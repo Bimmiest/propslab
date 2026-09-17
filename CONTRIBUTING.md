@@ -47,10 +47,10 @@ This is the part with rules of its own, because the project's whole claim is tha
 
 1. **Implement it in `src/engine/`**, with a unit test that asserts the behaviour.
 2. **Classify it in `directiveSupport.ts`** as `simulated`, `documented` or `ignored`. This is not optional — a test fails if a registry key is unclassified, and another fails if a `simulated` key is not mentioned by any test. Anything `ignored` needs a tracking issue.
-3. **Prefer a fidelity fixture over a reading of the docs.** `src/engine/__tests__/fixtures/corpus.ts` holds cases whose ground truth was captured from a real Splunk instance; see [`scripts/capture-fixtures.md`](scripts/capture-fixtures.md). Several long-standing bugs were reasonable readings of `props.conf.spec` that real Splunk contradicts, so a doc-derived test can encode a wrong answer confidently.
-4. **If you cannot capture,** say so in the test's comment and keep the assertion narrow.
+3. **Prefer a fidelity fixture over a reading of the docs — when you are licensed to capture one.** `src/engine/__tests__/fixtures/corpus.ts` holds cases whose ground truth was captured from a real Splunk instance. Several long-standing bugs were reasonable readings of `props.conf.spec` that real Splunk contradicts, so a doc-derived test can encode a wrong answer confidently. But the Splunk General Terms that govern the free edition and the `splunk/splunk` container do not permit a capture — [`scripts/capture-fixtures.md`](scripts/capture-fixtures.md) names the clauses — so run the script only under a licence or written consent that does.
+4. **If you cannot capture,** which is the expected case, assert against the documentation, say so in the test's comment, and keep the assertion narrow.
 
-Adding a corpus case needs a Splunk instance to capture against. If you do not have one, open an issue describing the case instead — that is genuinely useful on its own.
+Adding a corpus case needs a Splunk instance you are licensed to capture against. If you do not have one, open an issue describing the case instead — that is genuinely useful on its own. The existing fixtures are not being re-captured.
 
 ## Changing behaviour a test already asserts
 

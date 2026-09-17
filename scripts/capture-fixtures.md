@@ -11,22 +11,60 @@ version you want to pin. **CI never runs this script and never contacts
 Splunk**; it asserts against the committed JSON, which is what makes the test
 suite hermetic and fast.
 
-## Before you run it
+## Before you run it: the licence question
 
 The instance is yours, and so are its licence terms — this repository ships no
-Splunk software and cannot grant you any right to it. Two things worth being
-deliberate about, because the capture writes conf stanzas and restarts splunkd
-on whatever you point it at:
+Splunk software and cannot grant you any right to it. Read this section before
+deciding whether to run the script at all.
 
-- **Use an instance you are entitled to use this way.** Splunk Enterprise Free
-  or the `splunk/splunk` container is the intended target. Don't point it at a
-  production deployment, and don't point it at an employer's instance without
-  their say-so.
+**The Splunk General Terms do not permit a capture.** Splunk Enterprise Free and
+the `splunk/splunk` container are licensed under the
+[Splunk General Terms](https://www.splunk.com/en_us/legal/splunk-general-terms.html)
+— the 10.x container images require accepting them at start-up — and section
+1.2 of those terms, as last updated in May 2026, restricts what a licensee may
+do with the software. Two clauses reach what this script does:
+
+- **1.2(vii)** prohibits using an Offering "in order to analyze, test,
+  characterize, inspect, or monitor its source code or underlying structures,
+  ideas, protocols, or algorithms it contains or uses". Recording how a props
+  stanza turns an input line into fields is a characterisation of behaviour on
+  the strict reading of those words. There is an argument that observing the
+  documented configuration surface is ordinary use rather than characterising
+  algorithms, but it is an argument, not a settled point.
+- **1.2(vi)** prohibits using an Offering "to develop, test, troubleshoot,
+  support, or market any software or service that ... integrates,
+  interoperates with, or constitutes an extension of any Offering and that you
+  use or intend to use for a commercial purpose". Running captures to test a
+  tool you use commercially is inside those words.
+
+An earlier version of this guide named the free edition and the container as
+"the intended target". That was wrong: neither entitles you to run this.
+**Run the capture only under a licence or written consent that permits it** —
+a developer-programme or partner agreement whose scope covers testing software
+that interoperates with Splunk, or an instance whose owner has agreed in
+writing. If you have neither, do not run it. Assert the behaviour against the
+documentation instead and say so in the test, which is what CONTRIBUTING asks
+for.
+
+Two further things hold whichever licence you have:
+
 - **What is captured is functional behaviour only** — how a given props.conf
   turns a given input line into events and fields. The fixtures hold no timing,
   throughput, or resource figures, and this project publishes no benchmark or
   comparative evaluation of Splunk software. Keep it that way if you extend the
-  corpus: Splunk's terms restrict publishing performance results.
+  corpus: section 1.2(v) separately restricts analysing or characterising an
+  Offering's performance for competitive purposes.
+- **Don't point it at a production deployment**, and don't point it at an
+  employer's or a client's instance without their say-so — the capture writes
+  conf stanzas and restarts splunkd on whatever you point it at.
+
+**The fixtures already committed** were observed on Splunk Enterprise 10.4.0;
+the version and build are in each `manifest.json`. Section 18.2 of the General
+Terms states that "you own any reporting results that you or your Third Party
+Providers may derive from Customer Content through the use of the Offerings",
+and each fixture is exactly that: Splunk's output over input lines this project
+supplied. They are kept as regression pins for behaviour the documentation gets
+wrong, and they are not being re-captured.
 
 ## What you need
 

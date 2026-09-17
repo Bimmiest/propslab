@@ -228,6 +228,8 @@ One note if you extend it: the app runs the pipeline once on mount with an empty
 
 A simulator's correctness oracle is "matches real Splunk", which is a closed-source, versioned, partly undocumented target — so fidelity can never be *proven* complete. It can be bounded. This section is that boundary in one place: what is simulated, what is deliberately not, and where the simulation knowingly diverges. Verify anything suspicious against a real indexer before relying on the output.
 
+The fixtures under [`src/engine/__tests__/fixtures/`](src/engine/__tests__/fixtures/) are the only assertions here derived from Splunk itself: functional output observed on Splunk Enterprise 10.4.0, owned by the maintainer who captured them under section 18.2 of the Splunk General Terms, and kept as regression pins for behaviour the documentation gets wrong. They are not being re-captured, because the General Terms that govern the free edition and the container do not permit it — [`scripts/capture-fixtures.md`](scripts/capture-fixtures.md) explains, and names the clauses. Everything else asserts against the documentation and says so.
+
 Every directive the registry knows about carries one of three support levels, declared in [`src/engine/directiveSupport.ts`](src/engine/directiveSupport.ts):
 
 | Level | Count | Meaning |
