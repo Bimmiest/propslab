@@ -62,6 +62,8 @@ src/engine/__tests__/fixtures/splunk-<version>/ holds recorded outputs of a
 Splunk Enterprise instance processing small synthetic inputs, used to assert
 that this simulator's behaviour matches the real one. They record functional
 results only. No performance measurement, benchmark, or comparative evaluation
-of Splunk software is conducted or published by this project. Capture is a
-manual step performed against an instance the operator supplies and licenses
-themselves; see scripts/capture-fixtures.md.
+of Splunk software is conducted or published by this project. The set committed
+here was recorded in August 2026 from Splunk Enterprise 10.4.0 by the
+maintainer, whose property those results are under section 18.2 of the Splunk
+General Terms. No capture tooling ships with this repository and no further
+capture is planned; src/engine/__tests__/fixtures/README.md explains why.

@@ -22,5 +22,5 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
   },
-  "include": ["vite.config.ts", "vitest.config.ts", "scripts/capture-fixtures.ts"]
+  "include": ["vite.config.ts", "vitest.config.ts"]
 }

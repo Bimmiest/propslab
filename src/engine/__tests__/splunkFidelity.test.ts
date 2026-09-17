@@ -8,8 +8,8 @@
 // docs, which cannot catch a misreading shared by the implementation and the
 // test. These fixtures are the only assertions here derived from Splunk itself.
 //
-// Hermetic: reads committed JSON, never contacts Splunk. Regenerate with
-// scripts/capture-fixtures.ts (see scripts/capture-fixtures.md).
+// Hermetic: reads committed JSON, never contacts Splunk. There is no capture
+// tooling and no further capture is planned; fixtures/README.md says why.
 //
 // Runs under jsdom rather than the engine default of `node`, because the engine
 // is a *browser* target and parts of it reach for browser APIs: `KV_MODE = xml`
@@ -97,10 +97,9 @@ function runCase(fixture: Fixture): ReturnType<typeof runPipeline> {
 function engineEvents(fixture: Fixture): CapturedEvent[] {
   const { result } = runCase(fixture);
   return result.events.map((e) => {
-    // The capture excludes `punct` from every fixture (EXCLUDED_FIELDS in
-    // scripts/capture-fixtures.ts) unless the case opts back in with
-    // `comparePunct` — the punct-signature cases do, and for them the engine's
-    // punct is compared like any other field.
+    // The capture excluded `punct` from every fixture unless the case opted
+    // back in with `comparePunct` — the punct-signature cases do, and for them
+    // the engine's punct is compared like any other field.
     const { punct: _punct, ...withoutPunct } = e.fields;
     return {
       _raw: e._raw,
@@ -147,7 +146,7 @@ describe.skipIf(sets.length === 0)('Splunk fidelity fixtures', () => {
       it('every corpus case has a fixture', () => {
         const captured = new Set(fixtures.map((f) => f.id));
         const missing = CORPUS.filter((c) => !captured.has(c.id)).map((c) => c.id);
-        expect(missing, 'corpus cases never captured -- re-run scripts/capture-fixtures.ts').toEqual([]);
+        expect(missing, 'corpus cases with no fixture -- the corpus is closed to new cases; see fixtures/README.md').toEqual([]);
       });
 
       for (const fixture of fixtures) {
