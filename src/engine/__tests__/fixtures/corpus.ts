@@ -1,9 +1,11 @@
 // ---------------------------------------------------------------------------
 // corpus.ts
-// The fidelity corpus: minimal, self-contained cases whose ground truth is
-// captured from a real Splunk instance (see scripts/capture-fixtures.md) and
-// committed under `splunk-<version>/`. `splunkFidelity.test.ts` replays each
-// case through the engine and asserts it reproduces the recorded output.
+// The fidelity corpus: minimal, self-contained cases whose ground truth was
+// recorded from a real Splunk instance and committed under
+// `splunk-<version>/`. `splunkFidelity.test.ts` replays each case through the
+// engine and asserts it reproduces the recorded output. The corpus is closed
+// to new cases — README.md in this directory says why — so a new case here
+// with no fixture fails the suite.
 //
 // Every case is deliberately small. A case that exercises one directive and
 // fails tells you which directive is wrong; a realistic multi-directive log
