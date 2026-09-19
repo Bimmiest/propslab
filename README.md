@@ -234,9 +234,9 @@ Every directive the registry knows about carries one of three support levels, de
 
 | Level | Count | Meaning |
 |---|---|---|
-| **simulated** | 53 | The engine implements it and tests assert the behaviour. |
+| **simulated** | 54 | The engine implements it and tests assert the behaviour. |
 | **documented** | 25 | Recognised on purpose, outside the simulation for a reason that is not going to change — it belongs to a layer a browser has no access to, or it has no observable effect on output. |
-| **ignored** | 1 | Should be simulated, is not yet, and names the issue tracking it. Every one of these is a known wrong answer. |
+| **ignored** | 0 | Should be simulated, is not yet, and names the issue tracking it. Every one of these is a known wrong answer. |
 
 The counts are asserted by a test against the table itself, so they cannot go stale.
 
@@ -248,7 +248,9 @@ One `simulated` entry carries a caveat rather than a clean bill of health: `INDE
 
 ### Not simulated yet (`ignored`)
 
-Each of these is a directive the preview accepts and then does not honour. The roster lives in [`src/engine/directiveSupport.ts`](src/engine/directiveSupport.ts) — every `ignored` entry states what is missing and names its tracking issue, and the same text appears verbatim on the directive's hover, its editor warning, and its dictionary entry. One remains: `TZ_ALIAS` ([#227](https://github.com/Bimmiest/propslab/issues/227)), where an aliased `%Z` zone falls back to UTC.
+**The roster is currently empty.** An `ignored` entry is a directive the preview accepts and then does not honour — a known wrong answer — and there are none at present: the last one, `TZ_ALIAS`, was implemented in [#227](https://github.com/Bimmiest/propslab/issues/227).
+
+The mechanism stays, because the count is a measurement rather than a promise and the next unimplemented directive will land back here. It lives in [`src/engine/directiveSupport.ts`](src/engine/directiveSupport.ts): every `ignored` entry states what is missing and names its tracking issue, and the same text appears verbatim on the directive's hover, its editor warning, and its dictionary entry. A [scheduled workflow](.github/workflows/roster.yml) checks that those issues are still open, because an entry pointing at a closed issue is how this roster last went stale — `TZ_ALIAS` named #159 for months after the work it was waiting on had landed without it.
 
 ### Deliberately out of scope (`documented`)
 

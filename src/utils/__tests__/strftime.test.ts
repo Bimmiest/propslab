@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseTimestamp, strftimeToRegex } from '../strftime';
+import { parseTimestamp, parseTzAlias, strftimeToRegex } from '../strftime';
 
 /** Helper: ISO string of a parsed timestamp, or null. */
 function iso(text: string, format: string, tz?: string): string | null {
@@ -167,5 +167,65 @@ describe('#159 — IANA zone names resolve against real zone data', () => {
     const seen: string[] = [];
     parseTimestamp('2026-01-15 10:00:00', FMT, 'Europe/London', (v) => seen.push(v));
     expect(seen).toEqual([]);
+  });
+});
+
+// #227: the zone-spec forms TZ_ALIAS targets are written in, and the table that
+// parses them. Doc-derived from props.conf.spec's own `EST=GMT-5:00` example.
+describe('strftime — GMT-relative zone specs (#227)', () => {
+  const FMT = '%Y-%m-%d %H:%M:%S';
+
+  it('reads GMT-5:00 as UTC-5, the sign meaning Splunk\'s example relies on', () => {
+    expect(iso('2026-01-15 10:00:00', FMT, 'GMT-5:00')).toBe('2026-01-15T15:00:00.000Z');
+  });
+
+  it('accepts the single-digit, colonless and UTC-prefixed spellings alike', () => {
+    expect(iso('2026-01-15 10:00:00', FMT, 'GMT-5')).toBe('2026-01-15T15:00:00.000Z');
+    expect(iso('2026-01-15 10:00:00', FMT, 'GMT-0500')).toBe('2026-01-15T15:00:00.000Z');
+    expect(iso('2026-01-15 10:00:00', FMT, 'UTC+1:00')).toBe('2026-01-15T09:00:00.000Z');
+  });
+
+  it('leaves Etc/GMT-5 to IANA, where the sign is inverted', () => {
+    // The trap this pins: `GMT-5` is UTC-5, but the IANA zone `Etc/GMT-5` is
+    // UTC+5 — the POSIX convention, which the tz database kept and which reads
+    // backwards to everyone who meets it. The two must not be conflated, so
+    // this asserts they resolve to opposite sides of UTC.
+    expect(iso('2026-01-15 10:00:00', FMT, 'Etc/GMT-5')).toBe('2026-01-15T05:00:00.000Z');
+    expect(iso('2026-01-15 10:00:00', FMT, 'GMT-5')).toBe('2026-01-15T15:00:00.000Z');
+  });
+});
+
+describe('parseTzAlias (#227)', () => {
+  it('reads the comma-separated pairs from the spec example', () => {
+    const { aliases, invalid } = parseTzAlias('EST=GMT-5:00,METT=GMT+1:00');
+    expect(aliases.get('EST')).toBe('GMT-5:00');
+    expect(aliases.get('METT')).toBe('GMT+1:00');
+    expect(invalid).toEqual([]);
+  });
+
+  it('upper-cases the abbreviation but keeps the target verbatim', () => {
+    // The zone in an event is not reliably cased; the target is a zone spec
+    // that may be case-sensitive (`America/New_York`), so it is not touched.
+    const { aliases } = parseTzAlias('est=America/New_York');
+    expect(aliases.get('EST')).toBe('America/New_York');
+  });
+
+  it('tolerates surrounding whitespace and empty entries', () => {
+    const { aliases, invalid } = parseTzAlias('  EST = GMT-5:00 , , CST=GMT-6:00 ');
+    expect(aliases.get('EST')).toBe('GMT-5:00');
+    expect(aliases.get('CST')).toBe('GMT-6:00');
+    expect(invalid).toEqual([]);
+  });
+
+  it('reports a malformed pair instead of dropping it silently', () => {
+    const { aliases, invalid } = parseTzAlias('GMT-6:00,EST=,=GMT-5,CST=GMT-6:00');
+    expect([...aliases.keys()]).toEqual(['CST']);
+    expect(invalid).toEqual(['GMT-6:00', 'EST=', '=GMT-5']);
+  });
+
+  it('is empty for an empty value rather than throwing', () => {
+    const { aliases, invalid } = parseTzAlias('');
+    expect(aliases.size).toBe(0);
+    expect(invalid).toEqual([]);
   });
 });

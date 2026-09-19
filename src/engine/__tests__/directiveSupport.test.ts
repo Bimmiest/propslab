@@ -12,6 +12,7 @@
 import { describe, it, expect } from 'vitest';
 import { getAllDirectives } from '../directiveRegistry';
 import { DIRECTIVE_SUPPORT, UNDOCUMENTED_ATTRIBUTES } from '../directiveSupport';
+import type { SupportEntry } from '../directiveSupport';
 import { runPipeline } from '../pipeline';
 import type { EventMetadata } from '../types';
 
@@ -155,12 +156,44 @@ function diagnosticsFor(props: string, transforms = '') {
   }).diagnostics;
 }
 
+/**
+ * Run `body` with one registry key temporarily reclassified, then put the table
+ * back.
+ *
+ * The `ignored` warning has to stay assertable when nothing is ignored. These
+ * tests used to borrow whichever directive happened to be unimplemented —
+ * `TZ_ALIAS`, until #227 implemented it and emptied the roster — and a test
+ * written that way fails the day the borrowed directive is fixed, which is the
+ * wrong signal from a good event. A synthetic entry asserts the mechanism
+ * instead of the roster, so the two stop being coupled.
+ */
+function withSupport<T>(key: string, entry: SupportEntry, body: () => T): T {
+  const original = DIRECTIVE_SUPPORT[key];
+  DIRECTIVE_SUPPORT[key] = entry;
+  try {
+    return body();
+  } finally {
+    if (original === undefined) delete DIRECTIVE_SUPPORT[key];
+    else DIRECTIVE_SUPPORT[key] = original;
+  }
+}
+
+/** A stand-in classification. The key is real so the registry knows it; the
+ *  support level is not, so the roster can be empty and this still runs. */
+const IGNORED_STANDIN: SupportEntry = {
+  support: 'ignored',
+  issue: 9999,
+  note: 'Stand-in used to assert the ignored-directive warning.',
+};
+
 describe('unsimulated directives are reported rather than ignored (#153)', () => {
   it('warns, and names the tracking issue, for an ignored directive', () => {
-    const d = diagnosticsFor('TZ_ALIAS = EST=GMT-5\n').find((x) => x.directiveKey === 'TZ_ALIAS');
+    const d = withSupport('TZ_ALIAS', IGNORED_STANDIN, () =>
+      diagnosticsFor('TZ_ALIAS = EST=GMT-5\n').find((x) => x.directiveKey === 'TZ_ALIAS'),
+    );
     expect(d?.level).toBe('warning');
     expect(d?.message).toContain('not simulated');
-    expect(d?.message).toContain('#227');
+    expect(d?.message).toContain('#9999');
   });
 
   it('informs, without an issue, for a directive that is out of scope on purpose', () => {
@@ -171,9 +204,11 @@ describe('unsimulated directives are reported rather than ignored (#153)', () =>
   });
 
   it('locates the diagnostic on the line the directive is written on', () => {
-    // Line 1 is the stanza header, so TRUNCATE is 2 and DATETIME_CONFIG is 3.
-    const d = diagnosticsFor('TRUNCATE = 500\nTZ_ALIAS = EST=GMT-5\n').find(
-      (x) => x.directiveKey === 'TZ_ALIAS',
+    // Line 1 is the stanza header, so TRUNCATE is 2 and TZ_ALIAS is 3.
+    const d = withSupport('TZ_ALIAS', IGNORED_STANDIN, () =>
+      diagnosticsFor('TRUNCATE = 500\nTZ_ALIAS = EST=GMT-5\n').find(
+        (x) => x.directiveKey === 'TZ_ALIAS',
+      ),
     );
     expect(d?.line).toBe(3);
     expect(d?.file).toBe('props.conf');
