@@ -348,6 +348,19 @@ function resolveTzOffsetMinutes(tz: string): number | null {
     return known;
   }
 
+  // GMT-relative form, which is how props.conf.spec writes TZ_ALIAS targets:
+  // its own example is `EST=GMT-5:00`. The hour may be a single digit there,
+  // which the numeric branch below deliberately does not accept (%z never
+  // produces one). The sign is plain arithmetic from UTC rather than the POSIX
+  // TZ convention that inverts it, so `GMT-5` is UTC-5 and lands on Eastern
+  // Standard — the reading that makes Splunk's own example mean what it says.
+  const gmtRelative = /^(?:GMT|UTC)([+-])(\d{1,2})(?::?(\d{2}))?$/.exec(upper);
+  if (gmtRelative) {
+    const sign = gmtRelative[1] === '+' ? 1 : -1;
+    return sign * (parseInt(gmtRelative[2] ?? '0', 10) * 60
+      + (gmtRelative[3] ? parseInt(gmtRelative[3], 10) : 0));
+  }
+
   // Try parsing as +HHMM / -HH:MM / +HH:MM:SS / +HH (minutes and seconds
   // optional, colons optional) — covers %z, %:z and %::z outputs.
   const m = /^([+-])(\d{2})(?::?(\d{2}))?(?::?(\d{2}))?$/.exec(tz);
@@ -387,6 +400,45 @@ function computeSubMilliseconds(bag: Record<string, string>): number {
 }
 
 /**
+ * Parse a `TZ_ALIAS` value into the remapping table `parseTimestamp` consumes.
+ *
+ * The value is a comma-separated list of `<abbreviation>=<timezone>` pairs, per
+ * props.conf.spec: `TZ_ALIAS = EST=GMT-5:00,METT=GMT+1:00`. Keys are upper-cased
+ * because the zone written in an event is not reliably cased, and the target is
+ * kept verbatim so it can be anything `resolveTzOffsetMinutes` or the IANA
+ * formatter accepts — an offset, another abbreviation, or `America/New_York`.
+ *
+ * A pair that is not in that form is returned in `invalid` rather than dropped,
+ * so the caller can say so. A pair whose *target* does not resolve is not
+ * reported here: that failure already has a mechanism in the unresolved-zone
+ * warning, and two diagnostics for one mistake is worse than one.
+ */
+export function parseTzAlias(value: string): {
+  aliases: ReadonlyMap<string, string>;
+  invalid: readonly string[];
+} {
+  const aliases = new Map<string, string>();
+  const invalid: string[] = [];
+
+  for (const pair of value.split(',')) {
+    const text = pair.trim();
+    if (!text) continue;
+    // Split on the first `=` only: the target may itself contain one in
+    // principle, and the abbreviation never does.
+    const eq = text.indexOf('=');
+    const from = eq === -1 ? '' : text.slice(0, eq).trim();
+    const to = eq === -1 ? '' : text.slice(eq + 1).trim();
+    if (!from || !to) {
+      invalid.push(text);
+      continue;
+    }
+    aliases.set(from.toUpperCase(), to);
+  }
+
+  return { aliases, invalid };
+}
+
+/**
  * Parse a timestamp string using a Splunk strftime format.
  *
  * @param text   - The raw text (or substring) to search for the timestamp.
@@ -396,6 +448,8 @@ function computeSubMilliseconds(bag: Record<string, string>): number {
  * @param onUnresolvedTz - Called with the offending value when a named zone
  *                 (%Z or the `tz` fallback) can't be resolved and is treated as
  *                 UTC, so callers can surface a diagnostic instead of silent drift.
+ * @param tzAlias - `TZ_ALIAS` remapping table from {@link parseTzAlias}, applied
+ *                 to a zone read out of the event (%Z) before it is resolved.
  * @returns A `Date` object if parsing succeeded, or `null` otherwise.
  */
 export function parseTimestamp(
@@ -403,6 +457,7 @@ export function parseTimestamp(
   format: string,
   tz?: string,
   onUnresolvedTz?: (tz: string) => void,
+  tzAlias?: ReadonlyMap<string, string>,
 ): Date | null {
   const { regex, captures } = tokenise(format);
   const match = text.match(regex);
@@ -534,7 +589,14 @@ export function parseTimestamp(
 
   // A zone written in the event (%Z) beats the stanza's TZ, and an explicit
   // numeric offset (%z) beats both — it needs no resolution at all.
-  const zoneName = bag.tzName ?? tz;
+  //
+  // TZ_ALIAS rewrites the zone read out of the event, which is the ambiguity it
+  // exists for: EST is Eastern US in one deployment and Eastern Australia in
+  // another, and only the operator knows which. It deliberately does not touch
+  // the stanza's own TZ — that value was named explicitly, and letting a table
+  // entry redirect it would make an unambiguous setting ambiguous again.
+  const aliased = bag.tzName === undefined ? undefined : tzAlias?.get(bag.tzName.toUpperCase());
+  const zoneName = aliased ?? bag.tzName ?? tz;
 
   if (bag.tzOffset) {
     // %z only ever matches Z or a numeric offset, so this always resolves.
@@ -553,7 +615,10 @@ export function parseTimestamp(
     if (formatter) return new Date(ianaWallClockToEpoch(formatter, wallAsUtcMs));
 
     // Genuinely unresolvable: a typo, or a zone this runtime has no data for.
-    onUnresolvedTz?.(zoneName);
+    // When an alias was applied, name both halves — reporting only the target
+    // would describe a string the operator never wrote in their events, and
+    // reporting only the abbreviation would hide which side is actually broken.
+    onUnresolvedTz?.(aliased === undefined ? zoneName : `${bag.tzName} (TZ_ALIAS → ${aliased})`);
   }
 
   // No timezone info at all -- assume UTC.

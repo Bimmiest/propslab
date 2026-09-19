@@ -1,6 +1,6 @@
 import type { SplunkEvent, ConfDirective, ValidationDiagnostic } from '../types';
 import { safeRegex } from '../../utils/splunkRegex';
-import { parseTimestamp, strftimeToRegex } from '../../utils/strftime';
+import { parseTimestamp, parseTzAlias, strftimeToRegex } from '../../utils/strftime';
 import { atDirective } from '../parser/provenance';
 
 /**
@@ -41,12 +41,13 @@ function autoRecognize(
   region: string,
   tz?: string,
   onUnresolvedTz?: (tz: string) => void,
+  tzAlias?: ReadonlyMap<string, string>,
 ): { date: Date; format: string } | null {
   let best: { index: number; priority: number; date: Date; format: string } | null = null;
   for (const [priority, { fmt, regex }] of AUTO_PATTERNS.entries()) {
     const m = regex.exec(region);
     if (!m) continue;
-    const date = parseTimestamp(m[0], fmt, tz, onUnresolvedTz);
+    const date = parseTimestamp(m[0], fmt, tz, onUnresolvedTz, tzAlias);
     if (!date || isNaN(date.getTime())) continue;
     // Earliest match wins; a tie is broken by the more specific (lower-priority-
     // index) format.
@@ -105,6 +106,7 @@ export function extractTimestamps(
   const timeFormatDir = directives.find((d) => d.key === 'TIME_FORMAT');
   const maxLookaheadDir = directives.find((d) => d.key === 'MAX_TIMESTAMP_LOOKAHEAD');
   const tzDir = directives.find((d) => d.key === 'TZ');
+  const tzAliasDir = directives.find((d) => d.key === 'TZ_ALIAS');
   const datetimeConfigDir = directives.find((d) => d.key === 'DATETIME_CONFIG');
 
   // DATETIME_CONFIG = CURRENT stamps every event with the time it was merged;
@@ -147,6 +149,23 @@ export function extractTimestamps(
   const parsedLookahead = maxLookaheadDir ? parseInt(maxLookaheadDir.value.trim(), 10) : 128;
   const maxLookahead = Number.isFinite(parsedLookahead) && parsedLookahead > 0 ? parsedLookahead : 128;
   const tz = tzDir?.value.trim();
+
+  // TZ_ALIAS only ever rewrites a zone the event itself carried, so a table
+  // with no %Z to act on is not an error — it is simply unused, and saying so
+  // would fire on every stanza that sets it defensively.
+  const { aliases: tzAlias, invalid: invalidAliases } = parseTzAlias(tzAliasDir?.value ?? '');
+  if (diagnostics && invalidAliases.length > 0) {
+    diagnostics.push({
+      level: 'warning',
+      message:
+        `TZ_ALIAS ${invalidAliases.map((p) => `"${p}"`).join(', ')} is not in the form ` +
+        '<abbreviation>=<timezone> and was skipped; the rest of the table still applies. ' +
+        'Example: TZ_ALIAS = EST=GMT-5:00,CST=GMT-6:00',
+      file: 'props.conf',
+      ...atDirective(tzAliasDir),
+      directiveKey: 'TZ_ALIAS',
+    });
+  }
 
   // Surface a warning (once per distinct value) when a %Z zone name or the TZ
   // directive can't be resolved to an offset and the event is silently treated
@@ -317,7 +336,7 @@ export function extractTimestamps(
       if (!formatMatch) return inherit(event, 'TIME_FORMAT did not match this event');
 
       const timestampStr = formatMatch[0];
-      const parsedTime = parseTimestamp(timestampStr, timeFormat, tz, onUnresolvedTz);
+      const parsedTime = parseTimestamp(timestampStr, timeFormat, tz, onUnresolvedTz, tzAlias);
       // A match that will not parse is still a failure to read a timestamp, so
       // it inherits rather than leaving the event unplaced.
       if (!parsedTime) return inherit(event, `Could not parse "${timestampStr}" with TIME_FORMAT`);
@@ -326,7 +345,7 @@ export function extractTimestamps(
     }
 
     // No TIME_FORMAT → automatic timestamp recognition (datetime.xml-style).
-    const auto = autoRecognize(searchRegion, tz, onUnresolvedTz);
+    const auto = autoRecognize(searchRegion, tz, onUnresolvedTz, tzAlias);
     if (!auto) return inherit(event, 'No recognisable timestamp in this event');
 
     return accept(

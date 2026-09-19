@@ -63,11 +63,7 @@ export const DIRECTIVE_SUPPORT: Record<string, SupportEntry> = {
   MAX_DAYS_HENCE: { support: 'simulated' },
   MAX_DIFF_SECS_AGO: { support: 'simulated' },
   MAX_DIFF_SECS_HENCE: { support: 'simulated' },
-  TZ_ALIAS: {
-    support: 'ignored',
-    issue: 227,
-    note: 'Zone-abbreviation aliasing is not applied, so an aliased %Z zone falls back to UTC.',
-  },
+  TZ_ALIAS: { support: 'simulated' },
 
   // ---- Event breaking ---------------------------------------------------
   SHOULD_LINEMERGE: { support: 'simulated' },

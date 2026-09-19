@@ -173,6 +173,116 @@ describe('extractTimestamps — range validation (#12)', () => {
   });
 });
 
+// #227: TZ_ALIAS remaps an ambiguous zone abbreviation read out of the event.
+//
+// Every assertion here is DOC-DERIVED, from the props.conf.spec description of
+// TZ_ALIAS and its own example (`TZ_ALIAS = EST=GMT-5:00,METT=GMT+1:00`). No
+// fidelity capture backs them: the fixture corpus is closed (see the fixtures
+// README), so these are a reading of the documentation rather than a recording
+// of Splunk, and they are kept narrow for that reason. The one place the spec
+// is silent — whether the table also rewrites the stanza's own TZ — is asserted
+// as "it does not", which is the reading the spec's wording ("timezone strings
+// extracted from events") supports.
+describe('extractTimestamps — TZ_ALIAS (#227)', () => {
+  const fmt = dir('TIME_FORMAT', '%Y-%m-%d %H:%M:%S %Z');
+
+  it('resolves an aliased abbreviation to the offset the table names', () => {
+    const diags: ValidationDiagnostic[] = [];
+    const e = extractTimestamps(
+      [event('2024-01-15 10:00:00 EST x')],
+      [fmt, dir('TZ_ALIAS', 'EST=GMT-5:00,METT=GMT+1:00')],
+      diags,
+    )[0]!;
+    // EST aliased to GMT-5:00 → local 10:00 is 15:00 UTC.
+    expect(iso(e._time)).toBe('2024-01-15T15:00:00.000Z');
+    expect(diags).toHaveLength(0);
+  });
+
+  it('applies the alias in preference to the built-in abbreviation table', () => {
+    const diags: ValidationDiagnostic[] = [];
+    // EST resolves to -0500 unaided; aliasing it to Eastern Australia is the
+    // disambiguation the directive exists for, and must win.
+    const e = extractTimestamps(
+      [event('2024-01-15 10:00:00 EST x')],
+      [fmt, dir('TZ_ALIAS', 'EST=GMT+10:00')],
+      diags,
+    )[0]!;
+    expect(iso(e._time)).toBe('2024-01-15T00:00:00.000Z');
+    expect(diags).toHaveLength(0);
+  });
+
+  it('accepts an IANA name as the target, so the offset follows DST', () => {
+    const diags: ValidationDiagnostic[] = [];
+    const alias = dir('TZ_ALIAS', 'XYZ=Europe/London');
+    // London is GMT in January and BST in July. A fixed offset could not do
+    // both, which is what makes the IANA target worth accepting.
+    const winter = extractTimestamps([event('2024-01-15 10:00:00 XYZ x')], [fmt, alias], diags)[0]!;
+    const summer = extractTimestamps([event('2024-07-15 10:00:00 XYZ x')], [fmt, alias], diags)[0]!;
+    expect(iso(winter._time)).toBe('2024-01-15T10:00:00.000Z');
+    expect(iso(summer._time)).toBe('2024-07-15T09:00:00.000Z');
+    expect(diags).toHaveLength(0);
+  });
+
+  it('matches the event zone case-insensitively', () => {
+    const e = extractTimestamps(
+      [event('2024-01-15 10:00:00 est x')],
+      [fmt, dir('TZ_ALIAS', 'EST=GMT-5:00')],
+    )[0]!;
+    expect(iso(e._time)).toBe('2024-01-15T15:00:00.000Z');
+  });
+
+  it('leaves a zone the table does not name alone', () => {
+    const e = extractTimestamps(
+      [event('2024-01-15 10:00:00 PST x')],
+      [fmt, dir('TZ_ALIAS', 'EST=GMT+10:00')],
+    )[0]!;
+    // PST keeps its built-in -0800: 10:00 local is 18:00 UTC.
+    expect(iso(e._time)).toBe('2024-01-15T18:00:00.000Z');
+  });
+
+  it('does not rewrite the stanza TZ, only a zone read from the event', () => {
+    const diags: ValidationDiagnostic[] = [];
+    // No %Z in the format, so there is no event-borne zone to remap and TZ
+    // stands as written.
+    const e = extractTimestamps(
+      [event('2024-01-15 10:00:00 x')],
+      [dir('TIME_FORMAT', '%Y-%m-%d %H:%M:%S'), dir('TZ', 'EST'), dir('TZ_ALIAS', 'EST=GMT+10:00')],
+      diags,
+    )[0]!;
+    expect(iso(e._time)).toBe('2024-01-15T15:00:00.000Z');
+    expect(diags).toHaveLength(0);
+  });
+
+  it('warns about a malformed pair and still applies the rest of the table', () => {
+    const diags: ValidationDiagnostic[] = [];
+    const e = extractTimestamps(
+      [event('2024-01-15 10:00:00 EST x')],
+      [fmt, dir('TZ_ALIAS', 'GMT-6:00,EST=GMT-5:00')],
+      diags,
+    )[0]!;
+    expect(iso(e._time)).toBe('2024-01-15T15:00:00.000Z');
+    const warning = diags.find((d) => d.directiveKey === 'TZ_ALIAS');
+    expect(warning?.level).toBe('warning');
+    expect(warning?.message).toContain('"GMT-6:00"');
+  });
+
+  it('names both halves when the alias target cannot be resolved', () => {
+    const diags: ValidationDiagnostic[] = [];
+    const e = extractTimestamps(
+      [event('2024-01-15 10:00:00 EST x')],
+      [fmt, dir('TZ_ALIAS', 'EST=Middle/Earth')],
+      diags,
+    )[0]!;
+    // Unresolvable, so UTC — the documented fallback for any zone.
+    expect(iso(e._time)).toBe('2024-01-15T10:00:00.000Z');
+    // Reporting only the target would name a string the operator never wrote in
+    // an event; reporting only EST would hide which half is broken.
+    const warning = diags.find((d) => /could not be resolved/.test(d.message));
+    expect(warning?.message).toContain('EST');
+    expect(warning?.message).toContain('Middle/Earth');
+  });
+});
+
 // #12: an unresolvable timezone is treated as UTC but now warns instead of
 // drifting silently.
 describe('extractTimestamps — timezone resolution (#12)', () => {
