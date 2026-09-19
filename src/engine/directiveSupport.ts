@@ -265,35 +265,60 @@ export const DIRECTIVE_SUPPORT: Record<string, SupportEntry> = {
   RULESET_DESC: { support: 'ignored', issue: 275, note: 'Rulesets are not applied, so a stanza relying on one is previewed as though it were absent.' },
   ROUTE_EVENTS_OLDER_THAN: { support: 'ignored', issue: 275, note: 'Events are never dropped for age; the preview keeps them all.' },
   OPTIMIZE_IE_EXTRACT: { support: 'ignored', issue: 275, note: 'Search-time extraction always runs, whether or not index-time extraction covered the fields.' },
+
+  // ---- transforms.conf.spec 10.4.3 completeness (#178) --------------------
+  // Mostly lookup settings, documented for the reason every lookup attribute
+  // is: a lookup needs a table, and a browser with no backend has none. The
+  // metrics settings describe the metrics pipeline, not the event pipeline.
+  'METRIC-SCHEMA-BLACKLIST-DIMS': { support: 'documented', note: 'Selects dimensions for generated metrics, not fields on an event.' },
+  'METRIC-SCHEMA-MEASURES': { support: 'documented', note: 'Turns events into metrics, which this tool does not preview.' },
+  'METRIC-SCHEMA-WHITELIST-DIMS': { support: 'documented', note: 'Selects dimensions for generated metrics, not fields on an event.' },
+  REMOVE_DIMS_FROM_METRIC_NAME: { support: 'documented', note: 'Shapes statsd metric names, and metrics are outside the event pipeline modelled here.' },
+  allow_caching: { support: 'documented', note: 'Caches scripted-lookup output, and this tool runs no lookup scripts.' },
+  cache_size: { support: 'documented', note: 'Sizes the lookup cache, and there is no lookup to cache here.' },
+  check_permission: { support: 'documented', note: 'Guards writes to a CSV lookup file, which this tool never performs.' },
+  feature_id_element: { support: 'documented', note: 'A geospatial lookup setting, and a lookup needs a table this tool has nowhere to get.' },
+  filter: { support: 'documented', note: 'Narrows lookup rows before they are returned, and there are no rows here.' },
+  index_fields_list: { support: 'documented', note: 'A lookup setting, and a lookup needs a table this tool has nowhere to get.' },
+  max_duplicates: { support: 'documented', note: 'A lookup setting, and a lookup needs a table this tool has nowhere to get.' },
+  max_ext_batch: { support: 'documented', note: 'A KV Store lookup setting, and there is no KV Store here.' },
+  max_offset_secs: { support: 'documented', note: 'A temporal lookup setting, and a lookup needs a table this tool has nowhere to get.' },
+  'metrics.disabled': { support: 'documented', note: 'Controls reporting to metrics.log. It observes processing rather than changing it.' },
+  'metrics.report_interval': { support: 'documented', note: 'Sets how often metrics.log is written, which has no bearing on an event.' },
+  'metrics.rule_filter': { support: 'documented', note: 'Limits which rules report to metrics.log; it changes no output.' },
+  min_offset_secs: { support: 'documented', note: 'A temporal lookup setting, and a lookup needs a table this tool has nowhere to get.' },
+  'python.required': { support: 'documented', note: 'Selects the interpreter for a scripted lookup, which this tool cannot run.' },
+  'python.version': { support: 'documented', note: 'Deprecated, and it selects the interpreter for a scripted lookup this tool cannot run.' },
+  replicate: { support: 'documented', note: 'Decides where a CSV lookup is replicated, which is a deployment concern.' },
+  reverse_lookup_honor_case_sensitive_match: { support: 'documented', note: 'A lookup setting, and a lookup needs a table this tool has nowhere to get.' },
+  CAN_OPTIMIZE_IE: { support: 'ignored', issue: 275, note: 'Search-time extraction always runs, whether or not index-time extraction covered the fields.' },
+  STOP_PROCESSING_IF: { support: 'ignored', issue: 275, note: 'Index-time processing is never halted early, so a rule relying on this is previewed as absent.' },
 };
 
 /**
- * Valid props.conf / transforms.conf attributes that this repository does not
- * document yet (#178).
+ * Valid props.conf / transforms.conf attributes the registry has never heard
+ * of. **Empty as of #178**, and that is the point rather than an accident.
  *
  * The table above classifies everything the registry knows. It cannot classify
- * what the registry has never heard of, and `pipeline.ts` reads a missing entry
- * as "honoured" -- so until #178 lands, writing one of these produced no
- * warning anywhere and the preview ignored the line in silence. That is the
- * failure #153 exists to prevent, reached by a different route: not a directive
- * we decided not to simulate, but one we never knew to decide about.
+ * what it has never heard of, and `pipeline.ts` reads a missing entry as
+ * "honoured" -- so an attribute in neither place produced no warning anywhere
+ * and the preview ignored the line in silence. That is the failure #153 exists
+ * to prevent, reached by a different route: not a directive we decided not to
+ * simulate, but one we never knew to decide about.
+ *
+ * #178 closed the gap by registering every attribute in `props.conf.spec` and
+ * `transforms.conf.spec` for Splunk 10.4.3. This set stays because the next
+ * Splunk release will add attributes, and a name parked here is what stops the
+ * first person to write one getting silence.
  *
  * Names only, deliberately. Value types, defaults and valid values are
- * structural facts belonging to Splunk's `.spec` files, and #178 generates them
- * from the spec rather than having anyone recall them -- a half-remembered
+ * structural facts belonging to Splunk's `.spec` files; a half-remembered
  * default committed here would be exactly the kind of confident wrong answer
  * the fidelity corpus was built to catch. Naming a directive is enough to stop
- * claiming it works.
- *
- * These are the 91 attributes in the Splunk 10.4.0 spec files minus the ones
- * the registry documents. Generating this list, rather than maintaining it by
- * hand, is the rest of #178.
+ * claiming it works -- classify it properly in the registry when the facts are
+ * to hand.
  */
-export const UNDOCUMENTED_ATTRIBUTES: ReadonlySet<string> = new Set([
-  'CAN_OPTIMIZE_IE',
-  'REMOVE_DIMS_FROM_METRIC_NAME',
-  'STOP_PROCESSING_IF',
-]);
+export const UNDOCUMENTED_ATTRIBUTES: ReadonlySet<string> = new Set([]);
 
 /**
  * Whether a key is a real Splunk attribute this repository has not documented.
