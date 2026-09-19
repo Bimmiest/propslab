@@ -33,8 +33,43 @@ updates:
       development-dependencies:
         dependency-type: development
         update-types: [minor, patch]
-    # Majors are deliberately left out of both groups, so they arrive one PR at
-    # a time. react 19→20 or vite 7→8 is a change to read, not to batch.
+      # Two families are exempt from the majors rule below, because for them
+      # "one PR at a time" and "a PR that can install" are the same thing asked
+      # two ways. Each of these packages peer-depends on its sibling's major, so
+      # a bump arriving alone pins one half against the other and `npm ci` dies
+      # with ERESOLVE before a single test runs. That PR is not risky, it is
+      # unrunnable — no amount of review makes it mergeable, and the only way
+      # anyone has ever landed one is by assembling the other half by hand.
+      # Grouping them batches nothing unrelated: the family is one decision, and
+      # this is the only shape in which it can be read.
+      vitest:
+        # The tighter of the two couplings: @vitest/coverage-v8 peer-depends on
+        # the exact vitest it ships beside — 4.1.10's peer is `vitest@4.1.10`,
+        # not `^4.1.10` — so even a patch cannot move alone. #260 proposed
+        # vitest 5.0.1 against coverage-v8 4.1.10 and could never have installed.
+        # Nothing was wrong with the version: 5.0.1 passes the suite here once
+        # the two move together.
+        patterns:
+          - vitest
+          - "@vitest/*"
+        update-types: [major]
+      vite:
+        # The same failure, already paid for once. #215 and #217 raised vite 8
+        # and @vitejs/plugin-react 6 separately and neither could go green:
+        # plugin-react 6 requires `vite@^8`, and vite 8 is refused by
+        # plugin-react 5's peer range, so each failed at `npm ci` against the
+        # other's pin. They had to be re-assembled into one commit by hand.
+        # @tailwindcss/vite is deliberately not listed — it is a Tailwind
+        # package that happens to be named for its host, and it tracks
+        # Tailwind's major rather than Vite's.
+        patterns:
+          - vite
+          - "@vitejs/plugin-react"
+        update-types: [major]
+    # Every other major stays out of every group, so it arrives one PR at a
+    # time. react 19→20 is a change to read, not to batch. The exemptions
+    # above are not an argument against that rule — they are the cases where
+    # the unit that has to be read is a pair rather than a package.
 
   # `directory` is not recursive, so the entry above never sees
   # packages/mcp-server's lockfile. That was harmless while nothing audited that
