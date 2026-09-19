@@ -70,6 +70,22 @@ updates:
     # time. react 19→20 is a change to read, not to batch. The exemptions
     # above are not an argument against that rule — they are the cases where
     # the unit that has to be read is a pair rather than a package.
+    ignore:
+      # @types/node is not a dependency like the others — it describes the Node
+      # the code runs on, and `.nvmrc` is what decides that. A types major that
+      # arrives ahead of the runtime is worse than a stale one: it describes
+      # APIs that do not exist yet, so `tsc` accepts code that fails when it
+      # runs. The two halves of this repo had drifted apart on exactly that —
+      # #243 let 26 into packages/mcp-server while the root stayed on 24 and
+      # #265 proposed moving the root to match — and the answer is that both
+      # follow `.nvmrc`, which says 24.
+      #
+      # The cost is the one the Azure exclusion below also carries: this pin no
+      # longer advances on its own. When the Node line moves — 26 becomes
+      # Active LTS in October 2026 — delete this entry and take the types major
+      # in the same change that moves `.nvmrc`, not before it.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
 
   # `directory` is not recursive, so the entry above never sees
   # packages/mcp-server's lockfile. That was harmless while nothing audited that
@@ -92,6 +108,13 @@ updates:
     # Majors stay out of the group for the same reason they do above — and note
     # that @modelcontextprotocol/sdk majors move a protocol version, which is a
     # change to read against the spec rather than to wave through.
+    ignore:
+      # Same reason as the root entry above: this package's `engines` floor and
+      # the Node it is tested on are `.nvmrc`'s, so its types follow `.nvmrc`
+      # too. Both entries need the rule — `directory` is not recursive, so
+      # nothing the root says reaches here.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
 
   # Actions are pinned to commit SHAs (#138), which is what stops a mutable tag
   # from moving an unreviewed change into a job holding the deploy credentials.
