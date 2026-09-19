@@ -4,6 +4,20 @@ All notable changes to Propslab are documented here, newest first.
 
 ---
 
+## Unreleased
+
+### Added
+
+- **The registry covers `props.conf.spec` 10.4.3, and 47 attributes stop being invisible** ([#178](https://github.com/Bimmiest/propslab/issues/178), [src/engine/directiveRegistry.ts](src/engine/directiveRegistry.ts)). The registry drives autocomplete, hover and linting, so a valid directive it did not know about produced no completion, no hover and **no warning** — the preview behaved as though the line were not there, which is the one outcome the declared-surface mechanism ([#153](https://github.com/Bimmiest/propslab/issues/153)) exists to prevent. #178 counted 32 missing against Splunk 10.4.0 and 29 remained; checked against 10.4.3 the real figure was **47**, and **21 of those were not named in `UNDOCUMENTED_ATTRIBUTES` either** — unknown rather than merely unimplemented. All 47 are now registered with their value type, default and enumerated values read from the spec. The descriptions are written here and not copied: the structural facts are facts, the prose is Splunk's.
+- **A scheduled check stopped being the only thing watching the roster, and immediately earned its keep.** Classifying the new entries found that [#184](https://github.com/Bimmiest/propslab/issues/184) — cited in the README as tracking the delimited-extraction gap — **is closed**, the same rot that produced #227. It is replaced by [#272](https://github.com/Bimmiest/propslab/issues/272).
+
+### Changed
+
+- **The support counts move to 54 simulated, 50 documented, 22 ignored**, and the undocumented roster falls from 29 to 3. Most of the new entries are `documented`: they belong to the input, forwarder and metrics layers a browser has no access to, and each says which. The 22 that are real gaps are `ignored` and name a new tracking issue — XML indexed extraction and its eight supporting attributes ([#271](https://github.com/Bimmiest/propslab/issues/271)), the header-side delimited overrides ([#272](https://github.com/Bimmiest/propslab/issues/272)), the index-time timestamp fields ([#273](https://github.com/Bimmiest/propslab/issues/273)), the two attributes that reshape extracted field names and values ([#274](https://github.com/Bimmiest/propslab/issues/274)), and rulesets, age-based routing and extraction optimisation ([#275](https://github.com/Bimmiest/propslab/issues/275)). The three still listed as undocumented — `CAN_OPTIMIZE_IE`, `REMOVE_DIMS_FROM_METRIC_NAME` and `STOP_PROCESSING_IF` — are not in `props.conf.spec` and belong to `transforms.conf`, which is a separate pass.
+- **The generator #178 proposed is deliberately not built.** The registry is hand-maintained instead: conf attributes move rarely between Splunk versions, a generator would need `.spec` files this project has no licensed route to, and one that cannot be run against real input would look finished without being it. The drift test that depended on it goes with it.
+
+---
+
 ## 1.2.0 — 2026-09-19
 
 ### Fixed
