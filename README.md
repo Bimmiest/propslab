@@ -235,22 +235,22 @@ Every directive the registry knows about carries one of three support levels, de
 | Level | Count | Meaning |
 |---|---|---|
 | **simulated** | 54 | The engine implements it and tests assert the behaviour. |
-| **documented** | 25 | Recognised on purpose, outside the simulation for a reason that is not going to change — it belongs to a layer a browser has no access to, or it has no observable effect on output. |
-| **ignored** | 0 | Should be simulated, is not yet, and names the issue tracking it. Every one of these is a known wrong answer. |
+| **documented** | 50 | Recognised on purpose, outside the simulation for a reason that is not going to change — it belongs to a layer a browser has no access to, or it has no observable effect on output. |
+| **ignored** | 22 | Should be simulated, is not yet, and names the issue tracking it. Every one of these is a known wrong answer. |
 
 The counts are asserted by a test against the table itself, so they cannot go stale.
 
-A fourth state sits outside that table, because the table can only classify what the registry knows about. **29** attributes are valid in Splunk 10.4.0 and are not in the registry at all; until [#178](https://github.com/Bimmiest/propslab/issues/178) generates the registry from the `.spec` files, writing one of them is the same experience as an `ignored` directive — the preview does not honour it and says so. They are named in `UNDOCUMENTED_ATTRIBUTES` in [`src/engine/directiveSupport.ts`](src/engine/directiveSupport.ts), by name only: their value types and defaults are facts belonging to the spec, and guessing them here is the failure the fidelity corpus exists to catch.
+A fourth state sits outside that table, because the table can only classify what the registry knows about. **3** attributes are valid in Splunk 10.4.0 and are not in the registry at all; until [#178](https://github.com/Bimmiest/propslab/issues/178) generates the registry from the `.spec` files, writing one of them is the same experience as an `ignored` directive — the preview does not honour it and says so. They are named in `UNDOCUMENTED_ATTRIBUTES` in [`src/engine/directiveSupport.ts`](src/engine/directiveSupport.ts), by name only: their value types and defaults are facts belonging to the spec, and guessing them here is the failure the fidelity corpus exists to catch.
 
 Writing a directive that is not `simulated` produces a diagnostic under its editor — a warning for `ignored`, an informational note for `documented`. The dictionary and the editor hover say the same thing on the entry itself. The point is that the tool never silently renders output as though a line you wrote were absent.
 
-One `simulated` entry carries a caveat rather than a clean bill of health: `INDEXED_EXTRACTIONS` simulates every format it names — csv, tsv, psv, w3c and json — but the attributes that customise the delimited ones are `ignored` ([#184](https://github.com/Bimmiest/propslab/issues/184)).
+One `simulated` entry carries a caveat rather than a clean bill of health: `INDEXED_EXTRACTIONS` simulates every format it names — csv, tsv, psv, w3c and json — but the header-side attributes that customise the delimited ones are `ignored` ([#272](https://github.com/Bimmiest/propslab/issues/272), which replaces the closed #184 the README used to cite).
 
 ### Not simulated yet (`ignored`)
 
-**The roster is currently empty.** An `ignored` entry is a directive the preview accepts and then does not honour — a known wrong answer — and there are none at present: the last one, `TZ_ALIAS`, was implemented in [#227](https://github.com/Bimmiest/propslab/issues/227).
+Each of these is a directive the preview accepts and then does not honour — a known wrong answer. The roster lives in [`src/engine/directiveSupport.ts`](src/engine/directiveSupport.ts): every `ignored` entry states what is missing and names its tracking issue, and the same text appears verbatim on the directive's hover, its editor warning, and its dictionary entry. A [scheduled workflow](.github/workflows/roster.yml) checks those issues are still open, because an entry pointing at a closed one is how this roster goes stale.
 
-The mechanism stays, because the count is a measurement rather than a promise and the next unimplemented directive will land back here. It lives in [`src/engine/directiveSupport.ts`](src/engine/directiveSupport.ts): every `ignored` entry states what is missing and names its tracking issue, and the same text appears verbatim on the directive's hover, its editor warning, and its dictionary entry. A [scheduled workflow](.github/workflows/roster.yml) checks that those issues are still open, because an entry pointing at a closed issue is how this roster last went stale — `TZ_ALIAS` named #159 for months after the work it was waiting on had landed without it.
+The current roster is the index-time surface that [#178](https://github.com/Bimmiest/propslab/issues/178) surfaced by completing the registry against `props.conf.spec` 10.4.3: XML indexed extraction and its eight supporting attributes ([#271](https://github.com/Bimmiest/propslab/issues/271)), the header-side delimited-extraction overrides ([#272](https://github.com/Bimmiest/propslab/issues/272)), the index-time timestamp fields ([#273](https://github.com/Bimmiest/propslab/issues/273)), the two attributes that reshape automatically extracted field names and values ([#274](https://github.com/Bimmiest/propslab/issues/274)), and rulesets, age-based routing and extraction optimisation ([#275](https://github.com/Bimmiest/propslab/issues/275)).
 
 ### Deliberately out of scope (`documented`)
 
