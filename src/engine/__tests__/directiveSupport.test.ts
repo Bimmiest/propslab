@@ -186,6 +186,25 @@ const IGNORED_STANDIN: SupportEntry = {
   note: 'Stand-in used to assert the ignored-directive warning.',
 };
 
+/**
+ * Run `body` with one key temporarily treated as an undocumented attribute.
+ *
+ * `UNDOCUMENTED_ATTRIBUTES` is typed readonly but is a Set underneath, which is
+ * what lets this put a name in and take it out again. The alternative -- naming
+ * whichever attribute happens to be unregistered today -- is the shape that
+ * broke when #178 registered them all.
+ */
+function withUndocumented<T>(key: string, body: () => T): T {
+  const set = UNDOCUMENTED_ATTRIBUTES as Set<string>;
+  const had = set.has(key);
+  set.add(key);
+  try {
+    return body();
+  } finally {
+    if (!had) set.delete(key);
+  }
+}
+
 describe('unsimulated directives are reported rather than ignored (#153)', () => {
   it('warns, and names the tracking issue, for an ignored directive', () => {
     const d = withSupport('TZ_ALIAS', IGNORED_STANDIN, () =>
@@ -234,12 +253,22 @@ describe('unsimulated directives are reported rather than ignored (#153)', () =>
   });
 
   it('warns for a valid attribute the registry does not document (#178)', () => {
-    const d = diagnosticsFor('STOP_PROCESSING_IF = foo\n').find(
-      (x) => x.directiveKey === 'STOP_PROCESSING_IF',
+    // #178 emptied UNDOCUMENTED_ATTRIBUTES, so this borrows a name the way the
+    // ignored-directive tests above borrow a classification: the mechanism has
+    // to stay assertable when there is nothing currently parked in it, or it
+    // quietly stops being tested the moment the roster is clean.
+    // A name the registry will never hold, so this cannot break again the way
+    // it did when #178 registered the real attribute it used to borrow.
+    const KEY = 'A_FUTURE_SPLUNK_ATTRIBUTE';
+    const d = withUndocumented(KEY, () =>
+      diagnosticsFor(`${KEY} = foo\n`).find((x) => x.directiveKey === KEY),
     );
     expect(d?.level).toBe('warning');
     expect(d?.message).toContain('valid Splunk attribute');
-    expect(d?.message).toContain('#178');
+    // Deliberately asserts no issue number: the message used to name #178,
+    // which has closed. Pointing a user at a finished issue is the rot #227
+    // was about.
+    expect(d?.message).not.toContain('#178');
   });
 
   it('still says nothing about a key that is genuinely not an attribute', () => {

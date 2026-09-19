@@ -144,18 +144,25 @@ export function runPipeline(
         const baseKey = dir.className ? dir.directiveType : dir.key;
         const entry = getDirectiveSupport(baseKey);
 
-        // A real attribute the registry has never heard of reached this loop
-        // with no entry and left it silently, which is the one way a valid line
-        // could still vanish without being declared (#178). It gets the same
-        // warning as an `ignored` key, because from where the user is sitting
-        // it is the same event: they wrote a directive and the preview ignored it.
+        // A real attribute the registry has never heard of reaches this loop with
+        // no entry and would leave it silently, which is the one way a valid line
+        // can vanish without being declared. #178 swept the registry against the
+        // 10.4.3 spec files so the set is empty today, but a later Splunk release
+        // adds attributes and this is what stops them passing unnoticed. It gets
+        // the same warning as an `ignored` key, because from where the user is
+        // sitting it is the same event: they wrote a directive and it was ignored.
+        //
+        // Deliberately cites no issue number. The previous text named #178, which
+        // has since closed -- a diagnostic pointing a user at a finished issue is
+        // the rot #227 was about, reaching the product surface this time.
         if (!entry) {
           if (!isUndocumentedAttribute(baseKey)) continue;
           diagnostics.push({
             level: 'warning',
             message:
               `${dir.key} is a valid Splunk attribute that this simulator does not ` +
-              `document or honour — the preview ignores it. Tracked as #178.`,
+              `document or honour, so the preview ignores this line. Please report it ` +
+              `so it can be classified.`,
             file,
             ...atDirective(dir),
             directiveKey: dir.key,

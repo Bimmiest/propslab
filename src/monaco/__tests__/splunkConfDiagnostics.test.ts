@@ -104,14 +104,19 @@ describe('computeDiagnostics — SHOULD_LINEMERGE best practice inspects the val
 });
 
 describe('computeDiagnostics — undocumented attributes are not typos (#178)', () => {
-  const typoMarkers = (text: string) =>
-    computeDiagnostics(fakeModel(text), 'props.conf').filter((m) => /possible typo/.test(m.message));
+  const typoMarkers = (text: string, file: 'props.conf' | 'transforms.conf' = 'props.conf') =>
+    computeDiagnostics(fakeModel(text), file).filter((m) => /possible typo/.test(m.message));
 
   it('does not call a valid Splunk attribute a possible typo', () => {
     // The engine warns that the preview ignores it; calling it a typo as well
     // sends the user to check spelling that is already correct.
-    expect(typoMarkers('[st]\nSTOP_PROCESSING_IF = foo')).toEqual([]);
+    //
+    // Each key is checked against the conf file it belongs to. Before #178
+    // registered them, both of these sat in a flat undocumented set with no
+    // notion of which file they were valid in, so a transforms.conf key was
+    // excused in props.conf too.
     expect(typoMarkers('[st]\nKV_TRIM_SPACES = true')).toEqual([]);
+    expect(typoMarkers('[st]\nSTOP_PROCESSING_IF = foo', 'transforms.conf')).toEqual([]);
   });
 
   it('still flags an actual misspelling', () => {
