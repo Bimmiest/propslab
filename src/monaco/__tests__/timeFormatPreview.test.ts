@@ -9,7 +9,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { marked } from 'marked';
-import { buildTimeFormatPreview, renderTimeFormatPreview } from '../timeFormatPreview';
+import { buildTimeFormatPreview, renderTimeFormatPreview, MAX_PREVIEW_SAMPLE_LENGTH } from '../timeFormatPreview';
 import { unsupportedSpecifiers } from '../../utils/strftime';
 
 const NOW = new Date('2026-08-04T12:30:45.000Z');
@@ -109,13 +109,69 @@ describe('buildTimeFormatPreview', () => {
     expect(preview.sample).toEqual({ status: 'no-match', searchedFrom: 0 });
   });
 
-  it('survives a TIME_PREFIX that is not a valid regex', () => {
+  it('survives a TIME_PREFIX that is not a valid regex, and says why', () => {
+    // Previously reported as a plain 'no-match', which blamed the format for
+    // what was a broken prefix (#297).
     const preview = buildTimeFormatPreview('%Y-%m-%d', {
       now: NOW,
       sampleLine: '2024-01-15',
       timePrefix: '(unbalanced',
     });
-    expect(preview.sample?.status).toBe('no-match');
+    // Which reason depends on validateRegex (an unbalanced group also defeats
+    // the ReDoS scanner, which then assumes the worst) — the point is that
+    // there is one.
+    expect(preview.sample?.status).toBe('prefix-refused');
+    expect(preview.sample?.status === 'prefix-refused' ? preview.sample.reason : '').not.toBe('');
+  });
+
+  it('refuses a ReDoS-prone TIME_PREFIX instead of running it on the main thread (#297)', () => {
+    // `(a+)+$` against a long run of `a`s ending in a mismatch is the textbook
+    // catastrophic case: run for real, this hangs the tab.
+    const started = Date.now();
+    const preview = buildTimeFormatPreview('%Y-%m-%d', {
+      now: NOW,
+      sampleLine: `${'a'.repeat(40)}! 2024-01-15`,
+      timePrefix: '(a+)+$',
+    });
+    expect(Date.now() - started).toBeLessThan(1000);
+    expect(preview.sample?.status).toBe('prefix-refused');
+    expect(preview.sample?.status === 'prefix-refused' ? preview.sample.reason : '').toMatch(/catastrophic backtracking/);
+    expect(renderTimeFormatPreview(preview)).toMatch(/TIME_PREFIX was not run: .*catastrophic backtracking/);
+  });
+
+  it('translates PCRE in TIME_PREFIX the way the engine does (#297)', () => {
+    // Plain `new RegExp` rejected both of these, so the preview said "no match"
+    // for prefixes the pipeline applies without complaint.
+    const named = buildTimeFormatPreview('%Y-%m-%d', {
+      now: NOW,
+      sampleLine: 'id=5 ts=2024-01-15 rest',
+      timePrefix: '(?P<key>ts)=',
+    });
+    expect(named.sample).toMatchObject({ status: 'matched', text: '2024-01-15' });
+
+    const insensitive = buildTimeFormatPreview('%Y-%m-%d', {
+      now: NOW,
+      sampleLine: 'id=5 TS=2024-01-15 rest',
+      timePrefix: '(?i)ts=',
+    });
+    expect(insensitive.sample).toMatchObject({ status: 'matched', text: '2024-01-15' });
+  });
+
+  it('searches no more than the first 4 KB of the sample line (#297)', () => {
+    const date = '2024-01-15';
+    const within = buildTimeFormatPreview('%Y-%m-%d', {
+      now: NOW,
+      sampleLine: `${'x'.repeat(MAX_PREVIEW_SAMPLE_LENGTH - date.length - 3)}ts=${date}`,
+      timePrefix: 'ts=',
+    });
+    expect(within.sample).toMatchObject({ status: 'matched', text: date });
+
+    const beyond = buildTimeFormatPreview('%Y-%m-%d', {
+      now: NOW,
+      sampleLine: `${'x'.repeat(MAX_PREVIEW_SAMPLE_LENGTH)}ts=${date}`,
+      timePrefix: 'ts=',
+    });
+    expect(beyond.sample).toEqual({ status: 'no-match', searchedFrom: 0 });
   });
 
   it('carries the unsupported specifiers through', () => {

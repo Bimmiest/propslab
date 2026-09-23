@@ -10,7 +10,23 @@
 // ---------------------------------------------------------------------------
 
 import { formatStrftime, strftimeToRegex, parseTimestamp, unsupportedSpecifiers } from '../utils/strftime';
-import { inlineCode } from './markdown';
+import { safeRegex, validateRegex } from '../utils/splunkRegex';
+import { escapeMarkdown, inlineCode } from './markdown';
+
+/**
+ * The most of the sample line the preview will search (#297).
+ *
+ * The hover runs on the main thread, with none of the worker watchdogs that
+ * guard the pipeline, so the TIME_PREFIX match is the one user regex in the
+ * editor that could freeze the tab. `safeRegex` refuses the structurally
+ * catastrophic shapes, but it is a heuristic — `(a|aa)+` slips past it — and
+ * the other half of the defence is input length: backtracking cost grows with
+ * the text, and 4 KB keeps even a polynomial blow-up to a stutter. The engine
+ * cannot share this bound (it searches the whole event, off-thread), and a
+ * prefix that only matches beyond 4 KB into the first line is not a case this
+ * preview needs to get right.
+ */
+export const MAX_PREVIEW_SAMPLE_LENGTH = 4096;
 
 export interface TimeFormatPreview {
   /** The current time rendered with this pattern — "what does this produce?". */
@@ -20,6 +36,8 @@ export interface TimeFormatPreview {
     | { status: 'matched'; text: string; iso: string }
     | { status: 'no-match'; searchedFrom: number }
     | { status: 'unparseable'; text: string }
+    /** TIME_PREFIX was not run: it is invalid, or refused as ReDoS-prone. */
+    | { status: 'prefix-refused'; reason: string }
     | null;
   unsupported: { specifier: string; index: number }[];
 }
@@ -31,16 +49,20 @@ export interface TimeFormatPreview {
  */
 function attemptSample(
   format: string,
-  sampleLine: string,
+  fullSampleLine: string,
   timePrefix: string | undefined,
 ): TimeFormatPreview['sample'] {
+  const sampleLine = fullSampleLine.slice(0, MAX_PREVIEW_SAMPLE_LENGTH);
   let searchStart = 0;
   if (timePrefix) {
-    let prefixRegex: RegExp;
-    try {
-      prefixRegex = new RegExp(timePrefix);
-    } catch {
-      return { status: 'no-match', searchedFrom: 0 };
+    // Compiled exactly as the engine compiles it — PCRE translated, ReDoS
+    // guard applied — so `(?i)ts=` or `(?P<p>…)` previews the way it
+    // extracts, and a pattern the engine would refuse is never run here.
+    // `validateRegex` applies the same translation and guard, and says why.
+    const refusal = validateRegex(timePrefix);
+    const prefixRegex = refusal === null ? safeRegex(timePrefix) : null;
+    if (!prefixRegex) {
+      return { status: 'prefix-refused', reason: refusal ?? 'the pattern could not be compiled' };
     }
     const prefixMatch = prefixRegex.exec(sampleLine);
     if (!prefixMatch) return { status: 'no-match', searchedFrom: 0 };
@@ -126,6 +148,13 @@ export function renderTimeFormatPreview(preview: TimeFormatPreview): string {
           preview.sample.searchedFrom > 0
             ? `**Sample:** no match at offset ${preview.sample.searchedFrom} (immediately after TIME_PREFIX).`
             : '**Sample:** no match in the first event line.',
+        );
+        break;
+      case 'prefix-refused':
+        // The reason can quote the pattern (a SyntaxError message does), so it
+        // is document text like any other.
+        parts.push(
+          `**Sample:** not tried — TIME_PREFIX was not run: ${escapeMarkdown(preview.sample.reason)}`,
         );
         break;
     }
