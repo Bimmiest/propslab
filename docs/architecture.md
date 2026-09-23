@@ -35,7 +35,7 @@ Monaco's widgets (hover, suggest, folding, find, multi-cursor) are *contribution
 - A global `:focus-visible` outline in `index.css` is the floor for every focusable element; components that draw their own `focus-visible:ring-*` take precedence over it. Do not add `outline-none` without a replacement ring.
 - Clickable spans and divs that cannot be `<button>`s go through `components/ui/pressable.ts`, which adds the tab stop, `role="button"` and Enter/Space. The highlighted spans inside raw event text are the deliberate exception: one tab stop per value would bury the page, and the field sidebar offers the same pin action.
 - Raw-text selection (`SelectableRaw`) has a keyboard path: arrows select tokens, Shift extends, Shift+F10 or the Menu key opens the row's context menu.
-- `eslint-plugin-jsx-a11y` is not wired into lint: its peer range ends at eslint 9. See #300.
+- `eslint-plugin-jsx-a11y` is not wired into lint: its peer range ends at eslint 9. Tracked in #302.
 - Panel-level `ErrorBoundary` with "Try Again" recovery.
 
 ### Overlays
