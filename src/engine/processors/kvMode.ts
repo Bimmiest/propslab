@@ -19,7 +19,7 @@ export function applyKvMode(
   const autoKvJsonDir = directives.find((d) => d.key === 'AUTO_KV_JSON');
   const autoKvJson = autoKvJsonDir ? autoKvJsonDir.value.trim().toLowerCase() !== 'false' : true;
 
-  // Collected across events: data that looks like JSON (starts with { or [) but
+  // Collected across events: data that looks like JSON (see parseWholeJson) but
   // fails to parse. Surfaced as a single diagnostic so a malformed paste doesn't
   // silently yield partial/empty extractions with no explanation.
   const parseFailures: { line: number; error: string }[] = [];
@@ -125,7 +125,7 @@ function* jsonObjectCandidates(raw: string): Generator<string, void, undefined> 
 
 /**
  * Result of attempting to parse the whole event as JSON.
- * - `notJson`  — the event does not begin with `{`/`[`; it was never meant to be JSON.
+ * - `notJson`  — the event does not begin like a JSON object or array; it was never meant to be JSON.
  * - `invalid`  — it begins like JSON but `JSON.parse` rejected it (malformed data).
  * - `parsed`   — a valid JSON value (object or array).
  * Distinguishing `notJson` from `invalid` lets the caller warn about malformed JSON
@@ -138,7 +138,13 @@ type WholeJsonResult =
 
 function parseWholeJson(raw: string): WholeJsonResult {
   const trimmed = raw.trim();
-  if (!(trimmed.startsWith('{') || trimmed.startsWith('['))) return { kind: 'notJson' };
+  // A leading `[` alone is not evidence of JSON: `[INFO] started` and other
+  // bracketed log prefixes begin with one, and treating them as candidates
+  // raised a "not valid JSON" warning on ordinary events (#289). Only an `[`
+  // followed by something that can start a JSON value -- or close an empty
+  // array -- is plausibly an array.
+  const looksLikeJson = trimmed.startsWith('{') || /^\[\s*[{["\d\-tfn\]]/.test(trimmed);
+  if (!looksLikeJson) return { kind: 'notJson' };
   try {
     return { kind: 'parsed', value: JSON.parse(trimmed) };
   } catch (e) {

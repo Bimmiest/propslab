@@ -133,6 +133,48 @@ describe('applyKvMode — json', () => {
   });
 });
 
+describe('applyKvMode — a leading [ is not by itself JSON (#289)', () => {
+  // Not from a capture: this is about when the simulator's own warning fires,
+  // which Splunk has no counterpart for.
+  it.each(['json', 'auto'])('does not warn about a bracketed log prefix under KV_MODE = %s', (mode) => {
+    const diagnostics: ValidationDiagnostic[] = [];
+    applyKvMode(
+      [event('[INFO] started'), event('[main] worker ready'), event('  [ WARN ] disk low'), event('[')],
+      [dir(mode)],
+      diagnostics,
+    );
+    expect(diagnostics).toHaveLength(0);
+  });
+
+  it('still extracts key=value pairs after a bracketed prefix', () => {
+    const r = applyKvMode([event('[INFO] user=alice status=ok')], [dir('auto')])[0]!;
+    expect(r.fields['user']).toBe('alice');
+    expect(r.fields['status']).toBe('ok');
+  });
+
+  it.each([
+    ['an object', '[{"a":<ID>}]'],
+    ['a nested array', '[[1,2]'],
+    ['a string', '["a",'],
+    ['a number', '[1,'],
+    ['a negative number', '[-1,'],
+    ['true', '[true,'],
+    ['false', '[ false,'],
+    ['null', '[\n null,'],
+    ['an unclosed empty array', '[ ],'],
+  ])('warns when a malformed array starts with %s', (_label, raw) => {
+    const diagnostics: ValidationDiagnostic[] = [];
+    applyKvMode([event(raw)], [dir('json')], diagnostics);
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0]!.message).toMatch(/not valid JSON/);
+  });
+
+  it('still flattens a whole-event array', () => {
+    const r = applyKvMode([event('[{"id":1},{"id":2}]')], [dir('json')])[0]!;
+    expect(r.fields['{}.id']).toEqual(['1', '2']);
+  });
+});
+
 describe('applyKvMode — auto (AUTO_KV_JSON)', () => {
   it('auto-extracts JSON when the event is JSON and KV_MODE is unset (default auto)', () => {
     const r = applyKvMode([event('{"action":"login","code":200}')], [])[0]!;
