@@ -267,7 +267,7 @@ export const DIRECTIVE_SUPPORT: Record<string, SupportEntry> = {
     support: 'simulated',
     note: 'Only a TIME_FORMAT can describe a dateless timestamp here — automatic recognition has no time-only pattern.',
   },
-  KV_TRIM_SPACES: { support: 'ignored', issue: 274, note: 'Automatic key-value values are always space-trimmed; this cannot turn that off.' },
+  KV_TRIM_SPACES: { support: 'simulated' },
   JSON_TRIM_BRACES_IN_ARRAY_NAMES: { support: 'ignored', issue: 274, note: 'Array field names from the JSON parser keep their braces; this cannot strip them.' },
   RULESET: {
     support: 'simulated',

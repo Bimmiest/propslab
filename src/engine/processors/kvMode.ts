@@ -19,6 +19,12 @@ export function applyKvMode(
   const autoKvJsonDir = directives.find((d) => d.key === 'AUTO_KV_JSON');
   const autoKvJson = autoKvJsonDir ? autoKvJsonDir.value.trim().toLowerCase() !== 'false' : true;
 
+  // KV_TRIM_SPACES (default true) strips the outer spaces from an automatic
+  // key=value value; only an explicit false keeps them.
+  const trimSpaces = !/^(?:false|f|0|no|n)$/i.test(
+    directives.find((d) => d.key === 'KV_TRIM_SPACES')?.value.trim() ?? '',
+  );
+
   // Collected across events: data that looks like JSON (see parseWholeJson) but
   // fails to parse. Surfaced as a single diagnostic so a malformed paste doesn't
   // silently yield partial/empty extractions with no explanation.
@@ -53,7 +59,7 @@ export function applyKvMode(
           if (whole.kind === 'parsed') depthWarning = flattenParsed(whole.value, newFields, added);
           else if (whole.kind === 'invalid') parseError = whole.error;
         }
-        extractKeyValue(event._raw, newFields, added, mode === 'auto_escaped');
+        extractKeyValue(event._raw, newFields, added, mode === 'auto_escaped', trimSpaces);
         break;
       }
     }
@@ -290,6 +296,7 @@ function extractKeyValue(
   fields: Record<string, string | string[]>,
   added: string[],
   escaped: boolean,
+  trimSpaces: boolean,
 ): void {
   // Match key="value" and key='value' in ONE left-to-right pass, alternating on
   // the quote character, rather than a double-quoted sweep followed by a
@@ -369,6 +376,14 @@ function extractKeyValue(
     let value = match[2] ?? match[3];
     if (key && value !== undefined) {
       if (escaped) value = value.replace(/\\(["'\\])/g, '$1');
+      // KV_TRIM_SPACES, doc-derived (props.conf.spec 10.4.3): by default
+      // `myfield=" apples "` is `apples`, and false keeps ` apples `. Spaces
+      // only -- the spec says tabs are not trimmed, so the class is a literal
+      // space rather than \s. Only a quoted value can have outer spaces: a bare
+      // one ends at the first. No capture has a padded quoted value, so the
+      // default is the spec's word; the captured quoted values (`note="not
+      // found"`, `quoted="a b"`) have none to trim and are unchanged by it.
+      if (trimSpaces) value = value.replace(/^ +| +$/g, '');
       candidates.push({ at: start, key, value });
     }
   }
