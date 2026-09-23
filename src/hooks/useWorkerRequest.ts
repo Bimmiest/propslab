@@ -15,7 +15,7 @@
 // #151 scoped it to.
 // ---------------------------------------------------------------------------
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 export type WorkerRequestStatus = 'idle' | 'pending' | 'ok' | 'timeout' | 'invalid';
 
@@ -133,13 +133,18 @@ export function useWorkerRequest<TReq extends object, TRes, TData>(
       clearTimer();
       const current = configRef.current;
 
+      // Bumped before the idle check, not after it. Returning first left the id
+      // of the request still in flight current, so its late response passed the
+      // staleness check in onmessage and overwrote `idle` with results for input
+      // the caller had already cleared (#294). Going idle is a new request too —
+      // one whose answer is known without asking the worker.
+      const id = ++idRef.current;
+
       if (current.isIdle(request)) {
         setStatus('idle');
         setData(current.empty);
         return;
       }
-
-      const id = ++idRef.current;
 
       if (workerRef.current === null) {
         const outcome = current.runInline(request);
@@ -166,9 +171,13 @@ export function useWorkerRequest<TReq extends object, TRes, TData>(
     };
   }, []);
 
-  return {
-    status,
-    data,
-    run: (request: TReq) => runRef.current(request),
-  };
+  // Stable for the life of the hook, which the callers' effects rely on: they
+  // list `run` as a dependency, and a fresh arrow per render (as this used to
+  // return) would re-post on every render of the caller — the reason those
+  // effects had suppressed exhaustive-deps instead (#294). Delegating through
+  // the ref keeps the identity fixed while the implementation stays the one the
+  // setup effect installed.
+  const run = useCallback((request: TReq) => runRef.current(request), []);
+
+  return { status, data, run };
 }

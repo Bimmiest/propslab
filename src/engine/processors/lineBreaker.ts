@@ -45,20 +45,70 @@ function getDirective(directives: ConfDirective[], key: string): string | undefi
 }
 
 /**
- * Determine if a string looks like it starts with a date-like pattern.
- * Used when BREAK_ONLY_BEFORE_DATE = true.  Matches common timestamp
- * prefixes such as:
- *   2024-01-15  /  01/15/2024  /  Jan 15  /  Mon Jan 15  / epoch digits etc.
+ * Date forms BREAK_ONLY_BEFORE_DATE recognises ANYWHERE in the lookahead
+ * window of a line, not only at its start (#287). Splunk runs its timestamp
+ * recognizer over the line, so `[2026-09-22 10:00:00] a` and a syslog line
+ * behind its `<34>` priority both start events there; anchoring at `^` merged
+ * every such line into the one before it.
+ *
+ * The digit guards keep a date from being found inside a longer number, and
+ * month names must stand as words (`Mar 5` is a date, `Market 5` is not).
  */
-const DATE_LIKE_PATTERN = safeRegex(
-  '^\\s*(' +
-    '\\d{4}[\\-/]\\d{1,2}[\\-/]\\d{1,2}' +      // 2024-01-15 or 2024/01/15
-    '|\\d{1,2}[\\-/]\\d{1,2}[\\-/]\\d{2,4}' +    // 01-15-2024 or 1/15/24
-    '|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\\s+\\d{1,2}' + // Jan 15
-    '|(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\\s' +        // Mon ...
-    '|\\d{10,13}' +                                // epoch seconds/millis
-    ')'
+const MONTH = '(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)';
+const DATE_ANYWHERE_PATTERN = safeRegex(
+  '(?<!\\d)\\d{4}[\\-/]\\d{1,2}[\\-/]\\d{1,2}(?!\\d)' +           // 2024-01-15 or 2024/01/15
+    '|(?<![\\d/\\-])\\d{1,2}[\\-/]\\d{1,2}[\\-/]\\d{2,4}(?![\\d/\\-])' + // 01-15-2024 or 1/15/24
+    `|(?<![A-Za-z])${MONTH}\\.?\\s+\\d{1,2}(?!\\d)` +               // Jan 15, Sep 22 10:00:02
+    `|(?<!\\d)\\d{1,2}[/\\- ]${MONTH}[/\\- ]\\d{2,4}(?!\\d)`,        // 15/Jan/2024 (CLF), 15 Jan 2024
 );
+
+/**
+ * Forms recognised only at the START of a line, because anywhere else they
+ * are more often data than a timestamp. A weekday alone (`Mon `) keeps the
+ * reading it always had. Epoch time is a bare number, so in mid-line it is as
+ * likely an id, a byte count or a port; at the start it is still accepted only
+ * as a plausible epoch — 10 digits of seconds (2001–2033) or 13 of
+ * milliseconds, optionally fractional, and not the prefix of a longer number.
+ * Any 10–13 digit run used to count, so an 11- or 12-digit order id began a
+ * new event.
+ */
+const DATE_AT_START_PATTERN = safeRegex(
+  '^\\s*(?:' +
+    '(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\\s' +
+    '|1\\d{9}(?:\\d{3})?(?:\\.\\d+)?(?![\\d.])' +
+    ')',
+);
+
+/** props.conf.spec default for MAX_TIMESTAMP_LOOKAHEAD, as timestampExtractor reads it. */
+const DEFAULT_TIMESTAMP_LOOKAHEAD = 128;
+
+/** Whether a line carries a date BREAK_ONLY_BEFORE_DATE would break before. */
+function lineHasDate(line: string, lookahead: number): boolean {
+  if (DATE_AT_START_PATTERN?.test(line)) return true;
+  // Only the lookahead window is searched, as it is for timestamp extraction:
+  // a date deep inside a continuation line (a stack frame quoting a log line,
+  // say) is past where Splunk's recognizer looks, and must not split the event.
+  return DATE_ANYWHERE_PATTERN?.test(line.slice(0, lookahead)) ?? false;
+}
+
+/**
+ * The LINE_BREAKER segments each event was built from, as character lengths
+ * in `_raw` order (merged segments are joined by one `\n`).
+ *
+ * TRUNCATE caps a *line*, and props.conf.spec defines a line as what
+ * LINE_BREAKER delimits, before line merging — not a `\n`-separated piece of
+ * the final event. With the default breaker the two coincide; with a custom
+ * one a segment can span many `\n`s (a pretty-printed JSON record), and only
+ * the breaker knows where it ends. Kept beside the event rather than on it so
+ * the event shape every consumer sees, serialises and compares is unchanged;
+ * an event the breaker did not produce simply has no entry.
+ */
+const segmentLengths = new WeakMap<SplunkEvent, number[]>();
+
+/** The LINE_BREAKER segment lengths `event` was built from, if breakLines built it. */
+export function segmentLengthsOf(event: SplunkEvent): readonly number[] | undefined {
+  return segmentLengths.get(event);
+}
 
 /** Number of input lines a segment contributes (1 + embedded newlines). */
 function countLines(text: string): number {
@@ -185,11 +235,15 @@ export function breakLines(
     //   Split on the captured group.  The regex overall matches a region;
     //   the captured group within that region is what gets removed.
 
-    // To split correctly we iterate matches ourselves.
+    // To split correctly we iterate matches ourselves, over the WHOLE input
+    // with `lastIndex` rather than over a re-sliced remainder. Re-slicing hid
+    // the text already consumed from a lookbehind — `(?<=\})(\n)` could never
+    // see the `}` that ended the previous event — and copied the tail of the
+    // input once per event, which is quadratic on a large sample (#283).
     // Use 'd' flag so RegExpExecArray.indices gives exact capture offsets,
     // avoiding the indexOf() ambiguity when captured text repeats in the match.
-    const nonGlobalRegex = safeRegex(lineBreakerPattern, 'd');
-    if (!nonGlobalRegex) {
+    const lineBreakerRegex = safeRegex(lineBreakerPattern, 'dg');
+    if (!lineBreakerRegex) {
       // Invalid regex — treat entire data as one segment. A user-supplied
       // LINE_BREAKER that fails to compile silently disables event breaking, so
       // surface it (the default '([\r\n]+)' always compiles, so this is a real config).
@@ -204,61 +258,52 @@ export function breakLines(
       segments = [rawData];
       segmentOffsets.push(0);
     } else {
-      let remaining = rawData;
-      let offset = 0;
+      // `segmentStart` is where the event being built begins; `searchFrom` is
+      // where the next search starts. They differ only after a zero-width
+      // break was refused, below.
+      let segmentStart = 0;
+      let searchFrom = 0;
 
-      while (remaining.length > 0) {
-        const m = nonGlobalRegex.exec(remaining);
-        if (!m || m.index === undefined) {
-          // No more matches -- rest is last segment
-          if (remaining.length > 0) {
-            segments.push(remaining);
-            segmentOffsets.push(offset);
-          }
-          break;
-        }
+      while (searchFrom <= rawData.length) {
+        lineBreakerRegex.lastIndex = searchFrom;
+        const m = lineBreakerRegex.exec(rawData);
+        if (!m) break;
 
-        // The full match spans m.index .. m.index + m[0].length
-        // The captured group is m[1], which is the separator to discard.
-        const fullMatchStart = m.index;
+        // The captured group is the separator to discard. A match in which the
+        // group did not participate (`(a)|b` matching `b`) has no group
+        // offsets, so the whole match stands in for it.
+        const groupIndices = m[1] !== undefined ? m.indices?.[1] : undefined;
+        const captureStart = groupIndices ? groupIndices[0] : m.index;
+        const captureEnd = groupIndices ? groupIndices[1] : m.index + m[0].length;
 
-        // Locate the capture group using indices (d flag) for exact position.
-        let captureStartInMatch = 0;
-        let captureEndInMatch = m[0].length;
-        if (m[1] !== undefined) {
-          const groupIndices = m.indices?.[1];
-          if (groupIndices) {
-            captureStartInMatch = groupIndices[0] - fullMatchStart;
-            captureEndInMatch = groupIndices[1] - fullMatchStart;
-          }
+        // A break that would not move the event start forward is no break: an
+        // empty capture at the start of the current event (`()(?=b)` just
+        // after a previous break) would otherwise end an empty event there, and
+        // the old guard then emitted the next character as an event of its own
+        // (`bcd` came out as `b` + `cd`). Retry one character further on, which
+        // is where the next genuine break can begin (#283).
+        if (captureEnd <= segmentStart) {
+          searchFrom = m.index + 1;
+          continue;
         }
 
         // Segment text = everything before the captured group
-        const segmentText = remaining.substring(0, fullMatchStart + captureStartInMatch);
+        const segmentText = rawData.slice(segmentStart, Math.max(captureStart, segmentStart));
         if (segmentText.length > 0 || segments.length === 0) {
           segments.push(segmentText);
-          segmentOffsets.push(offset);
+          segmentOffsets.push(segmentStart);
         }
 
-        // Advance past the captured group.  Any text between the end of
-        // the captured group and the end of the full match becomes the
-        // start of the next segment (handled by leaving it in `remaining`).
-        const advanceTo = fullMatchStart + captureEndInMatch;
-        offset += advanceTo;
-        remaining = remaining.substring(advanceTo);
+        // Advance past the captured group.  Any text between the end of the
+        // captured group and the end of the full match becomes the start of
+        // the next segment, and is searched again for the next break.
+        segmentStart = captureEnd;
+        searchFrom = captureEnd;
+      }
 
-        // Guard against zero-length matches to prevent infinite loops
-        if (advanceTo === 0) {
-          if (remaining.length > 0) {
-            // Push one character and continue
-            segments.push(remaining.charAt(0));
-            segmentOffsets.push(offset);
-            remaining = remaining.substring(1);
-            offset += 1;
-          } else {
-            break;
-          }
-        }
+      if (segmentStart < rawData.length) {
+        segments.push(rawData.slice(segmentStart));
+        segmentOffsets.push(segmentStart);
       }
     }
   }
@@ -290,11 +335,13 @@ export function breakLines(
   const shouldLineMerge =
     shouldLineMergeVal === undefined ? !structured : shouldLineMergeVal.toLowerCase() === 'true';
 
-  let mergedSegments: { text: string; offset: number }[];
+  // `lines` is the length of each LINE_BREAKER segment the event was built
+  // from, in order; see segmentLengthsOf.
+  let mergedSegments: { text: string; offset: number; lines: number[] }[];
   let maxEventsTriggered = false;
 
   if (!shouldLineMerge) {
-    mergedSegments = filteredSegments;
+    mergedSegments = filteredSegments.map((seg) => ({ ...seg, lines: [seg.text.length] }));
   } else {
     // Merge directives
     const breakOnlyBeforeStr = getDirective(directives, 'BREAK_ONLY_BEFORE');
@@ -317,6 +364,12 @@ export function breakLines(
       breakOnlyBeforeDateStr === undefined
         ? true
         : breakOnlyBeforeDateStr.toLowerCase() !== 'false';
+    // Read exactly as timestampExtractor reads it, so the window a date is
+    // looked for in here is the one the extractor will then parse it from.
+    const lookaheadStr = getDirective(directives, 'MAX_TIMESTAMP_LOOKAHEAD');
+    const parsedLookahead = lookaheadStr !== undefined ? parseInt(lookaheadStr.trim(), 10) : DEFAULT_TIMESTAMP_LOOKAHEAD;
+    const timestampLookahead =
+      Number.isFinite(parsedLookahead) && parsedLookahead > 0 ? parsedLookahead : DEFAULT_TIMESTAMP_LOOKAHEAD;
     const mustBreakAfterRegex = mustBreakAfterStr
       ? safeRegex(mustBreakAfterStr)
       : null;
@@ -359,7 +412,7 @@ export function breakLines(
     const canMerge =
       breakOnlyBeforeAnchoredRegex !== null || breakOnlyBeforeDate || mustBreakAfterRegex === null;
 
-    mergedSegments = [firstSegment];
+    mergedSegments = [{ ...firstSegment, lines: [firstSegment.text.length] }];
     let currentLineCount = countLines(firstSegment.text);
     let forceBreakNext = false;
     // MUST_NOT_BREAK_AFTER is stateful: once a line matches, rule-driven breaks
@@ -382,7 +435,7 @@ export function breakLines(
       const bobBreak =
         breakOnlyBeforeAnchoredRegex !== null && breakOnlyBeforeAnchoredRegex.test(seg.text);
       const dateBreak =
-        breakOnlyBeforeDate && DATE_LIKE_PATTERN !== null && DATE_LIKE_PATTERN.test(seg.text);
+        breakOnlyBeforeDate && lineHasDate(seg.text, timestampLookahead);
 
       let reason:
         | 'must-break-after'
@@ -409,12 +462,15 @@ export function breakLines(
       if (reason === 'max-events') maxEventsTriggered = true;
 
       if (reason !== null) {
-        mergedSegments.push({ text: seg.text, offset: seg.offset });
+        mergedSegments.push({ text: seg.text, offset: seg.offset, lines: [seg.text.length] });
         currentLineCount = segLines;
       } else {
         // Merge into previous
         const prev = mergedSegments.at(-1);
-        if (prev !== undefined) prev.text += '\n' + seg.text;
+        if (prev !== undefined) {
+          prev.text += '\n' + seg.text;
+          prev.lines.push(seg.text.length);
+        }
         currentLineCount += segLines;
       }
 
@@ -442,7 +498,7 @@ export function breakLines(
       start: lineAtOffset(newlines, seg.offset),
       end: lineAtOffset(newlines, seg.offset + seg.text.length),
     };
-    return {
+    const event: SplunkEvent = {
       _raw: seg.text,
       _time: null,
       _meta: {},
@@ -460,6 +516,8 @@ export function breakLines(
         },
       ],
     };
+    segmentLengths.set(event, seg.lines);
+    return event;
   });
 
   // Add a summary trace entry if merging occurred

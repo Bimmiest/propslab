@@ -12,6 +12,9 @@ runPipeline(rawData, metadata, propsConfInput, transformsConfInput, options?)
 |---|---|---|
 | `perEventPipeline` | — | Resolve stanzas per event rather than once for the batch, so metadata rewritten mid-pipeline takes effect downstream. |
 | `captureOffsets` | `true` | Record capture spans for positional EXTRACTs into `fieldOffsets`. |
+| `now` | `Date.now()` | The current time, in epoch milliseconds, for everything Splunk measures against the clock: the `MAX_DAYS_AGO` / `MAX_DAYS_HENCE` timestamp bounds, the year given to a yearless `TIME_FORMAT`, the index-time `_time` an event with no usable timestamp falls back to, and eval's `now()` / `time()` (in `EVAL-` and `INGEST_EVAL`). |
+
+**Pass `now` when replaying recorded data.** A sample captured today carries absolute timestamps; replayed against the real clock years later, `MAX_DAYS_AGO` (2000 days by default) starts rejecting them and the output changes for no reason but the date. Pinning `now` to the moment of capture keeps the verdict fixed — the fidelity suite passes each fixture's `capturedAt` for exactly this reason.
 
 ## Conf layers (`default/` vs `local/`)
 

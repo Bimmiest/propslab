@@ -1,5 +1,5 @@
 import type { SplunkEvent, ConfDirective, ValidationDiagnostic } from '../types';
-import { evaluateExpression } from '../processors/evalProcessor';
+import { evaluateExpression, regexFailureMessage } from '../processors/evalProcessor';
 import { stripLeadingUnderscoreForField } from '../utils/internalFields';
 import { deleteField, setField } from '../utils/fieldBag';
 import { atDirective } from '../parser/provenance';
@@ -40,6 +40,8 @@ export function applyIngestEval(
   events: SplunkEvent[],
   directives: ConfDirective[],
   diagnostics?: ValidationDiagnostic[],
+  /** What now()/time() return, in epoch ms. See `PipelineOptions.now`. */
+  now: number = Date.now(),
 ): SplunkEvent[] {
   // A stanza may repeat INGEST_EVAL; Splunk's last-definition-wins rule means
   // only the final directive applies (each may still hold several comma-separated
@@ -73,6 +75,20 @@ export function applyIngestEval(
               diagnostics.push({
                 level: 'warning',
                 message: `${fn}() is not fully simulated — results may differ from real Splunk`,
+                file: 'transforms.conf',
+                ...atDirective(ingestEvalDir),
+                directiveKey: ingestEvalDir.key,
+              });
+            }
+          }, now, (fn, pattern) => {
+            // Deduplicated against the list itself rather than a local set:
+            // the transforms pass calls this once per event, so a set here
+            // would forget between events and warn on every line.
+            const message = `INGEST_EVAL ${fieldName}: ${regexFailureMessage(fn, pattern)}`;
+            if (diagnostics && !diagnostics.some((d) => d.message === message)) {
+              diagnostics.push({
+                level: 'warning',
+                message,
                 file: 'transforms.conf',
                 ...atDirective(ingestEvalDir),
                 directiveKey: ingestEvalDir.key,

@@ -148,3 +148,18 @@ describe('computeDiagnostics — unsimulated strftime specifiers (#90)', () => {
     expect(line.slice(marker.startColumn - 1, marker.endColumn - 1)).toBe('%i');
   });
 });
+
+describe('computeDiagnostics — PCRE translation warnings (#290)', () => {
+  it('warns when a regex compiles but its translation only approximates PCRE', () => {
+    // A mid-pattern (?x) is not applied, on any runtime.
+    const markers = computeDiagnostics(fakeModel('[st]\nREGEX = a (?x) b'), 'transforms.conf');
+    const warning = markers.find((m) => /approximated in preview/.test(m.message));
+    expect(warning).toMatchObject({ severity: 4, startLineNumber: 2 });
+    expect(markers.some((m) => /Invalid regex/.test(m.message))).toBe(false);
+  });
+
+  it('says nothing for a pattern the translation represents exactly', () => {
+    const markers = computeDiagnostics(fakeModel('[st]\nREGEX = (?x) (?i) a \\s+ b'), 'transforms.conf');
+    expect(markers.some((m) => /approximated in preview/.test(m.message))).toBe(false);
+  });
+});

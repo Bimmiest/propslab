@@ -40,7 +40,7 @@ export const PIPELINE_STAGES: PipelineStage[] = [
     name: 'Timestamp Extraction',
     phase: 'index-time',
     description:
-      'Locates and parses the event timestamp. TIME_PREFIX anchors the search position; TIME_FORMAT parses the found value using strftime tokens. If extraction fails, Splunk falls back to the current time.',
+      'Locates and parses the event timestamp. TIME_PREFIX anchors the search position; TIME_FORMAT parses the found value using strftime tokens. If no timestamp is found, the event inherits the previous event’s _time; the first event falls back to the time of indexing.',
     directives: ['TIME_PREFIX', 'TIME_FORMAT', 'MAX_TIMESTAMP_LOOKAHEAD', 'TZ', 'MAX_DAYS_AGO', 'MAX_DAYS_HENCE'],
   },
   {
@@ -72,7 +72,7 @@ export const PIPELINE_STAGES: PipelineStage[] = [
     name: 'Field Extraction',
     phase: 'search-time',
     description:
-      'Applies EXTRACT-<name> regex patterns to _raw, using named capture groups to produce fields. All matches are collected — if a regex matches multiple times, the field becomes a multivalue array.',
+      'Applies EXTRACT-<name> regex patterns to _raw, using named capture groups to produce fields. Each EXTRACT takes the first match only; use a REPORT transform with MV_ADD for repeated matches.',
     directives: ['EXTRACT'],
   },
   {
@@ -80,7 +80,7 @@ export const PIPELINE_STAGES: PipelineStage[] = [
     name: 'Search-Time Transforms',
     phase: 'search-time',
     description:
-      'Applies transforms.conf stanzas referenced by REPORT directives. Uses REGEX + FORMAT to extract fields at search time, with full support for SOURCE_KEY, DEST_KEY, and multivalue output. Runs before automatic KV extraction, matching Splunk’s documented order.',
+      'Applies transforms.conf stanzas referenced by REPORT directives. Uses REGEX + FORMAT to extract fields at search time, with SOURCE_KEY, MV_ADD and DELIMS. DEST_KEY is an index-time setting and has no effect here. Runs before automatic KV extraction, matching Splunk’s documented order.',
     directives: ['REPORT'],
   },
   {
@@ -104,7 +104,7 @@ export const PIPELINE_STAGES: PipelineStage[] = [
     name: 'Eval Expressions',
     phase: 'search-time',
     description:
-      'Computes new field values using SPL eval expressions at search time. Supports the full eval function library: if(), case(), coalesce(), lower(), tonumber(), strftime(), cidrmatch(), and more.',
+      'Computes new field values using SPL eval expressions at search time. Supports most of the eval function library, including if(), case(), coalesce(), lower(), tonumber(), strftime() and cidrmatch(); a function that is not simulated produces a warning rather than a silent null.',
     directives: ['EVAL'],
   },
 ];

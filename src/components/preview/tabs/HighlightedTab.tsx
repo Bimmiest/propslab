@@ -9,6 +9,7 @@ import { FieldTreeNode } from './shared/FieldTreeNode';
 import { buildFieldTree } from './shared/fieldTreeUtils';
 import type { FieldNode } from './shared/fieldTreeUtils';
 import { DirectiveNoOpList } from './shared/DirectiveNoOpList';
+import { pressable } from '../../ui/pressable';
 
 const AUTO_PROCESSORS = ['KV_MODE', 'INDEXED_EXTRACTIONS'];
 const MANUAL_PROCESSORS = ['EXTRACT', 'REPORT', 'TRANSFORMS', 'SEDCMD'];
@@ -419,7 +420,8 @@ export function HighlightedTab({ items, allEvents, currentPage, eventsPerPage }:
                               style={{ opacity: focused && !active ? 0.2 : 1, transition: 'opacity 0.15s' }}
                               onMouseEnter={() => setHoveredField(cf.name)}
                               onMouseLeave={() => setHoveredField(null)}
-                              onClick={() => togglePin(cf.name)}
+                              {...pressable(() => togglePin(cf.name), (f) => setHoveredField(f ? cf.name : null))}
+                              aria-pressed={pinned}
                             >
                               <span className="text-[var(--color-text-muted)]">{cf.name}=</span>
                               <span
@@ -457,7 +459,8 @@ export function HighlightedTab({ items, allEvents, currentPage, eventsPerPage }:
                                 style={{ opacity: focused && !active ? 0.2 : 1, transition: 'opacity 0.15s' }}
                                 onMouseEnter={() => setHoveredField(cf.name)}
                                 onMouseLeave={() => setHoveredField(null)}
-                                onClick={() => togglePin(cf.name)}
+                                {...pressable(() => togglePin(cf.name), (f) => setHoveredField(f ? cf.name : null))}
+                                aria-pressed={pinned}
                               >
                                 <span style={{ color }} className="font-medium">{cf.name}</span>
                                 <span className="text-[10px] uppercase tracking-wider text-[var(--color-text-muted)]">expr</span>

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { truncateEvents } from '../processors/truncator';
+import { breakLines } from '../processors/lineBreaker';
 import type { SplunkEvent, ConfDirective, ValidationDiagnostic } from '../types';
 
 function event(raw: string): SplunkEvent {
@@ -87,4 +88,52 @@ describe('truncateEvents', () => {
       expect(diags.some((d) => d.message.includes('not a valid byte count'))).toBe(true);
     },
   );
+});
+
+// Doc-derived (props.conf.spec): TRUNCATE is "the default maximum line length",
+// and LINE_BREAKER is what delimits a line — "the start of the first capturing
+// group [is] the end of the previous line". So a line is a LINE_BREAKER segment,
+// before merging, and may contain newlines. Not a captured fixture.
+describe('#287 — TRUNCATE caps LINE_BREAKER segments, not newline-separated pieces', () => {
+  const META = { index: 'main', host: 'h', source: 's', sourcetype: 'st' };
+  const d = (key: string, value: string): ConfDirective => ({ key, value, line: 1, directiveType: key });
+
+  it('cuts a multi-line JSON record kept in one segment by a custom LINE_BREAKER', () => {
+    const record = '{\n  "a": "0123456789",\n  "b": "0123456789"\n}';
+    const directives = [d('SHOULD_LINEMERGE', 'false'), d('LINE_BREAKER', '(\\n)(?=\\{)'), d('TRUNCATE', '20')];
+    const events = truncateEvents(breakLines(`${record}\n${record}`, directives, META), directives);
+    expect(events).toHaveLength(2);
+    // Every '\n'-piece is under 20 bytes, so the old per-'\n' reading left
+    // both records whole.
+    expect(events.map((e) => e._raw)).toEqual([record.slice(0, 20), record.slice(0, 20)]);
+    expect(events.every((e) => e.fields['meta'] === 'truncated')).toBe(true);
+  });
+
+  it('still caps each merged line on its own under the default LINE_BREAKER', () => {
+    // SHOULD_LINEMERGE defaults to true: single-line segments are merged into
+    // one event after being capped, so a long merged event of short lines is
+    // left alone and only the over-long line is cut.
+    const raw = '2026-01-15T10:00:00Z start\nshort\n' + 'x'.repeat(50) + '\nshort';
+    const directives = [d('TRUNCATE', '30')];
+    const [e] = truncateEvents(breakLines(raw, directives, META), directives);
+    expect(e!._raw).toBe('2026-01-15T10:00:00Z start\nshort\n' + 'x'.repeat(30) + '\nshort');
+  });
+
+  it('caps each segment separately when merged segments themselves span newlines', () => {
+    // A breaker that splits on `;\n` keeps `a\nb` style pairs as one segment;
+    // merging then joins those segments. Each segment is its own line.
+    const raw = `${'p'.repeat(8)}\n${'q'.repeat(8)};\n${'r'.repeat(4)}`;
+    const directives = [
+      d('LINE_BREAKER', ';(\\n)'),
+      d('BREAK_ONLY_BEFORE_DATE', 'false'),
+      d('TRUNCATE', '12'),
+    ];
+    const [e] = truncateEvents(breakLines(raw, directives, META), directives);
+    expect(e!._raw).toBe(`${'p'.repeat(8)}\n${'q'.repeat(3)}\n${'r'.repeat(4)}`);
+  });
+
+  it('falls back to newline-separated lines for an event breakLines did not build', () => {
+    const e = truncateEvents([event('abcdefgh\nab')], truncateDir('4'))[0]!;
+    expect(e._raw).toBe('abcd\nab');
+  });
 });

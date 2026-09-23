@@ -1,33 +1,101 @@
 name: Azure Static Web Apps CI/CD
 
+# Deploy on CI's verdict, not alongside it. This used to trigger on `push` to
+# main, the same event ci.yml runs on, so the two ran in parallel and nothing
+# connected them: a commit that failed lint, the unit suite or the e2e smoke
+# tests was already live by the time CI said so. `workflow_run` starts this
+# only once a CI run has *finished*, and the job-level `if` below lets it
+# through only when that run passed.
+#
+# `workflow_run` always executes this file as it stands on the default branch,
+# never the copy at the commit being deployed. That is what we want here: a
+# branch cannot rewrite the deploy that holds the token. The `branches` filter
+# matches the triggering run's head *branch name*, which a fork PR can also
+# call `main` — so it narrows the noise, and the `event == 'push'` check in the
+# job's `if` is what actually keeps pull requests (and CI's weekly schedule,
+# which re-grades a commit that is already live) from deploying.
 on:
-  push:
-    branches:
-      - main
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  # Manual redeploys. Ungated by design: dispatching is an operator saying
+  # "ship this ref", and the ref is whatever they picked in the UI.
   workflow_dispatch:
 
 # Deploys are not interchangeable the way CI runs are. Cancelling one mid-upload
 # can leave the site serving a partially published artifact, and the run that
 # starts last is not reliably the one that finishes last — two quick pushes to
 # main could land the older bundle on top of the newer. Queue them instead.
+#
+# Gating on CI adds a second way to get the order wrong, which the queue alone
+# does not fix: CI runs for two pushes can finish in either order, so the
+# deploys are *started* out of push order. And a group holds one running and
+# one pending run — a newer pending run cancels the older pending one — so the
+# run that survives the queue is not necessarily the newest commit's. The
+# "Resolve commit" step closes both: each run deploys the newest commit on main
+# with a green push CI at the moment it starts, not the commit that happened to
+# trigger it. Whichever run survives, it ships the newest green bundle.
 concurrency:
   group: deploy-static-web-app
   cancel-in-progress: false
 
 jobs:
-  # Lint / type-check / test live in ci.yml, which runs on the same push event.
-  # This workflow builds and deploys only, so checks aren't run twice.
+  # Lint / type-check / test live in ci.yml; this workflow builds and deploys
+  # only, so checks aren't run twice. It runs after CI, never beside it — see
+  # the `on:` block above.
   build_and_deploy_job:
+    # `conclusion` is the whole run's verdict, so every CI job — app, MCP
+    # server and audit — has to be green. `event` is the event CI itself ran
+    # on; only a push to main is a candidate for production.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     name: Build and Deploy Job
     # No `id-token: write`. This deploys with the Static Web App's deployment
     # token, not with a GitHub federated identity — see the Build And Deploy step.
+    # `actions: read` is for the Resolve commit step, which lists CI runs.
     permissions:
       contents: read
+      actions: read
     steps:
+      # Under workflow_run, `github.sha` is the default branch's head when this
+      # run was queued — not the commit CI graded, and possibly one CI has not
+      # finished with. So the commit is resolved explicitly: the newest push to
+      # main whose CI run succeeded (see the concurrency note for why that and
+      # not simply `workflow_run.head_sha`). That is at worst the triggering
+      # commit itself, which just passed. A failed lookup fails the job rather
+      # than falling back: deploying a guess is worse than not deploying.
+      # A manual dispatch deploys the ref it was dispatched on, as before —
+      # which is also the way to roll back: re-running an old commit's CI
+      # re-deploys the newest green commit, not that one.
+      - name: Resolve commit
+        id: target
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          EVENT_NAME: ${{ github.event_name }}
+          DISPATCH_SHA: ${{ github.sha }}
+        run: |
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            sha="$DISPATCH_SHA"
+          else
+            sha=$(gh run list --workflow ci.yml --branch main --event push \
+              --status success --limit 1 --json headSha --jq '.[0].headSha')
+          fi
+          if [ -z "$sha" ] || [ "$sha" = "null" ]; then
+            echo "::error::Could not resolve a commit to deploy"
+            exit 1
+          fi
+          echo "Deploying $sha"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          ref: ${{ steps.target.outputs.sha }}
           lfs: false
 
       # The build used to happen inside the Static Web Apps container, where

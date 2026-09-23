@@ -1,5 +1,18 @@
 import type { SplunkEvent, ConfDirective, ValidationDiagnostic } from '../types';
 import { atDirective } from '../parser/provenance';
+import { segmentLengthsOf } from './lineBreaker';
+
+// The engine type-checks against ES2022 alone (tsconfig.engine.json), so that
+// reaching for a browser-only global fails the build instead of failing in a
+// worker or under Node at run time (#280). The UTF-8 codecs are not ES but are
+// safe to use: they are globals in browsers, Web Workers and every supported
+// Node. Declared here, narrowed to what this file calls, rather than by pulling
+// in a whole lib that would also admit DOMParser and friends.
+declare const TextEncoder: new () => { encode(input: string): Uint8Array };
+declare const TextDecoder: new (
+  label: string,
+  options: { fatal: boolean },
+) => { decode(input: Uint8Array): string };
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder('utf-8', { fatal: false });
@@ -38,6 +51,33 @@ function truncateLine(line: string, maxBytes: number): { text: string; truncated
   return { text: decoder.decode(bytes.slice(0, end)), truncated: true };
 }
 
+/**
+ * The LINE_BREAKER segments an event's `_raw` was assembled from.
+ *
+ * breakLines records them; an event it did not build (a caller using the engine
+ * as a library, say), or one whose `_raw` no longer adds up to what was
+ * recorded, falls back to '\n'-separated lines — exactly the segments the
+ * default LINE_BREAKER produces, since breakLines joins merged segments with
+ * '\n'.
+ */
+function splitIntoSegments(event: SplunkEvent): string[] {
+  const lengths = segmentLengthsOf(event);
+  const raw = event._raw;
+  if (lengths !== undefined) {
+    const expected = lengths.reduce((sum, n) => sum + n, 0) + Math.max(lengths.length - 1, 0);
+    if (expected === raw.length) {
+      const segments: string[] = [];
+      let start = 0;
+      for (const length of lengths) {
+        segments.push(raw.slice(start, start + length));
+        start += length + 1; // step over the '\n' the merge inserted
+      }
+      return segments;
+    }
+  }
+  return raw.split('\n');
+}
+
 export function truncateEvents(
   events: SplunkEvent[],
   directives: ConfDirective[],
@@ -71,9 +111,13 @@ export function truncateEvents(
     // to each line-breaker segment *before* the aggregator merges them. Measuring
     // the whole merged `_raw` would wrongly truncate a long multi-line event whose
     // individual lines are all short (Splunk leaves that intact; MAX_EVENTS caps
-    // line count instead). Segments are merged with '\n' (lineBreaker.ts), so
-    // splitting on '\n' recovers the physical lines to cap independently.
-    const lines = event._raw.split('\n');
+    // line count instead).
+    //
+    // A "line" is a LINE_BREAKER segment, which is not the same as a
+    // '\n'-separated piece: a custom breaker can keep a whole pretty-printed JSON
+    // record in one segment, and Splunk caps that record as one line (#287).
+    // Splitting on '\n' let it through uncut however long it was.
+    const lines = splitIntoSegments(event);
     let truncatedLines = 0;
     const newLines = lines.map((line) => {
       const { text, truncated } = truncateLine(line, maxBytes);

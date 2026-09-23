@@ -86,6 +86,12 @@ updates:
       # in the same change that moves `.nvmrc`, not before it.
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
+      # `marked` is a devDependency only so the hover tests can render Markdown
+      # the way the editor will. Monaco bundles its own copy and pins it exactly
+      # (monaco-editor@0.55.1 ships 14.0.0), so the useful version is whichever
+      # Monaco ships, not the newest. Move it in the same change that moves
+      # monaco-editor, to the version that release pins.
+      - dependency-name: "marked"
 
   # `directory` is not recursive, so the entry above never sees
   # packages/mcp-server's lockfile. That was harmless while nothing audited that

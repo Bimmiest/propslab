@@ -57,10 +57,7 @@ export function useTimestampMatch(raws: string[], config: TimeConfig): Timestamp
 
   useEffect(() => {
     run({ raws, config });
-    // `run` is stable for the life of the hook; listing it would re-probe on
-    // every render of the caller.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [raws, config]);
+  }, [raws, config, run]);
 
   // Probing has no "the input was rejected" outcome — `interpret` and
   // `runInline` above both return `ok` — so `invalid` is unreachable here. Mapped

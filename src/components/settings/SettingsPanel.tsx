@@ -76,7 +76,7 @@ export function SettingsPanel() {
           <button
             onClick={toggleSettings}
             aria-label="Close settings"
-            className="flex items-center justify-center w-7 h-7 rounded-md text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-tertiary)] transition-colors cursor-pointer border-none outline-none"
+            className="flex items-center justify-center w-7 h-7 rounded-md text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-tertiary)] transition-colors cursor-pointer border-none"
           >
             <Icon name="x" className="w-4 h-4" />
           </button>

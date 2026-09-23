@@ -16,6 +16,54 @@ export function convertSplunkToJsRegex(pattern: string): string {
 const JS_REPRESENTABLE_INLINE_FLAGS = 'ims';
 /** All PCRE inline mode-modifier letters we recognise as a flag group (others are dropped). */
 const PCRE_INLINE_FLAG_LETTERS = 'imsxuUJADX';
+/** A whole inline flag group such as `(?i)` or `(?ims)`, anchored at the scan position. */
+const INLINE_FLAG_GROUP = /^\(\?([a-zA-Z]+)\)/;
+/** A bounded quantifier (`{2}`, `{2,}`, `{2,5}`), anchored at the scan position. */
+const BOUNDED_QUANTIFIER = /^\{\d+(?:,\d*)?\}/;
+
+/**
+ * Whether this runtime accepts scoped modifier groups, `(?i:…)` (ES2025).
+ *
+ * Probed rather than assumed from the build target: the `es2022` target says
+ * nothing about the RegExp parser, which ships with the JS engine. V8 enables
+ * them by default from Node 24 / Chrome 125 and Firefox from 132, but Node 22
+ * has them only behind `--js-regexp-modifiers`, and an older Safari may lack
+ * them. Emitting `(?i:…)` where the parser rejects it would turn a pattern that
+ * worked approximately into one `safeRegex` refuses outright, so the translator
+ * falls back to the old whole-pattern hoist there — and says so in `warnings`.
+ */
+export const SUPPORTS_SCOPED_MODIFIERS: boolean = (() => {
+  try {
+    new RegExp('(?i:a)');
+    return true;
+  } catch {
+    return false;
+  }
+})();
+
+export interface PcreTranslation {
+  source: string;
+  flags: string;
+  /**
+   * Places where the JS form only approximates the PCRE meaning. Not errors —
+   * the pattern still compiles — but its matches may differ from Splunk's.
+   */
+  warnings: string[];
+}
+
+export interface PcreTranslationOptions {
+  /**
+   * Rewrite a mid-pattern `(?i)` into a scoped `(?i:…)` group. Defaults to
+   * {@link SUPPORTS_SCOPED_MODIFIERS}; exposed so both paths can be tested on
+   * any runtime.
+   */
+  scopedModifiers?: boolean;
+}
+
+/** PCRE extended-mode whitespace (outside a character class). */
+function isExtendedWhitespace(c: string): boolean {
+  return c === ' ' || c === '\t' || c === '\n' || c === '\r' || c === '\f' || c === '\v';
+}
 
 /**
  * Translate the subset of PCRE (Splunk regex) syntax that the JS engine does not
@@ -25,56 +73,232 @@ const PCRE_INLINE_FLAG_LETTERS = 'imsxuUJADX';
  *
  * Handled:
  *  - `(?P<name>…)` / `(?P=name)`  → `(?<name>…)` / `\k<name>`
- *  - inline flag groups `(?i)`, `(?ims)` → merged into the flags (applied globally;
- *    JS has no scoped inline flags, which is correct for the common leading case)
+ *  - leading inline flag groups `(?i)`, `(?ims)` → merged into the flags, which
+ *    is exact: a leading group governs the whole pattern
+ *  - a mid-pattern flag group `a(?i)b` → a scoped group `a(?i:b)` running to the
+ *    end of the enclosing group. PCRE carries the option into that group's later
+ *    alternatives too, but one scoped group spanning a `|` would capture the
+ *    alternation (`a(?i)b|c` would become "a, then b or c"), so each alternative
+ *    is wrapped separately: `a(?i:b)|(?i:c)`. Where the runtime lacks scoped
+ *    groups the flag is hoisted to the whole pattern, with a warning.
+ *  - a leading `(?x)` → extended mode applied here, since JS has no `x` flag:
+ *    unescaped whitespace and `#…` comments outside character classes are removed
  *  - atomic groups `(?>…)`        → non-capturing `(?:…)` (loses atomicity only)
  *  - possessive quantifiers `a++`, `\d*+`, `x?+`, `{2,3}+` → greedy equivalents
+ *
+ * The rewrite is one left-to-right scan that tracks escapes and character
+ * classes, because every construct above is syntax only OUTSIDE a class: `[*+]`
+ * is "a star or a plus", not a possessive star, and `\\++` is an escaped
+ * backslash followed by a possessive plus. Regex-replace passes over the raw
+ * source could not tell those apart.
  *
  * Not handled (still throw → null): conditionals `(?(…)…)`, recursion, `\p{…}`
  * outside unicode mode, POSIX classes `[[:alpha:]]`.
  */
-export function translatePcreToJs(pattern: string, flags = ''): { source: string; flags: string } {
-  let source = pattern;
+export function translatePcreToJs(
+  pattern: string,
+  flags = '',
+  options: PcreTranslationOptions = {},
+): PcreTranslation {
+  const scopedModifiers = options.scopedModifiers ?? SUPPORTS_SCOPED_MODIFIERS;
+  const warnings: string[] = [];
   let extraFlags = '';
+  let extended = false;
 
-  // Python-style named groups and backreferences.
-  source = source.replace(/\(\?P<(\w+)>/g, '(?<$1>');
-  source = source.replace(/\(\?P=(\w+)\)/g, '\\k<$1>');
-
-  // Inline flag groups: (?i), (?ims) … — strip and hoist representable flags.
-  source = source.replace(/\(\?([a-zA-Z]+)\)/g, (whole, letters: string) => {
-    if (![...letters].every((c) => PCRE_INLINE_FLAG_LETTERS.includes(c))) {
-      return whole; // not a recognised flag group — leave it for the compiler to reject
-    }
+  const addFlags = (letters: string) => {
     for (const c of letters) {
-      if (JS_REPRESENTABLE_INLINE_FLAGS.includes(c) && !extraFlags.includes(c)) {
-        extraFlags += c;
+      if (JS_REPRESENTABLE_INLINE_FLAGS.includes(c) && !extraFlags.includes(c)) extraFlags += c;
+    }
+  };
+  // Anything else (`(?Q)`) is not a flag group — left for the compiler to reject.
+  const isFlagGroup = (letters: string) => [...letters].every((c) => PCRE_INLINE_FLAG_LETTERS.includes(c));
+
+  // Index just past any extended-mode whitespace and `#…` comments at `from`.
+  const skipIgnorable = (from: number): number => {
+    let i = from;
+    while (i < pattern.length) {
+      const c = pattern.charAt(i);
+      if (isExtendedWhitespace(c)) {
+        i++;
+      } else if (c === '#') {
+        const nl = pattern.indexOf('\n', i);
+        i = nl < 0 ? pattern.length : nl + 1;
+      } else {
+        break;
       }
     }
-    return '';
-  });
+    return i;
+  };
 
-  // Atomic groups → non-capturing (JS lacks atomic groups before ES2025).
-  source = source.replace(/\(\?>/g, '(?:');
+  // Leading flag groups govern the whole pattern, which a JS flag expresses
+  // exactly. Once `(?x)` is seen, whitespace between later leading groups is
+  // already insignificant, so `(?x) (?i)` is still two leading groups.
+  let i = 0;
+  for (;;) {
+    if (extended) i = skipIgnorable(i);
+    const m = INLINE_FLAG_GROUP.exec(pattern.slice(i));
+    if (!m || !isFlagGroup(m[1]!)) break;
+    addFlags(m[1]!);
+    if (m[1]!.includes('x')) extended = true;
+    i += m[0].length;
+  }
 
-  // Possessive quantifiers → greedy. The (?<!\\) guard avoids touching an escaped
-  // literal quantifier char (e.g. `\++` = "one or more literal plus", valid in JS).
-  source = source.replace(/(?<!\\)([*+?}])\+/g, '$1');
+  // One frame per open group. `scoped` lists the `(?flags:` wrappers that
+  // mid-pattern flag groups opened in it, so a `|` or the group's closing `)`
+  // can close them (and, after a `|`, reopen them for the next alternative).
+  const frames: { scoped: string[] }[] = [{ scoped: [] }];
+  const current = () => frames[frames.length - 1]!;
+  let out = '';
+  // True right after a quantifier, where a `+` makes it possessive and a `?` lazy.
+  let afterQuantifier = false;
+
+  while (i < pattern.length) {
+    const c = pattern.charAt(i);
+    const wasAfterQuantifier: boolean = afterQuantifier;
+    afterQuantifier = false;
+
+    if (c === '\\') {
+      // Copied verbatim, so an escaped `+`, `(`, `[`, `#` or space is never
+      // read as syntax. A trailing lone `\` is left for the compiler to reject.
+      out += pattern.slice(i, i + 2);
+      i += 2;
+      continue;
+    }
+
+    if (c === '[') {
+      const end = findClassEnd(pattern, i);
+      if (end < 0) {
+        out += pattern.slice(i); // unterminated — the compiler reports it
+        break;
+      }
+      // Verbatim: PCRE's `x` does not touch whitespace inside a class either.
+      out += pattern.slice(i, end + 1);
+      i = end + 1;
+      continue;
+    }
+
+    if (extended && (isExtendedWhitespace(c) || c === '#')) {
+      i = skipIgnorable(i);
+      afterQuantifier = wasAfterQuantifier; // ignorable text does not end a quantifier
+      continue;
+    }
+
+    if (c === '*' || c === '+' || c === '?') {
+      if (wasAfterQuantifier && c === '+') {
+        i++; // possessive → greedy
+        continue;
+      }
+      out += c;
+      i++;
+      // A `?` straight after a quantifier is its lazy marker, which ends it.
+      afterQuantifier = !wasAfterQuantifier;
+      continue;
+    }
+
+    if (c === '{') {
+      const bound = BOUNDED_QUANTIFIER.exec(pattern.slice(i));
+      if (bound) {
+        out += bound[0];
+        i += bound[0].length;
+        afterQuantifier = true;
+      } else {
+        out += c; // a literal brace
+        i++;
+      }
+      continue;
+    }
+
+    if (c === '(') {
+      const rest = pattern.slice(i);
+      const named = /^\(\?P<(\w+)>/.exec(rest);
+      if (named) {
+        out += `(?<${named[1]!}>`;
+        i += named[0].length;
+        frames.push({ scoped: [] });
+        continue;
+      }
+      const backref = /^\(\?P=(\w+)\)/.exec(rest);
+      if (backref) {
+        out += `\\k<${backref[1]!}>`;
+        i += backref[0].length;
+        continue;
+      }
+      if (rest.startsWith('(?>')) {
+        out += '(?:'; // JS has no atomic groups
+        i += 3;
+        frames.push({ scoped: [] });
+        continue;
+      }
+      const flagGroup = INLINE_FLAG_GROUP.exec(rest);
+      if (flagGroup && isFlagGroup(flagGroup[1]!)) {
+        const letters = flagGroup[1]!;
+        i += flagGroup[0].length;
+        if (letters.includes('x')) {
+          warnings.push(
+            '(?x) is only applied at the start of a pattern; mid-pattern it is ignored, so whitespace after it is matched literally.',
+          );
+        }
+        const js = [...new Set(letters)].filter((l) => JS_REPRESENTABLE_INLINE_FLAGS.includes(l)).join('');
+        if (!js) continue;
+        if (scopedModifiers) {
+          out += `(?${js}:`;
+          current().scoped.push(js);
+        } else {
+          addFlags(js);
+          warnings.push(
+            `Mid-pattern (?${js}) was applied to the whole pattern: this browser does not support scoped modifier groups, so text before it is matched with the same flags.`,
+          );
+        }
+        continue;
+      }
+      // Any other group: copy the `(` and its `?` introducer, so the `?` is not
+      // read as a quantifier, and let the scan continue into the body.
+      const open = rest.startsWith('(?') ? '(?' : '(';
+      out += open;
+      i += open.length;
+      frames.push({ scoped: [] });
+      continue;
+    }
+
+    if (c === ')') {
+      out += ')'.repeat(current().scoped.length) + ')';
+      if (frames.length > 1) frames.pop();
+      else current().scoped = []; // unbalanced — the compiler reports it
+      i++;
+      continue;
+    }
+
+    if (c === '|') {
+      const { scoped } = current();
+      out += ')'.repeat(scoped.length) + '|' + scoped.map((f) => `(?${f}:`).join('');
+      i++;
+      continue;
+    }
+
+    out += c;
+    i++;
+  }
+
+  // Close wrappers still open at the end of the pattern, innermost group first.
+  for (let f = frames.length - 1; f >= 0; f--) out += ')'.repeat(frames[f]!.scoped.length);
 
   let mergedFlags = flags;
   for (const c of extraFlags) {
     if (!mergedFlags.includes(c)) mergedFlags += c;
   }
 
-  return { source, flags: mergedFlags };
+  return { source: out, flags: mergedFlags, warnings };
 }
 
 /**
  * Best-effort detection of patterns that exhibit catastrophic backtracking on
- * long input. These are rejected before compiling so they never execute — the
- * live regex testers (RegexTab / ExtractNameDialog) run on the main thread,
- * where the 5 s Web Worker watchdog does NOT apply, so a hang there freezes the
- * tab with no recovery.
+ * long input. These are rejected before compiling so they never execute. It is
+ * the first line of defence, not the only one: the pipeline and the live regex
+ * testers (RegexTab / ExtractNameDialog, via `regexMatchWorker.ts`) run user
+ * patterns in Web Workers that a watchdog terminates. It still matters there —
+ * a refused pattern fails fast with a reason instead of stalling the preview
+ * until the watchdog fires — and it is all that stands between a pattern and a
+ * main-thread caller such as the editor's hover providers.
  *
  * This is a heuristic, not a complete ReDoS analysis. It catches:
  *  1. A repeated group whose body is *ambiguous* — the body contains an
@@ -96,8 +320,8 @@ export function translatePcreToJs(pattern: string, flags = ''): { source: string
  *
  * It does NOT catch alternation-overlap forms such as `(a|aa)+`: flagging those
  * without also rejecting benign alternations like `(foo|bar)+` needs a real
- * overlap analysis. Such patterns remain covered by the worker watchdog for the
- * main pipeline, but not for the main-thread live testers.
+ * overlap analysis. Such patterns remain covered by the worker watchdogs, but a
+ * main-thread caller must bound its input rather than rely on this check alone.
  */
 const REDOS_NESTED_GROUP = /\((?:[^()\\]|\\.)*[*+][^()]*\)(?:[*+]|\{\d+,?\d*\})/;
 const REDOS_ADJACENT_QUANTIFIER = /(\\?[A-Za-z0-9.])[*+]\1[*+]/;
@@ -264,7 +488,10 @@ function scanAtoms(source: string): RegexAtom[] | null {
 /** The inner source of a group atom, or null for constructs with no body to analyse. */
 function groupBody(groupSource: string): string | null {
   const inner = groupSource.slice(1, -1);
-  const prefix = /^\?(?::|<[A-Za-z_]\w*>|'[A-Za-z_]\w*'|P<[A-Za-z_]\w*>|=|!|<=|<!|>)/.exec(inner);
+  // `?ims-x:` is a scoped modifier group, which `translatePcreToJs` emits for a
+  // mid-pattern `(?i)`. It has a body like any other group; treating it as
+  // body-less would let `a(?i)(x+)+` past the check once it became `a(?i:(x+)+)`.
+  const prefix = /^\?(?::|[a-zA-Z]*(?:-[a-zA-Z]+)?:|<[A-Za-z_]\w*>|'[A-Za-z_]\w*'|P<[A-Za-z_]\w*>|=|!|<=|<!|>)/.exec(inner);
   if (prefix) return inner.slice(prefix[0].length);
   if (inner.startsWith('?')) return null; // inline flags or an unrecognised construct
   return inner;

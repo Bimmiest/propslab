@@ -60,6 +60,22 @@ describe('applyDestKey — MetaData:Source prefix enforcement', () => {
   });
 });
 
+// Doc-derived (transforms.conf.spec): FORMAT for `_MetaData:Index` is the bare
+// index name. The router used to require `index::` and silently skip the update
+// without it — the reverse of the spec, which requires the prefix only for
+// Host/Source/Sourcetype (#281).
+describe('applyDestKey — MetaData:Index takes the bare index name', () => {
+  it('routes to the bare FORMAT value', () => {
+    const event = applyDestKey(baseEvent(), result('_MetaData:Index', 'security'));
+    expect(event.metadata.index).toBe('security');
+  });
+
+  it('does not strip an index:: prefix — Splunk would route to that literal name', () => {
+    const event = applyDestKey(baseEvent(), result('MetaData:Index', 'index::security'));
+    expect(event.metadata.index).toBe('index::security');
+  });
+});
+
 describe('applyDestKey — queue routing (last-wins)', () => {
   it('records nullQueue on _meta._queue rather than dropping the event', () => {
     // DEST_KEY = queue is not a final decision — a later transform can overwrite

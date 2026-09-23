@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { validateRegex } from '../../../utils/splunkRegex';
 import { copyToClipboard } from '../../../utils/clipboard';
 import { useRegexMatch } from '../../../hooks/useRegexMatch';
@@ -129,6 +129,7 @@ interface RegexTabProps {
 }
 
 export function RegexTab({ items, allEvents, currentPage, eventsPerPage }: RegexTabProps) {
+  const patternId = useId();
   const [pattern, setPattern] = useState('');
   const [className, setClassName] = useState('custom');
   const [refOpen, setRefOpen] = useState(false);
@@ -226,7 +227,7 @@ export function RegexTab({ items, allEvents, currentPage, eventsPerPage }: Regex
       {/* Regex input */}
       <div className="flex-shrink-0 px-3 py-2 border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
         <div className="flex items-center gap-2 mb-1">
-          <label className="text-xs font-medium text-[var(--color-text-muted)]">Regex Pattern</label>
+          <label htmlFor={patternId} className="text-xs font-medium text-[var(--color-text-muted)]">Regex Pattern</label>
           {pattern && !validationError && matchStats.total > 0 && (
             <span className="text-[10px] text-[var(--color-text-muted)] ml-auto">
               {matchStats.matched}/{matchStats.total} events matched
@@ -234,6 +235,7 @@ export function RegexTab({ items, allEvents, currentPage, eventsPerPage }: Regex
           )}
         </div>
         <input
+          id={patternId}
           type="text"
           aria-label="Regular expression pattern"
           placeholder="(?P<field_name>\d+\.\d+\.\d+\.\d+)..."

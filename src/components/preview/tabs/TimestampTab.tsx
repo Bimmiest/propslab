@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useAppStore } from '../../../store/useAppStore';
 import { parseConf } from '../../../engine/parser/confParser';
 import { matchStanzas, mergeDirectives } from '../../../engine/parser/stanzaMatcher';
+import { resolveLookahead } from '../../../engine/processors/timestampExtractor';
 import { useTimestampMatch } from '../../../hooks/useTimestampMatch';
 import type { TimeConfig, TimestampProbe } from '../../../engine/timestampMatch';
 import type { EventMetadata, SplunkEvent, TimeSource } from '../../../engine/types';
@@ -159,11 +160,11 @@ const STRPTIME_REFERENCE: StrptimeCategory[] = [
 function parseTimeConfig(propsConf: string, metadata: EventMetadata): TimeConfig {
   const directives = mergeDirectives(matchStanzas(parseConf(propsConf, 'props.conf').stanzas, metadata));
   const get = (key: string) => directives.find((d) => d.key === key)?.value.trim();
-  const lookahead = parseInt(get('MAX_TIMESTAMP_LOOKAHEAD') ?? '', 10);
   return {
     timePrefix: get('TIME_PREFIX') ?? null,
     timeFormat: get('TIME_FORMAT') ?? null,
-    maxLookahead: Number.isFinite(lookahead) && lookahead > 0 ? lookahead : 128,
+    // Shared with the engine so 0 / -1 (no limit) draw the window it scans.
+    maxLookahead: resolveLookahead(get('MAX_TIMESTAMP_LOOKAHEAD')),
     tz: get('TZ') ?? null,
   };
 }
@@ -232,7 +233,7 @@ export function TimestampTab({ items, currentPage, eventsPerPage }: TimestampTab
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
           <ConfigValue label="TIME_PREFIX" value={config.timePrefix} color={PREFIX_COLOR} />
           <ConfigValue label="TIME_FORMAT" value={config.timeFormat} color={FORMAT_COLOR} />
-          <ConfigValue label="MAX_TIMESTAMP_LOOKAHEAD" value={config.maxLookahead.toString()} color={LOOKAHEAD_COLOR} />
+          <ConfigValue label="MAX_TIMESTAMP_LOOKAHEAD" value={Number.isFinite(config.maxLookahead) ? config.maxLookahead.toString() : 'no limit'} color={LOOKAHEAD_COLOR} />
           {config.tz && <ConfigValue label="TZ" value={config.tz} />}
         </div>
         {directives.length > 0 && (

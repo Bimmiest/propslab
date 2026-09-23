@@ -62,10 +62,7 @@ export function useRegexMatch(pattern: string, inputs: string[]): RegexMatchStat
 
   useEffect(() => {
     run({ pattern: debouncedPattern, inputs });
-    // `run` is stable for the life of the hook; listing it would re-run the
-    // match on every render of the caller.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedPattern, inputs]);
+  }, [debouncedPattern, inputs, run]);
 
   return { status, results: data };
 }

@@ -182,3 +182,68 @@ describe('matchStanzas — host case-insensitivity without the `i` flag (#118)',
     expect(matchStanzas(stanzas, META)).toHaveLength(0);
   });
 });
+
+// Doc-derived (props.conf.spec, [source::<source>]): "`|` is equivalent to
+// 'or'. `( )` are used to limit scope of `|`." Not a captured fixture.
+describe('matchStanzas — `|` alternation and `( )` scoping (#284)', () => {
+  const source = (pattern: string): ConfStanza => ({
+    name: `source::${pattern}`, type: 'source', sourcePattern: pattern,
+    directives: [], lineRange: { start: 1, end: 2 },
+  });
+  const at = (path: string): EventMetadata => ({ ...META, source: path });
+
+  it('matches either branch of a scoped alternation', () => {
+    const s = source('/var/log/(messages|secure)');
+    expect(matchStanzas([s], at('/var/log/secure'))).toHaveLength(1);
+    expect(matchStanzas([s], at('/var/log/messages'))).toHaveLength(1);
+  });
+
+  it('does not match outside the alternatives, or the pattern text itself', () => {
+    const s = source('/var/log/(messages|secure)');
+    expect(matchStanzas([s], at('/var/log/maillog'))).toHaveLength(0);
+    expect(matchStanzas([s], at('/var/log/(messages|secure)'))).toHaveLength(0);
+  });
+
+  it('anchors a top-level alternation at both ends', () => {
+    // Without a wrapping group, `^a|b$` would accept anything starting with
+    // the first branch or ending with the second.
+    const s = source('/var/log/messages|/var/log/secure');
+    expect(matchStanzas([s], at('/var/log/secure'))).toHaveLength(1);
+    expect(matchStanzas([s], at('/var/log/messages.1'))).toHaveLength(0);
+    expect(matchStanzas([s], at('/tmp/var/log/secure'))).toHaveLength(0);
+  });
+
+  it('keeps wildcards working inside a group', () => {
+    const s = source('/var/log/(app|web)/*.log');
+    expect(matchStanzas([s], at('/var/log/web/access.log'))).toHaveLength(1);
+    expect(matchStanzas([s], at('/var/log/web/sub/access.log'))).toHaveLength(0);
+    expect(matchStanzas([source('/var/(...|tmp)/x')], at('/var/a/b/x'))).toHaveLength(1);
+  });
+
+  it('reads an unbalanced parenthesis as a literal character rather than throwing', () => {
+    expect(matchStanzas([source('/var/log/app(1.log')], at('/var/log/app(1.log'))).toHaveLength(1);
+    expect(matchStanzas([source('/var/log/app1).log')], at('/var/log/app1).log'))).toHaveLength(1);
+    // The outer `(` has no partner; the inner pair still groups.
+    expect(matchStanzas([source('/x/((a|b)')], at('/x/(b'))).toHaveLength(1);
+  });
+
+  it('gives an alternation pattern the pattern-stanza default priority', () => {
+    // A literal source stanza defaults to 100 and a pattern one to 0, so the
+    // literal wins even when listed second.
+    const alt = source('/var/log/(messages|secure)');
+    const literal = source('/var/log/secure');
+    expect(matchStanzas([alt, literal], at('/var/log/secure')).map((s) => s.name))
+      .toEqual(['source::/var/log/secure', 'source::/var/log/(messages|secure)']);
+  });
+
+  it('scores an alternation by its least specific branch, not by every branch', () => {
+    // Both are pattern stanzas at priority 0, so specificity decides. The
+    // alternation guarantees 15 literal characters (`/var/log/` + `secure`);
+    // `/var/log/message?` guarantees 16. Counting both spelled-out branches,
+    // plus the parentheses and `|`, scored the alternation 26 and put it first.
+    const alt = source('/var/log/(messages|secure)');
+    const wild = source('/var/log/message?');
+    expect(matchStanzas([alt, wild], at('/var/log/messages')).map((s) => s.name))
+      .toEqual(['source::/var/log/message?', 'source::/var/log/(messages|secure)']);
+  });
+});

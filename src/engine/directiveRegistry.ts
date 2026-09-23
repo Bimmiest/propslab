@@ -78,7 +78,7 @@ const DIRECTIVE_DEFINITIONS: DirectiveDefinition[] = [
     description:
       'How far past the TIME_PREFIX match the timestamp scan is allowed to reach, counted in characters. ' +
       'A window that ends before the timestamp does means no timestamp is found at all; an over-wide one ' +
-      'invites a false match on digits elsewhere in the line.',
+      'invites a false match on digits elsewhere in the line. 0 or -1 disables the limit, so the scan reaches the end of the event.',
     example: 'MAX_TIMESTAMP_LOOKAHEAD = 128',
     defaultValue: '128',
     category: 'Time Configuration',
@@ -145,8 +145,9 @@ const DIRECTIVE_DEFINITIONS: DirectiveDefinition[] = [
     key: 'MAX_DIFF_SECS_AGO',
     description:
       'The maximum number of seconds that a timestamp from an event can differ (into the past) from the timestamp of the previous event. ' +
-      'If the difference exceeds this value, Splunk does not accept the parsed timestamp. ' +
-      'This helps guard against false timestamp matches within event text.',
+      'Beyond it, Splunk accepts the parsed timestamp only if it has the same exact time format as the majority of timestamps from the source, ' +
+      'so out-of-order lines in one consistent format keep their own times while a stray date of another shape in the event text is rejected. ' +
+      'The simulator judges "majority" over the events accepted earlier in the same sample.',
     example: 'MAX_DIFF_SECS_AGO = 86400',
     defaultValue: '3600',
     category: 'Time Configuration',
@@ -159,7 +160,8 @@ const DIRECTIVE_DEFINITIONS: DirectiveDefinition[] = [
     key: 'MAX_DIFF_SECS_HENCE',
     description:
       'The maximum number of seconds that a timestamp from an event can differ (into the future) from the timestamp of the previous event. ' +
-      'If the difference exceeds this value, Splunk does not accept the parsed timestamp.',
+      'Beyond it, Splunk accepts the parsed timestamp only if it has the same exact time format as the majority of timestamps from the source. ' +
+      'The simulator judges "majority" over the events accepted earlier in the same sample.',
     example: 'MAX_DIFF_SECS_HENCE = 604800',
     defaultValue: '604800',
     category: 'Time Configuration',
@@ -615,7 +617,9 @@ const DIRECTIVE_DEFINITIONS: DirectiveDefinition[] = [
     description:
       'Specifies how to map captured groups from the REGEX to field-value pairs. ' +
       'Uses $1, $2, etc. to reference numbered capturing groups. ' +
-      'Syntax is field_name::$capture_group or $capture_group for indexed field routing.',
+      'Syntax is field_name::$capture_group or $capture_group for indexed field routing. ' +
+      'With DEST_KEY = MetaData:Host/Source/Sourcetype the value needs the host::, source:: or ' +
+      'sourcetype:: prefix; with DEST_KEY = _MetaData:Index it is the bare index name.',
     example: 'FORMAT = src_ip::$1 action::$2',
     defaultValue: '',
     category: 'Field Extraction',
@@ -671,7 +675,9 @@ const DIRECTIVE_DEFINITIONS: DirectiveDefinition[] = [
     description:
       'Specifies the field where the result of the REGEX/FORMAT transformation is written. ' +
       'Commonly used for index-time transforms such as routing events. ' +
-      'Special values include queue (for routing), MetaData:Index, MetaData:Host, MetaData:Source, and MetaData:Sourcetype.',
+      'Special values include queue (for routing), MetaData:Index, MetaData:Host, MetaData:Source, and MetaData:Sourcetype. ' +
+      'For MetaData:Host/Source/Sourcetype, FORMAT must carry the host::, source:: or sourcetype:: prefix; ' +
+      'for _MetaData:Index, FORMAT is the bare index name (FORMAT = my_index).',
     example: 'DEST_KEY = MetaData:Index',
     defaultValue: '',
     category: 'Field Extraction',

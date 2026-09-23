@@ -93,6 +93,17 @@ describe('#179 — a value that is not the documented type', () => {
     expect(d?.message).toContain('cannot be negative');
   });
 
+  // Doc-derived (#286): props.conf.spec documents -1 as disabling the lookahead
+  // limit, so it is a setting rather than a mistake. Other negatives still are.
+  it('accepts MAX_TIMESTAMP_LOOKAHEAD = -1, which the spec documents as "no limit"', () => {
+    const lint = (v: string) =>
+      diagnosticsFor(`MAX_TIMESTAMP_LOOKAHEAD = ${v}\n`).filter(
+        (x) => x.directiveKey === 'MAX_TIMESTAMP_LOOKAHEAD' && x.message.includes('cannot be negative'),
+      );
+    expect(lint('-1')).toEqual([]);
+    expect(lint('-2')).toHaveLength(1);
+  });
+
   it('flags a value outside a documented enum, and lists the valid ones', () => {
     const d = diagnosticsFor('KV_MODE = XLM\n').find((x) => x.directiveKey === 'KV_MODE');
     expect(d?.message).toContain('does not accept');

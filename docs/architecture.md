@@ -9,10 +9,10 @@ Single Zustand store (`src/store/useAppStore.ts`). The store is flat — compone
 ```
 rawData / metadata / propsConf / transformsConf     User inputs (ephemeral)
 processingResult / validationDiagnostics            Pipeline output
-lastProcessingMs / workerStatus                     StatusBar telemetry
+isProcessing / lastProcessingMs                     StatusBar telemetry
 theme / activeOutputTab / collapsedPanels / ...     UI state
 activeView / dictionarySelection                    Rail view + dictionary deep link
-settings                                            Simulator options (e.g. perEventPipeline)
+settings / pipelineDirty / manualRunTick            Simulator options and the manual-apply run trigger
 ```
 
 localStorage is limited to UI layout state (split-pane sizes, seen-intro flag, theme), read inside try/catch with typed fallbacks. Raw logs and configuration are not persisted — a refresh clears them.
@@ -31,8 +31,11 @@ Monaco's widgets (hover, suggest, folding, find, multi-cursor) are *contribution
 - Arrow keys navigate tabs; Home/End jump to first/last. The activity rail is vertical and declares `aria-orientation`.
 - The rail's buttons carry `aria-label`, not just a tooltip: they have no visible text, and a Radix tooltip contributes `aria-describedby`, which supplements an accessible name rather than supplying one.
 - The dictionary list is a `role="listbox"` driven by `aria-activedescendant`, so one Tab stop covers 80-odd rows.
-- All inputs have associated `<label>` via `htmlFor`/`id`.
-- `focus-visible:ring-2` on all interactive elements.
+- Inputs have an accessible name: an associated `<label>` via `htmlFor`/`id` (ids from `useId`), or `aria-label` where there is no visible label.
+- A global `:focus-visible` outline in `index.css` is the floor for every focusable element; components that draw their own `focus-visible:ring-*` take precedence over it. Do not add `outline-none` without a replacement ring.
+- Clickable spans and divs that cannot be `<button>`s go through `components/ui/pressable.ts`, which adds the tab stop, `role="button"` and Enter/Space. The highlighted spans inside raw event text are the deliberate exception: one tab stop per value would bury the page, and the field sidebar offers the same pin action.
+- Raw-text selection (`SelectableRaw`) has a keyboard path: arrows select tokens, Shift extends, Shift+F10 or the Menu key opens the row's context menu.
+- `eslint-plugin-jsx-a11y` is not wired into lint: its peer range ends at eslint 9. Tracked in #302.
 - Panel-level `ErrorBoundary` with "Try Again" recovery.
 
 ### Overlays

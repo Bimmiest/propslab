@@ -2,6 +2,7 @@ import type { SplunkEvent, ConfDirective, ValidationDiagnostic } from '../types'
 import { flattenJson, flattenArray } from '../utils/flattenJson';
 import { hasField, setField, addFieldValue } from '../utils/fieldBag';
 import { cleanFieldKey } from '../transforms/regexTransform';
+import { parseXmlDocument, xmlChildElements, xmlTextContent, type XmlElement } from '../utils/xmlReader';
 
 export function applyKvMode(
   events: SplunkEvent[],
@@ -18,7 +19,7 @@ export function applyKvMode(
   const autoKvJsonDir = directives.find((d) => d.key === 'AUTO_KV_JSON');
   const autoKvJson = autoKvJsonDir ? autoKvJsonDir.value.trim().toLowerCase() !== 'false' : true;
 
-  // Collected across events: data that looks like JSON (starts with { or [) but
+  // Collected across events: data that looks like JSON (see parseWholeJson) but
   // fails to parse. Surfaced as a single diagnostic so a malformed paste doesn't
   // silently yield partial/empty extractions with no explanation.
   const parseFailures: { line: number; error: string }[] = [];
@@ -124,7 +125,7 @@ function* jsonObjectCandidates(raw: string): Generator<string, void, undefined> 
 
 /**
  * Result of attempting to parse the whole event as JSON.
- * - `notJson`  — the event does not begin with `{`/`[`; it was never meant to be JSON.
+ * - `notJson`  — the event does not begin like a JSON object or array; it was never meant to be JSON.
  * - `invalid`  — it begins like JSON but `JSON.parse` rejected it (malformed data).
  * - `parsed`   — a valid JSON value (object or array).
  * Distinguishing `notJson` from `invalid` lets the caller warn about malformed JSON
@@ -137,7 +138,18 @@ type WholeJsonResult =
 
 function parseWholeJson(raw: string): WholeJsonResult {
   const trimmed = raw.trim();
-  if (!(trimmed.startsWith('{') || trimmed.startsWith('['))) return { kind: 'notJson' };
+  // A leading `[` alone is not evidence of JSON: `[INFO] started` and other
+  // bracketed log prefixes begin with one, and treating them as candidates
+  // raised a "not valid JSON" warning on ordinary events (#289). Only an `[`
+  // followed by something that can start a JSON value -- or close an empty
+  // array -- is plausibly an array. That still admits a bracketed timestamp
+  // (`[2026-01-15 10:00:00] msg` starts with a digit), which is commoner than
+  // `[INFO]`, so an array must also end with `]`. The cost is that a truncated
+  // array no longer warns; a truncated object still does, and whole-event
+  // arrays are the rarer shape.
+  const looksLikeJson =
+    trimmed.startsWith('{') || (/^\[\s*[{["\d\-tfn\]]/.test(trimmed) && trimmed.endsWith(']'));
+  if (!looksLikeJson) return { kind: 'notJson' };
   try {
     return { kind: 'parsed', value: JSON.parse(trimmed) };
   } catch (e) {
@@ -208,37 +220,31 @@ function addMvField(fields: Record<string, string | string[]>, added: string[], 
 }
 
 function extractXml(raw: string, fields: Record<string, string | string[]>, added: string[]): void {
-  // Wrap in a root element so DOMParser handles fragments without a single root.
-  // DOMParser decodes entities, handles CDATA, and correctly matches multi-line content.
-  let doc: Document;
-  try {
-    doc = new DOMParser().parseFromString(`<_root_>${raw}</_root_>`, 'text/xml');
-  } catch {
-    return;
-  }
-  // If parsing failed, the document contains a <parsererror> element.
+  // Wrap in a root element so fragments with several top-level elements (or
+  // none) parse; the reader decodes entities, handles CDATA, and matches
+  // multi-line content. It is the engine's own rather than DOMParser, which
+  // exists in neither a Web Worker nor Node (see utils/xmlReader.ts, #280).
+  let root = parseXmlDocument(`<_root_>${raw}</_root_>`);
   let wrapped = true;
-  if (doc.querySelector('parsererror')) {
-    // Try wrapping the raw text as-is in case it is already a valid document.
-    try {
-      doc = new DOMParser().parseFromString(raw, 'text/xml');
-      if (doc.querySelector('parsererror')) return;
-      wrapped = false;
-    } catch {
-      return;
-    }
+  if (root === null) {
+    // The wrapper is what makes a document with an XML declaration or DOCTYPE
+    // malformed, so retry the raw text as-is in case it is already a valid
+    // document. If that fails too, the event is not XML: extract nothing.
+    root = parseXmlDocument(raw);
+    if (root === null) return;
+    wrapped = false;
   }
 
   // Walk from the *document's* root elements, not from the synthetic wrapper:
   // field names are dotted paths and `_root_` must not appear in any of them.
-  const roots = wrapped ? Array.from(doc.documentElement.children) : [doc.documentElement];
-  for (const root of roots) {
-    walkXmlElement(root, fields, added, []);
+  const roots = wrapped ? xmlChildElements(root) : [root];
+  for (const el of roots) {
+    walkXmlElement(el, fields, added, []);
   }
 }
 
 function walkXmlElement(
-  el: Element,
+  el: XmlElement,
   fields: Record<string, string | string[]>,
   added: string[],
   parentPath: string[],
@@ -252,7 +258,7 @@ function walkXmlElement(
   // Extract attributes. These keep their bare names rather than taking the path
   // prefix the element leaves get: no capture pins attribute naming, and the
   // WinEventLog convention below is the one behaviour here we do know.
-  for (const attr of Array.from(el.attributes)) {
+  for (const attr of el.attributes) {
     // "Name" attribute on an element uses TagName_Name as field name (Windows EventLog convention).
     const fieldName = attr.name === 'Name' ? `${tagName}_Name` : attr.name;
     // Accumulate like the leaf-text path below: within one mode, repeated data
@@ -260,13 +266,13 @@ function walkXmlElement(
     if (attr.value) addMvField(fields, added, fieldName, attr.value);
   }
 
-  const children = Array.from(el.children);
+  const children = xmlChildElements(el);
 
   if (children.length === 0) {
     // Leaf node — extract text content as a field.
-    const value = el.textContent?.trim() ?? '';
+    const value = xmlTextContent(el).trim();
     // For <Tag Name="fieldName">value</Tag>, use the Name attribute as the field name.
-    const nameAttr = el.getAttribute('Name');
+    const nameAttr = el.attributes.find((a) => a.name === 'Name')?.value;
     const fieldKey = nameAttr ?? path.join('.');
     if (value) {
       addMvField(fields, added, fieldKey, value);

@@ -42,7 +42,8 @@ describe('applyRegexTransform — zero-length match guard', () => {
   it('terminates on a DEST_KEY=<field> regex that can match the empty string', () => {
     // `(.*)` matches the whole line then an empty string at the end — without a
     // lastIndex guard the global match loop would spin forever and hang the worker.
-    const s = stanza('grab', { REGEX: '(.*)', FORMAT: '$1', DEST_KEY: 'myfield' });
+    // REPEAT_MATCH, or the REGEX runs once and the loop never reaches the empty match.
+    const s = stanza('grab', { REGEX: '(.*)', FORMAT: '$1', DEST_KEY: 'myfield', REPEAT_MATCH: 'true' });
     const result = applyRegexTransform(event('hello world'), s);
     expect(result.matched).toBe(true);
     expect(result.destKey).toBe('myfield');
@@ -110,10 +111,18 @@ describe('applyRegexTransform — default index-time FORMAT (#61.2)', () => {
     expect(result.fields['myextract']).toBe('hello');
   });
 
-  it('applies the default FORMAT to every match (multivalue) like an explicit field::$1', () => {
-    const s = stanza('word', { REGEX: '(\\w+)', WRITE_META: 'true' });
+  it('applies the default FORMAT to every match (multivalue) under REPEAT_MATCH', () => {
+    // Previously asserted every match without REPEAT_MATCH. Corrected in #285
+    // (doc-derived): at index time the REGEX runs once unless REPEAT_MATCH is set.
+    const s = stanza('word', { REGEX: '(\\w+)', WRITE_META: 'true', REPEAT_MATCH: 'true' });
     const result = applyRegexTransform(event('hello world'), s);
     expect(result.fields['word']).toEqual(['hello', 'world']);
+  });
+
+  it('applies the default FORMAT to the first match only without REPEAT_MATCH', () => {
+    const s = stanza('word', { REGEX: '(\\w+)', WRITE_META: 'true' });
+    const result = applyRegexTransform(event('hello world'), s);
+    expect(result.fields['word']).toBe('hello');
   });
 
   it('leaves a group-less REGEX with no FORMAT extracting nothing', () => {
@@ -184,10 +193,14 @@ describe('applyRegexTransform — REPEAT_MATCH / MV_ADD', () => {
     expect(result.fields['num']).toBe('1');
   });
 
-  it('MV_ADD without REPEAT_MATCH still only sees the first match', () => {
+  it('MV_ADD without REPEAT_MATCH still sees every match at search time', () => {
+    // Previously asserted '1' (first match only). Corrected in #285: REPEAT_MATCH
+    // is inert at search time — the report-transform-search-time capture
+    // (10.4.0) extracts repeated matches with MV_ADD and no REPEAT_MATCH — so
+    // named groups now scan the same matches the FORMAT path always did.
     const s = stanza('nums', { REGEX: '(?<num>\\d+)', MV_ADD: 'true' });
     const result = searchTime(event('1 2 3'), s);
-    expect(result.fields['num']).toBe('1');
+    expect(result.fields['num']).toEqual(['1', '2', '3']);
   });
 
   it('REPEAT_MATCH + MV_ADD builds multivalue across multiple named groups', () => {
@@ -422,10 +435,12 @@ describe('applyRegexTransform — DEST_KEY single-value metadata slots', () => {
   });
 
   it('arbitrary field DEST_KEY still accumulates multi-values', () => {
+    // REPEAT_MATCH added in #285: without it the index-time REGEX runs once.
     const s = stanza('extract_words', {
       REGEX: '(\\w+)',
       FORMAT: '$1',
       DEST_KEY: 'words',
+      REPEAT_MATCH: 'true',
     });
     const result = applyRegexTransform(event('foo bar baz'), s);
     expect(result.destKey).toBe('words');
@@ -481,7 +496,7 @@ describe('applyRegexTransform — FORMAT is tokenized before capture substitutio
   it('still accumulates one value per match across repeated matches', () => {
     const r = applyRegexTransform(
       event('k=a b; k=c d;'),
-      stanza('t', { REGEX: 'k=([^;]*);', FORMAT: 'k::$1' }),
+      stanza('t', { REGEX: 'k=([^;]*);', FORMAT: 'k::$1', REPEAT_MATCH: 'true' }),
     );
     expect(r.fields.k).toEqual(['a b', 'c d']);
   });
@@ -594,11 +609,76 @@ describe('#174 — MV_ADD in the FORMAT-pairs path', () => {
   });
 
   it('still accumulates at index time, where MV_ADD is inert', () => {
+    // REPEAT_MATCH added in #285: at index time the REGEX runs once without it,
+    // so there would be nothing to accumulate. The point here is MV_ADD.
     const r = applyRegexTransform(
       event('label=a label=b'),
-      stanza('t', { REGEX: 'label=(\\w+)', FORMAT: 'label::$1', MV_ADD: 'false' }),
+      stanza('t', { REGEX: 'label=(\\w+)', FORMAT: 'label::$1', MV_ADD: 'false', REPEAT_MATCH: 'true' }),
     );
     expect(r.fields.label).toEqual(['a', 'b']);
+  });
+});
+
+// Doc-derived (transforms.conf.spec, REPEAT_MATCH): default false, "only valid
+// for index-time field extractions". At index time the REGEX therefore runs
+// once unless it is set. Search time is pinned by the report-repeat-match and
+// report-transform-search-time captures, which show every match extracted
+// regardless (#285).
+describe('#285 — REPEAT_MATCH gates repeated matching at index time only', () => {
+  it('runs a FORMAT-pairs REGEX once at index time without REPEAT_MATCH', () => {
+    const r = applyRegexTransform(
+      event('label=a label=b'),
+      stanza('t', { REGEX: 'label=(\\w+)', FORMAT: 'label::$1', WRITE_META: 'true' }),
+    );
+    expect(r.fields.label).toBe('a');
+  });
+
+  it('runs a DEST_KEY = <field> REGEX once at index time without REPEAT_MATCH', () => {
+    const r = applyRegexTransform(
+      event('foo bar'),
+      stanza('t', { REGEX: '(\\w+)', FORMAT: '$1', DEST_KEY: 'words' }),
+    );
+    expect(r.destValue).toBe('foo');
+  });
+
+  it('still extracts every match at search time, where REPEAT_MATCH is inert', () => {
+    const r = searchTime(
+      event('label=a label=b'),
+      stanza('t', { REGEX: 'label=(\\w+)', FORMAT: 'label::$1', MV_ADD: 'true' }),
+    );
+    expect(r.fields.label).toEqual(['a', 'b']);
+  });
+});
+
+// Doc-derived (transforms.conf.spec, CLEAN_KEYS: default true, applies to keys
+// extracted at search time). A _KEY_n group names the field from the data, the
+// same way a FORMAT `$1::$2` does, so it gets the same cleaning (#285).
+describe('#285 — CLEAN_KEYS applies to _KEY_n names', () => {
+  const kv = (extra: Record<string, string> = {}) =>
+    stanza('kv', { REGEX: '(?<_KEY_1>[\\w-]+)=(?<_VAL_1>\\w+)', ...extra });
+
+  it('cleans the key by default', () => {
+    expect(searchTime(event('user-name=bob'), kv()).fields).toEqual({ user_name: 'bob' });
+  });
+
+  it('leaves the key alone under CLEAN_KEYS = false', () => {
+    expect(searchTime(event('user-name=bob'), kv({ CLEAN_KEYS: 'false' })).fields).toEqual({
+      'user-name': 'bob',
+    });
+  });
+});
+
+// Doc-derived: MV_ADD with named groups at search time sees the same matches as
+// the FORMAT path does, so the two agree (#285).
+describe('#285 — MV_ADD agrees between named groups and FORMAT', () => {
+  it('accumulates named groups and FORMAT pairs alike', () => {
+    const named = searchTime(event('n=1 n=2'), stanza('t', { REGEX: 'n=(?<n>\\d+)', MV_ADD: 'true' }));
+    const format = searchTime(
+      event('n=1 n=2'),
+      stanza('t', { REGEX: 'n=(\\d+)', FORMAT: 'n::$1', MV_ADD: 'true' }),
+    );
+    expect(named.fields.n).toEqual(['1', '2']);
+    expect(format.fields.n).toEqual(named.fields.n);
   });
 });
 

@@ -1,0 +1,39 @@
+{
+  // The engine runs in a Web Worker (the app) and under Node (the MCP server),
+  // and neither has a DOM. tsconfig.app.json checks it against the DOM lib, so
+  // a browser-only global type-checked there and failed only at run time:
+  // KV_MODE = xml called DOMParser and extracted nothing anywhere but jsdom
+  // (#280). This project checks the engine against ES2022 alone, so the build
+  // is what catches it. It deliberately overlaps the app project rather than
+  // carving src/engine out of it: the app imports the engine, so it would
+  // type-check those files anyway.
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.engine.tsbuildinfo",
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "ESNext",
+    // No ambient packages either: @types/node would admit Buffer and process.
+    "types": [],
+    "skipLibCheck": true,
+
+    /* Bundler mode */
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+
+    /* Linting */
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "erasableSyntaxOnly": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedSideEffectImports": true
+  },
+  "include": ["src/engine"],
+  // Tests use vitest and Vite globals and run under Node, not in a worker.
+  // Worker entry points need `self` and are checked by tsconfig.worker.json.
+  "exclude": ["src/engine/**/__tests__", "src/engine/**/*.test.ts", "src/engine/*Worker.ts"]
+}

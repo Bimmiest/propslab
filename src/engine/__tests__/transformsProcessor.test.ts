@@ -167,13 +167,72 @@ describe('applyTransforms — index-time extraction without WRITE_META (SEM-7)',
     applyTransforms([event('alice')], reportDir, conf, 'search-time', diags);
     expect(diags.some((d) => d.message.includes('no effect'))).toBe(false);
   });
+
+  // Doc-derived (transforms.conf.spec, WRITE_META): index-time fields are
+  // written to _meta only when WRITE_META = true (or DEST_KEY = _meta). The
+  // preview used to add them anyway, under a warning saying they have no
+  // effect; now it agrees with the warning (#288).
+  it('does not add the fields to the event, while still warning and tracing them', () => {
+    const diags: ValidationDiagnostic[] = [];
+    const conf = transformsConf('grab', { REGEX: '(?<user>\\w+)' });
+    const e = applyTransforms([event('alice')], transformsDir('grab'), conf, 'index-time', diags)[0]!;
+    expect(e.fields.user).toBeUndefined();
+    expect(diags.some((d) => d.message.includes('no effect'))).toBe(true);
+    const step = e.processingTrace.at(-1);
+    expect(step?.fieldsAdded).toEqual([]);
+    expect(step?.description).toContain('user');
+  });
+
+  it('honours the effective (last) WRITE_META', () => {
+    const conf: ParsedConf = transformsConf('grab', { REGEX: '(?<user>\\w+)' });
+    const grab = conf.stanzas[0]!;
+    grab.directives.push(
+      { key: 'WRITE_META', value: 'false', line: 2, directiveType: 'WRITE_META' },
+      { key: 'WRITE_META', value: 'true', line: 3, directiveType: 'WRITE_META' },
+    );
+    const e = applyTransforms([event('alice')], transformsDir('grab'), conf, 'index-time')[0]!;
+    expect(e.fields.user).toBe('alice');
+  });
+
+  // Doc-derived (transforms.conf.spec, FORMAT): the `<stanza>::$1` default is
+  // for index-time extractions; the search-time default is empty (#288).
+  it('extracts nothing from a REPORT with numbered groups and no FORMAT, and says why', () => {
+    const diags: ValidationDiagnostic[] = [];
+    const conf = transformsConf('word', { REGEX: '(\\w+)' });
+    const reportDir: ConfDirective[] = [{ key: 'REPORT-x', value: 'word', line: 1, directiveType: 'REPORT', className: 'x' }];
+    const e = applyTransforms([event('alice')], reportDir, conf, 'search-time', diags)[0]!;
+    expect(e.fields).toEqual({});
+    expect(diags.some((d) => d.message.includes('At search time FORMAT has no default'))).toBe(true);
+  });
+
+  it('keeps the index-time default FORMAT for the same stanza under TRANSFORMS-', () => {
+    const conf = transformsConf('word', { REGEX: '(\\w+)', WRITE_META: 'true' });
+    const e = applyTransforms([event('alice')], transformsDir('word'), conf, 'index-time')[0]!;
+    expect(e.fields.word).toBe('alice');
+  });
+
+  it('does not warn about a named-group REPORT whose group did not participate', () => {
+    const diags: ValidationDiagnostic[] = [];
+    const conf = transformsConf('opt', { REGEX: 'x(?<y>y)?' });
+    const reportDir: ConfDirective[] = [{ key: 'REPORT-x', value: 'opt', line: 1, directiveType: 'REPORT', className: 'x' }];
+    applyTransforms([event('x')], reportDir, conf, 'search-time', diags);
+    expect(diags.some((d) => d.message.includes('FORMAT has no default'))).toBe(false);
+  });
+
+  it('still stores what DEST_KEY = _meta writes', () => {
+    const conf = transformsConf('grab', { REGEX: '(\\w+)', DEST_KEY: '_meta', FORMAT: 'user::$1' });
+    const e = applyTransforms([event('alice')], transformsDir('grab'), conf, 'index-time')[0]!;
+    expect(e._meta.user).toBe('alice');
+  });
 });
 
 describe('applyTransforms — INGEST_EVAL interleaving (SEM-2)', () => {
   it('runs an INGEST_EVAL stanza at its list position so a later regex sees the result', () => {
     const conf = multiTransformsConf(
       stanza('rewrite', { INGEST_EVAL: '_raw="HELLO"' }),
-      stanza('extract', { REGEX: '(?<word>HELLO)' }),
+      // WRITE_META added in #288: without it an index-time extraction stores
+      // nothing, so the field this test observes would (correctly) not appear.
+      stanza('extract', { REGEX: '(?<word>HELLO)', WRITE_META: 'true' }),
     );
     // List order: eval rewrites _raw, then the regex extracts from the new _raw.
     const e = applyTransforms([event('original text')], transformsDir('rewrite, extract'), conf, 'index-time')[0]!;
@@ -257,6 +316,20 @@ describe('applyTransforms — SOURCE_KEY reads pipeline metadata (#53)', () => {
     });
     const out = applyTransforms([event('x')], transformsDir('t'), conf, 'index-time')[0]!;
     expect(out.fields.captured_host).toBe('h');
+  });
+
+  // Doc-derived: the index key is written bare (`FORMAT = my_index`, #281), so
+  // it reads back bare too — `index::main` here would be a value nothing wrote.
+  it('reads MetaData:Index as the bare index name', () => {
+    const conf = transformsConf('t', {
+      SOURCE_KEY: '_MetaData:Index',
+      REGEX: '^(\\w+)$',
+      FORMAT: 'captured_index::$1',
+      WRITE_META: 'true',
+    });
+    const ev = { ...event('x'), metadata: { ...event('x').metadata, index: 'main' } };
+    const out = applyTransforms([ev], transformsDir('t'), conf, 'index-time')[0]!;
+    expect(out.fields.captured_index).toBe('main');
   });
 
   it('reads an unrerouted queue as indexQueue', () => {
@@ -390,6 +463,48 @@ describe('#87 — CLONE_SOURCETYPE', () => {
     );
     expect(events[1]?.fields['masked_user']).toBe('alice');
     expect(events[0]?.fields['masked_user']).toBeUndefined();
+  });
+
+  // Doc-derived (transforms.conf.spec, CLONE_SOURCETYPE): "The duplicated
+  // events receive index-time transformations and sed commands for all
+  // transforms that match its new host, source, or source type." (#282)
+  describe('index-time processing of the clone (#282)', () => {
+    const cloneProps =
+      '[orig]\nTRANSFORMS-clone = do_clone\n\n[masked]\nSEDCMD-mask = s/\\d{4}-\\d{4}/XXXX-XXXX/g\n';
+    const cloneTransforms = '[do_clone]\nREGEX = .\nCLONE_SOURCETYPE = masked\n';
+    const runOrig = (p: string, t: string) =>
+      runPipeline('card 1234-5678\n', { ...metadata, sourcetype: 'orig' }, p, t, {
+        perEventPipeline: true,
+        captureOffsets: false,
+      });
+
+    it("applies the new sourcetype's SEDCMD to the clone and not the original", () => {
+      const events = runOrig(cloneProps, cloneTransforms).result.events;
+      expect(events).toHaveLength(2);
+      expect(events[0]?.metadata.sourcetype).toBe('orig');
+      expect(events[0]?._raw).toBe('card 1234-5678');
+      expect(events[1]?.metadata.sourcetype).toBe('masked');
+      expect(events[1]?._raw).toBe('card XXXX-XXXX');
+    });
+
+    it("applies the new sourcetype's TRANSFORMS to the clone", () => {
+      const events = runOrig(
+        `${cloneProps}TRANSFORMS-route = to_secure\n`,
+        `${cloneTransforms}\n[to_secure]\nREGEX = .\nDEST_KEY = _MetaData:Index\nFORMAT = secure\n`,
+      ).result.events;
+      expect(events[0]?.metadata.index).toBe('main');
+      expect(events[1]?.metadata.index).toBe('secure');
+    });
+
+    it('stops, with a warning, when clones loop back to a sourcetype in their chain', () => {
+      const { result, diagnostics } = runOrig(
+        '[orig]\nTRANSFORMS-c = to_masked\n\n[masked]\nTRANSFORMS-c = to_orig\n',
+        '[to_masked]\nREGEX = .\nCLONE_SOURCETYPE = masked\n\n[to_orig]\nREGEX = .\nCLONE_SOURCETYPE = orig\n',
+      );
+      // orig → masked (processed) → orig (cut: already in the chain).
+      expect(result.events.map((e) => e.metadata.sourcetype)).toEqual(['orig', 'masked', 'orig']);
+      expect(diagnostics.some((d) => d.message.includes('CLONE_SOURCETYPE loops back'))).toBe(true);
+    });
   });
 
   it('records the clone in the original event trace', () => {

@@ -10,11 +10,13 @@ import type { SplunkEvent } from '../types';
  * without anything having extracted them first.
  *
  * **As index-time SOURCE_KEY targets** — the same values are readable from the
- * `MetaData:*` keys, where they carry a `<name>::` prefix. That prefix is not
- * cosmetic: it is why `DEST_KEY = MetaData:Sourcetype` requires
- * `FORMAT = sourcetype::…`, and matching on it (`REGEX = source::/var/log/foo`)
- * is a documented idiom. The two accessors below keep the read and write sides
- * symmetric.
+ * `MetaData:*` keys, where host, source and sourcetype carry a `<name>::`
+ * prefix. That prefix is not cosmetic: it is why `DEST_KEY = MetaData:Sourcetype`
+ * requires `FORMAT = sourcetype::…`, and matching on it
+ * (`REGEX = source::/var/log/foo`) is a documented idiom. `_MetaData:Index` is
+ * the exception — transforms.conf.spec has it take the bare index name — so it
+ * carries no prefix on either side. The two accessors below keep the read and
+ * write sides symmetric.
  */
 
 /** The default fields Splunk materialises from event metadata at search time. */
@@ -63,7 +65,9 @@ export function getSourceKeyValue(event: SplunkEvent, sourceKey: string): string
     case 'MetaData:Host':
       return `host::${event.metadata.host}`;
     case 'MetaData:Index':
-      return `index::${event.metadata.index}`;
+      // The index key holds the bare name — it is written without a prefix
+      // (`FORMAT = my_index`), so it reads back without one too.
+      return event.metadata.index;
     case 'MetaData:Source':
       return `source::${event.metadata.source}`;
     case 'MetaData:Sourcetype':

@@ -109,6 +109,41 @@ describe('useWorkerRequest', () => {
     expect(latest().posted).toEqual([]);
   });
 
+  it('does not let a response to the request before an idle one overwrite idle', () => {
+    // #294: the idle branch returned before bumping the id, so request 1 was
+    // still "current" and its late answer replaced idle with stale data.
+    const { result } = setup();
+    act(() => result.current.run({ value: 'a' }));
+    act(() => result.current.run({ value: '' }));
+    expect(result.current.status).toBe('idle');
+
+    act(() => latest().respond(1, 'STALE'));
+    expect(result.current.status).toBe('idle');
+    expect(result.current.data).toBe('');
+  });
+
+  it('cancels the watchdog of a request superseded by an idle one', () => {
+    const { result } = setup();
+    const first = latest();
+    act(() => result.current.run({ value: 'slow' }));
+    act(() => result.current.run({ value: '' }));
+
+    act(() => void vi.advanceTimersByTime(5000));
+    expect(result.current.status).toBe('idle');
+    expect(first.terminated).toBe(false);
+  });
+
+  it('returns the same run across renders', () => {
+    // Callers list `run` as an effect dependency; a new identity per render
+    // would re-post on every render of the caller.
+    const { result, rerender } = setup();
+    const first = result.current.run;
+    rerender();
+    act(() => result.current.run({ value: 'a' }));
+    act(() => latest().respond(1, 'A'));
+    expect(result.current.run).toBe(first);
+  });
+
   it('clears data on an invalid response rather than keeping the last good one', () => {
     const { result } = setup();
     act(() => result.current.run({ value: 'a' }));

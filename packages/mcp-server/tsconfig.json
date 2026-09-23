@@ -6,10 +6,10 @@
     "target": "ES2023",
     "module": "ESNext",
     "moduleResolution": "bundler",
-    // DOM is for type-checking only: kvMode.ts references DOMParser for
-    // KV_MODE=xml and guards its absence at runtime — under Node the XML
-    // branch is a no-op, not a crash.
-    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    // No DOM: this runs under Node, and so does the engine it bundles. The DOM
+    // lib used to be here because kvMode.ts called DOMParser, which let that
+    // call type-check and then extract nothing at run time (#280).
+    "lib": ["ES2023"],
     "types": ["node"],
     "strict": true,
     "noEmit": true,

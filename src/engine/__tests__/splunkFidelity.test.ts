@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 // ---------------------------------------------------------------------------
 // splunkFidelity.test.ts
 // Replays the fidelity corpus through the engine and asserts it reproduces
@@ -11,16 +10,15 @@
 // Hermetic: reads committed JSON, never contacts Splunk. There is no capture
 // tooling and no further capture is planned; fixtures/README.md says why.
 //
-// Runs under jsdom rather than the engine default of `node`, because the engine
-// is a *browser* target and parts of it reach for browser APIs: `KV_MODE = xml`
-// calls `DOMParser`, which does not exist in Node. Under `node` that path threw,
-// was swallowed by its own try/catch, and extracted nothing -- so the fixture
-// recorded a divergence that the shipped app does not have. A fidelity suite
-// that cannot run a directive is worse than one that skips it, since the empty
-// result reads as a finding.
+// Runs under the engine default of `node`. It used to need jsdom, because
+// `KV_MODE = xml` called `DOMParser` and under `node` extracted nothing -- but
+// the app runs the engine in a Web Worker, which has no DOMParser either, so
+// jsdom was hiding a bug the shipped app did have (#280). The engine now reads
+// XML itself, and running this suite without a DOM is what keeps it honest: a
+// browser-only API would surface here as a failed fixture.
 // ---------------------------------------------------------------------------
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { runPipeline } from '../pipeline';
 import { getDirectiveInfo } from '../directiveRegistry';
 import { CORPUS, type FixtureCase } from './fixtures/corpus';
@@ -74,7 +72,7 @@ function fixtureSets(): Array<{ version: string; fixtures: Fixture[] }> {
  * -- capture uses `fx_<run>_<id>` so that re-runs cannot collide inside one
  * Splunk instance, which is irrelevant here.
  */
-function runCase(fixture: Fixture): ReturnType<typeof runPipeline> {
+function runCase(fixture: Fixture, injectNow = true): ReturnType<typeof runPipeline> {
   const sourcetype = `fx_${fixture.id.replace(/-/g, '_')}`;
   const metadata: EventMetadata = {
     index: 'fixtures',
@@ -87,15 +85,21 @@ function runCase(fixture: Fixture): ReturnType<typeof runPipeline> {
   // and a corpus that agreed only because of ordering would prove nothing.
   const extra = (fixture.extraProps ?? []).map((e) => `[${e.stanza}]\n${e.body}`).join('\n');
   const props = `${extra}\n[${sourcetype}]\n${fixture.props}`;
+  // `now` is the capture instant, not the wall clock. The captured `_time`s
+  // were judged by Splunk against the day of capture — MAX_DAYS_AGO counts back
+  // from it, and a yearless format takes its year — so replaying them against
+  // today would let the suite go red by the calendar alone, a divergence that
+  // says nothing about the engine (#293).
   return runPipeline(fixture.input, metadata, props, fixture.transforms ?? '', {
     perEventPipeline: false,
     captureOffsets: false,
+    ...(injectNow ? { now: Date.parse(fixture.capturedAt) } : {}),
   });
 }
 
 /** Engine output reduced to the shape the fixture records. */
-function engineEvents(fixture: Fixture): CapturedEvent[] {
-  const { result } = runCase(fixture);
+function engineEvents(fixture: Fixture, injectNow = true): CapturedEvent[] {
+  const { result } = runCase(fixture, injectNow);
   return result.events.map((e) => {
     // The capture excluded `punct` from every fixture unless the case opted
     // back in with `comparePunct` — the punct-signature cases do, and for them
@@ -205,5 +209,31 @@ describe('fidelity corpus', () => {
       for (const m of (c.transforms ?? '').matchAll(/^\[(.+)\]$/gm)) names.push(m[1]!);
     }
     expect(names, 'transforms stanzas share one namespace at capture time').toHaveLength(new Set(names).size);
+  });
+});
+
+// The fixtures carry absolute timestamps, and MAX_DAYS_AGO (2000 days by
+// default) is measured back from "now" — so on the real clock this suite would
+// start failing some time around 2031 for no reason but the date (#293). Pin
+// the clock far past that and show the capture still matches, and that it is
+// the injected `now` doing the work rather than the fixture being immune.
+describe('fidelity replay is independent of the wall clock (#293)', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const fixture = sets
+    .flatMap((s) => s.fixtures)
+    .find((f) => f.id === 'timestamp-named-timezone');
+
+  it.skipIf(fixture === undefined)('a capture still matches in 2040 when now is injected', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2040-01-01T00:00:00Z'));
+    const f = fixture!;
+
+    expect(describeDivergence(engineEvents(f), f.events)).toBe('');
+    // Control: the same replay against the wall clock rejects the timestamp as
+    // older than MAX_DAYS_AGO and falls back to index time.
+    expect(describeDivergence(engineEvents(f, false), f.events)).not.toBe('');
   });
 });

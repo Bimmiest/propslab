@@ -68,6 +68,35 @@ reviewed. `docs/engine.md`'s closing section is the spec this implements:
   engine's ReDoS heuristic flags — so the agent can repair the pattern rather
   than retry blind. The heuristic is structural and documents what it cannot
   see (e.g. `(a|aa)+`), and the error text says so.
+- **Each worker has a heap limit** (V8 `resourceLimits`: 512 MB old
+  generation, 64 MB young). A run that exceeds it kills only its own worker
+  and comes back as `{"error": "out_of_memory", "heap_limit_mb": …}` with
+  guidance to shrink the input, instead of growing until the whole server
+  dies. 512 MB is what the worst input the schemas accept needs (1 MB of
+  very short lines, ~125k events); 256 MB was measured to be too little.
+  Process-wide V8 heap flags override worker limits, so the launcher strips
+  `--max-old-space-size` / `--max-semi-space-size` / `--max-heap-size` from
+  its own arguments and from `NODE_OPTIONS` before re-exec'ing, and says so
+  on stderr. With `PROPSLAB_MCP_NO_REEXEC=1` nothing is stripped.
+- **At most `min(4, os.availableParallelism())` workers run at once**; further
+  calls queue first come, first served. The `timeout_ms` budget starts when a
+  call's worker starts, not when it is queued: a timeout is reported as "your
+  regex backtracked", and time spent waiting behind other calls says nothing
+  about this call's patterns. The trade-off is that a queued call can take
+  its wait plus its budget end to end; each call ahead of it holds a slot for
+  at most its own budget (30 s at the most), and the MCP client's request
+  timeout stays the outer limit. A slot is freed when its worker has actually
+  exited, so a terminated run still counts against the cap until it stops.
+
+## Process lifecycle
+
+The client starts `dist/index.js`, which re-execs node (see above) and so
+holds the *launcher's* pid, not the server's. The launcher forwards
+`SIGTERM`, `SIGINT` and `SIGHUP` to the server and then exits the way the
+server did: the same exit code, or — if the server was killed by a signal —
+by re-raising that signal on itself, so a supervisor sees "killed by
+SIGTERM" rather than an invented exit code. Stopping the client's process
+therefore stops the server instead of orphaning it.
 
 ## Development
 

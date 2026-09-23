@@ -70,23 +70,57 @@ export function useProcessingPipeline() {
     liveInputsRef.current = { rawData, metadata, propsConf, transformsConf };
   }, [rawData, metadata, propsConf, transformsConf]);
 
+  // Run a request on the calling thread. The fallback for when a worker cannot
+  // be constructed at all — no `Worker` (tests, SSR), a CSP that forbids worker
+  // scripts, a failed chunk fetch. Before this, construction was unguarded, so
+  // the throw escaped the mount effect and took the panel down; and had it been
+  // caught, `sendRequest` would have returned early on every keystroke and the
+  // preview would have sat on "No data yet" with nothing to say why (#294).
+  // `useWorkerRequest` makes the same trade for the live-matching hooks.
+  //
+  // What is given up is the watchdog: a runaway regex here blocks the tab rather
+  // than a worker. That is the cost of producing output at all in an environment
+  // that will not run a worker, and the browsers this ships to always can.
+  //
+  // The engine is imported dynamically so the main bundle does not carry a
+  // second copy of it for a path the browser normally never takes; the worker
+  // chunk already has one.
+  const runInline = useCallback((request: PipelineWorkerRequest) => {
+    setIsProcessing(true);
+    import('../engine/pipeline')
+      .then(({ runPipeline }) => {
+        if (request.id !== requestIdRef.current) return; // superseded while loading
+        const output = runPipeline(
+          request.rawData,
+          request.metadata,
+          request.propsConfText,
+          request.transformsConfText,
+          request.options,
+        );
+        setLastProcessingMs(performance.now() - requestStartRef.current);
+        setProcessingResult(output.result);
+        setValidationDiagnostics(output.diagnostics);
+      })
+      .catch((err: unknown) => {
+        if (request.id !== requestIdRef.current) return;
+        setProcessingResult(null);
+        setValidationDiagnostics([{
+          level: 'error',
+          message: `Pipeline error: ${err instanceof Error ? err.message : String(err)}`,
+          file: 'props.conf',
+        }]);
+      })
+      .finally(() => {
+        if (request.id === requestIdRef.current) setIsProcessing(false);
+      });
+  }, [setIsProcessing, setLastProcessingMs, setProcessingResult, setValidationDiagnostics]);
+
   const sendRequest = useCallback((
     inputs: { rawData: string; metadata: typeof metadata; propsConf: string; transformsConf: string },
     opts: typeof settings,
   ) => {
-    if (!workerRef.current) return;
-
     const id = ++requestIdRef.current;
     requestStartRef.current = performance.now();
-    // The retry budget is NOT reset here. Resetting per request meant a worker
-    // that had just crashed got a fresh budget from the next keystroke, so the
-    // "cap the restart loop" invariant this file documents was never actually
-    // bounded across requests — interleaved auto-run and manual traffic could
-    // restart the worker indefinitely. It is cleared where it should be: when a
-    // request completes cleanly (onmessage), or when the watchdog gives up.
-    setIsProcessing(true);
-
-    armWatchdog(id);
 
     const request: PipelineWorkerRequest = {
       id,
@@ -97,9 +131,24 @@ export function useProcessingPipeline() {
       options: { perEventPipeline: opts.perEventPipeline },
     };
 
+    if (!workerRef.current) {
+      runInline(request);
+      return;
+    }
+
+    // The retry budget is NOT reset here. Resetting per request meant a worker
+    // that had just crashed got a fresh budget from the next keystroke, so the
+    // "cap the restart loop" invariant this file documents was never actually
+    // bounded across requests — interleaved auto-run and manual traffic could
+    // restart the worker indefinitely. It is cleared where it should be: when a
+    // request completes cleanly (onmessage), or when the watchdog gives up.
+    setIsProcessing(true);
+
+    armWatchdog(id);
+
     lastRequestRef.current = request;
     workerRef.current.postMessage(request);
-  }, [armWatchdog, setIsProcessing]);
+  }, [armWatchdog, runInline, setIsProcessing]);
 
   // Initialise the worker once, with auto-restart on crash
   useEffect(() => {
@@ -110,8 +159,19 @@ export function useProcessingPipeline() {
       }
     }
 
-    function initWorker(): Worker {
-      const worker = createWorker();
+    // Returns null when no worker can be had; `sendRequest` then runs inline.
+    function initWorker(): Worker | null {
+      if (typeof Worker === 'undefined') {
+        workerRef.current = null;
+        return null;
+      }
+      let worker: Worker;
+      try {
+        worker = createWorker();
+      } catch {
+        workerRef.current = null;
+        return null;
+      }
       workerRef.current = worker;
 
       worker.onmessage = (e: MessageEvent<PipelineWorkerResponse>) => {
@@ -147,7 +207,17 @@ export function useProcessingPipeline() {
         const restartedWorker = initWorker();
 
         const pending = lastRequestRef.current;
-        if (pending && retryCountRef.current < MAX_WORKER_RETRIES) {
+        if (pending && restartedWorker === null && retryCountRef.current < MAX_WORKER_RETRIES) {
+          // The replacement could not be constructed. Finish this request on
+          // the calling thread, which is where every later one will run too —
+          // but only under the retry cap: an input that crashed its replay as
+          // well is not one to hand to the tab's own thread.
+          lastRequestRef.current = null;
+          retryCountRef.current = 0;
+          runInline(pending);
+          return;
+        }
+        if (pending && restartedWorker && retryCountRef.current < MAX_WORKER_RETRIES) {
           // Restart once and replay — covers a transient worker crash. The watchdog
           // is re-armed so a retry that also hangs cannot leave isProcessing stuck.
           retryCountRef.current += 1;
@@ -186,7 +256,7 @@ export function useProcessingPipeline() {
       workerRef.current?.terminate();
       workerRef.current = null;
     };
-  }, [armWatchdog, setIsProcessing, setProcessingResult, setValidationDiagnostics, setLastProcessingMs]);
+  }, [armWatchdog, runInline, setIsProcessing, setProcessingResult, setValidationDiagnostics, setLastProcessingMs]);
 
   const inputs = useMemo(
     () => ({ rawData, metadata, propsConf, transformsConf }),
