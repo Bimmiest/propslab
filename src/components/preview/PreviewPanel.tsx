@@ -51,6 +51,16 @@ export function PreviewPanel() {
   const setActiveTab = useAppStore((s) => s.setActiveOutputTab);
   const result = useAppStore((s) => s.processingResult);
   const isProcessing = useAppStore((s) => s.isProcessing);
+  const diagnostics = useAppStore((s) => s.validationDiagnostics);
+  // A run that produced no result at all — watchdog timeout, repeated worker
+  // crash, an engine throw — clears `processingResult` and says why in an error
+  // diagnostic. Without reading that here the panel fell through to the
+  // first-run "No data yet" invitation, which told a user whose input had just
+  // hung the pipeline to go and paste some input (#294). A successful run always
+  // sets a result, so a null result beside an error can only mean a failure.
+  const failure = result === null
+    ? diagnostics.find((d) => d.level === 'error')?.message ?? null
+    : null;
   const tabs = useMemo(() => [
     { id: 'preview', label: 'Preview' },
     { id: 'cim', label: 'CIM Models' },
@@ -81,7 +91,7 @@ export function PreviewPanel() {
         aria-labelledby={`tab-${activeTab}`}
         aria-busy={isProcessing}
       >
-        <TabContent tab={activeTab} hasData={!!result && result.events.length > 0} />
+        <TabContent tab={activeTab} hasData={!!result && result.events.length > 0} failure={failure} />
         {isProcessing && (
           <div
             className="absolute inset-0 flex items-center justify-center pointer-events-none"
@@ -96,12 +106,16 @@ export function PreviewPanel() {
   );
 }
 
-function TabContent({ tab, hasData }: { tab: OutputTabId; hasData: boolean }) {
+function TabContent({ tab, hasData, failure }: { tab: OutputTabId; hasData: boolean; failure: string | null }) {
   if (tab === 'architecture') return <ArchitecturePanel embedded />;
   // Resolves props.conf against the configured metadata, so it has an answer
   // before any data has been processed — the same reason Architecture sits
   // above the gate rather than inside the switch.
   if (tab === 'effective') return <EffectiveConfigTab />;
+
+  if (failure !== null) {
+    return <FailureState message={failure} />;
+  }
 
   if (!hasData) {
     return <EmptyState />;
@@ -120,6 +134,23 @@ const SAMPLE_ICONS: Record<string, React.ComponentProps<typeof Icon>['name']> = 
   'Apache Access Log': 'terminal',
   'Palo Alto Firewall': 'shield',
 };
+
+function FailureState({ message }: { message: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center h-full gap-3 px-8 text-center" role="alert">
+      <div
+        className="w-14 h-14 rounded-2xl flex items-center justify-center"
+        style={{ backgroundColor: 'var(--color-bg-secondary)' }}
+      >
+        <Icon name="warning" className="w-7 h-7 text-[var(--color-error)]" />
+      </div>
+      <div>
+        <p className="text-sm font-semibold text-[var(--color-text-primary)]">Processing failed</p>
+        <p className="text-xs text-[var(--color-text-muted)] max-w-md mt-1">{message}</p>
+      </div>
+    </div>
+  );
+}
 
 function EmptyState() {
   const setRawData = useAppStore((s) => s.setRawData);
