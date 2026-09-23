@@ -2,6 +2,7 @@ import type { SplunkEvent, ConfDirective, ValidationDiagnostic } from '../types'
 import { flattenJson, flattenArray } from '../utils/flattenJson';
 import { hasField, setField, addFieldValue } from '../utils/fieldBag';
 import { cleanFieldKey } from '../transforms/regexTransform';
+import { parseXmlDocument, xmlChildElements, xmlTextContent, type XmlElement } from '../utils/xmlReader';
 
 export function applyKvMode(
   events: SplunkEvent[],
@@ -208,37 +209,31 @@ function addMvField(fields: Record<string, string | string[]>, added: string[], 
 }
 
 function extractXml(raw: string, fields: Record<string, string | string[]>, added: string[]): void {
-  // Wrap in a root element so DOMParser handles fragments without a single root.
-  // DOMParser decodes entities, handles CDATA, and correctly matches multi-line content.
-  let doc: Document;
-  try {
-    doc = new DOMParser().parseFromString(`<_root_>${raw}</_root_>`, 'text/xml');
-  } catch {
-    return;
-  }
-  // If parsing failed, the document contains a <parsererror> element.
+  // Wrap in a root element so fragments with several top-level elements (or
+  // none) parse; the reader decodes entities, handles CDATA, and matches
+  // multi-line content. It is the engine's own rather than DOMParser, which
+  // exists in neither a Web Worker nor Node (see utils/xmlReader.ts, #280).
+  let root = parseXmlDocument(`<_root_>${raw}</_root_>`);
   let wrapped = true;
-  if (doc.querySelector('parsererror')) {
-    // Try wrapping the raw text as-is in case it is already a valid document.
-    try {
-      doc = new DOMParser().parseFromString(raw, 'text/xml');
-      if (doc.querySelector('parsererror')) return;
-      wrapped = false;
-    } catch {
-      return;
-    }
+  if (root === null) {
+    // The wrapper is what makes a document with an XML declaration or DOCTYPE
+    // malformed, so retry the raw text as-is in case it is already a valid
+    // document. If that fails too, the event is not XML: extract nothing.
+    root = parseXmlDocument(raw);
+    if (root === null) return;
+    wrapped = false;
   }
 
   // Walk from the *document's* root elements, not from the synthetic wrapper:
   // field names are dotted paths and `_root_` must not appear in any of them.
-  const roots = wrapped ? Array.from(doc.documentElement.children) : [doc.documentElement];
-  for (const root of roots) {
-    walkXmlElement(root, fields, added, []);
+  const roots = wrapped ? xmlChildElements(root) : [root];
+  for (const el of roots) {
+    walkXmlElement(el, fields, added, []);
   }
 }
 
 function walkXmlElement(
-  el: Element,
+  el: XmlElement,
   fields: Record<string, string | string[]>,
   added: string[],
   parentPath: string[],
@@ -252,7 +247,7 @@ function walkXmlElement(
   // Extract attributes. These keep their bare names rather than taking the path
   // prefix the element leaves get: no capture pins attribute naming, and the
   // WinEventLog convention below is the one behaviour here we do know.
-  for (const attr of Array.from(el.attributes)) {
+  for (const attr of el.attributes) {
     // "Name" attribute on an element uses TagName_Name as field name (Windows EventLog convention).
     const fieldName = attr.name === 'Name' ? `${tagName}_Name` : attr.name;
     // Accumulate like the leaf-text path below: within one mode, repeated data
@@ -260,13 +255,13 @@ function walkXmlElement(
     if (attr.value) addMvField(fields, added, fieldName, attr.value);
   }
 
-  const children = Array.from(el.children);
+  const children = xmlChildElements(el);
 
   if (children.length === 0) {
     // Leaf node — extract text content as a field.
-    const value = el.textContent?.trim() ?? '';
+    const value = xmlTextContent(el).trim();
     // For <Tag Name="fieldName">value</Tag>, use the Name attribute as the field name.
-    const nameAttr = el.getAttribute('Name');
+    const nameAttr = el.attributes.find((a) => a.name === 'Name')?.value;
     const fieldKey = nameAttr ?? path.join('.');
     if (value) {
       addMvField(fields, added, fieldKey, value);

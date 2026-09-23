@@ -2,6 +2,18 @@ import type { SplunkEvent, ConfDirective, ValidationDiagnostic } from '../types'
 import { atDirective } from '../parser/provenance';
 import { segmentLengthsOf } from './lineBreaker';
 
+// The engine type-checks against ES2022 alone (tsconfig.engine.json), so that
+// reaching for a browser-only global fails the build instead of failing in a
+// worker or under Node at run time (#280). The UTF-8 codecs are not ES but are
+// safe to use: they are globals in browsers, Web Workers and every supported
+// Node. Declared here, narrowed to what this file calls, rather than by pulling
+// in a whole lib that would also admit DOMParser and friends.
+declare const TextEncoder: new () => { encode(input: string): Uint8Array };
+declare const TextDecoder: new (
+  label: string,
+  options: { fatal: boolean },
+) => { decode(input: Uint8Array): string };
+
 const encoder = new TextEncoder();
 const decoder = new TextDecoder('utf-8', { fatal: false });
 

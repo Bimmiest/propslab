@@ -298,8 +298,7 @@ describe('applyKvMode — purely numeric field names are rejected (#166)', () =>
 });
 
 describe('applyKvMode — extraction never mutates the input event (#63)', () => {
-  // multikv rather than xml: this file runs in the node environment, where
-  // DOMParser is absent and xml mode would silently no-op.
+  // multikv, as the other multivalue-accumulating mode; xml has its own file.
   const TABLE = 'NAME  VALUE\na     1\nb     2';
 
   it('leaves a pre-existing multivalue array on the input untouched', () => {
