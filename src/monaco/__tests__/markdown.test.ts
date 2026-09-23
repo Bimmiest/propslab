@@ -16,14 +16,17 @@ function allTokens(markdown: string): Token[] {
 
 /** The plain text Markdown renders for `markdown`, with tags stripped. */
 function renderedText(markdown: string): string {
-  const html = marked.parseInline(markdown, { async: false });
-  return html
-    .replace(/<[^>]*>/g, '')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&amp;/g, '&');
+  let text = marked.parseInline(markdown, { async: false });
+  // Strip tags until none are left: one pass can leave a tag behind when
+  // removing an inner one joins the halves of an outer one (`<<b>script>`).
+  for (let prev = ''; prev !== text; ) {
+    prev = text;
+    text = text.replace(/<[^>]*>/g, '');
+  }
+  // Decode entities in a single pass, so `&amp;lt;` becomes `&lt;` rather
+  // than being decoded twice into `<`.
+  const ENTITIES: Record<string, string> = { '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'", '&amp;': '&' };
+  return text.replace(/&(?:lt|gt|quot|#39|amp);/g, (e) => ENTITIES[e] ?? e);
 }
 
 // Strings that would each open some construct if interpolated raw.
