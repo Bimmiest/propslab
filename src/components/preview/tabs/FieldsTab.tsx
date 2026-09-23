@@ -575,9 +575,24 @@ function ResizableHeader({
         <SortIndicator active={isActive} dir={sortDir} />
       </button>
       {/* Resize handle */}
+      {/* A focusable separator, so the column can be resized from the
+          keyboard as well as by dragging: Left/Right step by 10px, and Shift
+          by 50px. */}
       <div
-        className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-[var(--color-accent)] transition-colors z-10"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label={`Resize ${col.label} column`}
+        aria-valuenow={width}
+        aria-valuemin={col.minWidth}
+        tabIndex={0}
+        className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-[var(--color-accent)] focus-visible:bg-[var(--color-accent)] transition-colors z-10"
         onMouseDown={startResize}
+        onKeyDown={(e) => {
+          if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+          e.preventDefault();
+          const step = (e.shiftKey ? 50 : 10) * (e.key === 'ArrowLeft' ? -1 : 1);
+          onResize(Math.max(col.minWidth, width + step));
+        }}
       />
     </th>
   );

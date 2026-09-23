@@ -1,5 +1,6 @@
 import { isFieldActive, isAnyFocused } from './useFieldFocus';
 import { type FieldNode, nodeMatchesSearch } from './fieldTreeUtils';
+import { pressable } from '../../../ui/pressable';
 import { copyQuietly } from '../../../../utils/clipboard';
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuLabel } from '../../../ui/ContextMenu';
 
@@ -37,7 +38,11 @@ export function FieldTreeNode({
         }}
         onMouseEnter={() => onHover(node.name)}
         onMouseLeave={() => onHover(null)}
-        onClick={() => hasChildren ? toggleGroup(node.name) : onClick(node.name)}
+        {...pressable(
+          () => hasChildren ? toggleGroup(node.name) : onClick(node.name),
+          (focused) => onHover(focused ? node.name : null),
+        )}
+        {...(hasChildren ? { 'aria-expanded': !isCollapsed } : { 'aria-pressed': pinned })}
       >
         {hasChildren ? (
           <svg
