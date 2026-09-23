@@ -37,6 +37,8 @@ export function applyCloneIndexTime(
   propsConf: ParsedConf,
   transformsConf: ParsedConf,
   diagnostics: ValidationDiagnostic[],
+  /** Epoch ms that INGEST_EVAL's now()/time() read. See `PipelineOptions.now`. */
+  now: number = Date.now(),
 ): SplunkEvent[] {
   if (!events.some((e) => e.clonedFrom !== undefined)) return events;
 
@@ -66,7 +68,7 @@ export function applyCloneIndexTime(
 
     const directives = mergeDirectives(matchStanzas(propsConf.stanzas, clone.metadata));
     let out = applySedCommands([clone], directives, diagnostics);
-    out = applyTransforms(out, directives, transformsConf, 'index-time', diagnostics);
+    out = applyTransforms(out, directives, transformsConf, 'index-time', diagnostics, now);
 
     // applyTransforms returns the clone first and any clones IT emitted after.
     const [processed, ...grandchildren] = out;

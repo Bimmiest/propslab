@@ -58,4 +58,11 @@ describe('PipelineOptions.now (#293)', () => {
     const { result } = runPipeline('x', META, props, transforms, opts(1_700_000_000_000));
     expect(result.events[0]?.fields.stamped).toBe('1700000000');
   });
+  it('reaches the TRANSFORMS a CLONE_SOURCETYPE copy is given', () => {
+    const props = '[st]\nSHOULD_LINEMERGE = false\nTRANSFORMS-c = copy\n[cloned]\nTRANSFORMS-t = stamp\n';
+    const transforms = '[copy]\nREGEX = .\nCLONE_SOURCETYPE = cloned\n[stamp]\nINGEST_EVAL = stamped=now()\n';
+    const { result } = runPipeline('x', META, props, transforms, opts(1_700_000_000_000));
+    const clone = result.events.find((e) => e.metadata.sourcetype === 'cloned');
+    expect(clone?.fields.stamped).toBe('1700000000');
+  });
 });

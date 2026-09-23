@@ -411,7 +411,7 @@ export function runPipeline(
 
   // Step 7b: CLONE_SOURCETYPE copies get the SEDCMD and TRANSFORMS of the
   // sourcetype they were cloned to (#282).
-  events = safeProcessor('CLONE_SOURCETYPE', events, () => applyCloneIndexTime(events, propsConf, transformsConf, diagnostics), diagnostics, 'transforms.conf');
+  events = safeProcessor('CLONE_SOURCETYPE', events, () => applyCloneIndexTime(events, propsConf, transformsConf, diagnostics, now), diagnostics, 'transforms.conf');
 
   // Step 8: ANNOTATE_PUNCT — the annotation processor runs after regex
   // replacement, so the punct signature reflects _raw as indexed (post-SEDCMD,
