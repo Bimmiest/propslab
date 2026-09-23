@@ -42,12 +42,13 @@ function autoRecognize(
   tz?: string,
   onUnresolvedTz?: (tz: string) => void,
   tzAlias?: ReadonlyMap<string, string>,
+  now?: Date,
 ): { date: Date; format: string } | null {
   let best: { index: number; priority: number; date: Date; format: string } | null = null;
   for (const [priority, { fmt, regex }] of AUTO_PATTERNS.entries()) {
     const m = regex.exec(region);
     if (!m) continue;
-    const date = parseTimestamp(m[0], fmt, tz, onUnresolvedTz, tzAlias);
+    const date = parseTimestamp(m[0], fmt, tz, onUnresolvedTz, tzAlias, now);
     if (!date || isNaN(date.getTime())) continue;
     // Earliest match wins; a tie is broken by the more specific (lower-priority-
     // index) format.
@@ -97,8 +98,10 @@ export function extractTimestamps(
   directives: ConfDirective[],
   diagnostics?: ValidationDiagnostic[],
   /**
-   * The moment that stands in for index time. Injected so the fallback tail of
-   * the chain is assertable; production passes nothing.
+   * The moment that stands in for index time: the MAX_DAYS_AGO/HENCE bounds are
+   * measured from it, a yearless format takes its year, and the fallback tail of
+   * the chain lands on it. `runPipeline` passes `PipelineOptions.now` so a
+   * recorded fixture keeps being judged against the day it was captured (#293).
    */
   now: Date = new Date(),
 ): SplunkEvent[] {
@@ -336,7 +339,7 @@ export function extractTimestamps(
       if (!formatMatch) return inherit(event, 'TIME_FORMAT did not match this event');
 
       const timestampStr = formatMatch[0];
-      const parsedTime = parseTimestamp(timestampStr, timeFormat, tz, onUnresolvedTz, tzAlias);
+      const parsedTime = parseTimestamp(timestampStr, timeFormat, tz, onUnresolvedTz, tzAlias, now);
       // A match that will not parse is still a failure to read a timestamp, so
       // it inherits rather than leaving the event unplaced.
       if (!parsedTime) return inherit(event, `Could not parse "${timestampStr}" with TIME_FORMAT`);
@@ -345,7 +348,7 @@ export function extractTimestamps(
     }
 
     // No TIME_FORMAT → automatic timestamp recognition (datetime.xml-style).
-    const auto = autoRecognize(searchRegion, tz, onUnresolvedTz, tzAlias);
+    const auto = autoRecognize(searchRegion, tz, onUnresolvedTz, tzAlias, now);
     if (!auto) return inherit(event, 'No recognisable timestamp in this event');
 
     return accept(

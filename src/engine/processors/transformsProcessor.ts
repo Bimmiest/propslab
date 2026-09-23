@@ -31,6 +31,8 @@ export function applyTransforms(
   transformsConf: ParsedConf,
   phase: 'index-time' | 'search-time',
   diagnostics?: ValidationDiagnostic[],
+  /** Epoch ms that INGEST_EVAL's now()/time() read. See `PipelineOptions.now`. */
+  now: number = Date.now(),
 ): SplunkEvent[] {
   const directiveType = phase === 'index-time' ? 'TRANSFORMS' : 'REPORT';
   // When multiple TRANSFORMS-<class>/REPORT-<class> entries match, Splunk applies
@@ -95,7 +97,7 @@ export function applyTransforms(
         const ingestEvalDirs = transformStanza.directives.filter((d) => d.key === 'INGEST_EVAL');
         if (ingestEvalDirs.length > 0) {
           if (phase === 'index-time') {
-            currentEvent = applyIngestEval([currentEvent], ingestEvalDirs, diagnostics)[0] ?? currentEvent;
+            currentEvent = applyIngestEval([currentEvent], ingestEvalDirs, diagnostics, now)[0] ?? currentEvent;
           }
           continue;
         }

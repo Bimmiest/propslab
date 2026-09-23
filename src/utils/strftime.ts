@@ -450,6 +450,9 @@ export function parseTzAlias(value: string): {
  *                 UTC, so callers can surface a diagnostic instead of silent drift.
  * @param tzAlias - `TZ_ALIAS` remapping table from {@link parseTzAlias}, applied
  *                 to a zone read out of the event (%Z) before it is resolved.
+ * @param now    - The current moment, which supplies the year for a format
+ *                 that has none (syslog's `%b %e %H:%M:%S`). Injectable so a
+ *                 yearless timestamp parses the same way next year as today.
  * @returns A `Date` object if parsing succeeded, or `null` otherwise.
  */
 export function parseTimestamp(
@@ -458,6 +461,7 @@ export function parseTimestamp(
   tz?: string,
   onUnresolvedTz?: (tz: string) => void,
   tzAlias?: ReadonlyMap<string, string>,
+  now: Date = new Date(),
 ): Date | null {
   const { regex, captures } = tokenise(format);
   const match = text.match(regex);
@@ -504,7 +508,7 @@ export function parseTimestamp(
     year = y2 >= 69 ? 1900 + y2 : 2000 + y2;
   } else {
     // Default to current year when the format doesn't include a year.
-    year = new Date().getFullYear();
+    year = now.getFullYear();
   }
 
   let month: number; // 0-indexed

@@ -74,6 +74,8 @@ export function runPipeline(
   // Defaults to true: the browser reads these offsets to highlight extracted
   // fields, so declining them has to be an explicit choice by a caller that does not.
   const captureOffsets = options?.captureOffsets ?? true;
+  // Read once, so every stage of one run agrees on what "now" is.
+  const now = options?.now ?? Date.now();
 
   if (!rawData.trim()) {
     return {
@@ -375,7 +377,7 @@ export function runPipeline(
   events = safeProcessor('TRUNCATE', events, () => truncateEvents(events, directives, diagnostics), diagnostics);
 
   // Step 4: Timestamp extraction
-  events = safeProcessor('Timestamp', events, () => extractTimestamps(events, directives, diagnostics), diagnostics);
+  events = safeProcessor('Timestamp', events, () => extractTimestamps(events, directives, diagnostics, new Date(now)), diagnostics);
 
   // Step 5: Indexed extractions
   events = safeProcessor('INDEXED_EXTRACTIONS', events, () => applyIndexedExtractions(events, directives, diagnostics), diagnostics);
@@ -386,7 +388,7 @@ export function runPipeline(
   // Step 7: Index-time TRANSFORMS — regex transforms, DEST_KEY routing, and
   // INGEST_EVAL stanzas are all applied here, interleaved in TRANSFORMS-<class>
   // list order (only when a props.conf stanza references them).
-  events = safeProcessor('TRANSFORMS', events, () => applyTransforms(events, directives, transformsConf, 'index-time', diagnostics), diagnostics, 'transforms.conf');
+  events = safeProcessor('TRANSFORMS', events, () => applyTransforms(events, directives, transformsConf, 'index-time', diagnostics, now), diagnostics, 'transforms.conf');
 
   // Step 8: ANNOTATE_PUNCT — the annotation processor runs after regex
   // replacement, so the punct signature reflects _raw as indexed (post-SEDCMD,
@@ -452,7 +454,7 @@ export function runPipeline(
       ev = safeProcessor('REPORT', ev, () => applyTransforms(ev, evDirs, transformsConf, 'search-time', perEventDiagnostics), perEventDiagnostics, 'transforms.conf');
       ev = safeProcessor('KV_MODE', ev, () => applyKvMode(ev, evDirs, perEventDiagnostics), perEventDiagnostics);
       ev = safeProcessor('FIELDALIAS', ev, () => applyFieldAliases(ev, evDirs, perEventDiagnostics), perEventDiagnostics);
-      ev = safeProcessor('EVAL', ev, () => applyEvalExpressions(ev, evDirs, perEventDiagnostics), perEventDiagnostics);
+      ev = safeProcessor('EVAL', ev, () => applyEvalExpressions(ev, evDirs, perEventDiagnostics, now), perEventDiagnostics);
       // Step 13: attribute index-time `_raw` rewrites to the fields they hit.
       // Must run last — it replays extraction, which only exists now.
       ev = safeProcessor('SEDCMD attribution', ev, () => attributeRawMutations(ev, () => evDirs, transformsConf), perEventDiagnostics);
@@ -489,7 +491,7 @@ export function runPipeline(
     events = safeProcessor('FIELDALIAS', events, () => applyFieldAliases(events, searchTimeDirectives, diagnostics), diagnostics);
 
     // Step 12: EVAL (calculated fields)
-    events = safeProcessor('EVAL', events, () => applyEvalExpressions(events, searchTimeDirectives, diagnostics), diagnostics);
+    events = safeProcessor('EVAL', events, () => applyEvalExpressions(events, searchTimeDirectives, diagnostics, now), diagnostics);
 
     // Step 13: attribute index-time `_raw` rewrites (SEDCMD, DEST_KEY = _raw) to
     // the fields whose extracted value they changed or destroyed. Runs last

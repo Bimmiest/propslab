@@ -20,6 +20,8 @@ export function applyEvalExpressions(
   events: SplunkEvent[],
   directives: ConfDirective[],
   diagnostics?: ValidationDiagnostic[],
+  /** What now()/time() return, in epoch ms. See `PipelineOptions.now`. */
+  now: number = Date.now(),
 ): SplunkEvent[] {
   const evalDirectives = directives.filter((d) => d.directiveType === 'EVAL');
 
@@ -107,7 +109,7 @@ export function applyEvalExpressions(
         continue;
       }
       try {
-        const value = evalNode(c.ast!, { event, onStubWarning: (fn) => pushStub(c.dir, fn) });
+        const value = evalNode(c.ast!, { event, now, onStubWarning: (fn) => pushStub(c.dir, fn) });
         results.set(c.fieldName, { value, expression: c.dir.value.trim() });
       } catch (err) {
         pushError(c.dir, c.fieldName, err instanceof Error ? err.message : String(err));
@@ -549,6 +551,8 @@ class Parser {
 
 interface EvalCtx {
   event: SplunkEvent;
+  /** Epoch ms standing in for the current time — injected, never read from the clock here. */
+  now: number;
   onStubWarning?: ((fn: string) => void) | undefined;
 }
 
@@ -881,8 +885,8 @@ function evalBuiltin(fn: string, args: EvalValue[], ctx: EvalCtx): EvalValue {
     case 'sha512': ctx.onStubWarning?.('sha512'); return '[sha512() not simulated]';
 
     // Time
-    case 'now': return Math.floor(Date.now() / 1000);
-    case 'time': return Math.floor(Date.now() / 1000);
+    case 'now': return Math.floor(ctx.now / 1000);
+    case 'time': return Math.floor(ctx.now / 1000);
     case 'strftime': {
       // A non-numeric or absent epoch is NULL rather than 1970 — coercing to 0
       // renders a confident, wrong timestamp for a field that isn't there.
@@ -1144,6 +1148,7 @@ export function evaluateExpression(
   expr: string,
   event: SplunkEvent,
   onStubWarning?: (fn: string) => void,
+  now: number = Date.now(),
 ): EvalValue {
-  return evalNode(parseExpression(expr), { event, onStubWarning });
+  return evalNode(parseExpression(expr), { event, now, onStubWarning });
 }

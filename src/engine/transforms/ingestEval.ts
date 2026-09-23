@@ -40,6 +40,8 @@ export function applyIngestEval(
   events: SplunkEvent[],
   directives: ConfDirective[],
   diagnostics?: ValidationDiagnostic[],
+  /** What now()/time() return, in epoch ms. See `PipelineOptions.now`. */
+  now: number = Date.now(),
 ): SplunkEvent[] {
   // A stanza may repeat INGEST_EVAL; Splunk's last-definition-wins rule means
   // only the final directive applies (each may still hold several comma-separated
@@ -78,7 +80,7 @@ export function applyIngestEval(
                 directiveKey: ingestEvalDir.key,
               });
             }
-          });
+          }, now);
           // INGEST_EVAL can rewrite the event's timestamp and raw text, not just
           // add indexed fields. Route _time/_raw to the event rather than fields.
           if (fieldName === '_time') {

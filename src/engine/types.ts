@@ -287,6 +287,17 @@ export interface PipelineOptions {
    * linear-time regex fallback. See `extractFields` for the limits of that.
    */
   captureOffsets?: boolean;
+  /**
+   * The current time, in epoch milliseconds. Defaults to `Date.now()`.
+   *
+   * Everything in the simulation that Splunk measures against the clock reads
+   * this instead: the MAX_DAYS_AGO / MAX_DAYS_HENCE timestamp bounds, the year
+   * a yearless TIME_FORMAT is given, the index-time `_time` an event falls back
+   * to, and eval's `now()` / `time()`. A caller replaying recorded data — a test
+   * fixture, a saved sample — passes the moment it was recorded, so the verdict
+   * does not change as the real clock moves on (#293).
+   */
+  now?: number;
 }
 
 export type OutputTabId = 'preview' | 'cim' | 'fields' | 'transforms' | 'effective' | 'architecture';
