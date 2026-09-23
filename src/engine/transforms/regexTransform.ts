@@ -572,16 +572,26 @@ export function applyRegexTransform(
       ? [...sourceValue.matchAll(compiled.global)]
       : [firstMatch];
 
+    // Whether a field captured again by a later match keeps the later value.
+    // The same rule as `keepFirstMatchOnly` in the FORMAT path, stated the other
+    // way round: at search time MV_ADD decides; at index time MV_ADD is inert,
+    // and REPEAT_MATCH — the only way there is more than one match to see —
+    // "runs the REGEX multiple times", each match writing the field (#303).
+    // Named groups used to keep the first value here while the FORMAT path
+    // accumulated every match, so the same REPEAT_MATCH extraction produced a
+    // single value or a multivalue depending only on how the REGEX was written.
+    const accumulate = phase === 'index-time' || mvAdd;
+
     // `fieldName` arrives final: literal group names get the WRITE_META
     // underscore strip, _KEY_ names the full key cleaning, below.
     const assignField = (fieldName: string, value: string) => {
       if (!fieldName) return;
       if (!hasField(result.fields, fieldName)) {
         setField(result.fields, fieldName, value);
-      } else if (mvAdd) {
+      } else if (accumulate) {
         addMultiValue(result.fields, fieldName, value);
       }
-      // else: field already set and MV_ADD is false — discard the later value.
+      // else: search time, field already set and MV_ADD is false — discard the later value.
     };
 
     for (const match of matches) {
