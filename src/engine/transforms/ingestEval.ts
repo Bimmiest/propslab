@@ -1,5 +1,5 @@
 import type { SplunkEvent, ConfDirective, ValidationDiagnostic } from '../types';
-import { evaluateExpression } from '../processors/evalProcessor';
+import { evaluateExpression, regexFailureMessage } from '../processors/evalProcessor';
 import { stripLeadingUnderscoreForField } from '../utils/internalFields';
 import { deleteField, setField } from '../utils/fieldBag';
 import { atDirective } from '../parser/provenance';
@@ -80,7 +80,21 @@ export function applyIngestEval(
                 directiveKey: ingestEvalDir.key,
               });
             }
-          }, now);
+          }, now, (fn, pattern) => {
+            // Deduplicated against the list itself rather than a local set:
+            // the transforms pass calls this once per event, so a set here
+            // would forget between events and warn on every line.
+            const message = `INGEST_EVAL ${fieldName}: ${regexFailureMessage(fn, pattern)}`;
+            if (diagnostics && !diagnostics.some((d) => d.message === message)) {
+              diagnostics.push({
+                level: 'warning',
+                message,
+                file: 'transforms.conf',
+                ...atDirective(ingestEvalDir),
+                directiveKey: ingestEvalDir.key,
+              });
+            }
+          });
           // INGEST_EVAL can rewrite the event's timestamp and raw text, not just
           // add indexed fields. Route _time/_raw to the event rather than fields.
           if (fieldName === '_time') {

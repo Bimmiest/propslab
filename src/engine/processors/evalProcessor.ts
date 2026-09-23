@@ -1,5 +1,5 @@
 import type { SplunkEvent, ConfDirective, DirectiveNoOp, ValidationDiagnostic } from '../types';
-import { safeRegex } from '../../utils/splunkRegex';
+import { safeRegex, validateRegex } from '../../utils/splunkRegex';
 import { formatStrftime } from '../../utils/strftime';
 import { fieldQuotingWarning } from '../utils/fieldRef';
 import { getMetadataField } from '../utils/metadataFields';
@@ -31,6 +31,7 @@ export function applyEvalExpressions(
   const reportedErrors = new Set<string>();
   const reportedStubs = new Set<string>();
   const reportedDotted = new Set<string>();
+  const reportedRegex = new Set<string>();
 
   // Hint for the common mistake of referencing a nested JSON field unquoted: the
   // `.` is the concat operator, so `event.field` won't read the field named
@@ -62,6 +63,22 @@ export function applyEvalExpressions(
       diagnostics.push({
         level: 'warning',
         message: `${fn}() is not fully simulated — results may differ from real Splunk`,
+        file: 'props.conf',
+        ...atDirective(dir),
+        directiveKey: dir.key,
+      });
+    }
+  };
+  // Once per class and pattern: a pattern that will not compile fails the same
+  // way on every event, and a field built from event data can still yield a
+  // different pattern per event without flooding the list with one per line.
+  const pushRegex = (dir: ConfDirective, fieldName: string, fn: string, pattern: string) => {
+    const key = `${fieldName}\u0000${pattern}`;
+    if (diagnostics && !reportedRegex.has(key)) {
+      reportedRegex.add(key);
+      diagnostics.push({
+        level: 'warning',
+        message: `EVAL-${fieldName}: ${regexFailureMessage(fn, pattern)}`,
         file: 'props.conf',
         ...atDirective(dir),
         directiveKey: dir.key,
@@ -109,7 +126,12 @@ export function applyEvalExpressions(
         continue;
       }
       try {
-        const value = evalNode(c.ast!, { event, now, onStubWarning: (fn) => pushStub(c.dir, fn) });
+        const value = evalNode(c.ast!, {
+          event,
+          now,
+          onStubWarning: (fn) => pushStub(c.dir, fn),
+          onRegexError: (fn, pattern) => pushRegex(c.dir, c.fieldName, fn, pattern),
+        });
         results.set(c.fieldName, { value, expression: c.dir.value.trim() });
       } catch (err) {
         pushError(c.dir, c.fieldName, err instanceof Error ? err.message : String(err));
@@ -554,6 +576,32 @@ interface EvalCtx {
   /** Epoch ms standing in for the current time — injected, never read from the clock here. */
   now: number;
   onStubWarning?: ((fn: string) => void) | undefined;
+  /** A regex argument would not compile; the caller turns it into a diagnostic. */
+  onRegexError?: ((fn: string, pattern: string) => void) | undefined;
+}
+
+/**
+ * What an eval function does with a pattern it cannot compile, per function.
+ * Each still returns a value — that is what made the failure silent — so the
+ * warning has to say which value, or it reads as if the EVAL did nothing.
+ */
+const REGEX_FAILURE_RESULT: Readonly<Record<string, string>> = {
+  replace: 'returned its input unchanged',
+  match: 'evaluated to false',
+  mvfind: 'evaluated to null',
+};
+
+/** The shared tail of an eval regex-failure warning, for EVAL- and INGEST_EVAL alike. */
+export function regexFailureMessage(fn: string, pattern: string): string {
+  const why = validateRegex(pattern) ?? 'rejected as ReDoS-prone';
+  return `${fn}() pattern "${pattern}" could not be compiled (${why}), so it ${REGEX_FAILURE_RESULT[fn] ?? 'failed'}.`;
+}
+
+/** Compile an eval regex argument, reporting a pattern that will not compile. */
+function evalRegex(ctx: EvalCtx, fn: string, pattern: string, flags?: string): RegExp | null {
+  const regex = safeRegex(pattern, flags);
+  if (regex === null) ctx.onRegexError?.(fn, pattern);
+  return regex;
 }
 
 function getField(event: SplunkEvent, name: string): EvalValue {
@@ -693,7 +741,7 @@ function evalBuiltin(fn: string, args: EvalValue[], ctx: EvalCtx): EvalValue {
     case 'replace': {
       const s = strArg(args[0]);
       if (s === null) return null;
-      const regex = safeRegex(toStr(args[1]), 'g');
+      const regex = evalRegex(ctx, 'replace', toStr(args[1]), 'g');
       if (!regex) return s;
       return s.replace(regex, splunkReplacementToJs(toStr(args[2])));
     }
@@ -857,7 +905,7 @@ function evalBuiltin(fn: string, args: EvalValue[], ctx: EvalCtx): EvalValue {
     case 'mvdedup': return [...new Set(toMv(args[0]))];
     case 'mvfind': {
       const mv = toMv(args[0]);
-      const regex = safeRegex(toStr(args[1]));
+      const regex = evalRegex(ctx, 'mvfind', toStr(args[1]));
       if (!regex) return null;
       const idx = mv.findIndex((v) => regex.test(v));
       return idx >= 0 ? idx : null;
@@ -924,12 +972,15 @@ function evalBuiltin(fn: string, args: EvalValue[], ctx: EvalCtx): EvalValue {
       return regex ? regex.test(value) : false;
     }
     case 'match': {
-      const regex = safeRegex(toStr(args[1]));
+      const regex = evalRegex(ctx, 'match', toStr(args[1]));
       return regex ? regex.test(toStr(args[0])) : false;
     }
-    case 'cidrmatch':
-      ctx.onStubWarning?.('cidrmatch');
-      return false;
+    case 'cidrmatch': {
+      // A predicate, like match(): an absent address is simply not in the
+      // subnet, so it answers false rather than propagating NULL.
+      const ip = strArg(args[1]);
+      return ip === null ? false : cidrMatch(toStr(args[0]), ip);
+    }
     case 'searchmatch':
       ctx.onStubWarning?.('searchmatch');
       return false;
@@ -943,6 +994,80 @@ function evalBuiltin(fn: string, args: EvalValue[], ctx: EvalCtx): EvalValue {
 }
 
 // ── Helpers ─────────────────────────────────────────────
+
+/** Dotted-quad IPv4 as four bytes, or null. Each octet 0-255, no leading sign. */
+function parseIPv4(text: string): number[] | null {
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(text);
+  if (!m) return null;
+  const bytes = m.slice(1).map(Number);
+  return bytes.every((b) => b <= 255) ? bytes : null;
+}
+
+/**
+ * IPv6 as sixteen bytes, or null. Accepts `::` compression and a trailing
+ * dotted-quad (`::ffff:10.0.0.1`); rejects a zone suffix (`%eth0`), which
+ * names an interface rather than an address.
+ */
+function parseIPv6(text: string): number[] | null {
+  if (!text.includes(':') || text.includes('%')) return null;
+  const halves = text.split('::');
+  if (halves.length > 2) return null;
+  const groups = (part: string): number[] | null => {
+    if (part === '') return [];
+    const out: number[] = [];
+    const pieces = part.split(':');
+    for (const [i, piece] of pieces.entries()) {
+      if (i === pieces.length - 1 && piece.includes('.')) {
+        const v4 = parseIPv4(piece);
+        if (!v4) return null;
+        out.push(((v4[0] ?? 0) << 8) | (v4[1] ?? 0), ((v4[2] ?? 0) << 8) | (v4[3] ?? 0));
+        continue;
+      }
+      if (!/^[0-9a-f]{1,4}$/i.test(piece)) return null;
+      out.push(parseInt(piece, 16));
+    }
+    return out;
+  };
+  const head = groups(halves[0] ?? '');
+  const tail = halves.length === 2 ? groups(halves[1] ?? '') : [];
+  if (head === null || tail === null) return null;
+  const missing = 8 - head.length - tail.length;
+  // `::` must stand for at least one group; without it there must be exactly eight.
+  if (halves.length === 2 ? missing < 1 : missing !== 0) return null;
+  const words = [...head, ...new Array<number>(missing).fill(0), ...tail];
+  return words.flatMap((w) => [w >> 8, w & 0xff]);
+}
+
+/**
+ * cidrmatch(): whether `ip` falls inside `cidr`. IPv4 and IPv6 are both
+ * understood, and never match each other — an IPv4-mapped IPv6 address is an
+ * IPv6 address here, as it is on the wire. A bare address with no `/prefix` is
+ * a single-host range. Anything malformed on either side is false, not an
+ * error, which is how Splunk's own predicate behaves on a bad argument.
+ */
+function cidrMatch(cidr: string, ip: string): boolean {
+  const slash = cidr.indexOf('/');
+  const netText = slash === -1 ? cidr : cidr.slice(0, slash);
+  const net = parseIPv4(netText) ?? parseIPv6(netText);
+  if (!net) return false;
+  const width = net.length * 8;
+  let prefix = width;
+  if (slash !== -1) {
+    const prefixText = cidr.slice(slash + 1);
+    if (!/^\d{1,3}$/.test(prefixText)) return false;
+    prefix = Number(prefixText);
+    if (prefix > width) return false;
+  }
+  const addr = net.length === 4 ? parseIPv4(ip) : parseIPv6(ip);
+  if (!addr) return false;
+  for (let bit = 0; bit < prefix; bit += 8) {
+    const remaining = Math.min(8, prefix - bit);
+    const mask = (0xff << (8 - remaining)) & 0xff;
+    const i = bit / 8;
+    if (((net[i] ?? 0) & mask) !== ((addr[i] ?? 0) & mask)) return false;
+  }
+  return true;
+}
 
 function toBool(v: EvalArg): boolean {
   if (v === null || v === undefined) return false;
@@ -1149,6 +1274,7 @@ export function evaluateExpression(
   event: SplunkEvent,
   onStubWarning?: (fn: string) => void,
   now: number = Date.now(),
+  onRegexError?: (fn: string, pattern: string) => void,
 ): EvalValue {
-  return evalNode(parseExpression(expr), { event, now, onStubWarning });
+  return evalNode(parseExpression(expr), { event, now, onStubWarning, onRegexError });
 }

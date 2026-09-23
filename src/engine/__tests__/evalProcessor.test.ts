@@ -367,11 +367,13 @@ describe('applyEvalExpressions — lazy evaluation (SEM-8)', () => {
     const diagnostics: import('../types').ValidationDiagnostic[] = [];
     const r = applyEvalExpressions(
       [event({ a: 'present' })],
-      [evalDir('r', 'coalesce(a, cidrmatch("10.0.0.0/8", "10.1.1.1"))')],
+      // Probed with a stub that warns when evaluated. This used cidrmatch()
+      // until #291 simulated it, after which the assertion held vacuously.
+      [evalDir('r', 'coalesce(a, searchmatch("x"))')],
       diagnostics,
     )[0]!;
     expect(r.fields['r']).toBe('present');
-    expect(diagnostics.some((d) => d.message.includes('cidrmatch'))).toBe(false);
+    expect(diagnostics.some((d) => d.message.includes('searchmatch'))).toBe(false);
   });
 
   it('OR short-circuits when the left operand is true', () => {
