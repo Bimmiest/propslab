@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractTimestamps } from '../processors/timestampExtractor';
+import { extractTimestamps, resolveLookahead } from '../processors/timestampExtractor';
 import type { SplunkEvent, ConfDirective, ValidationDiagnostic } from '../types';
 
 function event(raw: string): SplunkEvent {
@@ -455,15 +455,67 @@ describe('#85 — timestamp sanity bounds', () => {
     expect(timeSource(out[1]!)).toBe('previous-event');
   });
 
-  it('rejects a jump backwards beyond MAX_DIFF_SECS_AGO', () => {
+  // This used to assert the jump was rejected. props.conf.spec says an event
+  // beyond MAX_DIFF_SECS_AGO is accepted "only if it has the same exact time
+  // format as the majority of timestamps from the source" — and under an
+  // explicit TIME_FORMAT every timestamp has that format, so it is kept (#286).
+  // Doc-derived; no fixture covers it.
+  it('keeps a jump backwards beyond MAX_DIFF_SECS_AGO when it is in the TIME_FORMAT', () => {
     const out = extractTimestamps(
       [event('2026-08-03 10:00:00 first'), event('2026-08-03 08:00:00 two hours earlier')],
       [fmt, dir('MAX_DIFF_SECS_AGO', '3600')],
       undefined,
       NOW,
     );
-    expect(iso(out[1]!._time)).toBe('2026-08-03T10:00:00.000Z');
-    expect(timeSource(out[1]!)).toBe('previous-event');
+    expect(iso(out[1]!._time)).toBe('2026-08-03T08:00:00.000Z');
+    expect(timeSource(out[1]!)).toBe('TIME_FORMAT');
+    expect(out[1]!.processingTrace.at(-1)?.description).toContain('MAX_DIFF_SECS_AGO');
+  });
+
+  it('keeps newest-first logs in their own times (#286)', () => {
+    const out = extractTimestamps(
+      [
+        event('2026-08-03 12:00:00 c'),
+        event('2026-08-03 09:00:00 b'),
+        event('2026-08-03 06:00:00 a'),
+      ],
+      [fmt],
+      undefined,
+      NOW,
+    );
+    expect(out.map((e) => iso(e._time))).toEqual([
+      '2026-08-03T12:00:00.000Z',
+      '2026-08-03T09:00:00.000Z',
+      '2026-08-03T06:00:00.000Z',
+    ]);
+  });
+
+  // Doc-derived (#286). Without TIME_FORMAT the "majority format" is judged over
+  // the events accepted so far in the sample: a backwards jump in the format the
+  // file has been using is kept, one in a different shape is the false match
+  // the bound exists for, and is refused.
+  it('under auto-recognition, keeps a backwards jump in the majority format', () => {
+    const out = extractTimestamps(
+      [event('2026-08-03T12:00:00 a'), event('2026-08-03T11:59:00 b'), event('2026-08-03T06:00:00 c')],
+      [],
+      undefined,
+      NOW,
+    );
+    expect(iso(out[2]!._time)).toBe('2026-08-03T06:00:00.000Z');
+    expect(timeSource(out[2]!)).toBe('auto-recognition');
+  });
+
+  it('under auto-recognition, rejects a backwards jump in a minority format', () => {
+    const diagnostics: ValidationDiagnostic[] = [];
+    const out = extractTimestamps(
+      [event('2026-08-03T12:00:00 a'), event('2026-08-03T11:59:00 b'), event('08/01/2026 06:00:00 c')],
+      [],
+      diagnostics,
+      NOW,
+    );
+    expect(iso(out[2]!._time)).toBe('2026-08-03T11:59:00.000Z');
+    expect(timeSource(out[2]!)).toBe('previous-event');
+    expect(diagnostics.some((d) => d.message.includes('MAX_DIFF_SECS_AGO') && d.message.includes('%m/%d/%Y'))).toBe(true);
   });
 
   it('allows a backwards jump within MAX_DIFF_SECS_AGO', () => {
@@ -513,12 +565,25 @@ describe('#85 — timestamp sanity bounds', () => {
 describe('#85 — MAX_DIFF_SECS_HENCE', () => {
   const fmt = dir('TIME_FORMAT', '%Y-%m-%d %H:%M:%S');
 
-  it('rejects a jump forwards beyond MAX_DIFF_SECS_HENCE', () => {
+  // Previously asserted a rejection; corrected by the spec's same-format
+  // exemption, which it words identically for HENCE and AGO (#286). Doc-derived.
+  it('keeps a jump forwards beyond MAX_DIFF_SECS_HENCE when it is in the TIME_FORMAT', () => {
     // Three days after the previous event, but still inside MAX_DAYS_HENCE — so
     // this isolates the previous-event bound from the wall-clock one.
     const out = extractTimestamps(
       [event('2026-08-01 10:00:00 first'), event('2026-08-04 09:00:00 three days later')],
       [fmt, dir('MAX_DIFF_SECS_HENCE', '3600')],
+      undefined,
+      NOW,
+    );
+    expect(iso(out[1]!._time)).toBe('2026-08-04T09:00:00.000Z');
+    expect(timeSource(out[1]!)).toBe('TIME_FORMAT');
+  });
+
+  it('under auto-recognition, rejects a forward jump in a minority format', () => {
+    const out = extractTimestamps(
+      [event('2026-08-01T10:00:00 first'), event('08/03/2026 09:00:00 two days later')],
+      [dir('MAX_DIFF_SECS_HENCE', '3600')],
       undefined,
       NOW,
     );
@@ -535,5 +600,57 @@ describe('#85 — MAX_DIFF_SECS_HENCE', () => {
     );
     expect(iso(out[1]!._time)).toBe('2026-08-01T10:30:00.000Z');
     expect(timeSource(out[1]!)).toBe('TIME_FORMAT');
+  });
+});
+
+describe('#286 — MAX_TIMESTAMP_LOOKAHEAD = 0 / -1 disables the limit', () => {
+  // Doc-derived: props.conf.spec says 0 or -1 disables the length constraint.
+  // Both used to fall back to the 128-character default.
+  const raw = `${'x'.repeat(200)} 2026-08-03 10:00:00`;
+  const fmt = dir('TIME_FORMAT', '%Y-%m-%d %H:%M:%S');
+
+  it('does not find a deep timestamp under the default', () => {
+    const e = extractTimestamps([event(raw)], [fmt], undefined, NOW)[0]!;
+    expect(timeSource(e)).toBe('current-time');
+  });
+
+  for (const value of ['0', '-1']) {
+    it(`finds it with MAX_TIMESTAMP_LOOKAHEAD = ${value}`, () => {
+      const e = extractTimestamps([event(raw)], [fmt, dir('MAX_TIMESTAMP_LOOKAHEAD', value)], undefined, NOW)[0]!;
+      expect(iso(e._time)).toBe('2026-08-03T10:00:00.000Z');
+    });
+  }
+
+  it('still falls back to 128 for a value that is not a usable count', () => {
+    expect(resolveLookahead('-5')).toBe(128);
+    expect(resolveLookahead('abc')).toBe(128);
+    expect(resolveLookahead(undefined)).toBe(128);
+    expect(resolveLookahead(' 64 ')).toBe(64);
+  });
+});
+
+describe('#286 — a TIME_PREFIX that does not compile', () => {
+  // Doc-derived: TIME_PREFIX "cannot be found" means no timestamp is extracted.
+  // A prefix that cannot even be compiled used to be dropped and the scan began
+  // at offset 0, reading a timestamp from exactly where the prefix said not to.
+  it('is treated as never matching, and reported as an error', () => {
+    const diagnostics: ValidationDiagnostic[] = [];
+    const out = extractTimestamps(
+      [event('2026-08-03 10:00:00 a'), event('2026-08-03 10:00:01 b')],
+      [dir('TIME_FORMAT', '%Y-%m-%d %H:%M:%S'), dir('TIME_PREFIX', 'ts=(')],
+      diagnostics,
+      NOW,
+    );
+    expect(out.map(timeSource)).toEqual(['current-time', 'current-time']);
+    const errors = diagnostics.filter((d) => d.directiveKey === 'TIME_PREFIX');
+    expect(errors).toHaveLength(1);
+    expect(errors[0]?.level).toBe('error');
+    expect(errors[0]?.message).toContain('ts=(');
+  });
+
+  it('names the ReDoS guard when that is what refused it', () => {
+    const diagnostics: ValidationDiagnostic[] = [];
+    extractTimestamps([event('x')], [dir('TIME_PREFIX', '(a+)+')], diagnostics, NOW);
+    expect(diagnostics.find((d) => d.directiveKey === 'TIME_PREFIX')?.message).toMatch(/ReDoS/);
   });
 });

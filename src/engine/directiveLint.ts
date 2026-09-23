@@ -151,7 +151,7 @@ export function lintDirectiveValues(
       if (info.valueType === 'number') {
         if (!/^[+-]?\d+$/.test(value)) {
           report(`${dir.key} takes an integer, and "${value}" is not one.`);
-        } else if (value.startsWith('-') && NON_NEGATIVE.has(info.key)) {
+        } else if (value.startsWith('-') && NON_NEGATIVE.has(info.key) && NEGATIVE_SENTINELS[info.key] !== value) {
           report(
             `${dir.key} cannot be negative — "${value}" will not do what it looks like it does.`,
           );
@@ -192,3 +192,12 @@ const NON_NEGATIVE = new Set([
   'LINE_BREAKER_LOOKBEHIND',
   'HEADER_FIELD_LINE_NUMBER',
 ]);
+
+/**
+ * The one negative a non-negative directive documents as meaningful.
+ * props.conf.spec: MAX_TIMESTAMP_LOOKAHEAD "0 or -1 disables the length
+ * constraint", so flagging -1 told users a correct setting was broken (#286).
+ */
+const NEGATIVE_SENTINELS: Readonly<Record<string, string>> = {
+  MAX_TIMESTAMP_LOOKAHEAD: '-1',
+};

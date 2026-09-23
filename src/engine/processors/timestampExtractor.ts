@@ -1,5 +1,5 @@
 import type { SplunkEvent, ConfDirective, ValidationDiagnostic } from '../types';
-import { safeRegex } from '../../utils/splunkRegex';
+import { safeRegex, validateRegex } from '../../utils/splunkRegex';
 import { parseTimestamp, parseTzAlias, strftimeToRegex } from '../../utils/strftime';
 import { atDirective } from '../parser/provenance';
 
@@ -93,6 +93,21 @@ function numericDirective(
   return Number.isFinite(parsed) && parsed > 0 ? parsed : BOUND_DEFAULTS[key];
 }
 
+/**
+ * MAX_TIMESTAMP_LOOKAHEAD as a character count. props.conf.spec: the default is
+ * 128, and "a value of 0 or -1 disables the length constraint". Those two used
+ * to fall through to 128 along with genuinely unusable values, so a config that
+ * turned the limit off to reach a deep timestamp still missed it (#286). An
+ * unlimited window is `Infinity`, which `Math.min` against the event length
+ * turns back into "the rest of the event".
+ */
+export function resolveLookahead(value: string | undefined): number {
+  if (value === undefined) return 128;
+  const parsed = parseInt(value.trim(), 10);
+  if (parsed === 0 || parsed === -1) return Infinity;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 128;
+}
+
 export function extractTimestamps(
   events: SplunkEvent[],
   directives: ConfDirective[],
@@ -148,9 +163,7 @@ export function extractTimestamps(
   const maxDiffSecsHence = numericDirective(directives, 'MAX_DIFF_SECS_HENCE');
 
   const timeFormat = timeFormatDir?.value.trim();
-  // props.conf.spec default for MAX_TIMESTAMP_LOOKAHEAD is 128 characters.
-  const parsedLookahead = maxLookaheadDir ? parseInt(maxLookaheadDir.value.trim(), 10) : 128;
-  const maxLookahead = Number.isFinite(parsedLookahead) && parsedLookahead > 0 ? parsedLookahead : 128;
+  const maxLookahead = resolveLookahead(maxLookaheadDir?.value);
   const tz = tzDir?.value.trim();
 
   // TZ_ALIAS only ever rewrites a zone the event itself carried, so a table
@@ -190,6 +203,25 @@ export function extractTimestamps(
     : undefined;
 
   const timePrefixRegex = timePrefixDir ? safeRegex(timePrefixDir.value.trim()) : null;
+  // A TIME_PREFIX that will not compile used to be dropped, and the scan began
+  // at offset 0 — so a broken prefix could still produce a plausible `_time`
+  // read from the wrong place, which is the one outcome that hides the mistake.
+  // It is treated as a prefix that never matches instead: every event takes the
+  // ordinary no-timestamp fallback, and the error says why (#286).
+  const timePrefixBroken = timePrefixDir !== undefined && timePrefixRegex === null;
+  if (timePrefixBroken && diagnostics) {
+    const pattern = timePrefixDir.value.trim();
+    const why = validateRegex(pattern) ?? 'rejected as ReDoS-prone';
+    diagnostics.push({
+      level: 'error',
+      message:
+        `TIME_PREFIX (${pattern}) could not be compiled: ${why}. It was treated as never matching, ` +
+        'so no event had its timestamp read — each fell back to the previous event or the time of indexing.',
+      file: 'props.conf',
+      ...atDirective(timePrefixDir),
+      directiveKey: 'TIME_PREFIX',
+    });
+  }
   const formatRegex = timeFormat ? strftimeToRegex(timeFormat) : null;
   // When TIME_PREFIX is set, props.conf.spec requires the TIME_FORMAT to start
   // reading immediately after the prefix — "the TIME_PREFIX regex must match up
@@ -213,30 +245,61 @@ export function extractTimestamps(
   let lastResolved: Date | null = null;
 
   /**
-   * Why a parsed timestamp was rejected, or null when it is within bounds.
-   *
-   * The AGO/HENCE pair is measured against the clock; the DIFF_SECS pair against
-   * the previous event, which is what makes them catch a single bad line in an
-   * otherwise coherent file rather than a whole misconfigured source.
+   * How many accepted timestamps each format produced, for the MAX_DIFF_SECS
+   * exemption below. The explicit-TIME_FORMAT path records its one format, so
+   * it is always the majority; auto-recognition records whichever pattern hit.
    */
-  const outOfBounds = (date: Date): string | null => {
+  const formatCounts = new Map<string, number>();
+
+  /**
+   * Whether `format` is the one "the majority of timestamps from the source"
+   * use. Approximated over the events accepted so far in this batch — the only
+   * source history a simulation has — with a tie counted as a majority, so the
+   * second event of a two-format file is not penalised for arriving second.
+   */
+  const isMajorityFormat = (format: string): boolean => {
+    const mine = formatCounts.get(format) ?? 0;
+    if (mine === 0) return false;
+    for (const count of formatCounts.values()) if (count > mine) return false;
+    return true;
+  };
+
+  /**
+   * Why a parsed timestamp was rejected, or null when it is accepted.
+   *
+   * The AGO/HENCE pair is measured against the clock and is absolute. The
+   * DIFF_SECS pair is measured against the previous event, and props.conf.spec
+   * does not make it a hard limit: an event beyond it is accepted "only if it
+   * has the same exact time format as the majority of timestamps from the
+   * source". Rejecting outright broke the commonest case it was never meant to
+   * catch — logs pasted newest-first, where every step is backwards and every
+   * timestamp is in the same TIME_FORMAT (#286). What the bound is for is a
+   * stray date of some other shape in the message body, and that is what the
+   * format test still catches.
+   */
+  const outOfBounds = (date: Date, format: string): { rejection: string | null; note?: string } => {
     const fromNow = now.getTime() - date.getTime();
     if (fromNow > maxDaysAgo * DAY_MS) {
-      return `more than MAX_DAYS_AGO (${maxDaysAgo}) days in the past`;
+      return { rejection: `more than MAX_DAYS_AGO (${maxDaysAgo}) days in the past` };
     }
     if (-fromNow > maxDaysHence * DAY_MS) {
-      return `more than MAX_DAYS_HENCE (${maxDaysHence}) days in the future`;
+      return { rejection: `more than MAX_DAYS_HENCE (${maxDaysHence}) days in the future` };
     }
     if (lastResolved) {
       const fromPrevious = lastResolved.getTime() - date.getTime();
-      if (fromPrevious > maxDiffSecsAgo * 1000) {
-        return `more than MAX_DIFF_SECS_AGO (${maxDiffSecsAgo}s) before the previous event`;
-      }
-      if (-fromPrevious > maxDiffSecsHence * 1000) {
-        return `more than MAX_DIFF_SECS_HENCE (${maxDiffSecsHence}s) after the previous event`;
+      const diff =
+        fromPrevious > maxDiffSecsAgo * 1000
+          ? `more than MAX_DIFF_SECS_AGO (${maxDiffSecsAgo}s) before the previous event`
+          : -fromPrevious > maxDiffSecsHence * 1000
+            ? `more than MAX_DIFF_SECS_HENCE (${maxDiffSecsHence}s) after the previous event`
+            : null;
+      if (diff !== null) {
+        return isMajorityFormat(format)
+          ? { rejection: null, note: `${diff}, kept because its format is the one most of this source's timestamps use` }
+          : { rejection: `${diff}, in a format (${format}) most of this source's timestamps do not use` };
       }
     }
-    return null;
+    return { rejection: null };
   };
 
   const reportedBounds = new Set<string>();
@@ -281,8 +344,14 @@ export function extractTimestamps(
    * per distinct reason: a misconfigured TIME_FORMAT can put every event in the
    * batch out of bounds, and one warning per event would bury everything else.
    */
-  const accept = (event: SplunkEvent, date: Date, source: 'TIME_FORMAT' | 'auto-recognition', label: string) => {
-    const rejection = outOfBounds(date);
+  const accept = (
+    event: SplunkEvent,
+    date: Date,
+    source: 'TIME_FORMAT' | 'auto-recognition',
+    format: string,
+    label: string,
+  ) => {
+    const { rejection, note } = outOfBounds(date, format);
     if (rejection !== null) {
       if (diagnostics && !reportedBounds.has(rejection)) {
         reportedBounds.add(rejection);
@@ -299,6 +368,7 @@ export function extractTimestamps(
     }
 
     lastResolved = date;
+    formatCounts.set(format, (formatCounts.get(format) ?? 0) + 1);
     return {
       ...event,
       _time: date,
@@ -307,7 +377,7 @@ export function extractTimestamps(
         {
           processor: 'timestampExtractor',
           phase: 'index-time' as const,
-          description: label,
+          description: note !== undefined ? `${label} (${note})` : label,
           timeSource: source,
         },
       ],
@@ -318,6 +388,7 @@ export function extractTimestamps(
     const raw = event._raw;
     let searchStart = 0;
 
+    if (timePrefixBroken) return inherit(event, 'TIME_PREFIX could not be compiled, so it never matches');
     if (timePrefixRegex) {
       const match = timePrefixRegex.exec(raw);
       if (match) {
@@ -344,7 +415,7 @@ export function extractTimestamps(
       // it inherits rather than leaving the event unplaced.
       if (!parsedTime) return inherit(event, `Could not parse "${timestampStr}" with TIME_FORMAT`);
 
-      return accept(event, parsedTime, 'TIME_FORMAT', `Extracted timestamp: ${parsedTime.toISOString()}`);
+      return accept(event, parsedTime, 'TIME_FORMAT', timeFormat, `Extracted timestamp: ${parsedTime.toISOString()}`);
     }
 
     // No TIME_FORMAT → automatic timestamp recognition (datetime.xml-style).
@@ -355,6 +426,7 @@ export function extractTimestamps(
       event,
       auto.date,
       'auto-recognition',
+      auto.format,
       `Auto-recognized timestamp (${auto.format}): ${auto.date.toISOString()}`,
     );
   });
