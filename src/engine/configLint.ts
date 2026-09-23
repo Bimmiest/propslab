@@ -2,6 +2,7 @@ import type { ConfDirective, ParsedConf, ValidationDiagnostic } from './types';
 import { atDirective, atStanza } from './parser/provenance';
 import { SIMULATED_DEST_KEYS, VALID_UNSIMULATED_DEST_KEYS, normaliseDestKey } from './transforms/destKeys';
 import { getDirectiveSupport, isUndocumentedAttribute } from './directiveSupport';
+import { wrongFileCanonical, WRONG_FILE_MESSAGE } from './directiveRegistry';
 import { lintInertTransformSettings, lintDirectiveValues } from './directiveLint';
 
 // Config lint: the diagnostics `runPipeline` reports about the conf files
@@ -48,9 +49,29 @@ export function lintConfigs(
   ] as const) {
     for (const stanza of conf.stanzas) {
       for (const dir of stanza.directives) {
-        if (dir.directiveType === 'LOOKUP') continue;
         // A class-based key is written `EXTRACT-foo`; classification is by base.
         const baseKey = dir.className ? dir.directiveType : dir.key;
+
+        // The support table is flat, so an attribute of the other conf file
+        // finds its row here and would be reported as "recognised but not
+        // simulated" -- or, if simulated, not at all -- while the editor, which
+        // looks it up per file, called it a possible typo (#278). Neither is
+        // what is wrong: Splunk does not read it from this file. Checked before
+        // the LOOKUP skip, because that skip exists for the props.conf warning
+        // above, which never sees a LOOKUP- written in transforms.conf.
+        const belongsIn = wrongFileCanonical(dir.key, file);
+        if (belongsIn !== undefined) {
+          diagnostics.push({
+            level: 'warning',
+            message: WRONG_FILE_MESSAGE(dir.key, file, belongsIn),
+            file,
+            ...atDirective(dir),
+            directiveKey: dir.key,
+          });
+          continue;
+        }
+
+        if (dir.directiveType === 'LOOKUP') continue;
         const entry = getDirectiveSupport(baseKey);
 
         // A real attribute the registry has never heard of reaches this loop with

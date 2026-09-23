@@ -2336,6 +2336,44 @@ export function getDirectiveInfo(
 }
 
 /**
+ * When `key` is a real attribute of the OTHER conf file and not of `file`,
+ * return the file it belongs in; otherwise undefined.
+ *
+ * `getDirectiveInfo` is file-aware but the support table is flat, so an
+ * attribute written in the wrong file used to get two verdicts that contradict
+ * each other: the engine found its support row and said "recognised but not
+ * simulated", while the editor found no entry for this file and called it a
+ * possible typo (#278). Neither is the problem. Splunk only reads an attribute
+ * from the file whose spec defines it, so the line is dead, and the fix is to
+ * move it -- both validators ask this one function so they give that answer
+ * together.
+ *
+ * Only exact spellings count: a mis-cased key in the wrong file is still
+ * reported as whatever the file it is in makes of it, since which of the two
+ * mistakes the user made is not knowable.
+ */
+export function wrongFileCanonical(
+  key: string,
+  file: 'props.conf' | 'transforms.conf',
+): 'props.conf' | 'transforms.conf' | undefined {
+  if (getDirectiveInfo(key, file)) return undefined;
+  const entries =
+    directivesByKey.get(key) ??
+    directivesByKey.get(getClassBasedDirectiveBase(key)?.base ?? '');
+  if (!entries || entries.length === 0) return undefined;
+  // Anything registered for 'both' would have been found above, so every
+  // remaining entry names the other file.
+  return file === 'props.conf' ? 'transforms.conf' : 'props.conf';
+}
+
+/** Shared wording, so the engine diagnostic and the editor marker read alike. */
+export const WRONG_FILE_MESSAGE = (
+  key: string,
+  file: 'props.conf' | 'transforms.conf',
+  belongsIn: 'props.conf' | 'transforms.conf',
+): string => `${key} belongs in ${belongsIn}; in ${file} it has no effect.`;
+
+/**
  * Return all directives that apply to the given configuration file.
  */
 export function getDirectivesForFile(

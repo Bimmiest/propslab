@@ -1,5 +1,10 @@
 import type { editor } from 'monaco-editor';
-import { getDirectiveInfo, getClassBasedDirectiveBase } from '../engine/directiveRegistry';
+import {
+  getDirectiveInfo,
+  getClassBasedDirectiveBase,
+  wrongFileCanonical,
+  WRONG_FILE_MESSAGE,
+} from '../engine/directiveRegistry';
 import { isUndocumentedAttribute } from '../engine/directiveSupport';
 import { DIRECTIVE_RE, miscasedCanonical, MISCASED_MESSAGE } from '../engine/parser/confParser';
 import { unsupportedSpecifiers } from '../utils/strftime';
@@ -175,6 +180,24 @@ export function computeDiagnostics(
           severity: 4, // Warning — this config is dead on a real indexer.
           code: MISCASED_MARKER_CODE,
           message: MISCASED_MESSAGE(key, canonical),
+          startLineNumber: i,
+          startColumn: 1,
+          endLineNumber: i,
+          endColumn: eqIdx + 1,
+        });
+        continue;
+      }
+
+      // A real attribute of the other conf file is not a typo either: Splunk
+      // ignores it here, and the fix is to move it. The engine reports the same
+      // sentence in the validation panel (#278). A warning, like the mis-cased
+      // branch above, because the line is dead on a real indexer. No quick fix:
+      // moving a line into another file's stanza is not a safe automatic edit.
+      const belongsIn = wrongFileCanonical(key, fileType);
+      if (belongsIn !== undefined) {
+        markers.push({
+          severity: 4,
+          message: WRONG_FILE_MESSAGE(key, fileType, belongsIn),
           startLineNumber: i,
           startColumn: 1,
           endLineNumber: i,
