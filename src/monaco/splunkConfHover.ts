@@ -1,8 +1,9 @@
-import type { languages, editor, Position, CancellationToken } from 'monaco-editor';
+import type { languages, editor, Position, CancellationToken, MarkdownStringTrustedOptions } from 'monaco-editor';
 import { getDirectiveInfo, getClassBasedDirectiveBase } from '../engine/directiveRegistry';
 import { classifyStanza } from '../engine/stanzaRegistry';
 import { getStagesForDirective } from '../engine/pipelineStages';
-import { openDictionaryCommandUri } from './dictionaryCommand';
+import { OPEN_DICTIONARY_COMMAND_ID, openDictionaryCommandUri } from './dictionaryCommand';
+import { escapeMarkdown, inlineCode } from './markdown';
 import { buildTimeFormatPreview, renderTimeFormatPreview } from './timeFormatPreview';
 import { useAppStore } from '../store/useAppStore';
 
@@ -112,11 +113,14 @@ export function createHoverProvider(fileType: 'props.conf' | 'transforms.conf'):
         if (info) {
           const keyStart = line.indexOf(key) + 1;
           return {
-            // `isTrusted` is what lets the "Open in dictionary" command link
-            // work; Monaco ignores `command:` URIs in untrusted Markdown. The
-            // content is built here from the local registry, never from the
-            // document, so nothing user-authored reaches the link.
-            contents: [{ value: formatDirectiveHover(info, key), isTrusted: true }],
+            // Trust is what lets the "Open in dictionary" command link work;
+            // Monaco ignores `command:` URIs in untrusted Markdown. It is
+            // narrowed to that one command rather than `true`, because the
+            // content is NOT purely registry text: the heading is the key as
+            // typed. formatDirectiveHover escapes it, so the document cannot
+            // add a link — and if an escape were ever missed, the most a
+            // forged link could do is open the dictionary (#296).
+            contents: [{ value: formatDirectiveHover(info, key), isTrusted: DIRECTIVE_HOVER_TRUST }],
             range: {
               startLineNumber: position.lineNumber,
               startColumn: keyStart,
@@ -132,14 +136,26 @@ export function createHoverProvider(fileType: 'props.conf' | 'transforms.conf'):
   };
 }
 
-function formatDirectiveHover(info: import('../engine/directiveRegistry').DirectiveInfo, actualKey: string): string {
+/** The only command a directive hover may run: its "Open in dictionary" link. */
+const DIRECTIVE_HOVER_TRUST: MarkdownStringTrustedOptions = {
+  enabledCommands: [OPEN_DICTIONARY_COMMAND_ID],
+};
+
+/**
+ * Markdown for a directive-key hover. `actualKey` is document text, so it (and
+ * the class name cut from it) is escaped; everything else is registry text.
+ */
+function formatDirectiveHover(
+  info: import('../engine/directiveRegistry').DirectiveInfo,
+  actualKey: string,
+): string {
   const parts: string[] = [];
 
-  parts.push(`### ${actualKey}`);
+  parts.push(`### ${escapeMarkdown(actualKey)}`);
 
   if (info.isClassBased && actualKey.includes('-')) {
     const className = actualKey.split('-').slice(1).join('-');
-    parts.push(`*Class-based directive* (\`${info.key}-<${className}>\`)`);
+    parts.push(`*Class-based directive* (${inlineCode(`${info.key}-<${className}>`)})`);
   }
 
   parts.push('');
@@ -200,16 +216,20 @@ function formatDirectiveHover(info: import('../engine/directiveRegistry').Direct
 /**
  * Render a stanza header hover from the shared stanza registry, so this and the
  * dictionary describe precedence identically.
+ *
+ * This hover is untrusted, so a forged `command:` link would not run — but the
+ * stanza name is document text all the same, and unescaped it could still
+ * restyle the hover or plant an ordinary link, so it is escaped too.
  */
 function getStanzaHoverContent(stanzaName: string): string {
   const { kind, pattern } = classifyStanza(stanzaName);
 
-  const parts: string[] = [`### [${stanzaName}]`, '', kind.description, ''];
+  const parts: string[] = [`### \\[${escapeMarkdown(stanzaName)}\\]`, '', kind.description, ''];
 
   if (kind.id === 'sourcetype' && pattern) {
-    parts.push(`Applies to events with \`sourcetype=${pattern}\`.`, '');
+    parts.push(`Applies to events with ${inlineCode(`sourcetype=${pattern}`)}.`, '');
   } else if (pattern) {
-    parts.push(`Matching pattern: \`${pattern}\``, '');
+    parts.push(`Matching pattern: ${inlineCode(pattern)}`, '');
   }
 
   parts.push(`**Precedence:** ${kind.precedence}`);

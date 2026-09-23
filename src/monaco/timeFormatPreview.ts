@@ -10,6 +10,7 @@
 // ---------------------------------------------------------------------------
 
 import { formatStrftime, strftimeToRegex, parseTimestamp, unsupportedSpecifiers } from '../utils/strftime';
+import { inlineCode } from './markdown';
 
 export interface TimeFormatPreview {
   /** The current time rendered with this pattern — "what does this produce?". */
@@ -96,22 +97,28 @@ export function buildTimeFormatPreview(
   };
 }
 
-/** Markdown for a hover or a completion detail. Empty when there is nothing to say. */
+/**
+ * Markdown for a hover or a completion detail. Empty when there is nothing to say.
+ *
+ * `rendered` carries the format's literal text and `sample.text` is event data,
+ * both user-authored, so each goes through `inlineCode` rather than a bare pair
+ * of backticks a stray backtick could close (#296).
+ */
 export function renderTimeFormatPreview(preview: TimeFormatPreview): string {
   const parts: string[] = [];
 
   if (preview.rendered !== null) {
-    parts.push(`**Now:** \`${preview.rendered}\``);
+    parts.push(`**Now:** ${inlineCode(preview.rendered)}`);
   }
 
   if (preview.sample) {
     switch (preview.sample.status) {
       case 'matched':
-        parts.push(`**Sample:** matched \`${preview.sample.text}\` → \`${preview.sample.iso}\``);
+        parts.push(`**Sample:** matched ${inlineCode(preview.sample.text)} → ${inlineCode(preview.sample.iso)}`);
         break;
       case 'unparseable':
         parts.push(
-          `**Sample:** matched \`${preview.sample.text}\`, but it could not be assembled into a date — check the field order and ranges.`,
+          `**Sample:** matched ${inlineCode(preview.sample.text)}, but it could not be assembled into a date — check the field order and ranges.`,
         );
         break;
       case 'no-match':
@@ -125,7 +132,7 @@ export function renderTimeFormatPreview(preview: TimeFormatPreview): string {
   }
 
   if (preview.unsupported.length > 0) {
-    const list = preview.unsupported.map((u) => `\`${u.specifier}\` (offset ${u.index})`).join(', ');
+    const list = preview.unsupported.map((u) => `${inlineCode(u.specifier)} (offset ${u.index})`).join(', ');
     parts.push(`**Not simulated:** ${list} — the preview treats these as literal text.`);
   }
 

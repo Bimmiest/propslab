@@ -8,6 +8,7 @@
 // ---------------------------------------------------------------------------
 
 import { describe, it, expect } from 'vitest';
+import { marked } from 'marked';
 import { buildTimeFormatPreview, renderTimeFormatPreview } from '../timeFormatPreview';
 import { unsupportedSpecifiers } from '../../utils/strftime';
 
@@ -143,5 +144,22 @@ describe('renderTimeFormatPreview', () => {
       buildTimeFormatPreview('%Y/%m/%d', { now: NOW, sampleLine: '2024-01-15 x' }),
     );
     expect(markdown).toContain('no match');
+  });
+
+  it('keeps a backtick in the format or the sample inside its code span (#296)', () => {
+    // Both the rendered format and the matched sample text are user-authored.
+    // A bare pair of backticks let a backtick in either close the span and
+    // turn the rest into live Markdown — here, a link.
+    const markdown = renderTimeFormatPreview({
+      rendered: 'x`[a](https://example.invalid)`',
+      sample: { status: 'matched', text: '`[b](https://example.invalid)', iso: '2024-01-15T00:00:00.000Z' },
+      unsupported: [],
+    });
+    const links: string[] = [];
+    void marked.walkTokens(marked.lexer(markdown), (t) => {
+      if (t.type === 'link') links.push(t.raw);
+    });
+    expect(links).toEqual([]);
+    expect(markdown).toContain('**Now:** `` x`[a](https://example.invalid)` ``');
   });
 });

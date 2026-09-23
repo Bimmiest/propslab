@@ -166,10 +166,12 @@ function directiveToCompletionItem(
         dir.example,
         '```',
       ].join('\n'),
-      // isTrusted enables command: links in markdown. Safe here because the content
-      // is built entirely from the static directiveRegistry — never from user input.
-      // IMPORTANT: do not interpolate user-controlled text into this value.
-      isTrusted: true,
+      // Deliberately untrusted. Trust only matters for `command:` links, and
+      // this documentation has none, so marking it trusted granted every
+      // command for no benefit — one interpolated string away from the hover
+      // bug in #296. If a link is ever added here, trust exactly its command
+      // (`{ enabledCommands: [...] }`) and escape anything from the document
+      // with ./markdown, as the directive hover does.
     },
     insertText,
     insertTextRules: InsertAsSnippet,
