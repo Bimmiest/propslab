@@ -461,9 +461,16 @@ export function applyRegexTransform(
   // Index-time FORMAT defaults to `<stanza-name>::$1` when omitted (transforms.conf.spec).
   // Named capture groups auto-extract without a FORMAT, so the default only applies
   // to a REGEX that uses numbered groups (at least group 1 must exist to reference).
+  //
+  // The search-time default is empty (#288): a REPORT- with only numbered groups
+  // and no FORMAT extracts nothing, rather than inventing a field named after the
+  // stanza. Named groups still extract there — the
+  // report-named-groups-without-format capture (10.4.0) pins that.
   const format =
     formatDir?.value.trim() ??
-    (!hasNamedGroups && firstMatch.length > 1 ? `${transformStanza.name}::$1` : undefined);
+    (phase === 'index-time' && !hasNamedGroups && firstMatch.length > 1
+      ? `${transformStanza.name}::$1`
+      : undefined);
 
   if (format) {
     if (destKey === '_raw') {

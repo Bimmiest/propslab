@@ -167,13 +167,72 @@ describe('applyTransforms — index-time extraction without WRITE_META (SEM-7)',
     applyTransforms([event('alice')], reportDir, conf, 'search-time', diags);
     expect(diags.some((d) => d.message.includes('no effect'))).toBe(false);
   });
+
+  // Doc-derived (transforms.conf.spec, WRITE_META): index-time fields are
+  // written to _meta only when WRITE_META = true (or DEST_KEY = _meta). The
+  // preview used to add them anyway, under a warning saying they have no
+  // effect; now it agrees with the warning (#288).
+  it('does not add the fields to the event, while still warning and tracing them', () => {
+    const diags: ValidationDiagnostic[] = [];
+    const conf = transformsConf('grab', { REGEX: '(?<user>\\w+)' });
+    const e = applyTransforms([event('alice')], transformsDir('grab'), conf, 'index-time', diags)[0]!;
+    expect(e.fields.user).toBeUndefined();
+    expect(diags.some((d) => d.message.includes('no effect'))).toBe(true);
+    const step = e.processingTrace.at(-1);
+    expect(step?.fieldsAdded).toEqual([]);
+    expect(step?.description).toContain('user');
+  });
+
+  it('honours the effective (last) WRITE_META', () => {
+    const conf: ParsedConf = transformsConf('grab', { REGEX: '(?<user>\\w+)' });
+    const grab = conf.stanzas[0]!;
+    grab.directives.push(
+      { key: 'WRITE_META', value: 'false', line: 2, directiveType: 'WRITE_META' },
+      { key: 'WRITE_META', value: 'true', line: 3, directiveType: 'WRITE_META' },
+    );
+    const e = applyTransforms([event('alice')], transformsDir('grab'), conf, 'index-time')[0]!;
+    expect(e.fields.user).toBe('alice');
+  });
+
+  // Doc-derived (transforms.conf.spec, FORMAT): the `<stanza>::$1` default is
+  // for index-time extractions; the search-time default is empty (#288).
+  it('extracts nothing from a REPORT with numbered groups and no FORMAT, and says why', () => {
+    const diags: ValidationDiagnostic[] = [];
+    const conf = transformsConf('word', { REGEX: '(\\w+)' });
+    const reportDir: ConfDirective[] = [{ key: 'REPORT-x', value: 'word', line: 1, directiveType: 'REPORT', className: 'x' }];
+    const e = applyTransforms([event('alice')], reportDir, conf, 'search-time', diags)[0]!;
+    expect(e.fields).toEqual({});
+    expect(diags.some((d) => d.message.includes('At search time FORMAT has no default'))).toBe(true);
+  });
+
+  it('keeps the index-time default FORMAT for the same stanza under TRANSFORMS-', () => {
+    const conf = transformsConf('word', { REGEX: '(\\w+)', WRITE_META: 'true' });
+    const e = applyTransforms([event('alice')], transformsDir('word'), conf, 'index-time')[0]!;
+    expect(e.fields.word).toBe('alice');
+  });
+
+  it('does not warn about a named-group REPORT whose group did not participate', () => {
+    const diags: ValidationDiagnostic[] = [];
+    const conf = transformsConf('opt', { REGEX: 'x(?<y>y)?' });
+    const reportDir: ConfDirective[] = [{ key: 'REPORT-x', value: 'opt', line: 1, directiveType: 'REPORT', className: 'x' }];
+    applyTransforms([event('x')], reportDir, conf, 'search-time', diags);
+    expect(diags.some((d) => d.message.includes('FORMAT has no default'))).toBe(false);
+  });
+
+  it('still stores what DEST_KEY = _meta writes', () => {
+    const conf = transformsConf('grab', { REGEX: '(\\w+)', DEST_KEY: '_meta', FORMAT: 'user::$1' });
+    const e = applyTransforms([event('alice')], transformsDir('grab'), conf, 'index-time')[0]!;
+    expect(e._meta.user).toBe('alice');
+  });
 });
 
 describe('applyTransforms — INGEST_EVAL interleaving (SEM-2)', () => {
   it('runs an INGEST_EVAL stanza at its list position so a later regex sees the result', () => {
     const conf = multiTransformsConf(
       stanza('rewrite', { INGEST_EVAL: '_raw="HELLO"' }),
-      stanza('extract', { REGEX: '(?<word>HELLO)' }),
+      // WRITE_META added in #288: without it an index-time extraction stores
+      // nothing, so the field this test observes would (correctly) not appear.
+      stanza('extract', { REGEX: '(?<word>HELLO)', WRITE_META: 'true' }),
     );
     // List order: eval rewrites _raw, then the regex extracts from the new _raw.
     const e = applyTransforms([event('original text')], transformsDir('rewrite, extract'), conf, 'index-time')[0]!;

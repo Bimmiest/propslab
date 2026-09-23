@@ -58,6 +58,7 @@ export function applyTransforms(
   // where Splunk ignores it.
   const warnedSearchTimeDestKey = new Set<string>();
   const warnedSearchOnlyAttrs = new Set<string>();
+  const warnedSearchTimeNoFormat = new Set<string>();
 
   return events.flatMap((event) => {
     let currentEvent: SplunkEvent = event;
@@ -129,13 +130,25 @@ export function applyTransforms(
           // the stanza.
           if (phase === 'search-time' && diagnostics) {
             warnSearchTimeDestKey(stanzaName, transformStanza, diagnostics, warnedSearchTimeDestKey);
+            warnSearchTimeNoFormat(result, stanzaName, transformStanza, diagnostics, warnedSearchTimeNoFormat);
           }
+          // An index-time extraction with neither WRITE_META = true nor a
+          // DEST_KEY stores nothing in Splunk (#288). The warning above says so,
+          // and the preview has to agree with it: showing the fields anyway made
+          // the dead config look like a working one, contradicting its own
+          // diagnostic. The field names are still reported, in the warning and
+          // the trace, so the reader can see what was lost.
+          const discardedFields =
+            phase === 'index-time' && !result.destKey && !stanzaWritesMeta(transformStanza)
+              ? Object.keys(result.fields)
+              : [];
+          const effective = discardedFields.length > 0 ? { ...result, fields: {} } : result;
           const beforeRaw = currentEvent._raw;
           // applyDestKey records queue values onto _meta._queue rather than dropping
           // the event — a later transform in the list can still overwrite the queue
           // (last-wins). nullQueue events are flagged (and shown as dropped) only
           // after the whole list runs; they are never removed mid-list.
-          const routed = applyDestKey(currentEvent, result);
+          const routed = applyDestKey(currentEvent, effective);
           if (result.destKey === '_raw' && diagnostics) {
             warnRawLoss(beforeRaw, routed._raw, stanzaName, transformStanza, diagnostics, warnedRawLoss);
           }
@@ -152,8 +165,10 @@ export function applyTransforms(
             phase,
             description: result.destKey
               ? `Transform routed to ${result.destKey}`
-              : `Transform extracted fields: ${Object.keys(result.fields).join(', ')}`,
-            fieldsAdded: Object.keys(result.fields),
+              : discardedFields.length > 0
+                ? `Transform matched, but without WRITE_META = true or a DEST_KEY its fields are not stored: ${discardedFields.join(', ')}`
+                : `Transform extracted fields: ${Object.keys(result.fields).join(', ')}`,
+            fieldsAdded: Object.keys(effective.fields),
             ...(rewroteRaw ? changeWindow(beforeRaw, routed._raw) : {}),
           };
           currentEvent = {
@@ -205,6 +220,21 @@ export function applyTransforms(
 }
 
 /**
+ * Whether the stanza's effective WRITE_META is true. Last definition wins, as
+ * applyRegexTransform reads it — the warning and the discard must not disagree
+ * with the extraction about a stanza that sets it twice.
+ */
+function stanzaWritesMeta(transformStanza: ParsedConf['stanzas'][number]): boolean {
+  return (
+    transformStanza.directives
+      .filter((d) => d.key === 'WRITE_META')
+      .at(-1)
+      ?.value.trim()
+      .toLowerCase() === 'true'
+  );
+}
+
+/**
  * Warn when an index-time transform extracts fields but writes nowhere — no
  * WRITE_META = true and no DEST_KEY. In real Splunk such a stanza does nothing at
  * index time (index-time field extraction requires WRITE_META), so a config that
@@ -220,9 +250,7 @@ function warnIndexTimeNoWriteMeta(
   if (warned.has(stanzaName)) return;
   // Only a concern when the transform produced fields and did not route anywhere.
   if (result.destKey || Object.keys(result.fields).length === 0) return;
-  const writeMeta = transformStanza.directives
-    .find((d) => d.key === 'WRITE_META')?.value.trim().toLowerCase() === 'true';
-  if (writeMeta) return;
+  if (stanzaWritesMeta(transformStanza)) return;
 
   warned.add(stanzaName);
   diagnostics.push({
@@ -308,6 +336,40 @@ function warnSearchTimeDestKey(
       'Reference the stanza from TRANSFORMS- instead if the routing is intended.',
     file: 'transforms.conf',
     ...atDirective(destKeyDir),
+  });
+}
+
+/**
+ * A REPORT- whose REGEX matched but produced nothing because it has no FORMAT
+ * and no named groups. At search time FORMAT has no default (#288) — the
+ * `<stanza>::$1` default is index-time only — so this is a silent no-op in
+ * Splunk, and the most likely cause is a config written with the index-time
+ * default in mind.
+ */
+function warnSearchTimeNoFormat(
+  result: { fields: Record<string, string | string[]> },
+  stanzaName: string,
+  transformStanza: ParsedConf['stanzas'][number],
+  diagnostics: ValidationDiagnostic[],
+  warned: Set<string>,
+): void {
+  if (warned.has(stanzaName) || Object.keys(result.fields).length > 0) return;
+  const has = (key: string) => transformStanza.directives.some((d) => d.key === key);
+  if (has('FORMAT') || has('DELIMS')) return;
+  // A named group that simply did not participate in this match also leaves
+  // `fields` empty; that is data, not config, so stay quiet for it.
+  const regex = transformStanza.directives.filter((d) => d.key === 'REGEX').at(-1)?.value ?? '';
+  if (/\(\?P?<(?![=!])/.test(regex)) return;
+  warned.add(stanzaName);
+  diagnostics.push({
+    level: 'warning',
+    message:
+      `Transform "${stanzaName}" is referenced by a search-time REPORT- and its REGEX matched, but it has no ` +
+      'FORMAT and no named capture groups, so it extracts nothing. At search time FORMAT has no default ' +
+      `(the "${stanzaName}::$1" default applies only to index-time TRANSFORMS-). Add a FORMAT such as ` +
+      'field::$1, or name the groups: (?<field>…).',
+    file: 'transforms.conf',
+    ...positionOfKeyOrStanza(transformStanza, 'REGEX'),
   });
 }
 
