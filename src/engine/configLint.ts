@@ -187,7 +187,7 @@ export function lintConfigs(
     }
   }
 
-  // Cross-reference validation: check TRANSFORMS/REPORT references exist, and collect
+  // Cross-reference validation: check TRANSFORMS/RULESET/REPORT references exist, and collect
   // referenced stanza names in one pass (avoids iterating props stanzas twice).
   const referencedTransforms = new Set<string>();
   // How props.conf reaches each transforms stanza decides that stanza's phase,
@@ -196,8 +196,10 @@ export function lintConfigs(
   const transformPhase = new Map<string, 'index-time' | 'search-time' | 'both'>();
   for (const stanza of propsConf.stanzas) {
     for (const dir of stanza.directives) {
-      if (dir.directiveType === 'TRANSFORMS' || dir.directiveType === 'REPORT') {
-        const phase = dir.directiveType === 'TRANSFORMS' ? 'index-time' : 'search-time';
+      // RULESET- is index-time like TRANSFORMS- (#275): a stanza it names is
+      // referenced, must exist, and is linted as index-time.
+      if (dir.directiveType === 'TRANSFORMS' || dir.directiveType === 'RULESET' || dir.directiveType === 'REPORT') {
+        const phase = dir.directiveType === 'REPORT' ? 'search-time' : 'index-time';
         const stanzaNames = dir.value.split(',').map((s) => s.trim()).filter(Boolean);
         for (const name of stanzaNames) {
           referencedTransforms.add(name);

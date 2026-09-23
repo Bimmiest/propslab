@@ -33,6 +33,15 @@ const TAGGERS = [
 ].join('\n\n');
 
 describe('RULESET-<class> (#275)', () => {
+  it('counts as a reference for the config lint, and a missing stanza is an error', () => {
+    const r = run('x', '[st]\nRULESET-r = tag_a, nope\n', TAGGERS);
+    const messages = r.diagnostics.map((d) => d.message);
+    expect(messages).toContain('Referenced transform stanza "nope" not found in transforms.conf');
+    expect(messages.some((m) => m.includes('"tag_a" is defined but never referenced'))).toBe(false);
+    // tag_b and tag_c are genuinely unreferenced.
+    expect(messages.some((m) => m.includes('"tag_b" is defined but never referenced'))).toBe(true);
+  });
+
   it('applies its transforms at index time', () => {
     const transforms = '[mask]\nREGEX = secret=\\S+\nFORMAT = secret=####\nDEST_KEY = _raw\n';
     const r = run('user=bob secret=hunter2', '[st]\nRULESET-mask = mask\n', transforms);
