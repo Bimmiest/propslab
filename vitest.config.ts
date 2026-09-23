@@ -52,10 +52,10 @@ export default defineConfig({
       // make a branch green. A round target picked in advance just produces
       // tests written to move a number.
       thresholds: {
-        statements: 75,
-        branches: 67,
-        functions: 63,
-        lines: 77,
+        statements: 76,
+        branches: 68,
+        functions: 64,
+        lines: 78,
         // The engine is held to a much higher bar than the app as a whole. It
         // is where correctness lives — a simulator whose UI is under-tested is
         // annoying, whereas one whose pipeline is under-tested is wrong — and
@@ -63,7 +63,7 @@ export default defineConfig({
         // healthy-looking global number.
         'src/engine/**': {
           statements: 92,
-          branches: 82,
+          branches: 83,
           functions: 97,
           lines: 94,
         },
