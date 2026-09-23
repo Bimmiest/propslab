@@ -40,8 +40,8 @@ export const PIPELINE_STAGES: PipelineStage[] = [
     name: 'Timestamp Extraction',
     phase: 'index-time',
     description:
-      'Locates and parses the event timestamp. TIME_PREFIX anchors the search position; TIME_FORMAT parses the found value using strftime tokens. If no timestamp is found, the event inherits the previous event’s _time; the first event falls back to the time of indexing.',
-    directives: ['TIME_PREFIX', 'TIME_FORMAT', 'MAX_TIMESTAMP_LOOKAHEAD', 'TZ', 'MAX_DAYS_AGO', 'MAX_DAYS_HENCE'],
+      'Locates and parses the event timestamp. TIME_PREFIX anchors the search position; TIME_FORMAT parses the found value using strftime tokens. If no timestamp is found, the event inherits the previous event’s _time; the first event falls back to the time of indexing. Once _time is known, ROUTE_EVENTS_OLDER_THAN sends events older than its age to nullQueue.',
+    directives: ['TIME_PREFIX', 'TIME_FORMAT', 'MAX_TIMESTAMP_LOOKAHEAD', 'TZ', 'MAX_DAYS_AGO', 'MAX_DAYS_HENCE', 'ROUTE_EVENTS_OLDER_THAN'],
   },
   {
     step: 4,
@@ -64,8 +64,8 @@ export const PIPELINE_STAGES: PipelineStage[] = [
     name: 'Index-Time Transforms',
     phase: 'index-time',
     description:
-      'Applies transforms.conf stanzas referenced by TRANSFORMS directives. Can route events to different indexes, modify metadata fields, or drop events entirely before they are written to disk.',
-    directives: ['TRANSFORMS', 'INGEST_EVAL'],
+      'Applies transforms.conf stanzas referenced by TRANSFORMS directives, then those referenced by RULESET directives. Can route events to different indexes, modify metadata fields, or drop events entirely before they are written to disk. A stanza whose STOP_PROCESSING_IF is true skips the rules after it in the same list.',
+    directives: ['TRANSFORMS', 'RULESET', 'INGEST_EVAL', 'STOP_PROCESSING_IF'],
   },
   {
     step: 7,

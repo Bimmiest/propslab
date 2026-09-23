@@ -261,10 +261,25 @@ export const DIRECTIVE_SUPPORT: Record<string, SupportEntry> = {
   DETERMINE_TIMESTAMP_DATE_WITH_SYSTEM_TIME: { support: 'ignored', issue: 273, note: 'The date for a dateless timestamp is chosen one way and is not selectable.' },
   KV_TRIM_SPACES: { support: 'ignored', issue: 274, note: 'Automatic key-value values are always space-trimmed; this cannot turn that off.' },
   JSON_TRIM_BRACES_IN_ARRAY_NAMES: { support: 'ignored', issue: 274, note: 'Array field names from the JSON parser keep their braces; this cannot strip them.' },
-  RULESET: { support: 'ignored', issue: 275, note: 'Rulesets are not applied, so a stanza relying on one is previewed as though it were absent.' },
-  RULESET_DESC: { support: 'ignored', issue: 275, note: 'Rulesets are not applied, so a stanza relying on one is previewed as though it were absent.' },
-  ROUTE_EVENTS_OLDER_THAN: { support: 'ignored', issue: 275, note: 'Events are never dropped for age; the preview keeps them all.' },
-  OPTIMIZE_IE_EXTRACT: { support: 'ignored', issue: 275, note: 'Search-time extraction always runs, whether or not index-time extraction covered the fields.' },
+  RULESET: {
+    support: 'simulated',
+    note:
+      'Applied after every TRANSFORMS- class, in class order. Splunk also runs rulesets on a heavy ' +
+      'forwarder as well as the indexer; the preview is one pipeline and shows them run once.',
+  },
+  RULESET_DESC: { support: 'documented', note: 'A description of the matching RULESET- for the next reader. Splunk does nothing with it, and neither does the preview.' },
+  ROUTE_EVENTS_OLDER_THAN: {
+    support: 'simulated',
+    note:
+      'Age is measured from the moment of simulation, and a bare number is read as seconds. The ' +
+      'route is a nullQueue queue write, so a later transform writing the queue can still override it.',
+  },
+  OPTIMIZE_IE_EXTRACT: {
+    support: 'documented',
+    note:
+      'A search performance optimisation keyed on the fields a particular search asks for. The preview runs ' +
+      'no search, and used as documented it skips only work whose fields index time already produced.',
+  },
 
   // ---- transforms.conf.spec 10.4.3 completeness (#178) --------------------
   // Mostly lookup settings, documented for the reason every lookup attribute
@@ -291,8 +306,17 @@ export const DIRECTIVE_SUPPORT: Record<string, SupportEntry> = {
   'python.version': { support: 'documented', note: 'Deprecated, and it selects the interpreter for a scripted lookup this tool cannot run.' },
   replicate: { support: 'documented', note: 'Decides where a CSV lookup is replicated, which is a deployment concern.' },
   reverse_lookup_honor_case_sensitive_match: { support: 'documented', note: 'A lookup setting, and a lookup needs a table this tool has nowhere to get.' },
-  CAN_OPTIMIZE_IE: { support: 'ignored', issue: 275, note: 'Search-time extraction always runs, whether or not index-time extraction covered the fields.' },
-  STOP_PROCESSING_IF: { support: 'ignored', issue: 275, note: 'Index-time processing is never halted early, so a rule relying on this is previewed as absent.' },
+  CAN_OPTIMIZE_IE: {
+    support: 'documented',
+    note:
+      'A search performance optimisation keyed on the fields a particular search asks for. The preview runs ' +
+      'no search, and used as documented it skips only work whose fields index time already produced.',
+  },
+  STOP_PROCESSING_IF: {
+    support: 'simulated',
+    note:
+      'When true, skips the rules after it in the same RULESET- or TRANSFORMS- list; later lists still run.',
+  },
 };
 
 /**
