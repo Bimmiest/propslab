@@ -234,9 +234,9 @@ Every directive the registry knows about carries one of three support levels, de
 
 | Level | Count | Meaning |
 |---|---|---|
-| **simulated** | 54 | The engine implements it and tests assert the behaviour. |
-| **documented** | 71 | Recognised on purpose, outside the simulation for a reason that is not going to change — it belongs to a layer a browser has no access to, or it has no observable effect on output. |
-| **ignored** | 24 | Should be simulated, is not yet, and names the issue tracking it. Every one of these is a known wrong answer. |
+| **simulated** | 75 | The engine implements it and tests assert the behaviour. |
+| **documented** | 74 | Recognised on purpose, outside the simulation for a reason that is not going to change — it belongs to a layer a browser has no access to, or it has no observable effect on output. |
+| **ignored** | 0 | Should be simulated, is not yet, and names the issue tracking it. Every one of these is a known wrong answer. |
 
 The counts are asserted by a test against the table itself, so they cannot go stale.
 
@@ -244,13 +244,13 @@ A fourth state sits outside that table, for attributes the registry does not kno
 
 Writing a directive that is not `simulated` produces a diagnostic under its editor — a warning for `ignored`, an informational note for `documented`. The dictionary and the editor hover say the same thing on the entry itself. The point is that the tool never silently renders output as though a line you wrote were absent.
 
-One `simulated` entry carries a caveat rather than a clean bill of health: `INDEXED_EXTRACTIONS` simulates every format it names — csv, tsv, psv, w3c and json — but the header-side attributes that customise the delimited ones are `ignored` ([#272](https://github.com/Bimmiest/propslab/issues/272), which replaces the closed #184 the README used to cite).
+One `simulated` entry carries a caveat rather than a clean bill of health: `INDEXED_EXTRACTIONS` simulates csv, tsv, psv, w3c, json and the xml family (`xml`, `xmlkv`, `xmlkv-winevt`) with their supporting attributes, but not `hec`, and the xml modes' field naming is not specified by `props.conf.spec` — it is borrowed from `KV_MODE = xml` and the `xmlkv` search command, and says so on the entry.
 
 ### Not simulated yet (`ignored`)
 
 Each of these is a directive the preview accepts and then does not honour — a known wrong answer. The roster lives in [`src/engine/directiveSupport.ts`](src/engine/directiveSupport.ts): every `ignored` entry states what is missing and names its tracking issue, and the same text appears verbatim on the directive's hover, its editor warning, and its dictionary entry. A [scheduled workflow](.github/workflows/roster.yml) checks those issues are still open, because an entry pointing at a closed one is how this roster goes stale.
 
-The current roster is the index-time surface that [#178](https://github.com/Bimmiest/propslab/issues/178) surfaced by completing the registry against `props.conf.spec` 10.4.3: XML indexed extraction and its eight supporting attributes ([#271](https://github.com/Bimmiest/propslab/issues/271)), the header-side delimited-extraction overrides ([#272](https://github.com/Bimmiest/propslab/issues/272)), the index-time timestamp fields ([#273](https://github.com/Bimmiest/propslab/issues/273)), the two attributes that reshape automatically extracted field names and values ([#274](https://github.com/Bimmiest/propslab/issues/274)), and rulesets, age-based routing and extraction optimisation ([#275](https://github.com/Bimmiest/propslab/issues/275)).
+The roster is empty. The last entries were the index-time surface [#178](https://github.com/Bimmiest/propslab/issues/178) uncovered when it completed the registry against the 10.4.3 spec files — XML indexed extraction ([#271](https://github.com/Bimmiest/propslab/issues/271)), the header-side delimited overrides ([#272](https://github.com/Bimmiest/propslab/issues/272)), the index-time timestamp fields ([#273](https://github.com/Bimmiest/propslab/issues/273)), `KV_TRIM_SPACES` and `JSON_TRIM_BRACES_IN_ARRAY_NAMES` ([#274](https://github.com/Bimmiest/propslab/issues/274)), and rulesets, `STOP_PROCESSING_IF` and age-based routing ([#275](https://github.com/Bimmiest/propslab/issues/275)) — and all are simulated now. `OPTIMIZE_IE_EXTRACT` and `CAN_OPTIMIZE_IE` moved to `documented` instead: they skip work for the fields a particular search asks for, and the preview runs no search. The roster check keeps running, and fails again the day an entry returns.
 
 ### Deliberately out of scope (`documented`)
 
