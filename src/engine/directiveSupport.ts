@@ -257,8 +257,16 @@ export const DIRECTIVE_SUPPORT: Record<string, SupportEntry> = {
   HEADER_FIELD_QUOTE: { support: 'ignored', issue: 272, note: 'Header-side delimited extraction overrides are not applied; the body-side ones are.' },
   HEADER_FIELD_ACCEPTABLE_SPECIAL_CHARACTERS: { support: 'ignored', issue: 272, note: 'Header-side delimited extraction overrides are not applied; the body-side ones are.' },
   MISSING_VALUE_REGEX: { support: 'ignored', issue: 272, note: 'Header-side delimited extraction overrides are not applied; the body-side ones are.' },
-  ADD_EXTRA_TIME_FIELDS: { support: 'ignored', issue: 273, note: 'Index-time timestamp fields are never generated, so this changes nothing in the preview.' },
-  DETERMINE_TIMESTAMP_DATE_WITH_SYSTEM_TIME: { support: 'ignored', issue: 273, note: 'The date for a dateless timestamp is chosen one way and is not selectable.' },
+  ADD_EXTRA_TIME_FIELDS: {
+    support: 'simulated',
+    note:
+      'The field values follow the documented conventions; no capture recorded them. Only an event whose ' +
+      'timestamp was read from its text gets date_*; the rest get timestamp=none.',
+  },
+  DETERMINE_TIMESTAMP_DATE_WITH_SYSTEM_TIME: {
+    support: 'simulated',
+    note: 'Only a TIME_FORMAT can describe a dateless timestamp here — automatic recognition has no time-only pattern.',
+  },
   KV_TRIM_SPACES: { support: 'ignored', issue: 274, note: 'Automatic key-value values are always space-trimmed; this cannot turn that off.' },
   JSON_TRIM_BRACES_IN_ARRAY_NAMES: { support: 'ignored', issue: 274, note: 'Array field names from the JSON parser keep their braces; this cannot strip them.' },
   RULESET: {

@@ -1,7 +1,14 @@
 import type { SplunkEvent, ConfDirective, ValidationDiagnostic } from '../types';
 import { safeRegex, validateRegex } from '../../utils/splunkRegex';
-import { parseTimestamp, parseTzAlias, strftimeToRegex } from '../../utils/strftime';
+import {
+  parseTimestampDetailed,
+  parseTzAlias,
+  strftimeToRegex,
+  type CalendarDate,
+  type ParsedTimestamp,
+} from '../../utils/strftime';
 import { atDirective } from '../parser/provenance';
+import { setField } from '../utils/fieldBag';
 
 /**
  * Priority-ordered formats for automatic timestamp recognition when no
@@ -43,20 +50,20 @@ function autoRecognize(
   onUnresolvedTz?: (tz: string) => void,
   tzAlias?: ReadonlyMap<string, string>,
   now?: Date,
-): { date: Date; format: string } | null {
-  let best: { index: number; priority: number; date: Date; format: string } | null = null;
-  for (const [priority, { fmt, regex }] of AUTO_PATTERNS.entries()) {
+): { parsed: ParsedTimestamp; format: string; index: number; length: number } | null {
+  let best: { index: number; length: number; parsed: ParsedTimestamp; format: string } | null = null;
+  for (const { fmt, regex } of AUTO_PATTERNS) {
     const m = regex.exec(region);
     if (!m) continue;
-    const date = parseTimestamp(m[0], fmt, tz, onUnresolvedTz, tzAlias, now);
-    if (!date || isNaN(date.getTime())) continue;
-    // Earliest match wins; a tie is broken by the more specific (lower-priority-
-    // index) format.
+    const parsed = parseTimestampDetailed(m[0], fmt, { tz, onUnresolvedTz, tzAlias, now });
+    if (!parsed || isNaN(parsed.date.getTime())) continue;
+    // Earliest match wins; a tie is broken by the more specific format, which
+    // is the one iterated first -- hence the strict `<`.
     if (best === null || m.index < best.index) {
-      best = { index: m.index, priority, date, format: fmt };
+      best = { index: m.index, length: m[0].length, parsed, format: fmt };
     }
   }
-  if (best) return { date: best.date, format: best.format };
+  if (best) return best;
   // Epoch seconds (10 digits) or milliseconds (13) at the very start of the region.
   // Anchored to avoid mistaking arbitrary long numbers elsewhere for a timestamp.
   const epoch = /^\s*(\d{13}|\d{10})(?![0-9])/.exec(region);
@@ -64,10 +71,107 @@ function autoRecognize(
     const digits = epoch[1] ?? '';
     const ms = digits.length >= 13 ? Number(digits) : Number(digits) * 1000;
     const date = new Date(ms);
-    if (!isNaN(date.getTime())) return { date, format: 'epoch' };
+    if (!isNaN(date.getTime())) {
+      return {
+        parsed: { date, wallAsUtcMs: ms, offsetMinutes: 0, hasDate: true },
+        format: 'epoch',
+        index: epoch[0].length - digits.length,
+        length: digits.length,
+      };
+    }
   }
   return null;
 }
+
+/**
+ * ADD_EXTRA_TIME_FIELDS, per the registry's reading of props.conf.spec 10.4.3:
+ * `all` (or true, the default) keeps the index-time timestamp fields and the
+ * sub-second part of `_time`; `subseconds` drops the fields and keeps the
+ * sub-seconds; `none` (or false) drops both. A value outside the enumeration
+ * is left at the default -- the linter already flags it, and silently
+ * stripping fields for a typo would be the more surprising reading.
+ */
+export type ExtraTimeFieldsMode = 'all' | 'subseconds' | 'none';
+
+export function resolveExtraTimeFields(value: string | undefined): ExtraTimeFieldsMode {
+  const v = value?.trim().toLowerCase();
+  if (v === 'none' || v === 'false') return 'none';
+  if (v === 'subseconds') return 'subseconds';
+  return 'all';
+}
+
+/** Every field ADD_EXTRA_TIME_FIELDS governs, in the order they are written. */
+export const EXTRA_TIME_FIELD_NAMES = [
+  'date_hour',
+  'date_mday',
+  'date_minute',
+  'date_month',
+  'date_second',
+  'date_wday',
+  'date_year',
+  'date_zone',
+  'timeendpos',
+  'timestartpos',
+  'timestamp',
+] as const;
+
+const MONTH_NAMES = [
+  'january', 'february', 'march', 'april', 'may', 'june',
+  'july', 'august', 'september', 'october', 'november', 'december',
+];
+const WEEKDAY_NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+
+/**
+ * The index-time timestamp fields for a timestamp read out of `_raw`.
+ *
+ * Doc-derived, not captured: the fidelity capture excluded every one of these
+ * (`manifest.json`, `excludedFields`), so no fixture pins them. They follow
+ * Splunk's documented default-field conventions:
+ *  - the date_* values describe the timestamp as written in the event -- its own
+ *    wall clock, not `_time` converted to some other zone -- which is why they
+ *    are read from `wallAsUtcMs` with the UTC accessors;
+ *  - numbers are unpadded, and month and weekday are lower-case full names;
+ *  - date_zone is the offset from UTC in minutes, or `local` when neither the
+ *    event nor TZ named a zone (the engine then reads the stamp as UTC, which
+ *    is this tool's stand-in for the indexer's local zone);
+ *  - timestartpos / timeendpos are the character offsets of the timestamp in
+ *    `_raw`, end exclusive.
+ * `timestamp` is not written here: in the documented convention it carries
+ * `none` for an event whose `_time` was not read from its text, so a found
+ * timestamp leaves it absent.
+ */
+export function extraTimeFields(parsed: ParsedTimestamp, start: number, end: number): Record<string, string> {
+  const wall = new Date(parsed.wallAsUtcMs);
+  return {
+    date_hour: String(wall.getUTCHours()),
+    date_mday: String(wall.getUTCDate()),
+    date_minute: String(wall.getUTCMinutes()),
+    date_month: MONTH_NAMES[wall.getUTCMonth()] ?? '',
+    date_second: String(wall.getUTCSeconds()),
+    date_wday: WEEKDAY_NAMES[wall.getUTCDay()] ?? '',
+    date_year: String(wall.getUTCFullYear()),
+    date_zone: parsed.offsetMinutes === null ? 'local' : String(parsed.offsetMinutes),
+    timeendpos: String(end),
+    timestartpos: String(start),
+  };
+}
+
+/** The wall-clock calendar date a parsed timestamp was written on. */
+function wallDate(parsed: ParsedTimestamp): CalendarDate {
+  const wall = new Date(parsed.wallAsUtcMs);
+  return { year: wall.getUTCFullYear(), month: wall.getUTCMonth(), day: wall.getUTCDate() };
+}
+
+/**
+ * Whether a boolean directive reads as true. The spellings are Splunk's
+ * conf-file booleans; anything else is the default, false.
+ */
+function isTrue(value: string | undefined): boolean {
+  return /^(?:true|t|1|yes|y)$/i.test(value?.trim() ?? '');
+}
+
+/** How far ahead of the clock a dateless stamp may be and still be today. */
+const DATELESS_TODAY_WINDOW_MS = 3 * 3_600_000;
 
 /**
  * props.conf.spec defaults for the timestamp sanity bounds. A timestamp outside
@@ -126,6 +230,26 @@ export function extractTimestamps(
   const tzDir = directives.find((d) => d.key === 'TZ');
   const tzAliasDir = directives.find((d) => d.key === 'TZ_ALIAS');
   const datetimeConfigDir = directives.find((d) => d.key === 'DATETIME_CONFIG');
+  const extraMode = resolveExtraTimeFields(directives.find((d) => d.key === 'ADD_EXTRA_TIME_FIELDS')?.value);
+  const datelessFromSystem = isTrue(
+    directives.find((d) => d.key === 'DETERMINE_TIMESTAMP_DATE_WITH_SYSTEM_TIME')?.value,
+  );
+
+  // `none` drops the sub-second part of `_time` along with the fields, so the
+  // event is placed to the second -- the storage saving the setting exists for.
+  const granular = (date: Date): Date =>
+    extraMode === 'none' ? new Date(Math.floor(date.getTime() / 1000) * 1000) : date;
+
+  // An event whose `_time` did not come from its own text carries
+  // `timestamp=none` and no date_* fields -- there is no written timestamp for
+  // them to describe. Doc-derived, like `extraTimeFields`.
+  const noTimestampFields = (fields: SplunkEvent['fields']): SplunkEvent['fields'] => {
+    if (extraMode !== 'all') return fields;
+    const out = { ...fields };
+    setField(out, 'timestamp', 'none');
+    return out;
+  };
+  const noTimestampAdded = extraMode === 'all' ? { fieldsAdded: ['timestamp'] } : {};
 
   // DATETIME_CONFIG = CURRENT stamps every event with the time it was merged;
   // = NONE stops the extractor running at all and the event keeps its index
@@ -144,7 +268,8 @@ export function extractTimestamps(
 
     return events.map((event) => ({
       ...event,
-      _time: now,
+      _time: granular(now),
+      fields: noTimestampFields(event.fields),
       processingTrace: [
         ...event.processingTrace,
         {
@@ -152,6 +277,7 @@ export function extractTimestamps(
           phase: 'index-time' as const,
           description,
           timeSource,
+          ...noTimestampAdded,
         },
       ],
     }));
@@ -243,6 +369,11 @@ export function extractTimestamps(
   // (#163). Carried across the batch, so a later event inherits from the last
   // event that actually parsed one.
   let lastResolved: Date | null = null;
+  /**
+   * The wall-clock date of the last timestamp that parsed, which is where a
+   * dateless timestamp takes its date from by default.
+   */
+  let lastWallDate: CalendarDate | null = null;
 
   /**
    * How many accepted timestamps each format produced, for the MAX_DIFF_SECS
@@ -326,7 +457,8 @@ export function extractTimestamps(
 
     return {
       ...event,
-      _time: step.date,
+      _time: granular(step.date),
+      fields: noTimestampFields(event.fields),
       processingTrace: [
         ...event.processingTrace,
         {
@@ -334,8 +466,51 @@ export function extractTimestamps(
           phase: 'index-time' as const,
           description: step.description,
           timeSource: step.timeSource,
+          ...noTimestampAdded,
         },
       ],
+    };
+  };
+
+  /**
+   * Give a timestamp that has a time and no date its date, per
+   * DETERMINE_TIMESTAMP_DATE_WITH_SYSTEM_TIME (props.conf.spec 10.4.3, as the
+   * registry describes it -- doc-derived, no capture covers a dateless stamp).
+   *
+   * False, the default, carries the date forward from the last timestamp that
+   * parsed. True reads it off the clock: today in the stamp's own zone, unless
+   * that puts the stamp three hours or more ahead of now, in which case it was
+   * written yesterday -- a log line from 23:30 read at 00:10 is last night's.
+   *
+   * With no earlier timestamp to carry from, the default path uses the clock
+   * rule too. The spec does not say what happens then; the clock is the only
+   * other date the indexer has, and 1 January -- what a dateless stamp used to
+   * get here -- is certainly not it.
+   */
+  const supplyDate = (
+    parsed: ParsedTimestamp,
+    reparse: (date: CalendarDate) => ParsedTimestamp | null,
+  ): { parsed: ParsedTimestamp; how: string } | null => {
+    if (!datelessFromSystem && lastWallDate !== null) {
+      const carried = reparse(lastWallDate);
+      return carried && { parsed: carried, how: 'date carried from the previous timestamp' };
+    }
+    const offsetMs = (parsed.offsetMinutes ?? 0) * 60_000;
+    const today = new Date(now.getTime() + offsetMs);
+    const candidate = (back: number): CalendarDate => {
+      const d = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - back));
+      return { year: d.getUTCFullYear(), month: d.getUTCMonth(), day: d.getUTCDate() };
+    };
+    const onToday = reparse(candidate(0));
+    if (!onToday) return null;
+    const source = datelessFromSystem ? 'DETERMINE_TIMESTAMP_DATE_WITH_SYSTEM_TIME' : 'no previous timestamp';
+    if (onToday.date.getTime() - now.getTime() < DATELESS_TODAY_WINDOW_MS) {
+      return { parsed: onToday, how: `date taken from the clock (${source})` };
+    }
+    const yesterday = reparse(candidate(1));
+    return yesterday && {
+      parsed: yesterday,
+      how: `date taken from the clock as yesterday, being 3h or more ahead of it (${source})`,
     };
   };
 
@@ -346,11 +521,13 @@ export function extractTimestamps(
    */
   const accept = (
     event: SplunkEvent,
-    date: Date,
+    parsed: ParsedTimestamp,
+    position: { start: number; end: number },
     source: 'TIME_FORMAT' | 'auto-recognition',
     format: string,
     label: string,
   ) => {
+    const { date } = parsed;
     const { rejection, note } = outOfBounds(date, format);
     if (rejection !== null) {
       if (diagnostics && !reportedBounds.has(rejection)) {
@@ -368,10 +545,16 @@ export function extractTimestamps(
     }
 
     lastResolved = date;
+    lastWallDate = wallDate(parsed);
     formatCounts.set(format, (formatCounts.get(format) ?? 0) + 1);
+    const extra = extraMode === 'all' ? extraTimeFields(parsed, position.start, position.end) : {};
+    const fields = { ...event.fields };
+    for (const [name, value] of Object.entries(extra)) setField(fields, name, value);
+    const extraNames = Object.keys(extra);
     return {
       ...event,
-      _time: date,
+      _time: granular(date),
+      fields,
       processingTrace: [
         ...event.processingTrace,
         {
@@ -379,6 +562,7 @@ export function extractTimestamps(
           phase: 'index-time' as const,
           description: note !== undefined ? `${label} (${note})` : label,
           timeSource: source,
+          ...(extraNames.length > 0 ? { fieldsAdded: extraNames } : {}),
         },
       ],
     };
@@ -410,12 +594,32 @@ export function extractTimestamps(
       if (!formatMatch) return inherit(event, 'TIME_FORMAT did not match this event');
 
       const timestampStr = formatMatch[0];
-      const parsedTime = parseTimestamp(timestampStr, timeFormat, tz, onUnresolvedTz, tzAlias, now);
+      const parseWith = (dateForDateless?: CalendarDate) =>
+        parseTimestampDetailed(timestampStr, timeFormat, { tz, onUnresolvedTz, tzAlias, now, dateForDateless });
+      let parsed = parseWith();
+      let dateless: string | undefined;
+      if (parsed && !parsed.hasDate) {
+        const supplied = supplyDate(parsed, parseWith);
+        parsed = supplied?.parsed ?? null;
+        dateless = supplied?.how;
+      }
       // A match that will not parse is still a failure to read a timestamp, so
       // it inherits rather than leaving the event unplaced.
-      if (!parsedTime) return inherit(event, `Could not parse "${timestampStr}" with TIME_FORMAT`);
+      if (!parsed) return inherit(event, `Could not parse "${timestampStr}" with TIME_FORMAT`);
 
-      return accept(event, parsedTime, 'TIME_FORMAT', timeFormat, `Extracted timestamp: ${parsedTime.toISOString()}`);
+      // The anchored form lets leading whitespace into the match; the
+      // timestamp itself starts after it.
+      const start = searchStart + formatMatch.index + (timestampStr.length - timestampStr.trimStart().length);
+      const end = searchStart + formatMatch.index + timestampStr.length;
+      const label = `Extracted timestamp: ${parsed.date.toISOString()}`;
+      return accept(
+        event,
+        parsed,
+        { start, end },
+        'TIME_FORMAT',
+        timeFormat,
+        dateless !== undefined ? `${label} (no date in the timestamp: ${dateless})` : label,
+      );
     }
 
     // No TIME_FORMAT → automatic timestamp recognition (datetime.xml-style).
@@ -424,10 +628,11 @@ export function extractTimestamps(
 
     return accept(
       event,
-      auto.date,
+      auto.parsed,
+      { start: searchStart + auto.index, end: searchStart + auto.index + auto.length },
       'auto-recognition',
       auto.format,
-      `Auto-recognized timestamp (${auto.format}): ${auto.date.toISOString()}`,
+      `Auto-recognized timestamp (${auto.format}): ${auto.parsed.date.toISOString()}`,
     );
   });
 }

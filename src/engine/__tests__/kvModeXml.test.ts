@@ -51,8 +51,9 @@ describe('KV_MODE = xml', () => {
 
   it('extracts nothing from text that is not XML', () => {
     // `punct` is generated for every event by the annotation processor (#185),
-    // so "nothing" means "nothing beyond it".
-    const { punct: _punct, ...rest } = fieldsOf('plain text, no markup here');
+    // and `timestamp=none` for every event with no timestamp in it (#273), so
+    // "nothing" means "nothing beyond those".
+    const { punct: _punct, timestamp: _timestamp, ...rest } = fieldsOf('plain text, no markup here');
     expect(rest).toEqual({});
   });
 
@@ -129,7 +130,7 @@ describe('KV_MODE = xml', () => {
     ['an unbound namespace prefix', '<p:a><b>1</b></p:a>'],
     ['a duplicate attribute', '<a x="1" x="2"><b>1</b></a>'],
   ])('extracts nothing from %s, as a strict parser rejects it outright', (_label, raw) => {
-    const { punct: _punct, ...rest } = fieldsOf(raw);
+    const { punct: _punct, timestamp: _timestamp, ...rest } = fieldsOf(raw);
     expect(rest).toEqual({});
   });
 });

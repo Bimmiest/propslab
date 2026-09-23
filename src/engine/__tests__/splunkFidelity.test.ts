@@ -23,6 +23,7 @@ import { runPipeline } from '../pipeline';
 import { getDirectiveInfo } from '../directiveRegistry';
 import { CORPUS, type FixtureCase } from './fixtures/corpus';
 import type { EventMetadata } from '../types';
+import { EXTRA_TIME_FIELD_NAMES } from '../processors/timestampExtractor';
 
 interface CapturedEvent {
   _raw: string;
@@ -52,6 +53,34 @@ interface Fixture {
 const FIXTURE_MODULES = import.meta.glob<{ default: Fixture }>('./fixtures/splunk-*/*.json', {
   eager: true,
 });
+
+interface Manifest {
+  excludedFields: { names: string[]; prefixes: string[] };
+}
+
+const MANIFEST_MODULES = import.meta.glob<{ default: Manifest }>('./fixtures/splunk-*/manifest.json', {
+  eager: true,
+});
+
+/**
+ * The ADD_EXTRA_TIME_FIELDS fields the capture left out of this version's
+ * fixtures, which the engine output is stripped of before comparison.
+ *
+ * Only these, and only because the manifest says they were excluded: the other
+ * excluded names (host, index, linecount, ...) are ones the engine does not put
+ * in `fields` at all, and stripping them too would stop this suite noticing if
+ * it started to. Read from the manifest rather than hard-coded so that a
+ * capture which did record them is compared on them (#273).
+ */
+function excludedTimeFields(version: string): Set<string> {
+  const entry = Object.entries(MANIFEST_MODULES).find(([path]) => path.includes(`/splunk-${version}/`));
+  const excluded = entry?.[1].default.excludedFields ?? { names: [], prefixes: [] };
+  return new Set(
+    EXTRA_TIME_FIELD_NAMES.filter(
+      (name) => excluded.names.includes(name) || excluded.prefixes.some((prefix) => name.startsWith(prefix)),
+    ),
+  );
+}
 
 /** Every captured version directory. More than one is fine; each is asserted. */
 function fixtureSets(): Array<{ version: string; fixtures: Fixture[] }> {
@@ -100,15 +129,18 @@ function runCase(fixture: Fixture, injectNow = true): ReturnType<typeof runPipel
 /** Engine output reduced to the shape the fixture records. */
 function engineEvents(fixture: Fixture, injectNow = true): CapturedEvent[] {
   const { result } = runCase(fixture, injectNow);
+  const timeFields = excludedTimeFields(fixture.splunk.version);
   return result.events.map((e) => {
     // The capture excluded `punct` from every fixture unless the case opted
     // back in with `comparePunct` — the punct-signature cases do, and for them
     // the engine's punct is compared like any other field.
     const { punct: _punct, ...withoutPunct } = e.fields;
+    const compared = fixture.comparePunct ? { ...e.fields } : withoutPunct;
+    for (const name of timeFields) delete compared[name];
     return {
       _raw: e._raw,
       _time: e._time ? e._time.getTime() : null,
-      fields: fixture.comparePunct ? e.fields : withoutPunct,
+      fields: compared,
     };
   });
 }
