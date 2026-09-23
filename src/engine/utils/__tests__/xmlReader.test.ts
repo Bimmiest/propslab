@@ -120,3 +120,32 @@ describe('parseXmlDocument — rejects', () => {
     expect(parseXmlDocument('<a xmlns:xml="http://www.w3.org/XML/1998/namespace"/>')).not.toBeNull();
   });
 });
+
+// What INDEXED_EXTRACTIONS = xml* needs beyond the tree (#271): where each
+// element's markup ends, for extraction_cutoff, and whether a value was
+// written with references, for XML_IE_SKIP_XML_ENCODED_VALS.
+describe('parseXmlDocument — source positions and encoding', () => {
+  it('records where each start tag and element end', () => {
+    const root = parseXmlDocument('<r><a x="1">t</a><b/></r>')!;
+    const [a, b] = xmlChildElements(root);
+    expect(a!.startTagEnd).toBe('<r><a x="1">'.length);
+    expect(a!.end).toBe('<r><a x="1">t</a>'.length);
+    expect(b!.startTagEnd).toBe(b!.end);
+    expect(root.end).toBe('<r><a x="1">t</a><b/></r>'.length);
+  });
+
+  it('counts positions after CRLF normalisation', () => {
+    const root = parseXmlDocument('<r>\r\n<a/></r>')!;
+    expect(xmlChildElements(root)[0]!.end).toBe('<r>\n<a/>'.length);
+  });
+
+  it('flags text and attribute values written with references, and only those', () => {
+    const root = parseXmlDocument('<r p="a&amp;b" q="plain"><a>x &lt; y</a><b>plain</b><c><![CDATA[&]]></c></r>')!;
+    expect(root.attributes.map((a) => a.encoded)).toEqual([true, undefined]);
+    const [a, b, c] = xmlChildElements(root);
+    expect(a!.children[0]).toEqual({ kind: 'text', value: 'x < y', encoded: true });
+    expect(b!.children[0]).toEqual({ kind: 'text', value: 'plain' });
+    // CDATA is literal text, not an encoding.
+    expect(c!.children[0]).toEqual({ kind: 'text', value: '&' });
+  });
+});

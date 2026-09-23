@@ -107,7 +107,12 @@ export const DIRECTIVE_SUPPORT: Record<string, SupportEntry> = {
   EXTRACT: { support: 'simulated' },
   REPORT: { support: 'simulated' },
   TRANSFORMS: { support: 'simulated' },
-  INDEXED_EXTRACTIONS: { support: 'simulated' },
+  INDEXED_EXTRACTIONS: {
+    support: 'simulated',
+    note:
+      'hec is not simulated. For xml, xmlkv and xmlkv-winevt the spec does not say how fields are ' +
+      'named; they follow KV_MODE = xml, the xmlkv command and the Windows event-log Name convention.',
+  },
   FIELDALIAS: { support: 'simulated' },
   EVAL: { support: 'simulated' },
   SEDCMD: { support: 'simulated' },
@@ -147,6 +152,29 @@ export const DIRECTIVE_SUPPORT: Record<string, SupportEntry> = {
       'settles it. Naming a space here keeps it.',
   },
   MISSING_VALUE_REGEX: { support: 'simulated' },
+  // The XML values of INDEXED_EXTRACTIONS (#271). The spec gives what each
+  // attribute does but not how the modes name fields; that naming is borrowed
+  // from KV_MODE = xml and the xmlkv command, and the note on
+  // INDEXED_EXTRACTIONS says so.
+  XML_INDEXED_EXTRACTIONS_PIPELINE: {
+    support: 'simulated',
+    note:
+      'Simulated as the switch the spec makes it: without a valid value the XML formats extract ' +
+      'nothing. Which pipeline it names is where the work runs, and every value behaves alike here.',
+  },
+  XML_IE_INCLUDE: { support: 'simulated' },
+  XML_IE_INCLUDE_MV: { support: 'simulated' },
+  XML_IE_EXCLUDE: { support: 'simulated' },
+  XML_IE_EXCLUDE_MV: { support: 'simulated' },
+  XML_IE_EXCLUDE_VALS: { support: 'simulated' },
+  XML_IE_SKIP_XML_ENCODED_VALS: { support: 'simulated' },
+  XML_IE_MAX_EXTRACTED_VALUE_SIZE: {
+    support: 'simulated',
+    note:
+      'A value over the limit is left out. The index processor’s own truncation above 1000 bytes, ' +
+      'which the spec mentions for a raised limit, is not modelled.',
+  },
+  extraction_cutoff: { support: 'simulated' },
   CHECK_FOR_HEADER: {
     support: 'documented',
     note: 'Deprecated by Splunk and superseded by INDEXED_EXTRACTIONS, which is simulated.',
@@ -253,15 +281,6 @@ export const DIRECTIVE_SUPPORT: Record<string, SupportEntry> = {
   unarchive_cmd: { support: 'documented', note: 'Runs a shell command to expand an archive at input time. There is no shell and no archive here.' },
   unarchive_cmd_start_mode: { support: 'documented', note: 'Chooses how the unarchive command is launched, which this tool never launches.' },
   unarchive_sourcetype: { support: 'documented', note: 'Names the sourcetype for the contents of an expanded archive, an input-layer decision.' },
-  XML_INDEXED_EXTRACTIONS_PIPELINE: { support: 'ignored', issue: 271, note: 'XML index-time extraction is not simulated at all, so this has no effect on the preview.' },
-  XML_IE_INCLUDE: { support: 'ignored', issue: 271, note: 'XML index-time extraction is not simulated at all, so this has no effect on the preview.' },
-  XML_IE_INCLUDE_MV: { support: 'ignored', issue: 271, note: 'XML index-time extraction is not simulated at all, so this has no effect on the preview.' },
-  XML_IE_EXCLUDE: { support: 'ignored', issue: 271, note: 'XML index-time extraction is not simulated at all, so this has no effect on the preview.' },
-  XML_IE_EXCLUDE_MV: { support: 'ignored', issue: 271, note: 'XML index-time extraction is not simulated at all, so this has no effect on the preview.' },
-  XML_IE_EXCLUDE_VALS: { support: 'ignored', issue: 271, note: 'XML index-time extraction is not simulated at all, so this has no effect on the preview.' },
-  XML_IE_SKIP_XML_ENCODED_VALS: { support: 'ignored', issue: 271, note: 'XML index-time extraction is not simulated at all, so this has no effect on the preview.' },
-  XML_IE_MAX_EXTRACTED_VALUE_SIZE: { support: 'ignored', issue: 271, note: 'XML index-time extraction is not simulated at all, so this has no effect on the preview.' },
-  extraction_cutoff: { support: 'ignored', issue: 271, note: 'XML index-time extraction is not simulated at all, so this has no effect on the preview.' },
   ADD_EXTRA_TIME_FIELDS: {
     support: 'simulated',
     note:

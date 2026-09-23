@@ -1,5 +1,6 @@
 /**
- * A small, strict XML 1.0 reader for `KV_MODE = xml`.
+ * A small, strict XML 1.0 reader for `KV_MODE = xml` and the XML values of
+ * `INDEXED_EXTRACTIONS`.
  *
  * This exists because the engine used to call `DOMParser`, which is a *window*
  * API: it does not exist in a Web Worker, where the app runs the pipeline, nor
@@ -28,6 +29,12 @@ export interface XmlAttribute {
   name: string;
   /** Value with references decoded and attribute-value whitespace normalised. */
   value: string;
+  /**
+   * Set when the value as written contained an entity or character reference.
+   * INDEXED_EXTRACTIONS = xmlkv-winevt needs to know, because
+   * XML_IE_SKIP_XML_ENCODED_VALS keys on the source form, which decoding erases.
+   */
+  encoded?: true;
 }
 
 export interface XmlElement {
@@ -40,11 +47,21 @@ export interface XmlElement {
   attributes: XmlAttribute[];
   /** Elements and text (CDATA included). Comments and PIs are not retained. */
   children: XmlNode[];
+  /**
+   * Source offsets just past the start tag and just past the end tag (equal
+   * for an empty-element tag), counted after end-of-line normalisation. They
+   * let `extraction_cutoff` tell which elements were complete within its byte
+   * budget without a second, lenient parser for the truncated text.
+   */
+  startTagEnd: number;
+  end: number;
 }
 
 export interface XmlText {
   kind: 'text';
   value: string;
+  /** Set when the text as written contained a reference; see `XmlAttribute.encoded`. */
+  encoded?: true;
 }
 
 export type XmlNode = XmlElement | XmlText;
@@ -253,22 +270,24 @@ class Reader {
     return named;
   }
 
-  private attributeValue(): string {
+  private attributeValue(): { value: string; encoded: boolean } {
     const quote = this.src[this.pos];
     if (quote !== '"' && quote !== "'") this.fail();
     this.pos++;
     let value = '';
+    let encoded = false;
     for (;;) {
       const ch = this.src[this.pos];
       if (ch === undefined || ch === '<') this.fail();
       if (ch === quote) {
         this.pos++;
-        return value;
+        return { value, encoded };
       }
       if (ch === '&') {
         // Decoded characters are exempt from the whitespace normalisation
         // below, so `&#10;` survives as a newline -- spec 3.3.3.
         value += this.reference();
+        encoded = true;
         continue;
       }
       value += ch === '\t' || ch === '\n' ? ' ' : ch;
@@ -293,9 +312,9 @@ class Reader {
       this.space();
       this.eat('=');
       this.space();
-      const value = this.attributeValue();
+      const { value, encoded } = this.attributeValue();
       if (attributes.some((a) => a.name === attrName)) this.fail();
-      attributes.push({ name: attrName, value });
+      attributes.push(encoded ? { name: attrName, value, encoded: true } : { name: attrName, value });
     }
     const empty = this.src[this.pos] === '/';
     this.pos += empty ? 2 : 1;
@@ -312,6 +331,8 @@ class Reader {
       localName: colon === -1 ? name : name.slice(colon + 1),
       attributes,
       children: [],
+      startTagEnd: this.pos,
+      end: this.pos,
     };
     return { open: { el, scope }, empty };
   }
@@ -351,10 +372,12 @@ class Reader {
     if (first.empty) return first.open.el;
     const stack: OpenElement[] = [first.open];
     let text = '';
+    let textEncoded = false;
 
     const flushText = (into: XmlElement): void => {
-      if (text) into.children.push({ kind: 'text', value: text });
+      if (text) into.children.push(textEncoded ? { kind: 'text', value: text, encoded: true } : { kind: 'text', value: text });
       text = '';
+      textEncoded = false;
     };
 
     for (;;) {
@@ -365,6 +388,7 @@ class Reader {
 
       if (ch === '&') {
         text += this.reference();
+        textEncoded = true;
       } else if (ch !== '<') {
         const next = this.src.slice(this.pos).search(/[<&]/);
         const end = next === -1 ? this.src.length : this.pos + next;
@@ -387,6 +411,7 @@ class Reader {
         if (this.name() !== top.el.name) this.fail();
         this.space();
         this.eat('>');
+        top.el.end = this.pos;
         flushText(top.el);
         stack.pop();
       } else {

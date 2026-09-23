@@ -4,6 +4,7 @@ import { getField, setField } from '../utils/fieldBag';
 import { safeRegex } from '../../utils/splunkRegex';
 import { atDirective } from '../parser/provenance';
 import { extractTimestamps } from './timestampExtractor';
+import { extractXmlIndexed } from './xmlIndexedExtractions';
 
 export function applyIndexedExtractions(
   events: SplunkEvent[],
@@ -26,6 +27,10 @@ export function applyIndexedExtractions(
       return extractDelimited(events, directives, '|', 'psv', diagnostics);
     case 'w3c':
       return extractW3c(events);
+    case 'xml':
+    case 'xmlkv':
+    case 'xmlkv-winevt':
+      return extractXmlIndexed(events, directives, mode, diagnostics);
     default:
       return events;
   }

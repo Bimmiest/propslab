@@ -396,8 +396,9 @@ const DIRECTIVE_DEFINITIONS: DirectiveDefinition[] = [
       'Specifies structured data format for automatic field extraction at index time. ' +
       'Splunk will parse the data according to the chosen format and create indexed fields. ' +
       'Valid values are csv, tsv, psv, w3c, json, hec, xml, xmlkv and xmlkv-winevt. ' +
-      'Note: this simulator models csv, tsv, psv, w3c and json; the xml family and hec ' +
-      'are accepted as valid config but not simulated.',
+      'Note: this simulator models csv, tsv, psv, w3c, json, xml, xmlkv and xmlkv-winevt ' +
+      '(the xml values only with XML_INDEXED_EXTRACTIONS_PIPELINE set); hec is accepted ' +
+      'as valid config but not simulated.',
     example: 'INDEXED_EXTRACTIONS = json',
     defaultValue: '',
     category: 'Field Extraction',
