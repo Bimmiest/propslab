@@ -467,6 +467,143 @@ describe('applyIndexedExtractions — TIMESTAMP_FIELDS (#184)', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Header-side delimited overrides (#272). Doc-derived: every assertion below
+// is read from the props.conf.spec 10.4.3 text for the attribute, since no
+// capture exercises any of the five.
+// ---------------------------------------------------------------------------
+
+describe('applyIndexedExtractions — FIELD_HEADER_REGEX (#272)', () => {
+  it('takes the header from the line the regex matches, after the match', () => {
+    const events = applyIndexedExtractions(
+      [event('#Version: 1'), event('#Fields: a,b'), event('1,2')],
+      [dir('csv'), dirOf('FIELD_HEADER_REGEX', '^#Fields:\\s')],
+    );
+    expect(events).toHaveLength(1);
+    expect(events[0]!.fields).toMatchObject({ a: '1', b: '2' });
+    expect(events[0]!.fields['Fields']).toBeUndefined();
+  });
+
+  it('strips the prefix from the line HEADER_FIELD_LINE_NUMBER names', () => {
+    const events = applyIndexedExtractions(
+      [event('banner'), event('>> a,b'), event('1,2')],
+      [dir('csv'), dirOf('HEADER_FIELD_LINE_NUMBER', '2'), dirOf('FIELD_HEADER_REGEX', '^>>\\s*')],
+    );
+    expect(events[0]!.fields).toMatchObject({ a: '1', b: '2' });
+  });
+
+  it('extracts nothing when no line matches', () => {
+    const input = [event('a,b'), event('1,2')];
+    const events = applyIndexedExtractions(input, [dir('csv'), dirOf('FIELD_HEADER_REGEX', '^#Fields:')]);
+    expect(events).toBe(input);
+  });
+
+  it('warns when the pattern cannot be compiled', () => {
+    const diagnostics: ValidationDiagnostic[] = [];
+    const events = applyIndexedExtractions(
+      [event('a,b'), event('1,2')],
+      [dir('csv'), dirOf('FIELD_HEADER_REGEX', '(')],
+      diagnostics,
+    );
+    expect(diagnostics.some((d) => d.directiveKey === 'FIELD_HEADER_REGEX')).toBe(true);
+    // …and falls back to locating the header as though it were unset.
+    expect(events[0]!.fields).toMatchObject({ a: '1', b: '2' });
+  });
+});
+
+describe('applyIndexedExtractions — HEADER_FIELD_DELIMITER / HEADER_FIELD_QUOTE (#272)', () => {
+  it('splits the header on its own delimiter and the body on the body one', () => {
+    const events = applyIndexedExtractions(
+      [event('a\tb\tc'), event('1,2,3')],
+      [dir('csv'), dirOf('HEADER_FIELD_DELIMITER', 'tab')],
+    );
+    expect(events[0]!.fields).toMatchObject({ a: '1', b: '2', c: '3' });
+  });
+
+  it('inherits FIELD_DELIMITER for the header when no header delimiter is set', () => {
+    const events = applyIndexedExtractions(
+      [event('a;b'), event('1;2')],
+      [dir('csv'), dirOf('FIELD_DELIMITER', ';')],
+    );
+    expect(events[0]!.fields).toMatchObject({ a: '1', b: '2' });
+  });
+
+  it('honours a header-only quote character', () => {
+    const events = applyIndexedExtractions(
+      [event("'x,y',z"), event('1,2')],
+      [dir('csv'), dirOf('HEADER_FIELD_QUOTE', "'")],
+    );
+    expect(events[0]!.fields).toMatchObject({ x_y: '1', z: '2' });
+  });
+
+  it('HEADER_FIELD_QUOTE = none disables quoting in the header only', () => {
+    const events = applyIndexedExtractions(
+      [event('"a,b'), event('"1,5",2')],
+      [dir('csv'), dirOf('HEADER_FIELD_QUOTE', 'none')],
+    );
+    // The header's `"a` cleans to `a`; the body still reads `"1,5"` as one value.
+    expect(events[0]!.fields).toMatchObject({ a: '1,5', b: '2' });
+  });
+
+  it('HEADER_FIELD_DELIMITER = whitespace splits the header on runs', () => {
+    const events = applyIndexedExtractions(
+      [event('a   b'), event('1,2')],
+      [dir('csv'), dirOf('HEADER_FIELD_DELIMITER', 'whitespace')],
+    );
+    expect(events[0]!.fields).toMatchObject({ a: '1', b: '2' });
+  });
+});
+
+describe('applyIndexedExtractions — HEADER_FIELD_ACCEPTABLE_SPECIAL_CHARACTERS (#272)', () => {
+  it('cleans field.name to field_name by default, as the spec example says', () => {
+    const events = applyIndexedExtractions([event('field.name'), event('v')], [dir('csv')]);
+    expect(events[0]!.fields['field_name']).toBe('v');
+  });
+
+  it('keeps the characters it names', () => {
+    const events = applyIndexedExtractions(
+      [event('field.name,a-b'), event('v,w')],
+      [dir('csv'), dirOf('HEADER_FIELD_ACCEPTABLE_SPECIAL_CHARACTERS', '.')],
+    );
+    expect(events[0]!.fields['field.name']).toBe('v');
+    // Only the named characters are exempt.
+    expect(events[0]!.fields['a_b']).toBe('w');
+  });
+
+  it('applies to FIELD_NAMES too, which go through the same cleaning', () => {
+    const events = applyIndexedExtractions(
+      [event('v')],
+      [dir('csv'), dirOf('FIELD_NAMES', 'x.y'), dirOf('HEADER_FIELD_ACCEPTABLE_SPECIAL_CHARACTERS', '.')],
+    );
+    expect(events[0]!.fields['x.y']).toBe('v');
+  });
+
+  it('ignores characters outside ASCII, which the spec does not allow', () => {
+    const events = applyIndexedExtractions(
+      [event('café'), event('v')],
+      [dir('csv'), dirOf('HEADER_FIELD_ACCEPTABLE_SPECIAL_CHARACTERS', 'é')],
+    );
+    expect(events[0]!.fields['caf_']).toBe('v');
+  });
+});
+
+describe('applyIndexedExtractions — MISSING_VALUE_REGEX (#272)', () => {
+  it('extracts no field for a value matching the placeholder', () => {
+    const events = applyIndexedExtractions(
+      [event('a,b,c'), event('1,-,NULL')],
+      [dir('csv'), dirOf('MISSING_VALUE_REGEX', '^(-|NULL)$')],
+    );
+    expect(events[0]!.fields['a']).toBe('1');
+    expect(events[0]!.fields['b']).toBeUndefined();
+    expect(events[0]!.fields['c']).toBeUndefined();
+  });
+
+  it('keeps a literal dash when unset', () => {
+    const events = applyIndexedExtractions([event('a'), event('-')], [dir('csv')]);
+    expect(events[0]!.fields['a']).toBe('-');
+  });
+});
+
 // Doc-derived (props.conf.spec 10.4.3, JSON_TRIM_BRACES_IN_ARRAY_NAMES): no
 // capture pins this attribute, so the assertions stay close to the spec's own
 // example and the default.

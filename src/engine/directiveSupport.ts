@@ -129,7 +129,7 @@ export const DIRECTIVE_SUPPORT: Record<string, SupportEntry> = {
   LOOKAHEAD: { support: 'simulated' },
 
   // ---- Structured data (INDEXED_EXTRACTIONS options) --------------------
-  // All six apply to the delimited formats (csv/tsv/psv). W3C keeps its own
+  // All eleven apply to the delimited formats (csv/tsv/psv). W3C keeps its own
   // #Fields header mechanism, which none of these override there.
   FIELD_DELIMITER: { support: 'simulated' },
   FIELD_QUOTE: { support: 'simulated' },
@@ -137,6 +137,16 @@ export const DIRECTIVE_SUPPORT: Record<string, SupportEntry> = {
   HEADER_FIELD_LINE_NUMBER: { support: 'simulated' },
   PREAMBLE_REGEX: { support: 'simulated' },
   TIMESTAMP_FIELDS: { support: 'simulated' },
+  FIELD_HEADER_REGEX: { support: 'simulated' },
+  HEADER_FIELD_DELIMITER: { support: 'simulated' },
+  HEADER_FIELD_QUOTE: { support: 'simulated' },
+  HEADER_FIELD_ACCEPTABLE_SPECIAL_CHARACTERS: {
+    support: 'simulated',
+    note:
+      'Header cleaning replaces spaces as well, although the spec wording exempts them; no capture ' +
+      'settles it. Naming a space here keeps it.',
+  },
+  MISSING_VALUE_REGEX: { support: 'simulated' },
   CHECK_FOR_HEADER: {
     support: 'documented',
     note: 'Deprecated by Splunk and superseded by INDEXED_EXTRACTIONS, which is simulated.',
@@ -252,11 +262,6 @@ export const DIRECTIVE_SUPPORT: Record<string, SupportEntry> = {
   XML_IE_SKIP_XML_ENCODED_VALS: { support: 'ignored', issue: 271, note: 'XML index-time extraction is not simulated at all, so this has no effect on the preview.' },
   XML_IE_MAX_EXTRACTED_VALUE_SIZE: { support: 'ignored', issue: 271, note: 'XML index-time extraction is not simulated at all, so this has no effect on the preview.' },
   extraction_cutoff: { support: 'ignored', issue: 271, note: 'XML index-time extraction is not simulated at all, so this has no effect on the preview.' },
-  FIELD_HEADER_REGEX: { support: 'ignored', issue: 272, note: 'Header-side delimited extraction overrides are not applied; the body-side ones are.' },
-  HEADER_FIELD_DELIMITER: { support: 'ignored', issue: 272, note: 'Header-side delimited extraction overrides are not applied; the body-side ones are.' },
-  HEADER_FIELD_QUOTE: { support: 'ignored', issue: 272, note: 'Header-side delimited extraction overrides are not applied; the body-side ones are.' },
-  HEADER_FIELD_ACCEPTABLE_SPECIAL_CHARACTERS: { support: 'ignored', issue: 272, note: 'Header-side delimited extraction overrides are not applied; the body-side ones are.' },
-  MISSING_VALUE_REGEX: { support: 'ignored', issue: 272, note: 'Header-side delimited extraction overrides are not applied; the body-side ones are.' },
   ADD_EXTRA_TIME_FIELDS: {
     support: 'simulated',
     note:
