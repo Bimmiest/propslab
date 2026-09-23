@@ -6,6 +6,7 @@ import {
   WRONG_FILE_MESSAGE,
 } from '../engine/directiveRegistry';
 import { isUndocumentedAttribute } from '../engine/directiveSupport';
+import { isSplunkBoolLiteral, parseSplunkBool } from '../engine/utils/directiveValues';
 import { DIRECTIVE_RE, miscasedCanonical, MISCASED_MESSAGE } from '../engine/parser/confParser';
 import { unsupportedSpecifiers } from '../utils/strftime';
 import { translatePcreToJs, validateRegex } from '../utils/splunkRegex';
@@ -277,7 +278,9 @@ export function computeDiagnostics(
     }
 
     if (info.valueType === 'boolean' && value) {
-      if (!['true', 'false', '0', '1', 'yes', 'no'].includes(value.toLowerCase())) {
+      // The engine's own reading, so the editor never flags a spelling the
+      // preview honours (t/f, y/n, on/off) or accepts one it does not.
+      if (!isSplunkBoolLiteral(value)) {
         markers.push({
           severity: 4,
           message: `Expected boolean value (true/false) for "${baseKey}", got "${value}"`,
@@ -445,9 +448,8 @@ function checkBestPractices(
     // Inspect the VALUE, not mere presence: `SHOULD_LINEMERGE = true` is the
     // wrong setting alongside a custom LINE_BREAKER, yet mere presence used to
     // suppress the very warning that asks for `= false`.
-    const linemergeDisabled = shouldLinemerge
-      ? ['false', '0', 'no'].includes(shouldLinemerge.value.trim().toLowerCase())
-      : false;
+    // Read as the engine reads it: a non-boolean explicit value counts as off.
+    const linemergeDisabled = shouldLinemerge ? !parseSplunkBool(shouldLinemerge.value, false) : false;
 
     if (lineBreaker && !linemergeDisabled) {
       markers.push(

@@ -183,7 +183,7 @@ Three routes in: the activity rail, `Ctrl/Cmd+K` → "Dictionary: KEY", and the 
 
 ## Eval expression engine
 
-Full tokenizer and recursive-descent parser in `evalProcessor.ts`.
+Full tokenizer and recursive-descent parser in [`src/engine/processors/eval/`](src/engine/processors/eval/) — `tokenizer.ts`, `parser.ts`, `evaluator.ts`, and the function library in `builtins.ts`.
 
 **Operators:** `+`, `-`, `*`, `/`, `%`, `.` (concat), `==`, `=`, `!=`, `<`, `>`, `<=`, `>=`, `AND`, `OR`, `NOT`, `IN`, `NOT IN`.
 
