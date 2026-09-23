@@ -261,7 +261,7 @@ Lookups (`LOOKUP` and every `transforms.conf` lookup attribute) need a lookup ta
 The directive levels above do not cover eval *functions*, which have their own boundary:
 
 - **Crypto functions.** `md5()`, `sha1()`, `sha256()`, `sha512()` return a placeholder string (e.g. `[md5() not simulated]`) and emit a warning.
-- **Partial stubs.** `cidrmatch()`, `searchmatch()`, `relative_time()`, `strptime()`, `mvfilter()` (returns its input unfiltered), and `sigfig()` / `exact()` (return the value unrounded) have simplified implementations; results may not match Splunk on edge cases. Every one of them emits a warning when evaluated, so a stubbed result is never mistaken for a computed one.
+- **Partial stubs.** `searchmatch()`, `relative_time()`, `strptime()`, `mvfilter()` (returns its input unfiltered), and `sigfig()` / `exact()` (return the value unrounded) have simplified implementations; results may not match Splunk on edge cases. Every one of them emits a warning when evaluated, so a stubbed result is never mistaken for a computed one.
 
 ### Simplified
 
