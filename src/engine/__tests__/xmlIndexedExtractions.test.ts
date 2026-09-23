@@ -262,3 +262,23 @@ describe('INDEXED_EXTRACTIONS = xml through the pipeline (#271)', () => {
     expect(ev.processingTrace.some((t) => t.processor === 'INDEXED_EXTRACTIONS(xml)')).toBe(true);
   });
 });
+
+describe('INDEXED_EXTRACTIONS xml family — line merging (#271)', () => {
+  // Doc-derived. csv/tsv/psv/w3c/json turn line merging off by default because
+  // each record is one line; an XML record is a document that spans lines, so
+  // the XML modes keep the ordinary default and a BREAK_ONLY_BEFORE frames it.
+  it('merges a multi-line record rather than splitting it per line', () => {
+    const raw = '<Event>\n  <user>bob</user>\n</Event>\n<Event>\n  <user>amy</user>\n</Event>\n';
+    const props =
+      '[st]\nINDEXED_EXTRACTIONS = xml\nXML_INDEXED_EXTRACTIONS_PIPELINE = typing\nBREAK_ONLY_BEFORE = <Event>\n';
+    const { result } = runPipeline(
+      raw,
+      { index: 'main', host: 'h', source: 's', sourcetype: 'st' },
+      props,
+      '',
+      { perEventPipeline: false },
+    );
+    expect(result.events).toHaveLength(2);
+    expect(result.events.map((e) => e.fields['Event.user'])).toEqual(['bob', 'amy']);
+  });
+});

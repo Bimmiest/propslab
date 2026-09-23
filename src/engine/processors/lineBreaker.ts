@@ -10,6 +10,8 @@ import type { ConfDirective, EventMetadata, SplunkEvent, ValidationDiagnostic } 
 import { safeRegex } from '../../utils/splunkRegex';
 import { atDirective } from '../parser/provenance';
 
+const XML_EXTRACTIONS = new Set(['xml', 'xmlkv', 'xmlkv-winevt']);
+
 /**
  * Find a directive by key.
  *
@@ -330,8 +332,15 @@ export function breakLines(
   // extracted nothing and #164 read as "INDEXED_EXTRACTIONS = JSON is not
   // implemented" when the extractor was never given a parseable event.
   // An explicit SHOULD_LINEMERGE still wins, as it does in Splunk.
+  //
+  // The XML modes are the exception (#271): an XML record is a document, and
+  // routinely spans lines. Splitting it per line hands the extractor a string
+  // of fragments, none of which parse, and ignores the BREAK_ONLY_BEFORE the
+  // user wrote to frame the record. They keep the ordinary default.
   const structuredFormat = getDirective(directives, 'INDEXED_EXTRACTIONS')?.trim().toLowerCase();
-  const structured = structuredFormat !== undefined && structuredFormat !== '' && structuredFormat !== 'none';
+  const structured =
+    structuredFormat !== undefined && structuredFormat !== '' && structuredFormat !== 'none' &&
+    !XML_EXTRACTIONS.has(structuredFormat);
   const shouldLineMerge =
     shouldLineMergeVal === undefined ? !structured : shouldLineMergeVal.toLowerCase() === 'true';
 
