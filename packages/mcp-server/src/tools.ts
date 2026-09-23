@@ -13,7 +13,12 @@ import {
 } from '../../../src/engine/directiveRegistry';
 import type { ConfInput, EventMetadata } from '../../../src/engine/types';
 import type { ExplainResponse, SimulateResponse, ValidateResponse } from './protocol';
-import { runInWorker, WorkerTimeoutError } from './runInWorker';
+import {
+  runInWorker,
+  WorkerOutOfMemoryError,
+  WorkerTimeoutError,
+  type RunInWorkerOptions,
+} from './runInWorker';
 import { serializeResult } from './serialize';
 import { collectRegexSuspects } from './suspects';
 
@@ -64,7 +69,9 @@ const timeoutSchema = z
   .default(5_000)
   .describe(
     'Wall-clock budget in ms for the sandboxed engine run. On expiry the worker ' +
-      'thread is hard-terminated and a structured timeout error is returned.',
+      'thread is hard-terminated and a structured timeout error is returned. The ' +
+      'budget starts when the run starts; time spent queued behind other calls ' +
+      '(a few run at once) does not count against it.',
   );
 
 const fileSchema = z.enum(['props.conf', 'transforms.conf']);
@@ -164,7 +171,9 @@ function json(payload: unknown, isError = false): ToolText {
 /**
  * Turn a worker failure into something the agent can act on. A timeout gets
  * the regex-suspect list (docs/engine.md's "repair rather than retry blind"),
- * with the caveat that the heuristic is structural and can miss.
+ * with the caveat that the heuristic is structural and can miss. Running out
+ * of the worker's heap gets its own error, so it reads as "too big" rather
+ * than as an engine crash.
  */
 function workerFailure(
   err: unknown,
@@ -188,6 +197,26 @@ function workerFailure(
       true,
     );
   }
+  if (err instanceof WorkerOutOfMemoryError) {
+    // No regex-suspect list here: memory is exhausted by volume — how much
+    // sample went in, how many events and fields came out, snapshots — far
+    // more often than by any one pattern, and pointing at regexes would send
+    // the agent after the wrong thing.
+    return json(
+      {
+        error: 'out_of_memory',
+        heap_limit_mb: err.limits.maxOldGenerationSizeMb,
+        message:
+          `The run exceeded the sandbox's ${err.limits.maxOldGenerationSizeMb}MB heap limit and ` +
+          'was terminated. The server itself is unaffected.',
+        guidance:
+          'Reduce what the run has to hold: a smaller raw sample, include_snapshots=false, ' +
+          'fewer layers, or a LINE_BREAKER that splits the sample into more than one huge ' +
+          'event. The limit is fixed; retrying the same input will fail the same way.',
+      },
+      true,
+    );
+  }
   return json(
     { error: 'engine_failure', message: err instanceof Error ? err.message : String(err) },
     true,
@@ -199,7 +228,7 @@ type ValidateArgs = z.infer<z.ZodObject<typeof validateInputShape>>;
 type ExplainArgs = z.infer<z.ZodObject<typeof explainInputShape>>;
 type LookupArgs = z.infer<z.ZodObject<typeof lookupInputShape>>;
 
-export async function handleSimulate(args: SimulateArgs, workerPath?: string): Promise<ToolText> {
+export async function handleSimulate(args: SimulateArgs, worker?: string | RunInWorkerOptions): Promise<ToolText> {
   const metadata: EventMetadata = {
     index: args.index,
     host: args.host,
@@ -218,7 +247,7 @@ export async function handleSimulate(args: SimulateArgs, workerPath?: string): P
         captureOffsets: args.capture_offsets,
       },
       args.timeout_ms,
-      workerPath,
+      worker,
     );
     return json({
       ...serializeResult(result, {
@@ -232,12 +261,12 @@ export async function handleSimulate(args: SimulateArgs, workerPath?: string): P
   }
 }
 
-export async function handleValidate(args: ValidateArgs, workerPath?: string): Promise<ToolText> {
+export async function handleValidate(args: ValidateArgs, worker?: string | RunInWorkerOptions): Promise<ToolText> {
   try {
     const { diagnostics } = await runInWorker<ValidateResponse>(
       { op: 'validate', propsConf: args.props_conf, transformsConf: args.transforms_conf },
       args.timeout_ms,
-      workerPath,
+      worker,
     );
     return json({ diagnostics });
   } catch (err) {
@@ -247,7 +276,7 @@ export async function handleValidate(args: ValidateArgs, workerPath?: string): P
 
 export async function handleExplainPrecedence(
   args: ExplainArgs,
-  workerPath?: string,
+  worker?: string | RunInWorkerOptions,
 ): Promise<ToolText> {
   const metadata: EventMetadata | undefined =
     args.file === 'props.conf' && args.sourcetype
@@ -257,7 +286,7 @@ export async function handleExplainPrecedence(
     const response = await runInWorker<ExplainResponse>(
       { op: 'explain', file: args.file, conf: args.conf, ...(metadata ? { metadata } : {}) },
       args.timeout_ms,
-      workerPath,
+      worker,
     );
     return json(response);
   } catch (err) {
