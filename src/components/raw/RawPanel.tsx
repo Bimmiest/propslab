@@ -68,7 +68,7 @@ export function RawPanel() {
           onClick={toggleScaffold}
           disabled={!rawData.trim()}
           title="Scaffold a starter props.conf from this sample"
-          className="ml-auto flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium cursor-pointer border-none outline-none text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-tertiary)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          className="ml-auto flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium cursor-pointer border-none text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-tertiary)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <Icon name="sparkles" className="w-3.5 h-3.5 text-[var(--color-accent)]" />
           Scaffold

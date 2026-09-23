@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo, type KeyboardEvent } from 'react';
+import { useState, useRef, useEffect, useMemo, useId, type FocusEvent, type KeyboardEvent } from 'react';
 import { Icon } from './Icon';
 
 interface MultiSelectProps {
@@ -15,6 +15,7 @@ export function MultiSelect({ label, options, selected, onChange, searchable }: 
   const ref = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const popupId = useId();
 
   const close = () => {
     setOpen(false);
@@ -27,6 +28,16 @@ export function MultiSelect({ label, options, selected, onChange, searchable }: 
       close();
       triggerRef.current?.focus();
     }
+  };
+
+  // Tabbing out of an open popup used to leave it open behind the focus,
+  // covering whatever the user had moved on to (#300). Only a move to a known
+  // element outside closes it: a null relatedTarget is a click on something
+  // unfocusable inside the popup (its padding, "No matches"), which the
+  // outside-mousedown handler below already covers when it is truly outside.
+  const handleBlur = (e: FocusEvent) => {
+    const next = e.relatedTarget as Node | null;
+    if (open && next && ref.current && !ref.current.contains(next)) close();
   };
 
   useEffect(() => {
@@ -65,13 +76,19 @@ export function MultiSelect({ label, options, selected, onChange, searchable }: 
   const showSearch = searchable && options.length > 8;
 
   return (
-    <div ref={ref} className="relative" onKeyDown={handleKeyDown}>
+    // The wrapper listens for keys and focus bubbling up from its own controls;
+    // it is not itself interactive.
+    <div ref={ref} className="relative" onKeyDown={handleKeyDown} onBlur={handleBlur}>
       <button
         ref={triggerRef}
         type="button"
         onClick={() => setOpen(!open)}
-        aria-haspopup="listbox"
+        // A disclosure, not a listbox: the popup is a group of checkboxes plus a
+        // filter field, and `aria-haspopup="listbox"` announced a widget whose
+        // option/arrow-key model it does not have (#300). aria-expanded and
+        // aria-controls are what the disclosure pattern asks for.
         aria-expanded={open}
+        aria-controls={open && options.length > 0 ? popupId : undefined}
         className="flex items-center gap-1 px-2 py-1 text-xs rounded border cursor-pointer"
         style={{
           backgroundColor: activeCount > 0 ? 'var(--color-accent)' : 'var(--color-bg-primary)',
@@ -87,6 +104,9 @@ export function MultiSelect({ label, options, selected, onChange, searchable }: 
       </button>
       {open && options.length > 0 && (
         <div
+          id={popupId}
+          role="group"
+          aria-label={`${label} options`}
           className="absolute top-full left-0 mt-1 z-50 min-w-[180px] max-w-[260px] max-h-[280px] flex flex-col rounded border shadow-lg"
           style={{
             backgroundColor: 'var(--color-bg-secondary)',
@@ -132,7 +152,13 @@ export function MultiSelect({ label, options, selected, onChange, searchable }: 
           </div>
           {activeCount > 0 && (
             <button
-              onClick={() => onChange(new Set())}
+              type="button"
+              onClick={() => {
+                onChange(new Set());
+                // This button unmounts with the selection it clears; without a
+                // new home, focus would fall to <body>.
+                triggerRef.current?.focus();
+              }}
               className="w-full px-2.5 py-1.5 text-xs text-left border-t cursor-pointer shrink-0 hover:bg-[var(--color-bg-tertiary)] text-[var(--color-text-muted)] border-[var(--color-border)]"
             >
               Clear all

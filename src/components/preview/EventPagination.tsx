@@ -44,7 +44,7 @@ export function EventPagination({
             id="events-per-page"
             value={eventsPerPage}
             onChange={(e) => onEventsPerPageChange(Number(e.target.value))}
-            className="px-1.5 py-0.5 text-xs rounded outline-none cursor-pointer"
+            className="px-1.5 py-0.5 text-xs rounded cursor-pointer"
             style={{
               backgroundColor: 'var(--color-bg-tertiary)',
               color: 'var(--color-text-primary)',

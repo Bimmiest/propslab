@@ -79,6 +79,22 @@ body {
   transition-timing-function: ease;
 }
 
+/* Keyboard focus indicator for anything that does not draw its own.
+ *
+ * Several controls opted out with `outline-none` and never added the
+ * `focus-visible:ring-2` everything else carries, so tabbing onto them showed
+ * nothing at all (#300). This is the floor beneath those per-component rings,
+ * not a replacement for them: it sits in the base layer, so an element that
+ * says `outline-none` alongside its own ring still wins, and only an element
+ * with no indicator of its own falls through to this one. Monaco manages focus
+ * inside its own DOM and is left to do so. */
+@layer base {
+  :focus-visible:where(:not(.monaco-editor, .monaco-editor *)) {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+}
+
 /* Indeterminate progress bar animation */
 @keyframes indeterminate {
   0%   { transform: translateX(-100%); }

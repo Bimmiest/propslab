@@ -1,5 +1,6 @@
 import type React from 'react';
 import { useCallback, useRef } from 'react';
+import { tabId, tabPanelId } from './tabIds';
 
 interface TabItem {
   id: string;
@@ -10,6 +11,11 @@ interface TabItem {
 }
 
 interface TabsProps {
+  /**
+   * From the caller's useId(). The caller renders the tabpanel, so it builds
+   * the panel's ids from the same prefix with `tabIds.ts`.
+   */
+  idPrefix: string;
   tabs: TabItem[];
   activeTab: string;
   onTabChange: (id: string) => void;
@@ -18,7 +24,7 @@ interface TabsProps {
   variant?: 'underline' | 'secondary';
 }
 
-export function Tabs({ tabs, activeTab, onTabChange, ariaLabel, size = 'md', variant = 'underline' }: TabsProps) {
+export function Tabs({ idPrefix, tabs, activeTab, onTabChange, ariaLabel, size = 'md', variant = 'underline' }: TabsProps) {
   const tablistRef = useRef<HTMLDivElement>(null);
 
   const handleKeyDown = useCallback(
@@ -74,10 +80,11 @@ export function Tabs({ tabs, activeTab, onTabChange, ariaLabel, size = 'md', var
         return (
           <button
             key={tab.id}
+            type="button"
             role="tab"
             aria-selected={isActive}
-            aria-controls={`tabpanel-${tab.id}`}
-            id={`tab-${tab.id}`}
+            aria-controls={tabPanelId(idPrefix, tab.id)}
+            id={tabId(idPrefix, tab.id)}
             tabIndex={isActive ? 0 : -1}
             onClick={() => onTabChange(tab.id)}
             className={variant === 'secondary' ? secondaryClasses : underlineClasses}

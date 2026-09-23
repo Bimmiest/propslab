@@ -58,14 +58,14 @@ export function DirectiveDialog({
         <div className="flex items-center justify-end gap-2 px-4 py-3" style={{ borderTop: '1px solid var(--color-border)' }}>
           <button
             onClick={onClose}
-            className="px-3 py-1.5 text-sm rounded-md cursor-pointer border-none outline-none text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-tertiary)]"
+            className="px-3 py-1.5 text-sm rounded-md cursor-pointer border-none text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-tertiary)]"
           >
             Cancel
           </button>
           <button
             onClick={onApply}
             disabled={applyDisabled}
-            className="px-3 py-1.5 text-sm rounded-md cursor-pointer border-none outline-none font-medium text-white disabled:opacity-40 disabled:cursor-not-allowed"
+            className="px-3 py-1.5 text-sm rounded-md cursor-pointer border-none font-medium text-white disabled:opacity-40 disabled:cursor-not-allowed"
             style={{ backgroundColor: 'var(--color-accent)' }}
           >
             {applyLabel}

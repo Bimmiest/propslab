@@ -28,6 +28,19 @@ describe('PreviewPanel', () => {
     expect(screen.queryByText('No data yet')).not.toBeInTheDocument();
   });
 
+  it('wires the active tab and its panel to each other by per-instance ids', () => {
+    // #300: ids were the global `tab-${id}`; two tablists (or two mounts of
+    // one) could collide and point aria-controls at the wrong panel.
+    render(<><PreviewPanel /><PreviewPanel /></>);
+    const tabs = screen.getAllByRole('tab', { name: 'Preview' });
+    const panels = screen.getAllByRole('tabpanel');
+    expect(tabs[0]!.id).not.toBe(tabs[1]!.id);
+    tabs.forEach((tab, i) => {
+      expect(tab).toHaveAttribute('aria-controls', panels[i]!.id);
+      expect(panels[i]).toHaveAttribute('aria-labelledby', tab.id);
+    });
+  });
+
   it('ignores warnings when there is no result', () => {
     useAppStore.setState({
       processingResult: null,

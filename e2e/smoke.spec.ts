@@ -172,6 +172,40 @@ test.describe('accessibility affordances', () => {
 
     expect(complaints.all, 'browser errors during overlay interaction').toEqual([]);
   });
+
+  test('a raw-event selection can be made and acted on from the keyboard', async ({ page, complaints }) => {
+    // #300: token selection was mouse-only. Shift+F10 is delivered as a
+    // `contextmenu` event on the focused element, which is what opens the menu.
+    await openApp(page);
+    await loadExample(page, APACHE);
+
+    const text = page.getByRole('textbox', { name: 'Event text' }).first();
+    await text.focus();
+    await page.keyboard.press('ArrowRight');
+    await expect(page.getByText(/^Selected: \S+/).first()).toBeAttached();
+
+    await page.keyboard.press('Shift+F10');
+    const extract = page.getByRole('menuitem', { name: /Create EXTRACT/ });
+    await expect(extract).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(extract).toBeHidden();
+
+    expect(complaints.all, 'browser errors during keyboard selection').toEqual([]);
+  });
+
+  test('controls that opted out of the outline still show keyboard focus', async ({ page }) => {
+    // #300: `outline-none` without a ring left some buttons with no focus
+    // indicator at all. The settings panel's close button was one.
+    await openApp(page);
+    // Opened from the keyboard so the focus Radix moves into the dialog counts
+    // as keyboard focus, which is what :focus-visible keys on.
+    await page.getByRole('button', { name: 'Open settings' }).focus();
+    await page.keyboard.press('Enter');
+    const close = page.getByRole('button', { name: 'Close settings' });
+    await expect(close).toBeFocused();
+    expect(await close.evaluate((el) => el.matches(':focus-visible'))).toBe(true);
+    expect(await close.evaluate((el) => getComputedStyle(el).outlineStyle)).not.toBe('none');
+  });
 });
 
 test.describe('dictionary', () => {

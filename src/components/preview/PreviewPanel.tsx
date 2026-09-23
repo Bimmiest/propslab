@@ -1,9 +1,10 @@
-import { useState, useMemo } from 'react';
+import { useId, useState, useMemo } from 'react';
 
 const normalise = (s: string) => s.replace(/\r\n/g, '\n').replace(/\s+$/, '');
 import type React from 'react';
 import { useAppStore } from '../../store/useAppStore';
 import { Tabs } from '../ui/Tabs';
+import { tabId, tabPanelId } from '../ui/tabIds';
 import { Icon } from '../ui/Icon';
 import type { EventMetadata, OutputTabId, PreviewSubTabId, SplunkEvent } from '../../engine/types';
 import { SAMPLE_CONFIGS } from '../../engine/sampleData';
@@ -51,6 +52,7 @@ export function PreviewPanel() {
   const setActiveTab = useAppStore((s) => s.setActiveOutputTab);
   const result = useAppStore((s) => s.processingResult);
   const isProcessing = useAppStore((s) => s.isProcessing);
+  const tabsId = useId();
   const diagnostics = useAppStore((s) => s.validationDiagnostics);
   // A run that produced no result at all — watchdog timeout, repeated worker
   // crash, an engine throw — clears `processingResult` and says why in an error
@@ -78,6 +80,7 @@ export function PreviewPanel() {
           <span className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">Output</span>
         </div>
         <Tabs
+          idPrefix={tabsId}
           tabs={tabs}
           activeTab={activeTab}
           onTabChange={(id) => setActiveTab(id as OutputTabId)}
@@ -87,8 +90,8 @@ export function PreviewPanel() {
       <div
         className="flex-1 min-h-0 overflow-auto relative"
         role="tabpanel"
-        id={`tabpanel-${activeTab}`}
-        aria-labelledby={`tab-${activeTab}`}
+        id={tabPanelId(tabsId, activeTab)}
+        aria-labelledby={tabId(tabsId, activeTab)}
         aria-busy={isProcessing}
       >
         <TabContent tab={activeTab} hasData={!!result && result.events.length > 0} failure={failure} />
@@ -232,6 +235,7 @@ function PreviewSubTab() {
   const originalRaw = result?.originalRaw ?? '';
 
   const [subTab, setSubTab] = useState<PreviewSubTabId>('raw');
+  const subTabsId = useId();
   const [search, setSearch] = useState('');
   const [selectedFields, setSelectedFields] = useState<Set<string>>(new Set());
   const [selectedStatus, setSelectedStatus] = useState<Set<string>>(new Set());
@@ -304,6 +308,7 @@ function PreviewSubTab() {
       {/* Sub-tab bar */}
       <div className="flex-shrink-0 border-b border-[var(--color-border-subtle)] bg-[var(--color-bg-secondary)]">
         <Tabs
+          idPrefix={subTabsId}
           tabs={PREVIEW_SUB_TABS}
           activeTab={subTab}
           onTabChange={(id) => setSubTab(id as PreviewSubTabId)}
@@ -332,8 +337,8 @@ function PreviewSubTab() {
       <div
         className="flex-1 min-h-0 overflow-auto"
         role="tabpanel"
-        id={`tabpanel-${subTab}`}
-        aria-labelledby={`tab-${subTab}`}
+        id={tabPanelId(subTabsId, subTab)}
+        aria-labelledby={tabId(subTabsId, subTab)}
       >
         {subTab === 'raw' && <RawTab items={paginatedItems} currentPage={currentPage} eventsPerPage={eventsPerPage} search={search} />}
         {subTab === 'highlighted' && <HighlightedTab items={paginatedItems} allEvents={filteredEvents} currentPage={currentPage} eventsPerPage={eventsPerPage} />}
