@@ -168,9 +168,9 @@ export function applyTransforms(
           };
           // CLONE_SOURCETYPE is index-time only. Splunk emits a copy carrying
           // the new sourcetype and lets the original continue untouched; the
-          // copy re-enters the pipeline and picks up the new sourcetype's props,
-          // which the per-event path below already does for any event whose
-          // metadata changed.
+          // copy re-enters the pipeline and picks up the new sourcetype's props
+          // — its SEDCMD and TRANSFORMS in cloneSourcetype.ts, its search-time
+          // config through the per-event path for any event whose metadata changed.
           const cloneType =
             phase === 'index-time'
               ? transformStanza.directives.filter((d) => d.key === 'CLONE_SOURCETYPE').at(-1)?.value.trim()

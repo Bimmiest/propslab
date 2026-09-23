@@ -406,6 +406,48 @@ describe('#87 — CLONE_SOURCETYPE', () => {
     expect(events[0]?.fields['masked_user']).toBeUndefined();
   });
 
+  // Doc-derived (transforms.conf.spec, CLONE_SOURCETYPE): "The duplicated
+  // events receive index-time transformations and sed commands for all
+  // transforms that match its new host, source, or source type." (#282)
+  describe('index-time processing of the clone (#282)', () => {
+    const cloneProps =
+      '[orig]\nTRANSFORMS-clone = do_clone\n\n[masked]\nSEDCMD-mask = s/\\d{4}-\\d{4}/XXXX-XXXX/g\n';
+    const cloneTransforms = '[do_clone]\nREGEX = .\nCLONE_SOURCETYPE = masked\n';
+    const runOrig = (p: string, t: string) =>
+      runPipeline('card 1234-5678\n', { ...metadata, sourcetype: 'orig' }, p, t, {
+        perEventPipeline: true,
+        captureOffsets: false,
+      });
+
+    it("applies the new sourcetype's SEDCMD to the clone and not the original", () => {
+      const events = runOrig(cloneProps, cloneTransforms).result.events;
+      expect(events).toHaveLength(2);
+      expect(events[0]?.metadata.sourcetype).toBe('orig');
+      expect(events[0]?._raw).toBe('card 1234-5678');
+      expect(events[1]?.metadata.sourcetype).toBe('masked');
+      expect(events[1]?._raw).toBe('card XXXX-XXXX');
+    });
+
+    it("applies the new sourcetype's TRANSFORMS to the clone", () => {
+      const events = runOrig(
+        `${cloneProps}TRANSFORMS-route = to_secure\n`,
+        `${cloneTransforms}\n[to_secure]\nREGEX = .\nDEST_KEY = _MetaData:Index\nFORMAT = secure\n`,
+      ).result.events;
+      expect(events[0]?.metadata.index).toBe('main');
+      expect(events[1]?.metadata.index).toBe('secure');
+    });
+
+    it('stops, with a warning, when clones loop back to a sourcetype in their chain', () => {
+      const { result, diagnostics } = runOrig(
+        '[orig]\nTRANSFORMS-c = to_masked\n\n[masked]\nTRANSFORMS-c = to_orig\n',
+        '[to_masked]\nREGEX = .\nCLONE_SOURCETYPE = masked\n\n[to_orig]\nREGEX = .\nCLONE_SOURCETYPE = orig\n',
+      );
+      // orig → masked (processed) → orig (cut: already in the chain).
+      expect(result.events.map((e) => e.metadata.sourcetype)).toEqual(['orig', 'masked', 'orig']);
+      expect(diagnostics.some((d) => d.message.includes('CLONE_SOURCETYPE loops back'))).toBe(true);
+    });
+  });
+
   it('records the clone in the original event trace', () => {
     const events = run('2024-01-15 user=alice\n');
     const step = events[1]?.processingTrace.find((s) => s.description.includes('CLONE_SOURCETYPE'));
