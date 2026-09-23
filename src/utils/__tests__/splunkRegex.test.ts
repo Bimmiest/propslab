@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { safeRegex, translatePcreToJs, hasReDoSRisk } from '../splunkRegex';
+import { safeRegex, translatePcreToJs, hasReDoSRisk, SUPPORTS_SCOPED_MODIFIERS } from '../splunkRegex';
 
 describe('translatePcreToJs', () => {
   it('hoists a leading inline flag group into the flags', () => {
@@ -33,6 +33,148 @@ describe('translatePcreToJs', () => {
   it('leaves an escaped literal quantifier char untouched', () => {
     // `\++` = one-or-more literal plus signs — valid JS, must not be stripped.
     expect(translatePcreToJs('\\++').source).toBe('\\++');
+  });
+});
+
+describe('translatePcreToJs — class- and escape-aware rewrites (#290)', () => {
+  it('leaves quantifier characters inside a character class alone', () => {
+    // `[*+]` is "a star or a plus". The old regex-replace pass read `*+` as a
+    // possessive star and produced `[*]`, silently dropping the plus.
+    expect(translatePcreToJs('[*+]').source).toBe('[*+]');
+    expect(translatePcreToJs('[?+]+x').source).toBe('[?+]+x');
+    expect(translatePcreToJs('[a-z]{2}+[}+]').source).toBe('[a-z]{2}[}+]');
+    expect(safeRegex('[*+]')!.test('+')).toBe(true);
+  });
+
+  it('treats an escaped backslash before a possessive plus as an escape, not an escaped plus', () => {
+    // `\\++` is "one or more backslashes, possessively" → `\\+`.
+    expect(translatePcreToJs('\\\\++').source).toBe('\\\\+');
+  });
+
+  it('keeps a lazy quantifier lazy and does not read the lazy marker as a new quantifier', () => {
+    expect(translatePcreToJs('a+?b').source).toBe('a+?b');
+    expect(translatePcreToJs('a*?+').source).toBe('a*?+');
+  });
+
+  it('strips a possessive after a group and leaves a literal brace alone', () => {
+    expect(translatePcreToJs('(ab)++c').source).toBe('(ab)+c');
+    expect(translatePcreToJs('{x}+').source).toBe('{x}+');
+  });
+
+  it('does not rewrite group syntax that appears inside a class or after an escape', () => {
+    expect(translatePcreToJs('[(?P<x>]').source).toBe('[(?P<x>]');
+    expect(translatePcreToJs('\\(?>').source).toBe('\\(?>');
+    expect(translatePcreToJs('a[(?i)]').flags).toBe('');
+  });
+});
+
+describe('translatePcreToJs — extended mode (#290)', () => {
+  it('strips unescaped whitespace and # comments when (?x) leads the pattern', () => {
+    const { source, flags } = translatePcreToJs('(?x) (?P<ip> \\d+ (?: \\. \\d+ ){3} )  # the address\n \\s+ port');
+    expect(source).toBe('(?<ip>\\d+(?:\\.\\d+){3})\\s+port');
+    expect(flags).toBe('');
+  });
+
+  it('keeps escaped whitespace, an escaped #, and whitespace or # inside a class', () => {
+    expect(translatePcreToJs('(?x) a\\ b \\# [ #] c').source).toBe('a\\ b\\#[ #]c');
+  });
+
+  it('matches the way the extended pattern reads', () => {
+    const re = safeRegex('(?x) ^ (?P<user> \\w+ ) \\s* = \\s* (?P<val> [^ ]+ ) # key = value');
+    expect({ ...re!.exec('alice = 42')?.groups }).toEqual({ user: 'alice', val: '42' });
+  });
+
+  it('combines with other leading flags, in one group or across groups', () => {
+    expect(translatePcreToJs('(?xi) a b').source).toBe('ab');
+    expect(translatePcreToJs('(?xi) a b').flags).toBe('i');
+    const split = translatePcreToJs('(?x)  # comment\n (?i) a b');
+    expect(split.source).toBe('ab');
+    expect(split.flags).toBe('i');
+  });
+
+  it('keeps a quantifier possessive across ignorable whitespace', () => {
+    expect(translatePcreToJs('(?x) a+ + b').source).toBe('a+b');
+  });
+
+  it('does not apply extended mode when (?x) is not leading, and says so', () => {
+    const { source, warnings } = translatePcreToJs('a (?x) b', '', { scopedModifiers: true });
+    expect(source).toBe('a  b');
+    expect(warnings.join(' ')).toMatch(/\(\?x\) is only applied at the start/);
+  });
+
+  it('leaves whitespace significant without (?x)', () => {
+    expect(translatePcreToJs('a b # c').source).toBe('a b # c');
+  });
+});
+
+describe('translatePcreToJs — mid-pattern inline flags (#290)', () => {
+  const scoped = { scopedModifiers: true };
+
+  it('keeps a leading flag group as a whole-pattern flag', () => {
+    expect(translatePcreToJs('(?i)abc', '', scoped)).toEqual({ source: 'abc', flags: 'i', warnings: [] });
+  });
+
+  it('scopes a mid-pattern flag group to the rest of the enclosing group', () => {
+    expect(translatePcreToJs('ab(?i)cd', '', scoped)).toEqual({ source: 'ab(?i:cd)', flags: '', warnings: [] });
+    expect(translatePcreToJs('x(a(?i)b)c', '', scoped).source).toBe('x(a(?i:b))c');
+    expect(translatePcreToJs('^(?i)foo', '', scoped).source).toBe('^(?i:foo)');
+  });
+
+  it('wraps each later alternative separately, so the alternation is not captured', () => {
+    // PCRE: `a(?i)b|c` is (a, then case-insensitive b) OR case-insensitive c.
+    // One wrapper spanning the `|` would instead mean "a, then b or c".
+    expect(translatePcreToJs('a(?i)b|c', '', scoped).source).toBe('a(?i:b)|(?i:c)');
+    expect(translatePcreToJs('(a(?i)b|c)d', '', scoped).source).toBe('(a(?i:b)|(?i:c))d');
+  });
+
+  it('nests successive flag groups and drops letters JS cannot scope', () => {
+    expect(translatePcreToJs('a(?i)b(?s)c', '', scoped).source).toBe('a(?i:b(?s:c))');
+    expect(translatePcreToJs('a(?iU)b', '', scoped).source).toBe('a(?i:b)');
+    expect(translatePcreToJs('a(?U)b', '', scoped).source).toBe('ab');
+  });
+
+  it('closes wrappers even when the pattern is unbalanced, leaving the error to the compiler', () => {
+    expect(translatePcreToJs('(a(?i)b', '', scoped).source).toBe('(a(?i:b)');
+    expect(translatePcreToJs('a(?i)b)c', '', scoped).source).toBe('a(?i:b))c');
+  });
+
+  it('hoists to a whole-pattern flag with a warning when scoped groups are unavailable', () => {
+    const { source, flags, warnings } = translatePcreToJs('ab(?i)cd', '', { scopedModifiers: false });
+    expect(source).toBe('abcd');
+    expect(flags).toBe('i');
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/applied to the whole pattern/);
+  });
+
+  it('probes the runtime rather than assuming support', () => {
+    let supported = true;
+    try {
+      new RegExp('(?i:a)');
+    } catch {
+      supported = false;
+    }
+    expect(SUPPORTS_SCOPED_MODIFIERS).toBe(supported);
+  });
+
+  // Node 24 (the pinned runtime, and CI's) and current browsers support scoped
+  // modifier groups; Node 22 has them only behind a flag, where the hoist
+  // fallback above is what runs.
+  it.runIf(SUPPORTS_SCOPED_MODIFIERS)('matches only the text after the flag group case-insensitively', () => {
+    const re = safeRegex('ab(?i)cd')!;
+    expect(re.test('abCD')).toBe(true);
+    expect(re.test('ABcd')).toBe(false);
+    const alt = safeRegex('^(?:a(?i)b|c)$')!;
+    expect(alt.test('aB')).toBe(true);
+    expect(alt.test('C')).toBe(true);
+    expect(alt.test('Ab')).toBe(false);
+  });
+
+  it('still analyses the body of a scoped group for ReDoS', () => {
+    const { source } = translatePcreToJs('a(?i)(x+)+', '', scoped);
+    expect(source).toBe('a(?i:(x+)+)');
+    expect(hasReDoSRisk(source)).toBe(true);
+    expect(hasReDoSRisk('(?i:(x+)+)')).toBe(true);
+    expect(hasReDoSRisk('(?i-s:\\d+\\.)+')).toBe(false);
   });
 });
 
