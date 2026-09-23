@@ -34,7 +34,7 @@ A few things worth knowing:
 | What | Where |
 |---|---|
 | Simulation logic | `src/engine/` — pure, no React imports, runs under Node and in a Web Worker |
-| Directive metadata (description, default, phase, valid values) | `src/engine/directiveRegistry.ts` |
+| Directive metadata (description, default, phase, valid values) | `src/engine/registry/`, assembled by `src/engine/directiveRegistry.ts` |
 | Whether the engine actually honours a directive | `src/engine/directiveSupport.ts` |
 | Editor behaviour (hover, completion, lint markers) | `src/monaco/` |
 | UI | `src/components/` |
@@ -59,7 +59,7 @@ If a captured fixture disagrees with an existing test, the fixture wins. Update 
 ## Recipes
 
 ### Add a directive
-1. Add a `DirectiveInfo` entry to `DIRECTIVES` in `src/engine/directiveRegistry.ts`. Autocomplete, hover, linting and the dictionary pick it up.
+1. Add a `DirectiveInfo` entry to the props or transforms data file under `src/engine/registry/` (the `*SpecDirectives.ts` files hold the spec-completeness sweep; anything new goes in `propsDirectives.ts` or `transformsDirectives.ts`). `directiveRegistry.ts` assembles them, and autocomplete, hover, linting and the dictionary pick it up.
 2. If it needs processing logic: create or edit a processor in `src/engine/processors/` and wire it into `src/engine/pipeline.ts` at the correct position, wrapped in `safeProcessor()`.
 3. Follow the classification and fixture rules above — the support-table tests enforce them.
 
