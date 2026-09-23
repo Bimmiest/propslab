@@ -17,7 +17,7 @@ export function applyIndexedExtractions(
 
   switch (mode) {
     case 'json':
-      return extractJsonFields(events);
+      return extractJsonFields(events, directives);
     case 'csv':
       return extractDelimited(events, directives, ',', 'csv', diagnostics);
     case 'tsv':
@@ -31,7 +31,9 @@ export function applyIndexedExtractions(
   }
 }
 
-function extractJsonFields(events: SplunkEvent[]): SplunkEvent[] {
+function extractJsonFields(events: SplunkEvent[], directives: ConfDirective[]): SplunkEvent[] {
+  const trimArrayBraces =
+    directives.find((d) => d.key === 'JSON_TRIM_BRACES_IN_ARRAY_NAMES')?.value.trim().toLowerCase() === 'true';
   return events.map((event) => {
     try {
       const obj: unknown = JSON.parse(event._raw);
@@ -40,7 +42,7 @@ function extractJsonFields(events: SplunkEvent[]): SplunkEvent[] {
       const fields = { ...event.fields };
       const added: string[] = [];
       const sourceKeys: Record<string, string> = {};
-      const opts = { stripLeadingUnderscore: true, sourceKeys };
+      const opts = { stripLeadingUnderscore: true, sourceKeys, trimArrayBraces };
       const depthTruncated = Array.isArray(obj)
         ? flattenArray(obj as unknown[], fields, added, '', 0, opts)
         : flattenJson(obj as Record<string, unknown>, fields, added, '', 0, opts);

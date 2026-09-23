@@ -30,6 +30,14 @@ export interface FlattenOptions {
    * key (e.g. `"_GID":"100"`) rather than the stripped name (`GID`).
    */
   sourceKeys?: Record<string, string>;
+  /**
+   * JSON_TRIM_BRACES_IN_ARRAY_NAMES: name array fields without the `{}` marker,
+   * so `data.mount_point{}` is `data.mount_point` and `items{}.id` is
+   * `items.id`. Only INDEXED_EXTRACTIONS passes it — the spec scopes the
+   * attribute to the index-time JSON parser and warns that it makes index-time
+   * names disagree with spath's, which keeps the braces.
+   */
+  trimArrayBraces?: boolean;
 }
 
 /** Append a value to a field, promoting to a multivalue array on repeated keys. */
@@ -97,7 +105,9 @@ export function flattenArray(
   options: FlattenOptions = {},
 ): boolean {
   if (depth > MAX_DEPTH) return true;
-  const arrayName = `${name}{}`;
+  // A top-level array has no name to trim back to, and an empty string is not
+  // a field name, so it keeps its bare `{}` even when trimming.
+  const arrayName = options.trimArrayBraces && name !== '' ? name : `${name}{}`;
   for (const item of arr) {
     if (item === null || item === undefined) continue;
     if (Array.isArray(item)) {

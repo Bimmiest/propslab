@@ -466,3 +466,54 @@ describe('applyIndexedExtractions — TIMESTAMP_FIELDS (#184)', () => {
     expect(events[0]!._time).toBeNull();
   });
 });
+
+// Doc-derived (props.conf.spec 10.4.3, JSON_TRIM_BRACES_IN_ARRAY_NAMES): no
+// capture pins this attribute, so the assertions stay close to the spec's own
+// example and the default.
+describe('applyIndexedExtractions — JSON_TRIM_BRACES_IN_ARRAY_NAMES (#274)', () => {
+  const raw = '{"data":{"mount_point":["/","/home"]}}';
+
+  it('keeps the {} marker by default', () => {
+    const events = applyIndexedExtractions([event(raw)], [dir('json')]);
+    expect(events[0]!.fields['data.mount_point{}']).toEqual(['/', '/home']);
+    expect(events[0]!.fields['data.mount_point']).toBeUndefined();
+  });
+
+  it('strips it when true, as the spec example shows', () => {
+    const events = applyIndexedExtractions(
+      [event(raw)],
+      [dir('json'), dirOf('JSON_TRIM_BRACES_IN_ARRAY_NAMES', 'true')],
+    );
+    expect(events[0]!.fields['data.mount_point']).toEqual(['/', '/home']);
+    expect(events[0]!.fields['data.mount_point{}']).toBeUndefined();
+  });
+
+  it('strips the marker inside a path too, since every {} is an array name', () => {
+    // Our reading: the spec's example is a leaf array, but `items{}.id` is
+    // named through the same array, so its braces go as well.
+    const events = applyIndexedExtractions(
+      [event('{"items":[{"id":1},{"id":2}]}')],
+      [dir('json'), dirOf('JSON_TRIM_BRACES_IN_ARRAY_NAMES', 'true')],
+    );
+    expect(events[0]!.fields['items.id']).toEqual(['1', '2']);
+  });
+
+  it('keeps a top-level array as {}, having no name to trim back to', () => {
+    const events = applyIndexedExtractions(
+      [event('["a","b"]')],
+      [dir('json'), dirOf('JSON_TRIM_BRACES_IN_ARRAY_NAMES', 'true')],
+    );
+    expect(events[0]!.fields['{}']).toEqual(['a', 'b']);
+  });
+
+  it('does not apply to KV_MODE = json, which the spec does not scope it to', () => {
+    const { result } = runPipeline(
+      `${raw}\n`,
+      { index: 'main', host: 'h', source: 's', sourcetype: 'st' },
+      '[st]\nKV_MODE = json\nJSON_TRIM_BRACES_IN_ARRAY_NAMES = true\n',
+      '',
+      { perEventPipeline: false, captureOffsets: false },
+    );
+    expect(result.events[0]!.fields['data.mount_point{}']).toEqual(['/', '/home']);
+  });
+});

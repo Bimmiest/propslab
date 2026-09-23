@@ -268,7 +268,10 @@ export const DIRECTIVE_SUPPORT: Record<string, SupportEntry> = {
     note: 'Only a TIME_FORMAT can describe a dateless timestamp here — automatic recognition has no time-only pattern.',
   },
   KV_TRIM_SPACES: { support: 'simulated' },
-  JSON_TRIM_BRACES_IN_ARRAY_NAMES: { support: 'ignored', issue: 274, note: 'Array field names from the JSON parser keep their braces; this cannot strip them.' },
+  JSON_TRIM_BRACES_IN_ARRAY_NAMES: {
+    support: 'simulated',
+    note: 'Applies to INDEXED_EXTRACTIONS = json only, as the spec scopes it; KV_MODE = json keeps the braces, as spath does.',
+  },
   RULESET: {
     support: 'simulated',
     note:
