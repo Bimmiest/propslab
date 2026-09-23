@@ -185,11 +185,15 @@ export function breakLines(
     //   Split on the captured group.  The regex overall matches a region;
     //   the captured group within that region is what gets removed.
 
-    // To split correctly we iterate matches ourselves.
+    // To split correctly we iterate matches ourselves, over the WHOLE input
+    // with `lastIndex` rather than over a re-sliced remainder. Re-slicing hid
+    // the text already consumed from a lookbehind — `(?<=\})(\n)` could never
+    // see the `}` that ended the previous event — and copied the tail of the
+    // input once per event, which is quadratic on a large sample (#283).
     // Use 'd' flag so RegExpExecArray.indices gives exact capture offsets,
     // avoiding the indexOf() ambiguity when captured text repeats in the match.
-    const nonGlobalRegex = safeRegex(lineBreakerPattern, 'd');
-    if (!nonGlobalRegex) {
+    const lineBreakerRegex = safeRegex(lineBreakerPattern, 'dg');
+    if (!lineBreakerRegex) {
       // Invalid regex — treat entire data as one segment. A user-supplied
       // LINE_BREAKER that fails to compile silently disables event breaking, so
       // surface it (the default '([\r\n]+)' always compiles, so this is a real config).
@@ -204,61 +208,52 @@ export function breakLines(
       segments = [rawData];
       segmentOffsets.push(0);
     } else {
-      let remaining = rawData;
-      let offset = 0;
+      // `segmentStart` is where the event being built begins; `searchFrom` is
+      // where the next search starts. They differ only after a zero-width
+      // break was refused, below.
+      let segmentStart = 0;
+      let searchFrom = 0;
 
-      while (remaining.length > 0) {
-        const m = nonGlobalRegex.exec(remaining);
-        if (!m || m.index === undefined) {
-          // No more matches -- rest is last segment
-          if (remaining.length > 0) {
-            segments.push(remaining);
-            segmentOffsets.push(offset);
-          }
-          break;
-        }
+      while (searchFrom <= rawData.length) {
+        lineBreakerRegex.lastIndex = searchFrom;
+        const m = lineBreakerRegex.exec(rawData);
+        if (!m) break;
 
-        // The full match spans m.index .. m.index + m[0].length
-        // The captured group is m[1], which is the separator to discard.
-        const fullMatchStart = m.index;
+        // The captured group is the separator to discard. A match in which the
+        // group did not participate (`(a)|b` matching `b`) has no group
+        // offsets, so the whole match stands in for it.
+        const groupIndices = m[1] !== undefined ? m.indices?.[1] : undefined;
+        const captureStart = groupIndices ? groupIndices[0] : m.index;
+        const captureEnd = groupIndices ? groupIndices[1] : m.index + m[0].length;
 
-        // Locate the capture group using indices (d flag) for exact position.
-        let captureStartInMatch = 0;
-        let captureEndInMatch = m[0].length;
-        if (m[1] !== undefined) {
-          const groupIndices = m.indices?.[1];
-          if (groupIndices) {
-            captureStartInMatch = groupIndices[0] - fullMatchStart;
-            captureEndInMatch = groupIndices[1] - fullMatchStart;
-          }
+        // A break that would not move the event start forward is no break: an
+        // empty capture at the start of the current event (`()(?=b)` just
+        // after a previous break) would otherwise end an empty event there, and
+        // the old guard then emitted the next character as an event of its own
+        // (`bcd` came out as `b` + `cd`). Retry one character further on, which
+        // is where the next genuine break can begin (#283).
+        if (captureEnd <= segmentStart) {
+          searchFrom = m.index + 1;
+          continue;
         }
 
         // Segment text = everything before the captured group
-        const segmentText = remaining.substring(0, fullMatchStart + captureStartInMatch);
+        const segmentText = rawData.slice(segmentStart, Math.max(captureStart, segmentStart));
         if (segmentText.length > 0 || segments.length === 0) {
           segments.push(segmentText);
-          segmentOffsets.push(offset);
+          segmentOffsets.push(segmentStart);
         }
 
-        // Advance past the captured group.  Any text between the end of
-        // the captured group and the end of the full match becomes the
-        // start of the next segment (handled by leaving it in `remaining`).
-        const advanceTo = fullMatchStart + captureEndInMatch;
-        offset += advanceTo;
-        remaining = remaining.substring(advanceTo);
+        // Advance past the captured group.  Any text between the end of the
+        // captured group and the end of the full match becomes the start of
+        // the next segment, and is searched again for the next break.
+        segmentStart = captureEnd;
+        searchFrom = captureEnd;
+      }
 
-        // Guard against zero-length matches to prevent infinite loops
-        if (advanceTo === 0) {
-          if (remaining.length > 0) {
-            // Push one character and continue
-            segments.push(remaining.charAt(0));
-            segmentOffsets.push(offset);
-            remaining = remaining.substring(1);
-            offset += 1;
-          } else {
-            break;
-          }
-        }
+      if (segmentStart < rawData.length) {
+        segments.push(rawData.slice(segmentStart));
+        segmentOffsets.push(segmentStart);
       }
     }
   }

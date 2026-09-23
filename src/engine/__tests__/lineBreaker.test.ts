@@ -114,6 +114,50 @@ describe('breakLines — custom LINE_BREAKER', () => {
   });
 });
 
+// Doc-derived (props.conf.spec, LINE_BREAKER): "the start of the first
+// capturing group [is] the end of the previous line" and its end "the start of
+// the next line" — so an empty group breaks WITHOUT removing anything, and a
+// break at the very start of the current event ends no event at all.
+describe('#283 — zero-width LINE_BREAKER captures', () => {
+  it('breaks before each lookahead match, keeping every character', () => {
+    const events = breakLines('a\nbcd\nbxy', [
+      dir('LINE_BREAKER', '()(?=b)'),
+      dir('SHOULD_LINEMERGE', 'false'),
+    ], META);
+    // Was ['a\n', 'b', 'cd\n', 'b', 'xy']: the empty match at the start of
+    // each new event re-fired, and the loop guard emitted one character alone.
+    expect(events.map((e) => e._raw)).toEqual(['a\n', 'bcd\n', 'bxy']);
+  });
+
+  it('does not produce an empty or one-character event at the start of input', () => {
+    const events = breakLines('bxy\nbz', [
+      dir('LINE_BREAKER', '()(?=b)'),
+      dir('SHOULD_LINEMERGE', 'false'),
+    ], META);
+    expect(events.map((e) => e._raw)).toEqual(['bxy\n', 'bz']);
+  });
+
+  it('records each event at its real offset in the input', () => {
+    const events = breakLines('a\nbcd\nbxy', [
+      dir('LINE_BREAKER', '()(?=b)'),
+      dir('SHOULD_LINEMERGE', 'false'),
+    ], META);
+    expect(events.map((e) => e.lineNumbers.start)).toEqual([1, 2, 3]);
+  });
+
+  it('lets a lookbehind see text the previous break consumed', () => {
+    // A blank-line separator written with a lookbehind: the run of newlines
+    // after the first is the separator. Searching a re-sliced remainder hid
+    // the newline just consumed, so the third one no longer matched and a
+    // newline leaked into the second event.
+    const events = breakLines('a\n\n\nb', [
+      dir('LINE_BREAKER', '(?<=\\n)(\\n)'),
+      dir('SHOULD_LINEMERGE', 'false'),
+    ], META);
+    expect(events.map((e) => e._raw)).toEqual(['a\n', 'b']);
+  });
+});
+
 describe('breakLines — uncompilable break patterns are reported (#75.2)', () => {
   it('warns when BREAK_ONLY_BEFORE cannot be compiled', () => {
     const diags: ValidationDiagnostic[] = [];
