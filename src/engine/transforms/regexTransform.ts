@@ -369,6 +369,14 @@ export function applyRegexTransform(
   // TRANSFORMS- pass ignores it rather than quietly honouring a setting real
   // Splunk drops. transformsProcessor warns when a stanza is used that way.
   const repeatMatch = lastDirective(transformStanza, 'REPEAT_MATCH')?.value.trim().toLowerCase() === 'true';
+  // Whether REGEX is run across the whole source or once. REPEAT_MATCH is
+  // documented as index-time only, and there it is the switch: without it the
+  // REGEX runs once. At search time it is inert, yet Splunk still extracts every
+  // match — the report-repeat-match and report-transform-search-time captures
+  // (10.4.0) both show repeated extraction, the first with REPEAT_MATCH set but
+  // irrelevant and the second without it — and MV_ADD alone decides whether the
+  // later values are kept (#285).
+  const scanAll = phase === 'search-time' || repeatMatch;
   const mvAdd =
     phase === 'search-time' &&
     lastDirective(transformStanza, 'MV_ADD')?.value.trim().toLowerCase() === 'true';
@@ -480,7 +488,8 @@ export function applyRegexTransform(
           result.destValue = expandFormat(format, m, priorDestValue);
         }
       } else {
-        // DEST_KEY=<field>: accumulate one value per match as a multi-value field.
+        // DEST_KEY=<field>: one value per match, accumulated as a multi-value
+        // field — under REPEAT_MATCH only, since without it the REGEX runs once.
         const { global } = compiled;
         global.lastIndex = 0;
         let m: RegExpExecArray | null;
@@ -493,6 +502,7 @@ export function applyRegexTransform(
           } else {
             extraValues.push(formatted);
           }
+          if (!repeatMatch) break;
           // Guard against zero-length matches (e.g. a regex like `(.*)` that can
           // match the empty string) — without advancing, lastIndex never moves and
           // global.exec loops forever.
@@ -531,26 +541,33 @@ export function applyRegexTransform(
           // at its default of false Splunk keeps the first match and discards
           // the rest rather than building a multivalue field (#174). It is a
           // search-time attribute, so an index-time transform still accumulates
-          // -- gating both phases on it would make MV_ADD do something where
+          // (when REPEAT_MATCH gives it more than one match to accumulate) --
+          // gating both phases on it would make MV_ADD do something where
           // Splunk ignores it entirely.
           if (keepFirstMatchOnly && hasField(result.fields, field)) continue;
           addMultiValue(result.fields, field, expandFormat(pair.value, m));
         }
+        // Index time without REPEAT_MATCH: the REGEX runs once (#285).
+        if (!scanAll) break;
         // Guard against zero-length outer matches looping forever.
         if (m.index === global.lastIndex) global.lastIndex++;
       }
     }
   } else {
-    // No FORMAT — extract named capture groups. REPEAT_MATCH=true re-runs the
-    // regex across the event (all matches); otherwise only the first match is used.
-    // When a field is captured more than once, MV_ADD=true accumulates a multivalue
-    // field while MV_ADD=false keeps the first value and discards the rest.
-    const matches: RegExpMatchArray[] = repeatMatch
+    // No FORMAT — extract named capture groups, scanning the same matches the
+    // FORMAT path does (`scanAll`): every match at search time, and at index
+    // time only under REPEAT_MATCH. When a field is captured more than once,
+    // MV_ADD=true accumulates a multivalue field while MV_ADD=false keeps the
+    // first value and discards the rest. This used to take the first match only
+    // at search time unless REPEAT_MATCH was set, so MV_ADD on named groups did
+    // nothing there while the same MV_ADD on a FORMAT stanza worked (#285).
+    const matches: RegExpMatchArray[] = scanAll
       ? [...sourceValue.matchAll(compiled.global)]
       : [firstMatch];
 
-    const assignField = (name: string, value: string) => {
-      const fieldName = writeMeta ? stripLeadingUnderscoreForField(name) : name;
+    // `fieldName` arrives final: literal group names get the WRITE_META
+    // underscore strip, _KEY_ names the full key cleaning, below.
+    const assignField = (fieldName: string, value: string) => {
       if (!fieldName) return;
       if (!hasField(result.fields, fieldName)) {
         setField(result.fields, fieldName, value);
@@ -576,7 +593,11 @@ export function applyRegexTransform(
         const keyText = groups[`_KEY_${suffix}`];
         const valText = groups[`_VAL_${suffix}`];
         if (keyText === undefined || valText === undefined) continue;
-        assignField(keyText, valText);
+        // The name comes from the DATA, exactly as with a FORMAT `$1::$2`, so it
+        // gets the same cleaning — CLEAN_KEYS at search time, the WRITE_META
+        // strip at index time. Passing it through raw let `user-name=bob`
+        // produce a field `user-name` that Splunk would call `user_name` (#285).
+        assignField(cleanName(keyText), valText);
       }
 
       // Remaining named groups become fields verbatim (skip the _KEY_/_VAL_ pair
@@ -584,7 +605,7 @@ export function applyRegexTransform(
       for (const [name, value] of Object.entries(groups)) {
         if (value === undefined) continue;
         if (/^_(?:KEY|VAL)_/.test(name)) continue;
-        assignField(name, value);
+        assignField(writeMeta ? stripLeadingUnderscoreForField(name) : name, value);
       }
     }
   }
