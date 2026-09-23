@@ -75,6 +75,63 @@ describe('breakLines — SHOULD_LINEMERGE defaults', () => {
   });
 });
 
+// Doc-derived (props.conf.spec, BREAK_ONLY_BEFORE_DATE: "creates a new event
+// only if it encounters a new line with a date", recognised the way timestamps
+// are — within MAX_TIMESTAMP_LOOKAHEAD). Not a captured fixture.
+describe('#287 — BREAK_ONLY_BEFORE_DATE finds a date anywhere in the lookahead window', () => {
+  const raws = (raw: string, extra: ConfDirective[] = []) =>
+    breakLines(raw, extra, META).map((e) => e._raw);
+
+  it('breaks before a bracketed timestamp', () => {
+    expect(raws('[2026-09-22 10:00:00] a\ncont\n[2026-09-22 10:00:01] b')).toEqual([
+      '[2026-09-22 10:00:00] a\ncont',
+      '[2026-09-22 10:00:01] b',
+    ]);
+  });
+
+  it('breaks before a syslog line behind its priority', () => {
+    expect(raws('<34>Sep 22 10:00:01 host a\ncont\n<34>Sep 22 10:00:02 host c')).toEqual([
+      '<34>Sep 22 10:00:01 host a\ncont',
+      '<34>Sep 22 10:00:02 host c',
+    ]);
+  });
+
+  it('breaks before an access-log line whose date follows the client address', () => {
+    const raw =
+      '10.0.0.1 - - [22/Sep/2026:10:00:00 +0000] "GET / HTTP/1.1" 200\n' +
+      '10.0.0.2 - - [22/Sep/2026:10:00:01 +0000] "GET /a HTTP/1.1" 200';
+    expect(raws(raw)).toHaveLength(2);
+  });
+
+  it('ignores a date past MAX_TIMESTAMP_LOOKAHEAD', () => {
+    const raw = '2026-09-22 10:00:00 a\n' + 'x'.repeat(40) + ' 2026-09-22 late';
+    expect(raws(raw)).toHaveLength(2);
+    expect(raws(raw, [dir('MAX_TIMESTAMP_LOOKAHEAD', '20')])).toHaveLength(1);
+  });
+
+  it('does not read a month name inside a word as a date', () => {
+    expect(raws('2026-09-22 a\nMarket 5 closed\nDecimal 12 places')).toHaveLength(1);
+  });
+
+  it('does not read a date inside a longer number', () => {
+    expect(raws('2026-09-22 a\nid 120260922-01-15\nref 3/4/2026/7')).toHaveLength(1);
+  });
+
+  it('accepts a plausible epoch at the start of a line', () => {
+    expect(raws('1768471200 a\ncont\n1768471200123 b\n1768471200.5 c')).toEqual([
+      '1768471200 a\ncont',
+      '1768471200123 b',
+      '1768471200.5 c',
+    ]);
+  });
+
+  it('does not treat any 10–13 digit run as an epoch', () => {
+    // An 11- or 12-digit id, a 10-digit number that is not a plausible epoch,
+    // and an epoch-looking number in mid-line all stay continuation lines.
+    expect(raws('1768471200 a\n17684712001 b\n176847120012 c\n9999999999 d\nid 1768471200 e')).toHaveLength(1);
+  });
+});
+
 describe('breakLines — BREAK_ONLY_BEFORE', () => {
   it('breaks only when the next segment matches the pattern', () => {
     const raw = 'START event1\ncontinuation\nSTART event2\ncontinuation2\n';

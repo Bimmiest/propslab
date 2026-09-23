@@ -45,20 +45,70 @@ function getDirective(directives: ConfDirective[], key: string): string | undefi
 }
 
 /**
- * Determine if a string looks like it starts with a date-like pattern.
- * Used when BREAK_ONLY_BEFORE_DATE = true.  Matches common timestamp
- * prefixes such as:
- *   2024-01-15  /  01/15/2024  /  Jan 15  /  Mon Jan 15  / epoch digits etc.
+ * Date forms BREAK_ONLY_BEFORE_DATE recognises ANYWHERE in the lookahead
+ * window of a line, not only at its start (#287). Splunk runs its timestamp
+ * recognizer over the line, so `[2026-09-22 10:00:00] a` and a syslog line
+ * behind its `<34>` priority both start events there; anchoring at `^` merged
+ * every such line into the one before it.
+ *
+ * The digit guards keep a date from being found inside a longer number, and
+ * month names must stand as words (`Mar 5` is a date, `Market 5` is not).
  */
-const DATE_LIKE_PATTERN = safeRegex(
-  '^\\s*(' +
-    '\\d{4}[\\-/]\\d{1,2}[\\-/]\\d{1,2}' +      // 2024-01-15 or 2024/01/15
-    '|\\d{1,2}[\\-/]\\d{1,2}[\\-/]\\d{2,4}' +    // 01-15-2024 or 1/15/24
-    '|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\\s+\\d{1,2}' + // Jan 15
-    '|(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\\s' +        // Mon ...
-    '|\\d{10,13}' +                                // epoch seconds/millis
-    ')'
+const MONTH = '(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)';
+const DATE_ANYWHERE_PATTERN = safeRegex(
+  '(?<!\\d)\\d{4}[\\-/]\\d{1,2}[\\-/]\\d{1,2}(?!\\d)' +           // 2024-01-15 or 2024/01/15
+    '|(?<![\\d/\\-])\\d{1,2}[\\-/]\\d{1,2}[\\-/]\\d{2,4}(?![\\d/\\-])' + // 01-15-2024 or 1/15/24
+    `|(?<![A-Za-z])${MONTH}\\.?\\s+\\d{1,2}(?!\\d)` +               // Jan 15, Sep 22 10:00:02
+    `|(?<!\\d)\\d{1,2}[/\\- ]${MONTH}[/\\- ]\\d{2,4}(?!\\d)`,        // 15/Jan/2024 (CLF), 15 Jan 2024
 );
+
+/**
+ * Forms recognised only at the START of a line, because anywhere else they
+ * are more often data than a timestamp. A weekday alone (`Mon `) keeps the
+ * reading it always had. Epoch time is a bare number, so in mid-line it is as
+ * likely an id, a byte count or a port; at the start it is still accepted only
+ * as a plausible epoch — 10 digits of seconds (2001–2033) or 13 of
+ * milliseconds, optionally fractional, and not the prefix of a longer number.
+ * Any 10–13 digit run used to count, so an 11- or 12-digit order id began a
+ * new event.
+ */
+const DATE_AT_START_PATTERN = safeRegex(
+  '^\\s*(?:' +
+    '(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\\s' +
+    '|1\\d{9}(?:\\d{3})?(?:\\.\\d+)?(?![\\d.])' +
+    ')',
+);
+
+/** props.conf.spec default for MAX_TIMESTAMP_LOOKAHEAD, as timestampExtractor reads it. */
+const DEFAULT_TIMESTAMP_LOOKAHEAD = 128;
+
+/** Whether a line carries a date BREAK_ONLY_BEFORE_DATE would break before. */
+function lineHasDate(line: string, lookahead: number): boolean {
+  if (DATE_AT_START_PATTERN?.test(line)) return true;
+  // Only the lookahead window is searched, as it is for timestamp extraction:
+  // a date deep inside a continuation line (a stack frame quoting a log line,
+  // say) is past where Splunk's recognizer looks, and must not split the event.
+  return DATE_ANYWHERE_PATTERN?.test(line.slice(0, lookahead)) ?? false;
+}
+
+/**
+ * The LINE_BREAKER segments each event was built from, as character lengths
+ * in `_raw` order (merged segments are joined by one `\n`).
+ *
+ * TRUNCATE caps a *line*, and props.conf.spec defines a line as what
+ * LINE_BREAKER delimits, before line merging — not a `\n`-separated piece of
+ * the final event. With the default breaker the two coincide; with a custom
+ * one a segment can span many `\n`s (a pretty-printed JSON record), and only
+ * the breaker knows where it ends. Kept beside the event rather than on it so
+ * the event shape every consumer sees, serialises and compares is unchanged;
+ * an event the breaker did not produce simply has no entry.
+ */
+const segmentLengths = new WeakMap<SplunkEvent, number[]>();
+
+/** The LINE_BREAKER segment lengths `event` was built from, if breakLines built it. */
+export function segmentLengthsOf(event: SplunkEvent): readonly number[] | undefined {
+  return segmentLengths.get(event);
+}
 
 /** Number of input lines a segment contributes (1 + embedded newlines). */
 function countLines(text: string): number {
@@ -285,11 +335,13 @@ export function breakLines(
   const shouldLineMerge =
     shouldLineMergeVal === undefined ? !structured : shouldLineMergeVal.toLowerCase() === 'true';
 
-  let mergedSegments: { text: string; offset: number }[];
+  // `lines` is the length of each LINE_BREAKER segment the event was built
+  // from, in order; see segmentLengthsOf.
+  let mergedSegments: { text: string; offset: number; lines: number[] }[];
   let maxEventsTriggered = false;
 
   if (!shouldLineMerge) {
-    mergedSegments = filteredSegments;
+    mergedSegments = filteredSegments.map((seg) => ({ ...seg, lines: [seg.text.length] }));
   } else {
     // Merge directives
     const breakOnlyBeforeStr = getDirective(directives, 'BREAK_ONLY_BEFORE');
@@ -312,6 +364,12 @@ export function breakLines(
       breakOnlyBeforeDateStr === undefined
         ? true
         : breakOnlyBeforeDateStr.toLowerCase() !== 'false';
+    // Read exactly as timestampExtractor reads it, so the window a date is
+    // looked for in here is the one the extractor will then parse it from.
+    const lookaheadStr = getDirective(directives, 'MAX_TIMESTAMP_LOOKAHEAD');
+    const parsedLookahead = lookaheadStr !== undefined ? parseInt(lookaheadStr.trim(), 10) : DEFAULT_TIMESTAMP_LOOKAHEAD;
+    const timestampLookahead =
+      Number.isFinite(parsedLookahead) && parsedLookahead > 0 ? parsedLookahead : DEFAULT_TIMESTAMP_LOOKAHEAD;
     const mustBreakAfterRegex = mustBreakAfterStr
       ? safeRegex(mustBreakAfterStr)
       : null;
@@ -354,7 +412,7 @@ export function breakLines(
     const canMerge =
       breakOnlyBeforeAnchoredRegex !== null || breakOnlyBeforeDate || mustBreakAfterRegex === null;
 
-    mergedSegments = [firstSegment];
+    mergedSegments = [{ ...firstSegment, lines: [firstSegment.text.length] }];
     let currentLineCount = countLines(firstSegment.text);
     let forceBreakNext = false;
     // MUST_NOT_BREAK_AFTER is stateful: once a line matches, rule-driven breaks
@@ -377,7 +435,7 @@ export function breakLines(
       const bobBreak =
         breakOnlyBeforeAnchoredRegex !== null && breakOnlyBeforeAnchoredRegex.test(seg.text);
       const dateBreak =
-        breakOnlyBeforeDate && DATE_LIKE_PATTERN !== null && DATE_LIKE_PATTERN.test(seg.text);
+        breakOnlyBeforeDate && lineHasDate(seg.text, timestampLookahead);
 
       let reason:
         | 'must-break-after'
@@ -404,12 +462,15 @@ export function breakLines(
       if (reason === 'max-events') maxEventsTriggered = true;
 
       if (reason !== null) {
-        mergedSegments.push({ text: seg.text, offset: seg.offset });
+        mergedSegments.push({ text: seg.text, offset: seg.offset, lines: [seg.text.length] });
         currentLineCount = segLines;
       } else {
         // Merge into previous
         const prev = mergedSegments.at(-1);
-        if (prev !== undefined) prev.text += '\n' + seg.text;
+        if (prev !== undefined) {
+          prev.text += '\n' + seg.text;
+          prev.lines.push(seg.text.length);
+        }
         currentLineCount += segLines;
       }
 
@@ -437,7 +498,7 @@ export function breakLines(
       start: lineAtOffset(newlines, seg.offset),
       end: lineAtOffset(newlines, seg.offset + seg.text.length),
     };
-    return {
+    const event: SplunkEvent = {
       _raw: seg.text,
       _time: null,
       _meta: {},
@@ -455,6 +516,8 @@ export function breakLines(
         },
       ],
     };
+    segmentLengths.set(event, seg.lines);
+    return event;
   });
 
   // Add a summary trace entry if merging occurred
