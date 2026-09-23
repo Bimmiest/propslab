@@ -35,9 +35,10 @@ const PATTERN_DEFAULT_PRIORITY = 0;
  *
  * Splunk's stanza pattern syntax is `...`, `*` and `?` for wildcards plus `|`
  * for alternation and `()` to scope it. A pattern carrying none of those matches
- * one exact string. Note a lone `.` is a literal dot in this syntax rather than
+ * one exact string; `\\` is an escape for one literal backslash, so it does not
+ * make a pattern. Note a lone `.` is a literal dot in this syntax rather than
  * a regex any-char, and a parenthesis with no partner is a literal character
- * too — both fall out of parseStanzaPattern.
+ * too — all three fall out of parseStanzaPattern.
  */
 function isLiteralPattern(pattern: string): boolean {
   const alternatives = parseStanzaPattern(pattern);
@@ -326,6 +327,19 @@ function parseStanzaPattern(pattern: string): PatternNode[][] {
         current = [];
         alternatives.push(current);
         pos++;
+      } else if (pattern.startsWith('\\\\', pos)) {
+        // props.conf.spec: "\\ = matches a literal backslash '\'". Treating each
+        // backslash as its own literal meant a Windows path written the way the
+        // spec says, `[source::C:\\logs\\app.log]`, looked for two backslashes
+        // per separator and never matched `C:\logs\app.log` (#303).
+        //
+        // A single backslash not followed by another stays a literal backslash,
+        // as it always was here: the spec defines no other escape, and configs
+        // written `C:\logs\app.log` match today, so reading a lone `\` as an
+        // escape would break them for no gain. One node, so the pair scores one
+        // literal character of specificity -- the one it matches.
+        current.push({ kind: 'literal', char: '\\' });
+        pos += 2;
       } else {
         // Includes an unpaired `(` or `)` — see above. A paired `)` is never
         // reached here: the group that owns it stops just before it.
