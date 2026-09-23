@@ -588,6 +588,7 @@ interface EvalCtx {
 const REGEX_FAILURE_RESULT: Readonly<Record<string, string>> = {
   replace: 'returned its input unchanged',
   match: 'evaluated to false',
+  like: 'evaluated to false',
   mvfind: 'evaluated to null',
 };
 
@@ -962,13 +963,22 @@ function evalBuiltin(fn: string, args: EvalValue[], ctx: EvalCtx): EvalValue {
     case 'false': return false;
     case 'like': {
       const value = toStr(args[0]);
-      // Escape regex metacharacters first, then translate SQL-style wildcards
+      // Escape regex metacharacters first, then translate SQL-style wildcards.
+      // A run of `%` collapses to ONE `.*` first. It means the same thing --
+      // any number of any-string wildcards in a row match any string -- but
+      // `.*.*` is exactly the adjacent-quantifier shape the ReDoS guard refuses,
+      // so `like(x, "a%%b")` compiled to nothing and quietly answered false for
+      // every event (#303). After the collapse the regex holds only literals,
+      // `.` and non-adjacent `.*`, which the guard accepts.
       const pattern = toStr(args[1])
         .replace(/[.+*?^${}()|[\]\\]/g, '\\$&')
-        .replace(/%/g, '.*')
+        .replace(/%+/g, '.*')
         .replace(/_/g, '.');
-      // Splunk's like() is case-sensitive.
-      const regex = safeRegex(`^${pattern}$`);
+      // Splunk's like() is case-sensitive. Compiled through evalRegex so that a
+      // pattern the guard still refuses is reported like replace()/match()/
+      // mvfind() are, rather than failing without a word; the message quotes
+      // the regex like() built, since that is what failed to compile.
+      const regex = evalRegex(ctx, 'like', `^${pattern}$`);
       return regex ? regex.test(value) : false;
     }
     case 'match': {
