@@ -1,5 +1,6 @@
 import type { ConfDirective, SplunkEvent, ValidationDiagnostic } from '../types';
 import { atDirective } from '../parser/provenance';
+import { effectiveDirective } from '../utils/directiveValues';
 
 const UNIT_MS: Record<string, number> = { s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 };
 
@@ -44,7 +45,7 @@ export function routeEventsByAge(
   diagnostics: ValidationDiagnostic[],
   now: number,
 ): SplunkEvent[] {
-  const dir = directives.filter((d) => d.key === 'ROUTE_EVENTS_OLDER_THAN').at(-1);
+  const dir = effectiveDirective(directives, 'ROUTE_EVENTS_OLDER_THAN');
   if (!dir) return events;
   const raw = dir.value.trim();
   // Empty is the default: the setting is off.

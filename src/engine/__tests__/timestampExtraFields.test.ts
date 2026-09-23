@@ -193,6 +193,13 @@ describe('DETERMINE_TIMESTAMP_DATE_WITH_SYSTEM_TIME (#273)', () => {
     ]);
   });
 
+  // `on` is the one Splunk true spelling this reader missed before the shared
+  // parser (#301); the rest it already accepted.
+  it.each(['on', 'yes', '1'])('reads %j as true, like every other boolean', (v) => {
+    const out = run(RAWS, [TIME_ONLY, dir('DETERMINE_TIMESTAMP_DATE_WITH_SYSTEM_TIME', v)]);
+    expect(out[1]?._time?.toISOString()).toBe('2026-08-04T01:00:00.000Z');
+  });
+
   it('treats a stamp just under three hours ahead as today', () => {
     const [e] = run(['03:29:59 x'], [TIME_ONLY, dir('DETERMINE_TIMESTAMP_DATE_WITH_SYSTEM_TIME', 'true')]);
     expect(e?._time?.toISOString()).toBe('2026-08-04T03:29:59.000Z');

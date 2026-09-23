@@ -2,6 +2,7 @@ import type { SplunkEvent, ConfDirective, ValidationDiagnostic } from '../types'
 import { flattenJson, flattenArray } from '../utils/flattenJson';
 import { hasField, setField, addFieldValue } from '../utils/fieldBag';
 import { cleanFieldKey } from '../transforms/regexTransform';
+import { effectiveBool, effectiveValue } from '../utils/directiveValues';
 import { parseXmlDocument, xmlChildElements, xmlTextContent, type XmlElement } from '../utils/xmlReader';
 
 export function applyKvMode(
@@ -9,21 +10,17 @@ export function applyKvMode(
   directives: ConfDirective[],
   diagnostics?: ValidationDiagnostic[],
 ): SplunkEvent[] {
-  const kvModeDir = directives.find((d) => d.key === 'KV_MODE');
-  const mode = kvModeDir?.value.trim().toLowerCase() ?? 'auto';
+  const mode = effectiveValue(directives, 'KV_MODE')?.toLowerCase() ?? 'auto';
 
   if (mode === 'none') return events;
 
   // AUTO_KV_JSON (default true): in auto / auto_escaped mode Splunk also extracts
   // JSON automatically when the whole event is JSON-formatted.
-  const autoKvJsonDir = directives.find((d) => d.key === 'AUTO_KV_JSON');
-  const autoKvJson = autoKvJsonDir ? autoKvJsonDir.value.trim().toLowerCase() !== 'false' : true;
+  const autoKvJson = effectiveBool(directives, 'AUTO_KV_JSON', true);
 
   // KV_TRIM_SPACES (default true) strips the outer spaces from an automatic
   // key=value value; only an explicit false keeps them.
-  const trimSpaces = !/^(?:false|f|0|no|n)$/i.test(
-    directives.find((d) => d.key === 'KV_TRIM_SPACES')?.value.trim() ?? '',
-  );
+  const trimSpaces = effectiveBool(directives, 'KV_TRIM_SPACES', true);
 
   // Collected across events: data that looks like JSON (see parseWholeJson) but
   // fails to parse. Surfaced as a single diagnostic so a malformed paste doesn't

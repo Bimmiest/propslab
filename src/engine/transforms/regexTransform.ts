@@ -4,6 +4,7 @@ import { longestPartialMatch, type NoOpReason } from '../noOpExplainer';
 import { stripLeadingUnderscoreForField } from '../utils/internalFields';
 import { getField, hasField, setField, addFieldValue } from '../utils/fieldBag';
 import { getSourceKeyValue } from '../utils/metadataFields';
+import { effectiveDirective, parseSplunkBool } from '../utils/directiveValues';
 
 export interface TransformResult {
   fields: Record<string, string | string[]>;
@@ -66,14 +67,6 @@ function getCompiledRegex(transformStanza: ConfStanza, jsPattern: string): Compi
   return result;
 }
 
-/** Last directive with the given key in a stanza (Splunk last-definition-wins), or undefined. */
-function lastDirective(stanza: ConfStanza, key: string): ConfDirective | undefined {
-  for (let i = stanza.directives.length - 1; i >= 0; i--) {
-    const directive = stanza.directives[i];
-    if (directive?.key === key) return directive;
-  }
-  return undefined;
-}
 
 /** One `key::value` token from a search-time FORMAT, still holding its `$N` references. */
 interface FormatPair {
@@ -280,10 +273,9 @@ function keyCleaner(
   if (phase === 'index-time') {
     return (raw) => (writeMeta ? stripLeadingUnderscoreForField(raw.trim()) : raw.trim());
   }
-  // Splunk reads this as a boolean, so `0`/`false` turn cleaning off and
+  // Splunk reads this as a boolean, so a false spelling turns cleaning off and
   // anything else (including an absent directive) leaves it on.
-  const declared = lastDirective(stanza, 'CLEAN_KEYS')?.value.trim().toLowerCase();
-  const cleanKeys = !(declared === 'false' || declared === '0');
+  const cleanKeys = parseSplunkBool(effectiveDirective(stanza.directives, 'CLEAN_KEYS')?.value, true);
   return (raw) => (cleanKeys ? cleanFieldKey(raw.trim()) : raw.trim());
 }
 
@@ -326,7 +318,7 @@ function applyDelimsExtraction(
       addMultiValue(result.fields, key, value);
     }
   } else {
-    const fieldsDir = lastDirective(stanza, 'FIELDS');
+    const fieldsDir = effectiveDirective(stanza.directives, 'FIELDS');
     if (!fieldsDir) return result;
     const names = parseDelimList(fieldsDir.value);
     const values = splitOnAnyChar(sourceValue, delimSets[0] ?? '');
@@ -350,16 +342,15 @@ export function applyRegexTransform(
 ): TransformResult {
   // Splunk's last-definition-wins rule: a repeated key within a stanza (including
   // one produced by merging duplicate same-name stanzas) takes its LAST value.
-  const regexDir = lastDirective(transformStanza, 'REGEX');
-  const formatDir = lastDirective(transformStanza, 'FORMAT');
-  const sourceKeyDir = lastDirective(transformStanza, 'SOURCE_KEY');
+  const regexDir = effectiveDirective(transformStanza.directives, 'REGEX');
+  const formatDir = effectiveDirective(transformStanza.directives, 'FORMAT');
+  const sourceKeyDir = effectiveDirective(transformStanza.directives, 'SOURCE_KEY');
   // DEST_KEY is index-time only (transforms.conf.spec: "only relevant for
   // index-time field extractions"). Reached through a search-time REPORT-, the
   // stanza performs field extraction and nothing else — so FORMAT is read as
   // `field::value` pairs, exactly as it would be with no DEST_KEY present.
-  const destKeyDir = phase === 'index-time' ? lastDirective(transformStanza, 'DEST_KEY') : undefined;
-  const writeMetaDir = lastDirective(transformStanza, 'WRITE_META');
-  const writeMeta = writeMetaDir?.value.trim().toLowerCase() === 'true';
+  const destKeyDir = phase === 'index-time' ? effectiveDirective(transformStanza.directives, 'DEST_KEY') : undefined;
+  const writeMeta = parseSplunkBool(effectiveDirective(transformStanza.directives, 'WRITE_META')?.value, false);
   // REPEAT_MATCH: re-run the regex to find every match (default: first match only).
   // MV_ADD: when a field is extracted more than once, accumulate into a multivalue
   // field rather than discarding the later value (default: keep the first).
@@ -368,7 +359,7 @@ export function applyRegexTransform(
   // as valid only for search-time field extractions, so an index-time
   // TRANSFORMS- pass ignores it rather than quietly honouring a setting real
   // Splunk drops. transformsProcessor warns when a stanza is used that way.
-  const repeatMatch = lastDirective(transformStanza, 'REPEAT_MATCH')?.value.trim().toLowerCase() === 'true';
+  const repeatMatch = parseSplunkBool(effectiveDirective(transformStanza.directives, 'REPEAT_MATCH')?.value, false);
   // Whether REGEX is run across the whole source or once. REPEAT_MATCH is
   // documented as index-time only, and there it is the switch: without it the
   // REGEX runs once. At search time it is inert, yet Splunk still extracts every
@@ -378,8 +369,7 @@ export function applyRegexTransform(
   // later values are kept (#285).
   const scanAll = phase === 'search-time' || repeatMatch;
   const mvAdd =
-    phase === 'search-time' &&
-    lastDirective(transformStanza, 'MV_ADD')?.value.trim().toLowerCase() === 'true';
+    phase === 'search-time' && parseSplunkBool(effectiveDirective(transformStanza.directives, 'MV_ADD')?.value, false);
 
   const result: TransformResult = { fields: {}, matched: false };
   const cleanName = keyCleaner(transformStanza, writeMeta, phase);
@@ -388,7 +378,7 @@ export function applyRegexTransform(
   // search-time only, so an index-time reference to a DELIMS stanza extracts
   // nothing at all. Falling through to the REGEX branch is correct: a DELIMS
   // stanza has no REGEX, so the transform does nothing.
-  const delimsDir = phase === 'search-time' ? lastDirective(transformStanza, 'DELIMS') : undefined;
+  const delimsDir = phase === 'search-time' ? effectiveDirective(transformStanza.directives, 'DELIMS') : undefined;
   if (delimsDir) {
     return applyDelimsExtraction(event, transformStanza, delimsDir, sourceKeyDir, cleanName);
   }
@@ -402,7 +392,7 @@ export function applyRegexTransform(
   // default rather than to "no limit".
   let sourceValue = resolveSourceValue(event, sourceKeyDir);
   if (phase === 'index-time') {
-    const lookaheadRaw = lastDirective(transformStanza, 'LOOKAHEAD')?.value.trim();
+    const lookaheadRaw = effectiveDirective(transformStanza.directives, 'LOOKAHEAD')?.value.trim();
     const parsedLookahead = lookaheadRaw !== undefined ? parseInt(lookaheadRaw, 10) : NaN;
     const lookahead = Number.isFinite(parsedLookahead) && parsedLookahead > 0 ? parsedLookahead : 4096;
     if (sourceValue.length > lookahead) sourceValue = sourceValue.slice(0, lookahead);
@@ -431,7 +421,7 @@ export function applyRegexTransform(
     // to DEST_KEY instead of doing nothing, so the destination is written for
     // every event. `matched` doubles as "has an effect to route" for the caller.
     const defaultValue =
-      phase === 'index-time' ? lastDirective(transformStanza, 'DEFAULT_VALUE')?.value.trim() : undefined;
+      phase === 'index-time' ? effectiveDirective(transformStanza.directives, 'DEFAULT_VALUE')?.value.trim() : undefined;
     const destKeyForDefault = destKeyDir?.value.trim();
     if (defaultValue !== undefined && defaultValue !== '' && destKeyForDefault) {
       result.matched = true;

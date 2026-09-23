@@ -26,6 +26,7 @@ import type { ConfDirective, SplunkEvent, ValidationDiagnostic } from '../types'
 import { setField } from '../utils/fieldBag';
 import { atDirective } from '../parser/provenance';
 import { parseXmlDocument, xmlChildElements, type XmlElement } from '../utils/xmlReader';
+import { effectiveDirective, parseSplunkBool } from '../utils/directiveValues';
 
 export type XmlIndexedMode = 'xml' | 'xmlkv' | 'xmlkv-winevt';
 
@@ -59,7 +60,7 @@ export function extractXmlIndexed(
   mode: XmlIndexedMode,
   diagnostics?: ValidationDiagnostic[],
 ): SplunkEvent[] {
-  const find = (key: string) => directives.find((d) => d.key === key);
+  const find = (key: string) => effectiveDirective(directives, key);
 
   // The spec makes XML_INDEXED_EXTRACTIONS_PIPELINE the switch for the XML
   // values of INDEXED_EXTRACTIONS, not only a routing choice: without it they
@@ -133,7 +134,6 @@ function xmlOptions(find: (key: string) => ConfDirective | undefined, mode: XmlI
     const n = parseInt(find(key)?.value.trim() ?? '', 10);
     return Number.isFinite(n) && n >= 0 ? n : fallback;
   };
-  const skipRaw = find('XML_IE_SKIP_XML_ENCODED_VALS')?.value.trim().toLowerCase();
   return {
     include: list('XML_IE_INCLUDE', '*'),
     exclude: list('XML_IE_EXCLUDE', ''),
@@ -141,7 +141,7 @@ function xmlOptions(find: (key: string) => ConfDirective | undefined, mode: XmlI
     excludeMv: list('XML_IE_EXCLUDE_MV', ''),
     excludeVals: list('XML_IE_EXCLUDE_VALS', ''),
     // Default true, and the spec confines it to xmlkv-winevt.
-    skipEncoded: mode === 'xmlkv-winevt' && skipRaw !== 'false',
+    skipEncoded: mode === 'xmlkv-winevt' && parseSplunkBool(find('XML_IE_SKIP_XML_ENCODED_VALS')?.value, true),
     maxValueBytes: int('XML_IE_MAX_EXTRACTED_VALUE_SIZE', 1000),
     cutoffBytes: int('extraction_cutoff', 10000),
   };

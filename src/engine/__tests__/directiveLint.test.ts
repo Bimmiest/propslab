@@ -77,7 +77,9 @@ describe('#179 — a value that is not the documented type', () => {
   });
 
   it('accepts every boolean spelling Splunk does', () => {
-    for (const v of ['true', 'False', '1', '0', 't', 'f', 'yes', 'no']) {
+    // y/n/on/off joined the list when the engine and the linter began sharing
+    // one boolean reader (#301): the engine honoured them, the linter did not.
+    for (const v of ['true', 'False', '1', '0', 't', 'f', 'yes', 'no', 'y', 'n', 'on', 'off']) {
       const msgs = messagesFor(`SHOULD_LINEMERGE = ${v}\n`);
       expect(msgs.filter((m) => m.includes('takes a boolean')), `for ${v}`).toEqual([]);
     }

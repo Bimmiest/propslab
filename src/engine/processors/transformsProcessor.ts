@@ -8,6 +8,7 @@ import { byClassName } from '../utils/asciiCompare';
 import { changeWindow } from '../utils/changeWindow';
 import { SIMULATED_DEST_KEYS, VALID_UNSIMULATED_DEST_KEYS, normaliseDestKey } from '../transforms/destKeys';
 import { atDirective, atStanza } from '../parser/provenance';
+import { effectiveDirective, parseSplunkBool } from '../utils/directiveValues';
 
 // A DEST_KEY=_raw transform that shrinks the event by at least this fraction is
 // treated as accidental data loss (FORMAT did not reproduce the rest of the line).
@@ -17,10 +18,11 @@ const RAW_LOSS_THRESHOLD = 0.3;
  * Locate a diagnostic at a named directive in a transform stanza, falling back
  * to the stanza header when the stanza does not carry that key. Both carry the
  * layer they came from, so the position stays unambiguous when the conf was read
- * as default/ + local/.
+ * as default/ + local/ — and it is the effective (last) definition, the one the
+ * transform actually ran, rather than a shadowed one above it.
  */
 function positionOfKeyOrStanza(stanza: ParsedConf['stanzas'][number], key: string) {
-  const directive = stanza.directives.find((d) => d.key === key);
+  const directive = effectiveDirective(stanza.directives, key);
   return directive ? atDirective(directive) : atStanza(stanza);
 }
 
@@ -228,7 +230,7 @@ export function applyTransforms(
           // config through the per-event path for any event whose metadata changed.
           const cloneType =
             phase === 'index-time'
-              ? transformStanza.directives.filter((d) => d.key === 'CLONE_SOURCETYPE').at(-1)?.value.trim()
+              ? effectiveDirective(transformStanza.directives, 'CLONE_SOURCETYPE')?.value.trim()
               : undefined;
           if (cloneType) {
             clones.push({
@@ -265,13 +267,7 @@ export function applyTransforms(
  * with the extraction about a stanza that sets it twice.
  */
 function stanzaWritesMeta(transformStanza: ParsedConf['stanzas'][number]): boolean {
-  return (
-    transformStanza.directives
-      .filter((d) => d.key === 'WRITE_META')
-      .at(-1)
-      ?.value.trim()
-      .toLowerCase() === 'true'
-  );
+  return parseSplunkBool(effectiveDirective(transformStanza.directives, 'WRITE_META')?.value, false);
 }
 
 /**
@@ -364,7 +360,7 @@ function warnSearchTimeDestKey(
   warned: Set<string>,
 ): void {
   if (warned.has(stanzaName)) return;
-  const destKeyDir = [...transformStanza.directives].reverse().find((d) => d.key === 'DEST_KEY');
+  const destKeyDir = effectiveDirective(transformStanza.directives, 'DEST_KEY');
   if (!destKeyDir) return;
   warned.add(stanzaName);
   const destKey = destKeyDir.value.trim();
@@ -398,7 +394,7 @@ function warnSearchTimeNoFormat(
   if (has('FORMAT') || has('DELIMS')) return;
   // A named group that simply did not participate in this match also leaves
   // `fields` empty; that is data, not config, so stay quiet for it.
-  const regex = transformStanza.directives.filter((d) => d.key === 'REGEX').at(-1)?.value ?? '';
+  const regex = effectiveDirective(transformStanza.directives, 'REGEX')?.value ?? '';
   if (/\(\?P?<(?![=!])/.test(regex)) return;
   warned.add(stanzaName);
   diagnostics.push({
@@ -425,7 +421,7 @@ function warnUnknownDestKey(
   if (SIMULATED_DEST_KEYS.has(normalized) || warned.has(stanzaName)) return;
   warned.add(stanzaName);
 
-  const line = transformStanza.directives.find((d) => d.key === 'DEST_KEY')?.line ?? transformStanza.lineRange.start;
+  const line = effectiveDirective(transformStanza.directives, 'DEST_KEY')?.line ?? transformStanza.lineRange.start;
   if (VALID_UNSIMULATED_DEST_KEYS.has(normalized)) {
     diagnostics.push({
       level: 'info',

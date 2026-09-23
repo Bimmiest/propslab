@@ -3,6 +3,7 @@ import { evaluateExpression, regexFailureMessage } from '../processors/evalProce
 import { stripLeadingUnderscoreForField } from '../utils/internalFields';
 import { deleteField, setField } from '../utils/fieldBag';
 import { atDirective } from '../parser/provenance';
+import { effectiveDirective } from '../utils/directiveValues';
 
 // Split "field=expr, field2=fn(a,b)" on top-level commas only — not inside parens
 // and not inside a string literal (e.g. msg="a,b" must stay one assignment).
@@ -46,7 +47,7 @@ export function applyIngestEval(
   // A stanza may repeat INGEST_EVAL; Splunk's last-definition-wins rule means
   // only the final directive applies (each may still hold several comma-separated
   // assignments, all of which run).
-  const lastIngestEval = directives.filter((d) => d.key === 'INGEST_EVAL').at(-1);
+  const lastIngestEval = effectiveDirective(directives, 'INGEST_EVAL');
   if (lastIngestEval === undefined) return events;
   const ingestEvalDirs = [lastIngestEval];
 

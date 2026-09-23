@@ -5,13 +5,14 @@ import { safeRegex } from '../../utils/splunkRegex';
 import { atDirective } from '../parser/provenance';
 import { extractTimestamps } from './timestampExtractor';
 import { extractXmlIndexed } from './xmlIndexedExtractions';
+import { effectiveBool, effectiveDirective } from '../utils/directiveValues';
 
 export function applyIndexedExtractions(
   events: SplunkEvent[],
   directives: ConfDirective[],
   diagnostics?: ValidationDiagnostic[],
 ): SplunkEvent[] {
-  const extractionDir = directives.find((d) => d.key === 'INDEXED_EXTRACTIONS');
+  const extractionDir = effectiveDirective(directives, 'INDEXED_EXTRACTIONS');
   if (!extractionDir) return events;
 
   const mode = extractionDir.value.trim().toLowerCase();
@@ -37,8 +38,7 @@ export function applyIndexedExtractions(
 }
 
 function extractJsonFields(events: SplunkEvent[], directives: ConfDirective[]): SplunkEvent[] {
-  const trimArrayBraces =
-    directives.find((d) => d.key === 'JSON_TRIM_BRACES_IN_ARRAY_NAMES')?.value.trim().toLowerCase() === 'true';
+  const trimArrayBraces = effectiveBool(directives, 'JSON_TRIM_BRACES_IN_ARRAY_NAMES', false);
   return events.map((event) => {
     try {
       const obj: unknown = JSON.parse(event._raw);
@@ -158,7 +158,7 @@ function delimitedOptions(
   defaultDelimiter: string,
   diagnostics?: ValidationDiagnostic[],
 ): DelimitedOptions {
-  const find = (key: string) => directives.find((d) => d.key === key);
+  const find = (key: string) => effectiveDirective(directives, key);
 
   const body: LineSyntax = { delimiter: defaultDelimiter, whitespaceDelimiter: false, quote: '"' };
   applySyntaxOverrides(body, find('FIELD_DELIMITER'), find('FIELD_QUOTE'));

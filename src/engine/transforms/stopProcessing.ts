@@ -1,6 +1,7 @@
 import type { ConfDirective, SplunkEvent, ValidationDiagnostic } from '../types';
 import { evaluateExpression, regexFailureMessage } from '../processors/evalProcessor';
 import { atDirective } from '../parser/provenance';
+import { effectiveDirective } from '../utils/directiveValues';
 
 /**
  * How transforms.conf.spec reads a STOP_PROCESSING_IF result: "numeric 0 and
@@ -37,7 +38,7 @@ export function evaluateStopCondition(
   now: number,
 ): { stop: boolean; expression: string } | undefined {
   // Last definition wins, as for every other transforms setting.
-  const dir = stanzaDirectives.filter((d) => d.key === 'STOP_PROCESSING_IF').at(-1);
+  const dir = effectiveDirective(stanzaDirectives, 'STOP_PROCESSING_IF');
   if (!dir) return undefined;
   const expression = dir.value.trim();
   if (expression === '') return undefined;

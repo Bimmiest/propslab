@@ -1,5 +1,6 @@
 import type { ConfStanza, EventMetadata } from '../types';
 import { safeRegex, escapeRegex } from '../../utils/splunkRegex';
+import { effectiveDirective, parseSplunkBool } from '../utils/directiveValues';
 
 // Splunk stanza precedence (highest wins): source > host > sourcetype > default
 const STANZA_PRIORITY: Record<ConfStanza['type'], number> = {
@@ -67,11 +68,6 @@ function defaultPriority(stanza: ConfStanza): number {
   }
 }
 
-/** Splunk's boolean spellings. Anything unrecognised reads as false, as it does there. */
-function isTruthy(value: string): boolean {
-  return ['1', 'true', 't', 'yes', 'y', 'on'].includes(value.trim().toLowerCase());
-}
-
 /**
  * A stanza switched off with `disabled = 1` takes no part in resolution at all.
  *
@@ -80,13 +76,13 @@ function isTruthy(value: string): boolean {
  * `default/` disabled is the whole point of writing it.
  */
 export function isStanzaDisabled(stanza: ConfStanza): boolean {
-  const declared = stanza.directives.filter((d) => d.key === 'disabled').at(-1);
-  return declared !== undefined && isTruthy(declared.value);
+  // Anything that is not a boolean spelling reads as false, as it does there.
+  return parseSplunkBool(effectiveDirective(stanza.directives, 'disabled')?.value, false);
 }
 
 /** The effective precedence number for a stanza: explicit `priority`, or its kind's default. */
 function stanzaPriority(stanza: ConfStanza): number {
-  const declared = stanza.directives.filter((d) => d.key === 'priority').at(-1);
+  const declared = effectiveDirective(stanza.directives, 'priority');
   if (declared) {
     const parsed = Number.parseInt(declared.value.trim(), 10);
     // A malformed priority is ignored rather than treated as 0, which would
@@ -205,8 +201,8 @@ export function resolveStanzasForEvent(
   // uses `rename` for that instead.
   const assignment = first
     .filter((s) => s.type === 'source' || s.type === 'host')
-    .flatMap((s) => s.directives.filter((d) => d.key === 'sourcetype').slice(-1))
-    .at(0);
+    .map((s) => effectiveDirective(s.directives, 'sourcetype'))
+    .find((d) => d !== undefined);
 
   const assigned = assignment?.value.trim();
   if (!assigned || assigned === metadata.sourcetype) {
@@ -232,8 +228,7 @@ export function resolveStanzasForEvent(
  */
 export function getRenamedSourcetype(matchedStanzas: ConfStanza[]): string | undefined {
   for (const stanza of matchedStanzas) {
-    const declared = stanza.directives.filter((d) => d.key === 'rename').at(-1);
-    const value = declared?.value.trim();
+    const value = effectiveDirective(stanza.directives, 'rename')?.value.trim();
     if (value) return value;
   }
   return undefined;
@@ -416,10 +411,7 @@ function getPatternSpecificity(pattern: string): number {
  */
 export function getDirectiveValue(stanzas: ConfStanza[], key: string): string | undefined {
   for (const stanza of stanzas) {
-    let value: string | undefined;
-    for (const directive of stanza.directives) {
-      if (directive.key === key) value = directive.value;
-    }
+    const value = effectiveDirective(stanza.directives, key)?.value;
     if (value !== undefined) return value;
   }
   return undefined;

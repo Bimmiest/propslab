@@ -4,6 +4,7 @@ import { SIMULATED_DEST_KEYS, VALID_UNSIMULATED_DEST_KEYS, normaliseDestKey } fr
 import { getDirectiveSupport, isUndocumentedAttribute } from './directiveSupport';
 import { wrongFileCanonical, WRONG_FILE_MESSAGE } from './directiveRegistry';
 import { lintInertTransformSettings, lintDirectiveValues } from './directiveLint';
+import { effectiveBool, effectiveDirective } from './utils/directiveValues';
 
 // Config lint: the diagnostics `runPipeline` reports about the conf files
 // themselves, split out of the pipeline so that file reads as the order of
@@ -133,8 +134,8 @@ export function lintConfigs(
     // Last definition wins, as it does at runtime: with default/ + local/
     // layers the effective FORMAT is the local one, and linting the default's
     // would warn about a line that no longer applies (or miss the one that does).
-    const destKeyDir = stanza.directives.filter((d) => d.key === 'DEST_KEY').at(-1);
-    const formatDir = stanza.directives.filter((d) => d.key === 'FORMAT').at(-1);
+    const destKeyDir = effectiveDirective(stanza.directives, 'DEST_KEY');
+    const formatDir = effectiveDirective(stanza.directives, 'FORMAT');
     if (!destKeyDir) continue;
 
     // Normalise the _MetaData: alias the same way the router does.
@@ -250,12 +251,13 @@ export function lintMatchedDirectives(
   // Splunk extracts the fields at BOTH index time and search time, producing duplicate
   // (multivalue) values. The simulator currently suppresses the duplicate in the preview,
   // so without this warning an operator could ship a config that misbehaves in Splunk.
-  const indexedExtJson = directives.find((d) => d.key === 'INDEXED_EXTRACTIONS')?.value.trim().toLowerCase() === 'json';
-  if (indexedExtJson) {
-    const kvModeDir = directives.find((d) => d.key === 'KV_MODE');
+  const indexedExtDir = effectiveDirective(directives, 'INDEXED_EXTRACTIONS');
+  if (indexedExtDir?.value.trim().toLowerCase() === 'json') {
+    const kvModeDir = effectiveDirective(directives, 'KV_MODE');
     const kvMode = kvModeDir?.value.trim().toLowerCase();
-    const autoKvJsonDir = directives.find((d) => d.key === 'AUTO_KV_JSON');
-    const autoKvJson = autoKvJsonDir ? autoKvJsonDir.value.trim().toLowerCase() !== 'false' : true;
+    // Read exactly as applyKvMode reads it, so the warning fires only when the
+    // search-time extraction it describes would actually run.
+    const autoKvJson = effectiveBool(directives, 'AUTO_KV_JSON', true);
     const searchTimeJson =
       kvMode === 'json' ||
       ((kvMode === undefined || kvMode === 'auto' || kvMode === 'auto_escaped') && autoKvJson);
@@ -267,7 +269,7 @@ export function lintMatchedDirectives(
           `INDEXED_EXTRACTIONS = json already extracts fields at index time, but ${kvDesc} extracts them again at search time. ` +
           'In Splunk this produces duplicate (multivalue) field values. Set KV_MODE = none for this sourcetype when using INDEXED_EXTRACTIONS = json.',
         file: 'props.conf',
-        ...atDirective(kvModeDir ?? directives.find((d) => d.key === 'INDEXED_EXTRACTIONS')),
+        ...atDirective(kvModeDir ?? indexedExtDir),
       });
     }
   }

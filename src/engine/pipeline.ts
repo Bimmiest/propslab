@@ -16,6 +16,7 @@ import { applyFieldAliases } from './processors/fieldAlias';
 import { applyEvalExpressions } from './processors/evalProcessor';
 import { attributeRawMutations } from './processors/rawMutationAttribution';
 import { lintConfigs, lintMatchedDirectives } from './configLint';
+import { effectiveDirective } from './utils/directiveValues';
 
 function safeProcessor(
   name: string,
@@ -167,7 +168,7 @@ export function runPipeline(
   // Real Splunk implicitly sets SHOULD_LINEMERGE=false when INDEXED_EXTRACTIONS is a
   // structured format (csv/tsv/psv/w3c), so each line becomes its own event.
   const STRUCTURED_EXTRACTIONS = new Set(['csv', 'tsv', 'psv', 'w3c']);
-  const indexedExtDir = directives.find((d) => d.key === 'INDEXED_EXTRACTIONS');
+  const indexedExtDir = effectiveDirective(directives, 'INDEXED_EXTRACTIONS');
   const lineBreakDirectives =
     indexedExtDir && STRUCTURED_EXTRACTIONS.has(indexedExtDir.value.trim().toLowerCase()) &&
     !directives.some((d) => d.key === 'SHOULD_LINEMERGE')

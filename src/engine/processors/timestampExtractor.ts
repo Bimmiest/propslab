@@ -9,6 +9,7 @@ import {
 } from '../../utils/strftime';
 import { atDirective } from '../parser/provenance';
 import { setField } from '../utils/fieldBag';
+import { effectiveBool, effectiveDirective, effectiveValue } from '../utils/directiveValues';
 
 /**
  * Priority-ordered formats for automatic timestamp recognition when no
@@ -162,14 +163,6 @@ function wallDate(parsed: ParsedTimestamp): CalendarDate {
   return { year: wall.getUTCFullYear(), month: wall.getUTCMonth(), day: wall.getUTCDate() };
 }
 
-/**
- * Whether a boolean directive reads as true. The spellings are Splunk's
- * conf-file booleans; anything else is the default, false.
- */
-function isTrue(value: string | undefined): boolean {
-  return /^(?:true|t|1|yes|y)$/i.test(value?.trim() ?? '');
-}
-
 /** How far ahead of the clock a dateless stamp may be and still be today. */
 const DATELESS_TODAY_WINDOW_MS = 3 * 3_600_000;
 
@@ -191,7 +184,7 @@ function numericDirective(
   directives: ConfDirective[],
   key: keyof typeof BOUND_DEFAULTS,
 ): number {
-  const raw = directives.find((d) => d.key === key)?.value.trim();
+  const raw = effectiveValue(directives, key);
   if (raw === undefined) return BOUND_DEFAULTS[key];
   const parsed = parseInt(raw, 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : BOUND_DEFAULTS[key];
@@ -224,16 +217,14 @@ export function extractTimestamps(
    */
   now: Date = new Date(),
 ): SplunkEvent[] {
-  const timePrefixDir = directives.find((d) => d.key === 'TIME_PREFIX');
-  const timeFormatDir = directives.find((d) => d.key === 'TIME_FORMAT');
-  const maxLookaheadDir = directives.find((d) => d.key === 'MAX_TIMESTAMP_LOOKAHEAD');
-  const tzDir = directives.find((d) => d.key === 'TZ');
-  const tzAliasDir = directives.find((d) => d.key === 'TZ_ALIAS');
-  const datetimeConfigDir = directives.find((d) => d.key === 'DATETIME_CONFIG');
-  const extraMode = resolveExtraTimeFields(directives.find((d) => d.key === 'ADD_EXTRA_TIME_FIELDS')?.value);
-  const datelessFromSystem = isTrue(
-    directives.find((d) => d.key === 'DETERMINE_TIMESTAMP_DATE_WITH_SYSTEM_TIME')?.value,
-  );
+  const timePrefixDir = effectiveDirective(directives, 'TIME_PREFIX');
+  const timeFormatDir = effectiveDirective(directives, 'TIME_FORMAT');
+  const maxLookaheadDir = effectiveDirective(directives, 'MAX_TIMESTAMP_LOOKAHEAD');
+  const tzDir = effectiveDirective(directives, 'TZ');
+  const tzAliasDir = effectiveDirective(directives, 'TZ_ALIAS');
+  const datetimeConfigDir = effectiveDirective(directives, 'DATETIME_CONFIG');
+  const extraMode = resolveExtraTimeFields(effectiveDirective(directives, 'ADD_EXTRA_TIME_FIELDS')?.value);
+  const datelessFromSystem = effectiveBool(directives, 'DETERMINE_TIMESTAMP_DATE_WITH_SYSTEM_TIME', false);
 
   // `none` drops the sub-second part of `_time` along with the fields, so the
   // event is placed to the second -- the storage saving the setting exists for.
