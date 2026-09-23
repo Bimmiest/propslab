@@ -146,6 +146,16 @@ describe('applyKvMode — a leading [ is not by itself JSON (#289)', () => {
     expect(diagnostics).toHaveLength(0);
   });
 
+  it('does not warn about a bracketed timestamp, which starts with a digit', () => {
+    const diagnostics: ValidationDiagnostic[] = [];
+    applyKvMode(
+      [event('[2026-01-15 10:00:00] started'), event('[1737000000] tick')],
+      [dir('json')],
+      diagnostics,
+    );
+    expect(diagnostics).toHaveLength(0);
+  });
+
   it('still extracts key=value pairs after a bracketed prefix', () => {
     const r = applyKvMode([event('[INFO] user=alice status=ok')], [dir('auto')])[0]!;
     expect(r.fields['user']).toBe('alice');
@@ -155,13 +165,13 @@ describe('applyKvMode — a leading [ is not by itself JSON (#289)', () => {
   it.each([
     ['an object', '[{"a":<ID>}]'],
     ['a nested array', '[[1,2]'],
-    ['a string', '["a",'],
-    ['a number', '[1,'],
-    ['a negative number', '[-1,'],
-    ['true', '[true,'],
-    ['false', '[ false,'],
-    ['null', '[\n null,'],
-    ['an unclosed empty array', '[ ],'],
+    ['a string', '["a",]'],
+    ['a number', '[1,]'],
+    ['a negative number', '[-1,]'],
+    ['true', '[true,]'],
+    ['false', '[ false,]'],
+    ['null', '[\n null,]'],
+    ['an empty array', '[ ],]'],
   ])('warns when a malformed array starts with %s', (_label, raw) => {
     const diagnostics: ValidationDiagnostic[] = [];
     applyKvMode([event(raw)], [dir('json')], diagnostics);

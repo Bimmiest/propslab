@@ -142,8 +142,13 @@ function parseWholeJson(raw: string): WholeJsonResult {
   // bracketed log prefixes begin with one, and treating them as candidates
   // raised a "not valid JSON" warning on ordinary events (#289). Only an `[`
   // followed by something that can start a JSON value -- or close an empty
-  // array -- is plausibly an array.
-  const looksLikeJson = trimmed.startsWith('{') || /^\[\s*[{["\d\-tfn\]]/.test(trimmed);
+  // array -- is plausibly an array. That still admits a bracketed timestamp
+  // (`[2026-01-15 10:00:00] msg` starts with a digit), which is commoner than
+  // `[INFO]`, so an array must also end with `]`. The cost is that a truncated
+  // array no longer warns; a truncated object still does, and whole-event
+  // arrays are the rarer shape.
+  const looksLikeJson =
+    trimmed.startsWith('{') || (/^\[\s*[{["\d\-tfn\]]/.test(trimmed) && trimmed.endsWith(']'));
   if (!looksLikeJson) return { kind: 'notJson' };
   try {
     return { kind: 'parsed', value: JSON.parse(trimmed) };
