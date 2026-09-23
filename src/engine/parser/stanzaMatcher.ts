@@ -36,10 +36,12 @@ const PATTERN_DEFAULT_PRIORITY = 0;
  * Splunk's stanza pattern syntax is `...`, `*` and `?` for wildcards plus `|`
  * for alternation and `()` to scope it. A pattern carrying none of those matches
  * one exact string. Note a lone `.` is a literal dot in this syntax rather than
- * a regex any-char, which is why it is absent here — see getPatternSpecificity.
+ * a regex any-char, and a parenthesis with no partner is a literal character
+ * too — both fall out of parseStanzaPattern.
  */
 function isLiteralPattern(pattern: string): boolean {
-  return !/[*?|()]/.test(pattern) && !pattern.includes('...');
+  const alternatives = parseStanzaPattern(pattern);
+  return alternatives.length === 1 && (alternatives[0] ?? []).every((node) => node.kind === 'literal');
 }
 
 /** The default `priority` a stanza carries when it declares none. */
@@ -243,10 +245,11 @@ export function getRenamedSourcetype(matchedStanzas: ConfStanza[]): string | und
  * or `u`, and stanza matching runs per event.
  *
  * Equivalent *here* specifically because `patternToRegex` can only emit `.*`,
- * `[^/\\]*`, `[^/\\]` and `escapeRegex(char)`, and `escapeRegex` only ever
- * backslashes a metacharacter — none of which are letters. So there is no
- * case-bearing escape (`\w`, `\W`, `\s`, `\S`) for lower-casing to invert — a
- * risk that would be real if this built patterns from arbitrary regex source.
+ * `[^/\\]*`, `[^/\\]`, `(?:`, `|`, `)` and `escapeRegex(char)`, and
+ * `escapeRegex` only ever backslashes a metacharacter — none of which are
+ * letters. So there is no case-bearing escape (`\w`, `\W`, `\s`, `\S`) for
+ * lower-casing to invert — a risk that would be real if this built patterns
+ * from arbitrary regex source.
  *
  * The residue is Unicode case folding: `toLowerCase()` and the `'i'` flag
  * disagree on a handful of characters (Turkish dotless i, `ß`/`SS`). Splunk
@@ -256,51 +259,135 @@ export function getRenamedSourcetype(matchedStanzas: ConfStanza[]): string | und
 function matchPattern(value: string, pattern: string, caseInsensitive: boolean): boolean {
   const subject = caseInsensitive ? value.toLowerCase() : value;
   const spec = caseInsensitive ? pattern.toLowerCase() : pattern;
-  const regex = safeRegex(`^${patternToRegex(spec)}$`);
+  // The group matters: a top-level `a|b` would otherwise anchor only `a` at the
+  // start and only `b` at the end.
+  const regex = safeRegex(`^(?:${patternToRegex(spec)})$`);
   if (regex) return regex.test(subject);
   return subject === spec;
 }
 
-function patternToRegex(pattern: string): string {
-  let result = '';
-  let i = 0;
-  while (i < pattern.length) {
-    if (pattern.substring(i, i + 3) === '...') {
-      result += '.*';
-      i += 3;
-    } else if (pattern[i] === '*') {
-      result += '[^/\\\\]*';
-      i++;
-    } else if (pattern[i] === '?') {
-      result += '[^/\\\\]';
-      i++;
-    } else {
-      result += escapeRegex(pattern.charAt(i));
-      i++;
+/**
+ * One element of a parsed stanza pattern. A pattern is a list of alternatives
+ * (split on `|`), each a sequence of these.
+ */
+type PatternNode =
+  | { kind: 'literal'; char: string }
+  | { kind: 'wildcard'; regex: string }
+  | { kind: 'group'; alternatives: PatternNode[][] };
+
+/**
+ * Parse a `source::`/`host::` pattern once, so matching, specificity and the
+ * literal/pattern test all read the same tokenisation — they disagreed before
+ * (#30.1), and a second syntax is a second chance for that.
+ *
+ * props.conf.spec: "`|` is equivalent to 'or'. `( )` are used to limit scope
+ * of `|`." Both were escaped as literal characters, so
+ * `[source::/var/log/(messages|secure)]` matched only a file literally named
+ * `(messages|secure)` and never `/var/log/secure` (#284).
+ *
+ * Parentheses are paired up front. One with no partner — `app(1.log` — is kept
+ * as a literal character rather than rejected, because a stanza header is not
+ * the place to throw: an unmatchable stanza would silently drop every setting
+ * in it, while a literal reading at worst matches exactly what was written.
+ */
+function parseStanzaPattern(pattern: string): PatternNode[][] {
+  const pairs = new Map<number, number>();
+  const open: number[] = [];
+  for (let i = 0; i < pattern.length; i++) {
+    if (pattern[i] === '(') open.push(i);
+    else if (pattern[i] === ')') {
+      const start = open.pop();
+      if (start !== undefined) pairs.set(start, i);
     }
   }
-  return result;
+
+  let pos = 0;
+  // Parse up to (not including) `end`; the caller steps over a group's `)`.
+  function parseAlternatives(end: number): PatternNode[][] {
+    const alternatives: PatternNode[][] = [];
+    let current: PatternNode[] = [];
+    alternatives.push(current);
+    while (pos < end) {
+      const closer = pairs.get(pos);
+      if (closer !== undefined) {
+        pos++;
+        current.push({ kind: 'group', alternatives: parseAlternatives(closer) });
+        pos = closer + 1;
+      } else if (pattern.startsWith('...', pos)) {
+        current.push({ kind: 'wildcard', regex: '.*' });
+        pos += 3;
+      } else if (pattern[pos] === '*') {
+        current.push({ kind: 'wildcard', regex: '[^/\\\\]*' });
+        pos++;
+      } else if (pattern[pos] === '?') {
+        current.push({ kind: 'wildcard', regex: '[^/\\\\]' });
+        pos++;
+      } else if (pattern[pos] === '|') {
+        current = [];
+        alternatives.push(current);
+        pos++;
+      } else {
+        // Includes an unpaired `(` or `)` — see above. A paired `)` is never
+        // reached here: the group that owns it stops just before it.
+        current.push({ kind: 'literal', char: pattern.charAt(pos) });
+        pos++;
+      }
+    }
+    return alternatives;
+  }
+  return parseAlternatives(pattern.length);
+}
+
+function alternativesToRegex(alternatives: PatternNode[][]): string {
+  return alternatives
+    .map((sequence) =>
+      sequence
+        .map((node) => {
+          switch (node.kind) {
+            case 'literal':
+              return escapeRegex(node.char);
+            case 'wildcard':
+              return node.regex;
+            case 'group':
+              return `(?:${alternativesToRegex(node.alternatives)})`;
+          }
+        })
+        .join(''),
+    )
+    .join('|');
+}
+
+function patternToRegex(pattern: string): string {
+  return alternativesToRegex(parseStanzaPattern(pattern));
+}
+
+/**
+ * Score literal characters; wildcards contribute nothing. Only `*`, `?`, and
+ * the `...` multi-segment wildcard are wildcards — a lone `.` is a LITERAL dot
+ * (Splunk source::/host:: syntax), so it must count. Otherwise `host::a.b.c.d`
+ * scores below a shorter all-literal pattern and can wrongly lose precedence.
+ *
+ * Grouping parentheses and `|` are syntax, not text, and score nothing. An
+ * alternation scores its LEAST specific branch: the literal text every match is
+ * guaranteed to carry. Summing the branches would let `/var/log/(messages|secure)`
+ * outrank a stanza it is no more specific than, merely for spelling out options
+ * the event did not take.
+ */
+function alternativesSpecificity(alternatives: PatternNode[][]): number {
+  let least = Infinity;
+  for (const sequence of alternatives) {
+    let score = 0;
+    for (const node of sequence) {
+      if (node.kind === 'literal') score++;
+      else if (node.kind === 'group') score += alternativesSpecificity(node.alternatives);
+    }
+    least = Math.min(least, score);
+  }
+  return least;
 }
 
 function getPatternSpecificity(pattern: string): number {
-  // Score literal characters; wildcards contribute nothing. Mirror
-  // patternToRegex's tokenisation exactly: only `*`, `?`, and the `...`
-  // multi-segment wildcard are wildcards — a lone `.` is a LITERAL dot (Splunk
-  // source::/host:: syntax), so it must count. Otherwise `host::a.b.c.d` scores
-  // below a shorter all-literal pattern and can wrongly lose precedence.
-  let score = 0;
-  let i = 0;
-  while (i < pattern.length) {
-    if (pattern.substring(i, i + 3) === '...') {
-      i += 3;
-    } else if (pattern[i] === '*' || pattern[i] === '?') {
-      i++;
-    } else {
-      score++;
-      i++;
-    }
-  }
-  return score;
+  return alternativesSpecificity(parseStanzaPattern(pattern));
 }
 
 /**
