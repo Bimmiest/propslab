@@ -64,7 +64,7 @@ If a captured fixture disagrees with an existing test, the fixture wins. Update 
 3. Follow the classification and fixture rules above — the support-table tests enforce them.
 
 ### Add an eval function
-Add a `case` to the `callFunction` switch in `src/engine/processors/evalProcessor.ts`.
+Add a `case` to the `evalBuiltin` switch in `src/engine/processors/eval/builtins.ts`. A function that must evaluate only some of its arguments (like `if` or `coalesce`) goes in `evalCall` in `eval/evaluator.ts` instead.
 
 ### Add a preview sub-tab
 1. Create the component in `src/components/preview/tabs/`.
