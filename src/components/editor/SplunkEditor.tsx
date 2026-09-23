@@ -69,43 +69,54 @@ export function SplunkEditor({ value, onChange, fileType = 'props.conf', languag
     editorRef.current = editorInstance;
     registerEditor(fileType, editorInstance);
     onEditorReady?.(editorInstance);
-    // Run initial diagnostics (timer cleared on unmount alongside the change timer).
-    diagnosticTimerRef.current = setTimeout(runDiagnostics, 500);
-  };
-
-  const handleChange = (newValue: string) => {
-    onChange(newValue);
-
-    // Debounce diagnostics
-    if (diagnosticTimerRef.current) {
-      clearTimeout(diagnosticTimerRef.current);
-    }
-    diagnosticTimerRef.current = setTimeout(runDiagnostics, 500);
   };
 
   // Theme is applied through the <MonacoEditor theme=…> prop below (which calls
   // monaco.editor.setTheme); a separate updateOptions({ theme }) effect was
   // redundant — updateOptions doesn't even carry the global theme.
 
-  // Cleanup on unmount: clear the diagnostics timer and remove this editor from the
-  // registry so consumers can't act on a disposed instance (e.g. after a collapse or
-  // mobile-layout switch).
+  // Lint on every content change, whoever made it. This used to be scheduled
+  // from the `onChange` handler, but MonacoEditor deliberately withholds
+  // `onChange` for its own writes of `value` (so they are not echoed back to
+  // the store as user edits) — which meant Clear, loading an example and the
+  // scaffold all replaced the text and left the old file's markers on it
+  // (#295). Listening on the editor directly sees both kinds of edit through
+  // one debounce, so a keystroke is not scheduled twice, and it cannot feed
+  // back: setting markers is not a content change.
+  //
+  // Runs after MonacoEditor's construction effect (a child's effects fire
+  // before its parent's), so the instance is already here. It also owns the
+  // registry entry's teardown: keyed on `fileType`, a change re-registers the
+  // editor under the new name instead of only unregistering it from the old.
   useEffect(() => {
+    const instance = editorRef.current;
+    if (!instance) return;
+    registerEditor(fileType, instance);
+
+    const schedule = () => {
+      if (diagnosticTimerRef.current) clearTimeout(diagnosticTimerRef.current);
+      diagnosticTimerRef.current = setTimeout(runDiagnostics, 500);
+    };
+    schedule(); // initial pass over whatever the editor mounted with
+    const subscription = instance.onDidChangeModelContent(schedule);
+
     return () => {
+      subscription.dispose();
       if (diagnosticTimerRef.current) {
         clearTimeout(diagnosticTimerRef.current);
+        diagnosticTimerRef.current = null;
       }
-      if (editorRef.current) {
-        unregisterEditor(fileType, editorRef.current);
-      }
+      // Removed so consumers can't act on a disposed instance (e.g. after a
+      // collapse or mobile-layout switch).
+      unregisterEditor(fileType, instance);
     };
-  }, [fileType]);
+  }, [fileType, runDiagnostics]);
 
   return (
     <MonacoEditor
       language={resolvedLanguage}
       value={value}
-      onChange={handleChange}
+      onChange={onChange}
       onMount={handleMount}
       theme={theme === 'dark' ? 'splunk-dark' : 'splunk-light'}
       options={EDITOR_OPTIONS}

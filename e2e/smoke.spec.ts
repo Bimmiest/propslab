@@ -48,6 +48,25 @@ test.describe('monaco', () => {
 
     expect(complaints.csp, 'blocked by Content-Security-Policy').toEqual([]);
   });
+
+  test('re-lints after a programmatic write, not only after typing', async ({ page }) => {
+    // Clear writes the model through MonacoEditor's controlled-value path, which
+    // withholds onChange; lint used to hang off onChange, so the old file's
+    // markers outlived the text they described (#295).
+    await openApp(page);
+    const propsEditor = page.locator('.monaco-editor').nth(1);
+    await propsEditor.click();
+    await page.keyboard.type('[my:sourcetype]\nSHOULD_LINEMERGE = notabool\n');
+    const squiggles = page.locator('.squiggly-warning, .squiggly-error, .squiggly-info');
+    await expect(squiggles.first()).toBeVisible({ timeout: 15_000 });
+
+    // The raw log's Clear only renders once it has data, so with it empty the
+    // first exact "Clear" is props.conf's ("Clear All" is the header's).
+    await page.getByRole('button', { name: 'Clear', exact: true }).first().click();
+    await page.getByRole('button', { name: 'Click again to confirm clear' }).click();
+
+    await expect(squiggles).toHaveCount(0, { timeout: 15_000 });
+  });
 });
 
 test.describe('pipeline worker', () => {
