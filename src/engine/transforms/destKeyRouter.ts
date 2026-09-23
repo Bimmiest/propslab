@@ -72,12 +72,14 @@ export function applyDestKey(event: SplunkEvent, result: TransformResult): Splun
       };
 
     case 'MetaData:Index':
-      if (!destValue.startsWith('index::')) {
-        return { ...event, fields: { ...event.fields, ...result.fields } };
-      }
+      // Unlike the three keys around it, the index key takes the BARE index name
+      // (transforms.conf.spec: `FORMAT = my_index`); the `<name>::` prefix
+      // requirement is documented for Host, Source and Sourcetype only. Nothing
+      // is stripped, so `FORMAT = index::foo` routes to an index literally named
+      // `index::foo` — which is what Splunk does, and what the config lint warns about.
       return {
         ...event,
-        metadata: { ...event.metadata, index: destValue.slice('index::'.length) },
+        metadata: { ...event.metadata, index: destValue },
         fields: { ...event.fields, ...result.fields },
       };
 

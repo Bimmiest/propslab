@@ -259,6 +259,20 @@ describe('applyTransforms — SOURCE_KEY reads pipeline metadata (#53)', () => {
     expect(out.fields.captured_host).toBe('h');
   });
 
+  // Doc-derived: the index key is written bare (`FORMAT = my_index`, #281), so
+  // it reads back bare too — `index::main` here would be a value nothing wrote.
+  it('reads MetaData:Index as the bare index name', () => {
+    const conf = transformsConf('t', {
+      SOURCE_KEY: '_MetaData:Index',
+      REGEX: '^(\\w+)$',
+      FORMAT: 'captured_index::$1',
+      WRITE_META: 'true',
+    });
+    const ev = { ...event('x'), metadata: { ...event('x').metadata, index: 'main' } };
+    const out = applyTransforms([ev], transformsDir('t'), conf, 'index-time')[0]!;
+    expect(out.fields.captured_index).toBe('main');
+  });
+
   it('reads an unrerouted queue as indexQueue', () => {
     const conf = transformsConf('t', {
       SOURCE_KEY: 'queue',

@@ -617,7 +617,9 @@ const DIRECTIVE_DEFINITIONS: DirectiveDefinition[] = [
     description:
       'Specifies how to map captured groups from the REGEX to field-value pairs. ' +
       'Uses $1, $2, etc. to reference numbered capturing groups. ' +
-      'Syntax is field_name::$capture_group or $capture_group for indexed field routing.',
+      'Syntax is field_name::$capture_group or $capture_group for indexed field routing. ' +
+      'With DEST_KEY = MetaData:Host/Source/Sourcetype the value needs the host::, source:: or ' +
+      'sourcetype:: prefix; with DEST_KEY = _MetaData:Index it is the bare index name.',
     example: 'FORMAT = src_ip::$1 action::$2',
     defaultValue: '',
     category: 'Field Extraction',
@@ -673,7 +675,9 @@ const DIRECTIVE_DEFINITIONS: DirectiveDefinition[] = [
     description:
       'Specifies the field where the result of the REGEX/FORMAT transformation is written. ' +
       'Commonly used for index-time transforms such as routing events. ' +
-      'Special values include queue (for routing), MetaData:Index, MetaData:Host, MetaData:Source, and MetaData:Sourcetype.',
+      'Special values include queue (for routing), MetaData:Index, MetaData:Host, MetaData:Source, and MetaData:Sourcetype. ' +
+      'For MetaData:Host/Source/Sourcetype, FORMAT must carry the host::, source:: or sourcetype:: prefix; ' +
+      'for _MetaData:Index, FORMAT is the bare index name (FORMAT = my_index).',
     example: 'DEST_KEY = MetaData:Index',
     defaultValue: '',
     category: 'Field Extraction',

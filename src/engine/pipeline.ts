@@ -190,19 +190,23 @@ export function runPipeline(
     }
   }
 
-  // Validate DEST_KEY=MetaData:* stanzas require the matching prefix in FORMAT
+  // Validate DEST_KEY=MetaData:* stanzas require the matching prefix in FORMAT.
+  // Index is deliberately absent: transforms.conf.spec has `_MetaData:Index`
+  // take the bare index name, and the prefix rule covers these three only (#281).
   const DEST_KEY_REQUIRED_PREFIX: Record<string, string> = {
     'MetaData:Host': 'host::',
     'MetaData:Source': 'source::',
     'MetaData:Sourcetype': 'sourcetype::',
-    'MetaData:Index': 'index::',
   };
   // DEST_KEY only accepts a documented set of routing keys; the simulator otherwise
   // falls back to "treat as a field name", which Splunk does not do. The key sets
   // are shared with the router so config-time and match-time agree (#75.3).
   for (const stanza of transformsConf.stanzas) {
-    const destKeyDir = stanza.directives.find((d) => d.key === 'DEST_KEY');
-    const formatDir = stanza.directives.find((d) => d.key === 'FORMAT');
+    // Last definition wins, as it does at runtime: with default/ + local/
+    // layers the effective FORMAT is the local one, and linting the default's
+    // would warn about a line that no longer applies (or miss the one that does).
+    const destKeyDir = stanza.directives.filter((d) => d.key === 'DEST_KEY').at(-1);
+    const formatDir = stanza.directives.filter((d) => d.key === 'FORMAT').at(-1);
     if (!destKeyDir) continue;
 
     // Normalise the _MetaData: alias the same way the router does.
@@ -236,6 +240,20 @@ export function runPipeline(
           ...atDirective(formatDir),
           directiveKey: formatDir.key,
           suggestion: `Change FORMAT = ${formatDir.value.trim()} to FORMAT = ${requiredPrefix}${formatDir.value.trim()}`,
+        });
+      }
+      // The mirror-image mistake: carrying the prefix habit over to the index
+      // key. Splunk does not strip it, so the event is routed to an index
+      // literally named `index::…`, which almost certainly does not exist.
+      const format = formatDir.value.trim();
+      if (destKey === 'MetaData:Index' && format.startsWith('index::')) {
+        diagnostics.push({
+          level: 'warning',
+          message: `DEST_KEY = ${destKeyDir.value.trim()} takes the bare index name, not an "index::" prefix. Splunk does not strip it, so this routes events to an index literally named "${format}".`,
+          file: 'transforms.conf',
+          ...atDirective(formatDir),
+          directiveKey: formatDir.key,
+          suggestion: `Change FORMAT = ${format} to FORMAT = ${format.slice('index::'.length)}`,
         });
       }
     }

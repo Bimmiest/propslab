@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { runPipeline } from '../pipeline';
-import type { EventMetadata } from '../types';
+import type { EventMetadata, ValidationDiagnostic } from '../types';
 
 const META: EventMetadata = { index: 'main', host: '', source: '', sourcetype: 'aws:cloudtrail' };
 const JSON_RAW = '{"eventTime":"2024-01-15T10:00:00Z","action":"login","user":"alice"}';
@@ -61,6 +61,52 @@ describe('runPipeline — DEST_KEY validation (SEM-11)', () => {
     const transforms = '[route]\nREGEX = (.*)\nDEST_KEY = queue\nFORMAT = indexQueue';
     const { diagnostics } = runPipeline('a log line', PLAIN_META, props, transforms);
     expect(diagnostics.some((d) => d.message.includes('DEST_KEY'))).toBe(false);
+  });
+});
+
+// Doc-derived (transforms.conf.spec, DEST_KEY / FORMAT): `_MetaData:Index`
+// takes the bare index name, and only Host/Source/Sourcetype need a
+// `<name>::` prefix. This lint previously demanded `index::` and told users
+// to add it — the opposite of the spec (#281).
+describe('runPipeline — DEST_KEY = MetaData:Index FORMAT lint (#281)', () => {
+  const PLAIN_META: EventMetadata = { index: 'main', host: '', source: '', sourcetype: 'st' };
+  const props = '[st]\nTRANSFORMS-t = route';
+  const prefixWarning = (diags: ValidationDiagnostic[]) =>
+    diags.filter((d) => d.message.includes('prefix'));
+
+  it('accepts the bare index name and routes to it', () => {
+    const transforms = '[route]\nREGEX = .\nDEST_KEY = _MetaData:Index\nFORMAT = security';
+    const { result, diagnostics } = runPipeline('a log line', PLAIN_META, props, transforms);
+    expect(prefixWarning(diagnostics)).toHaveLength(0);
+    expect(result.events[0]?.metadata.index).toBe('security');
+  });
+
+  it('warns that an index:: prefix is kept, naming the index it really routes to', () => {
+    const transforms = '[route]\nREGEX = .\nDEST_KEY = _MetaData:Index\nFORMAT = index::security';
+    const { result, diagnostics } = runPipeline('a log line', PLAIN_META, props, transforms);
+    const warning = prefixWarning(diagnostics);
+    expect(warning).toHaveLength(1);
+    expect(warning[0]?.message).toContain('"index::security"');
+    expect(warning[0]?.suggestion).toBe('Change FORMAT = index::security to FORMAT = security');
+    expect(result.events[0]?.metadata.index).toBe('index::security');
+  });
+
+  it('lints the effective (last) FORMAT when default/ and local/ both set it', () => {
+    const route = (format: string) => `[route]\nREGEX = .\nDEST_KEY = MetaData:Sourcetype\nFORMAT = ${format}`;
+    // local fixes what default got wrong: no warning, because runtime uses local's.
+    const fixed = runPipeline('a log line', PLAIN_META, props, [
+      { layer: 'default', text: route('other') },
+      { layer: 'local', text: route('sourcetype::other') },
+    ]);
+    expect(prefixWarning(fixed.diagnostics)).toHaveLength(0);
+    // And the reverse: local breaks it, so the warning must point at local's line.
+    const broken = runPipeline('a log line', PLAIN_META, props, [
+      { layer: 'default', text: route('sourcetype::other') },
+      { layer: 'local', text: route('other') },
+    ]);
+    const warning = prefixWarning(broken.diagnostics);
+    expect(warning).toHaveLength(1);
+    expect(warning[0]?.layer).toBe('local');
   });
 });
 
