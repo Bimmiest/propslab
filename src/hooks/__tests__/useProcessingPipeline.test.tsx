@@ -10,7 +10,7 @@
 // result so the preview can say the run failed.
 // ---------------------------------------------------------------------------
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { useProcessingPipeline } from '../useProcessingPipeline';
 import { useAppStore } from '../../store/useAppStore';
@@ -51,6 +51,16 @@ class FakeWorker {
 }
 
 describe('useProcessingPipeline', () => {
+  // The inline fallback loads the engine with a dynamic import(). The first
+  // load transforms the whole engine, which under a loaded test run can take
+  // longer than waitFor's one-second default on top of the 300 ms debounce, so
+  // the inline tests failed intermittently while measuring module load time
+  // rather than the hook. Loading it once up front keeps that cost out of
+  // every assertion window.
+  beforeAll(async () => {
+    await import('../../engine/pipeline');
+  });
+
   beforeEach(() => {
     useAppStore.setState(initial, true);
     FakeWorker.instances = [];

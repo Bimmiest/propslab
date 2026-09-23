@@ -1,5 +1,6 @@
 import type { ConfStanza, EventMetadata } from '../types';
 import { safeRegex, escapeRegex } from '../../utils/splunkRegex';
+import { effectiveDirective, parseSplunkBool } from '../utils/directiveValues';
 
 // Splunk stanza precedence (highest wins): source > host > sourcetype > default
 const STANZA_PRIORITY: Record<ConfStanza['type'], number> = {
@@ -35,9 +36,10 @@ const PATTERN_DEFAULT_PRIORITY = 0;
  *
  * Splunk's stanza pattern syntax is `...`, `*` and `?` for wildcards plus `|`
  * for alternation and `()` to scope it. A pattern carrying none of those matches
- * one exact string. Note a lone `.` is a literal dot in this syntax rather than
+ * one exact string; `\\` is an escape for one literal backslash, so it does not
+ * make a pattern. Note a lone `.` is a literal dot in this syntax rather than
  * a regex any-char, and a parenthesis with no partner is a literal character
- * too — both fall out of parseStanzaPattern.
+ * too — all three fall out of parseStanzaPattern.
  */
 function isLiteralPattern(pattern: string): boolean {
   const alternatives = parseStanzaPattern(pattern);
@@ -66,11 +68,6 @@ function defaultPriority(stanza: ConfStanza): number {
   }
 }
 
-/** Splunk's boolean spellings. Anything unrecognised reads as false, as it does there. */
-function isTruthy(value: string): boolean {
-  return ['1', 'true', 't', 'yes', 'y', 'on'].includes(value.trim().toLowerCase());
-}
-
 /**
  * A stanza switched off with `disabled = 1` takes no part in resolution at all.
  *
@@ -79,13 +76,13 @@ function isTruthy(value: string): boolean {
  * `default/` disabled is the whole point of writing it.
  */
 export function isStanzaDisabled(stanza: ConfStanza): boolean {
-  const declared = stanza.directives.filter((d) => d.key === 'disabled').at(-1);
-  return declared !== undefined && isTruthy(declared.value);
+  // Anything that is not a boolean spelling reads as false, as it does there.
+  return parseSplunkBool(effectiveDirective(stanza.directives, 'disabled')?.value, false);
 }
 
 /** The effective precedence number for a stanza: explicit `priority`, or its kind's default. */
 function stanzaPriority(stanza: ConfStanza): number {
-  const declared = stanza.directives.filter((d) => d.key === 'priority').at(-1);
+  const declared = effectiveDirective(stanza.directives, 'priority');
   if (declared) {
     const parsed = Number.parseInt(declared.value.trim(), 10);
     // A malformed priority is ignored rather than treated as 0, which would
@@ -204,8 +201,8 @@ export function resolveStanzasForEvent(
   // uses `rename` for that instead.
   const assignment = first
     .filter((s) => s.type === 'source' || s.type === 'host')
-    .flatMap((s) => s.directives.filter((d) => d.key === 'sourcetype').slice(-1))
-    .at(0);
+    .map((s) => effectiveDirective(s.directives, 'sourcetype'))
+    .find((d) => d !== undefined);
 
   const assigned = assignment?.value.trim();
   if (!assigned || assigned === metadata.sourcetype) {
@@ -231,8 +228,7 @@ export function resolveStanzasForEvent(
  */
 export function getRenamedSourcetype(matchedStanzas: ConfStanza[]): string | undefined {
   for (const stanza of matchedStanzas) {
-    const declared = stanza.directives.filter((d) => d.key === 'rename').at(-1);
-    const value = declared?.value.trim();
+    const value = effectiveDirective(stanza.directives, 'rename')?.value.trim();
     if (value) return value;
   }
   return undefined;
@@ -326,6 +322,19 @@ function parseStanzaPattern(pattern: string): PatternNode[][] {
         current = [];
         alternatives.push(current);
         pos++;
+      } else if (pattern.startsWith('\\\\', pos)) {
+        // props.conf.spec: "\\ = matches a literal backslash '\'". Treating each
+        // backslash as its own literal meant a Windows path written the way the
+        // spec says, `[source::C:\\logs\\app.log]`, looked for two backslashes
+        // per separator and never matched `C:\logs\app.log` (#303).
+        //
+        // A single backslash not followed by another stays a literal backslash,
+        // as it always was here: the spec defines no other escape, and configs
+        // written `C:\logs\app.log` match today, so reading a lone `\` as an
+        // escape would break them for no gain. One node, so the pair scores one
+        // literal character of specificity -- the one it matches.
+        current.push({ kind: 'literal', char: '\\' });
+        pos += 2;
       } else {
         // Includes an unpaired `(` or `)` — see above. A paired `)` is never
         // reached here: the group that owns it stops just before it.
@@ -402,10 +411,7 @@ function getPatternSpecificity(pattern: string): number {
  */
 export function getDirectiveValue(stanzas: ConfStanza[], key: string): string | undefined {
   for (const stanza of stanzas) {
-    let value: string | undefined;
-    for (const directive of stanza.directives) {
-      if (directive.key === key) value = directive.value;
-    }
+    const value = effectiveDirective(stanza.directives, key)?.value;
     if (value !== undefined) return value;
   }
   return undefined;

@@ -77,6 +77,11 @@ const CLASS_DIRECTIVE_PREFIXES = [
   'EVAL',
   'SEDCMD',
   'TRANSFORMS',
+  // Class-based in the registry since #178, but missing here, so `RULESET-x`
+  // parsed as a bare key named `RULESET-x`: no class, no support lookup, and
+  // no way for the transforms stage to find it (#275).
+  'RULESET',
+  'RULESET_DESC',
 ] as const;
 
 /**

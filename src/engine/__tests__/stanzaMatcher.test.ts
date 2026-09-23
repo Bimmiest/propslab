@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { matchStanzas, mergeDirectives } from '../parser/stanzaMatcher';
+import { parseConf } from '../parser/confParser';
 import type { ConfDirective, ConfStanza, EventMetadata } from '../types';
 
 function stanza(type: ConfStanza['type'], name: string): ConfStanza {
@@ -245,5 +246,64 @@ describe('matchStanzas — `|` alternation and `( )` scoping (#284)', () => {
     const wild = source('/var/log/message?');
     expect(matchStanzas([alt, wild], at('/var/log/messages')).map((s) => s.name))
       .toEqual(['source::/var/log/message?', 'source::/var/log/(messages|secure)']);
+  });
+});
+
+// Doc-derived (props.conf.spec, stanza pattern syntax): "\\ = matches a literal
+// backslash '\'". Not checked against a capture.
+describe('matchStanzas — a doubled backslash matches one literal backslash (#303)', () => {
+  const source = (pattern: string): ConfStanza => ({
+    name: `source::${pattern}`, type: 'source', sourcePattern: pattern,
+    directives: [], lineRange: { start: 1, end: 2 },
+  });
+  const at = (path: string): EventMetadata => ({ ...META, source: path });
+  // The conf text `C:\\logs\\app.log`, i.e. written the way the spec says.
+  const SPEC_WINDOWS = 'C:\\\\logs\\\\app.log';
+
+  it('matches a Windows path written per the spec', () => {
+    expect(matchStanzas([source(SPEC_WINDOWS)], at('C:\\logs\\app.log'))).toHaveLength(1);
+  });
+
+  it('no longer demands two backslashes where the spec means one', () => {
+    expect(matchStanzas([source(SPEC_WINDOWS)], at('C:\\\\logs\\\\app.log'))).toHaveLength(0);
+  });
+
+  it('still reads a lone backslash as itself, so existing configs keep matching', () => {
+    expect(matchStanzas([source('C:\\logs\\app.log')], at('C:\\logs\\app.log'))).toHaveLength(1);
+  });
+
+  it('pairs backslashes left to right, leaving an odd one literal', () => {
+    // `\\\` is an escaped backslash followed by a lone one: two in total.
+    expect(matchStanzas([source('a\\\\\\b')], at('a\\\\b'))).toHaveLength(1);
+    // `\\\\` is two escaped backslashes: also two.
+    expect(matchStanzas([source('a\\\\\\\\b')], at('a\\\\b'))).toHaveLength(1);
+  });
+
+  it('keeps wildcards working after an escaped backslash', () => {
+    const s = source('C:\\\\logs\\\\*.log');
+    expect(matchStanzas([s], at('C:\\logs\\app.log'))).toHaveLength(1);
+    // `*` stops at a path separator, and a backslash is one.
+    expect(matchStanzas([s], at('C:\\logs\\sub\\app.log'))).toHaveLength(0);
+  });
+
+  it('is still a literal-matching stanza, with the default priority that implies', () => {
+    const wild = source('C:\\\\logs\\\\*');
+    expect(matchStanzas([wild, source(SPEC_WINDOWS)], at('C:\\logs\\app.log')).map((s) => s.name))
+      .toEqual([`source::${SPEC_WINDOWS}`, 'source::C:\\\\logs\\\\*']);
+  });
+
+  it('scores an escaped pair as the one character it matches', () => {
+    // Both pattern stanzas at priority 0, so specificity decides. `C:\\logs\\*.log`
+    // guarantees 12 literal characters and `C:\logs\a*.log` 13. Counting both
+    // characters of each pair would score the first 14 and put it ahead.
+    const escaped = source('C:\\\\logs\\\\*.log');
+    const lone = source('C:\\logs\\a*.log');
+    expect(matchStanzas([escaped, lone], at('C:\\logs\\app.log')).map((s) => s.name))
+      .toEqual(['source::C:\\logs\\a*.log', 'source::C:\\\\logs\\\\*.log']);
+  });
+
+  it('survives the conf parser: the stanza header keeps its backslashes', () => {
+    const conf = parseConf('[source::C:\\\\logs\\\\app.log]\nTRUNCATE = 5\n', 'props.conf');
+    expect(matchStanzas(conf.stanzas, at('C:\\logs\\app.log'))).toHaveLength(1);
   });
 });

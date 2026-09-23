@@ -163,3 +163,26 @@ describe('computeDiagnostics — PCRE translation warnings (#290)', () => {
     expect(markers.some((m) => /approximated in preview/.test(m.message))).toBe(false);
   });
 });
+
+describe('computeDiagnostics — booleans read as the engine reads them (#301)', () => {
+  const booleanMarkers = (text: string) =>
+    computeDiagnostics(fakeModel(text), 'props.conf').filter((m) => m.message.startsWith('Expected boolean'));
+
+  it('accepts every spelling the engine honours', () => {
+    for (const v of ['t', 'F', 'y', 'n', 'on', 'OFF', 'yes', '0']) {
+      expect(booleanMarkers(`[st]\nSHOULD_LINEMERGE = ${v}\n`)).toEqual([]);
+    }
+  });
+
+  it('still flags a value that is not a boolean', () => {
+    expect(booleanMarkers('[st]\nSHOULD_LINEMERGE = maybe\n')).toHaveLength(1);
+  });
+
+  it('treats SHOULD_LINEMERGE = off as disabling merge beside a custom LINE_BREAKER', () => {
+    const markers = computeDiagnostics(
+      fakeModel('[st]\nLINE_BREAKER = ([\\r\\n]+)\nSHOULD_LINEMERGE = off\n'),
+      'props.conf',
+    );
+    expect(markers.some((m) => m.message.includes('Set SHOULD_LINEMERGE = false'))).toBe(false);
+  });
+});

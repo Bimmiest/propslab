@@ -107,7 +107,12 @@ export const DIRECTIVE_SUPPORT: Record<string, SupportEntry> = {
   EXTRACT: { support: 'simulated' },
   REPORT: { support: 'simulated' },
   TRANSFORMS: { support: 'simulated' },
-  INDEXED_EXTRACTIONS: { support: 'simulated' },
+  INDEXED_EXTRACTIONS: {
+    support: 'simulated',
+    note:
+      'hec is not simulated. For xml, xmlkv and xmlkv-winevt the spec does not say how fields are ' +
+      'named; they follow KV_MODE = xml, the xmlkv command and the Windows event-log Name convention.',
+  },
   FIELDALIAS: { support: 'simulated' },
   EVAL: { support: 'simulated' },
   SEDCMD: { support: 'simulated' },
@@ -129,7 +134,7 @@ export const DIRECTIVE_SUPPORT: Record<string, SupportEntry> = {
   LOOKAHEAD: { support: 'simulated' },
 
   // ---- Structured data (INDEXED_EXTRACTIONS options) --------------------
-  // All six apply to the delimited formats (csv/tsv/psv). W3C keeps its own
+  // All eleven apply to the delimited formats (csv/tsv/psv). W3C keeps its own
   // #Fields header mechanism, which none of these override there.
   FIELD_DELIMITER: { support: 'simulated' },
   FIELD_QUOTE: { support: 'simulated' },
@@ -137,6 +142,39 @@ export const DIRECTIVE_SUPPORT: Record<string, SupportEntry> = {
   HEADER_FIELD_LINE_NUMBER: { support: 'simulated' },
   PREAMBLE_REGEX: { support: 'simulated' },
   TIMESTAMP_FIELDS: { support: 'simulated' },
+  FIELD_HEADER_REGEX: { support: 'simulated' },
+  HEADER_FIELD_DELIMITER: { support: 'simulated' },
+  HEADER_FIELD_QUOTE: { support: 'simulated' },
+  HEADER_FIELD_ACCEPTABLE_SPECIAL_CHARACTERS: {
+    support: 'simulated',
+    note:
+      'Header cleaning replaces spaces as well, although the spec wording exempts them; no capture ' +
+      'settles it. Naming a space here keeps it.',
+  },
+  MISSING_VALUE_REGEX: { support: 'simulated' },
+  // The XML values of INDEXED_EXTRACTIONS (#271). The spec gives what each
+  // attribute does but not how the modes name fields; that naming is borrowed
+  // from KV_MODE = xml and the xmlkv command, and the note on
+  // INDEXED_EXTRACTIONS says so.
+  XML_INDEXED_EXTRACTIONS_PIPELINE: {
+    support: 'simulated',
+    note:
+      'Simulated as the switch the spec makes it: without a valid value the XML formats extract ' +
+      'nothing. Which pipeline it names is where the work runs, and every value behaves alike here.',
+  },
+  XML_IE_INCLUDE: { support: 'simulated' },
+  XML_IE_INCLUDE_MV: { support: 'simulated' },
+  XML_IE_EXCLUDE: { support: 'simulated' },
+  XML_IE_EXCLUDE_MV: { support: 'simulated' },
+  XML_IE_EXCLUDE_VALS: { support: 'simulated' },
+  XML_IE_SKIP_XML_ENCODED_VALS: { support: 'simulated' },
+  XML_IE_MAX_EXTRACTED_VALUE_SIZE: {
+    support: 'simulated',
+    note:
+      'A value over the limit is left out. The index processor’s own truncation above 1000 bytes, ' +
+      'which the spec mentions for a raised limit, is not modelled.',
+  },
+  extraction_cutoff: { support: 'simulated' },
   CHECK_FOR_HEADER: {
     support: 'documented',
     note: 'Deprecated by Splunk and superseded by INDEXED_EXTRACTIONS, which is simulated.',
@@ -243,28 +281,40 @@ export const DIRECTIVE_SUPPORT: Record<string, SupportEntry> = {
   unarchive_cmd: { support: 'documented', note: 'Runs a shell command to expand an archive at input time. There is no shell and no archive here.' },
   unarchive_cmd_start_mode: { support: 'documented', note: 'Chooses how the unarchive command is launched, which this tool never launches.' },
   unarchive_sourcetype: { support: 'documented', note: 'Names the sourcetype for the contents of an expanded archive, an input-layer decision.' },
-  XML_INDEXED_EXTRACTIONS_PIPELINE: { support: 'ignored', issue: 271, note: 'XML index-time extraction is not simulated at all, so this has no effect on the preview.' },
-  XML_IE_INCLUDE: { support: 'ignored', issue: 271, note: 'XML index-time extraction is not simulated at all, so this has no effect on the preview.' },
-  XML_IE_INCLUDE_MV: { support: 'ignored', issue: 271, note: 'XML index-time extraction is not simulated at all, so this has no effect on the preview.' },
-  XML_IE_EXCLUDE: { support: 'ignored', issue: 271, note: 'XML index-time extraction is not simulated at all, so this has no effect on the preview.' },
-  XML_IE_EXCLUDE_MV: { support: 'ignored', issue: 271, note: 'XML index-time extraction is not simulated at all, so this has no effect on the preview.' },
-  XML_IE_EXCLUDE_VALS: { support: 'ignored', issue: 271, note: 'XML index-time extraction is not simulated at all, so this has no effect on the preview.' },
-  XML_IE_SKIP_XML_ENCODED_VALS: { support: 'ignored', issue: 271, note: 'XML index-time extraction is not simulated at all, so this has no effect on the preview.' },
-  XML_IE_MAX_EXTRACTED_VALUE_SIZE: { support: 'ignored', issue: 271, note: 'XML index-time extraction is not simulated at all, so this has no effect on the preview.' },
-  extraction_cutoff: { support: 'ignored', issue: 271, note: 'XML index-time extraction is not simulated at all, so this has no effect on the preview.' },
-  FIELD_HEADER_REGEX: { support: 'ignored', issue: 272, note: 'Header-side delimited extraction overrides are not applied; the body-side ones are.' },
-  HEADER_FIELD_DELIMITER: { support: 'ignored', issue: 272, note: 'Header-side delimited extraction overrides are not applied; the body-side ones are.' },
-  HEADER_FIELD_QUOTE: { support: 'ignored', issue: 272, note: 'Header-side delimited extraction overrides are not applied; the body-side ones are.' },
-  HEADER_FIELD_ACCEPTABLE_SPECIAL_CHARACTERS: { support: 'ignored', issue: 272, note: 'Header-side delimited extraction overrides are not applied; the body-side ones are.' },
-  MISSING_VALUE_REGEX: { support: 'ignored', issue: 272, note: 'Header-side delimited extraction overrides are not applied; the body-side ones are.' },
-  ADD_EXTRA_TIME_FIELDS: { support: 'ignored', issue: 273, note: 'Index-time timestamp fields are never generated, so this changes nothing in the preview.' },
-  DETERMINE_TIMESTAMP_DATE_WITH_SYSTEM_TIME: { support: 'ignored', issue: 273, note: 'The date for a dateless timestamp is chosen one way and is not selectable.' },
-  KV_TRIM_SPACES: { support: 'ignored', issue: 274, note: 'Automatic key-value values are always space-trimmed; this cannot turn that off.' },
-  JSON_TRIM_BRACES_IN_ARRAY_NAMES: { support: 'ignored', issue: 274, note: 'Array field names from the JSON parser keep their braces; this cannot strip them.' },
-  RULESET: { support: 'ignored', issue: 275, note: 'Rulesets are not applied, so a stanza relying on one is previewed as though it were absent.' },
-  RULESET_DESC: { support: 'ignored', issue: 275, note: 'Rulesets are not applied, so a stanza relying on one is previewed as though it were absent.' },
-  ROUTE_EVENTS_OLDER_THAN: { support: 'ignored', issue: 275, note: 'Events are never dropped for age; the preview keeps them all.' },
-  OPTIMIZE_IE_EXTRACT: { support: 'ignored', issue: 275, note: 'Search-time extraction always runs, whether or not index-time extraction covered the fields.' },
+  ADD_EXTRA_TIME_FIELDS: {
+    support: 'simulated',
+    note:
+      'The field values follow the documented conventions; no capture recorded them. Only an event whose ' +
+      'timestamp was read from its text gets date_*; the rest get timestamp=none.',
+  },
+  DETERMINE_TIMESTAMP_DATE_WITH_SYSTEM_TIME: {
+    support: 'simulated',
+    note: 'Only a TIME_FORMAT can describe a dateless timestamp here — automatic recognition has no time-only pattern.',
+  },
+  KV_TRIM_SPACES: { support: 'simulated' },
+  JSON_TRIM_BRACES_IN_ARRAY_NAMES: {
+    support: 'simulated',
+    note: 'Applies to INDEXED_EXTRACTIONS = json only, as the spec scopes it; KV_MODE = json keeps the braces, as spath does.',
+  },
+  RULESET: {
+    support: 'simulated',
+    note:
+      'Applied after every TRANSFORMS- class, in class order. Splunk also runs rulesets on a heavy ' +
+      'forwarder as well as the indexer; the preview is one pipeline and shows them run once.',
+  },
+  RULESET_DESC: { support: 'documented', note: 'A description of the matching RULESET- for the next reader. Splunk does nothing with it, and neither does the preview.' },
+  ROUTE_EVENTS_OLDER_THAN: {
+    support: 'simulated',
+    note:
+      'Age is measured from the moment of simulation, and a bare number is read as seconds. The ' +
+      'route is a nullQueue queue write, so a later transform writing the queue can still override it.',
+  },
+  OPTIMIZE_IE_EXTRACT: {
+    support: 'documented',
+    note:
+      'A search performance optimisation keyed on the fields a particular search asks for. The preview runs ' +
+      'no search, and used as documented it skips only work whose fields index time already produced.',
+  },
 
   // ---- transforms.conf.spec 10.4.3 completeness (#178) --------------------
   // Mostly lookup settings, documented for the reason every lookup attribute
@@ -291,8 +341,17 @@ export const DIRECTIVE_SUPPORT: Record<string, SupportEntry> = {
   'python.version': { support: 'documented', note: 'Deprecated, and it selects the interpreter for a scripted lookup this tool cannot run.' },
   replicate: { support: 'documented', note: 'Decides where a CSV lookup is replicated, which is a deployment concern.' },
   reverse_lookup_honor_case_sensitive_match: { support: 'documented', note: 'A lookup setting, and a lookup needs a table this tool has nowhere to get.' },
-  CAN_OPTIMIZE_IE: { support: 'ignored', issue: 275, note: 'Search-time extraction always runs, whether or not index-time extraction covered the fields.' },
-  STOP_PROCESSING_IF: { support: 'ignored', issue: 275, note: 'Index-time processing is never halted early, so a rule relying on this is previewed as absent.' },
+  CAN_OPTIMIZE_IE: {
+    support: 'documented',
+    note:
+      'A search performance optimisation keyed on the fields a particular search asks for. The preview runs ' +
+      'no search, and used as documented it skips only work whose fields index time already produced.',
+  },
+  STOP_PROCESSING_IF: {
+    support: 'simulated',
+    note:
+      'When true, skips the rules after it in the same RULESET- or TRANSFORMS- list; later lists still run.',
+  },
 };
 
 /**

@@ -15,6 +15,7 @@ import type { ConfInput, EventMetadata } from '../../../src/engine/types';
 import type { ExplainResponse, SimulateResponse, ValidateResponse } from './protocol';
 import {
   runInWorker,
+  WorkerCancelledError,
   WorkerOutOfMemoryError,
   WorkerTimeoutError,
   type RunInWorkerOptions,
@@ -217,6 +218,19 @@ function workerFailure(
       true,
     );
   }
+  if (err instanceof WorkerCancelledError) {
+    // Over MCP nobody reads this: the SDK drops the response to a cancelled
+    // request. It exists for direct callers of the handlers, and so a
+    // cancellation is never mistaken for an engine failure in a log.
+    return json(
+      {
+        error: 'cancelled',
+        started: err.started,
+        message: err.message,
+      },
+      true,
+    );
+  }
   return json(
     { error: 'engine_failure', message: err instanceof Error ? err.message : String(err) },
     true,
@@ -363,6 +377,12 @@ export function handleLookupDirective(args: LookupArgs): ToolText {
 
 export function registerTools(server: McpServer, options?: { workerPath?: string }): void {
   const workerPath = options?.workerPath;
+  // Each call carries its own request's cancellation signal, so a cancelled
+  // (or disconnected) request frees its concurrency slot — see runInWorker.
+  const worker = (extra: { signal: AbortSignal }): RunInWorkerOptions => ({
+    workerPath,
+    signal: extra.signal,
+  });
 
   server.registerTool(
     'simulate',
@@ -377,7 +397,7 @@ export function registerTools(server: McpServer, options?: { workerPath?: string
         'directives the simulator recognises but does not honour.',
       inputSchema: simulateInputShape,
     },
-    (args) => handleSimulate(args, workerPath),
+    (args, extra) => handleSimulate(args, worker(extra)),
   );
 
   server.registerTool(
@@ -391,7 +411,7 @@ export function registerTools(server: McpServer, options?: { workerPath?: string
         'does not honour. Use it to check a config you have drafted before simulating it.',
       inputSchema: validateInputShape,
     },
-    (args) => handleValidate(args, workerPath),
+    (args, extra) => handleValidate(args, worker(extra)),
   );
 
   server.registerTool(
@@ -406,7 +426,7 @@ export function registerTools(server: McpServer, options?: { workerPath?: string
         'merged directive set, i.e. what `btool props list --debug` would answer.',
       inputSchema: explainInputShape,
     },
-    (args) => handleExplainPrecedence(args, workerPath),
+    (args, extra) => handleExplainPrecedence(args, worker(extra)),
   );
 
   server.registerTool(

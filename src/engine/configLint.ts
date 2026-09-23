@@ -2,7 +2,9 @@ import type { ConfDirective, ParsedConf, ValidationDiagnostic } from './types';
 import { atDirective, atStanza } from './parser/provenance';
 import { SIMULATED_DEST_KEYS, VALID_UNSIMULATED_DEST_KEYS, normaliseDestKey } from './transforms/destKeys';
 import { getDirectiveSupport, isUndocumentedAttribute } from './directiveSupport';
+import { wrongFileCanonical, WRONG_FILE_MESSAGE } from './directiveRegistry';
 import { lintInertTransformSettings, lintDirectiveValues } from './directiveLint';
+import { effectiveBool, effectiveDirective } from './utils/directiveValues';
 
 // Config lint: the diagnostics `runPipeline` reports about the conf files
 // themselves, split out of the pipeline so that file reads as the order of
@@ -48,9 +50,29 @@ export function lintConfigs(
   ] as const) {
     for (const stanza of conf.stanzas) {
       for (const dir of stanza.directives) {
-        if (dir.directiveType === 'LOOKUP') continue;
         // A class-based key is written `EXTRACT-foo`; classification is by base.
         const baseKey = dir.className ? dir.directiveType : dir.key;
+
+        // The support table is flat, so an attribute of the other conf file
+        // finds its row here and would be reported as "recognised but not
+        // simulated" -- or, if simulated, not at all -- while the editor, which
+        // looks it up per file, called it a possible typo (#278). Neither is
+        // what is wrong: Splunk does not read it from this file. Checked before
+        // the LOOKUP skip, because that skip exists for the props.conf warning
+        // above, which never sees a LOOKUP- written in transforms.conf.
+        const belongsIn = wrongFileCanonical(dir.key, file);
+        if (belongsIn !== undefined) {
+          diagnostics.push({
+            level: 'warning',
+            message: WRONG_FILE_MESSAGE(dir.key, file, belongsIn),
+            file,
+            ...atDirective(dir),
+            directiveKey: dir.key,
+          });
+          continue;
+        }
+
+        if (dir.directiveType === 'LOOKUP') continue;
         const entry = getDirectiveSupport(baseKey);
 
         // A real attribute the registry has never heard of reaches this loop with
@@ -112,8 +134,8 @@ export function lintConfigs(
     // Last definition wins, as it does at runtime: with default/ + local/
     // layers the effective FORMAT is the local one, and linting the default's
     // would warn about a line that no longer applies (or miss the one that does).
-    const destKeyDir = stanza.directives.filter((d) => d.key === 'DEST_KEY').at(-1);
-    const formatDir = stanza.directives.filter((d) => d.key === 'FORMAT').at(-1);
+    const destKeyDir = effectiveDirective(stanza.directives, 'DEST_KEY');
+    const formatDir = effectiveDirective(stanza.directives, 'FORMAT');
     if (!destKeyDir) continue;
 
     // Normalise the _MetaData: alias the same way the router does.
@@ -166,7 +188,7 @@ export function lintConfigs(
     }
   }
 
-  // Cross-reference validation: check TRANSFORMS/REPORT references exist, and collect
+  // Cross-reference validation: check TRANSFORMS/RULESET/REPORT references exist, and collect
   // referenced stanza names in one pass (avoids iterating props stanzas twice).
   const referencedTransforms = new Set<string>();
   // How props.conf reaches each transforms stanza decides that stanza's phase,
@@ -175,8 +197,10 @@ export function lintConfigs(
   const transformPhase = new Map<string, 'index-time' | 'search-time' | 'both'>();
   for (const stanza of propsConf.stanzas) {
     for (const dir of stanza.directives) {
-      if (dir.directiveType === 'TRANSFORMS' || dir.directiveType === 'REPORT') {
-        const phase = dir.directiveType === 'TRANSFORMS' ? 'index-time' : 'search-time';
+      // RULESET- is index-time like TRANSFORMS- (#275): a stanza it names is
+      // referenced, must exist, and is linted as index-time.
+      if (dir.directiveType === 'TRANSFORMS' || dir.directiveType === 'RULESET' || dir.directiveType === 'REPORT') {
+        const phase = dir.directiveType === 'REPORT' ? 'search-time' : 'index-time';
         const stanzaNames = dir.value.split(',').map((s) => s.trim()).filter(Boolean);
         for (const name of stanzaNames) {
           referencedTransforms.add(name);
@@ -227,12 +251,13 @@ export function lintMatchedDirectives(
   // Splunk extracts the fields at BOTH index time and search time, producing duplicate
   // (multivalue) values. The simulator currently suppresses the duplicate in the preview,
   // so without this warning an operator could ship a config that misbehaves in Splunk.
-  const indexedExtJson = directives.find((d) => d.key === 'INDEXED_EXTRACTIONS')?.value.trim().toLowerCase() === 'json';
-  if (indexedExtJson) {
-    const kvModeDir = directives.find((d) => d.key === 'KV_MODE');
+  const indexedExtDir = effectiveDirective(directives, 'INDEXED_EXTRACTIONS');
+  if (indexedExtDir?.value.trim().toLowerCase() === 'json') {
+    const kvModeDir = effectiveDirective(directives, 'KV_MODE');
     const kvMode = kvModeDir?.value.trim().toLowerCase();
-    const autoKvJsonDir = directives.find((d) => d.key === 'AUTO_KV_JSON');
-    const autoKvJson = autoKvJsonDir ? autoKvJsonDir.value.trim().toLowerCase() !== 'false' : true;
+    // Read exactly as applyKvMode reads it, so the warning fires only when the
+    // search-time extraction it describes would actually run.
+    const autoKvJson = effectiveBool(directives, 'AUTO_KV_JSON', true);
     const searchTimeJson =
       kvMode === 'json' ||
       ((kvMode === undefined || kvMode === 'auto' || kvMode === 'auto_escaped') && autoKvJson);
@@ -244,7 +269,7 @@ export function lintMatchedDirectives(
           `INDEXED_EXTRACTIONS = json already extracts fields at index time, but ${kvDesc} extracts them again at search time. ` +
           'In Splunk this produces duplicate (multivalue) field values. Set KV_MODE = none for this sourcetype when using INDEXED_EXTRACTIONS = json.',
         file: 'props.conf',
-        ...atDirective(kvModeDir ?? directives.find((d) => d.key === 'INDEXED_EXTRACTIONS')),
+        ...atDirective(kvModeDir ?? indexedExtDir),
       });
     }
   }

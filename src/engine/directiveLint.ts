@@ -16,6 +16,7 @@
 import type { ConfStanza, ValidationDiagnostic } from './types';
 import { atDirective } from './parser/provenance';
 import { getDirectiveInfo } from './directiveRegistry';
+import { effectiveDirective, isSplunkBoolLiteral } from './utils/directiveValues';
 
 /**
  * transforms.conf settings that do nothing in one of the two phases. A stanza's
@@ -81,9 +82,9 @@ export function lintInertTransformSettings(
   // it is ignored when DEST_KEY is _raw. Checked separately because it depends
   // on a sibling directive rather than on the stanza's phase.
   for (const stanza of transformsStanzas) {
-    const destKey = stanza.directives.filter((d) => d.key === 'DEST_KEY').at(-1);
+    const destKey = effectiveDirective(stanza.directives, 'DEST_KEY');
     if (destKey?.value.trim() !== '_raw') continue;
-    const repeat = stanza.directives.find((d) => d.key === 'REPEAT_MATCH');
+    const repeat = effectiveDirective(stanza.directives, 'REPEAT_MATCH');
     if (!repeat) continue;
     diagnostics.push({
       level: 'warning',
@@ -96,9 +97,6 @@ export function lintInertTransformSettings(
     });
   }
 }
-
-/** Values Splunk accepts for a `<boolean>`. */
-const BOOLEAN_LITERALS = new Set(['true', 'false', '1', '0', 't', 'f', 'yes', 'no']);
 
 /**
  * Report values that are not the type their directive documents.
@@ -139,7 +137,7 @@ export function lintDirectiveValues(
         });
       };
 
-      if (info.valueType === 'boolean' && !BOOLEAN_LITERALS.has(value.toLowerCase())) {
+      if (info.valueType === 'boolean' && !isSplunkBoolLiteral(value)) {
         report(
           `${dir.key} takes a boolean, and "${value}" is not one. Splunk reads an unrecognised ` +
             'value as false rather than reporting it.',

@@ -12,7 +12,7 @@ import { DirectiveNoOpList } from './shared/DirectiveNoOpList';
 import { pressable } from '../../ui/pressable';
 
 const AUTO_PROCESSORS = ['KV_MODE', 'INDEXED_EXTRACTIONS'];
-const MANUAL_PROCESSORS = ['EXTRACT', 'REPORT', 'TRANSFORMS', 'SEDCMD'];
+const MANUAL_PROCESSORS = ['EXTRACT', 'REPORT', 'TRANSFORMS', 'RULESET', 'SEDCMD'];
 /**
  * Upper bound on rows rendered while a field is pinned. A pin filters the whole
  * dataset rather than the current page, so without a cap a common field renders

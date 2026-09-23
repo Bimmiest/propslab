@@ -463,6 +463,60 @@ export function parseTimestamp(
   tzAlias?: ReadonlyMap<string, string>,
   now: Date = new Date(),
 ): Date | null {
+  return parseTimestampDetailed(text, format, { tz, onUnresolvedTz, tzAlias, now })?.date ?? null;
+}
+
+/** A calendar date, month 0-indexed as `Date` has it. */
+export interface CalendarDate {
+  year: number;
+  month: number;
+  day: number;
+}
+
+/**
+ * What {@link parseTimestampDetailed} read, beyond the instant.
+ *
+ * The index-time `date_*` fields describe the timestamp as it was written -- the
+ * wall clock in the event's own zone -- which cannot be recovered from a `Date`
+ * once the zone has been folded into it. And a dateless timestamp needs its
+ * date supplied from elsewhere, which the caller can only do if it is told the
+ * date was missing rather than handed a silent 1 January.
+ */
+export interface ParsedTimestamp {
+  date: Date;
+  /** The components as written, expressed as a UTC epoch (`Date.UTC(...)`). */
+  wallAsUtcMs: number;
+  /**
+   * Minutes east of UTC the wall clock was read in, or null when no zone was
+   * known (neither in the event nor from `tz`) and it was read as UTC.
+   */
+  offsetMinutes: number | null;
+  /** False when the format carried no date component at all, only a time. */
+  hasDate: boolean;
+}
+
+export interface ParseTimestampOptions {
+  tz?: string;
+  onUnresolvedTz?: (tz: string) => void;
+  tzAlias?: ReadonlyMap<string, string>;
+  now?: Date;
+  /**
+   * The date to use when the format has none (see `hasDate`). Without it such a
+   * timestamp lands on 1 January of `now`'s year, which is what it always did.
+   */
+  dateForDateless?: CalendarDate;
+}
+
+/**
+ * {@link parseTimestamp}, returning the wall clock and zone it read as well as
+ * the instant. `parseTimestamp` is this with everything but `date` discarded.
+ */
+export function parseTimestampDetailed(
+  text: string,
+  format: string,
+  options: ParseTimestampOptions = {},
+): ParsedTimestamp | null {
+  const { tz, onUnresolvedTz, tzAlias, now = new Date(), dateForDateless } = options;
   const { regex, captures } = tokenise(format);
   const match = text.match(regex);
   if (!match) {
@@ -489,18 +543,24 @@ export function parseTimestamp(
     const epochNum = parseInt(bag.epoch, 10);
     // If the value is 13 digits it is already milliseconds; a captured
     // subsecond field would be below ms resolution, so leave it as-is.
-    if (bag.epoch.length >= 13) {
-      return new Date(epochNum);
-    }
     // Seconds since epoch: fold in any subseconds from e.g. `%s%3N`/`%s%3Q`.
-    return new Date(epochNum * 1000 + subMilliseconds);
+    const ms = bag.epoch.length >= 13 ? epochNum : epochNum * 1000 + subMilliseconds;
+    // An epoch is an absolute instant, so its wall clock is UTC by definition.
+    return { date: new Date(ms), wallAsUtcMs: ms, offsetMinutes: 0, hasDate: true };
   }
+
+  // A weekday alone (%a) does not name a date, so it does not count.
+  const hasDate = [bag.year4, bag.year2, bag.month, bag.monthAbbr, bag.monthFull, bag.day, bag.dayOfYear]
+    .some((v) => v !== undefined);
+  const suppliedDate = hasDate ? undefined : dateForDateless;
 
   // -----------------------------------------------------------------------
   // Assemble date components
   // -----------------------------------------------------------------------
   let year: number;
-  if (bag.year4) {
+  if (suppliedDate) {
+    year = suppliedDate.year;
+  } else if (bag.year4) {
     year = parseInt(bag.year4, 10);
   } else if (bag.year2) {
     const y2 = parseInt(bag.year2, 10);
@@ -512,7 +572,9 @@ export function parseTimestamp(
   }
 
   let month: number; // 0-indexed
-  if (bag.month) {
+  if (suppliedDate) {
+    month = suppliedDate.month;
+  } else if (bag.month) {
     month = parseInt(bag.month, 10) - 1;
   } else if (bag.monthAbbr) {
     month = MONTH_NAMES_ABBR.indexOf(
@@ -545,7 +607,7 @@ export function parseTimestamp(
     month = m;
     day = rem;
   } else {
-    day = bag.day ? parseInt(bag.day, 10) : 1;
+    day = suppliedDate ? suppliedDate.day : bag.day ? parseInt(bag.day, 10) : 1;
   }
 
   let hour: number;
@@ -602,21 +664,32 @@ export function parseTimestamp(
   const aliased = bag.tzName === undefined ? undefined : tzAlias?.get(bag.tzName.toUpperCase());
   const zoneName = aliased ?? bag.tzName ?? tz;
 
+  const zoned = (offsetMinutes: number): ParsedTimestamp => ({
+    date: new Date(wallAsUtcMs - offsetMinutes * 60_000),
+    wallAsUtcMs,
+    offsetMinutes,
+    hasDate,
+  });
+
   if (bag.tzOffset) {
     // %z only ever matches Z or a numeric offset, so this always resolves.
-    const offsetMinutes = resolveTzOffsetMinutes(bag.tzOffset) ?? 0;
-    return new Date(wallAsUtcMs - offsetMinutes * 60_000);
+    return zoned(resolveTzOffsetMinutes(bag.tzOffset) ?? 0);
   }
 
   if (zoneName) {
     // A fixed offset or a known abbreviation is a constant, so answer directly.
     const fixed = resolveTzOffsetMinutes(zoneName);
-    if (fixed !== null) return new Date(wallAsUtcMs - fixed * 60_000);
+    if (fixed !== null) return zoned(fixed);
 
     // Otherwise it may be an IANA name, whose offset depends on the date --
     // which is exactly why the abbreviation table cannot answer it.
     const formatter = ianaFormatter(zoneName);
-    if (formatter) return new Date(ianaWallClockToEpoch(formatter, wallAsUtcMs));
+    if (formatter) {
+      // Take the instant as resolved rather than rebuilding it from a rounded
+      // offset: a historical zone can sit a few seconds off a whole minute.
+      const epoch = ianaWallClockToEpoch(formatter, wallAsUtcMs);
+      return { date: new Date(epoch), wallAsUtcMs, offsetMinutes: Math.round((wallAsUtcMs - epoch) / 60_000), hasDate };
+    }
 
     // Genuinely unresolvable: a typo, or a zone this runtime has no data for.
     // When an alias was applied, name both halves — reporting only the target
@@ -626,7 +699,7 @@ export function parseTimestamp(
   }
 
   // No timezone info at all -- assume UTC.
-  return new Date(wallAsUtcMs);
+  return { date: new Date(wallAsUtcMs), wallAsUtcMs, offsetMinutes: null, hasDate };
 }
 
 // ---------------------------------------------------------------------------

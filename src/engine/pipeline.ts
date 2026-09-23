@@ -4,6 +4,7 @@ import { matchStanzas, mergeDirectives, resolveStanzasForEvent, getRenamedSource
 import { breakLines } from './processors/lineBreaker';
 import { extractTimestamps } from './processors/timestampExtractor';
 import { truncateEvents } from './processors/truncator';
+import { routeEventsByAge } from './processors/routeByAge';
 import { applyIndexedExtractions } from './processors/indexedExtractions';
 import { annotatePunct } from './processors/punctAnnotator';
 import { applySedCommands } from './processors/sedCmd';
@@ -15,6 +16,7 @@ import { applyFieldAliases } from './processors/fieldAlias';
 import { applyEvalExpressions } from './processors/evalProcessor';
 import { attributeRawMutations } from './processors/rawMutationAttribution';
 import { lintConfigs, lintMatchedDirectives } from './configLint';
+import { effectiveDirective } from './utils/directiveValues';
 
 function safeProcessor(
   name: string,
@@ -166,7 +168,7 @@ export function runPipeline(
   // Real Splunk implicitly sets SHOULD_LINEMERGE=false when INDEXED_EXTRACTIONS is a
   // structured format (csv/tsv/psv/w3c), so each line becomes its own event.
   const STRUCTURED_EXTRACTIONS = new Set(['csv', 'tsv', 'psv', 'w3c']);
-  const indexedExtDir = directives.find((d) => d.key === 'INDEXED_EXTRACTIONS');
+  const indexedExtDir = effectiveDirective(directives, 'INDEXED_EXTRACTIONS');
   const lineBreakDirectives =
     indexedExtDir && STRUCTURED_EXTRACTIONS.has(indexedExtDir.value.trim().toLowerCase()) &&
     !directives.some((d) => d.key === 'SHOULD_LINEMERGE')
@@ -184,6 +186,11 @@ export function runPipeline(
   // Step 4: Timestamp extraction
   events = safeProcessor('Timestamp', events, () => extractTimestamps(events, directives, diagnostics, new Date(now)), diagnostics);
 
+  // Step 4b: ROUTE_EVENTS_OLDER_THAN — the spec runs the age test "after
+  // timestamp extraction", so it reads the extracted _time, before any
+  // index-time transform can rewrite it (#275).
+  events = safeProcessor('ROUTE_EVENTS_OLDER_THAN', events, () => routeEventsByAge(events, directives, diagnostics, now), diagnostics);
+
   // Step 5: Indexed extractions
   events = safeProcessor('INDEXED_EXTRACTIONS', events, () => applyIndexedExtractions(events, directives, diagnostics), diagnostics);
 
@@ -191,8 +198,9 @@ export function runPipeline(
   events = safeProcessor('SEDCMD', events, () => applySedCommands(events, directives, diagnostics), diagnostics);
 
   // Step 7: Index-time TRANSFORMS — regex transforms, DEST_KEY routing, and
-  // INGEST_EVAL stanzas are all applied here, interleaved in TRANSFORMS-<class>
-  // list order (only when a props.conf stanza references them).
+  // INGEST_EVAL / STOP_PROCESSING_IF stanzas are all applied here, interleaved
+  // in TRANSFORMS-<class> list order, then every RULESET-<class> after them
+  // (only when a props.conf stanza references them).
   events = safeProcessor('TRANSFORMS', events, () => applyTransforms(events, directives, transformsConf, 'index-time', diagnostics, now), diagnostics, 'transforms.conf');
 
   // Step 7b: CLONE_SOURCETYPE copies get the SEDCMD and TRANSFORMS of the

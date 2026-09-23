@@ -4,20 +4,22 @@ import { getField, setField } from '../utils/fieldBag';
 import { safeRegex } from '../../utils/splunkRegex';
 import { atDirective } from '../parser/provenance';
 import { extractTimestamps } from './timestampExtractor';
+import { extractXmlIndexed } from './xmlIndexedExtractions';
+import { effectiveBool, effectiveDirective } from '../utils/directiveValues';
 
 export function applyIndexedExtractions(
   events: SplunkEvent[],
   directives: ConfDirective[],
   diagnostics?: ValidationDiagnostic[],
 ): SplunkEvent[] {
-  const extractionDir = directives.find((d) => d.key === 'INDEXED_EXTRACTIONS');
+  const extractionDir = effectiveDirective(directives, 'INDEXED_EXTRACTIONS');
   if (!extractionDir) return events;
 
   const mode = extractionDir.value.trim().toLowerCase();
 
   switch (mode) {
     case 'json':
-      return extractJsonFields(events);
+      return extractJsonFields(events, directives);
     case 'csv':
       return extractDelimited(events, directives, ',', 'csv', diagnostics);
     case 'tsv':
@@ -26,12 +28,17 @@ export function applyIndexedExtractions(
       return extractDelimited(events, directives, '|', 'psv', diagnostics);
     case 'w3c':
       return extractW3c(events);
+    case 'xml':
+    case 'xmlkv':
+    case 'xmlkv-winevt':
+      return extractXmlIndexed(events, directives, mode, diagnostics);
     default:
       return events;
   }
 }
 
-function extractJsonFields(events: SplunkEvent[]): SplunkEvent[] {
+function extractJsonFields(events: SplunkEvent[], directives: ConfDirective[]): SplunkEvent[] {
+  const trimArrayBraces = effectiveBool(directives, 'JSON_TRIM_BRACES_IN_ARRAY_NAMES', false);
   return events.map((event) => {
     try {
       const obj: unknown = JSON.parse(event._raw);
@@ -40,7 +47,7 @@ function extractJsonFields(events: SplunkEvent[]): SplunkEvent[] {
       const fields = { ...event.fields };
       const added: string[] = [];
       const sourceKeys: Record<string, string> = {};
-      const opts = { stripLeadingUnderscore: true, sourceKeys };
+      const opts = { stripLeadingUnderscore: true, sourceKeys, trimArrayBraces };
       const depthTruncated = Array.isArray(obj)
         ? flattenArray(obj as unknown[], fields, added, '', 0, opts)
         : flattenJson(obj as Record<string, unknown>, fields, added, '', 0, opts);
@@ -65,17 +72,33 @@ function extractJsonFields(events: SplunkEvent[]): SplunkEvent[] {
   });
 }
 
-/**
- * How one delimited (csv/tsv/psv) source is read, after the format's defaults
- * have been overridden by the structured-data attributes (#184).
- */
-interface DelimitedOptions {
+/** How the fields of one line are split: the body's, or the header's. */
+interface LineSyntax {
   /** Field separator. Ignored when `whitespaceDelimiter` is set. */
   delimiter: string;
   /** FIELD_DELIMITER = whitespace/ws: any run of spaces and tabs separates fields. */
   whitespaceDelimiter: boolean;
   /** Quote character, or null when quoting is disabled (FIELD_QUOTE = none). */
   quote: string | null;
+}
+
+/**
+ * How one delimited (csv/tsv/psv) source is read, after the format's defaults
+ * have been overridden by the structured-data attributes (#184, #272).
+ */
+interface DelimitedOptions extends LineSyntax {
+  /**
+   * How the header line is split. HEADER_FIELD_DELIMITER and
+   * HEADER_FIELD_QUOTE override the body's syntax for that one line only;
+   * without them the header is split exactly like the body.
+   */
+  header: LineSyntax;
+  /** FIELD_HEADER_REGEX: marks the header line; the header is the text after the match. */
+  fieldHeaderRegex: RegExp | null;
+  /** HEADER_FIELD_ACCEPTABLE_SPECIAL_CHARACTERS: characters header cleaning keeps. */
+  acceptableSpecialChars: string;
+  /** MISSING_VALUE_REGEX: a value matching this is absent, not a value. */
+  missingValueRegex: RegExp | null;
   /** FIELD_NAMES: explicit header, for data with no header line. */
   fieldNames: string[] | null;
   /** HEADER_FIELD_LINE_NUMBER: 1-based header line; 0 locates it automatically. */
@@ -135,31 +158,31 @@ function delimitedOptions(
   defaultDelimiter: string,
   diagnostics?: ValidationDiagnostic[],
 ): DelimitedOptions {
-  const find = (key: string) => directives.find((d) => d.key === key);
+  const find = (key: string) => effectiveDirective(directives, key);
+
+  const body: LineSyntax = { delimiter: defaultDelimiter, whitespaceDelimiter: false, quote: '"' };
+  applySyntaxOverrides(body, find('FIELD_DELIMITER'), find('FIELD_QUOTE'));
+  // The header starts from the body's syntax, not the format default, so a
+  // FIELD_DELIMITER that applies to the whole file still splits the header
+  // when no HEADER_FIELD_DELIMITER says otherwise.
+  const header: LineSyntax = { ...body };
+  applySyntaxOverrides(header, find('HEADER_FIELD_DELIMITER'), find('HEADER_FIELD_QUOTE'));
 
   const opts: DelimitedOptions = {
-    delimiter: defaultDelimiter,
-    whitespaceDelimiter: false,
-    quote: '"',
+    ...body,
+    header,
+    fieldHeaderRegex: compileOption(find('FIELD_HEADER_REGEX'), 'The header was located as if it were unset.', diagnostics),
+    // ASCII below 128 only, per the spec; anything else is not a character
+    // the header processor can be told to keep.
+    acceptableSpecialChars: [...(find('HEADER_FIELD_ACCEPTABLE_SPECIAL_CHARACTERS')?.value.trim() ?? '')]
+      .filter((ch) => ch.charCodeAt(0) < 128)
+      .join(''),
+    missingValueRegex: compileOption(find('MISSING_VALUE_REGEX'), 'No value was treated as missing.', diagnostics),
     fieldNames: null,
     headerLineNumber: 0,
     preambleRegex: null,
     timestampFields: null,
   };
-
-  const delimiterDir = find('FIELD_DELIMITER');
-  if (delimiterDir) {
-    const decoded = decodeDelimiterChar(delimiterDir.value);
-    if (decoded?.whitespace) opts.whitespaceDelimiter = true;
-    else if (decoded?.char !== undefined) opts.delimiter = decoded.char;
-  }
-
-  const quoteDir = find('FIELD_QUOTE');
-  if (quoteDir) {
-    const decoded = decodeDelimiterChar(quoteDir.value);
-    if (decoded?.none) opts.quote = null;
-    else if (decoded?.char !== undefined) opts.quote = decoded.char;
-  }
 
   const namesDir = find('FIELD_NAMES');
   if (namesDir) {
@@ -173,21 +196,7 @@ function delimitedOptions(
     if (Number.isFinite(n) && n > 0) opts.headerLineNumber = n;
   }
 
-  const preambleDir = find('PREAMBLE_REGEX');
-  if (preambleDir) {
-    const compiled = safeRegex(preambleDir.value.trim());
-    if (compiled) {
-      opts.preambleRegex = compiled;
-    } else if (diagnostics) {
-      diagnostics.push({
-        level: 'warning',
-        message: `PREAMBLE_REGEX (${preambleDir.value.trim()}) could not be compiled safely (invalid regex or rejected as ReDoS-prone). No preamble lines were skipped.`,
-        file: 'props.conf',
-        ...atDirective(preambleDir),
-        directiveKey: 'PREAMBLE_REGEX',
-      });
-    }
-  }
+  opts.preambleRegex = compileOption(find('PREAMBLE_REGEX'), 'No preamble lines were skipped.', diagnostics);
 
   const timestampDir = find('TIMESTAMP_FIELDS');
   if (timestampDir) {
@@ -196,6 +205,53 @@ function delimitedOptions(
   }
 
   return opts;
+}
+
+/** Apply a delimiter/quote directive pair to `syntax` in place. */
+function applySyntaxOverrides(
+  syntax: LineSyntax,
+  delimiterDir: ConfDirective | undefined,
+  quoteDir: ConfDirective | undefined,
+): void {
+  if (delimiterDir) {
+    const decoded = decodeDelimiterChar(delimiterDir.value);
+    if (decoded?.whitespace) syntax.whitespaceDelimiter = true;
+    else if (decoded?.char !== undefined) {
+      syntax.delimiter = decoded.char;
+      syntax.whitespaceDelimiter = false;
+    }
+  }
+  if (quoteDir) {
+    const decoded = decodeDelimiterChar(quoteDir.value);
+    if (decoded?.none) syntax.quote = null;
+    else if (decoded?.char !== undefined) syntax.quote = decoded.char;
+  }
+}
+
+/**
+ * Compile a regex-valued attribute, or warn and return null. A pattern that
+ * fails is reported rather than dropped silently: an unapplied regex looks
+ * exactly like one that matched nothing.
+ */
+function compileOption(
+  dir: ConfDirective | undefined,
+  consequence: string,
+  diagnostics?: ValidationDiagnostic[],
+): RegExp | null {
+  if (!dir) return null;
+  const pattern = dir.value.trim();
+  if (pattern === '') return null;
+  const compiled = safeRegex(pattern);
+  if (!compiled && diagnostics) {
+    diagnostics.push({
+      level: 'warning',
+      message: `${dir.key} (${pattern}) could not be compiled safely (invalid regex or rejected as ReDoS-prone). ${consequence}`,
+      file: 'props.conf',
+      ...atDirective(dir),
+      directiveKey: dir.key,
+    });
+  }
+  return compiled;
 }
 
 /**
@@ -271,21 +327,30 @@ function extractDelimited(
   // content line is the header — a leading blank or comment line that became
   // its own event must be skipped, since assuming `events[0]` is the header
   // makes every field name garbage whenever the file opens with one.
+  // FIELD_HEADER_REGEX, when set, is what identifies the header line instead:
+  // such headers are typically decorated with a `#` prefix, which the
+  // content-line rule would otherwise skip straight past.
+  const clean = (name: string) => sanitizeHeaderName(name, opts.acceptableSpecialChars);
+  const headerFrom = (raw: string) =>
+    parseDelimitedLine(stripHeaderPrefix(raw, opts.fieldHeaderRegex), opts.header).map(clean);
   let headers: string[];
   let dataStart: number;
   if (opts.fieldNames) {
-    headers = opts.fieldNames.map(sanitizeHeaderName);
+    headers = opts.fieldNames.map(clean);
     dataStart = 0;
   } else if (opts.headerLineNumber > 0) {
     const headerEvent = working[opts.headerLineNumber - 1];
     if (headerEvent === undefined) return events;
-    headers = parseDelimitedLine(headerEvent._raw, opts).map(sanitizeHeaderName);
+    headers = headerFrom(headerEvent._raw);
     dataStart = opts.headerLineNumber;
   } else {
-    const headerIndex = working.findIndex((e) => isContentLine(e._raw));
+    const fieldHeaderRegex = opts.fieldHeaderRegex;
+    const headerIndex = fieldHeaderRegex
+      ? working.findIndex((e) => fieldHeaderRegex.test(e._raw))
+      : working.findIndex((e) => isContentLine(e._raw));
     const headerEvent = working[headerIndex];
     if (headerEvent === undefined) return events;
-    headers = parseDelimitedLine(headerEvent._raw, opts).map(sanitizeHeaderName);
+    headers = headerFrom(headerEvent._raw);
     dataStart = headerIndex + 1;
   }
 
@@ -301,7 +366,10 @@ function extractDelimited(
 
     for (const [i, header] of headers.entries()) {
       const value = values[i];
-      if (header && value) {
+      // MISSING_VALUE_REGEX names the placeholder a source writes for "no
+      // value"; indexing the placeholder would make an absent value
+      // searchable as if it were data.
+      if (header && value && !opts.missingValueRegex?.test(value)) {
         setField(fields, header, value);
         added.push(header);
       }
@@ -332,7 +400,7 @@ function extractW3c(events: SplunkEvent[]): SplunkEvent[] {
   for (const event of events) {
     const fieldsMatch = event._raw.match(/^#Fields:\s*(.+)$/m);
     if (fieldsMatch) {
-      headers = (fieldsMatch[1] ?? '').trim().split(/\s+/).map(sanitizeHeaderName);
+      headers = (fieldsMatch[1] ?? '').trim().split(/\s+/).map((name) => sanitizeHeaderName(name));
       break;
     }
   }
@@ -392,9 +460,28 @@ function isW3cDirectiveOnly(raw: string): boolean {
  * and strips the leading underscores it reserves for internal fields. Keeping
  * the raw token meant a W3C/IIS log surfaced `cs-uri-stem`, which is not the
  * name anyone can search for — `cs_uri_stem` is.
+ *
+ * `acceptable` is HEADER_FIELD_ACCEPTABLE_SPECIAL_CHARACTERS: characters that
+ * survive cleaning. The spec's wording exempts a space by default too; this
+ * keeps replacing it, as it did before #272, because no capture settles the
+ * point and changing every spaced header name on a doc reading alone is the
+ * kind of confident wrong answer the fixtures exist to prevent. Naming a space
+ * in the attribute keeps it.
  */
-function sanitizeHeaderName(name: string): string {
-  return name.replace(/[^A-Za-z0-9_]/g, '_').replace(/^_+/, '');
+function sanitizeHeaderName(name: string, acceptable = ''): string {
+  let out = '';
+  for (const ch of name) out += /[A-Za-z0-9_]/.test(ch) || acceptable.includes(ch) ? ch : '_';
+  return out.replace(/^_+/, '');
+}
+
+/**
+ * FIELD_HEADER_REGEX: the header proper starts after the match, and the
+ * matched decoration is not part of any field name. A line it does not match
+ * (possible when HEADER_FIELD_LINE_NUMBER chose the line) is read whole.
+ */
+function stripHeaderPrefix(raw: string, fieldHeaderRegex: RegExp | null): string {
+  const m = fieldHeaderRegex?.exec(raw);
+  return m ? raw.slice(m.index + m[0].length) : raw;
 }
 
 /**
@@ -412,7 +499,7 @@ function parseW3cLine(line: string): string[] {
   return tokens;
 }
 
-function parseDelimitedLine(line: string, opts: DelimitedOptions): string[] {
+function parseDelimitedLine(line: string, opts: LineSyntax): string[] {
   const fields: string[] = [];
   let current = '';
   let inQuotes = false;

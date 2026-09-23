@@ -405,3 +405,43 @@ describe('applyKvMode — auto-KV key cleaning (#207)', () => {
     expect(r.fields['a_b']).toBe('1');
   });
 });
+
+describe('applyKvMode — KV_TRIM_SPACES (#274)', () => {
+  // Doc-derived: props.conf.spec 10.4.3. Default true strips the outer spaces
+  // from an automatic key=value value, false keeps them, tabs are never
+  // trimmed, and it applies to KV_MODE auto and auto_escaped. No capture has a
+  // quoted value with outer spaces, so none pins this.
+  const trim = (value: string): ConfDirective => ({
+    key: 'KV_TRIM_SPACES',
+    value,
+    line: 2,
+    directiveType: 'KV_TRIM_SPACES',
+  });
+
+  it('strips outer spaces by default, as in the spec example', () => {
+    const r = applyKvMode([event('myfield=" apples "')], [dir('auto')])[0]!;
+    expect(r.fields['myfield']).toBe('apples');
+  });
+
+  it('keeps the inner spaces', () => {
+    const r = applyKvMode([event("note='  not found  '")], [dir('auto')])[0]!;
+    expect(r.fields['note']).toBe('not found');
+  });
+
+  it('keeps outer spaces when false', () => {
+    const r = applyKvMode([event('myfield=" apples "')], [dir('auto'), trim('false')])[0]!;
+    expect(r.fields['myfield']).toBe(' apples ');
+  });
+
+  it('trims spaces only, never tabs', () => {
+    const r = applyKvMode([event('myfield="\t apples \t"')], [dir('auto')])[0]!;
+    expect(r.fields['myfield']).toBe('\t apples \t');
+  });
+
+  it('applies to auto_escaped too', () => {
+    const on = applyKvMode([event('msg=" say \\"hi\\" "')], [dir('auto_escaped')])[0]!;
+    const off = applyKvMode([event('msg=" say \\"hi\\" "')], [dir('auto_escaped'), trim('false')])[0]!;
+    expect(on.fields['msg']).toBe('say "hi"');
+    expect(off.fields['msg']).toBe(' say "hi" ');
+  });
+});

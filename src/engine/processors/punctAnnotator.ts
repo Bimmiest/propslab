@@ -22,6 +22,7 @@
 
 import type { ConfDirective, SplunkEvent } from '../types';
 import { setField } from '../utils/fieldBag';
+import { effectiveBool } from '../utils/directiveValues';
 
 const PUNCT_MAX_LENGTH = 50;
 
@@ -40,10 +41,8 @@ export function buildPunct(raw: string): string {
 }
 
 export function annotatePunct(events: SplunkEvent[], directives: ConfDirective[]): SplunkEvent[] {
-  const declared = directives.find((d) => d.key === 'ANNOTATE_PUNCT')?.value.trim().toLowerCase();
   // Splunk's default is true; only an explicit false disables the field.
-  const enabled = declared === undefined ? true : declared !== 'false';
-  if (!enabled) return events;
+  if (!effectiveBool(directives, 'ANNOTATE_PUNCT', true)) return events;
 
   return events.map((event) => {
     const punct = buildPunct(event._raw);

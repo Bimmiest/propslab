@@ -517,13 +517,21 @@ describe('applyRegexTransform — search-time-only attributes are ignored index-
     expect(searchTime(event('a=1|b=2'), s).fields).toEqual({ a: '1', b: '2' });
   });
 
-  it('ignores MV_ADD index-time, keeping the first value', () => {
-    // Named capture groups — the path that consults MV_ADD. (FORMAT-pair
-    // extraction accumulates unconditionally regardless of MV_ADD, which is the
-    // separate known divergence #174.)
+  it('ignores MV_ADD index-time: REPEAT_MATCH accumulates either way', () => {
+    // Previously asserted '1' (first value only). Changed in #303 (doc-derived):
+    // REPEAT_MATCH runs the REGEX once per match and each match writes the
+    // field, which is what the FORMAT path already did (#174 test below). Named
+    // groups disagreeing with it was the bug. MV_ADD stays inert here — the
+    // MV_ADD = false case below produces the same multivalue.
     const s = stanza('nums', { REGEX: '(?<num>\\d+)', REPEAT_MATCH: 'true', MV_ADD: 'true' });
     const result = applyRegexTransform(event('1 2 3'), s, undefined, 'index-time');
-    expect(result.fields['num']).toBe('1');
+    expect(result.fields['num']).toEqual(['1', '2', '3']);
+    const withoutMvAdd = stanza('nums', { REGEX: '(?<num>\\d+)', REPEAT_MATCH: 'true', MV_ADD: 'false' });
+    expect(applyRegexTransform(event('1 2 3'), withoutMvAdd, undefined, 'index-time').fields['num']).toEqual([
+      '1',
+      '2',
+      '3',
+    ]);
   });
 });
 
@@ -679,6 +687,34 @@ describe('#285 — MV_ADD agrees between named groups and FORMAT', () => {
     );
     expect(named.fields.n).toEqual(['1', '2']);
     expect(format.fields.n).toEqual(named.fields.n);
+  });
+});
+
+// Doc-derived (transforms.conf.spec, REPEAT_MATCH: the REGEX is run repeatedly,
+// each match writing the field). Index-time named groups and FORMAT pairs used
+// to disagree — first value only against every match (#303).
+describe('#303 — index-time REPEAT_MATCH agrees between named groups and FORMAT', () => {
+  const indexTime = (s: ConfStanza) => applyRegexTransform(event('n=1 n=2 n=3'), s, undefined, 'index-time');
+
+  it('collects every match from named groups, as FORMAT does', () => {
+    const named = indexTime(stanza('t', { REGEX: 'n=(?<n>\\d+)', WRITE_META: 'true', REPEAT_MATCH: 'true' }));
+    const format = indexTime(
+      stanza('t', { REGEX: 'n=(\\d+)', FORMAT: 'n::$1', WRITE_META: 'true', REPEAT_MATCH: 'true' }),
+    );
+    expect(named.fields.n).toEqual(['1', '2', '3']);
+    expect(format.fields.n).toEqual(named.fields.n);
+  });
+
+  it('collects every _KEY_/_VAL_ value too', () => {
+    const r = indexTime(
+      stanza('t', { REGEX: '(?<_KEY_1>n)=(?<_VAL_1>\\d+)', WRITE_META: 'true', REPEAT_MATCH: 'true' }),
+    );
+    expect(r.fields.n).toEqual(['1', '2', '3']);
+  });
+
+  it('still takes the first match only without REPEAT_MATCH', () => {
+    const r = indexTime(stanza('t', { REGEX: 'n=(?<n>\\d+)', WRITE_META: 'true' }));
+    expect(r.fields.n).toBe('1');
   });
 });
 

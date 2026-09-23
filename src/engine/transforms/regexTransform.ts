@@ -1,9 +1,21 @@
+// Applying one transforms.conf stanza to one event: SOURCE_KEY, LOOKAHEAD,
+// REGEX, and where the result goes (DEST_KEY, or fields via FORMAT or named
+// groups). FORMAT parsing, DELIMS/FIELDS extraction and key cleaning live in
+// the sibling format.ts, delims.ts and keyCleaning.ts.
+
 import type { SplunkEvent, ConfStanza, ConfDirective } from '../types';
 import { safeRegex, convertSplunkToJsRegex, validateRegex } from '../../utils/splunkRegex';
 import { longestPartialMatch, type NoOpReason } from '../noOpExplainer';
-import { stripLeadingUnderscoreForField } from '../utils/internalFields';
 import { getField, hasField, setField, addFieldValue } from '../utils/fieldBag';
+import { stripLeadingUnderscoreForField } from '../utils/internalFields';
 import { getSourceKeyValue } from '../utils/metadataFields';
+import { effectiveDirective, parseSplunkBool } from '../utils/directiveValues';
+import { expandFormat, parseFormatPairs } from './format';
+import { keyCleaner } from './keyCleaning';
+import { applyDelimsExtraction } from './delims';
+
+// kvMode applies the same key cleaning, and has always imported it from here.
+export { cleanFieldKey } from './keyCleaning';
 
 export interface TransformResult {
   fields: Record<string, string | string[]>;
@@ -18,10 +30,6 @@ export interface TransformResult {
    */
   noOp?: NoOpReason;
 }
-
-// Pre-compiled patterns for format string substitution.
-const CAPTURE_REF_PATTERN = /\$(\d+)/g;
-const NAMED_REF_PATTERN = /\$\{(\w+)\}/g;
 
 interface CompiledRegex { plain: RegExp; global: RegExp }
 
@@ -66,105 +74,6 @@ function getCompiledRegex(transformStanza: ConfStanza, jsPattern: string): Compi
   return result;
 }
 
-/** Last directive with the given key in a stanza (Splunk last-definition-wins), or undefined. */
-function lastDirective(stanza: ConfStanza, key: string): ConfDirective | undefined {
-  for (let i = stanza.directives.length - 1; i >= 0; i--) {
-    const directive = stanza.directives[i];
-    if (directive?.key === key) return directive;
-  }
-  return undefined;
-}
-
-/** One `key::value` token from a search-time FORMAT, still holding its `$N` references. */
-interface FormatPair {
-  key: string;
-  value: string;
-}
-
-/**
- * Split a FORMAT string into its `key::value` pairs *without* substituting
- * captures, so a capture containing spaces or `::` cannot change the pair
- * structure (transforms.conf.spec, "FORMAT for search-time extractions").
- *
- * Both halves may hold `$N` references — `FORMAT = $1::$2` names the field from
- * one capture and its value from another. A value may be double-quoted to carry
- * literal whitespace: `field::"a b"`.
- */
-function parseFormatPairs(format: string): FormatPair[] {
-  const pairs: FormatPair[] = [];
-  let i = 0;
-
-  while (i < format.length) {
-    while (i < format.length && /\s/.test(format.charAt(i))) i++;
-    if (i >= format.length) break;
-
-    // Keys never contain whitespace, so the `::` separator must appear in the
-    // run that starts here. A run without one is stray text — skip it.
-    let runEnd = i;
-    while (runEnd < format.length && !/\s/.test(format.charAt(runEnd))) runEnd++;
-    const sep = format.indexOf('::', i);
-    if (sep < 0) break;
-    if (sep >= runEnd) {
-      i = runEnd;
-      continue;
-    }
-
-    const key = format.slice(i, sep);
-    i = sep + 2;
-
-    let value: string;
-    if (format.charAt(i) === '"') {
-      const end = format.indexOf('"', i + 1);
-      if (end < 0) {
-        value = format.slice(i + 1);
-        i = format.length;
-      } else {
-        value = format.slice(i + 1, end);
-        i = end + 1;
-      }
-    } else {
-      let end = i;
-      while (end < format.length && !/\s/.test(format.charAt(end))) end++;
-      value = format.slice(i, end);
-      i = end;
-    }
-
-    if (key) pairs.push({ key, value });
-  }
-
-  return pairs;
-}
-
-function expandFormat(format: string, match: RegExpExecArray, priorDestValue?: string): string {
-  // match[0] is the whole match; match[1..maxIndex] are the capture groups.
-  const maxIndex = match.length - 1;
-  let result = format.replace(CAPTURE_REF_PATTERN, (whole: string, digits: string) => {
-    // The pattern greedily grabs every trailing digit, but a reference resolves
-    // to at most `maxIndex`. Mirror PCRE/JS `$nn` fallback: take the LONGEST
-    // leading digit-run that names an existing group; any remaining digits are
-    // literal text. (So with one group, `$10` → group 1 followed by a literal
-    // `0`, not the non-existent group 10.)
-    for (let len = digits.length; len > 0; len--) {
-      const idx = parseInt(digits.slice(0, len), 10);
-      if (idx <= maxIndex) {
-        // transforms.conf.spec: `$0` is "what was in the DEST_KEY before the
-        // REGEX was performed", not the whole match. Use the prior DEST_KEY value
-        // when one is known; fall back to the whole match otherwise (e.g. field
-        // extractions with no DEST_KEY).
-        const base = idx === 0 && priorDestValue !== undefined ? priorDestValue : (match[idx] ?? '');
-        return base + digits.slice(len);
-      }
-    }
-    // No leading digit-run names a real group — leave the `$N` text untouched.
-    return whole;
-  });
-  if (match.groups) {
-    const groups = match.groups;
-    result = result.replace(NAMED_REF_PATTERN, (_: string, name: string) => groups[name] ?? '');
-  }
-  return result;
-}
-
 /**
  * Resolve the current contents of DEST_KEY (used for `$0` in FORMAT). Returns
  * `undefined` when there is no DEST_KEY, so `$0` falls back to the whole match.
@@ -206,142 +115,6 @@ function resolveSourceValue(event: SplunkEvent, sourceKeyDir?: ConfDirective): s
   return (Array.isArray(v) ? v[0] : v) ?? '';
 }
 
-/** Decode the escape sequences Splunk allows inside DELIMS/FIELDS quoted tokens. */
-function decodeDelimEscapes(s: string): string {
-  return s.replace(/\\([tnr"\\])/g, (_: string, c: string) =>
-    c === 't' ? '\t' : c === 'n' ? '\n' : c === 'r' ? '\r' : c,
-  );
-}
-
-/**
- * Parse a comma-separated list of double-quoted tokens — used for both DELIMS
- * (each token is a set of delimiter characters) and FIELDS (each token is a
- * field name). Falls back to an unquoted comma-split for leniency.
- */
-function parseDelimList(raw: string): string[] {
-  const out: string[] = [];
-  const re = /"((?:[^"\\]|\\.)*)"/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(raw)) !== null) out.push(decodeDelimEscapes(m[1] ?? ''));
-  if (out.length === 0) {
-    for (const part of raw.split(',')) {
-      const t = part.trim();
-      if (t) out.push(decodeDelimEscapes(t));
-    }
-  }
-  return out;
-}
-
-/** Split on ANY single character in `delims` — each character is its own delimiter. */
-function splitOnAnyChar(value: string, delims: string): string[] {
-  if (!delims) return [value];
-  const set = new Set(delims);
-  const parts: string[] = [];
-  let cur = '';
-  for (const ch of value) {
-    if (set.has(ch)) {
-      parts.push(cur);
-      cur = '';
-    } else {
-      cur += ch;
-    }
-  }
-  parts.push(cur);
-  return parts;
-}
-
-/**
- * CLEAN_KEYS "key cleaning": replace every non-alphanumeric character with an
- * underscore, then strip leading underscores and digits.
- *
- * Both halves are pinned by a capture from Splunk 10.4.0
- * (`report-delims-field-and-value`), where `DELIMS = ";", "="` over
- * `2026-01-15T10:00:00Z a=1;…` yields the field `T10_00_00Z_a`:
- * `2026-01-15T10:00:00Z a` → `2026_01_15T10_00_00Z_a` → `T10_00_00Z_a`.
- *
- * Interior underscores survive — only a LEADING run is stripped — which is why
- * a FIELDS name like `col_a` comes back unchanged.
- */
-export function cleanFieldKey(raw: string): string {
-  return raw.replace(/[^A-Za-z0-9]/g, '_').replace(/^[_0-9]+/, '');
-}
-
-/**
- * Resolve the field-name transformation a transform applies to keys it extracts.
- *
- * CLEAN_KEYS is search-time only, and defaults to on. At index time the only
- * name rewriting is the leading-underscore strip that WRITE_META performs.
- */
-function keyCleaner(
-  stanza: ConfStanza,
-  writeMeta: boolean,
-  phase: 'index-time' | 'search-time',
-): (raw: string) => string {
-  if (phase === 'index-time') {
-    return (raw) => (writeMeta ? stripLeadingUnderscoreForField(raw.trim()) : raw.trim());
-  }
-  // Splunk reads this as a boolean, so `0`/`false` turn cleaning off and
-  // anything else (including an absent directive) leaves it on.
-  const declared = lastDirective(stanza, 'CLEAN_KEYS')?.value.trim().toLowerCase();
-  const cleanKeys = !(declared === 'false' || declared === '0');
-  return (raw) => (cleanKeys ? cleanFieldKey(raw.trim()) : raw.trim());
-}
-
-/**
- * DELIMS/FIELDS delimiter-based extraction (the alternative to REGEX).
- *  - Two DELIMS sets → field/value pairs: first set splits pairs, second splits
- *    key from value (on the first key-delimiter occurrence).
- *  - One DELIMS set + FIELDS → positional values named by FIELDS.
- * Keys/values are trimmed; empty values are dropped (KEEP_EMPTY_VALS default false).
- */
-function applyDelimsExtraction(
-  event: SplunkEvent,
-  stanza: ConfStanza,
-  delimsDir: ConfDirective,
-  sourceKeyDir: ConfDirective | undefined,
-  cleanName: (raw: string) => string,
-): TransformResult {
-  const result: TransformResult = { fields: {}, matched: false };
-  const sourceValue = resolveSourceValue(event, sourceKeyDir);
-  if (!sourceValue) return result;
-
-  const delimSets = parseDelimList(delimsDir.value);
-  if (delimSets.length === 0) return result;
-
-  if (delimSets.length >= 2) {
-    const [pairDelims = '', kvDelims = ''] = delimSets;
-    const kvDelimSet = new Set(kvDelims);
-    for (const pair of splitOnAnyChar(sourceValue, pairDelims)) {
-      let splitAt = -1;
-      for (let i = 0; i < pair.length; i++) {
-        if (kvDelimSet.has(pair.charAt(i))) {
-          splitAt = i;
-          break;
-        }
-      }
-      if (splitAt < 0) continue;
-      const key = cleanName(pair.slice(0, splitAt));
-      const value = pair.slice(splitAt + 1).trim();
-      if (!key || !value) continue;
-      addMultiValue(result.fields, key, value);
-    }
-  } else {
-    const fieldsDir = lastDirective(stanza, 'FIELDS');
-    if (!fieldsDir) return result;
-    const names = parseDelimList(fieldsDir.value);
-    const values = splitOnAnyChar(sourceValue, delimSets[0] ?? '');
-    for (let i = 0; i < names.length && i < values.length; i++) {
-      const key = cleanName(names[i] ?? '');
-      const value = (values[i] ?? '').trim();
-      if (!key || !value) continue;
-      addMultiValue(result.fields, key, value);
-    }
-  }
-
-  result.matched = Object.keys(result.fields).length > 0;
-  return result;
-}
-
 export function applyRegexTransform(
   event: SplunkEvent,
   transformStanza: ConfStanza,
@@ -350,16 +123,15 @@ export function applyRegexTransform(
 ): TransformResult {
   // Splunk's last-definition-wins rule: a repeated key within a stanza (including
   // one produced by merging duplicate same-name stanzas) takes its LAST value.
-  const regexDir = lastDirective(transformStanza, 'REGEX');
-  const formatDir = lastDirective(transformStanza, 'FORMAT');
-  const sourceKeyDir = lastDirective(transformStanza, 'SOURCE_KEY');
+  const regexDir = effectiveDirective(transformStanza.directives, 'REGEX');
+  const formatDir = effectiveDirective(transformStanza.directives, 'FORMAT');
+  const sourceKeyDir = effectiveDirective(transformStanza.directives, 'SOURCE_KEY');
   // DEST_KEY is index-time only (transforms.conf.spec: "only relevant for
   // index-time field extractions"). Reached through a search-time REPORT-, the
   // stanza performs field extraction and nothing else — so FORMAT is read as
   // `field::value` pairs, exactly as it would be with no DEST_KEY present.
-  const destKeyDir = phase === 'index-time' ? lastDirective(transformStanza, 'DEST_KEY') : undefined;
-  const writeMetaDir = lastDirective(transformStanza, 'WRITE_META');
-  const writeMeta = writeMetaDir?.value.trim().toLowerCase() === 'true';
+  const destKeyDir = phase === 'index-time' ? effectiveDirective(transformStanza.directives, 'DEST_KEY') : undefined;
+  const writeMeta = parseSplunkBool(effectiveDirective(transformStanza.directives, 'WRITE_META')?.value, false);
   // REPEAT_MATCH: re-run the regex to find every match (default: first match only).
   // MV_ADD: when a field is extracted more than once, accumulate into a multivalue
   // field rather than discarding the later value (default: keep the first).
@@ -368,7 +140,7 @@ export function applyRegexTransform(
   // as valid only for search-time field extractions, so an index-time
   // TRANSFORMS- pass ignores it rather than quietly honouring a setting real
   // Splunk drops. transformsProcessor warns when a stanza is used that way.
-  const repeatMatch = lastDirective(transformStanza, 'REPEAT_MATCH')?.value.trim().toLowerCase() === 'true';
+  const repeatMatch = parseSplunkBool(effectiveDirective(transformStanza.directives, 'REPEAT_MATCH')?.value, false);
   // Whether REGEX is run across the whole source or once. REPEAT_MATCH is
   // documented as index-time only, and there it is the switch: without it the
   // REGEX runs once. At search time it is inert, yet Splunk still extracts every
@@ -378,8 +150,7 @@ export function applyRegexTransform(
   // later values are kept (#285).
   const scanAll = phase === 'search-time' || repeatMatch;
   const mvAdd =
-    phase === 'search-time' &&
-    lastDirective(transformStanza, 'MV_ADD')?.value.trim().toLowerCase() === 'true';
+    phase === 'search-time' && parseSplunkBool(effectiveDirective(transformStanza.directives, 'MV_ADD')?.value, false);
 
   const result: TransformResult = { fields: {}, matched: false };
   const cleanName = keyCleaner(transformStanza, writeMeta, phase);
@@ -388,9 +159,9 @@ export function applyRegexTransform(
   // search-time only, so an index-time reference to a DELIMS stanza extracts
   // nothing at all. Falling through to the REGEX branch is correct: a DELIMS
   // stanza has no REGEX, so the transform does nothing.
-  const delimsDir = phase === 'search-time' ? lastDirective(transformStanza, 'DELIMS') : undefined;
+  const delimsDir = phase === 'search-time' ? effectiveDirective(transformStanza.directives, 'DELIMS') : undefined;
   if (delimsDir) {
-    return applyDelimsExtraction(event, transformStanza, delimsDir, sourceKeyDir, cleanName);
+    return applyDelimsExtraction(resolveSourceValue(event, sourceKeyDir), transformStanza, delimsDir, cleanName);
   }
 
   if (!regexDir) return result;
@@ -402,7 +173,7 @@ export function applyRegexTransform(
   // default rather than to "no limit".
   let sourceValue = resolveSourceValue(event, sourceKeyDir);
   if (phase === 'index-time') {
-    const lookaheadRaw = lastDirective(transformStanza, 'LOOKAHEAD')?.value.trim();
+    const lookaheadRaw = effectiveDirective(transformStanza.directives, 'LOOKAHEAD')?.value.trim();
     const parsedLookahead = lookaheadRaw !== undefined ? parseInt(lookaheadRaw, 10) : NaN;
     const lookahead = Number.isFinite(parsedLookahead) && parsedLookahead > 0 ? parsedLookahead : 4096;
     if (sourceValue.length > lookahead) sourceValue = sourceValue.slice(0, lookahead);
@@ -431,7 +202,7 @@ export function applyRegexTransform(
     // to DEST_KEY instead of doing nothing, so the destination is written for
     // every event. `matched` doubles as "has an effect to route" for the caller.
     const defaultValue =
-      phase === 'index-time' ? lastDirective(transformStanza, 'DEFAULT_VALUE')?.value.trim() : undefined;
+      phase === 'index-time' ? effectiveDirective(transformStanza.directives, 'DEFAULT_VALUE')?.value.trim() : undefined;
     const destKeyForDefault = destKeyDir?.value.trim();
     if (defaultValue !== undefined && defaultValue !== '' && destKeyForDefault) {
       result.matched = true;
@@ -572,16 +343,26 @@ export function applyRegexTransform(
       ? [...sourceValue.matchAll(compiled.global)]
       : [firstMatch];
 
+    // Whether a field captured again by a later match keeps the later value.
+    // The same rule as `keepFirstMatchOnly` in the FORMAT path, stated the other
+    // way round: at search time MV_ADD decides; at index time MV_ADD is inert,
+    // and REPEAT_MATCH — the only way there is more than one match to see —
+    // "runs the REGEX multiple times", each match writing the field (#303).
+    // Named groups used to keep the first value here while the FORMAT path
+    // accumulated every match, so the same REPEAT_MATCH extraction produced a
+    // single value or a multivalue depending only on how the REGEX was written.
+    const accumulate = phase === 'index-time' || mvAdd;
+
     // `fieldName` arrives final: literal group names get the WRITE_META
     // underscore strip, _KEY_ names the full key cleaning, below.
     const assignField = (fieldName: string, value: string) => {
       if (!fieldName) return;
       if (!hasField(result.fields, fieldName)) {
         setField(result.fields, fieldName, value);
-      } else if (mvAdd) {
+      } else if (accumulate) {
         addMultiValue(result.fields, fieldName, value);
       }
-      // else: field already set and MV_ADD is false — discard the later value.
+      // else: search time, field already set and MV_ADD is false — discard the later value.
     };
 
     for (const match of matches) {

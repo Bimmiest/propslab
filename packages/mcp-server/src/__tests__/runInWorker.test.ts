@@ -6,6 +6,7 @@ import {
   DEFAULT_MAX_CONCURRENT_WORKERS,
   runInWorker,
   Semaphore,
+  WorkerCancelledError,
   WorkerOutOfMemoryError,
 } from '../runInWorker';
 import type { WorkerRequest } from '../protocol';
@@ -141,6 +142,126 @@ describe('concurrency cap', () => {
     await Promise.all(waiters);
     expect(order).toEqual([1, 2, 3]);
     expect(limiter.active).toBe(0);
+  });
+});
+
+describe('cancellation', () => {
+  // A worker that fails the moment it is spawned. Pointed at by calls the
+  // test cancels before they start: had one started anyway, it would reject
+  // with a load error instead of WorkerCancelledError.
+  const NEVER_SPAWN = fixture('does-not-exist.cjs');
+
+  it('takes a queued call out of the queue without ever starting its worker', async () => {
+    const limiter = new Semaphore(1);
+    const first = runInWorker<SleepResult>(sleep(600), 10_000, {
+      workerPath: SLEEP_WORKER,
+      limiter,
+    });
+    const controller = new AbortController();
+    const cancelled = runInWorker(sleep(0), 10_000, {
+      workerPath: NEVER_SPAWN,
+      limiter,
+      signal: controller.signal,
+    });
+    const third = runInWorker<SleepResult>(sleep(0), 10_000, {
+      workerPath: SLEEP_WORKER,
+      limiter,
+    });
+    await vi.waitFor(() => expect(limiter.queued).toBe(2));
+
+    controller.abort();
+    await expect(cancelled).rejects.toBeInstanceOf(WorkerCancelledError);
+    await expect(cancelled).rejects.toMatchObject({ started: false });
+    // Its queue position is gone, and the slot the first run holds is untouched.
+    expect(limiter.queued).toBe(1);
+    expect(limiter.active).toBe(1);
+
+    // The third call is next in line now, and gets the slot when the first frees it.
+    const [a, c] = await Promise.all([first, third]);
+    expect(c.startedAt).toBeGreaterThanOrEqual(a.endedAt);
+    await vi.waitFor(() => expect(limiter.active).toBe(0));
+    expect(limiter.queued).toBe(0);
+  }, 20_000);
+
+  it('terminates a running call promptly and frees its slot on exit', async () => {
+    const limiter = new Semaphore(1);
+    const controller = new AbortController();
+    const running = runInWorker(sleep(15_000), 20_000, {
+      workerPath: SLEEP_WORKER,
+      limiter,
+      signal: controller.signal,
+    });
+    const next = runInWorker<SleepResult>(sleep(0), 10_000, {
+      workerPath: SLEEP_WORKER,
+      limiter,
+    });
+    // Let the worker actually start before cancelling it.
+    await new Promise((r) => setTimeout(r, 300));
+
+    const abortedAt = Date.now();
+    controller.abort();
+    await expect(running).rejects.toBeInstanceOf(WorkerCancelledError);
+    await expect(running).rejects.toMatchObject({ started: true });
+    // Without cancellation this call would hold its slot for 15s; the queued
+    // one getting to run at all within a few seconds shows it did not.
+    const afterNext = await next;
+    expect(afterNext.startedAt - abortedAt).toBeLessThan(3_000);
+    await vi.waitFor(() => expect(limiter.active).toBe(0));
+  }, 20_000);
+
+  it('gives back a slot handed over in the same tick the call is cancelled', async () => {
+    const limiter = new Semaphore(1);
+    const release = await limiter.acquire();
+    const controller = new AbortController();
+    const run = runInWorker(sleep(0), 10_000, {
+      workerPath: NEVER_SPAWN,
+      limiter,
+      signal: controller.signal,
+    });
+    await vi.waitFor(() => expect(limiter.queued).toBe(1));
+    // The hand-off dequeues the waiter first, so the abort finds it already
+    // holding the slot; runInWorker must return it rather than spawn.
+    release();
+    controller.abort();
+    await expect(run).rejects.toMatchObject({ name: 'WorkerCancelledError', started: false });
+    expect(limiter.active).toBe(0);
+  });
+
+  it('short-circuits an already-aborted signal without taking a free slot', async () => {
+    const limiter = new Semaphore(1);
+    const run = runInWorker(sleep(0), 10_000, {
+      workerPath: NEVER_SPAWN,
+      limiter,
+      signal: AbortSignal.abort(),
+    });
+    await expect(run).rejects.toBeInstanceOf(WorkerCancelledError);
+    await expect(run).rejects.toMatchObject({ started: false });
+    expect(limiter.active).toBe(0);
+    expect(limiter.queued).toBe(0);
+  });
+
+  it('reports a cancelled call as a structured tool error, not an engine failure', async () => {
+    const result = await handleSimulate(
+      {
+        raw: 'x\n',
+        sourcetype: 'st',
+        index: 'main',
+        host: 'localhost',
+        source: '/var/log/x',
+        props_conf: '',
+        transforms_conf: '',
+        per_event_pipeline: false,
+        capture_offsets: false,
+        include_snapshots: false,
+        max_events: 20,
+        timeout_ms: 10_000,
+      },
+      { workerPath: NEVER_SPAWN, limiter: new Semaphore(1), signal: AbortSignal.abort() },
+    );
+    expect(result.isError).toBe(true);
+    const out = JSON.parse(result.content[0].text);
+    expect(out.error).toBe('cancelled');
+    expect(out.started).toBe(false);
   });
 });
 

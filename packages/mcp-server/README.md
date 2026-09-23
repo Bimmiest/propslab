@@ -87,6 +87,14 @@ reviewed. `docs/engine.md`'s closing section is the spec this implements:
   at most its own budget (30 s at the most), and the MCP client's request
   timeout stays the outer limit. A slot is freed when its worker has actually
   exited, so a terminated run still counts against the cap until it stops.
+- **A cancelled request gives up its slot.** When the client cancels a call
+  (`notifications/cancelled`) or the transport closes, a call still in the
+  queue leaves it without ever starting a worker, and a running call's
+  worker is terminated rather than left to run to its `timeout_ms` — as with
+  a timeout, its slot frees once the worker has exited. The SDK sends no
+  response to a cancelled request; the handler's own result is
+  `{"error": "cancelled", "started": …}`, where `started` says whether a
+  worker had begun.
 
 ## Process lifecycle
 

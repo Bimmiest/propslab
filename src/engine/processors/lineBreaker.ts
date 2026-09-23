@@ -9,6 +9,9 @@
 import type { ConfDirective, EventMetadata, SplunkEvent, ValidationDiagnostic } from '../types';
 import { safeRegex } from '../../utils/splunkRegex';
 import { atDirective } from '../parser/provenance';
+import { effectiveDirective, parseSplunkBool } from '../utils/directiveValues';
+
+const XML_EXTRACTIONS = new Set(['xml', 'xmlkv', 'xmlkv-winevt']);
 
 /**
  * Find a directive by key.
@@ -36,12 +39,12 @@ function countCaptureGroups(pattern: string | undefined): number {
   }
 }
 
-function findDirective(directives: ConfDirective[], key: string): ConfDirective | undefined {
-  return directives.find((dir) => dir.key === key);
-}
-
+/**
+ * The raw, untrimmed value: the break patterns read through this are regexes,
+ * where trailing whitespace is part of the pattern.
+ */
 function getDirective(directives: ConfDirective[], key: string): string | undefined {
-  return findDirective(directives, key)?.value;
+  return effectiveDirective(directives, key)?.value;
 }
 
 /**
@@ -172,7 +175,7 @@ function warnUncompilableBreakPattern(
     level: 'warning',
     message: `${key} pattern (${pattern}) could not be compiled safely (invalid regex or rejected as ReDoS-prone). The option was ignored, so events were broken as if it were not set.`,
     file: 'props.conf',
-    ...atDirective(findDirective(directives, key)),
+    ...atDirective(effectiveDirective(directives, key)),
     directiveKey: key,
   });
 }
@@ -206,7 +209,7 @@ export function breakLines(
         'to break on. Splunk falls back to breaking on newlines, and the text this pattern matches ' +
         'becomes an event of its own. Wrap the delimiter in parentheses to break on it.',
       file: 'props.conf',
-      ...atDirective(findDirective(directives, 'LINE_BREAKER')),
+      ...atDirective(effectiveDirective(directives, 'LINE_BREAKER')),
       directiveKey: 'LINE_BREAKER',
     });
   }
@@ -252,7 +255,7 @@ export function breakLines(
           level: 'warning',
           message: `LINE_BREAKER pattern (${lineBreakerPattern}) could not be compiled safely (invalid regex or rejected as ReDoS-prone). Event breaking was skipped — the entire input is treated as one event.`,
           file: 'props.conf',
-          ...atDirective(findDirective(directives, 'LINE_BREAKER')),
+          ...atDirective(effectiveDirective(directives, 'LINE_BREAKER')),
         });
       }
       segments = [rawData];
@@ -330,10 +333,19 @@ export function breakLines(
   // extracted nothing and #164 read as "INDEXED_EXTRACTIONS = JSON is not
   // implemented" when the extractor was never given a parseable event.
   // An explicit SHOULD_LINEMERGE still wins, as it does in Splunk.
+  //
+  // The XML modes are the exception (#271): an XML record is a document, and
+  // routinely spans lines. Splitting it per line hands the extractor a string
+  // of fragments, none of which parse, and ignores the BREAK_ONLY_BEFORE the
+  // user wrote to frame the record. They keep the ordinary default.
   const structuredFormat = getDirective(directives, 'INDEXED_EXTRACTIONS')?.trim().toLowerCase();
-  const structured = structuredFormat !== undefined && structuredFormat !== '' && structuredFormat !== 'none';
+  const structured =
+    structuredFormat !== undefined && structuredFormat !== '' && structuredFormat !== 'none' &&
+    !XML_EXTRACTIONS.has(structuredFormat);
   const shouldLineMerge =
-    shouldLineMergeVal === undefined ? !structured : shouldLineMergeVal.toLowerCase() === 'true';
+    // An explicit value that is not a boolean reads as false, as it always has
+    // here; it is the structured-format default that only an absent key gets.
+    shouldLineMergeVal === undefined ? !structured : parseSplunkBool(shouldLineMergeVal, false);
 
   // `lines` is the length of each LINE_BREAKER segment the event was built
   // from, in order; see segmentLengthsOf.
@@ -359,11 +371,8 @@ export function breakLines(
       'BREAK_ONLY_BEFORE', breakOnlyBeforeStr, breakOnlyBeforeAnchoredRegex, directives, diagnostics,
     );
     // Splunk default: BREAK_ONLY_BEFORE_DATE=true when SHOULD_LINEMERGE=true.
-    // Only disabled when explicitly set to false.
-    const breakOnlyBeforeDate =
-      breakOnlyBeforeDateStr === undefined
-        ? true
-        : breakOnlyBeforeDateStr.toLowerCase() !== 'false';
+    // Only disabled when explicitly set to a false spelling.
+    const breakOnlyBeforeDate = parseSplunkBool(breakOnlyBeforeDateStr, true);
     // Read exactly as timestampExtractor reads it, so the window a date is
     // looked for in here is the one the extractor will then parse it from.
     const lookaheadStr = getDirective(directives, 'MAX_TIMESTAMP_LOOKAHEAD');

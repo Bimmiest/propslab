@@ -1,6 +1,7 @@
 import type { SplunkEvent, ConfDirective, ValidationDiagnostic } from '../types';
 import { atDirective } from '../parser/provenance';
 import { segmentLengthsOf } from './lineBreaker';
+import { effectiveDirective } from '../utils/directiveValues';
 
 // The engine type-checks against ES2022 alone (tsconfig.engine.json), so that
 // reaching for a browser-only global fails the build instead of failing in a
@@ -83,7 +84,7 @@ export function truncateEvents(
   directives: ConfDirective[],
   diagnostics?: ValidationDiagnostic[],
 ): SplunkEvent[] {
-  const truncateDir = directives.find((d) => d.key === 'TRUNCATE');
+  const truncateDir = effectiveDirective(directives, 'TRUNCATE');
   const isDefault = !truncateDir;
   const rawValue = truncateDir?.value.trim() ?? '';
   const maxBytes = truncateDir ? parseInt(rawValue, 10) : 10000;

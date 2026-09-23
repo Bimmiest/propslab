@@ -1,6 +1,12 @@
 import type { editor } from 'monaco-editor';
-import { getDirectiveInfo, getClassBasedDirectiveBase } from '../engine/directiveRegistry';
+import {
+  getDirectiveInfo,
+  getClassBasedDirectiveBase,
+  wrongFileCanonical,
+  WRONG_FILE_MESSAGE,
+} from '../engine/directiveRegistry';
 import { isUndocumentedAttribute } from '../engine/directiveSupport';
+import { isSplunkBoolLiteral, parseSplunkBool } from '../engine/utils/directiveValues';
 import { DIRECTIVE_RE, miscasedCanonical, MISCASED_MESSAGE } from '../engine/parser/confParser';
 import { unsupportedSpecifiers } from '../utils/strftime';
 import { translatePcreToJs, validateRegex } from '../utils/splunkRegex';
@@ -183,6 +189,24 @@ export function computeDiagnostics(
         continue;
       }
 
+      // A real attribute of the other conf file is not a typo either: Splunk
+      // ignores it here, and the fix is to move it. The engine reports the same
+      // sentence in the validation panel (#278). A warning, like the mis-cased
+      // branch above, because the line is dead on a real indexer. No quick fix:
+      // moving a line into another file's stanza is not a safe automatic edit.
+      const belongsIn = wrongFileCanonical(key, fileType);
+      if (belongsIn !== undefined) {
+        markers.push({
+          severity: 4,
+          message: WRONG_FILE_MESSAGE(key, fileType, belongsIn),
+          startLineNumber: i,
+          startColumn: 1,
+          endLineNumber: i,
+          endColumn: eqIdx + 1,
+        });
+        continue;
+      }
+
       // A valid attribute the registry has not documented yet is not a typo,
       // and telling the user it might be sends them to check spelling that is
       // already correct. The engine warns that the preview ignores it (#178),
@@ -254,7 +278,9 @@ export function computeDiagnostics(
     }
 
     if (info.valueType === 'boolean' && value) {
-      if (!['true', 'false', '0', '1', 'yes', 'no'].includes(value.toLowerCase())) {
+      // The engine's own reading, so the editor never flags a spelling the
+      // preview honours (t/f, y/n, on/off) or accepts one it does not.
+      if (!isSplunkBoolLiteral(value)) {
         markers.push({
           severity: 4,
           message: `Expected boolean value (true/false) for "${baseKey}", got "${value}"`,
@@ -422,9 +448,8 @@ function checkBestPractices(
     // Inspect the VALUE, not mere presence: `SHOULD_LINEMERGE = true` is the
     // wrong setting alongside a custom LINE_BREAKER, yet mere presence used to
     // suppress the very warning that asks for `= false`.
-    const linemergeDisabled = shouldLinemerge
-      ? ['false', '0', 'no'].includes(shouldLinemerge.value.trim().toLowerCase())
-      : false;
+    // Read as the engine reads it: a non-boolean explicit value counts as off.
+    const linemergeDisabled = shouldLinemerge ? !parseSplunkBool(shouldLinemerge.value, false) : false;
 
     if (lineBreaker && !linemergeDisabled) {
       markers.push(

@@ -3,10 +3,12 @@ import type { NoOpReason } from '../noOpExplainer';
 import { applyRegexTransform } from '../transforms/regexTransform';
 import { applyDestKey } from '../transforms/destKeyRouter';
 import { applyIngestEval } from '../transforms/ingestEval';
+import { evaluateStopCondition } from '../transforms/stopProcessing';
 import { byClassName } from '../utils/asciiCompare';
 import { changeWindow } from '../utils/changeWindow';
 import { SIMULATED_DEST_KEYS, VALID_UNSIMULATED_DEST_KEYS, normaliseDestKey } from '../transforms/destKeys';
 import { atDirective, atStanza } from '../parser/provenance';
+import { effectiveDirective, parseSplunkBool } from '../utils/directiveValues';
 
 // A DEST_KEY=_raw transform that shrinks the event by at least this fraction is
 // treated as accidental data loss (FORMAT did not reproduce the rest of the line).
@@ -16,10 +18,11 @@ const RAW_LOSS_THRESHOLD = 0.3;
  * Locate a diagnostic at a named directive in a transform stanza, falling back
  * to the stanza header when the stanza does not carry that key. Both carry the
  * layer they came from, so the position stays unambiguous when the conf was read
- * as default/ + local/.
+ * as default/ + local/ — and it is the effective (last) definition, the one the
+ * transform actually ran, rather than a shadowed one above it.
  */
 function positionOfKeyOrStanza(stanza: ParsedConf['stanzas'][number], key: string) {
-  const directive = stanza.directives.find((d) => d.key === key);
+  const directive = effectiveDirective(stanza.directives, key);
   return directive ? atDirective(directive) : atStanza(stanza);
 }
 
@@ -34,13 +37,20 @@ export function applyTransforms(
   /** Epoch ms that INGEST_EVAL's now()/time() read. See `PipelineOptions.now`. */
   now: number = Date.now(),
 ): SplunkEvent[] {
-  const directiveType = phase === 'index-time' ? 'TRANSFORMS' : 'REPORT';
   // When multiple TRANSFORMS-<class>/REPORT-<class> entries match, Splunk applies
   // them in ASCII order of the class name (comma-separated names within one class
   // stay list-ordered). Ordering is decisive once queue routing is last-wins.
-  const transformDirectives = directives
-    .filter((d) => d.directiveType === directiveType)
-    .sort(byClassName);
+  //
+  // RULESET-<class> is the other index-time list (#275). It does what
+  // TRANSFORMS- does, and transforms.conf.spec fixes the order between them:
+  // every TRANSFORMS class alphabetically, then every RULESET class
+  // alphabetically, then by position within a ruleset. So the two are sorted
+  // separately and concatenated rather than sorted together — a RULESET-a
+  // still runs after a TRANSFORMS-z.
+  const byType = (type: string) =>
+    directives.filter((d) => d.directiveType === type).sort(byClassName);
+  const transformDirectives =
+    phase === 'index-time' ? [...byType('TRANSFORMS'), ...byType('RULESET')] : byType('REPORT');
 
   if (transformDirectives.length === 0) return events;
 
@@ -82,8 +92,11 @@ export function applyTransforms(
     for (const dir of transformDirectives) {
       // Value can be comma-separated list of transform stanza names
       const stanzaNames = dir.value.split(',').map((s) => s.trim()).filter(Boolean);
+      // The trace names the list a step came from, so a RULESET- rule reads as
+      // one rather than being mislabelled TRANSFORMS-.
+      const listLabel = `${dir.directiveType}-${dir.className ?? ''}`;
 
-      for (const stanzaName of stanzaNames) {
+      for (const [position, stanzaName] of stanzaNames.entries()) {
         const transformStanza = stanzaMap.get(stanzaName);
         if (!transformStanza) {
           noteNoOp(dir, stanzaName, { kind: 'transforms-stanza-missing', name: stanzaName });
@@ -95,10 +108,39 @@ export function applyTransforms(
         // because a TRANSFORMS-<class> references them. A regex transform listed
         // after the eval therefore sees the evaled event. INGEST_EVAL is
         // index-time only, so it is ignored on the search-time (REPORT) pass.
+        //
+        // STOP_PROCESSING_IF is the same kind of stanza (#275): like INGEST_EVAL
+        // it overrides the stanza's other index-time settings, and it runs after
+        // the stanza's INGEST_EVAL, so it sees the evaled event. When it holds,
+        // the rules after it in this list are skipped. The spec states that
+        // scope for a ruleset — "skips every rule after it in that ruleset" —
+        // and the same scope is applied to a TRANSFORMS- list, which is the
+        // same construct: a class's comma-separated rules. Later classes still
+        // run; nothing in the spec says a stop reaches across lists.
         const ingestEvalDirs = transformStanza.directives.filter((d) => d.key === 'INGEST_EVAL');
-        if (ingestEvalDirs.length > 0) {
+        const hasStopCondition = transformStanza.directives.some((d) => d.key === 'STOP_PROCESSING_IF');
+        if (ingestEvalDirs.length > 0 || hasStopCondition) {
           if (phase === 'index-time') {
-            currentEvent = applyIngestEval([currentEvent], ingestEvalDirs, diagnostics, now)[0] ?? currentEvent;
+            if (ingestEvalDirs.length > 0) {
+              currentEvent = applyIngestEval([currentEvent], ingestEvalDirs, diagnostics, now)[0] ?? currentEvent;
+            }
+            const stop = evaluateStopCondition(currentEvent, transformStanza.directives, diagnostics, now);
+            if (stop) {
+              const skipped = stanzaNames.slice(position + 1);
+              const description = !stop.stop
+                ? `STOP_PROCESSING_IF (${stop.expression}) was false — processing continues`
+                : skipped.length > 0
+                  ? `STOP_PROCESSING_IF (${stop.expression}) was true — skipped the rest of ${listLabel}: ${skipped.join(', ')}`
+                  : `STOP_PROCESSING_IF (${stop.expression}) was true — no rules follow it in ${listLabel}`;
+              currentEvent = {
+                ...currentEvent,
+                processingTrace: [
+                  ...currentEvent.processingTrace,
+                  { processor: `${listLabel}:${stanzaName}`, phase, description },
+                ],
+              };
+              if (stop.stop) break;
+            }
           }
           continue;
         }
@@ -161,7 +203,7 @@ export function applyTransforms(
           // the before/after text — this step previously logged neither.
           const rewroteRaw = result.destKey === '_raw' && routed._raw !== beforeRaw;
           const step: ProcessingStep = {
-            processor: `${directiveType}-${dir.className ?? ''}:${stanzaName}`,
+            processor: `${listLabel}:${stanzaName}`,
             phase,
             description: result.destKey
               ? `Transform routed to ${result.destKey}`
@@ -188,7 +230,7 @@ export function applyTransforms(
           // config through the per-event path for any event whose metadata changed.
           const cloneType =
             phase === 'index-time'
-              ? transformStanza.directives.filter((d) => d.key === 'CLONE_SOURCETYPE').at(-1)?.value.trim()
+              ? effectiveDirective(transformStanza.directives, 'CLONE_SOURCETYPE')?.value.trim()
               : undefined;
           if (cloneType) {
             clones.push({
@@ -198,7 +240,7 @@ export function applyTransforms(
               processingTrace: [
                 ...currentEvent.processingTrace,
                 {
-                  processor: `${directiveType}-${dir.className ?? ''}:${stanzaName}`,
+                  processor: `${listLabel}:${stanzaName}`,
                   phase,
                   description: `CLONE_SOURCETYPE = ${cloneType} — emitted a copy of this event under sourcetype "${cloneType}"`,
                 },
@@ -225,13 +267,7 @@ export function applyTransforms(
  * with the extraction about a stanza that sets it twice.
  */
 function stanzaWritesMeta(transformStanza: ParsedConf['stanzas'][number]): boolean {
-  return (
-    transformStanza.directives
-      .filter((d) => d.key === 'WRITE_META')
-      .at(-1)
-      ?.value.trim()
-      .toLowerCase() === 'true'
-  );
+  return parseSplunkBool(effectiveDirective(transformStanza.directives, 'WRITE_META')?.value, false);
 }
 
 /**
@@ -324,7 +360,7 @@ function warnSearchTimeDestKey(
   warned: Set<string>,
 ): void {
   if (warned.has(stanzaName)) return;
-  const destKeyDir = [...transformStanza.directives].reverse().find((d) => d.key === 'DEST_KEY');
+  const destKeyDir = effectiveDirective(transformStanza.directives, 'DEST_KEY');
   if (!destKeyDir) return;
   warned.add(stanzaName);
   const destKey = destKeyDir.value.trim();
@@ -358,7 +394,7 @@ function warnSearchTimeNoFormat(
   if (has('FORMAT') || has('DELIMS')) return;
   // A named group that simply did not participate in this match also leaves
   // `fields` empty; that is data, not config, so stay quiet for it.
-  const regex = transformStanza.directives.filter((d) => d.key === 'REGEX').at(-1)?.value ?? '';
+  const regex = effectiveDirective(transformStanza.directives, 'REGEX')?.value ?? '';
   if (/\(\?P?<(?![=!])/.test(regex)) return;
   warned.add(stanzaName);
   diagnostics.push({
@@ -385,7 +421,7 @@ function warnUnknownDestKey(
   if (SIMULATED_DEST_KEYS.has(normalized) || warned.has(stanzaName)) return;
   warned.add(stanzaName);
 
-  const line = transformStanza.directives.find((d) => d.key === 'DEST_KEY')?.line ?? transformStanza.lineRange.start;
+  const line = effectiveDirective(transformStanza.directives, 'DEST_KEY')?.line ?? transformStanza.lineRange.start;
   if (VALID_UNSIMULATED_DEST_KEYS.has(normalized)) {
     diagnostics.push({
       level: 'info',
