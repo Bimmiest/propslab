@@ -23,6 +23,10 @@
  * - **Concurrency.** A burst of calls used to spawn a worker each, all at once;
  *   each can hold its full heap limit and a core for its full budget. Calls now
  *   pass through a small semaphore and queue beyond it.
+ * - **Cancellation.** A slot is scarce, so a call whose MCP request has been
+ *   cancelled gives it up: aborting `options.signal` takes a queued call out
+ *   of the queue before it ever holds a slot, and terminates a running call's
+ *   worker instead of letting it run to its budget.
  *
  * The wall-clock budget starts when the call's worker is spawned, NOT when the
  * call is queued. A timeout is reported as "your regex backtracked — repair it"
@@ -55,6 +59,29 @@ export class WorkerOutOfMemoryError extends Error {
     );
     this.name = 'WorkerOutOfMemoryError';
     this.limits = limits;
+  }
+}
+
+/**
+ * The MCP request behind a call was cancelled, or its transport closed (the
+ * SDK aborts every in-flight handler's signal then too). `started` says
+ * whether that happened while the call was still queued — no worker ever ran
+ * — or mid-run, when its worker was terminated. Its own type so the tool
+ * reports it as neither a timeout, which would blame the conf's regexes, nor
+ * an engine failure.
+ */
+export class WorkerCancelledError extends Error {
+  readonly started: boolean;
+  readonly reason: unknown;
+  constructor(started: boolean, reason?: unknown) {
+    super(
+      started
+        ? 'Request was cancelled; its worker was terminated'
+        : 'Request was cancelled before its worker started',
+    );
+    this.name = 'WorkerCancelledError';
+    this.started = started;
+    this.reason = reason;
   }
 }
 
@@ -105,15 +132,37 @@ export class Semaphore {
     return this.waiters.length;
   }
 
-  /** Resolves once a slot is held; call the returned function exactly once to free it. */
-  async acquire(): Promise<() => void> {
+  /**
+   * Resolves once a slot is held; call the returned function exactly once to
+   * free it. If `signal` aborts first, the caller leaves the queue without
+   * ever holding a slot and this rejects with `WorkerCancelledError` — a
+   * cancelled request must not keep its place in line, or everything queued
+   * behind it waits on a run nobody will read.
+   */
+  async acquire(signal?: AbortSignal): Promise<() => void> {
+    if (signal?.aborted) throw new WorkerCancelledError(false, signal.reason);
     if (this.held < this.max) {
       this.held++;
     } else {
       // The releasing caller hands its slot straight to us (see release), so
       // `held` is never decremented and re-incremented in between — nothing
       // arriving meanwhile can jump the queue.
-      await new Promise<void>((resolve) => this.waiters.push(resolve));
+      await new Promise<void>((resolve, reject) => {
+        const onAbort = () => {
+          // Only reachable while still queued: the hand-off below removes
+          // this listener in the same synchronous step that dequeues us, so
+          // an abort can never strand a slot that was already handed over.
+          const i = this.waiters.indexOf(waiter);
+          if (i !== -1) this.waiters.splice(i, 1);
+          reject(new WorkerCancelledError(false, signal?.reason));
+        };
+        const waiter = () => {
+          signal?.removeEventListener('abort', onAbort);
+          resolve();
+        };
+        this.waiters.push(waiter);
+        signal?.addEventListener('abort', onAbort, { once: true });
+      });
     }
     let released = false;
     return () => {
@@ -144,6 +193,12 @@ export interface RunInWorkerOptions {
   resourceLimits?: ResourceLimits;
   /** Overrides the process-wide concurrency cap (tests use their own). */
   limiter?: Semaphore;
+  /**
+   * The MCP request's cancellation signal (`extra.signal` in a tool handler).
+   * Aborting it dequeues a waiting call, or terminates a running call's
+   * worker; either way the call rejects with `WorkerCancelledError`.
+   */
+  signal?: AbortSignal;
 }
 
 export async function runInWorker<T>(
@@ -155,7 +210,15 @@ export async function runInWorker<T>(
     typeof workerPathOrOptions === 'string'
       ? { workerPath: workerPathOrOptions }
       : (workerPathOrOptions ?? {});
-  const release = await (options.limiter ?? defaultLimiter).acquire();
+  const { signal } = options;
+  const release = await (options.limiter ?? defaultLimiter).acquire(signal);
+  // The slot can be handed over in the same tick the request is cancelled
+  // (the hand-off wins that race inside acquire). Spawning then would run a
+  // worker for nobody, so give the slot straight back instead.
+  if (signal?.aborted) {
+    release();
+    throw new WorkerCancelledError(false, signal.reason);
+  }
   let run: { result: Promise<T>; exited: Promise<void> };
   try {
     run = spawnAndWait<T>(request, timeoutMs, options);
@@ -181,6 +244,7 @@ function spawnAndWait<T>(
   // pass the built worker's path explicitly.
   const resolvedPath = options.workerPath ?? path.join(__dirname, 'simulateWorker.js');
   const resourceLimits = options.resourceLimits ?? DEFAULT_RESOURCE_LIMITS;
+  const { signal } = options;
 
   const worker = new Worker(resolvedPath, { workerData: request, resourceLimits });
   const exited = new Promise<void>((resolve) => worker.once('exit', () => resolve()));
@@ -191,6 +255,7 @@ function spawnAndWait<T>(
     const timer = setTimeout(() => {
       if (settled) return;
       settled = true;
+      signal?.removeEventListener('abort', onAbort);
       void worker.terminate();
       reject(new WorkerTimeoutError(timeoutMs));
     }, timeoutMs);
@@ -199,9 +264,17 @@ function spawnAndWait<T>(
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
       fn();
       void worker.terminate();
     };
+
+    // A cancelled call's answer will never be read (the SDK drops responses
+    // to cancelled requests), so letting it run on to its budget only keeps a
+    // slot and a core from calls whose answers will be. As with a timeout,
+    // the slot frees on the worker's actual exit (see runInWorker), not here.
+    const onAbort = () => settle(() => reject(new WorkerCancelledError(true, signal?.reason)));
+    signal?.addEventListener('abort', onAbort, { once: true });
 
     worker.once('message', (response: WorkerResponse) => {
       settle(() => {
@@ -224,6 +297,7 @@ function spawnAndWait<T>(
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
       reject(new Error(`Worker exited with code ${code} before responding`));
     });
   });
