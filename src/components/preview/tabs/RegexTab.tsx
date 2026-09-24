@@ -119,6 +119,25 @@ function buildGroupColorMap(groups: string[]): Map<string, string> {
 
 const NO_RESULTS: (RegexMatchInfo | null)[] = [];
 
+/**
+ * Why `name` cannot be the class in an `EXTRACT-<class>` key, or null if it can
+ * (#338). The parser only treats a key as a class directive when something
+ * follows the dash, and splits `key = value` at the first `=`, so an empty class
+ * wrote `EXTRACT- = …` (a bare, unknown key) and `a=b` wrote a key that ends at
+ * `a` with `b = …` folded into the value. The editor's highlighter stops a class
+ * at whitespace or `=`; beyond that, brackets and the like read as stanza syntax
+ * to anyone scanning the file. Kept to the characters Splunk's own class names
+ * use, so what the button writes is what every reader of the file parses.
+ */
+function classNameError(name: string): string | null {
+  if (name === '') return 'Enter a class name — EXTRACT- needs one to be a field extraction.';
+  if (name.includes('=')) return 'Class name cannot contain "=" — the key would end there.';
+  if (!/^[A-Za-z0-9_.-]+$/.test(name)) {
+    return 'Class name may contain only letters, digits, "_", "-" and ".".';
+  }
+  return null;
+}
+
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 interface RegexTabProps {
@@ -132,6 +151,8 @@ interface RegexTabProps {
 
 export function RegexTab({ items, allEvents, currentPage, eventsPerPage }: RegexTabProps) {
   const patternId = useId();
+  const matchBlockId = useId();
+  const classErrorId = useId();
   const [pattern, setPattern] = useState('');
   const [className, setClassName] = useState('custom');
   const [refOpen, setRefOpen] = useState(false);
@@ -229,6 +250,29 @@ export function RegexTab({ items, allEvents, currentPage, eventsPerPage }: Regex
     return { matched, total: settled ? settled.inputs.length : allEvents.length };
   }, [results, settled, allEvents]);
 
+  // Adding needs a settled 'ok' run of exactly this pattern over exactly these
+  // events — the rule the Create EXTRACT dialog applies (#329). Gated only on
+  // compiling, the button wrote a pattern the tab was showing as too slow to
+  // evaluate (`(a|aa)+b`), so every pipeline run then hit the 5 s watchdog; and
+  // inside the debounce window it wrote a pattern that had not been run at all
+  // (#338). A timeout keeps it disabled: the pipeline would hit the same wall.
+  const matchBlock: string | null = !pattern || validationError
+    ? null
+    : match.pattern !== requestedPattern
+      ? 'Wait for the pattern to finish testing before adding it.'
+      : match.status === 'timeout'
+        ? 'This pattern timed out — it likely backtracks catastrophically. Simplify the pattern before adding it.'
+        : match.status === 'invalid'
+          ? "This pattern won't compile, so it can't be added."
+          : match.status !== 'ok' || match.inputs !== rawInputs
+            ? 'Wait for the pattern to finish testing before adding it.'
+            : null;
+  const matchBlockIsError = matchBlock !== null && match.pattern === requestedPattern
+    && (match.status === 'timeout' || match.status === 'invalid');
+  const classError = classNameError(className);
+  const canAdd = !!pattern && !validationError && matchBlock === null && classError === null;
+  const addDescribedBy = [matchBlock && matchBlockId, classError && classErrorId].filter(Boolean).join(' ') || undefined;
+
   /**
    * Write the directive straight into props.conf (#88), closing the loop from
    * experiment to config. The match statistics beside it are whole-dataset
@@ -236,7 +280,7 @@ export function RegexTab({ items, allEvents, currentPage, eventsPerPage }: Regex
    * rather than inferred from the current page.
    */
   const handleAddToProps = () => {
-    if (!pattern || validationError) return;
+    if (!canAdd) return;
     applyDirective(`EXTRACT-${className}`, pattern);
     setAdded(true);
   };
@@ -331,10 +375,15 @@ export function RegexTab({ items, allEvents, currentPage, eventsPerPage }: Regex
               aria-label="EXTRACT class name"
               value={className}
               onChange={(e) => setClassName(e.target.value.replace(/\s/g, '_'))}
+              aria-invalid={classError !== null}
+              aria-describedby={classError ? classErrorId : undefined}
               className="px-1.5 py-0.5 text-xs font-mono rounded border border-[var(--color-border)] bg-[var(--color-bg-primary)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent)] w-32"
               placeholder="classname"
             />
           </div>
+          {classError && (
+            <div id={classErrorId} className="mb-1 text-[10px] text-[var(--color-error)]">{classError}</div>
+          )}
           <div className="flex items-center gap-2">
             <code className="flex-1 text-xs font-mono px-2 py-1.5 rounded bg-[var(--color-bg-tertiary)] text-[var(--color-success)] break-all select-all">
               {extractDirective}
@@ -348,12 +397,22 @@ export function RegexTab({ items, allEvents, currentPage, eventsPerPage }: Regex
             </button>
             <button
               onClick={handleAddToProps}
-              className="flex-shrink-0 px-2 py-1 text-xs rounded border border-[var(--color-accent)] text-[var(--color-accent)] hover:bg-[var(--color-bg-tertiary)] transition-colors cursor-pointer"
-              title={`Upsert into [${stanza}] in props.conf`}
+              disabled={!canAdd}
+              aria-describedby={addDescribedBy}
+              className="flex-shrink-0 px-2 py-1 text-xs rounded border border-[var(--color-accent)] text-[var(--color-accent)] hover:bg-[var(--color-bg-tertiary)] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+              title={matchBlock ?? classError ?? `Upsert into [${stanza}] in props.conf`}
             >
               {added ? 'Added!' : 'Add to props.conf'}
             </button>
           </div>
+          {matchBlock && (
+            <p
+              id={matchBlockId}
+              className={`mt-1 text-[10px] ${matchBlockIsError ? 'text-[var(--color-error)]' : 'text-[var(--color-text-muted)]'}`}
+            >
+              {matchBlock}
+            </p>
+          )}
           {/*
             Say what the button is about to do to the metadata. Writing
             [my:sourcetype] and silently repointing the event's sourcetype at it
