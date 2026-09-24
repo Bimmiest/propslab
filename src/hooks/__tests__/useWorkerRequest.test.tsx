@@ -7,6 +7,9 @@
 // per hook, and both fail silently — a stale response renders results for a
 // pattern the user has already changed, and a leaked worker only shows up as
 // drift under a profiler.
+//
+// Restart bounds too (#309): a worker whose script never loads fails through
+// an `error` event rather than a throw, and used to be recreated forever.
 // ---------------------------------------------------------------------------
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -19,7 +22,7 @@ interface Res { id: number; echo: string }
 class FakeWorker {
   static instances: FakeWorker[] = [];
   onmessage: ((e: MessageEvent<Res>) => void) | null = null;
-  onerror: (() => void) | null = null;
+  onerror: ((e: ErrorEvent) => void) | null = null;
   posted: (Req & { id: number })[] = [];
   terminated = false;
 
@@ -31,6 +34,14 @@ class FakeWorker {
   }
   terminate() {
     this.terminated = true;
+  }
+  /** What the browser fires when the script cannot be fetched: a plain Event, no message. */
+  failToLoad() {
+    this.onerror?.(new Event('error') as ErrorEvent);
+  }
+  /** An exception thrown by worker code that did run. */
+  crash() {
+    this.onerror?.({ message: 'boom' } as ErrorEvent);
   }
   /** Deliver a response as the real worker would. */
   respond(id: number, echo: string) {
@@ -181,7 +192,7 @@ describe('useWorkerRequest', () => {
     const first = latest();
     act(() => result.current.run({ value: 'a' }));
 
-    act(() => first.onerror?.());
+    act(() => first.crash());
 
     expect(result.current.status).toBe('timeout');
     expect(first.terminated).toBe(true);
@@ -219,5 +230,49 @@ describe('useWorkerRequest', () => {
 
     act(() => result.current.run({ value: 'x' }));
     expect(result.current.data).toBe('inline:x');
+  });
+  it('stops recreating a worker whose script never loads, and runs inline (#309)', () => {
+    const { result } = setup();
+    act(() => result.current.run({ value: 'a' }));
+
+    act(() => latest().failToLoad());
+    // One replacement, with the in-flight request resent rather than reported.
+    expect(FakeWorker.instances).toHaveLength(2);
+    expect(latest().posted).toEqual([{ value: 'a', id: 1 }]);
+    expect(result.current.status).toBe('pending');
+
+    act(() => latest().failToLoad());
+    expect(FakeWorker.instances).toHaveLength(2); // capped
+    expect(result.current.status).toBe('ok');
+    expect(result.current.data).toBe('inline:a');
+
+    act(() => result.current.run({ value: 'b' }));
+    expect(result.current.data).toBe('inline:b');
+    expect(FakeWorker.instances).toHaveLength(2);
+  });
+
+  it('does not report a timeout for an error with no request in flight (#309)', () => {
+    const { result } = setup();
+    act(() => latest().failToLoad());
+    expect(result.current.status).toBe('idle');
+    expect(FakeWorker.instances).toHaveLength(2);
+
+    act(() => result.current.run({ value: 'a' }));
+    act(() => latest().respond(1, 'A'));
+    act(() => latest().crash());
+    expect(result.current.status).toBe('ok');
+    expect(result.current.data).toBe('A');
+  });
+
+  it('keeps restarting a worker that has answered before, however often it crashes', () => {
+    // The cap counts only workers that never answered; one that loaded and
+    // later crashes resets it, so a long session is never pushed inline.
+    const { result } = setup();
+    for (let i = 1; i <= 4; i++) {
+      act(() => result.current.run({ value: 'a' }));
+      act(() => latest().respond(i, 'A'));
+      act(() => latest().crash());
+    }
+    expect(FakeWorker.instances).toHaveLength(5);
   });
 });

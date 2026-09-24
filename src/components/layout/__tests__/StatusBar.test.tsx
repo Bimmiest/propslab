@@ -50,6 +50,7 @@ describe('StatusBar', () => {
       originalRaw: '',
       eventCount: 2,
       processingSteps: [],
+      inputMetadata: { index: 'main', host: '', source: '', sourcetype: '' },
     };
     useAppStore.setState({ processingResult: result, validationDiagnostics: [] });
     renderStatusBar();
@@ -66,7 +67,7 @@ describe('StatusBar', () => {
       { level: 'warning', message: 'w1', file: 'props.conf' },
     ];
     useAppStore.setState({
-      processingResult: { events: [], originalRaw: '', eventCount: 0, processingSteps: [] },
+      processingResult: { events: [], originalRaw: '', eventCount: 0, processingSteps: [], inputMetadata: { index: 'main', host: '', source: '', sourcetype: '' } },
       validationDiagnostics: diags,
     });
     renderStatusBar();

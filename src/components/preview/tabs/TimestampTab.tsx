@@ -4,6 +4,7 @@ import { parseConf } from '../../../engine/parser/confParser';
 import { matchStanzas, mergeDirectives } from '../../../engine/parser/stanzaMatcher';
 import { resolveLookahead } from '../../../engine/processors/timestampExtractor';
 import { useTimestampMatch } from '../../../hooks/useTimestampMatch';
+import { useDebounce } from '../../../hooks/useDebounce';
 import type { TimeConfig, TimestampProbe } from '../../../engine/timestampMatch';
 import type { EventMetadata, SplunkEvent, TimeSource } from '../../../engine/types';
 import type { EnrichedEvent } from '../PreviewPanel';
@@ -166,7 +167,49 @@ function parseTimeConfig(propsConf: string, metadata: EventMetadata): TimeConfig
     // Shared with the engine so 0 / -1 (no limit) draw the window it scans.
     maxLookahead: resolveLookahead(get('MAX_TIMESTAMP_LOOKAHEAD')),
     tz: get('TZ') ?? null,
+    // Handed to the prober so a %Z the alias table remaps parses to the same
+    // instant the pipeline gives it (#313). `now` is left to the clock, which is
+    // what the app's pipeline runs use too.
+    tzAlias: get('TZ_ALIAS') ?? null,
   };
+}
+
+/** The pipeline's auto-run debounce, in `useProcessingPipeline`. */
+const PIPELINE_DEBOUNCE_MS = 300;
+
+/**
+ * The props.conf and metadata the events on screen were produced from, as near
+ * as the tab can tell.
+ *
+ * The tab used to read the live editor state, so its highlights ran ahead of
+ * the `_time` badges beside them: in manual-apply mode they showed a config
+ * that had not been run, and in auto mode every keystroke re-probed before the
+ * pipeline had caught up (#316). Here the inputs follow the pipeline instead —
+ * debounced like its auto-run, or frozen at the last "Run pipeline" click in
+ * manual-apply mode, which is the moment the pipeline reads them too.
+ *
+ * The store does not record what a run used, so a tab that mounts while
+ * manual-apply changes are pending starts from the editor state.
+ */
+function usePipelineInputs(): { propsConf: string; metadata: EventMetadata } {
+  const propsConf = useAppStore((s) => s.propsConf);
+  const metadata = useAppStore((s) => s.metadata);
+  const manualApply = useAppStore((s) => s.settings.manualApply);
+  const manualRunTick = useAppStore((s) => s.manualRunTick);
+
+  const live = useMemo(() => ({ propsConf, metadata }), [propsConf, metadata]);
+  const debounced = useDebounce(live, PIPELINE_DEBOUNCE_MS);
+
+  // Adjusted during render rather than in an effect, as React recommends for
+  // state derived from props, so the frame after a Run click already probes
+  // what was run. In auto mode it tracks the debounced inputs, so turning
+  // manual-apply on freezes it at the last auto run.
+  const [applied, setApplied] = useState({ tick: manualRunTick, inputs: live });
+  const target = !manualApply ? debounced : applied.tick !== manualRunTick ? live : applied.inputs;
+  if (applied.tick !== manualRunTick || applied.inputs !== target) {
+    setApplied({ tick: manualRunTick, inputs: target });
+  }
+  return target;
 }
 
 /** Extract strftime directives from a format string */
@@ -197,8 +240,7 @@ function extractDirectives(format: string): { directive: string; description: st
 }
 
 export function TimestampTab({ items, currentPage, eventsPerPage }: TimestampTabProps) {
-  const propsConf = useAppStore((s) => s.propsConf);
-  const metadata = useAppStore((s) => s.metadata);
+  const { propsConf, metadata } = usePipelineInputs();
   const [refOpen, setRefOpen] = useState(false);
   const [refSearch, setRefSearch] = useState('');
 
@@ -208,7 +250,7 @@ export function TimestampTab({ items, currentPage, eventsPerPage }: TimestampTab
   // and executing it during render had nothing to interrupt it. Memoised so the
   // hook re-probes when the events or the config change, not on every render.
   const raws = useMemo(() => items.map((item) => item.event._raw), [items]);
-  const { status, probes } = useTimestampMatch(raws, config);
+  const { status, probes, error } = useTimestampMatch(raws, config);
 
   const directives = useMemo(
     () => config.timeFormat ? extractDirectives(config.timeFormat) : [],
@@ -252,6 +294,8 @@ export function TimestampTab({ items, currentPage, eventsPerPage }: TimestampTab
       <div className="flex-shrink-0 border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
         <button
           onClick={() => setRefOpen(!refOpen)}
+          aria-expanded={refOpen}
+          aria-controls="strptime-reference"
           className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-[var(--color-bg-tertiary)] transition-colors cursor-pointer text-left"
         >
           <svg
@@ -264,7 +308,7 @@ export function TimestampTab({ items, currentPage, eventsPerPage }: TimestampTab
           <span className="text-xs font-medium text-[var(--color-text-muted)]">STRPTIME Reference</span>
         </button>
         {refOpen && (
-          <div className="px-3 pb-2">
+          <div id="strptime-reference" className="px-3 pb-2">
             <div className="relative mb-2">
               <svg
                 className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 pointer-events-none"
@@ -338,6 +382,16 @@ export function TimestampTab({ items, currentPage, eventsPerPage }: TimestampTab
               that backtracks catastrophically — nested or overlapping quantifiers such as{' '}
               <code className="font-mono">(a|a)*</code>.
             </span>
+          </div>
+        ) : status === 'error' ? (
+          // A throw inside the prober, reported as itself. It used to kill the
+          // worker and come out as the timeout message above, which sent people
+          // looking for a backtracking TIME_PREFIX that was not there (#322).
+          <div className="flex flex-col items-center justify-center gap-1 py-12 text-center">
+            <span className="text-sm font-medium text-[var(--color-error)]">
+              Timestamp matching failed
+            </span>
+            <span className="text-xs text-[var(--color-text-muted)] max-w-md font-mono">{error}</span>
           </div>
         ) : (
           items.map((item, idx) => {

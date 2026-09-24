@@ -5,6 +5,16 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
+// Flat config merges `globals` across matching blocks rather than replacing
+// them, so a later `globals: globals.node` would leave every browser global
+// (window, document, localStorage…) declared too. Code that runs only under
+// Node gets the browser set switched off explicitly, so reaching for one is
+// reported instead of type-checking and then failing at run time.
+const nodeOnlyGlobals = {
+  ...Object.fromEntries(Object.keys(globals.browser).map((name) => [name, 'off'])),
+  ...globals.node,
+}
+
 export default defineConfig([
   // All generated: build output (the app's and any package's), and the
   // reports the test suites write.
@@ -64,6 +74,29 @@ export default defineConfig([
       '@typescript-eslint/no-unsafe-call': 'off',
       '@typescript-eslint/no-unsafe-argument': 'off',
       '@typescript-eslint/no-unsafe-return': 'off',
+    },
+  },
+  {
+    // The MCP server is a Node process (#322): stdio, worker_threads,
+    // child_process. It used to inherit the app's browser globals from the
+    // block above, which describe an environment it never runs in.
+    files: ['packages/mcp-server/**/*.{ts,mts}'],
+    languageOptions: {
+      globals: nodeOnlyGlobals,
+    },
+  },
+  {
+    // The maintenance scripts (#322). Only .ts/.tsx was linted, so these two
+    // Node scripts — one of which runs weekly in roster.yml — were the only
+    // hand-written code nothing checked. No type-aware rules: they are plain
+    // JS outside every tsconfig, which is what projectService needs to see a
+    // file. ESM either way: the root package.json is "type": "module".
+    files: ['scripts/**/*.{js,mjs}'],
+    extends: [js.configs.recommended],
+    languageOptions: {
+      ecmaVersion: 'latest',
+      sourceType: 'module',
+      globals: globals.node,
     },
   },
   {

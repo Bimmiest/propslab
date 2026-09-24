@@ -12,6 +12,14 @@ const WORKER_TIMEOUT_MS = 5_000;
 // give up. A request that itself crashes the worker (e.g. OOM-sized input) would
 // otherwise restart-and-replay forever; cap it so the loop terminates.
 const MAX_WORKER_RETRIES = 1;
+// How many workers in a row may die without ever answering before we stop
+// constructing them and run on the calling thread instead (#309). `new Worker`
+// does not throw when its module chunk cannot be fetched — a 404 after a
+// redeploy, a CSP that blocks the script — the failure arrives later as an
+// `error` event, so the constructor-failure fallback below never saw it and
+// onerror recreated the worker forever. Two, not one: a single start-up death
+// could be a transient fetch, and costs only one spare construction to find out.
+const MAX_WORKER_START_FAILURES = 2;
 
 export function useProcessingPipeline() {
   const rawData = useAppStore((s) => s.rawData);
@@ -32,6 +40,9 @@ export function useProcessingPipeline() {
   const lastRequestRef = useRef<PipelineWorkerRequest | null>(null);
   const requestStartRef = useRef<number>(0);
   const retryCountRef = useRef(0);
+  // Consecutive errors from workers that never produced a message; reset only
+  // by a message, not per request, or the cap would never be reached (#309).
+  const startFailuresRef = useRef(0);
   const initWorkerRef = useRef<() => void>(() => {});
   // Latest settings, for the manual-run effect (which depends only on the tick).
   const settingsRef = useRef(settings);
@@ -77,6 +88,9 @@ export function useProcessingPipeline() {
   // caught, `sendRequest` would have returned early on every keystroke and the
   // preview would have sat on "No data yet" with nothing to say why (#294).
   // `useWorkerRequest` makes the same trade for the live-matching hooks.
+  // A failed chunk fetch does not actually throw from `new Worker`; it surfaces
+  // later as an `error` event, and reaches this path through onerror's
+  // start-failure cap instead (#309).
   //
   // What is given up is the watchdog: a runaway regex here blocks the tab rather
   // than a worker. That is the cost of producing output at all in an environment
@@ -173,8 +187,15 @@ export function useProcessingPipeline() {
         return null;
       }
       workerRef.current = worker;
+      // Whether this worker has ever answered, i.e. its script demonstrably
+      // loaded. An error from one that has not is a start-up failure, which is
+      // what bounds the restart loop below (#309).
+      let answered = false;
 
       worker.onmessage = (e: MessageEvent<PipelineWorkerResponse>) => {
+        // Any message — stale or not — proves the chunk loaded and ran.
+        answered = true;
+        startFailuresRef.current = 0;
         const { id, result, error } = e.data;
         if (id !== requestIdRef.current) return;
 
@@ -204,9 +225,46 @@ export function useProcessingPipeline() {
         clearWatchdog();
         workerRef.current?.terminate();
         workerRef.current = null;
-        const restartedWorker = initWorker();
+
+        // A load failure is an error from a worker that never answered and whose
+        // event carries no message: per the HTML spec a failed fetch or parse of
+        // the worker script fires a plain `Event`, while an exception thrown by
+        // code that did run arrives as an `ErrorEvent` with one. The distinction
+        // matters because a load failure says nothing about the pending request —
+        // no code ever saw it — so it must not spend that request's crash budget,
+        // nor be reported as the input crashing the worker (#309).
+        const loadFailure = !answered && !(e as Partial<ErrorEvent>).message;
+
+        // Every worker that dies before answering counts, crash or load failure
+        // alike (a script that throws at top level never answers either). Past
+        // the cap no replacement is built, and `sendRequest` runs everything
+        // inline from here on — the same place the constructor-failure path
+        // lands (#309). Before this, `initWorker()` ran unconditionally, and a
+        // chunk that 404s was refetched, and diagnostics rewritten, forever.
+        if (!answered) startFailuresRef.current += 1;
+        const restartedWorker =
+          startFailuresRef.current < MAX_WORKER_START_FAILURES ? initWorker() : null;
 
         const pending = lastRequestRef.current;
+
+        if (loadFailure) {
+          // Nothing to report: the next request (or the one below) either
+          // reaches the replacement or runs inline. Writing "Worker error"
+          // here is what repainted the diagnostics on every refetch.
+          if (!pending) return;
+          if (restartedWorker) {
+            // Resend without charging the retry budget; the watchdog is
+            // re-armed for the same reason as on the crash-replay path.
+            setIsProcessing(true);
+            armWatchdog(pending.id);
+            restartedWorker.postMessage(pending);
+            return;
+          }
+          lastRequestRef.current = null;
+          retryCountRef.current = 0;
+          runInline(pending);
+          return;
+        }
         if (pending && restartedWorker === null && retryCountRef.current < MAX_WORKER_RETRIES) {
           // The replacement could not be constructed. Finish this request on
           // the calling thread, which is where every later one will run too —

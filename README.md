@@ -12,6 +12,7 @@ Browser-based simulator for Splunk's `props.conf` and `transforms.conf` processi
 
 ```bash
 npm install
+npm ci --prefix packages/mcp-server  # lint is type-aware over the MCP server too
 npm run dev          # Dev server on http://localhost:5173
 npm run build        # tsc -b && vite build → dist/
 npm run preview      # Serve production build
@@ -132,7 +133,7 @@ e2e/                           # Playwright smoke tests (production build, Chrom
 
 ## Output tabs
 
-**Top-level:** Preview, CIM Models, Fields, Pipeline, Architecture.
+**Top-level:** Preview, CIM Models, Fields, Pipeline, Effective config, Architecture.
 
 **Preview sub-tabs** (order: Raw → Timestamp → Extractions → Diff → Regex):
 
@@ -220,9 +221,11 @@ It exists for the things vitest structurally cannot reach, each of which has fai
 
 One note if you extend it: the app runs the pipeline once on mount with an empty raw log, and `runPipeline` returns a real result for empty input (`eventCount: 0`). So the status bar reads "Worker idle · 0 events" *before* anything is loaded — wait on a non-zero event count, as `loadExample` does, not on the idle state.
 
-`@playwright/test` is pinned to `~1.56` to match the Chromium revision preinstalled in the dev container; bump it freely, since CI installs the matching browser itself.
+`@playwright/test` is pinned to `~1.63.0` to match the Chromium revision preinstalled in the dev container; bump it freely, since CI installs the matching browser itself.
 
-`ci.yml` runs lint → build (`tsc -b && vite build`) → tests → e2e smoke → `npm audit` on every PR and on pushes to main. The Azure SWA deploy workflow is separate and has no test job of its own: it triggers on push to main and runs its own build, so it is gated by CI only in the sense that both run on the same commit. Node is pinned once, in `.nvmrc`, which `ci.yml` and `package.json`'s `engines` both follow.
+`ci.yml` runs on every PR, on pushes to main, weekly, and on demand, as three independent jobs: `ci` (lint → build (`tsc -b && vite build`) → tests with coverage → e2e smoke), `mcp-server` (the MCP server's typecheck, bundle and tests), and `audit` (`npm audit` over both lockfiles — high-severity advisories in production dependencies fail it, dev-only ones are reported).
+
+The Azure SWA deploy (`azure-static-web-apps.yml`) builds and deploys only; it has no test job of its own because it does not run until CI has passed. It triggers on `workflow_run` when a CI run finishes, and proceeds only if that run succeeded and was for a push to main. It then deploys the **newest commit on main with a green push CI** — not necessarily the commit that triggered it, since CI runs for two quick pushes can finish in either order — building it with the `.nvmrc` Node and `npm ci --ignore-scripts`, and uploading `dist/` with the app build skipped. A manual `workflow_dispatch` is the redeploy and rollback path: it deploys the dispatched ref without waiting on CI, but refuses any commit that is not an ancestor of `main`, so only something that was once merged can be put back. The job runs in the `production` environment, whose deployment-branch rules and scoped secret are what keep a branch from deploying at all. Node is pinned once, in `.nvmrc`, which both workflows and `package.json`'s `engines` follow.
 
 ## Simulation fidelity
 
@@ -287,7 +290,7 @@ See [CHANGELOG.md](CHANGELOG.md) for fix history
 
 ## Tech stack
 
-React 19, Vite 8, TypeScript 5.9, Tailwind CSS 4 (CSS-first config), Monaco Editor 0.55 (mounted directly by `MonacoEditor.tsx`), Zustand 5, react-resizable-panels 4.6, `diff` 9, `cmdk` (command palette), `@radix-ui/react-tooltip`.
+React 19, Vite 8, TypeScript 5.9, Tailwind CSS 4 (CSS-first config), Monaco Editor 0.55 (mounted directly by `MonacoEditor.tsx`), Zustand 5, react-resizable-panels 4.12, `diff` 9, `cmdk` (command palette), Radix UI primitives (`react-tooltip`, `react-dialog`, `react-context-menu`).
 
 ## Contributing
 

@@ -55,8 +55,10 @@ export function evalNode(node: Node, ctx: EvalCtx): EvalValue {
       return !toBool(evalNode(node.operand, ctx));
     case 'logical': {
       // Short-circuit: Splunk does not evaluate the right operand once the left
-      // settles the result. Both operators yield a boolean.
+      // settles the result. All three operators yield a boolean. XOR has no
+      // short circuit: its answer always depends on both sides (#312).
       const left = evalNode(node.left, ctx);
+      if (node.op === 'XOR') return toBool(left) !== toBool(evalNode(node.right, ctx));
       if (node.op === 'OR') return toBool(left) ? true : toBool(evalNode(node.right, ctx));
       return !toBool(left) ? false : toBool(evalNode(node.right, ctx));
     }

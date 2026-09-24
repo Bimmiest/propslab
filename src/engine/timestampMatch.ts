@@ -1,5 +1,6 @@
 import { safeRegex } from '../utils/splunkRegex';
-import { strftimeToRegex, parseTimestamp } from '../utils/strftime';
+import { parseTimestampDetailed, parseTzAlias } from '../utils/strftime';
+import { matchTimeFormat, timeFormatRegex } from './processors/timestampExtractor';
 
 /**
  * Timestamp probing for the Timestamp tab, extracted from the component so it
@@ -22,6 +23,20 @@ export interface TimeConfig {
   timeFormat: string | null;
   maxLookahead: number;
   tz: string | null;
+  /**
+   * The TZ_ALIAS value as written, parsed here the way the extractor parses
+   * it. A string rather than the parsed Map so the config stays plain data: it
+   * crosses the worker boundary, and the tab compares configs by value.
+   * Optional so a caller without one keeps working.
+   */
+  tzAlias?: string | null;
+  /**
+   * The moment standing in for index time, in epoch ms — the same value as
+   * `PipelineOptions.now`, which gives a yearless TIME_FORMAT its year. Omitted,
+   * both fall back to the clock. Without it the prober and a pipeline run with
+   * a fixed `now` put the same timestamp in different years (#313).
+   */
+  now?: number;
 }
 
 export interface TimestampMatch {
@@ -58,13 +73,40 @@ export interface TimestampProbe {
 
 const EMPTY: TimestampProbe = { match: null, prefix: null };
 
-export function probeTimestamp(raw: string, config: TimeConfig): TimestampProbe {
+/**
+ * What a config compiles to, once per batch rather than once per event. The
+ * TIME_FORMAT regex comes from the extractor's own `timeFormatRegex`, so the
+ * prober and the pipeline search the lookahead window identically: anchored
+ * right after TIME_PREFIX when there is one. The prober used to scan the window
+ * unanchored, and highlighted a date the pipeline then rejected (#313).
+ */
+interface CompiledTimeConfig {
+  config: TimeConfig;
+  /** undefined: no TIME_PREFIX. null: one that will not compile. */
+  prefixRegex: RegExp | null | undefined;
+  formatRegex: RegExp | null;
+  tzAlias: ReadonlyMap<string, string>;
+  now: Date | undefined;
+}
+
+function compile(config: TimeConfig): CompiledTimeConfig {
+  const prefixRegex = config.timePrefix ? safeRegex(config.timePrefix) : undefined;
+  return {
+    config,
+    prefixRegex,
+    formatRegex: config.timeFormat ? timeFormatRegex(config.timeFormat, prefixRegex != null) : null,
+    tzAlias: parseTzAlias(config.tzAlias ?? '').aliases,
+    now: config.now !== undefined ? new Date(config.now) : undefined,
+  };
+}
+
+function probe(raw: string, compiled: CompiledTimeConfig): TimestampProbe {
+  const { config, prefixRegex, formatRegex } = compiled;
   let prefixStart = 0;
   let prefixEnd = 0;
   let prefix: TimestampProbe['prefix'] = null;
 
-  if (config.timePrefix) {
-    const prefixRegex = safeRegex(config.timePrefix);
+  if (prefixRegex !== undefined) {
     if (!prefixRegex) return EMPTY;
     const prefixMatch = prefixRegex.exec(raw);
     if (!prefixMatch) return EMPTY;
@@ -80,35 +122,42 @@ export function probeTimestamp(raw: string, config: TimeConfig): TimestampProbe 
   // Reported after the prefix so the overlay can still draw the lookahead window
   // for a config that has a TIME_PREFIX but no TIME_FORMAT yet — the state a user
   // is in halfway through writing one.
-  if (!config.timeFormat) return { match: null, prefix };
+  if (!config.timeFormat || !formatRegex) return { match: null, prefix };
 
   const lookaheadEnd = Math.min(prefixEnd + config.maxLookahead, raw.length);
-  const searchRegion = raw.substring(prefixEnd, lookaheadEnd);
-
-  const formatRegex = strftimeToRegex(config.timeFormat);
-  const formatMatch = formatRegex.exec(searchRegion);
+  const formatMatch = matchTimeFormat(raw, prefixEnd, lookaheadEnd, formatRegex);
   if (!formatMatch) return { match: null, prefix };
 
-  const tsStart = prefixEnd + formatMatch.index;
-  const tsEnd = tsStart + formatMatch[0].length;
-  const matchedText = formatMatch[0];
-  const parsed = parseTimestamp(matchedText, config.timeFormat, config.tz ?? undefined);
+  // Parsed with the same inputs the extractor passes — TZ, TZ_ALIAS and `now` —
+  // so the value shown is the one the pipeline reads (#313). A dateless format
+  // is the exception: the extractor dates it from the previous event, which a
+  // per-event probe has no view of, and it lands on 1 January here.
+  const parsed = parseTimestampDetailed(formatMatch.text, config.timeFormat, {
+    tz: config.tz ?? undefined,
+    tzAlias: compiled.tzAlias,
+    now: compiled.now,
+  });
 
   return {
     match: {
       prefixStart,
       prefixEnd,
       lookaheadEnd,
-      tsStart,
-      tsEnd,
-      parsedTimeMs: parsed ? parsed.getTime() : null,
-      matchedText,
+      tsStart: formatMatch.start,
+      tsEnd: formatMatch.end,
+      parsedTimeMs: parsed ? parsed.date.getTime() : null,
+      matchedText: raw.substring(formatMatch.start, formatMatch.end),
     },
     prefix,
   };
 }
 
+export function probeTimestamp(raw: string, config: TimeConfig): TimestampProbe {
+  return probe(raw, compile(config));
+}
+
 /** Probe many events under one config. Aligned to `raws`. */
 export function probeTimestamps(raws: string[], config: TimeConfig): TimestampProbe[] {
-  return raws.map((raw) => probeTimestamp(raw, config));
+  const compiled = compile(config);
+  return raws.map((raw) => probe(raw, compiled));
 }

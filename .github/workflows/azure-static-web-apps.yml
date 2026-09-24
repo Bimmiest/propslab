@@ -19,8 +19,19 @@ on:
     workflows: [CI]
     types: [completed]
     branches: [main]
-  # Manual redeploys. Ungated by design: dispatching is an operator saying
-  # "ship this ref", and the ref is whatever they picked in the UI.
+  # Manual redeploys, and the rollback path: dispatch on an older ref (a
+  # release tag, say) to put that bundle back. Not gated on CI, by design — a
+  # rollback is usually needed precisely when main is in a state nobody wants
+  # to wait on — but no longer "any ref" (#314). The dispatch form accepts every
+  # branch and tag in the repo, so an unreviewed branch was one click from
+  # production. The "Refuse commits not on main" step below now requires the
+  # commit to be one main has already contained, which keeps rollback to
+  # anything that was ever reviewed and merged and nothing else.
+  #
+  # That step is only as strong as the copy of this file that runs, and a
+  # dispatch runs the copy *on the dispatched ref* — a branch can delete the
+  # check along with anything else. What actually binds is the `production`
+  # environment on the job below; see the note there.
   workflow_dispatch:
 
 # Deploys are not interchangeable the way CI runs are. Cancelling one mid-upload
@@ -55,6 +66,24 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     name: Build and Deploy Job
+    # The job that holds the deployment token runs in an environment (#314), so
+    # the rules around *who and what may deploy* live in repo settings, where
+    # no branch can edit them — unlike the checks in this file, which a
+    # dispatched branch supplies itself. Naming the environment does nothing on
+    # its own; it needs two settings changes by a repo admin:
+    #
+    #   - Move AZURE_STATIC_WEB_APPS_API_TOKEN from repository secrets to the
+    #     `production` environment's secrets, and delete the repository-level
+    #     copy. Until then any workflow on any branch can still read it.
+    #   - Under the environment's deployment branches and tags, allow `main`
+    #     plus the release tags (`v*`) and nothing else. `workflow_run` runs
+    #     report the default branch as their ref, so the gated path is
+    #     unaffected; a dispatch from any other branch is refused before a step
+    #     runs. Required reviewers are optional on top.
+    #
+    # With the secret scoped this way, a branch that rewrites this file can
+    # still start a run, but not one that can see the token.
+    environment: production
     # No `id-token: write`. This deploys with the Static Web App's deployment
     # token, not with a GitHub federated identity — see the Build And Deploy step.
     # `actions: read` is for the Resolve commit step, which lists CI runs.
@@ -71,7 +100,8 @@ jobs:
       # than falling back: deploying a guess is worse than not deploying.
       # A manual dispatch deploys the ref it was dispatched on, as before —
       # which is also the way to roll back: re-running an old commit's CI
-      # re-deploys the newest green commit, not that one.
+      # re-deploys the newest green commit, not that one. The next two steps
+      # hold a dispatched ref to commits main has contained (#314).
       - name: Resolve commit
         id: target
         env:
@@ -97,6 +127,29 @@ jobs:
         with:
           ref: ${{ steps.target.outputs.sha }}
           lfs: false
+          # Full history, so the ancestry check below can connect the target
+          # commit to main. A shallow clone has neither side's parents and
+          # `merge-base` could only ever answer "no".
+          fetch-depth: 0
+
+      # Rollback stays possible, but only to a commit that was once main: a
+      # merged, reviewed state, not whatever a branch or tag happens to point
+      # at (#314). It runs before `npm ci`, so a refused ref never gets as far
+      # as executing its own build config, let alone reaching the token.
+      #
+      # Checked for the workflow_run path too, where it should never fire: the
+      # resolved commit came from a push to main. The one case it catches there
+      # is a force-push that rewrote main after CI passed — and a commit main no
+      # longer contains should not ship either.
+      - name: Refuse commits not on main
+        env:
+          SHA: ${{ steps.target.outputs.sha }}
+        run: |
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          if ! git merge-base --is-ancestor "$SHA" origin/main; then
+            echo "::error::Refusing to deploy $SHA: it is not an ancestor of origin/main. Deploy a commit that has been merged to main (a release tag, or main itself)."
+            exit 1
+          fi
 
       # The build used to happen inside the Static Web Apps container, where
       # Oryx picked its own Node. That left the one artifact users actually load
@@ -110,7 +163,19 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        # --ignore-scripts (#314): this job runs in the environment that holds
+        # the deployment token, and install scripts are the one place a
+        # compromised or typo-squatted dependency runs code without anyone
+        # importing it. The app does not need them — the only package in the
+        # lockfile with an install script is fsevents (macOS-only, optional,
+        # never installed here), and vite 8's native pieces (rolldown,
+        # lightningcss) arrive as prebuilt platform packages through
+        # optionalDependencies, not a postinstall. Checked by running
+        # `npm ci --ignore-scripts && npm run build` against a clean tree. If a
+        # future dependency does need its script, the build fails here loudly
+        # rather than silently shipping without it; allow that one package
+        # explicitly rather than dropping the flag.
+        run: npm ci --ignore-scripts
 
       - name: Build
         run: npm run build

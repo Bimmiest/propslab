@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, fireEvent, within } from '@testing-library/react';
 import { FieldsTab } from '../FieldsTab';
 import { useAppStore } from '../../../../store/useAppStore';
@@ -35,6 +35,7 @@ const result: ProcessingResult = {
   originalRaw: '',
   eventCount: 1,
   processingSteps: [],
+  inputMetadata: { index: 'main', host: '', source: '', sourcetype: '' },
 };
 
 const initial = useAppStore.getState();
@@ -77,5 +78,87 @@ describe('FieldsTab', () => {
     fireEvent.change(search, { target: { value: 'ext' } });
     expect(within(container).getByText('ext_field')).toBeInTheDocument();
     expect(within(container).queryByText('idx_field')).not.toBeInTheDocument();
+  });
+});
+
+describe('FieldsTab — accessibility (#320)', () => {
+  beforeEach(() => {
+    useAppStore.setState(initial, true);
+    useAppStore.setState({ processingResult: result });
+  });
+
+  it('marks the selected phase filter as pressed', () => {
+    const { container } = render(<FieldsTab />);
+    const all = within(container).getByRole('button', { name: 'All' });
+    const index = within(container).getByRole('button', { name: 'Index-time' });
+    expect(all).toHaveAttribute('aria-pressed', 'true');
+    expect(index).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(index);
+    expect(all).toHaveAttribute('aria-pressed', 'false');
+    expect(index).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('exposes the sort order on the sorted column only', () => {
+    const { container } = render(<FieldsTab />);
+    const header = (label: string) => within(container).getByRole('columnheader', { name: new RegExp(`^${label}`) });
+    expect(header('Events')).toHaveAttribute('aria-sort', 'descending');
+    expect(header('Field Name')).not.toHaveAttribute('aria-sort');
+
+    fireEvent.click(within(container).getByRole('button', { name: 'Field Name' }));
+    expect(header('Field Name')).toHaveAttribute('aria-sort', 'ascending');
+    expect(header('Events')).not.toHaveAttribute('aria-sort');
+
+    fireEvent.click(within(container).getByRole('button', { name: 'Field Name' }));
+    expect(header('Field Name')).toHaveAttribute('aria-sort', 'descending');
+  });
+});
+
+describe('FieldsTab — nested field counts (#316)', () => {
+  it('counts each collapsed parent\'s immediate children', () => {
+    useAppStore.setState(initial, true);
+    const json = makeEvent(
+      { a: '{}', 'a.b': '{}', 'a.b.c': '1', 'a.b.d': '2', 'a.e': '3', z: 'x' },
+      [],
+    );
+    useAppStore.setState({
+      processingResult: { events: [json], originalRaw: '', eventCount: 1, processingSteps: [], inputMetadata: { index: 'main', host: '', source: '', sourcetype: '' } },
+    });
+    const { container } = render(<FieldsTab />);
+    // Parents collapse on load, so only `a` and `z` show, with a's two
+    // immediate children (a.b, a.e) counted — not a.b's own.
+    expect(within(container).getByText('(2)')).toBeInTheDocument();
+    fireEvent.click(within(container).getByRole('button', { name: 'Expand' }));
+    const expands = within(container).getAllByRole('button', { name: 'Expand' });
+    expect(expands).toHaveLength(1); // a.b, still collapsed
+    expect(within(container).getByText('(2)')).toBeInTheDocument();
+  });
+});
+
+describe('FieldsTab — column resize teardown (#322)', () => {
+  beforeEach(() => {
+    useAppStore.setState(initial, true);
+    useAppStore.setState({ processingResult: result });
+  });
+
+  it('restores the page and drops its listeners when unmounted mid-drag', () => {
+    const removeSpy = vi.spyOn(document, 'removeEventListener');
+    const { container, unmount } = render(<FieldsTab />);
+    fireEvent.mouseDown(within(container).getByRole('separator', { name: 'Resize Events column' }), { clientX: 100 });
+    expect(document.body.style.cursor).toBe('col-resize');
+    expect(document.body.style.userSelect).toBe('none');
+
+    unmount();
+    expect(document.body.style.cursor).toBe('');
+    expect(document.body.style.userSelect).toBe('');
+    expect(removeSpy).toHaveBeenCalledWith('mousemove', expect.any(Function));
+    expect(removeSpy).toHaveBeenCalledWith('mouseup', expect.any(Function));
+    removeSpy.mockRestore();
+  });
+
+  it('still ends a drag on mouseup', () => {
+    const { container } = render(<FieldsTab />);
+    fireEvent.mouseDown(within(container).getByRole('separator', { name: 'Resize Events column' }), { clientX: 100 });
+    fireEvent.mouseUp(document);
+    expect(document.body.style.cursor).toBe('');
   });
 });

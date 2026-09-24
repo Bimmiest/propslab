@@ -14,9 +14,10 @@ export interface Token {
  *
  * Character access goes through `charAt` rather than `expr[i]`: every read here
  * is already inside an `i < expr.length` loop, and charAt returns a plain string
- * for an in-bounds index instead of `string | undefined`. The two lookaheads at
- * `i + 1` are the only reads that can run off the end, and both compare the
- * result against a literal — where charAt's `''` is the answer we want anyway.
+ * for an in-bounds index instead of `string | undefined`. The lookaheads at
+ * `i + 1` are the only reads that can run off the end, and each tests the
+ * result against a literal or `\d` — where charAt's `''` is the answer we want
+ * anyway.
  */
 export function tokenize(expr: string): Token[] {
   const tokens: Token[] = [];
@@ -44,6 +45,10 @@ export function tokenize(expr: string): Token[] {
           i++;
         }
       }
+      // Running off the end without a closing quote is a syntax error. It used
+      // to be accepted as a literal holding the rest of the expression, so a
+      // typo'd `"abc` evaluated instead of being reported (#312).
+      if (i >= expr.length) throw new Error('Unterminated string literal');
       i++; // skip closing quote
       tokens.push({ type: 'string', value: str });
       continue;
@@ -57,6 +62,9 @@ export function tokenize(expr: string): Token[] {
         name += expr.charAt(i);
         i++;
       }
+      // Same rule as a string literal: no closing quote is an error, not a
+      // field named after the rest of the expression (#312).
+      if (i >= expr.length) throw new Error('Unterminated quoted field name');
       i++; // skip closing quote
       tokens.push({ type: 'field_ref', value: name });
       continue;
@@ -66,22 +74,38 @@ export function tokenize(expr: string): Token[] {
     // cannot already be in progress — at the start, after an operator or comma,
     // or after an OPENING paren. After a CLOSING paren `-` is subtraction, so
     // `len(x) - 1` must not lex `-1` as a negative literal.
+    //
+    // A leading `.` starts a number (`.5`) under the same condition. Where a
+    // value IS in progress the `.` is the concatenation operator, so `a.5` stays
+    // `a . 5` and `"x".5` stays `"x" . 5`. Before this, `.5` fell through to the
+    // unknown-character skip and `.5 * 2` quietly evaluated to 10 (#312).
     const prevTok = tokens[tokens.length - 1];
+    const valueExpected =
+      !prevTok ||
+      prevTok.type === 'op' ||
+      prevTok.type === 'comma' ||
+      (prevTok.type === 'paren' && prevTok.value === '(');
     const unaryMinus =
       expr.charAt(i) === '-' &&
       i + 1 < expr.length &&
       /\d/.test(expr.charAt(i + 1)) &&
-      (!prevTok ||
-        prevTok.type === 'op' ||
-        prevTok.type === 'comma' ||
-        (prevTok.type === 'paren' && prevTok.value === '('));
-    if (/\d/.test(expr.charAt(i)) || unaryMinus) {
+      valueExpected;
+    const leadingDot = expr.charAt(i) === '.' && /\d/.test(expr.charAt(i + 1)) && valueExpected;
+    if (/\d/.test(expr.charAt(i)) || unaryMinus || leadingDot) {
       let num = '';
       if (expr.charAt(i) === '-') { num += '-'; i++; }
       let seenDot = false;
       while (i < expr.length && /[\d.]/.test(expr.charAt(i))) {
         if (expr.charAt(i) === '.') {
-          if (seenDot) break; // at most one decimal point: 1.2.3 → 1.2 then .3
+          // A second decimal point glued to the literal (`1.2.3`) is a malformed
+          // number, not `1.2 . 3`: without this the concatenation rule below
+          // would take the second `.` and quietly produce "1.23" (#312).
+          if (seenDot) {
+            if (/\d/.test(expr.charAt(i + 1))) {
+              throw new Error(`Malformed number: ${num}${/^[\d.]*/.exec(expr.slice(i))?.[0] ?? ''}`);
+            }
+            break;
+          }
           seenDot = true;
         }
         num += expr.charAt(i); i++;
@@ -91,7 +115,8 @@ export function tokenize(expr: string): Token[] {
     }
 
     // Operators
-    if (expr.charAt(i) === '.' && (i + 1 >= expr.length || !/\d/.test(expr.charAt(i + 1)))) {
+    // Any `.` the number branch above did not take is concatenation.
+    if (expr.charAt(i) === '.') {
       tokens.push({ type: 'dot', value: '.' }); i++; continue;
     }
 
@@ -129,7 +154,9 @@ export function tokenize(expr: string): Token[] {
         ident += expr.charAt(i); i++;
       }
       const upper = ident.toUpperCase();
-      if (upper === 'AND' || upper === 'OR' || upper === 'NOT' || upper === 'IN') {
+      // LIKE and XOR are SPL eval operators too (#312); the parser still reads
+      // `like(...)` in operand position as the like() function.
+      if (['AND', 'OR', 'NOT', 'IN', 'LIKE', 'XOR'].includes(upper)) {
         tokens.push({ type: 'op', value: upper });
       } else {
         tokens.push({ type: 'ident', value: ident });
@@ -137,8 +164,10 @@ export function tokenize(expr: string): Token[] {
       continue;
     }
 
-    // Unknown character, skip
-    i++;
+    // Anything else is not part of eval syntax. It used to be skipped without a
+    // word, which is how `.5` lost its point; an expression the simulator does
+    // not understand should be reported, not evaluated as something else (#312).
+    throw new Error(`Unexpected character: ${expr.charAt(i)}`);
   }
 
   return tokens;

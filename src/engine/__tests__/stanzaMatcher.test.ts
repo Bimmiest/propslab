@@ -307,3 +307,37 @@ describe('matchStanzas — a doubled backslash matches one literal backslash (#3
     expect(matchStanzas(conf.stanzas, at('C:\\logs\\app.log'))).toHaveLength(1);
   });
 });
+
+describe('matchStanzas — ASCII order breaks a full tie (#318)', () => {
+  // Doc-derived: props.conf.spec resolves colliding patterns of equal priority
+  // by the ASCII order of the stanza, the one sorting first winning — the
+  // captured `precedence-ascii-order` fixture agrees (`...fx_a...` beats
+  // `...fx_z...`). What this pins is that file order no longer decides it.
+  const tied = (first: string, second: string) =>
+    parseConf(`[source::${first}]\nSEDCMD-who = s/M/${first}/\n\n[source::${second}]\nSEDCMD-who = s/M/${second}/\n`, 'props.conf')
+      .stanzas;
+  const meta: EventMetadata = { ...META, source: '/logs/app_a_app_z.log' };
+
+  it('puts the ASCII-lower stanza first whichever comes first in the file', () => {
+    const forward = matchStanzas(tied('...app_a...', '...app_z...'), meta).map((s) => s.name);
+    const reversed = matchStanzas(tied('...app_z...', '...app_a...'), meta).map((s) => s.name);
+    expect(forward).toHaveLength(2);
+    expect(forward).toEqual(reversed);
+    expect(forward[0]).toContain('...app_a...');
+  });
+
+  it('compares bytes, so an uppercase name sorts before a lowercase one', () => {
+    const stanzas = tied('...app_a...', '...APP_A...');
+    const result = matchStanzas(stanzas, { ...meta, source: '/logs/app_a_APP_A_z.log' }).map((s) => s.name);
+    expect(result).toHaveLength(2);
+    expect(result[0]).toContain('...APP_A...');
+  });
+
+  it('does not override priority or specificity', () => {
+    const stanzas = parseConf(
+      '[source::...app_a...]\nSEDCMD-who = s/M/a/\n\n[source::...app_z...]\npriority = 5\nSEDCMD-who = s/M/z/\n',
+      'props.conf',
+    ).stanzas;
+    expect(matchStanzas(stanzas, meta)[0]!.name).toContain('...app_z...');
+  });
+});

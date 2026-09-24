@@ -39,7 +39,9 @@ function getMetadataChanges(event: SplunkEvent, original: EventMetadata) {
 }
 
 export function RawTab({ items, currentPage, eventsPerPage, search }: RawTabProps) {
-  const originalMetadata = useAppStore((s) => s.metadata);
+  // The run's own input, as in PreviewPanel: the live fields may have been
+  // edited since, which would badge every event as changed (#316).
+  const originalMetadata = useAppStore((s) => s.processingResult?.inputMetadata ?? s.metadata);
 
   return (
     <div className="p-3 space-y-2">

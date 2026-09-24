@@ -157,6 +157,13 @@ export interface ProcessingResult {
   originalRaw: string;
   eventCount: number;
   processingSteps: ProcessingStep[];
+  /**
+   * The metadata the run was given, before any input-time assignment or
+   * index-time rewrite. Carried on the result so a view can say which events
+   * a run changed without reading the metadata fields as they are now, which
+   * may have been edited since (#316).
+   */
+  inputMetadata: EventMetadata;
 }
 
 export type DiagnosticLevel = 'error' | 'warning' | 'info';
