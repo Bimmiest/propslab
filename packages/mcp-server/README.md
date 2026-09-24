@@ -47,6 +47,12 @@ Or in any client's JSON config:
 }
 ```
 
+`dist/index.js` starts with a `#!/usr/bin/env node` shebang (#319), so the
+package's `propslab-mcp` bin also runs directly — e.g. after `npm link` here,
+`claude mcp add propslab -- propslab-mcp`. Only the launcher carries it; the
+worker bundle is loaded by `new Worker`, never executed as a command. The
+launcher still re-execs node with the regex-fallback flags either way.
+
 ## Security model
 
 The server executes regexes the agent wrote and the user may not have

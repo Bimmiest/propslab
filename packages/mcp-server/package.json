@@ -12,7 +12,9 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
-    "build": "npm run typecheck && esbuild src/index.ts src/simulateWorker.ts --bundle --platform=node --target=node24 --format=cjs --outdir=dist --sourcemap",
+    "build": "npm run typecheck && npm run build:index && npm run build:worker",
+    "build:index": "esbuild src/index.ts --bundle --platform=node --target=node24 --format=cjs --outdir=dist --sourcemap --banner:js=\"#!/usr/bin/env node\"",
+    "build:worker": "esbuild src/simulateWorker.ts --bundle --platform=node --target=node24 --format=cjs --outdir=dist --sourcemap",
     "start": "node dist/index.js",
     "pretest": "npm run build",
     "test": "vitest run"

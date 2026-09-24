@@ -9,19 +9,34 @@ Node is pinned in [`.nvmrc`](.nvmrc), matched by `engines` in `package.json`, an
 ```bash
 nvm use            # or: fnm use
 npm install
+npm ci --prefix packages/mcp-server
 npm run dev        # http://localhost:5173
 ```
 
-## The four checks
+The second install is not optional if you intend to lint. `npm run lint` is type-aware over the whole repository, `packages/mcp-server` included, and that package resolves `@modelcontextprotocol/sdk` and `zod` from its own `node_modules`. Without them those types don't resolve and every use reports as an unsafe `any` — a wall of errors that have nothing to do with your change.
 
-CI runs these in order, and a PR needs all of them:
+## The CI checks
+
+[`ci.yml`](.github/workflows/ci.yml) runs three jobs, independently, on every PR, on pushes to main, weekly and on demand. A PR needs all three green — and so does a deploy, which only ships a commit whose whole CI run passed.
+
+**`ci`** — the app, in this order:
 
 ```bash
-npm run lint          # ESLint, including type-aware rules
+npm run lint          # ESLint, including type-aware rules (needs the MCP server's deps, above)
 npm run build         # tsc -b && vite build — this is the type-check
 npm run test:coverage # vitest, with the coverage floor enforced
 npm run test:e2e      # Playwright, against a production build
 ```
+
+**`mcp-server`** — the MCP server package, which has its own lockfile and toolchain:
+
+```bash
+cd packages/mcp-server
+npm ci
+npm test              # pretest runs typecheck + esbuild bundle, then vitest
+```
+
+**`audit`** — `npm audit` over both lockfiles, the app's and `packages/mcp-server`'s. A high-severity advisory in a production dependency fails it; dev-only advisories are reported but never fatal. It installs nothing, so there is nothing to run locally beyond `npm audit --omit=dev --audit-level=high` in each directory.
 
 A few things worth knowing:
 

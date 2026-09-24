@@ -8,10 +8,26 @@ import './v8Flags';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { registerTools } from './tools';
+// The version the server reports in its MCP `initialize` handshake. It used to
+// be a string literal here that duplicated package.json and had to be bumped by
+// hand alongside it (#319). esbuild inlines the JSON at build time — and, with
+// a named import, only this one field of it — so nothing is read from disk at
+// run time and dist/ still works when copied away from the package.
+import { version } from '../package.json';
 
-export function createServer(): McpServer {
-  const server = new McpServer({ name: 'propslab', version: '0.1.0' });
-  registerTools(server);
+export interface CreateServerOptions {
+  /**
+   * Worker script for the sandboxed engine runs. Defaults to the
+   * `simulateWorker.js` bundle next to the running code — which is right in
+   * dist/, and wrong when the server is imported from source, as the
+   * end-to-end test does.
+   */
+  workerPath?: string;
+}
+
+export function createServer(options: CreateServerOptions = {}): McpServer {
+  const server = new McpServer({ name: 'propslab', version });
+  registerTools(server, options);
   return server;
 }
 
