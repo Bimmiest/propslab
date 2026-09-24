@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { buildExtractFromSelection, toCaptureGroupName } from '../../../../engine/scaffold/fromSelection';
 import { useRegexMatch } from '../../../../hooks/useRegexMatch';
+import { validateRegex } from '../../../../utils/splunkRegex';
 import { DirectiveDialog } from './DirectiveDialog';
 
 type Capture =
   | { state: 'empty' }
   | { state: 'pending' }
-  | { state: 'invalid' }
+  | { state: 'invalid'; reason: string | null }
   | { state: 'timeout' }
   | { state: 'nomatch' }
   | { state: 'nogroup'; full: string }
@@ -67,29 +68,47 @@ export function ExtractNameDialog({
   // outright: the 5 s pipeline watchdog does not cover the main thread, and the
   // ReDoS heuristic is deliberately not a complete analysis.
   const inputs = useMemo(() => [raw], [raw]);
-  const { status, results } = useRegexMatch(pattern.trim(), inputs);
+  const trimmed = pattern.trim();
+  // Compile-only check on this thread, as the Regex tab does: compiling cannot
+  // backtrack, and it catches both a syntax error and a pattern the ReDoS
+  // heuristic refuses before anything is sent to the worker.
+  const validationError = useMemo(() => (trimmed ? validateRegex(trimmed) : null), [trimmed]);
+  const requestedPattern = validationError ? '' : trimmed;
+  const { status, results, pattern: matchedPattern, inputs: matchedInputs } = useRegexMatch(requestedPattern, inputs);
 
   const capture = useMemo<Capture>(() => {
-    if (!pattern.trim()) return { state: 'empty' };
-    if (status === 'invalid') return { state: 'invalid' };
+    if (!trimmed) return { state: 'empty' };
+    if (validationError) return { state: 'invalid', reason: validationError };
+    // Matching runs on a debounced copy of the pattern, so for 250 ms after each
+    // keystroke the hook still reports the previous pattern's outcome. Shown as
+    // is, "Captures in this event" described a pattern that was no longer the
+    // one in the box (#329). Only an outcome for exactly this pattern and this
+    // event counts; anything else is still pending.
+    if (matchedPattern !== requestedPattern) return { state: 'pending' };
+    if (status === 'invalid') return { state: 'invalid', reason: null };
     if (status === 'timeout') return { state: 'timeout' };
-    if (status !== 'ok') return { state: 'pending' };
+    if (status !== 'ok' || matchedInputs !== inputs) return { state: 'pending' };
     const info = results[0];
     if (!info) return { state: 'nomatch' };
     const groups = Object.entries(info.groups);
     if (groups.length === 0) return { state: 'nogroup', full: info.match };
     return { state: 'ok', groups };
-  }, [pattern, status, results]);
+  }, [trimmed, validationError, requestedPattern, inputs, status, results, matchedPattern, matchedInputs]);
 
-  const valid =
-    pattern.trim().length > 0 && capture.state !== 'invalid' && capture.state !== 'timeout';
+  // Adding needs a settled 'ok' run of exactly this pattern (#329). `valid` used
+  // to be true while matching was pending, so "Add EXTRACT" wrote a pattern
+  // that had not compiled yet, or was still inside the watchdog window — a
+  // catastrophic regex could reach props.conf before the timeout that would
+  // have flagged it. A timeout keeps the button disabled: the pipeline would
+  // hit the same wall on every event this stanza applies to.
+  const valid = capture.state === 'ok' || capture.state === 'nomatch' || capture.state === 'nogroup';
 
   return (
     <DirectiveDialog
       title="Create EXTRACT from selection"
       applyLabel="Add EXTRACT"
       applyDisabled={!valid}
-      onApply={() => { if (valid) { onApply(`EXTRACT-${cleanName}`, pattern.trim()); onClose(); } }}
+      onApply={() => { if (valid) { onApply(`EXTRACT-${cleanName}`, trimmed); onClose(); } }}
       onClose={onClose}
     >
       <div>
@@ -136,7 +155,7 @@ export function ExtractNameDialog({
           className="text-xs font-mono rounded border p-2 overflow-x-auto whitespace-pre-wrap break-all"
           style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-primary)', backgroundColor: 'var(--color-bg-secondary)' }}
         >
-          {pattern.trim() ? `EXTRACT-${cleanName} = ${pattern.trim()}` : 'Enter a regex…'}
+          {trimmed ? `EXTRACT-${cleanName} = ${trimmed}` : 'Enter a regex…'}
         </pre>
       </div>
     </DirectiveDialog>
@@ -150,11 +169,13 @@ function CapturePreview({ capture }: { capture: Capture }) {
     <div className="text-xs font-medium" style={{ color }}>{text}</div>
   );
 
-  if (capture.state === 'invalid') return note('var(--color-error)', "Invalid regex — won't compile");
+  if (capture.state === 'invalid') {
+    return note('var(--color-error)', capture.reason ?? "Invalid regex — won't compile");
+  }
   if (capture.state === 'timeout') {
     return note(
       'var(--color-error)',
-      'Pattern took too long to run — it likely backtracks catastrophically. Simplify it.',
+      'Pattern took too long to run — it likely backtracks catastrophically. Simplify it before adding it.',
     );
   }
   if (capture.state === 'pending') return note('var(--color-text-muted)', 'Matching…');
