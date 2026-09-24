@@ -17,6 +17,14 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+// How many workers in a row may die without ever answering before the hook
+// stops constructing them and runs everything inline (#309). `new Worker` does
+// not throw when its script cannot be fetched (a 404 after a redeploy, a CSP
+// block); that failure arrives as an `error` event, which used to restart the
+// worker unconditionally — forever, for a chunk that is gone. Matches the cap in
+// `useProcessingPipeline`.
+const MAX_WORKER_START_FAILURES = 2;
+
 export type WorkerRequestStatus = 'idle' | 'pending' | 'ok' | 'timeout' | 'invalid';
 
 /**
@@ -94,12 +102,45 @@ export function useWorkerRequest<TReq extends object, TRes, TData>(
       }
     }
 
-    function fail() {
+    // Consecutive deaths of workers that never answered; reset by any message.
+    let startFailures = 0;
+    // The request in flight, kept so a worker that failed to load can have it
+    // resent or run inline rather than dropped (#309). Null when nothing is in
+    // flight, which is also how onerror knows there is nothing to report.
+    let inFlight: { request: TReq; id: number } | null = null;
+
+    // Tear down the current worker and, unless the start-failure cap has been
+    // reached, build a replacement. Past the cap `workerRef` stays null, which
+    // routes every later `run` through `runInline` (#309).
+    function restart() {
       clearTimer();
       workerRef.current?.terminate();
-      init();
+      workerRef.current = null;
+      if (startFailures < MAX_WORKER_START_FAILURES) init();
+    }
+
+    function fail() {
+      restart();
+      inFlight = null;
       setStatus('timeout');
       setData(configRef.current.empty);
+    }
+
+    function applyInline(request: TReq) {
+      const current = configRef.current;
+      const outcome = current.runInline(request);
+      setStatus(outcome.status);
+      setData(outcome.status === 'ok' ? outcome.data : current.empty);
+    }
+
+    function post(worker: Worker, request: TReq, id: number) {
+      inFlight = { request, id };
+      setStatus('pending');
+      timeoutRef.current = setTimeout(() => {
+        timeoutRef.current = null;
+        fail();
+      }, configRef.current.timeoutMs);
+      worker.postMessage({ ...request, id });
     }
 
     function init() {
@@ -115,22 +156,57 @@ export function useWorkerRequest<TReq extends object, TRes, TData>(
         return;
       }
       workerRef.current = worker;
+      // Whether this worker has ever answered, i.e. its script demonstrably
+      // loaded. Errors from one that has not are what the cap counts (#309).
+      let answered = false;
 
       worker.onmessage = (e: MessageEvent<TRes & { id: number }>) => {
+        // Any message, stale or not, proves the script loaded and ran.
+        answered = true;
+        startFailures = 0;
         if (e.data.id !== idRef.current) return; // stale response
         clearTimer();
+        inFlight = null;
         const outcome = configRef.current.interpret(e.data);
         setStatus(outcome.status);
         setData(outcome.status === 'ok' ? outcome.data : configRef.current.empty);
       };
 
-      // The worker died mid-run (e.g. a runaway pattern). Restart it and report
-      // it the way a timeout is reported, so the caller recovers identically.
-      worker.onerror = fail;
+      worker.onerror = (e) => {
+        // A load failure — a worker that never answered, with an event that
+        // carries no message — is the plain `Event` the HTML spec fires when the
+        // script cannot be fetched or parsed; an exception from code that ran is
+        // an `ErrorEvent` with one. No code saw the request in a load failure, so
+        // it is resent (or run inline past the cap) rather than reported (#309).
+        const loadFailure = !answered && !(e as Partial<ErrorEvent>).message;
+        if (!answered) startFailures += 1;
+        const pending = inFlight;
+        restart();
+
+        // Nothing was requested, so there is nothing to report. This used to go
+        // through `fail`, flipping status to `timeout` for a request that never
+        // existed (#309).
+        if (!pending) return;
+
+        if (!loadFailure) {
+          // The worker died mid-run (e.g. a runaway pattern). Report it the way
+          // a timeout is reported, so the caller recovers identically.
+          inFlight = null;
+          setStatus('timeout');
+          setData(configRef.current.empty);
+          return;
+        }
+        if (workerRef.current) post(workerRef.current, pending.request, pending.id);
+        else {
+          inFlight = null;
+          applyInline(pending.request);
+        }
+      };
     }
 
     runRef.current = (request: TReq) => {
       clearTimer();
+      inFlight = null;
       const current = configRef.current;
 
       // Bumped before the idle check, not after it. Returning first left the id
@@ -147,19 +223,11 @@ export function useWorkerRequest<TReq extends object, TRes, TData>(
       }
 
       if (workerRef.current === null) {
-        const outcome = current.runInline(request);
-        setStatus(outcome.status);
-        setData(outcome.status === 'ok' ? outcome.data : current.empty);
+        applyInline(request);
         return;
       }
 
-      setStatus('pending');
-      timeoutRef.current = setTimeout(() => {
-        timeoutRef.current = null;
-        fail();
-      }, current.timeoutMs);
-
-      workerRef.current.postMessage({ ...request, id });
+      post(workerRef.current, request, id);
     };
 
     init();
