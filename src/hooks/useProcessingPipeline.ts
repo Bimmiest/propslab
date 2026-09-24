@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useMemo } from 'react';
 import { useAppStore } from '../store/useAppStore';
 import { useDebounce } from './useDebounce';
+import { MAX_WORKER_LOAD_FAILURES, PIPELINE_DEBOUNCE_MS, isWorkerLoadFailure } from './workerLifecycle';
 import type { PipelineWorkerRequest, PipelineWorkerResponse } from '../engine/pipelineWorker';
+import type { EventMetadata } from '../engine/types';
 
 // Vite worker import — bundled as a separate chunk
 const createWorker = () =>
@@ -12,14 +14,43 @@ const WORKER_TIMEOUT_MS = 5_000;
 // give up. A request that itself crashes the worker (e.g. OOM-sized input) would
 // otherwise restart-and-replay forever; cap it so the loop terminates.
 const MAX_WORKER_RETRIES = 1;
-// How many workers in a row may die without ever answering before we stop
-// constructing them and run on the calling thread instead (#309). `new Worker`
-// does not throw when its module chunk cannot be fetched — a 404 after a
-// redeploy, a CSP that blocks the script — the failure arrives later as an
-// `error` event, so the constructor-failure fallback below never saw it and
-// onerror recreated the worker forever. Two, not one: a single start-up death
-// could be a transient fetch, and costs only one spare construction to find out.
-const MAX_WORKER_START_FAILURES = 2;
+// Workers that fail to *load* stop being built after MAX_WORKER_LOAD_FAILURES in
+// a row, and requests then run on the calling thread (#309). `new Worker` does
+// not throw when its module chunk cannot be fetched — a 404 after a redeploy, a
+// CSP that blocks the script — the failure arrives later as an `error` event, so
+// the constructor-failure fallback below never saw it and onerror recreated the
+// worker forever. Two, not one: a single start-up death could be a transient
+// fetch, and costs only one spare construction to find out.
+//
+// Crashes are deliberately not counted (#326). #309 counted every death of a
+// worker that had not yet answered, and a fresh replacement has not answered by
+// definition — so an input that crashed its worker and its replay, edited and
+// crashed the next worker once more, reached the cap and was then run inline:
+// the very input that had just killed three workers, on the tab's own thread,
+// with no watchdog.
+
+/** The inputs a run was made with, to tell whether the editors have moved on since (#335). */
+interface RunInputs {
+  rawData: string;
+  metadata: EventMetadata;
+  propsConf: string;
+  transformsConf: string;
+  perEventPipeline: boolean;
+}
+
+function sameRunInputs(a: RunInputs, b: RunInputs): boolean {
+  return (
+    a.rawData === b.rawData &&
+    a.propsConf === b.propsConf &&
+    a.transformsConf === b.transformsConf &&
+    a.perEventPipeline === b.perEventPipeline &&
+    // Field by field: editing one metadata field replaces the whole object.
+    a.metadata.index === b.metadata.index &&
+    a.metadata.host === b.metadata.host &&
+    a.metadata.source === b.metadata.source &&
+    a.metadata.sourcetype === b.metadata.sourcetype
+  );
+}
 
 export function useProcessingPipeline() {
   const rawData = useAppStore((s) => s.rawData);
@@ -40,9 +71,14 @@ export function useProcessingPipeline() {
   const lastRequestRef = useRef<PipelineWorkerRequest | null>(null);
   const requestStartRef = useRef<number>(0);
   const retryCountRef = useRef(0);
-  // Consecutive errors from workers that never produced a message; reset only
-  // by a message, not per request, or the cap would never be reached (#309).
-  const startFailuresRef = useRef(0);
+  // Consecutive workers that failed to start; reset only by a message, not per
+  // request, or the cap would never be reached (#309). Crashes caused by a
+  // request do not count (#326) — see onerror.
+  const loadFailuresRef = useRef(0);
+  // What the last request was made with. In manual-apply mode the pipeline is
+  // dirty when the settled inputs differ from these, not merely because the
+  // inputs changed (#335).
+  const lastRunRef = useRef<RunInputs | null>(null);
   const initWorkerRef = useRef<() => void>(() => {});
   // Latest settings, for the manual-run effect (which depends only on the tick).
   const settingsRef = useRef(settings);
@@ -90,7 +126,7 @@ export function useProcessingPipeline() {
   // `useWorkerRequest` makes the same trade for the live-matching hooks.
   // A failed chunk fetch does not actually throw from `new Worker`; it surfaces
   // later as an `error` event, and reaches this path through onerror's
-  // start-failure cap instead (#309).
+  // load-failure cap instead (#309). A request whose worker crashed never does (#326).
   //
   // What is given up is the watchdog: a runaway regex here blocks the tab rather
   // than a worker. That is the cost of producing output at all in an environment
@@ -135,6 +171,7 @@ export function useProcessingPipeline() {
   ) => {
     const id = ++requestIdRef.current;
     requestStartRef.current = performance.now();
+    lastRunRef.current = { ...inputs, perEventPipeline: opts.perEventPipeline };
 
     const request: PipelineWorkerRequest = {
       id,
@@ -195,7 +232,7 @@ export function useProcessingPipeline() {
       worker.onmessage = (e: MessageEvent<PipelineWorkerResponse>) => {
         // Any message — stale or not — proves the chunk loaded and ran.
         answered = true;
-        startFailuresRef.current = 0;
+        loadFailuresRef.current = 0;
         const { id, result, error } = e.data;
         if (id !== requestIdRef.current) return;
 
@@ -226,26 +263,41 @@ export function useProcessingPipeline() {
         workerRef.current?.terminate();
         workerRef.current = null;
 
+        const pending = lastRequestRef.current;
         // A load failure is an error from a worker that never answered and whose
-        // event carries no message: per the HTML spec a failed fetch or parse of
-        // the worker script fires a plain `Event`, while an exception thrown by
-        // code that did run arrives as an `ErrorEvent` with one. The distinction
+        // event carries no message (see `isWorkerLoadFailure`). The distinction
         // matters because a load failure says nothing about the pending request —
         // no code ever saw it — so it must not spend that request's crash budget,
         // nor be reported as the input crashing the worker (#309).
-        const loadFailure = !answered && !(e as Partial<ErrorEvent>).message;
+        const loadFailure = isWorkerLoadFailure(e, answered);
+        // A worker that threw before answering and was never given anything to
+        // do (`lastRequestRef` is set for as long as a request is outstanding,
+        // and every replacement starts with none) died of its own script — a
+        // module that throws while evaluating. That is a failure to start, not
+        // an input crashing it, and counting it is what keeps such a script from
+        // being rebuilt in a loop once the request it crashed has been dropped.
+        const diedIdle = !answered && pending === null;
 
-        // Every worker that dies before answering counts, crash or load failure
-        // alike (a script that throws at top level never answers either). Past
-        // the cap no replacement is built, and `sendRequest` runs everything
-        // inline from here on — the same place the constructor-failure path
-        // lands (#309). Before this, `initWorker()` ran unconditionally, and a
-        // chunk that 404s was refetched, and diagnostics rewritten, forever.
-        if (!answered) startFailuresRef.current += 1;
+        // Only failures to start count toward the cap (#309, #326). A crash
+        // while running a request is the input's doing: the script evidently
+        // loaded, and a fresh worker is still the right place for the next
+        // request. Past the cap no replacement is built, and `sendRequest` runs
+        // everything inline from here on — the same place the constructor-
+        // failure path lands. Before #309, `initWorker()` ran unconditionally,
+        // and a chunk that 404s was refetched, and diagnostics rewritten, forever.
+        if (loadFailure || diedIdle) loadFailuresRef.current += 1;
         const restartedWorker =
-          startFailuresRef.current < MAX_WORKER_START_FAILURES ? initWorker() : null;
+          loadFailuresRef.current < MAX_WORKER_LOAD_FAILURES ? initWorker() : null;
 
-        const pending = lastRequestRef.current;
+        const giveUp = (message: string) => {
+          lastRequestRef.current = null;
+          retryCountRef.current = 0;
+          setIsProcessing(false);
+          setProcessingResult(null);
+          setValidationDiagnostics([{ level: 'error', message, file: 'props.conf' }]);
+        };
+        const crashedMessage = (detail: string) =>
+          `Worker crashed ${retryCountRef.current > 0 ? 'repeatedly ' : ''}while processing this input: ${detail}. Processing was stopped — try reducing the input size or simplifying your patterns.`;
 
         if (loadFailure) {
           // Nothing to report: the next request (or the one below) either
@@ -260,18 +312,15 @@ export function useProcessingPipeline() {
             restartedWorker.postMessage(pending);
             return;
           }
+          // Out of workers. A request that has not crashed anything finishes
+          // inline, but one on its replay already crashed a worker, and the
+          // replacement merely failing to load does not make it safe to run
+          // on the tab's own thread (#326).
+          if (retryCountRef.current > 0) {
+            giveUp('Worker crashed while processing this input, and no replacement worker could be started to retry it. Processing was stopped — try reducing the input size or simplifying your patterns.');
+            return;
+          }
           lastRequestRef.current = null;
-          retryCountRef.current = 0;
-          runInline(pending);
-          return;
-        }
-        if (pending && restartedWorker === null && retryCountRef.current < MAX_WORKER_RETRIES) {
-          // The replacement could not be constructed. Finish this request on
-          // the calling thread, which is where every later one will run too —
-          // but only under the retry cap: an input that crashed its replay as
-          // well is not one to hand to the tab's own thread.
-          lastRequestRef.current = null;
-          retryCountRef.current = 0;
           runInline(pending);
           return;
         }
@@ -285,19 +334,17 @@ export function useProcessingPipeline() {
           return;
         }
 
-        // Out of retries (or no pending request): the input itself is crashing the
-        // worker. Drop it so we don't loop, and surface a terminal error.
-        lastRequestRef.current = null;
-        retryCountRef.current = 0;
-        setIsProcessing(false);
-        setProcessingResult(null);
-        setValidationDiagnostics([{
-          level: 'error',
-          message: pending
-            ? `Worker crashed repeatedly while processing this input: ${e.message}. Processing was stopped — try reducing the input size or simplifying your patterns.`
-            : `Worker error: ${e.message}`,
-          file: 'props.conf',
-        }]);
+        // Out of retries, or no replacement could be constructed: either way the
+        // input crashed a worker, and it is never finished inline — it once was
+        // when the constructor threw here, which put the one input known to
+        // take a thread down onto the tab's own (#326). Drop it so we don't
+        // loop, and surface a terminal error. Later requests still reach
+        // `sendRequest`, which runs them inline if no worker could be built.
+        if (pending) {
+          giveUp(crashedMessage(e.message));
+          return;
+        }
+        giveUp(`Worker error: ${e.message}`);
       };
 
       return worker;
@@ -321,12 +368,23 @@ export function useProcessingPipeline() {
     [rawData, metadata, propsConf, transformsConf],
   );
 
-  const debouncedInputs = useDebounce(inputs, 300);
+  const debouncedInputs = useDebounce(inputs, PIPELINE_DEBOUNCE_MS);
 
   // Auto-run effect: fires on debounced input changes when manual apply is OFF.
+  //
+  // In manual-apply mode it only decides whether there is anything to apply, by
+  // comparing the settled inputs with the ones the last run used. It used to
+  // set the flag on every debounced change, so typing and clicking "Run"
+  // within the debounce window went: the run clears the flag, the debounce
+  // settles on the very inputs that run used, the flag comes back — and the
+  // status bar offered to apply changes that had already been applied (#335).
   useEffect(() => {
     if (settings.manualApply) {
-      setPipelineDirty(true);
+      const last = lastRunRef.current;
+      setPipelineDirty(
+        last === null ||
+          !sameRunInputs(last, { ...debouncedInputs, perEventPipeline: settings.perEventPipeline }),
+      );
       return;
     }
     sendRequest(debouncedInputs, settings);
@@ -342,5 +400,10 @@ export function useProcessingPipeline() {
   useEffect(() => {
     if (manualRunTick === 0) return; // skip the initial mount
     sendRequest(liveInputsRef.current, settingsRef.current);
-  }, [manualRunTick, sendRequest]);
+    // `triggerManualRun` already cleared the flag, but when the debounce settles
+    // in the same commit as the click the effect above ran first, against the
+    // previous run's inputs. This run used the live inputs, so nothing is
+    // pending (#335).
+    setPipelineDirty(false);
+  }, [manualRunTick, sendRequest, setPipelineDirty]);
 }

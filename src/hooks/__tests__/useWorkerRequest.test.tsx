@@ -10,6 +10,8 @@
 //
 // Restart bounds too (#309): a worker whose script never loads fails through
 // an `error` event rather than a throw, and used to be recreated forever.
+// Only load failures count toward that bound (#326): counting crashes too sent
+// the hook inline for good after two crashing patterns, losing the watchdog.
 // ---------------------------------------------------------------------------
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -274,5 +276,53 @@ describe('useWorkerRequest', () => {
       act(() => latest().crash());
     }
     expect(FakeWorker.instances).toHaveLength(5);
+  });
+  it('keeps using workers however many requests in a row crash them (#326)', () => {
+    // #309 counted each replacement's crash as a start failure — it had not
+    // answered yet — so the second crash of a replacement hit the cap, no
+    // worker was built, and every later pattern ran inline on the tab's thread
+    // with no watchdog.
+    const { result } = setup();
+    act(() => result.current.run({ value: 'a' }));
+    act(() => latest().respond(1, 'A'));
+
+    for (const value of ['boom1', 'boom2', 'boom3']) {
+      act(() => result.current.run({ value }));
+      act(() => latest().crash());
+      expect(result.current.status).toBe('timeout');
+    }
+    expect(FakeWorker.instances).toHaveLength(4);
+
+    // The crashing pattern again: posted to a worker, under the watchdog, not
+    // run inline.
+    act(() => result.current.run({ value: 'boom3' }));
+    expect(result.current.status).toBe('pending');
+    expect(latest().posted).toEqual([{ value: 'boom3', id: 5 }]);
+    act(() => void vi.advanceTimersByTime(1000));
+    expect(result.current.status).toBe('timeout');
+    expect(FakeWorker.instances).toHaveLength(5);
+  });
+
+  it('never runs a request inline after two workers in a row crashed on it (#326)', () => {
+    // Two crashing requests from a fresh start used to be enough on their own.
+    const { result } = setup();
+    for (let i = 1; i <= 3; i++) {
+      act(() => result.current.run({ value: 'boom' }));
+      act(() => latest().crash());
+      expect(result.current.status).toBe('timeout');
+      expect(result.current.data).toBe('');
+    }
+    expect(FakeWorker.instances).toHaveLength(4);
+  });
+
+  it('stops rebuilding a worker whose script throws before it is given anything (#326)', () => {
+    // Crashes do not count toward the cap, but a worker that dies without ever
+    // being handed a request died of its own script, and would otherwise be
+    // rebuilt for as long as the tab is open.
+    setup();
+    act(() => latest().crash());
+    act(() => latest().crash());
+    expect(FakeWorker.instances).toHaveLength(2);
+    expect(FakeWorker.instances.every((w) => w.terminated)).toBe(true);
   });
 });
