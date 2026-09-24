@@ -15,10 +15,10 @@ Implements [#202](https://github.com/Bimmiest/propslab/issues/202).
 | `explain_precedence` | layered `parseConf` + `resolveStanzasForEvent` + `mergeDirectives` | btool-style provenance: which layer won each attribute (`overrides` / `overriddenBy` / `layers`), and the effective directive set for a sourcetype |
 | `lookup_directive` | `directiveRegistry` | Curated directive documentation, including the simulation-support level, so an agent cites the registry instead of recalling spec |
 
-`simulate` and `explain_precedence` accept conf input as either one flat
-string or an ordered list of layers, lowest precedence first — an agent
-pointed at a real app directory hands over `default/` + `local/` and gets
-btool-style provenance back.
+`simulate`, `validate` and `explain_precedence` accept conf input as either
+one flat string or an ordered list of layers, lowest precedence first — an
+agent pointed at a real app directory hands over `default/` + `local/` and
+gets btool-style provenance back.
 
 ## Setup
 
@@ -105,11 +105,29 @@ reviewed. `docs/engine.md`'s closing section is the spec this implements:
 - **The queue is bounded too**, at four waiting calls per slot (16 at most).
   A queued call holds its whole input in the server's own heap, outside
   any worker's limit, so an unbounded queue only moved a burst from the
-  workers onto the main thread. A call that arrives with the queue full is
-  refused at once with `{"error": "busy", "max_concurrent": …,
-  "max_queued": …}`. Nothing is wrong with its input; retry once calls in
+  workers onto the main thread — and the next bullet bounds each call's
+  input, so the queue's total is bounded as well. A call that arrives with
+  the queue full is refused at once with `{"error": "busy",
+  "max_concurrent": …, "max_queued": …}`. Nothing is wrong with its input; retry once calls in
   flight finish. The bound also keeps any queued call's wait to at most
   four budgets.
+- **Each message is bounded before it is parsed** (#349), at 8 MiB of
+  UTF-8 on the wire. The input schemas' limits and the `input_too_large`
+  check above only see a call after the SDK's stdio transport has buffered
+  and `JSON.parse`d it on the server's own thread, so on their own they
+  bound what reaches a worker, not what the server holds. A size limiter in
+  front of the transport forwards each newline-delimited message only once
+  it is complete and within the limit; a longer one is dropped as it
+  arrives — its remainder skipped without being kept — and answered with a
+  JSON-RPC `-32600` error (`data.error: "message_too_large"`, no `id`,
+  since finding it would mean parsing the message), after which the
+  messages behind it are processed as normal. 8 MiB carries the largest
+  call the schemas accept (3M characters of sample and conf) with JSON
+  escaping doubling every character, plus room for non-ASCII. The server's
+  own heap is therefore bounded per message by that limit, not only once a
+  message has passed the schemas. (Recent SDK releases cap their read buffer
+  at 10 MB by closing the transport, which took the whole server down with
+  one oversized line; the limiter stays below that.)
 - **A cancelled request gives up its slot.** When the client cancels a call
   (`notifications/cancelled`) or the transport closes, a call still in the
   queue leaves it without ever starting a worker, and a running call's
