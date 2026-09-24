@@ -10,6 +10,21 @@ export interface Token {
 }
 
 /**
+ * True when `tok` completes a value, so what follows it is in operator
+ * position: a literal, a field, or a closing paren.
+ */
+function endsValue(tok: Token | undefined): boolean {
+  return (
+    tok !== undefined &&
+    (tok.type === 'string' ||
+      tok.type === 'number' ||
+      tok.type === 'ident' ||
+      tok.type === 'field_ref' ||
+      (tok.type === 'paren' && tok.value === ')'))
+  );
+}
+
+/**
  * Lex an eval expression.
  *
  * Character access goes through `charAt` rather than `expr[i]`: every read here
@@ -79,10 +94,15 @@ export function tokenize(expr: string): Token[] {
     // value IS in progress the `.` is the concatenation operator, so `a.5` stays
     // `a . 5` and `"x".5` stays `"x" . 5`. Before this, `.5` fell through to the
     // unknown-character skip and `.5 * 2` quietly evaluated to 10 (#312).
+    //
+    // The concatenation `.` is a binary operator like the rest, so a value is
+    // expected after it too. Leaving it out lexed `"x" . .5` as two dots, which
+    // failed to parse, and `"x" . -1` as a subtraction sign (#340).
     const prevTok = tokens[tokens.length - 1];
     const valueExpected =
       !prevTok ||
       prevTok.type === 'op' ||
+      prevTok.type === 'dot' ||
       prevTok.type === 'comma' ||
       (prevTok.type === 'paren' && prevTok.value === '(');
     const unaryMinus =
@@ -163,14 +183,22 @@ export function tokenize(expr: string): Token[] {
       // NOT is the exception: it is a prefix operator, so value position is
       // exactly where it is legitimate, and after a value it is the NOT of
       // `x NOT IN (...)`. It stays a keyword everywhere.
-      const valueInProgress =
-        prevTok !== undefined &&
-        (prevTok.type === 'string' ||
-          prevTok.type === 'number' ||
-          prevTok.type === 'ident' ||
-          prevTok.type === 'field_ref' ||
-          (prevTok.type === 'paren' && prevTok.value === ')'));
-      if (upper === 'NOT' || (valueInProgress && ['AND', 'OR', 'IN', 'LIKE', 'XOR'].includes(upper))) {
+      const valueInProgress = endsValue(prevTok);
+      // The IN of `x NOT IN (...)` follows NOT, not a value, so the rule above
+      // alone lexed it as an identifier that kept the user's casing: only an
+      // upper-case `IN` then matched the parser's NOT IN check, and `x not in
+      // (...)` or `x NOT in (...)` failed with "Unexpected token: NOT" (#337).
+      // A NOT that itself follows a value can only be the NOT of NOT IN, so the
+      // word after it is the operator in any case. A prefix NOT (`NOT in(x,
+      // "a")`, `NOT in`) does not follow a value, so the function form and a
+      // field named `in` are unaffected.
+      const afterInfixNot =
+        prevTok?.type === 'op' && prevTok.value === 'NOT' && endsValue(tokens[tokens.length - 2]);
+      if (
+        upper === 'NOT' ||
+        (valueInProgress && ['AND', 'OR', 'IN', 'LIKE', 'XOR'].includes(upper)) ||
+        (afterInfixNot && upper === 'IN')
+      ) {
         tokens.push({ type: 'op', value: upper });
       } else {
         tokens.push({ type: 'ident', value: ident });

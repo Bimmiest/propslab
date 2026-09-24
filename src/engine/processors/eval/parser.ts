@@ -127,7 +127,11 @@ class Parser {
       this.consume();
       return this.parseInList(left, false);
     }
-    if (tok?.type === 'op' && tok.value === 'NOT' && this.tokens[this.pos + 1]?.value === 'IN') {
+    // The lexer reads the word after an infix NOT as the IN operator whatever
+    // its casing (#337), so this matches an operator token, never a field that
+    // happens to be named `IN`.
+    const next = this.tokens[this.pos + 1];
+    if (tok?.type === 'op' && tok.value === 'NOT' && next?.type === 'op' && next.value === 'IN') {
       this.consume(); // NOT
       this.consume(); // IN
       return this.parseInList(left, true);

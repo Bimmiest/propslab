@@ -63,6 +63,15 @@ describe('eval numbers with a leading decimal point (#312)', () => {
     expect(run('a . b', { a: 'p', b: 'q' }).value).toBe('pq');
   });
 
+  // Found by the property tests (#340): the `.` operator was missing from the
+  // places a value is expected, so a leading-dot number straight after it lexed
+  // as a second concatenation operator and the expression failed to parse.
+  it('reads .5 and -1 after the concatenation operator as numbers', () => {
+    expect(run('"x" . .5').value).toBe('x0.5');
+    expect(run('a . .5', { a: 'x' }).value).toBe('x0.5');
+    expect(run('"x".-1').value).toBe('x-1');
+  });
+
   it('still rejects a number with two decimal points', () => {
     expectSyntaxError('1.2.3', /Malformed number: 1\.2\.3/);
     expectSyntaxError('.5.3', /Malformed number/);
@@ -203,5 +212,61 @@ describe('word operators are identifiers in value position (#332)', () => {
     expect(run('if(like LIKE "v%", 1, 0)', { like: 'vx' }).value).toBe('1');
     expect(run('if(xor == "a" XOR xor == "b", 1, 0)', { xor: 'a' }).value).toBe('1');
     expect(run('if(like(like, "v%"), 1, 0)', { like: 'vx' }).value).toBe('1');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #337: since #332 made the word operators contextual, the `in` after an infix
+// NOT lexed as an identifier that kept its casing, and the parser's NOT IN
+// check compared it against upper-case 'IN'. So `x NOT IN (...)` parsed while
+// `x not in (...)` and `x NOT in (...)` threw "Unexpected token: NOT".
+//
+// Doc-derived: the SPL eval operator table lists IN and NOT, and SPL keywords
+// are case-insensitive (LIKE, XOR and IN are already asserted in every casing
+// above). Asserted narrowly: the result must not depend on keyword casing.
+// ---------------------------------------------------------------------------
+
+describe('eval NOT IN in any casing (#337)', () => {
+  // NOT, not, Not, nOT — and likewise for IN — in every pairing.
+  const casings = (word: string) => [
+    word.toUpperCase(),
+    word.toLowerCase(),
+    word.charAt(0).toUpperCase() + word.slice(1).toLowerCase(),
+    word.charAt(0).toLowerCase() + word.slice(1).toUpperCase(),
+  ];
+  const combos = casings('not').flatMap((not) => casings('in').map((inWord) => [not, inWord] as const));
+
+  it.each(combos)('parses a %s %s (...) operator', (not, inWord) => {
+    expect(run(`if(a ${not} ${inWord} ("x", "y"), 1, 0)`, { a: 'z' }).value).toBe('1');
+    expect(run(`if(a ${not} ${inWord} ("x", "y"), 1, 0)`, { a: 'x' }).value).toBe('0');
+    expect(run(`a ${not} ${inWord} ("x")`, { a: 'z' }).value).toBe('true');
+  });
+
+  it('parses NOT IN with no space before the list', () => {
+    expect(run('if(a not in("x"), 1, 0)', { a: 'z' }).value).toBe('1');
+    expect(run('if(a not in("x"), 1, 0)', { a: 'x' }).value).toBe('0');
+  });
+
+  it('treats NOT x IN (...) as the negation of the IN', () => {
+    expect(run('if(NOT a IN ("x"), 1, 0)', { a: 'x' }).value).toBe('0');
+    expect(run('if(not a in ("x"), 1, 0)', { a: 'z' }).value).toBe('1');
+  });
+
+  it('keeps the in() function form under a prefix NOT in any casing', () => {
+    expect(run('if(not in(a, "x"), 1, 0)', { a: 'x' }).value).toBe('0');
+    expect(run('if(NOT In(a, "x"), 1, 0)', { a: 'z' }).value).toBe('1');
+    expect(run('if(1==1 AND not in(a, "x"), 1, 0)', { a: 'z' }).value).toBe('1');
+  });
+
+  it('still reads a field named in where it read one before', () => {
+    expect(run('if(NOT in, 1, 0)', { in: '' }).value).toBe('1');
+    expect(run('if(1==1 AND not in, 1, 0)', { in: 'v' }).value).toBe('0');
+    expect(run('if(in NOT IN ("x"), 1, 0)', { in: 'v' }).value).toBe('1');
+    expect(run('if(in in ("v"), 1, 0)', { in: 'v' }).value).toBe('1');
+    expect(run('in . "x"', { in: 'v' }).value).toBe('vx');
+  });
+
+  it('still reports a NOT IN with no list', () => {
+    expectSyntaxError('a not in', /Unexpected end of expression/);
   });
 });
