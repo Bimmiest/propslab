@@ -11,9 +11,9 @@
 //
 // Nothing here is a claim about Splunk's output: every property compares the
 // simulator with itself (two spellings of one expression, or two expressions the
-// SPL operator table defines as equivalent). NULL comparison semantics are left
-// alone on purpose — no generated field is missing, and no property asserts what
-// a comparison against NULL yields.
+// SPL operator table defines as equivalent). No generated field is missing; the
+// NULL-propagation properties in (e) name an absent field explicitly, now that
+// #343 defined what a comparison against NULL yields.
 //
 // The seed is fixed so a run is reproducible; a failure prints the
 // counterexample and fast-check's shrunk path.
@@ -392,7 +392,8 @@ describe('eval operator equivalences (#340)', () => {
   });
 
   it('a XOR b is (a OR b) AND NOT (a AND b) on booleans', () => {
-    // Coerced through NOT NOT so both sides are booleans whatever the operands are.
+    // Coerced through NOT NOT so both sides are booleans or NULL whatever the
+    // operands are; three-valued logic keeps the identity for NULL too (#343).
     const bool = expr.map((g) => `NOT NOT (${text(g)})`);
     fc.assert(
       fc.property(bool, bool, fc.integer(), (a, b, s) => {
@@ -447,6 +448,57 @@ describe('eval AST print/parse round trip (#340)', () => {
         const ast = parseExpression(render(g.toks, prng(seed)));
         const printed = print(ast);
         expect(parseExpression(printed), printed).toEqual(ast);
+      }),
+    );
+  });
+});
+
+// ── (e) NULL propagation (#343) ─────────────────────────
+//
+// `missing` is not on the test event, so it evaluates to NULL. Whatever the
+// other operand, a comparison, LIKE or IN involving it is NULL, and NULL is
+// falsy: if() takes its else branch, and NOT does not turn it true.
+
+describe('eval NULL propagation (#343)', () => {
+  const text = (g: Gen) => canonical(g.toks);
+  const op = fc.constantFrom('=', '==', '!=', '<', '>', '<=', '>=', 'LIKE');
+
+  it('a comparison with an absent field is NULL, on either side', () => {
+    fc.assert(
+      fc.property(op, expr, (o, g) => {
+        for (const e of [`missing ${o} (${text(g)})`, `(${text(g)}) ${o} missing`]) {
+          expect(outcome(e), e).toEqual({ value: null });
+        }
+      }),
+    );
+  });
+
+  it('takes the else branch of if(), with or without NOT', () => {
+    fc.assert(
+      fc.property(op, expr, fc.boolean(), (o, g, not) => {
+        const cond = `${not ? 'NOT ' : ''}(missing ${o} (${text(g)}))`;
+        const e = `if(${cond}, "then", "else")`;
+        expect(outcome(e), e).toEqual({ value: 'else' });
+      }),
+    );
+  });
+
+  it('an absent field IN or NOT IN any list is NULL', () => {
+    fc.assert(
+      fc.property(fc.array(expr, { minLength: 1, maxLength: 3 }), fc.boolean(), (l, negate) => {
+        const e = `missing ${negate ? 'NOT IN' : 'IN'} (${l.map(text).join(', ')})`;
+        expect(outcome(e), e).toEqual({ value: null });
+      }),
+    );
+  });
+
+  it('NULL AND x is false or NULL, NULL OR x is true or NULL, never the other', () => {
+    fc.assert(
+      fc.property(expr, (g) => {
+        const and = outcome(`(missing = 1) AND (${text(g)})`);
+        const or = outcome(`(missing = 1) OR (${text(g)})`);
+        expect([false, null]).toContainEqual((and as { value: EvalValue }).value);
+        expect([true, null]).toContainEqual((or as { value: EvalValue }).value);
       }),
     );
   });

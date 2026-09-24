@@ -68,6 +68,52 @@ describe('translatePcreToJs — class- and escape-aware rewrites (#290)', () => 
   });
 });
 
+describe('translatePcreToJs — a `]` first in a character class (#341)', () => {
+  // Doc-derived (pcre2pattern, "Square brackets and character classes"): a
+  // closing square bracket "should be the first data character in the class
+  // (after an initial circumflex, if present)" to be a member. JS instead reads
+  // `[]` as an empty class and `[^]` as any character, so a class copied
+  // verbatim meant something else entirely.
+  it.each([
+    ['[]a]', '[\\]a]'],
+    ['[^]a]', '[^\\]a]'],
+    ['[]]', '[\\]]'],
+    ['[^]]', '[^\\]]'],
+  ])('escapes the leading ] in %s', (pcre, js) => {
+    expect(translatePcreToJs(pcre)).toEqual({ source: js, flags: '', warnings: [] });
+  });
+
+  it('matches what PCRE matches', () => {
+    // `[]a]` is one character, `]` or `a`.
+    const cls = safeRegex('^[]a]$')!;
+    expect(['a', ']'].map((s) => cls.test(s))).toEqual([true, true]);
+    expect(['b', '', ']a'].map((s) => cls.test(s))).toEqual([false, false, false]);
+    // `[^]a]` is one character that is neither.
+    const neg = safeRegex('^[^]a]$')!;
+    expect(['b', ' '].map((s) => neg.test(s))).toEqual([true, true]);
+    expect(['a', ']', 'bc'].map((s) => neg.test(s))).toEqual([false, false, false]);
+    // `[]]` and `[^]]`: just the bracket, and anything but it.
+    expect(safeRegex('^[]]+$')!.test(']]')).toBe(true);
+    expect(safeRegex('^[]]$')!.test('a')).toBe(false);
+    expect(safeRegex('^[^]]$')!.test('a')).toBe(true);
+    expect(safeRegex('^[^]]$')!.test(']')).toBe(false);
+  });
+
+  it('finds the class end past the leading ], so later syntax is still translated', () => {
+    // The `++` after the class is possessive, not text inside it.
+    expect(translatePcreToJs('[]a]++').source).toBe('[\\]a]+');
+    expect(translatePcreToJs('(?P<b>[^]x])').source).toBe('(?<b>[^\\]x])');
+  });
+
+  it('leaves a ] that is not first alone: [a]] is class a, then a literal ]', () => {
+    expect(translatePcreToJs('[a]]').source).toBe('[a]]');
+    const re = safeRegex('^[a]]$')!;
+    expect(re.test('a]')).toBe(true);
+    expect(re.test('a')).toBe(false);
+    expect(re.test(']]')).toBe(false);
+  });
+});
+
 describe('translatePcreToJs — extended mode (#290)', () => {
   it('strips unescaped whitespace and # comments when (?x) leads the pattern', () => {
     const { source, flags } = translatePcreToJs('(?x) (?P<ip> \\d+ (?: \\. \\d+ ){3} )  # the address\n \\s+ port');

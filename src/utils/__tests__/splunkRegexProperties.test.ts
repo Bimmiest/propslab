@@ -9,13 +9,13 @@
 // the translation is checked against JS's own reading of the equivalent
 // pattern, on generated subject strings.
 //
+// One class spelling differs between the two: a `]` first in a class (`[]a]`,
+// `[^]a]`) is a literal member in PCRE, while JS reads `[]` as an empty class
+// and `[^]` as "any character". The generator produces it, rendered as `[]a]`
+// for PCRE and `[\]a]` for JS, so the properties check the translator escapes
+// it (#341).
+//
 // Excluded from generation, with the reason:
-//  - a `]` first in a class (`[]a]`, `[^]a]`). PCRE reads it as a literal `]`
-//    inside the class; JS reads `[]` as an empty class and `[^]` as "any
-//    character". The translator copies classes verbatim, so the two engines
-//    disagree on such a pattern — a real divergence, reported separately
-//    rather than asserted here, since the properties below compare against
-//    JS's reading.
 //  - `[:` inside a class, which PCRE reads as the start of a POSIX class.
 //
 // The seed is fixed so a run is reproducible.
@@ -34,7 +34,9 @@ fc.configureGlobal({ seed: 340, numRuns: 300 });
 // numbered while rendering so names never collide.
 
 type Atom =
-  | { t: 'text'; s: string } // a literal, escape, `.`, or character class — identical in both syntaxes
+  // A literal, escape, `.`, or character class. `pcre` is set only where the
+  // PCRE spelling differs: a class whose first member is `]` (#341).
+  | { t: 'text'; s: string; pcre?: string }
   | { t: 'anchor'; s: string }
   | { t: 'group'; kind: 'cap' | 'nc' | 'named' | 'la' | 'nla' | 'lb' | 'nlb'; body: Alt }
   | { t: 'backref' } // to the most recent named group, if any
@@ -59,18 +61,28 @@ const classItem = fc.constantFrom(
   '(?P<x>', '(?i)', '(?>', '++', '*+', '?+', '{2}+', '(?P=x)',
 );
 
-/** A character class. A `^` is only a negation when first; inside, it is a literal. */
+/**
+ * A character class, in both spellings. A `^` is only a negation when first;
+ * inside, it is a literal. A `]` first (after any `^`) is a literal member in
+ * PCRE, which JS spells `\]` (#341); with it, the class needs no other member.
+ */
 const charClass = fc
-  .tuple(fc.boolean(), fc.array(classItem, { minLength: 1, maxLength: 4 }), fc.boolean())
-  .map(([negate, items, caret]) => `[${negate ? '^' : ''}${items.join('')}${caret ? '^' : ''}]`);
+  .tuple(fc.boolean(), fc.boolean(), fc.array(classItem, { maxLength: 4 }), fc.boolean())
+  .filter(([, bracket, items]) => bracket || items.length > 0)
+  .map(([negate, bracket, items, caret]) => {
+    const open = `[${negate ? '^' : ''}`;
+    const rest = `${items.join('')}${caret ? '^' : ''}]`;
+    return { js: `${open}${bracket ? '\\]' : ''}${rest}`, pcre: `${open}${bracket ? ']' : ''}${rest}` };
+  });
 
 const quantifier = fc
   .tuple(fc.constantFrom('*', '+', '?', '{2}', '{1,}', '{0,2}', '{1,3}'), fc.boolean())
   .map(([q, lazy]) => (lazy ? `${q}?` : q));
 
-const textAtom: fc.Arbitrary<Atom> = fc
-  .oneof(literal, escape, fc.constant('.'), charClass)
-  .map((s) => ({ t: 'text', s }));
+const textAtom: fc.Arbitrary<Atom> = fc.oneof(
+  fc.oneof(literal, escape, fc.constant('.')).map((s): Atom => ({ t: 'text', s })),
+  charClass.map(({ js, pcre }): Atom => (js === pcre ? { t: 'text', s: js } : { t: 'text', s: js, pcre })),
+);
 
 const anchor: fc.Arbitrary<Atom> = fc.constantFrom('^', '$', '\\b', '\\B').map((s) => ({ t: 'anchor', s }));
 
@@ -104,6 +116,7 @@ function render(pattern: Alt, flavour: 'js' | 'pcre'): string {
   const atom = (a: Atom): string => {
     switch (a.t) {
       case 'text':
+        return flavour === 'pcre' ? a.pcre ?? a.s : a.s;
       case 'anchor':
         return a.s;
       case 'backref':
@@ -212,17 +225,19 @@ describe('translatePcreToJs properties (#340)', () => {
     post: seqOnly,
     rest: fc.option(seqOnly, { nil: undefined }),
   });
-  const seqText = (s: Atom[]) => s.map((a) => (a.t === 'text' || a.t === 'anchor' ? a.s : '')).join('');
+  const seqText = (s: Atom[], flavour: 'js' | 'pcre' = 'js') =>
+    s.map((a) => (a.t === 'text' ? (flavour === 'pcre' ? a.pcre ?? a.s : a.s) : a.t === 'anchor' ? a.s : '')).join('');
 
   it.runIf(SUPPORTS_SCOPED_MODIFIERS)('scopes a mid-pattern (?i) to the rest of its group and each later alternative', () => {
     fc.assert(
       fc.property(midPattern, subjects, ({ outer, inGroup, pre, post, rest }, strings) => {
-        const tail = rest === undefined ? '' : `|${seqText(rest)}`;
+        const tail = rest === undefined ? '' : `|${seqText(rest, 'pcre')}`;
         const tailJs = rest === undefined ? '' : `|(?i:(?:${seqText(rest)}))`;
-        const body = `${seqText(pre)}(?i)${seqText(post)}${tail}`;
+        const body = `${seqText(pre, 'pcre')}(?i)${seqText(post, 'pcre')}${tail}`;
         const bodyJs = `${seqText(pre)}(?i:(?:${seqText(post)}))${tailJs}`;
-        const [before, after] = outer.map(seqText) as [string, string];
-        const pcre = inGroup ? `${before}(${body})${after}` : body;
+        const [beforePcre, afterPcre] = outer.map((o) => seqText(o, 'pcre')) as [string, string];
+        const [before, after] = outer.map((o) => seqText(o)) as [string, string];
+        const pcre = inGroup ? `${beforePcre}(${body})${afterPcre}` : body;
         const js = inGroup ? `${before}(${bodyJs})${after}` : bodyJs;
         const t = translatePcreToJs(pcre, '', { scopedModifiers: true });
         expect(t.warnings).toEqual([]);
@@ -234,11 +249,16 @@ describe('translatePcreToJs properties (#340)', () => {
   it('hoists a mid-pattern (?i) to the whole pattern, with a warning, where scoped groups are unavailable', () => {
     fc.assert(
       fc.property(midPattern, subjects, ({ outer, inGroup, pre, post, rest }, strings) => {
-        const tail = rest === undefined ? '' : `|${seqText(rest)}`;
-        const [before, after] = outer.map(seqText) as [string, string];
-        const wrap = (body: string) => (inGroup ? `${before}(${body})${after}` : body);
-        const t = translatePcreToJs(wrap(`${seqText(pre)}(?i)${seqText(post)}${tail}`), '', { scopedModifiers: false });
-        const hoisted = wrap(`${seqText(pre)}${seqText(post)}${tail}`);
+        const text = (f: 'js' | 'pcre') => {
+          const tail = rest === undefined ? '' : `|${seqText(rest, f)}`;
+          const [before, after] = outer.map((o) => seqText(o, f)) as [string, string];
+          const wrap = (body: string) => (inGroup ? `${before}(${body})${after}` : body);
+          return { wrap, pre: seqText(pre, f), post: seqText(post, f), tail };
+        };
+        const p = text('pcre');
+        const j = text('js');
+        const t = translatePcreToJs(p.wrap(`${p.pre}(?i)${p.post}${p.tail}`), '', { scopedModifiers: false });
+        const hoisted = j.wrap(`${j.pre}${j.post}${j.tail}`);
         expect(t.source).toBe(hoisted);
         expect(t.flags).toBe('i');
         // A (?i) at the very start is a leading group, which a flag expresses exactly.
@@ -249,12 +269,12 @@ describe('translatePcreToJs properties (#340)', () => {
     );
   });
 
-  it('never alters the contents of a character class', () => {
+  it('never alters the contents of a character class, beyond escaping a leading ] (#341)', () => {
     // PCRE-only syntax around the classes, so the translator has work to do
     // everywhere except inside them.
     const pcreNoise = fc.constantFrom('a++', '\\d*+', 'x?+', '(?>b)', '(?P<n>c)', '(?i)', 'd{2}+', ' # c\n', '|', '(e)');
     const piece = fc.oneof(
-      charClass.map((c) => ({ cls: c })),
+      charClass.map((c) => ({ cls: c.pcre, js: c.js })),
       pcreNoise.map((s) => ({ text: s })),
     );
     fc.assert(
@@ -264,9 +284,9 @@ describe('translatePcreToJs properties (#340)', () => {
         let from = 0;
         for (const p of pieces) {
           if (!('cls' in p)) continue;
-          const at = source.indexOf(p.cls, from);
-          expect(at, `${p.cls} in ${source}`).toBeGreaterThanOrEqual(0);
-          from = at + p.cls.length;
+          const at = source.indexOf(p.js, from);
+          expect(at, `${p.js} in ${source}`).toBeGreaterThanOrEqual(0);
+          from = at + p.js.length;
         }
       }),
     );
@@ -279,7 +299,10 @@ describe('translatePcreToJs properties (#340)', () => {
     fc.assert(
       fc.property(fc.string({ unit: regexChar, maxLength: 16 }), fc.boolean(), (s, scoped) => {
         const t = translatePcreToJs(s, '', { scopedModifiers: scoped });
-        if (compiles(s)) {
+        // A class opening `[]` or `[^]` is the one spelling JS accepts but reads
+        // differently from PCRE, so the translator rewrites it (#341). The test
+        // is conservative: it also skips a `[]` that sits inside a class.
+        if (compiles(s) && !/\[\^?\]/.test(s)) {
           expect(t, s).toEqual({ source: s, flags: '', warnings: [] });
         }
       }),

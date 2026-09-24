@@ -671,11 +671,14 @@ describe('#211 — null propagates into function arguments', () => {
     expect(evalWith('len(coalesce(user, "anonymous"))', {})).toBe('9');
   });
 
-  it('does not propagate through the predicates, which report on absence', () => {
+  it('does not propagate through the type predicates, which report on absence', () => {
     // These answer a question about the value rather than computing from it, so
-    // they must keep returning a boolean the surrounding if()/case() can branch on.
+    // they must keep returning a value the surrounding if()/case() can branch on.
     expect(evalWith('if(isnull(user), "missing", "present")', {})).toBe('missing');
     expect(evalWith('typeof(user)', {})).toBe('Invalid');
+    // match() and like() were listed here too. Since #343 they yield NULL for a
+    // NULL subject, as the comparison operators do; NULL is falsy in if(), so
+    // the guard below still takes its else branch.
     expect(evalWith('if(match(user, "^a"), "yes", "no")', {})).toBe('no');
     expect(evalWith('if(like(user, "a%"), "yes", "no")', {})).toBe('no');
   });

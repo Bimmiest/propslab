@@ -60,8 +60,10 @@ export function evalBuiltin(fn: string, args: EvalValue[], ctx: EvalCtx): EvalVa
     // String — an absent argument propagates NULL rather than being coerced to
     // "". `len(nonexistent)` is null, not 0; a plausible-looking 0 is worse than
     // no field at all, because nothing about it says the field was missing (#211).
-    // The predicates below (match, like, isnull, typeof) deliberately do not
-    // propagate: they answer a question about the value, including its absence.
+    // The type predicates (isnull, isnotnull, typeof, isnum, ...) deliberately
+    // do not propagate: they answer a question about the value, including its
+    // absence. The matching predicates (like, match, cidrmatch) do, as the
+    // comparison operators do (#343).
     case 'lower': { const s = strArg(args[0]); return s === null ? null : s.toLowerCase(); }
     case 'upper': { const s = strArg(args[0]); return s === null ? null : s.toUpperCase(); }
     case 'len': { const s = strArg(args[0]); return s === null ? null : s.length; }
@@ -296,7 +298,12 @@ export function evalBuiltin(fn: string, args: EvalValue[], ctx: EvalCtx): EvalVa
     case 'true': return true;
     case 'false': return false;
     case 'like': {
-      const value = toStr(args[0]);
+      // NULL in, NULL out, the same as `=` (#343): `x LIKE "%"` parses to this
+      // call, and an absent field is not "" — `like(missing, "%")` used to be
+      // true. NULL is falsy in if()/case(), so a guard still takes its else.
+      const value = strArg(args[0]);
+      const likePattern = strArg(args[1]);
+      if (value === null || likePattern === null) return null;
       // Escape regex metacharacters first, then translate SQL-style wildcards.
       // A run of `%` collapses to ONE `.*` first. It means the same thing --
       // any number of any-string wildcards in a row match any string -- but
@@ -304,7 +311,7 @@ export function evalBuiltin(fn: string, args: EvalValue[], ctx: EvalCtx): EvalVa
       // so `like(x, "a%%b")` compiled to nothing and quietly answered false for
       // every event (#303). After the collapse the regex holds only literals,
       // `.` and non-adjacent `.*`, which the guard accepts.
-      const pattern = toStr(args[1])
+      const pattern = likePattern
         .replace(/[.+*?^${}()|[\]\\]/g, '\\$&')
         .replace(/%+/g, '.*')
         .replace(/_/g, '.');
@@ -316,14 +323,21 @@ export function evalBuiltin(fn: string, args: EvalValue[], ctx: EvalCtx): EvalVa
       return regex ? regex.test(value) : false;
     }
     case 'match': {
-      const regex = evalRegex(ctx, 'match', toStr(args[1]));
-      return regex ? regex.test(toStr(args[0])) : false;
+      // NULL propagates, as for like() and the comparison operators (#343):
+      // matching an absent field against `^$` or `.*` used to answer true.
+      const subject = strArg(args[0]);
+      const regexText = strArg(args[1]);
+      if (subject === null || regexText === null) return null;
+      const regex = evalRegex(ctx, 'match', regexText);
+      return regex ? regex.test(subject) : false;
     }
     case 'cidrmatch': {
-      // A predicate, like match(): an absent address is simply not in the
-      // subnet, so it answers false rather than propagating NULL.
+      // NULL propagates, as for match() and like() (#343). It used to answer
+      // false for an absent address, which only differs under NOT: `NOT
+      // cidrmatch(...)` on an event without the field was true.
+      const range = strArg(args[0]);
       const ip = strArg(args[1]);
-      return ip === null ? false : cidrMatch(toStr(args[0]), ip);
+      return range === null || ip === null ? null : cidrMatch(range, ip);
     }
     case 'searchmatch':
       ctx.onStubWarning?.('searchmatch');
