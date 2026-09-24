@@ -4,6 +4,10 @@
 // The TIME_FORMAT hover matches TIME_PREFIX in a worker, never on the main
 // thread (#334). The worker is faked so a response can be held back, withheld
 // past the watchdog, or replaced by a load failure.
+//
+// An error before the worker's ready signal is a load failure, after it a
+// crash (#339). A script that threw at top level used to count as a crash:
+// uncapped, so every hover built a new worker and blamed its prefix.
 // ---------------------------------------------------------------------------
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -27,8 +31,24 @@ class FakeWorker {
   onerror: ((e: Event) => void) | null = null;
   posted: TimestampMatchRequest[] = [];
   terminated = false;
+  loaded = false;
   constructor() {
     FakeWorker.instances.push(this);
+  }
+  /** The module finished evaluating: what every worker entry posts first (#339). */
+  ready() {
+    if (this.loaded) return;
+    this.loaded = true;
+    this.onmessage?.({ data: { type: 'ready' } } as unknown as MessageEvent<TimestampMatchResponse>);
+  }
+  /** A module that throws while evaluating: an ErrorEvent with a message, before ready. */
+  throwOnLoad() {
+    this.onerror?.(new ErrorEvent('error', { message: 'SyntaxError: Unexpected token' }));
+  }
+  /** Code that ran threw: the module loaded first. */
+  crash(message = 'boom') {
+    this.ready();
+    this.onerror?.(new ErrorEvent('error', { message }));
   }
   postMessage(message: TimestampMatchRequest) {
     this.posted.push(message);
@@ -38,6 +58,7 @@ class FakeWorker {
   }
   /** Answer the last request the way the real worker would, by running it. */
   answer(request: TimestampMatchRequest = this.posted[this.posted.length - 1]!) {
+    this.ready();
     this.onmessage?.({
       data: { id: request.id, probes: probeTimestamps(request.raws, request.config) },
     } as MessageEvent<TimestampMatchResponse>);
@@ -211,8 +232,69 @@ describe('TIME_FORMAT hover — TIME_PREFIX in a worker (#334)', () => {
 
   it('reports a crash in the worker rather than a timeout', async () => {
     const pending = matchTimePrefix('ts=', SAMPLE);
-    worker().onerror?.(new ErrorEvent('error', { message: 'boom' }));
+    worker().crash('boom');
     await expect(pending).resolves.toEqual({ status: 'error', message: 'boom' });
+  });
+
+  describe('lifecycle (#339)', () => {
+    it('counts a script that throws at top level as a load failure, and stops after the cap', async () => {
+      // It was a crash: reported as the prefix's error, and uncapped, so every
+      // hover built a new worker for a script that could never run.
+      for (let i = 0; i < 2; i++) {
+        const pending = matchTimePrefix('ts=', SAMPLE);
+        worker().throwOnLoad();
+        await expect(pending).resolves.toEqual({ status: 'unavailable' });
+      }
+      await expect(matchTimePrefix('ts=', SAMPLE)).resolves.toEqual({ status: 'unavailable' });
+      expect(FakeWorker.instances).toHaveLength(2);
+    });
+
+    it('omits the sample line, not an error, when the first worker throws at top level', async () => {
+      const pending = hover();
+      await flush();
+      worker().throwOnLoad();
+      const markdown = text(await pending);
+      expect(markdown).toContain('**Now:**');
+      expect(markdown).not.toContain('**Sample:**');
+    });
+
+    it('blames only the running entry for a crash, and replays the ones queued behind it', async () => {
+      // A crash used to report every queued entry as an error, while a hang
+      // replayed them.
+      const first = matchTimePrefix('(a|aa)+b', 'a'.repeat(4000));
+      const second = matchTimePrefix('ts=', SAMPLE);
+      const crashed = worker();
+      crashed.crash('out of memory');
+      await expect(first).resolves.toEqual({ status: 'error', message: 'out of memory' });
+
+      expect(FakeWorker.instances).toHaveLength(2);
+      expect(worker().posted.map((r) => r.config.timePrefix)).toEqual(['ts=']);
+      worker().answer();
+      await expect(second).resolves.toEqual({ status: 'matched', end: 8 });
+    });
+
+    it('keeps building workers however many crashes there are', async () => {
+      for (let i = 0; i < 4; i++) {
+        const pending = matchTimePrefix('(a|aa)+b', SAMPLE);
+        worker().crash();
+        await expect(pending).resolves.toMatchObject({ status: 'error' });
+      }
+      const pending = matchTimePrefix('ts=', SAMPLE);
+      worker().answer();
+      await expect(pending).resolves.toEqual({ status: 'matched', end: 8 });
+    });
+
+    it('drops a cancelled entry queued behind a hang instead of replaying it', async () => {
+      vi.useFakeTimers();
+      const first = matchTimePrefix('(a|aa)+b', 'a'.repeat(4000));
+      const { token, cancel } = cancellable();
+      const second = matchTimePrefix('ts=', SAMPLE, token);
+      cancel();
+      await expect(second).resolves.toEqual({ status: 'cancelled' });
+      vi.advanceTimersByTime(TIME_PREFIX_TIMEOUT_MS);
+      await expect(first).resolves.toEqual({ status: 'timed-out' });
+      expect(worker().posted).toEqual([]);
+    });
   });
 });
 

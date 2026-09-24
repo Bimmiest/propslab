@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { render, screen, fireEvent, within, act } from '@testing-library/react';
+import { render, screen, fireEvent, within, act, waitFor } from '@testing-library/react';
 import { useAppStore } from '../../../../store/useAppStore';
 import { RegexTab } from '../RegexTab';
 import type { EnrichedEvent } from '../../PreviewPanel';
@@ -92,12 +92,19 @@ describe('RegexTab — one-click Add to props.conf (#88)', () => {
     fireEvent.change(input, { target: { value: pattern } });
   }
 
-  it('upserts the directive into the event sourcetype stanza', () => {
+  /** The Add button once the typed pattern has been matched and it is enabled (#338). */
+  async function addButton(container: HTMLElement) {
+    const button = within(container).getByRole('button', { name: 'Add to props.conf' });
+    await waitFor(() => expect(button).toBeEnabled());
+    return button;
+  }
+
+  it('upserts the directive into the event sourcetype stanza', async () => {
     setup('my_app');
     const { container } = render(<RegexTab {...defaultProps} />);
     typePattern(container, 'user=(?<user>\\w+)');
 
-    fireEvent.click(within(container).getByRole('button', { name: 'Add to props.conf' }));
+    fireEvent.click(await addButton(container));
 
     const props = useAppStore.getState().propsConf;
     expect(props).toContain('EXTRACT-');
@@ -107,14 +114,14 @@ describe('RegexTab — one-click Add to props.conf (#88)', () => {
     expect(props).toContain('SHOULD_LINEMERGE = false');
   });
 
-  it('points the metadata at the placeholder stanza when there is no sourcetype', () => {
+  it('points the metadata at the placeholder stanza when there is no sourcetype', async () => {
     // Writing [my:sourcetype] alone produces config that can never match the
     // event it was scaffolded from (#72).
     setup('');
     const { container } = render(<RegexTab {...defaultProps} />);
     typePattern(container, 'user=(?<user>\\w+)');
 
-    fireEvent.click(within(container).getByRole('button', { name: 'Add to props.conf' }));
+    fireEvent.click(await addButton(container));
 
     expect(useAppStore.getState().propsConf).toContain('[my:sourcetype]');
     expect(useAppStore.getState().metadata.sourcetype).toBe('my:sourcetype');
@@ -155,15 +162,19 @@ describe('RegexTab — results follow the typed pattern (#315)', () => {
     expect(within(container).getByText('2/3 events matched')).toBeInTheDocument();
 
     // Inside the debounce window the old results must not be shown as the
-    // new pattern's — the "Add to props.conf" button already writes this one.
+    // new pattern's, and the "Add to props.conf" button, which writes the
+    // typed pattern, must not commit it before its own results are shown:
+    // it stays disabled until they are (#338).
     fireEvent.change(input, { target: { value: 'this_text_does_not_appear' } });
     expect(within(container).queryByText(/Event #/)).not.toBeInTheDocument();
     expect(within(container).queryByText(/events matched/)).not.toBeInTheDocument();
     expect(within(container).getByText('Testing pattern…')).toBeInTheDocument();
-    expect(within(container).getByRole('button', { name: 'Add to props.conf' })).toBeInTheDocument();
+    const add = within(container).getByRole('button', { name: 'Add to props.conf' });
+    expect(add).toBeDisabled();
 
     expect(await within(container).findByText('No events matched')).toBeInTheDocument();
     expect(within(container).getByText('0/3 events matched')).toBeInTheDocument();
+    expect(add).toBeEnabled();
   });
 });
 
@@ -247,7 +258,9 @@ describe('RegexTab — timers (#322)', () => {
     fireEvent.change(within(container).getByPlaceholderText(/\\d\+/), { target: { value: 'GET' } });
     fireEvent.click(within(container).getByRole('button', { name: 'Copy' }));
     expect(await within(container).findByRole('button', { name: 'Copied!' })).toBeInTheDocument();
-    fireEvent.click(within(container).getByRole('button', { name: 'Add to props.conf' }));
+    const add = within(container).getByRole('button', { name: 'Add to props.conf' });
+    await waitFor(() => expect(add).toBeEnabled());
+    fireEvent.click(add);
     expect(within(container).getByRole('button', { name: 'Added!' })).toBeInTheDocument();
     expect(labelTimers).toHaveLength(2);
 
@@ -256,27 +269,28 @@ describe('RegexTab — timers (#322)', () => {
   });
 });
 
+/** A regex-match worker the test answers by hand, so a request can be held in flight. */
+class FakeWorker {
+  static instances: FakeWorker[] = [];
+  onmessage: ((e: MessageEvent<RegexMatchResponse>) => void) | null = null;
+  onerror: ((e: ErrorEvent) => void) | null = null;
+  posted: RegexMatchRequest[] = [];
+  constructor() { FakeWorker.instances.push(this); }
+  postMessage(message: RegexMatchRequest) { this.posted.push(message); }
+  terminate() {}
+  respond() {
+    const req = this.posted[this.posted.length - 1]!;
+    this.onmessage?.({ data: { id: req.id, results: matchInputs(req.pattern, req.inputs) } } as MessageEvent<RegexMatchResponse>);
+  }
+}
+const worker = () => FakeWorker.instances[FakeWorker.instances.length - 1]!;
+
 // #329: pending was keyed on the pattern alone. When `allEvents` changed — a
 // pipeline re-run, a search keystroke — the first commit indexed the previous
 // events' results into the new events by position, then the whole list flipped
 // to "Testing pattern…" until the re-run answered. Driven through a fake worker
 // so the re-run can be held in flight.
 describe('RegexTab — results follow the events they were matched over (#329)', () => {
-  class FakeWorker {
-    static instances: FakeWorker[] = [];
-    onmessage: ((e: MessageEvent<RegexMatchResponse>) => void) | null = null;
-    onerror: ((e: ErrorEvent) => void) | null = null;
-    posted: RegexMatchRequest[] = [];
-    constructor() { FakeWorker.instances.push(this); }
-    postMessage(message: RegexMatchRequest) { this.posted.push(message); }
-    terminate() {}
-    respond() {
-      const req = this.posted[this.posted.length - 1]!;
-      this.onmessage?.({ data: { id: req.id, results: matchInputs(req.pattern, req.inputs) } } as MessageEvent<RegexMatchResponse>);
-    }
-  }
-  const worker = () => FakeWorker.instances[FakeWorker.instances.length - 1]!;
-
   beforeEach(() => {
     useAppStore.setState(initialState, true);
     FakeWorker.instances = [];
@@ -330,5 +344,128 @@ describe('RegexTab — results follow the events they were matched over (#329)',
     act(() => { vi.advanceTimersByTime(2_000); });
     expect(within(container).getByText(/too slow to evaluate/)).toBeInTheDocument();
     expect(cardTitles(container)).toEqual([]);
+  });
+});
+
+// #338: "Add to props.conf" was gated only on the pattern compiling. It wrote a
+// pattern the tab was showing as too slow to evaluate, so every pipeline run
+// hit the watchdog, and inside the debounce window it wrote one that had not
+// run at all; a bad class name wrote a key the parser reads differently. The
+// button now follows the Create EXTRACT dialog's rule (#329).
+describe('RegexTab — Add to props.conf waits for a settled match (#338)', () => {
+  beforeEach(() => {
+    useAppStore.setState(initialState, true);
+    useAppStore.setState({
+      metadata: { index: 'main', host: 'h', source: 's', sourcetype: 'my_app' },
+      propsConf: '[my_app]\n',
+    });
+    FakeWorker.instances = [];
+    vi.stubGlobal('Worker', FakeWorker);
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  const addButton = (container: HTMLElement) =>
+    within(container).getByRole('button', { name: 'Add to props.conf' });
+
+  function typePattern(container: HTMLElement, pattern: string) {
+    fireEvent.change(within(container).getByPlaceholderText(/\\d\+/), { target: { value: pattern } });
+  }
+
+  function typeClass(container: HTMLElement, name: string) {
+    fireEvent.change(within(container).getByLabelText('EXTRACT class name'), { target: { value: name } });
+  }
+
+  /** Let the debounce elapse and answer the posted request. */
+  function settle() {
+    act(() => { vi.advanceTimersByTime(250); });
+    act(() => { worker().respond(); });
+  }
+
+  it('stays disabled through the debounce and while the match is pending', () => {
+    const { container } = render(<RegexTab {...defaultProps} />);
+    typePattern(container, 'GET');
+    // Inside the debounce window: nothing has been posted yet.
+    expect(addButton(container)).toBeDisabled();
+    expect(addButton(container)).toHaveAccessibleDescription(/finish testing/);
+
+    // Posted, not answered.
+    act(() => { vi.advanceTimersByTime(250); });
+    expect(worker().posted.at(-1)?.pattern).toBe('GET');
+    expect(addButton(container)).toBeDisabled();
+
+    fireEvent.click(addButton(container));
+    expect(useAppStore.getState().propsConf).not.toContain('EXTRACT-');
+  });
+
+  it('is enabled once this exact pattern has settled, and writes it', () => {
+    const { container } = render(<RegexTab {...defaultProps} />);
+    typePattern(container, 'GET');
+    settle();
+    expect(addButton(container)).toBeEnabled();
+    expect(addButton(container)).not.toHaveAttribute('aria-describedby');
+
+    fireEvent.click(addButton(container));
+    expect(useAppStore.getState().propsConf).toContain('EXTRACT-custom = GET');
+  });
+
+  it('goes back to disabled when the pattern changes after settling', () => {
+    const { container } = render(<RegexTab {...defaultProps} />);
+    typePattern(container, 'GET');
+    settle();
+    expect(addButton(container)).toBeEnabled();
+
+    typePattern(container, 'POST');
+    expect(addButton(container)).toBeDisabled();
+    fireEvent.click(addButton(container));
+    expect(useAppStore.getState().propsConf).not.toContain('EXTRACT-');
+  });
+
+  it('stays disabled on a timeout and says to simplify the pattern', () => {
+    const { container } = render(<RegexTab {...defaultProps} />);
+    typePattern(container, '(a|aa)+b');
+    act(() => { vi.advanceTimersByTime(250); });
+    act(() => { vi.advanceTimersByTime(2_000); });
+    expect(within(container).getByText(/too slow to evaluate/)).toBeInTheDocument();
+
+    const add = addButton(container);
+    expect(add).toBeDisabled();
+    expect(add).toHaveAccessibleDescription(/Simplify the pattern/);
+    expect(add).toHaveAttribute('title', expect.stringMatching(/Simplify the pattern/));
+    fireEvent.click(add);
+    expect(useAppStore.getState().propsConf).not.toContain('EXTRACT-');
+  });
+
+  it.each([
+    ['', /Enter a class name/],
+    ['a=b', /cannot contain "="/],
+    ['a]b', /only letters, digits/],
+  ])('is disabled with a message for the class name %j', (name, message) => {
+    const { container } = render(<RegexTab {...defaultProps} />);
+    typePattern(container, 'GET');
+    settle();
+    typeClass(container, name);
+
+    const classInput = within(container).getByLabelText('EXTRACT class name');
+    expect(classInput).toHaveAttribute('aria-invalid', 'true');
+    expect(classInput).toHaveAccessibleDescription(message);
+    expect(within(container).getByText(message)).toBeVisible();
+
+    const add = addButton(container);
+    expect(add).toBeDisabled();
+    expect(add).toHaveAccessibleDescription(message);
+    fireEvent.click(add);
+    expect(useAppStore.getState().propsConf).not.toContain('EXTRACT-');
+
+    // A valid name enables it again.
+    typeClass(container, 'web.access-1');
+    expect(classInput).toHaveAttribute('aria-invalid', 'false');
+    expect(add).toBeEnabled();
+    fireEvent.click(add);
+    expect(useAppStore.getState().propsConf).toContain('EXTRACT-web.access-1 = GET');
   });
 });

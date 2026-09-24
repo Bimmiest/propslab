@@ -19,6 +19,19 @@ localStorage holds preferences only: UI state (split-pane sizes, seen-intro flag
 
 Monaco editor instances live in a module-level `Map` in `editorRegistry.ts`, not in the Zustand store.
 
+## Workers
+
+Three workers run user regexes off the main thread: the pipeline (`pipelineWorker.ts`), the Regex tab and Create EXTRACT dialog (`regexMatchWorker.ts`), and the Timestamp tab and TIME_FORMAT hover (`timestampMatchWorker.ts`). All three share one lifecycle, `createManagedWorker` in `src/hooks/workerLifecycle.ts`. It has no React import, so the hover can use it outside a component. Each caller passes in only its fallback policy, as callbacks.
+
+The lifecycle rules:
+
+- **Ready signal.** Each worker entry posts `WORKER_READY` (`engine/workerProtocol.ts`) as its last statement. An error before that is a *load failure*: the chunk didn't fetch, CSP blocked it, or the module threw at top level. An error after it is a *crash*.
+- **Load failures are capped.** After `MAX_WORKER_LOAD_FAILURES`, no new worker is built. The pipeline and the matchers then run on the calling thread. The hover has no fallback and drops its sample line.
+- **Crashes are never retried inline.** A request whose worker crashed never runs on the main thread (#326).
+- **Classification uses the ready signal, not the work sent.** The first request is posted before the worker's script has run, so it can't be used to tell a load failure from a crash (#339).
+
+A new worker entry must post `WORKER_READY`. A caller must not handle `onerror` itself.
+
 ## Monaco bundling
 
 Monaco's widgets (hover, suggest, folding, find, multi-cursor) are *contributions*, imported separately from the API surface in `MonacoEditor.tsx` via `editor.all`. `editor.api` alone registers providers that nothing ever renders. `vite.config.ts` groups the slim `esm/vs` tree both entries pull in via `codeSplitting` (Rolldown's replacement for `manualChunks` — it claims modules the graph already reached rather than naming ids to pull in, so `editor.all` is held there by its own import in `MonacoEditor.tsx`). A bad split type-checks and builds, then fails to mount an editor — which is one of the things the e2e suite exists to catch (see the README's Tests section).

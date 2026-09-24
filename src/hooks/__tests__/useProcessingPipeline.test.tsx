@@ -20,6 +20,11 @@
 //
 // #335: in manual-apply mode, a run made inside the debounce window left the
 // status bar reporting unapplied changes once the debounce settled.
+//
+// #339: a load failure is now any error before the worker's ready signal, so
+// the fake loads (`ready`) before it answers or crashes, and `throwOnLoad` is a
+// module that throws while evaluating. The first worker is posted its request
+// before its script has run, and a top-level throw was charged to that request.
 // ---------------------------------------------------------------------------
 
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
@@ -49,6 +54,7 @@ class FakeWorker {
   onerror: ((e: ErrorEvent) => void) | null = null;
   posted: PipelineWorkerRequest[] = [];
   terminated = false;
+  loaded = false;
 
   constructor() {
     if (FakeWorker.instances.length >= FakeWorker.failAfter) throw new Error('blocked by CSP');
@@ -60,16 +66,28 @@ class FakeWorker {
   terminate() {
     this.terminated = true;
   }
+  /** The module finished evaluating: what every worker entry posts first (#339). */
+  ready() {
+    if (this.loaded) return;
+    this.loaded = true;
+    this.onmessage?.({ data: { type: 'ready' } } as MessageEvent);
+  }
   /** What the browser fires when the script chunk cannot be fetched: a plain Event, no message. */
   failToLoad() {
     this.onerror?.(new Event('error') as ErrorEvent);
   }
-  /** An exception thrown by worker code that did run. */
+  /** A module that throws while evaluating: an ErrorEvent with a message, before ready (#339). */
+  throwOnLoad(message = 'SyntaxError: Unexpected token') {
+    this.onerror?.({ message } as ErrorEvent);
+  }
+  /** An exception thrown by worker code that did run: the module loaded first. */
   crash(message = 'boom') {
+    this.ready();
     this.onerror?.({ message } as ErrorEvent);
   }
   /** Answer a request with an empty, successful result. */
   answer(id: number) {
+    this.ready();
     this.onmessage?.({
       data: { id, result: { result: { events: [] }, diagnostics: [] } },
     } as unknown as MessageEvent);
@@ -160,11 +178,12 @@ describe('useProcessingPipeline', () => {
     expect(FakeWorker.instances[0]!.posted).toHaveLength(1);
     expect(useAppStore.getState().isProcessing).toBe(true);
 
+    act(() => FakeWorker.instances[0]!.ready());
     act(() => void vi.advanceTimersByTime(5_000));
     const state = useAppStore.getState();
     expect(state.isProcessing).toBe(false);
     expect(state.processingResult).toBeNull();
-    expect(state.validationDiagnostics[0]?.message).toMatch(/timed out/);
+    expect(state.validationDiagnostics[0]?.message).toMatch(/timed out.*ReDoS/);
     expect(FakeWorker.instances[0]!.terminated).toBe(true);
     expect(FakeWorker.instances).toHaveLength(2);
   });
@@ -325,9 +344,93 @@ describe('useProcessingPipeline', () => {
     useAppStore.setState({ settings: { perEventPipeline: false, manualApply: true } });
     renderHook(() => useProcessingPipeline());
 
-    act(() => FakeWorker.instances[0]!.crash('SyntaxError'));
-    act(() => FakeWorker.instances[1]!.crash('SyntaxError'));
+    act(() => FakeWorker.instances[0]!.throwOnLoad('SyntaxError'));
+    act(() => FakeWorker.instances[1]!.throwOnLoad('SyntaxError'));
     expect(FakeWorker.instances).toHaveLength(2);
+  });
+
+  describe('a worker whose script throws at top level (#339)', () => {
+    it('is a load failure on first mount: resent, capped, then the current input renders inline', async () => {
+      // The mount request is posted in the same commit the worker is built,
+      // before its script has run. The top-level throw was charged to it: the
+      // replay "crashed" too, the preview said the input crashed repeatedly,
+      // and it stayed empty until an edit.
+      vi.stubGlobal('Worker', FakeWorker);
+      seed();
+      renderHook(() => useProcessingPipeline());
+
+      await waitFor(() => expect(FakeWorker.instances[0]!.posted).toHaveLength(1));
+      const request = FakeWorker.instances[0]!.posted[0]!;
+      act(() => FakeWorker.instances[0]!.throwOnLoad());
+      expect(FakeWorker.instances).toHaveLength(2);
+      expect(FakeWorker.instances[1]!.posted).toEqual([request]);
+      expect(useAppStore.getState().validationDiagnostics).toEqual([]);
+
+      act(() => FakeWorker.instances[1]!.throwOnLoad());
+      expect(FakeWorker.instances).toHaveLength(2); // capped
+      await waitFor(() => expect(useAppStore.getState().processingResult?.events).toHaveLength(2));
+      const state = useAppStore.getState();
+      expect(state.isProcessing).toBe(false);
+      expect(state.validationDiagnostics.some((d) => /crashed|Worker/.test(d.message))).toBe(false);
+    });
+
+    it('does not count a crash after ready as a load failure', async () => {
+      vi.stubGlobal('Worker', FakeWorker);
+      seed();
+      renderHook(() => useProcessingPipeline());
+
+      await waitFor(() => expect(FakeWorker.instances[0]!.posted).toHaveLength(1));
+      act(() => FakeWorker.instances[0]!.ready());
+      act(() => FakeWorker.instances[0]!.crash());
+      act(() => FakeWorker.instances[1]!.crash());
+      await settleInline();
+      expect(useAppStore.getState().validationDiagnostics[0]?.message).toMatch(/crashed repeatedly/);
+      expect(useAppStore.getState().processingResult).toBeNull();
+      expect(FakeWorker.instances).toHaveLength(3);
+    });
+  });
+
+  describe('the load-failure cap with nothing in flight (#339)', () => {
+    it('re-runs inline an input that timed out before its worker ever loaded', async () => {
+      // The worker never started, so the input never ran. When the workers
+      // after it fail to load too, nothing will ever come to run it; the cap
+      // runs it here instead of leaving the preview on the timeout.
+      vi.useFakeTimers();
+      vi.stubGlobal('Worker', FakeWorker);
+      seed();
+      renderHook(() => useProcessingPipeline());
+
+      expect(FakeWorker.instances[0]!.posted).toHaveLength(1);
+      act(() => void vi.advanceTimersByTime(5_000));
+      expect(useAppStore.getState().validationDiagnostics[0]?.message).toMatch(/waiting for its worker to start/);
+      expect(FakeWorker.instances).toHaveLength(2);
+
+      act(() => FakeWorker.instances[1]!.failToLoad());
+      act(() => FakeWorker.instances[2]!.failToLoad());
+      expect(FakeWorker.instances).toHaveLength(3);
+      vi.useRealTimers();
+      await waitFor(() => expect(useAppStore.getState().processingResult?.events).toHaveLength(2));
+      expect(useAppStore.getState().validationDiagnostics).toEqual([]);
+    });
+
+    it('never re-runs inline an input that hung a worker that had loaded', async () => {
+      vi.useFakeTimers();
+      vi.stubGlobal('Worker', FakeWorker);
+      seed();
+      renderHook(() => useProcessingPipeline());
+
+      act(() => FakeWorker.instances[0]!.ready());
+      act(() => void vi.advanceTimersByTime(5_000));
+      expect(useAppStore.getState().validationDiagnostics[0]?.message).toMatch(/ReDoS/);
+
+      act(() => FakeWorker.instances[1]!.failToLoad());
+      act(() => FakeWorker.instances[2]!.failToLoad());
+      vi.useRealTimers();
+      await settleInline();
+      const state = useAppStore.getState();
+      expect(state.processingResult).toBeNull();
+      expect(state.validationDiagnostics[0]?.message).toMatch(/ReDoS/);
+    });
   });
 
   describe('manual apply (#335)', () => {
