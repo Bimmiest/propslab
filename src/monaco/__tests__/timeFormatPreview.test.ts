@@ -9,8 +9,34 @@
 
 import { describe, it, expect } from 'vitest';
 import { marked } from 'marked';
-import { buildTimeFormatPreview, renderTimeFormatPreview, MAX_PREVIEW_SAMPLE_LENGTH } from '../timeFormatPreview';
+import {
+  buildTimeFormatPreview as buildWith,
+  describeTimeFormat,
+  renderTimeFormatPreview,
+  MAX_PREVIEW_SAMPLE_LENGTH,
+  type TimeFormatPreview,
+  type TimeFormatPreviewOptions,
+} from '../timeFormatPreview';
+import type { PrefixMatcher } from '../timePrefixMatcher';
+import { probeTimestamps } from '../../engine/timestampMatch';
 import { unsupportedSpecifiers } from '../../utils/strftime';
+
+/**
+ * Stands in for the worker (#334) by running what the worker runs — the
+ * Timestamp prober with no TIME_FORMAT — so these tests still pin the preview
+ * to the engine's reading of TIME_PREFIX. The worker plumbing itself is
+ * covered in timePrefixMatcher.test.ts.
+ */
+const proberInline: PrefixMatcher = (pattern, sample) => {
+  const [probe] = probeTimestamps([sample], { timePrefix: pattern, timeFormat: null, maxLookahead: 0, tz: null });
+  return Promise.resolve(probe?.prefix ? { status: 'matched', end: probe.prefix.end } : { status: 'no-match' });
+};
+
+async function buildTimeFormatPreview(format: string, options: TimeFormatPreviewOptions = {}): Promise<TimeFormatPreview> {
+  const preview = await buildWith(format, { matchPrefix: proberInline, ...options });
+  if (preview === null) throw new Error('unexpectedly cancelled');
+  return preview;
+}
 
 const NOW = new Date('2026-08-04T12:30:45.000Z');
 
@@ -40,19 +66,19 @@ describe('unsupportedSpecifiers', () => {
 });
 
 describe('buildTimeFormatPreview', () => {
-  it('renders the current time with the pattern', () => {
-    const preview = buildTimeFormatPreview('%Y-%m-%d', { now: NOW });
+  it('renders the current time with the pattern', async () => {
+    const preview = await buildTimeFormatPreview('%Y-%m-%d', { now: NOW });
     expect(preview.rendered).toBe('2026-08-04');
   });
 
-  it('says nothing at all for an empty value', () => {
-    const preview = buildTimeFormatPreview('   ', { now: NOW });
+  it('says nothing at all for an empty value', async () => {
+    const preview = await buildTimeFormatPreview('   ', { now: NOW });
     expect(preview.rendered).toBeNull();
     expect(renderTimeFormatPreview(preview)).toBe('');
   });
 
-  it('matches a sample line and resolves it', () => {
-    const preview = buildTimeFormatPreview('%Y-%m-%d %H:%M:%S', {
+  it('matches a sample line and resolves it', async () => {
+    const preview = await buildTimeFormatPreview('%Y-%m-%d %H:%M:%S', {
       now: NOW,
       sampleLine: '2024-01-15 10:00:00 user=alice',
     });
@@ -63,16 +89,16 @@ describe('buildTimeFormatPreview', () => {
     });
   });
 
-  it('reports a sample that does not match', () => {
-    const preview = buildTimeFormatPreview('%Y/%m/%d', {
+  it('reports a sample that does not match', async () => {
+    const preview = await buildTimeFormatPreview('%Y/%m/%d', {
       now: NOW,
       sampleLine: '2024-01-15 10:00:00 user=alice',
     });
     expect(preview.sample?.status).toBe('no-match');
   });
 
-  it('honours TIME_PREFIX the way the engine does', () => {
-    const preview = buildTimeFormatPreview('%Y-%m-%dT%H:%M:%S', {
+  it('honours TIME_PREFIX the way the engine does', async () => {
+    const preview = await buildTimeFormatPreview('%Y-%m-%dT%H:%M:%S', {
       now: NOW,
       sampleLine: 'id=5 ts=2024-01-15T10:00:00 rest',
       timePrefix: 'ts=',
@@ -80,10 +106,10 @@ describe('buildTimeFormatPreview', () => {
     expect(preview.sample).toMatchObject({ status: 'matched', text: '2024-01-15T10:00:00' });
   });
 
-  it('anchors after TIME_PREFIX rather than scanning the whole line (#66)', () => {
+  it('anchors after TIME_PREFIX rather than scanning the whole line (#66)', async () => {
     // The date is present but NOT immediately after the prefix, which is what a
     // real indexer refuses — so the preview must refuse it too.
-    const preview = buildTimeFormatPreview('%Y-%m-%d', {
+    const preview = await buildTimeFormatPreview('%Y-%m-%d', {
       now: NOW,
       sampleLine: 'ts=pending job started 2024-01-15',
       timePrefix: 'ts=',
@@ -91,8 +117,8 @@ describe('buildTimeFormatPreview', () => {
     expect(preview.sample?.status).toBe('no-match');
   });
 
-  it('reports where it started looking when a prefix moved the search', () => {
-    const preview = buildTimeFormatPreview('%Y-%m-%d', {
+  it('reports where it started looking when a prefix moved the search', async () => {
+    const preview = await buildTimeFormatPreview('%Y-%m-%d', {
       now: NOW,
       sampleLine: 'ts=nothing here',
       timePrefix: 'ts=',
@@ -100,8 +126,8 @@ describe('buildTimeFormatPreview', () => {
     expect(preview.sample).toEqual({ status: 'no-match', searchedFrom: 3 });
   });
 
-  it('reports a TIME_PREFIX that does not match at all', () => {
-    const preview = buildTimeFormatPreview('%Y-%m-%d', {
+  it('reports a TIME_PREFIX that does not match at all', async () => {
+    const preview = await buildTimeFormatPreview('%Y-%m-%d', {
       now: NOW,
       sampleLine: '2024-01-15 no prefix here',
       timePrefix: 'when=',
@@ -109,10 +135,10 @@ describe('buildTimeFormatPreview', () => {
     expect(preview.sample).toEqual({ status: 'no-match', searchedFrom: 0 });
   });
 
-  it('survives a TIME_PREFIX that is not a valid regex, and says why', () => {
+  it('survives a TIME_PREFIX that is not a valid regex, and says why', async () => {
     // Previously reported as a plain 'no-match', which blamed the format for
     // what was a broken prefix (#297).
-    const preview = buildTimeFormatPreview('%Y-%m-%d', {
+    const preview = await buildTimeFormatPreview('%Y-%m-%d', {
       now: NOW,
       sampleLine: '2024-01-15',
       timePrefix: '(unbalanced',
@@ -124,11 +150,11 @@ describe('buildTimeFormatPreview', () => {
     expect(preview.sample?.status === 'prefix-refused' ? preview.sample.reason : '').not.toBe('');
   });
 
-  it('refuses a ReDoS-prone TIME_PREFIX instead of running it on the main thread (#297)', () => {
+  it('refuses a ReDoS-prone TIME_PREFIX instead of running it on the main thread (#297)', async () => {
     // `(a+)+$` against a long run of `a`s ending in a mismatch is the textbook
     // catastrophic case: run for real, this hangs the tab.
     const started = Date.now();
-    const preview = buildTimeFormatPreview('%Y-%m-%d', {
+    const preview = await buildTimeFormatPreview('%Y-%m-%d', {
       now: NOW,
       sampleLine: `${'a'.repeat(40)}! 2024-01-15`,
       timePrefix: '(a+)+$',
@@ -139,17 +165,17 @@ describe('buildTimeFormatPreview', () => {
     expect(renderTimeFormatPreview(preview)).toMatch(/TIME_PREFIX was not run: .*catastrophic backtracking/);
   });
 
-  it('translates PCRE in TIME_PREFIX the way the engine does (#297)', () => {
+  it('translates PCRE in TIME_PREFIX the way the engine does (#297)', async () => {
     // Plain `new RegExp` rejected both of these, so the preview said "no match"
     // for prefixes the pipeline applies without complaint.
-    const named = buildTimeFormatPreview('%Y-%m-%d', {
+    const named = await buildTimeFormatPreview('%Y-%m-%d', {
       now: NOW,
       sampleLine: 'id=5 ts=2024-01-15 rest',
       timePrefix: '(?P<key>ts)=',
     });
     expect(named.sample).toMatchObject({ status: 'matched', text: '2024-01-15' });
 
-    const insensitive = buildTimeFormatPreview('%Y-%m-%d', {
+    const insensitive = await buildTimeFormatPreview('%Y-%m-%d', {
       now: NOW,
       sampleLine: 'id=5 TS=2024-01-15 rest',
       timePrefix: '(?i)ts=',
@@ -157,16 +183,16 @@ describe('buildTimeFormatPreview', () => {
     expect(insensitive.sample).toMatchObject({ status: 'matched', text: '2024-01-15' });
   });
 
-  it('searches no more than the first 4 KB of the sample line (#297)', () => {
+  it('searches no more than the first 4 KB of the sample line (#297)', async () => {
     const date = '2024-01-15';
-    const within = buildTimeFormatPreview('%Y-%m-%d', {
+    const within = await buildTimeFormatPreview('%Y-%m-%d', {
       now: NOW,
       sampleLine: `${'x'.repeat(MAX_PREVIEW_SAMPLE_LENGTH - date.length - 3)}ts=${date}`,
       timePrefix: 'ts=',
     });
     expect(within.sample).toMatchObject({ status: 'matched', text: date });
 
-    const beyond = buildTimeFormatPreview('%Y-%m-%d', {
+    const beyond = await buildTimeFormatPreview('%Y-%m-%d', {
       now: NOW,
       sampleLine: `${'x'.repeat(MAX_PREVIEW_SAMPLE_LENGTH)}ts=${date}`,
       timePrefix: 'ts=',
@@ -174,30 +200,38 @@ describe('buildTimeFormatPreview', () => {
     expect(beyond.sample).toEqual({ status: 'no-match', searchedFrom: 0 });
   });
 
-  it('carries the unsupported specifiers through', () => {
-    const preview = buildTimeFormatPreview('%Y-%m-%d %H:%i', { now: NOW });
+  it('describes a format synchronously, with no sample, for the completion detail', () => {
+    expect(describeTimeFormat('%Y-%m-%d %H:%i', NOW)).toEqual({
+      rendered: '2026-08-04 12:%i',
+      sample: null,
+      unsupported: [{ specifier: '%i', index: 12 }],
+    });
+  });
+
+  it('carries the unsupported specifiers through', async () => {
+    const preview = await buildTimeFormatPreview('%Y-%m-%d %H:%i', { now: NOW });
     expect(preview.unsupported).toHaveLength(1);
   });
 });
 
 describe('renderTimeFormatPreview', () => {
-  it('shows the rendering, the sample result and the caveats together', () => {
+  it('shows the rendering, the sample result and the caveats together', async () => {
     const markdown = renderTimeFormatPreview(
-      buildTimeFormatPreview('%Y-%m-%d', { now: NOW, sampleLine: '2024-01-15 x' }),
+      await buildTimeFormatPreview('%Y-%m-%d', { now: NOW, sampleLine: '2024-01-15 x' }),
     );
     expect(markdown).toContain('**Now:** `2026-08-04`');
     expect(markdown).toContain('2024-01-15T00:00:00.000Z');
   });
 
-  it('names each unsupported specifier and where it sits', () => {
-    const markdown = renderTimeFormatPreview(buildTimeFormatPreview('%Y-%m-%d %H:%i', { now: NOW }));
+  it('names each unsupported specifier and where it sits', async () => {
+    const markdown = renderTimeFormatPreview(await buildTimeFormatPreview('%Y-%m-%d %H:%i', { now: NOW }));
     expect(markdown).toContain('`%i` (offset 12)');
     expect(markdown).toContain('literal text');
   });
 
-  it('says the sample did not match rather than staying silent', () => {
+  it('says the sample did not match rather than staying silent', async () => {
     const markdown = renderTimeFormatPreview(
-      buildTimeFormatPreview('%Y/%m/%d', { now: NOW, sampleLine: '2024-01-15 x' }),
+      await buildTimeFormatPreview('%Y/%m/%d', { now: NOW, sampleLine: '2024-01-15 x' }),
     );
     expect(markdown).toContain('no match');
   });
