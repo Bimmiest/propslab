@@ -386,3 +386,71 @@ describe('breakLines — MUST_NOT_BREAK_BEFORE / MUST_NOT_BREAK_AFTER (#190)', (
     expect(diagnostics.some((d) => d.message.includes('MUST_NOT_BREAK_AFTER'))).toBe(true);
   });
 });
+
+describe('breakLines — LINE_BREAKER capture groups counted on the translated pattern (#311)', () => {
+  // Doc-derived: props.conf.spec reads LINE_BREAKER as a PCRE whose first
+  // capturing group is the break. `(?i)` is PCRE's inline case-insensitive
+  // flag, which JS only accepts once translated, so the group must be counted
+  // on the same translation the split compiles.
+  it('accepts a leading (?i) and breaks on its group instead of falling back to the default', () => {
+    const diagnostics: ValidationDiagnostic[] = [];
+    const events = breakLines(
+      'DATE one\nDate two\ndate three',
+      [dir('LINE_BREAKER', '(?i)([\\r\\n]+)date'), dir('SHOULD_LINEMERGE', 'false')],
+      META,
+      diagnostics,
+    );
+    expect(diagnostics.filter((d) => d.directiveKey === 'LINE_BREAKER')).toEqual([]);
+    // The pattern's own `date` is outside the group, so it stays on the next event.
+    expect(events.map((e) => e._raw)).toEqual(['DATE one', 'Date two', 'date three']);
+  });
+
+  it('still warns when the translated pattern genuinely has no capturing group', () => {
+    const diagnostics: ValidationDiagnostic[] = [];
+    breakLines('a\nb', [dir('LINE_BREAKER', '(?i)[\\r\\n]+'), dir('SHOULD_LINEMERGE', 'false')], META, diagnostics);
+    expect(diagnostics.some((d) => d.message.includes('has no capturing group'))).toBe(true);
+  });
+});
+
+describe('breakLines — lineNumbers.end measured on the original input (#317)', () => {
+  // Doc-derived: the default LINE_BREAKER `([\r\n]+)` discards the whole run of
+  // line endings it matches, so a merged event's `_raw` is shorter than the
+  // stretch of input it came from. The reported line range describes the input.
+  it('spans the blank lines a merge swallowed', () => {
+    const raw = '2026-01-15 10:00:00 x\n\n\n\n\n\nc\n2026-01-15 10:00:01 y';
+    const events = breakLines(raw, [], META);
+    expect(events.map((e) => e._raw)).toEqual(['2026-01-15 10:00:00 x\nc', '2026-01-15 10:00:01 y']);
+    expect(events.map((e) => e.lineNumbers)).toEqual([
+      { start: 1, end: 7 },
+      { start: 8, end: 8 },
+    ]);
+  });
+
+  it('counts every line of a CRLF event, not one fewer per merged line', () => {
+    const raw = '2026-01-15 10:00:00 a\r\nb\r\nc\r\nd\r\ne\r\n2026-01-15 10:00:01 f\r\n';
+    const events = breakLines(raw, [], META);
+    expect(events).toHaveLength(2);
+    expect(events[0]!.lineNumbers).toEqual({ start: 1, end: 5 });
+    expect(events[1]!.lineNumbers).toEqual({ start: 6, end: 6 });
+  });
+});
+
+describe('breakLines — the SHOULD_LINEMERGE default INDEXED_EXTRACTIONS implies (#322)', () => {
+  // Doc-derived: structured INDEXED_EXTRACTIONS formats are one record per
+  // line, while the XML modes keep ordinary line merging (#271). breakLines is
+  // the only place this default is decided, so it must hold with no pipeline
+  // injecting a SHOULD_LINEMERGE for it.
+  const raw = 'a,1\nb,2\nc,3';
+
+  it.each(['csv', 'TSV', 'psv', 'w3c', 'json'])('does not merge lines for INDEXED_EXTRACTIONS = %s', (format) => {
+    expect(breakLines(raw, [dir('INDEXED_EXTRACTIONS', format)], META)).toHaveLength(3);
+  });
+
+  it('keeps merging for the XML modes', () => {
+    expect(breakLines(raw, [dir('INDEXED_EXTRACTIONS', 'xml')], META)).toHaveLength(1);
+  });
+
+  it('lets an explicit SHOULD_LINEMERGE win over the format default', () => {
+    expect(breakLines(raw, [dir('INDEXED_EXTRACTIONS', 'csv'), dir('SHOULD_LINEMERGE', 'true')], META)).toHaveLength(1);
+  });
+});

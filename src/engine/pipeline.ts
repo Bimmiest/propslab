@@ -16,7 +16,6 @@ import { applyFieldAliases } from './processors/fieldAlias';
 import { applyEvalExpressions } from './processors/evalProcessor';
 import { attributeRawMutations } from './processors/rawMutationAttribution';
 import { lintConfigs, lintMatchedDirectives } from './configLint';
-import { effectiveDirective } from './utils/directiveValues';
 
 function safeProcessor(
   name: string,
@@ -165,20 +164,17 @@ export function runPipeline(
   // ── Index-time processing ─────────────────────────────
 
   // Step 1-2: Line breaking and merging.
-  // Real Splunk implicitly sets SHOULD_LINEMERGE=false when INDEXED_EXTRACTIONS is a
-  // structured format (csv/tsv/psv/w3c), so each line becomes its own event.
-  const STRUCTURED_EXTRACTIONS = new Set(['csv', 'tsv', 'psv', 'w3c']);
-  const indexedExtDir = effectiveDirective(directives, 'INDEXED_EXTRACTIONS');
-  const lineBreakDirectives =
-    indexedExtDir && STRUCTURED_EXTRACTIONS.has(indexedExtDir.value.trim().toLowerCase()) &&
-    !directives.some((d) => d.key === 'SHOULD_LINEMERGE')
-      ? [...directives, { key: 'SHOULD_LINEMERGE', value: 'false', directiveType: 'SHOULD_LINEMERGE', line: 0 } as ConfDirective]
-      : directives;
+  // The SHOULD_LINEMERGE default that INDEXED_EXTRACTIONS implies (off for the
+  // line-per-record formats, on for XML) is decided inside breakLines alone.
+  // This used to inject a synthetic `SHOULD_LINEMERGE = false` here for
+  // csv/tsv/psv/w3c as well — a narrower copy of the same rule, which agreed
+  // with the breaker only by accident and left JSON to the other copy (#322).
+  //
   // Wrapped like every other stage: a throw here used to escape runPipeline
   // and fail the whole run, where every later stage degrades to a diagnostic.
   // With nothing broken there are no events to carry forward, so the fallback
   // is empty rather than the unbroken input.
-  let events = safeProcessor('LINE_BREAKER', [], () => breakLines(truncatedRaw, lineBreakDirectives, effectiveMetadata, diagnostics), diagnostics);
+  let events = safeProcessor('LINE_BREAKER', [], () => breakLines(truncatedRaw, directives, effectiveMetadata, diagnostics), diagnostics);
 
   // Step 3: Truncation
   events = safeProcessor('TRUNCATE', events, () => truncateEvents(events, directives, diagnostics), diagnostics);
@@ -215,7 +211,13 @@ export function runPipeline(
   // ── Search-time processing ────────────────────────────
 
   const metaKey = (m: EventMetadata) => `${m.sourcetype}|${m.host}|${m.source}`;
-  const originalMetaKey = metaKey(metadata);
+  // Compared against the metadata the events were BROKEN with, not the caller's:
+  // an input-time `sourcetype =` assignment has already been applied to every
+  // event by now, and is not an index-time rewrite. Keying on the caller's
+  // metadata read it as one, so batch mode warned about a DEST_KEY = MetaData:*
+  // transform that did not exist and per-event mode added a StanzaRematch step
+  // to every event (#310).
+  const originalMetaKey = metaKey(effectiveMetadata);
 
   if (options?.perEventPipeline) {
     // Resolve per-event directives; re-match stanzas for events whose metadata changed at index-time.

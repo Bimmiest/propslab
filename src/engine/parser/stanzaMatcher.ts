@@ -1,6 +1,7 @@
 import type { ConfStanza, EventMetadata } from '../types';
 import { safeRegex, escapeRegex } from '../../utils/splunkRegex';
 import { effectiveDirective, parseSplunkBool } from '../utils/directiveValues';
+import { asciiCompare } from '../utils/asciiCompare';
 
 // Splunk stanza precedence (highest wins): source > host > sourcetype > default
 const STANZA_PRIORITY: Record<ConfStanza['type'], number> = {
@@ -167,10 +168,17 @@ export function matchStanzas(stanzas: ConfStanza[], metadata: EventMetadata): Co
   // [<sourcetype>] patterns and [host::<host>] patterns", which is a cross-type
   // claim. The statement implemented here is the explicit one, and the one
   // carrying a worked example.
+  //
+  // A full tie falls to the ASCII order of the stanza name, where the stanza
+  // sorting first takes precedence — the spec's rule for colliding patterns, and
+  // what the `precedence-ascii-order` capture records (`...fx_a...` beats
+  // `...fx_z...`). Without it the tie fell to file order, so reordering two
+  // stanzas in props.conf changed which one won (#318).
   matched.sort((a, b) => {
     if (a.priority !== b.priority) return b.priority - a.priority;
     if (a.explicitPriority !== b.explicitPriority) return b.explicitPriority - a.explicitPriority;
-    return b.specificity - a.specificity;
+    if (a.specificity !== b.specificity) return b.specificity - a.specificity;
+    return asciiCompare(a.stanza.name, b.stanza.name);
   });
 
   return matched.map((m) => m.stanza);

@@ -188,3 +188,39 @@ describe('runPipeline — search-time REPORT compile failures are reported (#75.
     expect(diagnostics.filter((d) => d.message.includes('could not be compiled safely'))).toHaveLength(1);
   });
 });
+
+describe('runPipeline — an input-time sourcetype assignment is not an index-time rewrite (#310)', () => {
+  // Doc-derived: props.conf.spec describes `sourcetype = <string>` in a
+  // [source::] stanza as assigning the sourcetype at input time, before any
+  // TRANSFORMS run — so it must not be reported as a DEST_KEY = MetaData:*
+  // rewrite, and per-event mode has nothing to re-match.
+  const meta: EventMetadata = { index: 'main', host: 'h', source: '/a.log', sourcetype: 'st' };
+  const props = '[source::/a.log]\nsourcetype = foo\n\n[foo]\nSHOULD_LINEMERGE = false\nEXTRACT-k = k=(?<k>\\w+)\n';
+  const raw = 'k=one\nk=two\n';
+  const rewriteWarning = (diags: ValidationDiagnostic[]) =>
+    diags.some((d) => d.message.includes('rewritten by a DEST_KEY = MetaData:* transform'));
+
+  it('batch mode does not warn about a metadata rewrite', () => {
+    const { result, diagnostics } = runPipeline(raw, meta, props, '', { perEventPipeline: false });
+    expect(rewriteWarning(diagnostics)).toBe(false);
+    expect(result.events.map((e) => e.fields.k)).toEqual(['one', 'two']);
+  });
+
+  it('per-event mode adds no StanzaRematch step and keeps the assigned sourcetype\'s search-time config', () => {
+    const { result } = runPipeline(raw, meta, props, '', { perEventPipeline: true });
+    expect(result.processingSteps.some((s) => s.processor === 'StanzaRematch')).toBe(false);
+    expect(result.events.map((e) => e.fields.k)).toEqual(['one', 'two']);
+  });
+
+  it('still reports a genuine DEST_KEY = MetaData:Sourcetype rewrite on top of the assignment', () => {
+    const rewriting = props + 'TRANSFORMS-st = to_bar\n';
+    const transforms = '[to_bar]\nREGEX = two\nDEST_KEY = MetaData:Sourcetype\nFORMAT = sourcetype::bar\n';
+    const batch = runPipeline(raw, meta, rewriting, transforms, { perEventPipeline: false });
+    expect(rewriteWarning(batch.diagnostics)).toBe(true);
+    const perEvent = runPipeline(raw, meta, rewriting, transforms, { perEventPipeline: true });
+    expect(perEvent.result.events.map((e) => e.processingTrace.some((s) => s.processor === 'StanzaRematch'))).toEqual([
+      false,
+      true,
+    ]);
+  });
+});

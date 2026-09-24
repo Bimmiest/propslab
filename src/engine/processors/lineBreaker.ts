@@ -7,7 +7,7 @@
  */
 
 import type { ConfDirective, EventMetadata, SplunkEvent, ValidationDiagnostic } from '../types';
-import { safeRegex } from '../../utils/splunkRegex';
+import { safeRegex, translatePcreToJs } from '../../utils/splunkRegex';
 import { atDirective } from '../parser/provenance';
 import { effectiveDirective, parseSplunkBool } from '../utils/directiveValues';
 
@@ -29,11 +29,18 @@ const XML_EXTRACTIONS = new Set(['xml', 'xmlkv', 'xmlkv-winevt']);
  * Counted by compiling `pattern|` — an alternation with an empty branch always
  * matches, and the resulting array has one entry per group, which is more
  * reliable than counting unescaped `(` by hand.
+ *
+ * Counted on the PCRE→JS translation, the same source the split compiles via
+ * safeRegex. Compiling the raw PCRE rejected anything JS does not spell the
+ * same way — `(?i)([\r\n]+)date` threw, counted 0 groups, and a working
+ * LINE_BREAKER was replaced by the default with a warning that it had no
+ * capturing group (#311).
  */
 function countCaptureGroups(pattern: string | undefined): number {
   if (pattern === undefined) return 0;
   try {
-    return new RegExp(`${pattern}|`).exec('')!.length - 1;
+    const { source, flags } = translatePcreToJs(pattern);
+    return new RegExp(`${source}|`, flags).exec('')!.length - 1;
   } catch {
     return 0;
   }
@@ -338,6 +345,9 @@ export function breakLines(
   // routinely spans lines. Splitting it per line hands the extractor a string
   // of fragments, none of which parse, and ignores the BREAK_ONLY_BEFORE the
   // user wrote to frame the record. They keep the ordinary default.
+  //
+  // This is the only place the default is decided; the pipeline used to inject
+  // it as well for csv/tsv/psv/w3c, and two copies of one rule drift (#322).
   const structuredFormat = getDirective(directives, 'INDEXED_EXTRACTIONS')?.trim().toLowerCase();
   const structured =
     structuredFormat !== undefined && structuredFormat !== '' && structuredFormat !== 'none' &&
@@ -349,11 +359,20 @@ export function breakLines(
 
   // `lines` is the length of each LINE_BREAKER segment the event was built
   // from, in order; see segmentLengthsOf.
-  let mergedSegments: { text: string; offset: number; lines: number[] }[];
+  // `end` is where the event's last segment ends in `rawData`. It cannot be
+  // derived from `offset + text.length`: merged segments are joined by one
+  // `\n`, while the break they replaced may have been `\r\n` or a run of blank
+  // lines, so the joined text is shorter than the input it spans and the end
+  // line came out early (#317).
+  let mergedSegments: { text: string; offset: number; end: number; lines: number[] }[];
   let maxEventsTriggered = false;
 
   if (!shouldLineMerge) {
-    mergedSegments = filteredSegments.map((seg) => ({ ...seg, lines: [seg.text.length] }));
+    mergedSegments = filteredSegments.map((seg) => ({
+      ...seg,
+      end: seg.offset + seg.text.length,
+      lines: [seg.text.length],
+    }));
   } else {
     // Merge directives
     const breakOnlyBeforeStr = getDirective(directives, 'BREAK_ONLY_BEFORE');
@@ -421,7 +440,9 @@ export function breakLines(
     const canMerge =
       breakOnlyBeforeAnchoredRegex !== null || breakOnlyBeforeDate || mustBreakAfterRegex === null;
 
-    mergedSegments = [{ ...firstSegment, lines: [firstSegment.text.length] }];
+    mergedSegments = [
+      { ...firstSegment, end: firstSegment.offset + firstSegment.text.length, lines: [firstSegment.text.length] },
+    ];
     let currentLineCount = countLines(firstSegment.text);
     let forceBreakNext = false;
     // MUST_NOT_BREAK_AFTER is stateful: once a line matches, rule-driven breaks
@@ -471,13 +492,19 @@ export function breakLines(
       if (reason === 'max-events') maxEventsTriggered = true;
 
       if (reason !== null) {
-        mergedSegments.push({ text: seg.text, offset: seg.offset, lines: [seg.text.length] });
+        mergedSegments.push({
+          text: seg.text,
+          offset: seg.offset,
+          end: seg.offset + seg.text.length,
+          lines: [seg.text.length],
+        });
         currentLineCount = segLines;
       } else {
         // Merge into previous
         const prev = mergedSegments.at(-1);
         if (prev !== undefined) {
           prev.text += '\n' + seg.text;
+          prev.end = seg.offset + seg.text.length;
           prev.lines.push(seg.text.length);
         }
         currentLineCount += segLines;
@@ -505,7 +532,7 @@ export function breakLines(
   const events: SplunkEvent[] = mergedSegments.map((seg) => {
     const lineNums = {
       start: lineAtOffset(newlines, seg.offset),
-      end: lineAtOffset(newlines, seg.offset + seg.text.length),
+      end: lineAtOffset(newlines, seg.end),
     };
     const event: SplunkEvent = {
       _raw: seg.text,
