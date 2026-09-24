@@ -1,4 +1,12 @@
-import { test, expect, openApp, loadExample } from './fixtures';
+import {
+  test,
+  expect,
+  openApp,
+  loadExample,
+  recordWorkerReplies,
+  workerReplies,
+  dwellUntilVisible,
+} from './fixtures';
 
 const APACHE = /Apache Access Log/i;
 
@@ -263,18 +271,109 @@ test.describe('dictionary', () => {
     const box = await token.boundingBox();
     if (!box) throw new Error('TIME_PREFIX token not rendered');
 
-    // Monaco opens the hover on mouse DWELL, and it needs movement to start the
-    // timer — a single jump to the token can arrive before the editor is
-    // listening and then never repeat. Nudge repeatedly until the widget shows.
     const link = page.getByText('Open in dictionary');
-    await expect(async () => {
-      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-      await page.mouse.move(box.x + box.width / 2 + 1, box.y + box.height / 2);
-      await expect(link).toBeVisible({ timeout: 2_000 });
-    }).toPass({ timeout: 20_000 });
+    await dwellUntilVisible(page, box.x + box.width / 2, box.y + box.height / 2, link);
 
     await link.click();
 
     await expect(page.getByRole('heading', { level: 2, name: 'TIME_PREFIX' })).toBeVisible();
+  });
+});
+
+/**
+ * The two on-demand workers (#348). Neither is built until its tab opens or a
+ * TIME_FORMAT is hovered, so the boot tests above never load their chunks.
+ *
+ * The tabs' visible output cannot prove a worker ran: past two load failures
+ * they match on the main thread instead (#309) and render the same thing,
+ * and a worker script that 404s logs nothing to the console. So each test
+ * also asserts that the worker itself replied (`recordWorkerReplies`). The
+ * hover has no fallback at all since #334 — without its worker the preview
+ * silently drops the sample line — so there the UI is proof on its own.
+ *
+ * All three use the Apache example: its props.conf sets `TIME_PREFIX = \[`
+ * and `TIME_FORMAT = %d/%b/%Y:%H:%M:%S %z`, and its first event's timestamp
+ * is `10/Oct/2000:13:55:36 -0700`, i.e. 2000-10-10T20:55:36Z in any browser
+ * time zone.
+ */
+test.describe('match workers', () => {
+  const REGEX_WORKER = /\/regexMatchWorker[^/]*\.js$/;
+  const TIMESTAMP_WORKER = /\/timestampMatchWorker[^/]*\.js$/;
+  const FIRST_EVENT_TIME = '10/Oct/2000:13:55:36 -0700';
+  const FIRST_EVENT_ISO = '2000-10-10T20:55:36.000Z';
+
+  test.beforeEach(async ({ page }) => {
+    await recordWorkerReplies(page);
+  });
+
+  test('the Regex tab matches a typed pattern in its worker', async ({ page, complaints }) => {
+    await openApp(page);
+    await loadExample(page, APACHE);
+
+    await page.getByRole('tab', { name: /^Regex$/ }).click();
+    await page.getByRole('textbox', { name: 'Regular expression pattern' }).fill('HTTP/1\\.(?P<minor>\\d)');
+
+    // Every Apache event carries an HTTP version, so all of them match: the
+    // count and one card per event are the worker's results rendered.
+    await expect(page.getByText(/^5\/5 events matched$/)).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('tabpanel', { name: 'Regex' }).getByText(/^Event #\d+$/)).toHaveCount(5);
+    await expect.poll(() => workerReplies(page, REGEX_WORKER), { message: 'replies from regexMatchWorker' })
+      .toBeGreaterThan(0);
+
+    expect(complaints.csp, 'blocked by Content-Security-Policy').toEqual([]);
+    expect(complaints.all, 'browser errors in the Regex tab').toEqual([]);
+  });
+
+  test('the Timestamp tab highlights the TIME_FORMAT match from its worker', async ({ page, complaints }) => {
+    await openApp(page);
+    await loadExample(page, APACHE);
+
+    await page.getByRole('tab', { name: /^Timestamp$/ }).click();
+
+    // The highlighted span's title carries the parsed instant, which only
+    // exists once the prober has answered for these events.
+    const highlight = page.getByTitle(`TIME_FORMAT: %d/%b/%Y:%H:%M:%S %z\nParsed: ${FIRST_EVENT_ISO}`, {
+      exact: true,
+    });
+    await expect(highlight).toBeVisible({ timeout: 15_000 });
+    await expect(highlight).toHaveText(FIRST_EVENT_TIME);
+    await expect.poll(() => workerReplies(page, TIMESTAMP_WORKER), { message: 'replies from timestampMatchWorker' })
+      .toBeGreaterThan(0);
+
+    expect(complaints.csp, 'blocked by Content-Security-Policy').toEqual([]);
+    expect(complaints.all, 'browser errors in the Timestamp tab').toEqual([]);
+  });
+
+  test('a TIME_FORMAT hover in props.conf previews the sample line', async ({ page, complaints }) => {
+    await openApp(page);
+    await loadExample(page, APACHE);
+
+    // At the default 720px height the example's lint warning squeezes the
+    // props.conf editor to about one line, and line 3 is never rendered.
+    await page.setViewportSize({ width: 1280, height: 1200 });
+    const props = page.locator('.monaco-editor').nth(1);
+    const key = props.getByText('TIME_FORMAT', { exact: true }).first();
+    await expect(key).toBeVisible();
+    const box = await key.boundingBox();
+    if (!box) throw new Error('TIME_FORMAT token not rendered');
+
+    // The preview hangs off the VALUE, not the key. The font is monospaced, so
+    // the key's width gives the character width: `TIME_FORMAT = ` is 14
+    // characters, and six more lands inside `%d/%b/%Y:%H:%M:%S %z`.
+    const charWidth = box.width / 'TIME_FORMAT'.length;
+    const x = box.x + charWidth * 20;
+    const y = box.y + box.height / 2;
+
+    // "Sample: matched <text> → <iso>" is only rendered from the worker's
+    // TIME_PREFIX match; with no worker the hover shows "Now:" alone.
+    const sample = page.getByText(/^Sample:/);
+    await dwellUntilVisible(page, x, y, sample);
+    const hover = page.locator('.monaco-hover').filter({ has: sample });
+    await expect(hover).toContainText(`matched ${FIRST_EVENT_TIME} → ${FIRST_EVENT_ISO}`);
+    await expect.poll(() => workerReplies(page, TIMESTAMP_WORKER), { message: 'replies from timestampMatchWorker' })
+      .toBeGreaterThan(0);
+
+    expect(complaints.csp, 'blocked by Content-Security-Policy').toEqual([]);
+    expect(complaints.all, 'browser errors during the TIME_FORMAT hover').toEqual([]);
   });
 });
