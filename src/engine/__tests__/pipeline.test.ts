@@ -198,7 +198,7 @@ describe('runPipeline — an input-time sourcetype assignment is not an index-ti
   const props = '[source::/a.log]\nsourcetype = foo\n\n[foo]\nSHOULD_LINEMERGE = false\nEXTRACT-k = k=(?<k>\\w+)\n';
   const raw = 'k=one\nk=two\n';
   const rewriteWarning = (diags: ValidationDiagnostic[]) =>
-    diags.some((d) => d.message.includes('rewritten by a DEST_KEY = MetaData:* transform'));
+    diags.some((d) => d.message.includes('rewritten at index-time by a DEST_KEY = MetaData:* transform'));
 
   it('batch mode does not warn about a metadata rewrite', () => {
     const { result, diagnostics } = runPipeline(raw, meta, props, '', { perEventPipeline: false });
@@ -260,7 +260,7 @@ describe('runPipeline — CLONE_SOURCETYPE copies are not reported as MetaData:*
   const props = '[st]\nSHOULD_LINEMERGE = false\nTRANSFORMS-c = copy\n';
   const transforms = '[copy]\nREGEX = .\nCLONE_SOURCETYPE = cloned\n';
   const rewriteWarning = (diags: ValidationDiagnostic[]) =>
-    diags.some((d) => d.message.includes('rewritten by a DEST_KEY = MetaData:* transform'));
+    diags.some((d) => d.message.includes('rewritten at index-time by a DEST_KEY = MetaData:* transform'));
   const cloneWarning = (diags: ValidationDiagnostic[]) =>
     diags.filter((d) => d.message.startsWith('CLONE_SOURCETYPE copied events to sourcetype "cloned"'));
 

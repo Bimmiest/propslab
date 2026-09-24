@@ -319,7 +319,7 @@ export function runPipeline(
       diagnostics.push({
         level: 'warning',
         message:
-          'One or more events had their sourcetype/host/source rewritten by a DEST_KEY = MetaData:* transform at index-time. ' +
+          'One or more events had their sourcetype/host/source rewritten at index-time by a DEST_KEY = MetaData:* transform or an INGEST_EVAL assignment. ' +
           'In batch mode, search-time processors (EXTRACT, REPORT, FIELDALIAS, EVAL) still use the original stanza match and will not apply directives from the new sourcetype. ' +
           'Enable "Re-match stanzas after metadata rewrites" in Settings to simulate this correctly.',
         file: 'transforms.conf',

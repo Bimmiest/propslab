@@ -147,3 +147,61 @@ describe('eval NOT NOT (#312)', () => {
     expect(run('if(!!(1==2), 1, 0)').value).toBe('0');
   });
 });
+
+// ---------------------------------------------------------------------------
+// #332: the in() function did not parse, because the lexer read the word `in`
+// as the IN operator wherever it appeared; and since #312 made LIKE and XOR
+// keywords the same way, a bare field named `like` or `xor` stopped parsing.
+//
+// Doc-derived: the SPL eval function reference lists in(<value>, <list>) as a
+// comparison function that is TRUE when any list item matches the value, next
+// to the `x IN (...)` operator form. That a word operator is an identifier in
+// value position is not stated in the docs; it follows from the operators being
+// binary (a field reference is the only thing a bare word there can be), and is
+// asserted narrowly here. NOT is a prefix operator and stays a keyword.
+// ---------------------------------------------------------------------------
+
+describe('eval in() function (#332)', () => {
+  it('is true when any list item matches the value', () => {
+    expect(run('if(in(a, "x", "y"), 1, 0)', { a: 'y' }).value).toBe('1');
+    expect(run('if(in(a, "x", "y"), 1, 0)', { a: 'z' }).value).toBe('0');
+  });
+
+  it('works as a whole expression and under NOT', () => {
+    expect(run('in(a, "x")', { a: 'x' }).value).toBe('true');
+    expect(run('if(NOT in(a, "x"), 1, 0)', { a: 'x' }).value).toBe('0');
+  });
+
+  it('is case-insensitive as a function name', () => {
+    expect(run('if(IN(a, "x"), 1, 0)', { a: 'x' }).value).toBe('1');
+  });
+
+  it('leaves the IN and NOT IN operator forms working', () => {
+    expect(run('if(a IN ("x", "y"), 1, 0)', { a: 'x' }).value).toBe('1');
+    expect(run('if(a in ("x", "y"), 1, 0)', { a: 'z' }).value).toBe('0');
+    expect(run('if(a NOT IN ("x", "y"), 1, 0)', { a: 'z' }).value).toBe('1');
+    expect(run('if(len(a) IN (1, 2), 1, 0)', { a: 'x' }).value).toBe('1');
+  });
+
+  it('reports a call with no list', () => {
+    expectSyntaxError('in(a)', /in\(\) requires a value and at least one list item/);
+  });
+});
+
+describe('word operators are identifiers in value position (#332)', () => {
+  it('reads bare fields named xor and like', () => {
+    expect(run('xor', { xor: 'v' }).value).toBe('v');
+    expect(run('like . "x"', { like: 'v' }).value).toBe('vx');
+  });
+
+  it('reads fields named after the other binary word operators', () => {
+    expect(run('and . or', { and: 'a', or: 'o' }).value).toBe('ao');
+    expect(run('in', { in: 'v' }).value).toBe('v');
+  });
+
+  it('still reads the same words as operators after a value', () => {
+    expect(run('if(like LIKE "v%", 1, 0)', { like: 'vx' }).value).toBe('1');
+    expect(run('if(xor == "a" XOR xor == "b", 1, 0)', { xor: 'a' }).value).toBe('1');
+    expect(run('if(like(like, "v%"), 1, 0)', { like: 'vx' }).value).toBe('1');
+  });
+});
