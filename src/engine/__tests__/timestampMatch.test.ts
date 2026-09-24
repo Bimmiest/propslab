@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { probeTimestamp, probeTimestamps } from '../timestampMatch';
 import type { TimeConfig } from '../timestampMatch';
 import { extractTimestamps } from '../processors/timestampExtractor';
-import type { ConfDirective, SplunkEvent } from '../types';
+import { runPipeline } from '../pipeline';
+import type { ConfDirective, SplunkEvent, ValidationDiagnostic } from '../types';
 
 function config(overrides: Partial<TimeConfig> = {}): TimeConfig {
   return { timePrefix: null, timeFormat: null, maxLookahead: 128, tz: null, ...overrides };
@@ -209,6 +210,38 @@ describe('probeTimestamp agrees with extractTimestamps (#313)', () => {
     expect(new Date(probe.match!.parsedTimeMs!).toISOString()).toBe('2026-08-03T07:00:00.000Z');
   });
 
+  it('reads an empty TIME_PREFIX as unset, and both sides agree (#328)', () => {
+    // Doc-derived: props.conf.spec gives no meaning to an empty TIME_PREFIX, and
+    // an empty setting is an unset one — as this engine already reads an empty
+    // TIME_FORMAT, TZ or ROUTE_EVENTS_OLDER_THAN. The extractor used to compile
+    // '' and anchor TIME_FORMAT at offset 0, so a mid-line date was missed; the
+    // prober called the same '' "no prefix" and found it.
+    for (const prefix of ['', '   ']) {
+      const { extracted, source, probe } = both('level=info at 2026-08-03 10:00:00', {
+        TIME_PREFIX: prefix,
+        TIME_FORMAT: '%Y-%m-%d %H:%M:%S',
+      });
+      expect(source).toBe('TIME_FORMAT');
+      expect(probe.prefix).toBeNull();
+      expect(String(probe.match!.tsStart)).toBe(extracted.fields.timestartpos);
+      expect(probe.match!.parsedTimeMs).toBe(extracted._time!.getTime());
+    }
+  });
+
+  it('reports no compile error for an empty TIME_PREFIX (#328)', () => {
+    const diagnostics: ValidationDiagnostic[] = [];
+    extractTimestamps(
+      [event('2026-08-03 10:00:00 msg')],
+      [
+        { key: 'TIME_PREFIX', value: '', line: 1, directiveType: 'TIME_PREFIX' },
+        { key: 'TIME_FORMAT', value: '%Y-%m-%d %H:%M:%S', line: 2, directiveType: 'TIME_FORMAT' },
+      ],
+      diagnostics,
+      NOW,
+    );
+    expect(diagnostics.filter((d) => d.directiveKey === 'TIME_PREFIX')).toEqual([]);
+  });
+
   it('agrees with no TIME_PREFIX, scanning the window unanchored', () => {
     const { extracted, source, probe } = both('level=info at 2026-08-03 10:00:00', {
       TIME_FORMAT: '%Y-%m-%d %H:%M:%S',
@@ -216,5 +249,60 @@ describe('probeTimestamp agrees with extractTimestamps (#313)', () => {
     expect(source).toBe('TIME_FORMAT');
     expect(String(probe.match!.tsStart)).toBe(extracted.fields.timestartpos);
     expect(probe.match!.parsedTimeMs).toBe(extracted._time!.getTime());
+  });
+});
+
+/**
+ * The tab probes the text the extractor read, which is not the final `_raw`:
+ * SEDCMD, DEST_KEY = _raw and INGEST_EVAL all run after timestamping. Probing
+ * the final `_raw` reported "TIME_PREFIX did not match" on an event whose
+ * `_time` the pipeline had read from that very prefix (#328). These run the
+ * whole pipeline, so the ordering is the pipeline's and not the test's.
+ */
+describe('probing what the extractor read, after _raw is rewritten (#328)', () => {
+  const NOW = Date.parse('2026-01-16T00:00:00.000Z');
+  const METADATA = { index: 'main', host: 'h', source: 's', sourcetype: 'st' };
+  const PROPS = [
+    '[st]',
+    'SHOULD_LINEMERGE = false',
+    'TIME_PREFIX = host=\\S+\\s',
+    'TIME_FORMAT = %Y-%m-%d %H:%M:%S',
+    'SEDCMD-mask = s/host=\\S+ //',
+  ].join('\n');
+  const TIME_CONFIG = config({
+    timePrefix: 'host=\\S+\\s',
+    timeFormat: '%Y-%m-%d %H:%M:%S',
+    now: NOW,
+  });
+
+  it('records the pre-SEDCMD text on the event, and probing it agrees with _time', () => {
+    const { result } = runPipeline('host=web01 2026-01-15 10:00:00 login', METADATA, PROPS, '', {
+      perEventPipeline: false,
+      now: NOW,
+    });
+    const ev = result.events[0]!;
+    // The repro: SEDCMD removed the prefix after the extractor had used it.
+    expect(ev._raw).toBe('2026-01-15 10:00:00 login');
+    expect(ev.processingTrace.find((s) => s.processor === 'timestampExtractor')?.timeSource).toBe('TIME_FORMAT');
+    expect(ev.timestampText).toBe('host=web01 2026-01-15 10:00:00 login');
+
+    // The final _raw is what the tab used to probe — and it disagreed.
+    expect(probeTimestamp(ev._raw, TIME_CONFIG).prefix).toBeNull();
+
+    const probe = probeTimestamp(ev.timestampText!, TIME_CONFIG);
+    expect(probe.match).not.toBeNull();
+    expect(probe.match!.matchedText).toBe('2026-01-15 10:00:00');
+    expect(probe.match!.parsedTimeMs).toBe(ev._time!.getTime());
+  });
+
+  it('records the text even when the extractor fell back, so a miss is a real miss', () => {
+    const { result } = runPipeline('nohost 2026-01-15 10:00:00 login', METADATA, PROPS, '', {
+      perEventPipeline: false,
+      now: NOW,
+    });
+    const ev = result.events[0]!;
+    expect(ev.timestampText).toBe('nohost 2026-01-15 10:00:00 login');
+    expect(ev.processingTrace.find((s) => s.processor === 'timestampExtractor')?.timeSource).not.toBe('TIME_FORMAT');
+    expect(probeTimestamp(ev.timestampText!, TIME_CONFIG).match).toBeNull();
   });
 });

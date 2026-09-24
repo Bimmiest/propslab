@@ -22,8 +22,9 @@ const DEST_KEY_LABELS: Record<keyof EventMetadata, string> = {
   sourcetype: '_MetaData:Sourcetype',
 };
 
-function getMetadataChanges(event: SplunkEvent, original: EventMetadata) {
+function getMetadataChanges(event: SplunkEvent, original: EventMetadata | undefined) {
   const changes: { field: keyof EventMetadata; from: string; to: string; transform: string | null }[] = [];
+  if (!original) return changes;
   for (const key of Object.keys(DEST_KEY_LABELS) as (keyof EventMetadata)[]) {
     if (event.metadata[key] !== original[key] && event.metadata[key] !== '') {
       // Find the transform that caused this change
@@ -40,8 +41,11 @@ function getMetadataChanges(event: SplunkEvent, original: EventMetadata) {
 
 export function RawTab({ items, currentPage, eventsPerPage, search }: RawTabProps) {
   // The run's own input, as in PreviewPanel: the live fields may have been
-  // edited since, which would badge every event as changed (#316).
-  const originalMetadata = useAppStore((s) => s.processingResult?.inputMetadata ?? s.metadata);
+  // edited since, which would badge every event as changed (#316). Every
+  // result carries it, so the fallback to the live fields this used to have was
+  // dead code (#335). Undefined only with no result at all (the tab is not
+  // mounted then), when there is nothing to compare against.
+  const originalMetadata = useAppStore((s) => s.processingResult?.inputMetadata);
 
   return (
     <div className="p-3 space-y-2">
@@ -66,7 +70,7 @@ export function RawTab({ items, currentPage, eventsPerPage, search }: RawTabProp
   );
 }
 
-function EventRow({ item, globalIdx, originalMetadata, search }: { item: EnrichedEvent; globalIdx: number; originalMetadata: EventMetadata; search: string }) {
+function EventRow({ item, globalIdx, originalMetadata, search }: { item: EnrichedEvent; globalIdx: number; originalMetadata: EventMetadata | undefined; search: string }) {
   const { event, isDropped } = item;
   const [expanded, setExpanded] = useState(false);
 
@@ -178,6 +182,7 @@ function EventRow({ item, globalIdx, originalMetadata, search }: { item: Enriche
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
+          aria-expanded={expanded}
           className="w-full flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-medium border-t border-[var(--color-border)] hover:bg-[var(--color-bg-tertiary)] transition-colors"
           style={{ color: 'var(--color-accent)' }}
         >
@@ -199,6 +204,7 @@ function EventRow({ item, globalIdx, originalMetadata, search }: { item: Enriche
       <button
         type="button"
         onClick={() => setMetaExpanded((v) => !v)}
+        aria-expanded={metaExpanded}
         className="w-full flex items-center gap-2 px-3 py-1 border-t border-[var(--color-border)] bg-[var(--color-bg-tertiary)] hover:bg-[var(--color-bg-secondary)] transition-colors"
       >
         <svg
@@ -215,10 +221,10 @@ function EventRow({ item, globalIdx, originalMetadata, search }: { item: Enriche
         <>
           <div className="px-3 py-1.5 border-t border-[var(--color-border)] bg-[var(--color-bg-tertiary)]">
             <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs font-mono">
-              <MetadataField label="index" value={event.metadata.index} original={originalMetadata.index} />
-              <MetadataField label="host" value={event.metadata.host} original={originalMetadata.host} />
-              <MetadataField label="source" value={event.metadata.source} original={originalMetadata.source} />
-              <MetadataField label="sourcetype" value={event.metadata.sourcetype} original={originalMetadata.sourcetype} />
+              <MetadataField label="index" value={event.metadata.index} original={originalMetadata?.index} />
+              <MetadataField label="host" value={event.metadata.host} original={originalMetadata?.host} />
+              <MetadataField label="source" value={event.metadata.source} original={originalMetadata?.source} />
+              <MetadataField label="sourcetype" value={event.metadata.sourcetype} original={originalMetadata?.sourcetype} />
             </div>
           </div>
 
@@ -319,8 +325,8 @@ function SearchHighlightedRaw({ raw, search }: { raw: string; search: string }) 
   );
 }
 
-function MetadataField({ label, value, original }: { label: string; value: string; original: string }) {
-  const changed = value !== original && value !== '';
+function MetadataField({ label, value, original }: { label: string; value: string; original: string | undefined }) {
+  const changed = original !== undefined && value !== original && value !== '';
   return (
     <span className="text-[var(--color-text-muted)]">
       {label}=<span className={changed ? 'text-[var(--color-warning)] font-semibold' : 'text-[var(--color-text-secondary)]'}>

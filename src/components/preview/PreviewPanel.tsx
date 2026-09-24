@@ -21,6 +21,7 @@ import { ArchitecturePanel } from '../architecture/ArchitecturePanel';
 import { PreviewFilterBar } from './PreviewFilterBar';
 import { EventPagination } from './EventPagination';
 import { usePagination } from '../../hooks/usePagination';
+import { useDebounce } from '../../hooks/useDebounce';
 
 export interface EnrichedEvent {
   event: SplunkEvent;
@@ -38,6 +39,9 @@ function hasMetadataDiff(eventMeta: EventMetadata, originalMeta: EventMetadata):
     (eventMeta.sourcetype !== originalMeta.sourcetype && eventMeta.sourcetype !== '')
   );
 }
+
+/** How long the preview search waits for typing to pause before filtering (#335). */
+const SEARCH_DEBOUNCE_MS = 200;
 
 const PREVIEW_SUB_TABS: { id: PreviewSubTabId; label: string }[] = [
   { id: 'raw', label: 'Raw' },
@@ -237,6 +241,11 @@ function PreviewSubTab() {
   const [subTab, setSubTab] = useState<PreviewSubTabId>('raw');
   const subTabsId = useId();
   const [search, setSearch] = useState('');
+  // The input stays bound to `search`, so typing is immediate; everything the
+  // filter drives reads this settled copy. Each keystroke used to rebuild
+  // `filteredEvents`, which re-scans every event, re-runs the Extractions tab's
+  // JSON scan and re-posts the whole dataset to the Regex tab's matcher (#335).
+  const debouncedSearch = useDebounce(search, SEARCH_DEBOUNCE_MS);
   const [selectedFields, setSelectedFields] = useState<Set<string>>(new Set());
   const [selectedStatus, setSelectedStatus] = useState<Set<string>>(new Set());
   const [selectedChangeState, setSelectedChangeState] = useState<Set<string>>(new Set());
@@ -277,8 +286,8 @@ function PreviewSubTab() {
   // Apply filters
   const filteredEvents = useMemo(() => {
     return enrichedEvents.filter((item) => {
-      if (search) {
-        const lower = search.toLowerCase();
+      if (debouncedSearch) {
+        const lower = debouncedSearch.toLowerCase();
         if (!item.event._raw.toLowerCase().includes(lower)) return false;
       }
       if (selectedFields.size > 0) {
@@ -301,7 +310,7 @@ function PreviewSubTab() {
       }
       return true;
     });
-  }, [enrichedEvents, search, selectedFields, selectedStatus, selectedChangeState]);
+  }, [enrichedEvents, debouncedSearch, selectedFields, selectedStatus, selectedChangeState]);
 
   const { paginatedItems, currentPage, totalPages, eventsPerPage, totalItems, setCurrentPage, setEventsPerPage } =
     usePagination(filteredEvents);
@@ -343,7 +352,7 @@ function PreviewSubTab() {
         id={tabPanelId(subTabsId, subTab)}
         aria-labelledby={tabId(subTabsId, subTab)}
       >
-        {subTab === 'raw' && <RawTab items={paginatedItems} currentPage={currentPage} eventsPerPage={eventsPerPage} search={search} />}
+        {subTab === 'raw' && <RawTab items={paginatedItems} currentPage={currentPage} eventsPerPage={eventsPerPage} search={debouncedSearch} />}
         {subTab === 'highlighted' && <HighlightedTab items={paginatedItems} allEvents={filteredEvents} currentPage={currentPage} eventsPerPage={eventsPerPage} />}
         {subTab === 'diff' && <DiffTab items={paginatedItems} currentPage={currentPage} eventsPerPage={eventsPerPage} />}
         {subTab === 'timestamp' && <TimestampTab items={paginatedItems} currentPage={currentPage} eventsPerPage={eventsPerPage} />}

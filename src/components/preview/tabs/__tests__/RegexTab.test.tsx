@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
+import { render, screen, fireEvent, within, act } from '@testing-library/react';
 import { useAppStore } from '../../../../store/useAppStore';
 import { RegexTab } from '../RegexTab';
 import type { EnrichedEvent } from '../../PreviewPanel';
 import type { SplunkEvent } from '../../../../engine/types';
+import { matchInputs } from '../../../../engine/regexMatch';
+import type { RegexMatchRequest, RegexMatchResponse } from '../../../../engine/regexMatchWorker';
 
 function makeEvent(raw: string): SplunkEvent {
   return {
@@ -174,20 +176,47 @@ describe('RegexTab — reference keyboard access (#320)', () => {
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
   });
 
-  it('inserts a reference pattern from the keyboard', () => {
+  it('inserts a reference pattern from its button', () => {
     render(<RegexTab {...defaultProps} />);
     fireEvent.click(screen.getByRole('button', { name: 'Regex Reference' }));
     const input = screen.getByPlaceholderText(/\\d\+/);
 
+    // A native button: Enter and Space activate it as a click.
     const append = screen.getByRole('button', { name: 'Append \\d' });
-    expect(append).toHaveAttribute('tabIndex', '0');
-    fireEvent.keyDown(append, { key: 'Enter' });
+    expect(append.tagName).toBe('BUTTON');
+    fireEvent.click(append);
     expect(input).toHaveValue('\\d');
-    fireEvent.keyDown(append, { key: ' ' });
+    fireEvent.click(append);
     expect(input).toHaveValue('\\d\\d');
 
-    fireEvent.keyDown(screen.getByRole('button', { name: 'Use pattern (?P<pid>\\d+)' }), { key: 'Enter' });
+    fireEvent.click(screen.getByRole('button', { name: 'Use pattern (?P<pid>\\d+)' }));
     expect(input).toHaveValue('(?P<pid>\\d+)');
+  });
+
+  it('still inserts once when the row itself is clicked', () => {
+    render(<RegexTab {...defaultProps} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Regex Reference' }));
+    const input = screen.getByPlaceholderText(/\\d\+/);
+    fireEvent.click(screen.getByText('Whitespace'));
+    expect(input).toHaveValue('\\s');
+  });
+});
+
+// #335: the reference rows were themselves role="button", which dropped their
+// row and cell semantics, and their aria-label hid the description cell.
+describe('RegexTab — reference table semantics (#335)', () => {
+  it('keeps rows as rows and describes each button by its description cell', () => {
+    render(<RegexTab {...defaultProps} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Regex Reference' }));
+
+    const button = screen.getByRole('button', { name: 'Append \\d' });
+    expect(button).toHaveAccessibleDescription('Digit (0-9)');
+
+    const row = button.closest('tr')!;
+    expect(row).not.toHaveAttribute('role');
+    expect(row).not.toHaveAttribute('aria-label');
+    expect(within(row).getAllByRole('cell')).toHaveLength(3);
+    expect(screen.getAllByRole('row').length).toBeGreaterThan(1);
   });
 });
 
@@ -224,5 +253,82 @@ describe('RegexTab — timers (#322)', () => {
 
     unmount();
     for (const id of labelTimers) expect(clearSpy).toHaveBeenCalledWith(id);
+  });
+});
+
+// #329: pending was keyed on the pattern alone. When `allEvents` changed — a
+// pipeline re-run, a search keystroke — the first commit indexed the previous
+// events' results into the new events by position, then the whole list flipped
+// to "Testing pattern…" until the re-run answered. Driven through a fake worker
+// so the re-run can be held in flight.
+describe('RegexTab — results follow the events they were matched over (#329)', () => {
+  class FakeWorker {
+    static instances: FakeWorker[] = [];
+    onmessage: ((e: MessageEvent<RegexMatchResponse>) => void) | null = null;
+    onerror: ((e: ErrorEvent) => void) | null = null;
+    posted: RegexMatchRequest[] = [];
+    constructor() { FakeWorker.instances.push(this); }
+    postMessage(message: RegexMatchRequest) { this.posted.push(message); }
+    terminate() {}
+    respond() {
+      const req = this.posted[this.posted.length - 1]!;
+      this.onmessage?.({ data: { id: req.id, results: matchInputs(req.pattern, req.inputs) } } as MessageEvent<RegexMatchResponse>);
+    }
+  }
+  const worker = () => FakeWorker.instances[FakeWorker.instances.length - 1]!;
+
+  beforeEach(() => {
+    useAppStore.setState(initialState, true);
+    FakeWorker.instances = [];
+    vi.stubGlobal('Worker', FakeWorker);
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  const cardTitles = (container: HTMLElement) =>
+    within(container).queryAllByText(/^Event #\d+$/).map((el) => el.textContent);
+
+  it('keeps showing the previous results against their own events while the new ones are matched', () => {
+    const { container, rerender } = render(<RegexTab {...defaultProps} />);
+    fireEvent.change(within(container).getByPlaceholderText(/\\d\+/), { target: { value: '\\d+\\.\\d+\\.\\d+\\.\\d+' } });
+    act(() => { vi.advanceTimersByTime(250); });
+    act(() => { worker().respond(); });
+    expect(cardTitles(container)).toEqual(['Event #1', 'Event #2']);
+    expect(within(container).getByText('2/3 events matched')).toBeInTheDocument();
+
+    // A re-run reorders and grows the dataset; the IP events move to #3 and #4.
+    const next = [makeItem('no ip here'), makeItem('still none'), items[1]!, items[0]!];
+    rerender(<RegexTab items={next} allEvents={next} currentPage={1} eventsPerPage={10} />);
+
+    // Not flashed to pending, and not the old results laid over the new events
+    // (which would badge "no ip here" as Event #1, matched).
+    expect(within(container).queryByText('Testing pattern…')).not.toBeInTheDocument();
+    expect(cardTitles(container)).toEqual(['Event #1', 'Event #2']);
+    expect(container.textContent).toContain('192.168.1.1 - GET /foo 200');
+    expect(container.textContent).not.toContain('no ip here');
+    expect(within(container).getByText(/2\/3 events matched/).textContent).toContain('updating');
+
+    act(() => { worker().respond(); });
+    expect(cardTitles(container)).toEqual(['Event #3', 'Event #4']);
+    expect(within(container).getByText('2/4 events matched')).toBeInTheDocument();
+    expect(container.textContent).not.toContain('updating');
+  });
+
+  it('shows the timeout, not stale results, when the re-run is stopped', () => {
+    const { container, rerender } = render(<RegexTab {...defaultProps} />);
+    fireEvent.change(within(container).getByPlaceholderText(/\\d\+/), { target: { value: 'GET' } });
+    act(() => { vi.advanceTimersByTime(250); });
+    act(() => { worker().respond(); });
+    expect(cardTitles(container)).toEqual(['Event #1']);
+
+    const next = [...items, makeItem('GET /again')];
+    rerender(<RegexTab items={next} allEvents={next} currentPage={1} eventsPerPage={10} />);
+    act(() => { vi.advanceTimersByTime(2_000); });
+    expect(within(container).getByText(/too slow to evaluate/)).toBeInTheDocument();
+    expect(cardTitles(container)).toEqual([]);
   });
 });

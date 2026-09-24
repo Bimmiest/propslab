@@ -1,6 +1,6 @@
 import type { languages, editor, Position, CancellationToken } from 'monaco-editor';
 import { getDirectivesForFile, getDirectivesByCategory, type DirectiveInfo } from '../engine/directiveRegistry';
-import { buildTimeFormatPreview, renderTimeFormatPreview } from './timeFormatPreview';
+import { describeTimeFormat, renderTimeFormatPreview } from './timeFormatPreview';
 
 // Monaco CompletionItemKind numeric values (monaco-editor doesn't export the enum at runtime
 // when imported as `type`, so we maintain this local mapping for readability).
@@ -225,7 +225,7 @@ function getValueSuggestions(
     for (const { token, desc } of strftimeTokens) {
       // Same live rendering the hover gives (#90): picking between five opaque
       // token strings is guesswork until you can see what each one produces.
-      const preview = renderTimeFormatPreview(buildTimeFormatPreview(token));
+      const preview = renderTimeFormatPreview(describeTimeFormat(token));
       items.push({
         label: token,
         kind: CIK.Constant,

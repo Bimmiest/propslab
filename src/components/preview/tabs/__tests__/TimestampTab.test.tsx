@@ -69,6 +69,60 @@ describe('TimestampTab', () => {
     expect(shownFormat()).toBe('%Y');
   });
 
+  it('resolves an input-time sourcetype assignment the way the pipeline does (#328)', () => {
+    // [source::s] assigns `assigned`, so the pipeline reads [assigned]'s
+    // TIME_FORMAT; matchStanzas alone stopped at [st]'s.
+    useAppStore.setState({
+      propsConf: [
+        '[source::s]',
+        'sourcetype = assigned',
+        '',
+        '[st]',
+        'TIME_FORMAT = %Y',
+        '',
+        '[assigned]',
+        'TIME_FORMAT = %Y-%m-%d',
+      ].join('\n'),
+    });
+    render(<TimestampTab items={items} currentPage={1} eventsPerPage={10} />);
+    expect(shownFormat()).toBe('%Y-%m-%d');
+  });
+
+  it('reads an empty TIME_PREFIX as not set (#328)', () => {
+    useAppStore.setState({ propsConf: '[st]\nTIME_PREFIX =\nTIME_FORMAT = %Y-%m-%d\n' });
+    render(<TimestampTab items={items} currentPage={1} eventsPerPage={10} />);
+    expect(screen.getByText(/^TIME_PREFIX=/)).toHaveTextContent('not set');
+  });
+
+  it('probes the text the extractor read, not a _raw SEDCMD rewrote after it (#328)', async () => {
+    // The issue's repro: SEDCMD masks the very prefix TIME_PREFIX anchors on,
+    // after the extractor has read the timestamp through it.
+    useAppStore.setState({
+      propsConf: '[st]\nTIME_PREFIX = host=\\S+\\s\nTIME_FORMAT = %Y-%m-%d %H:%M:%S\nSEDCMD-mask = s/host=\\S+ //\n',
+    });
+    const time = new Date('2026-01-15T10:00:00.000Z');
+    const rewritten: EnrichedEvent = {
+      ...item,
+      event: {
+        ...item.event,
+        _raw: '2026-01-15 10:00:00 login',
+        _time: time,
+        timestampText: 'host=web01 2026-01-15 10:00:00 login',
+        processingTrace: [
+          { processor: 'timestampExtractor', phase: 'index-time', description: 'Extracted', timeSource: 'TIME_FORMAT' },
+        ],
+      },
+    };
+    render(<TimestampTab items={[rewritten]} currentPage={1} eventsPerPage={10} />);
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+    expect(screen.queryByText('No match')).not.toBeInTheDocument();
+    expect(screen.getByText('host=web01')).toBeInTheDocument();
+    expect(screen.getByText('2026-01-15 10:00:00')).toBeInTheDocument();
+    expect(screen.getByText('as read before _raw was rewritten')).toBeInTheDocument();
+  });
+
   it('announces whether the strptime reference is expanded (#320)', () => {
     render(<TimestampTab items={items} currentPage={1} eventsPerPage={10} />);
     const toggle = screen.getByRole('button', { name: 'STRPTIME Reference' });

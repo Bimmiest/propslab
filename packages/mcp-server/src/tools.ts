@@ -15,6 +15,7 @@ import type { ConfInput, EventMetadata } from '../../../src/engine/types';
 import type { ExplainResponse, SimulateResponse, ValidateResponse } from './protocol';
 import {
   runInWorker,
+  WorkerBusyError,
   WorkerCancelledError,
   WorkerOutOfMemoryError,
   WorkerTimeoutError,
@@ -29,6 +30,52 @@ import { collectRegexSuspects } from './suspects';
 
 /** Bounds chosen to comfortably fit real apps while keeping requests sane. */
 const MAX_CONF_CHARS = 1_000_000;
+const MAX_CONF_LAYERS = 20;
+
+/**
+ * Total conf text one call may carry: every layer of props.conf and
+ * transforms.conf together (#335). The per-field limits alone admit twenty
+ * layers of a million characters for each file — forty million characters —
+ * which the worker's heap limit was never sized for (runInWorker.ts sizes it
+ * from the sample), and which a timeout then re-parses on the server's own
+ * thread to list regex suspects. Two million is still several times the
+ * largest real props.conf + transforms.conf pair, default and local together.
+ *
+ * Enforced in two places: `confInputSchema` refuses one conf over it during
+ * validation, and `confTooLarge` refuses the two files' sum in the handlers,
+ * since a raw zod shape (what `registerTool` takes) cannot refine across
+ * fields.
+ */
+export const MAX_TOTAL_CONF_CHARS = 2_000_000;
+
+/** Characters of conf text in one input, summed across its layers. */
+export function confChars(conf: ConfInput): number {
+  return typeof conf === 'string' ? conf.length : conf.reduce((n, l) => n + l.text.length, 0);
+}
+
+/**
+ * The structured refusal for conf text over `MAX_TOTAL_CONF_CHARS`, or null
+ * when it fits. Checked before a worker slot is taken, so an oversized call
+ * neither queues nor reaches the timeout path's main-thread re-parse.
+ */
+function confTooLarge(...confs: ConfInput[]): ToolText | null {
+  const total = confs.reduce((n, c) => n + confChars(c), 0);
+  if (total <= MAX_TOTAL_CONF_CHARS) return null;
+  return json(
+    {
+      error: 'input_too_large',
+      conf_chars: total,
+      max_conf_chars: MAX_TOTAL_CONF_CHARS,
+      message:
+        `The conf text totals ${total} characters across all layers and files; ` +
+        `the limit is ${MAX_TOTAL_CONF_CHARS}.`,
+      guidance:
+        'Send only the stanzas that matter for this question — the ones matching the ' +
+        'sourcetype/source/host under test, and the transforms they reference.',
+    },
+    true,
+  );
+}
 
 const confLayerSchema = z.object({
   layer: z
@@ -39,12 +86,16 @@ const confLayerSchema = z.object({
 });
 
 const confInputSchema = z
-  .union([z.string().max(MAX_CONF_CHARS), z.array(confLayerSchema).max(20)])
+  .union([z.string().max(MAX_CONF_CHARS), z.array(confLayerSchema).max(MAX_CONF_LAYERS)])
+  .refine((conf) => confChars(conf) <= MAX_TOTAL_CONF_CHARS, {
+    message: `Conf text across all layers must total at most ${MAX_TOTAL_CONF_CHARS} characters`,
+  })
   .describe(
     'Either the full text of one flat conf file, or an ordered list of layers ' +
       'LOWEST precedence first (e.g. default/ then local/), each {layer, text}. ' +
       'Layered input adds btool-style provenance to the output: which layer won ' +
-      'each attribute, and what it overrode.',
+      'each attribute, and what it overrode. props_conf and transforms_conf ' +
+      `together may total at most ${MAX_TOTAL_CONF_CHARS} characters across all layers.`,
   );
 
 const metadataShape = {
@@ -218,6 +269,22 @@ function workerFailure(
       true,
     );
   }
+  if (err instanceof WorkerBusyError) {
+    // Refused before queuing (#335): the input may be fine, the server is
+    // just full. Said plainly so the agent waits rather than edits its conf.
+    return json(
+      {
+        error: 'busy',
+        max_concurrent: err.maxConcurrent,
+        max_queued: err.maxQueued,
+        message: err.message,
+        guidance:
+          'Nothing is wrong with the input. Wait for in-flight calls to finish and retry; ' +
+          'issue fewer calls at once.',
+      },
+      true,
+    );
+  }
   if (err instanceof WorkerCancelledError) {
     // Over MCP nobody reads this: the SDK drops the response to a cancelled
     // request. It exists for direct callers of the handlers, and so a
@@ -243,6 +310,8 @@ type ExplainArgs = z.infer<z.ZodObject<typeof explainInputShape>>;
 type LookupArgs = z.infer<z.ZodObject<typeof lookupInputShape>>;
 
 export async function handleSimulate(args: SimulateArgs, worker?: string | RunInWorkerOptions): Promise<ToolText> {
+  const tooLarge = confTooLarge(args.props_conf, args.transforms_conf);
+  if (tooLarge) return tooLarge;
   const metadata: EventMetadata = {
     index: args.index,
     host: args.host,
@@ -276,6 +345,8 @@ export async function handleSimulate(args: SimulateArgs, worker?: string | RunIn
 }
 
 export async function handleValidate(args: ValidateArgs, worker?: string | RunInWorkerOptions): Promise<ToolText> {
+  const tooLarge = confTooLarge(args.props_conf, args.transforms_conf);
+  if (tooLarge) return tooLarge;
   try {
     const { diagnostics } = await runInWorker<ValidateResponse>(
       { op: 'validate', propsConf: args.props_conf, transformsConf: args.transforms_conf },
@@ -292,6 +363,10 @@ export async function handleExplainPrecedence(
   args: ExplainArgs,
   worker?: string | RunInWorkerOptions,
 ): Promise<ToolText> {
+  // The schema already refuses one conf over the limit; checked again for
+  // direct callers of the handler, which skip the schema.
+  const tooLarge = confTooLarge(args.conf);
+  if (tooLarge) return tooLarge;
   const metadata: EventMetadata | undefined =
     args.file === 'props.conf' && args.sourcetype
       ? { index: args.index, host: args.host, source: args.source, sourcetype: args.sourcetype }

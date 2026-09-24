@@ -6,7 +6,6 @@ import type { RegexMatchInfo } from '../../../engine/regexMatch';
 import type { EnrichedEvent } from '../PreviewPanel';
 import { fieldColorAt } from './shared/fieldColors';
 import { useApplyDirective } from './shared/useApplyDirective';
-import { pressable } from '../../ui/pressable';
 
 // ─── Regex Reference Data ────────────────────────────────────────────────────
 
@@ -118,6 +117,8 @@ function buildGroupColorMap(groups: string[]): Map<string, string> {
   return map;
 }
 
+const NO_RESULTS: (RegexMatchInfo | null)[] = [];
+
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 interface RegexTabProps {
@@ -193,26 +194,40 @@ export function RegexTab({ items, allEvents, currentPage, eventsPerPage }: Regex
   // props.conf" button that writes the new one — a pattern that matched nothing
   // could be committed under the previous pattern's "3/3 events matched"
   // (#315). Until the results catch up with what is typed, they are pending.
-  const status = match.pattern === requestedPattern ? match.status : 'pending';
-  const results = match.results;
+  //
+  // The results are also tied to the inputs they were matched over. When
+  // `allEvents` changes — a pipeline re-run, a search keystroke — the new
+  // request is posted from an effect, so the results in hand still index the
+  // previous array; indexing them by position into the new events put one
+  // event's match on another's card and the old total beside the new one (#329).
+  // They are rendered against their own inputs instead, and kept on screen
+  // while the re-run is in flight rather than flashing the list to pending.
+  const settled = match.settled !== null && match.settled.pattern === requestedPattern ? match.settled : null;
+  const status = settled ? 'ok' : match.pattern === requestedPattern ? match.status : 'pending';
+  const results = settled?.results ?? NO_RESULTS;
+  // Settled results for the typed pattern standing in while newer inputs are matched.
+  const refreshing = settled !== null && (match.status === 'pending' || settled.inputs !== rawInputs);
 
-  // Aligned to `allEvents`; the rendered page starts at this offset into it.
+  // Aligned to `settled.inputs`; the rendered page starts at this offset into it.
   const pageOffset = (currentPage - 1) * eventsPerPage;
-  const matchInfoFor = (datasetIdx: number): RegexMatchInfo | null =>
-    status === 'ok' ? results[datasetIdx] ?? null : null;
 
-  /** Page events that matched, each carrying its index in the full dataset. */
+  /** Page events that matched, each carrying its raw text and its index in the matched dataset. */
   const matchedPageItems = useMemo(() => {
-    if (!pattern || validationError || status !== 'ok') return [];
-    return items
-      .map((item, i) => ({ item, datasetIdx: pageOffset + i }))
-      .filter(({ datasetIdx }) => results[datasetIdx] != null);
-  }, [pattern, validationError, status, items, results, pageOffset]);
+    if (!pattern || validationError || !settled) return [];
+    // The current page's events when the results describe them; otherwise the
+    // same page of the inputs the results were matched over (#329).
+    const pageRaws = settled.inputs === rawInputs
+      ? items.map((item) => item.event._raw)
+      : settled.inputs.slice(pageOffset, pageOffset + eventsPerPage);
+    return pageRaws
+      .map((raw, i) => ({ raw, datasetIdx: pageOffset + i }))
+      .filter(({ datasetIdx }) => settled.results[datasetIdx] != null);
+  }, [pattern, validationError, settled, rawInputs, items, pageOffset, eventsPerPage]);
 
   const matchStats = useMemo(() => {
-    const matched = status === 'ok' ? results.reduce((n, r) => (r != null ? n + 1 : n), 0) : 0;
-    return { matched, total: allEvents.length };
-  }, [status, results, allEvents]);
+    const matched = results.reduce((n, r) => (r != null ? n + 1 : n), 0);
+    return { matched, total: settled ? settled.inputs.length : allEvents.length };
+  }, [results, settled, allEvents]);
 
   /**
    * Write the directive straight into props.conf (#88), closing the loop from
@@ -266,6 +281,7 @@ export function RegexTab({ items, allEvents, currentPage, eventsPerPage }: Regex
           {pattern && !validationError && status === 'ok' && matchStats.total > 0 && (
             <span className="text-[10px] text-[var(--color-text-muted)] ml-auto">
               {matchStats.matched}/{matchStats.total} events matched
+              {refreshing && ' \u00b7 updating\u2026'}
             </span>
           )}
         </div>
@@ -430,7 +446,7 @@ export function RegexTab({ items, allEvents, currentPage, eventsPerPage }: Regex
       )}
 
       {/* Event cards */}
-      <div className="flex-1 overflow-auto p-3 space-y-3">
+      <div className="flex-1 overflow-auto p-3 space-y-3" aria-busy={refreshing}>
         {validationError ? (
           <div className="flex items-center justify-center py-12 text-[var(--color-error)] text-sm">
             Fix the regex error above to see matches
@@ -457,13 +473,13 @@ export function RegexTab({ items, allEvents, currentPage, eventsPerPage }: Regex
               : 'No events matched'}
           </div>
         ) : (
-          matchedPageItems.map(({ item, datasetIdx }) => (
+          matchedPageItems.map(({ raw, datasetIdx }) => (
             <RegexEventCard
               key={datasetIdx}
-              raw={item.event._raw}
+              raw={raw}
               globalIdx={datasetIdx + 1}
               hasPattern={!!pattern}
-              matchInfo={matchInfoFor(datasetIdx)}
+              matchInfo={results[datasetIdx] ?? null}
               groupColorMap={groupColorMap}
             />
           ))
@@ -492,26 +508,46 @@ function RegexCategoryRows({ category, onInsert, onReplace }: { category: RegexC
         </td>
       </tr>
       {category.directives.map((d) => (
-        <tr
+        <RegexReferenceRow
           key={d.pattern}
-          className="hover:bg-[var(--color-bg-tertiary)] focus-visible:bg-[var(--color-bg-tertiary)] transition-colors cursor-pointer"
-          // A row, not a button, so the three cells stay aligned with the
-          // header; pressable gives it the tab stop and Enter/Space it lacked,
-          // which left the reference mouse-only (#320).
-          {...pressable(() => isReplace ? onReplace(d.pattern) : onInsert(d.pattern))}
-          aria-label={isReplace ? `Use pattern ${d.pattern}` : `Append ${d.pattern}`}
-          title={isReplace ? `Use pattern: ${d.pattern}` : `Append: ${d.pattern}`}
-        >
-          <td className="py-0.5 pr-3">
-            <code className="font-mono px-1 py-0.5 rounded text-[11px] bg-[var(--color-bg-tertiary)] text-[var(--color-text-primary)]">
-              {d.pattern}
-            </code>
-          </td>
-          <td className="py-0.5 pr-3 text-[var(--color-text-secondary)]">{d.description}</td>
-          <td className="py-0.5 text-[var(--color-text-muted)] font-mono text-[11px]">{d.example}</td>
-        </tr>
+          directive={d}
+          isReplace={isReplace}
+          onPick={() => (isReplace ? onReplace(d.pattern) : onInsert(d.pattern))}
+        />
       ))}
     </>
+  );
+}
+
+function RegexReferenceRow({ directive: d, isReplace, onPick }: { directive: RegexDirective; isReplace: boolean; onPick: () => void }) {
+  const descriptionId = useId();
+  return (
+    // Stays a plain row so the table keeps its row and cell semantics. Making
+    // the <tr> itself pressable (#320) gave it role="button", which flattened
+    // its cells, and its aria-label replaced the description a screen reader
+    // would otherwise have read (#335). The keyboard path is the button in the
+    // first cell, described by the description cell; the row's own click is a
+    // larger mouse target for the same action.
+    <tr
+      className="hover:bg-[var(--color-bg-tertiary)] focus-within:bg-[var(--color-bg-tertiary)] transition-colors cursor-pointer"
+      onClick={onPick}
+      title={isReplace ? `Use pattern: ${d.pattern}` : `Append: ${d.pattern}`}
+    >
+      <td className="py-0.5 pr-3">
+        <button
+          type="button"
+          // Stopped here so the row's handler does not run the action twice.
+          onClick={(e) => { e.stopPropagation(); onPick(); }}
+          aria-label={isReplace ? `Use pattern ${d.pattern}` : `Append ${d.pattern}`}
+          aria-describedby={descriptionId}
+          className="font-mono px-1 py-0.5 rounded text-[11px] text-left bg-[var(--color-bg-tertiary)] text-[var(--color-text-primary)] border-none cursor-pointer"
+        >
+          {d.pattern}
+        </button>
+      </td>
+      <td id={descriptionId} className="py-0.5 pr-3 text-[var(--color-text-secondary)]">{d.description}</td>
+      <td className="py-0.5 text-[var(--color-text-muted)] font-mono text-[11px]">{d.example}</td>
+    </tr>
   );
 }
 

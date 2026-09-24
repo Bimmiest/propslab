@@ -4,8 +4,10 @@ import { execFileSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import {
   DEFAULT_MAX_CONCURRENT_WORKERS,
+  DEFAULT_MAX_QUEUED_CALLS,
   runInWorker,
   Semaphore,
+  WorkerBusyError,
   WorkerCancelledError,
   WorkerOutOfMemoryError,
 } from '../runInWorker';
@@ -142,6 +144,60 @@ describe('concurrency cap', () => {
     await Promise.all(waiters);
     expect(order).toEqual([1, 2, 3]);
     expect(limiter.active).toBe(0);
+  });
+
+  // #335: every queued call holds its input in the server's own heap, so the
+  // queue is bounded and a call past the bound is refused rather than parked.
+  it('bounds the default queue at four calls per slot', () => {
+    expect(DEFAULT_MAX_QUEUED_CALLS).toBe(4 * DEFAULT_MAX_CONCURRENT_WORKERS);
+  });
+
+  it('refuses a call once the queue is full, without disturbing the queue', async () => {
+    const limiter = new Semaphore(1, 2);
+    const release = await limiter.acquire();
+    const queued = [limiter.acquire(), limiter.acquire()];
+    expect(limiter.queued).toBe(2);
+    await expect(limiter.acquire()).rejects.toBeInstanceOf(WorkerBusyError);
+    expect(limiter.queued).toBe(2);
+    // The refused call took no place in line: both queued calls still get
+    // their slot, in order, and room reopens as the queue drains.
+    release();
+    (await queued[0])();
+    (await queued[1])();
+    expect(limiter.active).toBe(0);
+    const again = await limiter.acquire();
+    again();
+  });
+
+  it('reports a full queue as a structured busy error, not an engine failure', async () => {
+    const limiter = new Semaphore(1, 0);
+    const release = await limiter.acquire();
+    try {
+      const result = await handleSimulate(
+        {
+          raw: 'x\n',
+          sourcetype: 'st',
+          index: 'main',
+          host: 'localhost',
+          source: '/var/log/x',
+          props_conf: '',
+          transforms_conf: '',
+          per_event_pipeline: false,
+          capture_offsets: false,
+          include_snapshots: false,
+          max_events: 20,
+          timeout_ms: 10_000,
+        },
+        { workerPath: SLEEP_WORKER, limiter },
+      );
+      expect(result.isError).toBe(true);
+      const out = JSON.parse(result.content[0].text);
+      expect(out.error).toBe('busy');
+      expect(out.max_concurrent).toBe(1);
+      expect(out.max_queued).toBe(0);
+    } finally {
+      release();
+    }
   });
 });
 

@@ -109,6 +109,14 @@ describe('#287 — BREAK_ONLY_BEFORE_DATE finds a date anywhere in the lookahead
     expect(raws(raw, [dir('MAX_TIMESTAMP_LOOKAHEAD', '20')])).toHaveLength(1);
   });
 
+  // Doc-derived (props.conf.spec, MAX_TIMESTAMP_LOOKAHEAD: "Set to 0 or -1 to
+  // disable the lookahead limit"), read the way timestampExtractor reads it (#331).
+  it.each(['0', '-1'])('searches the whole line when MAX_TIMESTAMP_LOOKAHEAD = %s', (value) => {
+    const raw = '2026-09-22 10:00:00 a\n' + 'x'.repeat(200) + ' 2026-09-22 late';
+    expect(raws(raw)).toHaveLength(1);
+    expect(raws(raw, [dir('MAX_TIMESTAMP_LOOKAHEAD', value)])).toHaveLength(2);
+  });
+
   it('does not read a month name inside a word as a date', () => {
     expect(raws('2026-09-22 a\nMarket 5 closed\nDecimal 12 places')).toHaveLength(1);
   });
@@ -432,6 +440,36 @@ describe('breakLines — lineNumbers.end measured on the original input (#317)',
     expect(events).toHaveLength(2);
     expect(events[0]!.lineNumbers).toEqual({ start: 1, end: 5 });
     expect(events[1]!.lineNumbers).toEqual({ start: 6, end: 6 });
+  });
+
+  // Doc-derived: LINE_BREAKER discards only its first capture group, so a
+  // breaker that captures `---` leaves the preceding `\n` in the event. That
+  // newline ends the event's last line; it does not start another (#331).
+  const dashes = [dir('LINE_BREAKER', '(---)'), dir('SHOULD_LINEMERGE', 'false')];
+
+  it('ends a segment that keeps its trailing \\n on that line, not the next (#331)', () => {
+    const events = breakLines('a\n---b\n---c', dashes, META);
+    expect(events.map((e) => e._raw)).toEqual(['a\n', 'b\n', 'c']);
+    expect(events.map((e) => e.lineNumbers)).toEqual([
+      { start: 1, end: 1 },
+      { start: 2, end: 2 },
+      { start: 3, end: 3 },
+    ]);
+  });
+
+  it('ends a CRLF-terminated segment on its own line (#331)', () => {
+    const events = breakLines('a\r\n---b\r\n---c', dashes, META);
+    expect(events.map((e) => e.lineNumbers)).toEqual([
+      { start: 1, end: 1 },
+      { start: 2, end: 2 },
+      { start: 3, end: 3 },
+    ]);
+  });
+
+  it('still spans every line of a multi-line segment ending in \\n (#331)', () => {
+    const events = breakLines('a\nb\n---c', dashes, META);
+    expect(events[0]!.lineNumbers).toEqual({ start: 1, end: 2 });
+    expect(events[1]!.lineNumbers).toEqual({ start: 3, end: 3 });
   });
 });
 

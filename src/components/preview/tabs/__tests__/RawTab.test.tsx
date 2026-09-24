@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
+import { useAppStore } from '../../../../store/useAppStore';
 import { RawTab } from '../RawTab';
 import type { EnrichedEvent } from '../../PreviewPanel';
 import type { SplunkEvent } from '../../../../engine/types';
@@ -68,5 +69,56 @@ describe('RawTab — CLONE_SOURCETYPE badge (#87)', () => {
       <RawTab items={[makeItem('2024-01-15 user=alice', 1)]} currentPage={1} eventsPerPage={10} search="" />,
     );
     expect(container.textContent).not.toContain('Cloned from');
+  });
+});
+
+// #335: the disclosure toggles did not say whether they were open.
+describe('RawTab — toggles announce their state (#335)', () => {
+  const scrollHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollHeight');
+  afterEach(() => {
+    if (scrollHeight) Object.defineProperty(HTMLElement.prototype, 'scrollHeight', scrollHeight);
+    else Reflect.deleteProperty(HTMLElement.prototype, 'scrollHeight');
+  });
+
+  it('marks the metadata bar expanded or collapsed', () => {
+    render(<RawTab items={pageOne} currentPage={1} eventsPerPage={1} search="" />);
+    const toggle = screen.getByRole('button', { name: /Metadata/i });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('marks the full-event toggle expanded or collapsed', () => {
+    // jsdom does no layout; report an overflowing body so the toggle renders.
+    Object.defineProperty(HTMLElement.prototype, 'scrollHeight', { configurable: true, get: () => 1000 });
+    render(<RawTab items={pageOne} currentPage={1} eventsPerPage={1} search="" />);
+    const toggle = screen.getByRole('button', { name: /Show full event/ });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(toggle);
+    expect(screen.getByRole('button', { name: /Show less/ })).toHaveAttribute('aria-expanded', 'true');
+  });
+});
+
+// #335: metadata changes are measured against the run's own input only. The
+// fallback to the live fields was unreachable with a result, and with none it
+// badged events against whatever the fields held.
+describe('RawTab — metadata baseline is the run (#335)', () => {
+  const initial = useAppStore.getState();
+  afterEach(() => { useAppStore.setState(initial, true); });
+
+  it('compares against the result\'s input metadata, not the live fields', () => {
+    const meta = { index: 'main', host: 'h', source: 's', sourcetype: 'st' };
+    useAppStore.setState({
+      metadata: { ...meta, host: 'edited-since' },
+      processingResult: { events: [pageOne[0]!.event], originalRaw: 'first event', eventCount: 1, processingSteps: [], inputMetadata: meta },
+    });
+    const { container } = render(<RawTab items={pageOne} currentPage={1} eventsPerPage={1} search="" />);
+    expect(container.textContent).not.toContain('Metadata modified');
+  });
+
+  it('flags nothing when there is no result to compare against', () => {
+    useAppStore.setState({ metadata: { index: 'other', host: 'x', source: 'y', sourcetype: 'z' }, processingResult: null });
+    const { container } = render(<RawTab items={pageOne} currentPage={1} eventsPerPage={1} search="" />);
+    expect(container.textContent).not.toContain('Metadata modified');
   });
 });

@@ -240,8 +240,14 @@ export function runPipeline(
     });
 
     // Annotate events whose metadata was rewritten so the trace shows the re-match.
+    // A CLONE_SOURCETYPE copy differs because it was cloned to a new
+    // sourcetype, not because a DEST_KEY = MetaData:* transform rewrote it, so
+    // its step says that instead (#330).
     events = events.map((event, i) => {
       if (metaKey(event.metadata) === originalMetaKey) return event;
+      const why = event.clonedFrom !== undefined
+        ? `Cloned by CLONE_SOURCETYPE ("${event.clonedFrom}" → "${event.metadata.sourcetype}")`
+        : `Metadata rewritten at index-time (sourcetype → "${event.metadata.sourcetype}")`;
       return {
         ...event,
         processingTrace: [
@@ -249,7 +255,7 @@ export function runPipeline(
           {
             processor: 'StanzaRematch',
             phase: 'search-time' as const,
-            description: `Metadata rewritten at index-time (sourcetype → "${event.metadata.sourcetype}"); stanzas re-matched for search-time using ${eventDirectives[i]?.length ?? 0} directives`,
+            description: `${why}; stanzas re-matched for search-time using ${eventDirectives[i]?.length ?? 0} directives`,
           },
         ],
       };
@@ -284,12 +290,36 @@ export function runPipeline(
   } else {
     // Warn if any event had its routing metadata rewritten at index-time — search-time directives
     // are still resolved from the original metadata in batch mode.
-    const rewroteMetadata = events.some((e) => metaKey(e.metadata) !== originalMetaKey);
+    //
+    // CLONE_SOURCETYPE copies are counted apart: they differ because they were
+    // cloned to a new sourcetype, and blaming a DEST_KEY = MetaData:* transform
+    // for them sent the reader looking for one that did not exist. Their
+    // index-time SEDCMD and TRANSFORMS already come from the new sourcetype
+    // (#282), but search-time here does not, so they get their own warning (#330).
+    const rewroteMetadata = events.some((e) => e.clonedFrom === undefined && metaKey(e.metadata) !== originalMetaKey);
+    const clonedSourcetypes = [
+      ...new Set(
+        events
+          .filter((e) => e.clonedFrom !== undefined && metaKey(e.metadata) !== originalMetaKey)
+          .map((e) => e.metadata.sourcetype),
+      ),
+    ];
+    if (clonedSourcetypes.length > 0) {
+      diagnostics.push({
+        level: 'warning',
+        message:
+          `CLONE_SOURCETYPE copied events to sourcetype ${clonedSourcetypes.map((st) => `"${st}"`).join(', ')}. ` +
+          'Their index-time SEDCMD and TRANSFORMS come from the new sourcetype, but in batch mode search-time processors ' +
+          '(EXTRACT, REPORT, FIELDALIAS, EVAL) still use the original stanza match for the copies. ' +
+          'Enable "Re-match stanzas after metadata rewrites" in Settings to simulate this correctly.',
+        file: 'transforms.conf',
+      });
+    }
     if (rewroteMetadata) {
       diagnostics.push({
         level: 'warning',
         message:
-          'One or more events had their sourcetype/host/source rewritten by a DEST_KEY = MetaData:* transform at index-time. ' +
+          'One or more events had their sourcetype/host/source rewritten at index-time by a DEST_KEY = MetaData:* transform or an INGEST_EVAL assignment. ' +
           'In batch mode, search-time processors (EXTRACT, REPORT, FIELDALIAS, EVAL) still use the original stanza match and will not apply directives from the new sourcetype. ' +
           'Enable "Re-match stanzas after metadata rewrites" in Settings to simulate this correctly.',
         file: 'transforms.conf',
@@ -336,7 +366,11 @@ export function runPipeline(
       originalRaw: truncatedRaw,
       eventCount: events.length,
       processingSteps,
-      inputMetadata: metadata,
+      // The metadata the events were broken with — the caller's, after any
+      // input-time `sourcetype =` assignment. Returning the caller's badged
+      // every event of an assigned sourcetype as "Metadata Modified", the UI
+      // counterpart of #310 (#330).
+      inputMetadata: effectiveMetadata,
     },
     diagnostics,
   };

@@ -44,7 +44,7 @@ export function createHoverProvider(fileType: 'props.conf' | 'transforms.conf'):
     provideHover(
       model: editor.ITextModel,
       position: Position,
-      _token: CancellationToken
+      token: CancellationToken
     ): languages.ProviderResult<languages.Hover> {
       const line = model.getLineContent(position.lineNumber);
 
@@ -74,14 +74,17 @@ export function createHoverProvider(fileType: 'props.conf' | 'transforms.conf'):
         const key = line.substring(0, eqIdx).trim();
         const info = getDirectiveInfo(key, fileType);
         if (info?.valueType === 'strftime') {
+          // Asynchronous because TIME_PREFIX is matched in a terminatable
+          // worker, never here (#334). A cancelled hover resolves to null.
           const value = line.substring(eqIdx + 1);
-          const markdown = renderTimeFormatPreview(
-            buildTimeFormatPreview(value, {
-              sampleLine: firstSampleLine(),
-              timePrefix: timePrefixFor(model, position.lineNumber),
-            }),
-          );
-          if (markdown !== '') {
+          return buildTimeFormatPreview(value, {
+            sampleLine: firstSampleLine(),
+            timePrefix: timePrefixFor(model, position.lineNumber),
+            token,
+          }).then((preview) => {
+            if (preview === null || token.isCancellationRequested) return null;
+            const markdown = renderTimeFormatPreview(preview);
+            if (markdown === '') return null;
             return {
               contents: [{ value: markdown }],
               range: {
@@ -91,7 +94,7 @@ export function createHoverProvider(fileType: 'props.conf' | 'transforms.conf'):
                 endColumn: line.length + 1,
               },
             };
-          }
+          });
         }
       }
 

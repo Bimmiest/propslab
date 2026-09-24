@@ -376,15 +376,21 @@ export function extractTimestamps(
       }
     : undefined;
 
-  const timePrefixRegex = timePrefixDir ? safeRegex(timePrefixDir.value.trim()) : null;
+  // An empty `TIME_PREFIX =` is unset, as an empty value is for every other
+  // setting read here (TIME_FORMAT, TZ) and for the regex options of
+  // INDEXED_EXTRACTIONS. It used to compile to the empty regex, which matches
+  // at offset 0 and so anchored TIME_FORMAT to the start of the event — a date
+  // anywhere else in the lookahead window was missed (#328).
+  const timePrefix = timePrefixDir?.value.trim() || undefined;
+  const timePrefixRegex = timePrefix !== undefined ? safeRegex(timePrefix) : null;
   // A TIME_PREFIX that will not compile used to be dropped, and the scan began
   // at offset 0 — so a broken prefix could still produce a plausible `_time`
   // read from the wrong place, which is the one outcome that hides the mistake.
   // It is treated as a prefix that never matches instead: every event takes the
   // ordinary no-timestamp fallback, and the error says why (#286).
-  const timePrefixBroken = timePrefixDir !== undefined && timePrefixRegex === null;
+  const timePrefixBroken = timePrefix !== undefined && timePrefixRegex === null;
   if (timePrefixBroken && diagnostics) {
-    const pattern = timePrefixDir.value.trim();
+    const pattern = timePrefix;
     const why = validateRegex(pattern) ?? 'rejected as ReDoS-prone';
     diagnostics.push({
       level: 'error',
@@ -497,6 +503,7 @@ export function extractTimestamps(
       ...event,
       _time: granular(step.date),
       fields: noTimestampFields(event.fields),
+      timestampText: event._raw,
       processingTrace: [
         ...event.processingTrace,
         {
@@ -593,6 +600,9 @@ export function extractTimestamps(
       ...event,
       _time: granular(date),
       fields,
+      // What was read, for the Timestamp tab to probe once SEDCMD or an
+      // index-time transform has rewritten `_raw` (#328).
+      timestampText: event._raw,
       processingTrace: [
         ...event.processingTrace,
         {

@@ -230,21 +230,24 @@ class Parser {
       return { kind: 'lit', value: parseFloat(this.consume().value) };
     }
 
-    // `like(...)` in operand position is the like() function, even though the
-    // lexer now reads the word as the LIKE operator (#312). An operator cannot
-    // start an operand, so there is no ambiguity.
-    if (tok.type === 'op' && tok.value === 'LIKE' && this.tokens[this.pos + 1]?.value === '(') {
-      this.consume();
-      return this.parseCall('like');
-    }
-
     // Function call or field reference
     if (tok.type === 'ident') {
       const name = this.consume().value;
 
-      // Check for function call
+      // Check for function call. `like(...)` and `in(...)` arrive here too: the
+      // lexer only reads those words as operators after a value (#332).
       if (this.peek()?.type === 'paren' && this.peek()?.value === '(') {
-        return this.parseCall(name);
+        const call = this.parseCall(name);
+        // in(<value>, <list>...) is the IN operator written as a function; it
+        // becomes the same node so the two cannot disagree about matching.
+        if (name.toLowerCase() === 'in') {
+          const [value, ...list] = call.args;
+          if (value === undefined || list.length === 0) {
+            throw new Error('in() requires a value and at least one list item');
+          }
+          return { kind: 'in', value, list, negate: false };
+        }
+        return call;
       }
 
       // Boolean literals
@@ -259,7 +262,7 @@ class Parser {
   }
 
   /** The argument list of a call to `name`; the next token is its `(`. */
-  private parseCall(name: string): Node {
+  private parseCall(name: string): Extract<Node, { kind: 'call' }> {
     this.expect('paren', '(');
     const args: Node[] = [];
     if (this.peek()?.type !== 'paren' || this.peek()?.value !== ')') {

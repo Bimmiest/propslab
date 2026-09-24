@@ -37,6 +37,40 @@ function splitAssignments(s: string): string[] {
   return parts.filter(Boolean);
 }
 
+/**
+ * The event metadata an INGEST_EVAL assignment rewrites instead of adding an
+ * indexed field. transforms.conf.spec lists these with _raw, _time and queue
+ * as the keys INGEST_EVAL writes into the event itself.
+ */
+const METADATA_KEYS = new Set<string>(['index', 'host', 'source', 'sourcetype']);
+
+function isMetadataKey(name: string): name is 'index' | 'host' | 'source' | 'sourcetype' {
+  return METADATA_KEYS.has(name);
+}
+
+/**
+ * Split one `field=expr` or `field:=expr` assignment at its operator.
+ *
+ * `:=` is INGEST_EVAL's replace-assignment operator (transforms.conf.spec). It
+ * used to be split at the `=` like any other assignment, which left the `:` on
+ * the name and wrote a field literally called `x:` (#327). Both operators are
+ * handled identically after this point: the simulator already replaces an
+ * existing field's value on `=`, which is exactly what the spec says `:=` does.
+ * The spec's multivalue-append reading of `=` on an existing field is not
+ * modelled — see the note in ingestEval.test.ts.
+ */
+function splitAssignment(expr: string): { fieldName: string; evalExpr: string } | null {
+  const eqIdx = expr.indexOf('=');
+  if (eqIdx <= 0) return null;
+  const nameEnd = expr.charAt(eqIdx - 1) === ':' ? eqIdx - 1 : eqIdx;
+  const rawName = expr.substring(0, nameEnd).trim();
+  if (rawName === '') return null;
+  return {
+    fieldName: stripLeadingUnderscoreForField(rawName),
+    evalExpr: expr.substring(eqIdx + 1).trim(),
+  };
+}
+
 export function applyIngestEval(
   events: SplunkEvent[],
   directives: ConfDirective[],
@@ -63,11 +97,9 @@ export function applyIngestEval(
       totalExpressions += expressions.length;
 
       for (const expr of expressions) {
-        const eqIdx = expr.indexOf('=');
-        if (eqIdx <= 0) continue;
-
-        const fieldName = stripLeadingUnderscoreForField(expr.substring(0, eqIdx).trim());
-        const evalExpr = expr.substring(eqIdx + 1).trim();
+        const assignment = splitAssignment(expr);
+        if (!assignment) continue;
+        const { fieldName, evalExpr } = assignment;
 
         try {
           const result = evaluateExpression(evalExpr, currentEvent, (fn) => {
@@ -113,6 +145,21 @@ export function applyIngestEval(
             // it: the shallow event copy still shares the input's object.
             const queue = result === null ? '' : String(Array.isArray(result) ? result[0] : result);
             currentEvent._meta = { ...currentEvent._meta, _queue: queue };
+          } else if (isMetadataKey(fieldName)) {
+            // index/host/source/sourcetype are the event's metadata, not indexed
+            // fields: assigning one rewrites it exactly as DEST_KEY =
+            // MetaData:<Key> does, so the event lands in the new index and — in
+            // per-event mode — is re-matched against the new sourcetype's
+            // stanzas (#327). Writing them into `fields` instead left the
+            // routing untouched while the preview showed a field that claimed
+            // otherwise. The value is bare: unlike FORMAT for DEST_KEY there is
+            // no `host::` prefix to strip. A null result has nothing to route
+            // to, and the event keeps the metadata it has, as it does when a
+            // DEST_KEY FORMAT lacks its prefix.
+            if (result !== null) {
+              const value = String(Array.isArray(result) ? result[0] ?? '' : result);
+              currentEvent.metadata = { ...currentEvent.metadata, [fieldName]: value };
+            }
           } else if (result === null) {
             deleteField(currentEvent.fields, fieldName);
           } else if (Array.isArray(result)) {

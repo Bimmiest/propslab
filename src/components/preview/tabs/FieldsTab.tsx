@@ -464,7 +464,10 @@ function FieldNameCell({
           <button
             className="flex items-center justify-center w-4 h-4 rounded hover:bg-[var(--color-bg-tertiary)] cursor-pointer bg-transparent border-none p-0 transition-colors"
             onClick={() => onToggle(name)}
-            aria-label={collapsed ? 'Expand' : 'Collapse'}
+            // Named for the field it toggles: a column of bare "Expand"
+            // buttons gave a screen reader no way to tell them apart (#335).
+            aria-label={`${collapsed ? 'Expand' : 'Collapse'} ${name}`}
+            aria-expanded={!collapsed}
           >
             <svg
               className="w-3 h-3 transition-transform"
@@ -506,7 +509,8 @@ function FieldNameCell({
         <button
           className="flex items-center justify-center w-4 h-4 rounded hover:bg-[var(--color-bg-tertiary)] cursor-pointer bg-transparent border-none p-0 transition-colors"
           onClick={() => onToggle(name)}
-          aria-label={collapsed ? 'Expand' : 'Collapse'}
+          aria-label={`${collapsed ? 'Expand' : 'Collapse'} ${name}`}
+          aria-expanded={!collapsed}
         >
           <svg
             className="w-3 h-3 transition-transform"

@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { fileURLToPath } from 'node:url';
 import {
+  explainInputShape,
   handleExplainPrecedence,
   handleLookupDirective,
   handleSimulate,
   handleValidate,
+  MAX_TOTAL_CONF_CHARS,
+  validateInputShape,
 } from '../tools';
+import { z } from 'zod';
 import { collectRegexSuspects } from '../suspects';
 
 /**
@@ -231,6 +235,70 @@ describe('lookup_directive', () => {
     expect(out['transforms.conf'].some((d: { key: string }) => d.key === 'REGEX')).toBe(true);
     expect(out).not.toHaveProperty('props.conf');
   });
+});
+
+// #335: the per-field limits admit 20 layers of 1M characters per file; the
+// combined bound keeps a call inside what the worker heap and the timeout
+// path's main-thread re-parse were sized for.
+describe('conf size bound', () => {
+  // Half the limit plus one in each file: each alone is under the combined
+  // limit, together over. (As one flat string it exceeds the 1M per-field
+  // limit, but the handlers are called directly here, past the schema.)
+  const half = 'x'.repeat(MAX_TOTAL_CONF_CHARS / 2 + 1);
+  const layers = (n: number, size: number) =>
+    Array.from({ length: n }, (_, i) => ({ layer: `l${i}`, text: 'x'.repeat(size) }));
+
+  it('refuses props + transforms over the combined limit before running anything', async () => {
+    // A worker path that does not exist: had the handler spawned one, the
+    // error would be an engine failure, not input_too_large.
+    const nowhere = '/nonexistent/worker.js';
+    for (const result of [
+      await handleSimulate(simulateArgs({ props_conf: half, transforms_conf: half }), nowhere),
+      await handleValidate({ props_conf: half, transforms_conf: half, timeout_ms: 1_000 }, nowhere),
+    ]) {
+      expect(result.isError).toBe(true);
+      const out = payload(result);
+      expect(out.error).toBe('input_too_large');
+      expect(out.conf_chars).toBe(2 * half.length);
+      expect(out.max_conf_chars).toBe(MAX_TOTAL_CONF_CHARS);
+    }
+  });
+
+  it('counts every layer, not just each layer against its own limit', async () => {
+    // Three layers of 700k: each under the 1M per-layer limit, 2.1M in all.
+    const result = await handleExplainPrecedence(
+      {
+        file: 'props.conf',
+        conf: layers(3, 700_000),
+        index: 'main',
+        host: 'localhost',
+        source: '/var/log/x',
+        timeout_ms: 1_000,
+      },
+      '/nonexistent/worker.js',
+    );
+    expect(payload(result).error).toBe('input_too_large');
+  });
+
+  it('is enforced by the schema for a single conf', () => {
+    const explain = z.object(explainInputShape);
+    expect(explain.safeParse({ conf: layers(3, 700_000) }).success).toBe(false);
+    expect(explain.safeParse({ conf: layers(2, 700_000) }).success).toBe(true);
+    // The combined sum is a cross-field rule the shape cannot express; the
+    // handler owns it (above). Each field alone still passes the schema.
+    const big = layers(2, 600_000);
+    expect(
+      z.object(validateInputShape).safeParse({ props_conf: big, transforms_conf: big }).success,
+    ).toBe(true);
+  });
+
+  it('accepts input at the limit', async () => {
+    const result = await handleValidate(
+      { props_conf: half.slice(1), transforms_conf: half.slice(1), timeout_ms: 10_000 },
+      WORKER_PATH,
+    );
+    expect(result.isError).toBeUndefined();
+  }, 20_000);
 });
 
 describe('collectRegexSuspects', () => {

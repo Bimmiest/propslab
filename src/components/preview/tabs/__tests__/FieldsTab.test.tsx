@@ -127,10 +127,29 @@ describe('FieldsTab — nested field counts (#316)', () => {
     // Parents collapse on load, so only `a` and `z` show, with a's two
     // immediate children (a.b, a.e) counted — not a.b's own.
     expect(within(container).getByText('(2)')).toBeInTheDocument();
-    fireEvent.click(within(container).getByRole('button', { name: 'Expand' }));
-    const expands = within(container).getAllByRole('button', { name: 'Expand' });
+    fireEvent.click(within(container).getByRole('button', { name: 'Expand a' }));
+    const expands = within(container).getAllByRole('button', { name: /^Expand / });
     expect(expands).toHaveLength(1); // a.b, still collapsed
     expect(within(container).getByText('(2)')).toBeInTheDocument();
+  });
+
+  // #335: every toggle was a bare "Expand"/"Collapse" with no state, so a
+  // screen reader heard a column of identical buttons.
+  it('names each toggle for its field and announces its state', () => {
+    useAppStore.setState(initial, true);
+    const json = makeEvent({ a: '{}', 'a.b': '{}', 'a.b.c': '1' }, []);
+    useAppStore.setState({
+      processingResult: { events: [json], originalRaw: '', eventCount: 1, processingSteps: [], inputMetadata: { index: 'main', host: '', source: '', sourcetype: '' } },
+    });
+    const { container } = render(<FieldsTab />);
+    const top = within(container).getByRole('button', { name: 'Expand a' });
+    expect(top).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(top);
+    expect(within(container).getByRole('button', { name: 'Collapse a' })).toHaveAttribute('aria-expanded', 'true');
+
+    // The nested toggle carries the full dotted name, not just its leaf.
+    const nested = within(container).getByRole('button', { name: 'Expand a.b' });
+    expect(nested).toHaveAttribute('aria-expanded', 'false');
   });
 });
 

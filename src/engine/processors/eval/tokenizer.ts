@@ -154,9 +154,23 @@ export function tokenize(expr: string): Token[] {
         ident += expr.charAt(i); i++;
       }
       const upper = ident.toUpperCase();
-      // LIKE and XOR are SPL eval operators too (#312); the parser still reads
-      // `like(...)` in operand position as the like() function.
-      if (['AND', 'OR', 'NOT', 'IN', 'LIKE', 'XOR'].includes(upper)) {
+      // The word operators are contextual (#332). AND, OR, XOR, IN and LIKE are
+      // all binary, so they can only be operators straight after a complete
+      // value; anywhere a value is expected the word is an ordinary identifier —
+      // a field named `xor` or `like`, or a function call when `(` follows, as
+      // in `in(x, "a", "b")` or `like(x, "a%")`. Lexing them as operators
+      // unconditionally (#312) broke every expression that read such a field.
+      // NOT is the exception: it is a prefix operator, so value position is
+      // exactly where it is legitimate, and after a value it is the NOT of
+      // `x NOT IN (...)`. It stays a keyword everywhere.
+      const valueInProgress =
+        prevTok !== undefined &&
+        (prevTok.type === 'string' ||
+          prevTok.type === 'number' ||
+          prevTok.type === 'ident' ||
+          prevTok.type === 'field_ref' ||
+          (prevTok.type === 'paren' && prevTok.value === ')'));
+      if (upper === 'NOT' || (valueInProgress && ['AND', 'OR', 'IN', 'LIKE', 'XOR'].includes(upper))) {
         tokens.push({ type: 'op', value: upper });
       } else {
         tokens.push({ type: 'ident', value: ident });

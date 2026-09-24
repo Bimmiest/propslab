@@ -198,7 +198,7 @@ describe('runPipeline — an input-time sourcetype assignment is not an index-ti
   const props = '[source::/a.log]\nsourcetype = foo\n\n[foo]\nSHOULD_LINEMERGE = false\nEXTRACT-k = k=(?<k>\\w+)\n';
   const raw = 'k=one\nk=two\n';
   const rewriteWarning = (diags: ValidationDiagnostic[]) =>
-    diags.some((d) => d.message.includes('rewritten by a DEST_KEY = MetaData:* transform'));
+    diags.some((d) => d.message.includes('rewritten at index-time by a DEST_KEY = MetaData:* transform'));
 
   it('batch mode does not warn about a metadata rewrite', () => {
     const { result, diagnostics } = runPipeline(raw, meta, props, '', { perEventPipeline: false });
@@ -222,5 +222,68 @@ describe('runPipeline — an input-time sourcetype assignment is not an index-ti
       false,
       true,
     ]);
+  });
+});
+
+describe('runPipeline — inputMetadata is the metadata the events were broken with (#330)', () => {
+  // Doc-derived: props.conf.spec — `sourcetype = <string>` in a [source::]
+  // stanza assigns the sourcetype at input time, to every event. The UI badges
+  // an event "Metadata Modified" when it differs from inputMetadata, so the
+  // baseline has to carry the assignment or every event is badged.
+  const meta: EventMetadata = { index: 'main', host: 'h', source: '/var/log/app.log', sourcetype: 'orig' };
+  const props = '[source::/var/log/app.log]\nsourcetype = app\n\n[app]\nSHOULD_LINEMERGE = false\n';
+
+  it('reports the assigned sourcetype, matching every unrewritten event', () => {
+    const { result } = runPipeline('a\nb', meta, props, '');
+    expect(result.inputMetadata).toEqual({ ...meta, sourcetype: 'app' });
+    expect(result.events.every((e) => e.metadata.sourcetype === result.inputMetadata.sourcetype)).toBe(true);
+  });
+
+  it('is the caller\'s metadata unchanged when nothing is assigned', () => {
+    const { result } = runPipeline('a', { ...meta, source: '/other.log' }, props, '');
+    expect(result.inputMetadata).toEqual({ ...meta, source: '/other.log' });
+  });
+
+  it('still differs from an event a DEST_KEY = MetaData:Sourcetype transform rewrote', () => {
+    const transforms = '[to_bar]\nREGEX = b\nDEST_KEY = MetaData:Sourcetype\nFORMAT = sourcetype::bar\n';
+    const { result } = runPipeline('a\nb', meta, props + 'TRANSFORMS-x = to_bar\n', transforms);
+    expect(result.events.map((e) => e.metadata.sourcetype === result.inputMetadata.sourcetype)).toEqual([true, false]);
+  });
+});
+
+describe('runPipeline — CLONE_SOURCETYPE copies are not reported as MetaData:* rewrites (#330)', () => {
+  // Doc-derived: transforms.conf.spec — CLONE_SOURCETYPE duplicates the event
+  // under a new sourcetype; no DEST_KEY = MetaData:* transform is involved, so
+  // the batch-mode warning must not name one. The copies still need search-time
+  // re-matching, so batch mode warns about that in its own words.
+  const meta: EventMetadata = { index: 'main', host: 'h', source: '/a.log', sourcetype: 'st' };
+  const props = '[st]\nSHOULD_LINEMERGE = false\nTRANSFORMS-c = copy\n';
+  const transforms = '[copy]\nREGEX = .\nCLONE_SOURCETYPE = cloned\n';
+  const rewriteWarning = (diags: ValidationDiagnostic[]) =>
+    diags.some((d) => d.message.includes('rewritten at index-time by a DEST_KEY = MetaData:* transform'));
+  const cloneWarning = (diags: ValidationDiagnostic[]) =>
+    diags.filter((d) => d.message.startsWith('CLONE_SOURCETYPE copied events to sourcetype "cloned"'));
+
+  it('batch mode warns about the clones once, and not as a DEST_KEY rewrite', () => {
+    const { result, diagnostics } = runPipeline('a\nb', meta, props, transforms, { perEventPipeline: false });
+    expect(result.events.map((e) => e.metadata.sourcetype).sort()).toEqual(['cloned', 'cloned', 'st', 'st']);
+    expect(rewriteWarning(diagnostics)).toBe(false);
+    expect(cloneWarning(diagnostics)).toHaveLength(1);
+  });
+
+  it('batch mode still reports a genuine rewrite alongside clones', () => {
+    const rewriting = props + 'TRANSFORMS-r = to_bar\n';
+    const both = transforms + '[to_bar]\nREGEX = b\nDEST_KEY = MetaData:Sourcetype\nFORMAT = sourcetype::bar\n';
+    const { diagnostics } = runPipeline('a\nb', meta, rewriting, both, { perEventPipeline: false });
+    expect(rewriteWarning(diagnostics)).toBe(true);
+    expect(cloneWarning(diagnostics)).toHaveLength(1);
+  });
+
+  it('per-event mode re-matches the clones and says they were cloned', () => {
+    const { result, diagnostics } = runPipeline('a', meta, props, transforms, { perEventPipeline: true });
+    expect(cloneWarning(diagnostics)).toHaveLength(0);
+    const clone = result.events.find((e) => e.clonedFrom !== undefined);
+    const step = clone?.processingTrace.find((s) => s.processor === 'StanzaRematch');
+    expect(step?.description).toMatch(/^Cloned by CLONE_SOURCETYPE \("st" → "cloned"\)/);
   });
 });

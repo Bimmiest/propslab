@@ -19,20 +19,33 @@ on:
     workflows: [CI]
     types: [completed]
     branches: [main]
-  # Manual redeploys, and the rollback path: dispatch on an older ref (a
-  # release tag, say) to put that bundle back. Not gated on CI, by design — a
+  # Manual redeploys, and the rollback path. Not gated on CI, by design — a
   # rollback is usually needed precisely when main is in a state nobody wants
-  # to wait on — but no longer "any ref" (#314). The dispatch form accepts every
-  # branch and tag in the repo, so an unreviewed branch was one click from
-  # production. The "Refuse commits not on main" step below now requires the
-  # commit to be one main has already contained, which keeps rollback to
-  # anything that was ever reviewed and merged and nothing else.
+  # to wait on — but no longer "any ref" (#314, #333). Dispatch it on `main`
+  # and name the commit to put back in `sha`; leave `sha` empty to redeploy
+  # the newest commit on main with a green push CI, the same one the
+  # workflow_run path would pick. The "Refuse commits not on main" step
+  # requires the commit to be one main has already contained, which keeps
+  # rollback to anything that was ever reviewed and merged and nothing else.
   #
-  # That step is only as strong as the copy of this file that runs, and a
-  # dispatch runs the copy *on the dispatched ref* — a branch can delete the
-  # check along with anything else. What actually binds is the `production`
-  # environment on the job below; see the note there.
+  # Rollback used to mean dispatching on an older ref, a release tag, and the
+  # `production` environment allowed `v*` tags for that. But a dispatch runs
+  # the copy of this file *on the dispatched ref* (#333): anyone who can push
+  # a tag could push `v-anything` on an unmerged commit whose copy of this
+  # file has no ancestor check, dispatch on it, and reach the token. So the
+  # ref a dispatch runs from is now always main — whose copy of this file is
+  # the reviewed one — and the target commit is data, validated by that copy.
+  # The environment admitting `main` and nothing else is what makes that
+  # binding; the ref check in the build job only makes the failure readable.
   workflow_dispatch:
+    inputs:
+      sha:
+        description: >-
+          Commit to deploy (rollback). Must be on main. Leave empty for the
+          newest commit on main whose push CI passed.
+        required: false
+        default: ''
+        type: string
 
 # Deploys are not interchangeable the way CI runs are. Cancelling one mid-upload
 # can leave the site serving a partially published artifact, and the run that
@@ -47,6 +60,12 @@ on:
 # "Resolve commit" step closes both: each run deploys the newest commit on main
 # with a green push CI at the moment it starts, not the commit that happened to
 # trigger it. Whichever run survives, it ships the newest green bundle.
+#
+# The group stays at workflow level rather than moving onto a job when build
+# and deploy split (#333), so it still holds a whole run, build and deploy
+# together. Per-job groups would let a newer run build and resolve while an
+# older run's deploy was still waiting, and the two uploads could again land
+# in either order.
 concurrency:
   group: deploy-static-web-app
   cancel-in-progress: false
@@ -55,7 +74,15 @@ jobs:
   # Lint / type-check / test live in ci.yml; this workflow builds and deploys
   # only, so checks aren't run twice. It runs after CI, never beside it — see
   # the `on:` block above.
-  build_and_deploy_job:
+  #
+  # Build and deploy are separate jobs (#333). The job that holds the
+  # deployment token used to check out the target commit and run its
+  # `npm ci` and `npm run build` — the repo's own code and every dependency's,
+  # in the same job as the secret. Now everything that executes repo code
+  # happens in `build`, which has no environment and so cannot see the token,
+  # and `deploy` only downloads the built `dist/` and hands it to the Azure
+  # action. It never checks out the repository at all.
+  build:
     # `conclusion` is the whole run's verdict, so every CI job — app, MCP
     # server and audit — has to be green. `event` is the event CI itself ran
     # on; only a push to main is a candidate for production.
@@ -65,32 +92,31 @@ jobs:
        github.event.workflow_run.event == 'push')
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    name: Build and Deploy Job
-    # The job that holds the deployment token runs in an environment (#314), so
-    # the rules around *who and what may deploy* live in repo settings, where
-    # no branch can edit them — unlike the checks in this file, which a
-    # dispatched branch supplies itself. Naming the environment does nothing on
-    # its own; it needs two settings changes by a repo admin:
-    #
-    #   - Move AZURE_STATIC_WEB_APPS_API_TOKEN from repository secrets to the
-    #     `production` environment's secrets, and delete the repository-level
-    #     copy. Until then any workflow on any branch can still read it.
-    #   - Under the environment's deployment branches and tags, allow `main`
-    #     plus the release tags (`v*`) and nothing else. `workflow_run` runs
-    #     report the default branch as their ref, so the gated path is
-    #     unaffected; a dispatch from any other branch is refused before a step
-    #     runs. Required reviewers are optional on top.
-    #
-    # With the secret scoped this way, a branch that rewrites this file can
-    # still start a run, but not one that can see the token.
-    environment: production
-    # No `id-token: write`. This deploys with the Static Web App's deployment
-    # token, not with a GitHub federated identity — see the Build And Deploy step.
+    name: Build
     # `actions: read` is for the Resolve commit step, which lists CI runs.
     permissions:
       contents: read
       actions: read
+    outputs:
+      sha: ${{ steps.verify.outputs.sha }}
     steps:
+      # A dispatch runs this file as it stands on the dispatched ref, so a
+      # branch or tag can supply a copy without this step — this is not the
+      # control (#333). The `production` environment's main-only deployment
+      # branch rule is, and it refuses such a run's deploy job regardless.
+      # This makes the ordinary mistake, dispatching from the wrong ref in the
+      # form, fail in the first second with a message that says what to do
+      # instead of at the environment gate after a full build.
+      - name: Require dispatch from main
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          REF: ${{ github.ref }}
+        run: |
+          if [ "$REF" != "refs/heads/main" ]; then
+            echo "::error::Dispatch this workflow on main, not $REF. To roll back, dispatch on main and put the commit in the 'sha' input; it must be a commit main has contained."
+            exit 1
+          fi
+
       # Under workflow_run, `github.sha` is the default branch's head when this
       # run was queued — not the commit CI graded, and possibly one CI has not
       # finished with. So the commit is resolved explicitly: the newest push to
@@ -98,20 +124,25 @@ jobs:
       # not simply `workflow_run.head_sha`). That is at worst the triggering
       # commit itself, which just passed. A failed lookup fails the job rather
       # than falling back: deploying a guess is worse than not deploying.
-      # A manual dispatch deploys the ref it was dispatched on, as before —
-      # which is also the way to roll back: re-running an old commit's CI
-      # re-deploys the newest green commit, not that one. The next two steps
-      # hold a dispatched ref to commits main has contained (#314).
+      #
+      # A dispatch with `sha` set deploys that commit — the rollback path. A
+      # dispatch without it resolves exactly as workflow_run does. The input
+      # reaches the shell through `env`, never interpolated into the script,
+      # and must look like a commit hash before anything else touches it; the
+      # next steps hold it to commits main has contained (#314, #333).
       - name: Resolve commit
         id: target
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          EVENT_NAME: ${{ github.event_name }}
-          DISPATCH_SHA: ${{ github.sha }}
+          INPUT_SHA: ${{ inputs.sha }}
         run: |
-          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
-            sha="$DISPATCH_SHA"
+          if [ -n "$INPUT_SHA" ]; then
+            if ! printf '%s' "$INPUT_SHA" | grep -Eq '^[0-9a-fA-F]{7,40}$'; then
+              echo "::error::The 'sha' input must be a commit hash (7-40 hex characters), got: $INPUT_SHA"
+              exit 1
+            fi
+            sha="$INPUT_SHA"
           else
             sha=$(gh run list --workflow ci.yml --branch main --event push \
               --status success --limit 1 --json headSha --jq '.[0].headSha')
@@ -120,53 +151,74 @@ jobs:
             echo "::error::Could not resolve a commit to deploy"
             exit 1
           fi
-          echo "Deploying $sha"
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
 
+      # main, not the target: the ancestry check below needs main's history,
+      # and the target is checked out from it only once it has passed.
+      # persist-credentials: false (#333) — nothing after this step talks to
+      # the remote, and the build runs dependency code that has no business
+      # finding a token in .git/config.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          ref: ${{ steps.target.outputs.sha }}
+          ref: main
           lfs: false
+          persist-credentials: false
           # Full history, so the ancestry check below can connect the target
           # commit to main. A shallow clone has neither side's parents and
-          # `merge-base` could only ever answer "no".
+          # `merge-base` could only ever answer "no". With fetch-depth 0,
+          # checkout also fetches every branch into refs/remotes/origin/*, so
+          # origin/main is present without a second, credentialed fetch.
           fetch-depth: 0
 
       # Rollback stays possible, but only to a commit that was once main: a
       # merged, reviewed state, not whatever a branch or tag happens to point
-      # at (#314). It runs before `npm ci`, so a refused ref never gets as far
-      # as executing its own build config, let alone reaching the token.
+      # at (#314). It runs before `npm ci`, so a refused commit never gets as
+      # far as executing its own build config, let alone reaching the deploy.
+      # It lives in the build job rather than beside the token (#333): it
+      # needs git history, and `deploy` deliberately has none.
       #
       # Checked for the workflow_run path too, where it should never fire: the
       # resolved commit came from a push to main. The one case it catches there
       # is a force-push that rewrote main after CI passed — and a commit main no
       # longer contains should not ship either.
+      #
+      # `rev-parse` also turns an abbreviated `sha` input into the full hash,
+      # which is what the deploy job logs and what the output carries.
       - name: Refuse commits not on main
+        id: verify
         env:
           SHA: ${{ steps.target.outputs.sha }}
         run: |
-          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
-          if ! git merge-base --is-ancestor "$SHA" origin/main; then
-            echo "::error::Refusing to deploy $SHA: it is not an ancestor of origin/main. Deploy a commit that has been merged to main (a release tag, or main itself)."
+          if ! full=$(git rev-parse --verify --quiet "${SHA}^{commit}"); then
+            echo "::error::Refusing to deploy $SHA: no such commit in this repository's history."
             exit 1
           fi
+          if ! git merge-base --is-ancestor "$full" origin/main; then
+            echo "::error::Refusing to deploy $full: it is not an ancestor of origin/main. Deploy a commit that has been merged to main."
+            exit 1
+          fi
+          git checkout --quiet --detach "$full"
+          echo "Deploying $full"
+          echo "sha=$full" >> "$GITHUB_OUTPUT"
 
       # The build used to happen inside the Static Web Apps container, where
       # Oryx picked its own Node. That left the one artifact users actually load
       # as the only thing outside the .nvmrc / engines / CI alignment — CI could
       # be green on the pinned version while the deployed bundle came off
       # whatever Oryx chose. Building here and uploading with skip_app_build
-      # means what ships came off the toolchain that passed CI.
+      # means what ships came off the toolchain that passed CI. `.nvmrc` is
+      # read from the target commit, checked out by the step above.
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version-file: .nvmrc
           cache: npm
 
       - name: Install dependencies
-        # --ignore-scripts (#314): this job runs in the environment that holds
-        # the deployment token, and install scripts are the one place a
+        # --ignore-scripts (#314): install scripts are the one place a
         # compromised or typo-squatted dependency runs code without anyone
-        # importing it. The app does not need them — the only package in the
+        # importing it. Since #333 this job no longer holds the deployment
+        # token, but it does produce the bundle that ships, so the flag stays.
+        # The app does not need them — the only package in the
         # lockfile with an install script is fsevents (macOS-only, optional,
         # never installed here), and vite 8's native pieces (rolldown,
         # lightningcss) arrive as prebuilt platform packages through
@@ -179,6 +231,64 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      # dist/ holds no dotfiles (staticwebapp.config.json comes from public/),
+      # so upload-artifact's default of skipping hidden files loses nothing.
+      # One day is plenty: the deploy job downloads it minutes from now, and a
+      # rollback rebuilds from the commit rather than reusing an old artifact.
+      - name: Upload build
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+          retention-days: 1
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    name: Deploy
+    # The job that holds the deployment token runs in an environment (#314), so
+    # the rules around *who and what may deploy* live in repo settings, where
+    # no branch can edit them — unlike the checks in this file, which a
+    # dispatched ref supplies itself. Naming the environment does nothing on
+    # its own; it needs two settings changes by a repo admin:
+    #
+    #   - Move AZURE_STATIC_WEB_APPS_API_TOKEN from repository secrets to the
+    #     `production` environment's secrets, and delete the repository-level
+    #     copy. Until then any workflow on any branch can still read it.
+    #   - Under the environment's deployment branches and tags, choose
+    #     "Selected branches and tags" and allow the branch `main` and nothing
+    #     else — no tag patterns (#333). `workflow_run` runs report the
+    #     default branch as their ref, so the gated path is unaffected, and a
+    #     rollback is a dispatch on main with the `sha` input. A dispatch from
+    #     any other branch or tag is refused before this job's first step.
+    #     Required reviewers are optional on top.
+    #
+    # With the secret scoped this way, a ref that rewrites this file can still
+    # start a run, but not one that can see the token.
+    environment: production
+    # No `id-token: write`. This deploys with the Static Web App's deployment
+    # token, not with a GitHub federated identity — see the Build And Deploy
+    # step. Nor anything else: downloading an artifact from the same run uses
+    # the runner's own artifact credentials, not GITHUB_TOKEN, and this job
+    # checks nothing out.
+    permissions: {}
+    steps:
+      - name: Report commit
+        env:
+          SHA: ${{ needs.build.outputs.sha }}
+        run: echo "Deploying $SHA"
+
+      # Into dist/ in an otherwise empty workspace: no checkout, so nothing
+      # from the repository runs here — only the bundle the build job made,
+      # and the pinned Azure action.
+      - name: Download build
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: dist
+          path: dist
 
       - name: Build And Deploy
         id: builddeploy
@@ -210,7 +320,8 @@ jobs:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
           action: "upload"
           # With skip_app_build, app_location is the built output to upload
-          # rather than the source to build, and output_location goes unused.
+          # rather than the source to build — here the artifact downloaded
+          # above — and output_location goes unused.
           app_location: "dist"
           api_location: ""
           output_location: ""

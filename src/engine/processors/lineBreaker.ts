@@ -10,6 +10,7 @@ import type { ConfDirective, EventMetadata, SplunkEvent, ValidationDiagnostic } 
 import { safeRegex, translatePcreToJs } from '../../utils/splunkRegex';
 import { atDirective } from '../parser/provenance';
 import { effectiveDirective, parseSplunkBool } from '../utils/directiveValues';
+import { resolveLookahead } from './timestampExtractor';
 
 const XML_EXTRACTIONS = new Set(['xml', 'xmlkv', 'xmlkv-winevt']);
 
@@ -88,9 +89,6 @@ const DATE_AT_START_PATTERN = safeRegex(
     '|1\\d{9}(?:\\d{3})?(?:\\.\\d+)?(?![\\d.])' +
     ')',
 );
-
-/** props.conf.spec default for MAX_TIMESTAMP_LOOKAHEAD, as timestampExtractor reads it. */
-const DEFAULT_TIMESTAMP_LOOKAHEAD = 128;
 
 /** Whether a line carries a date BREAK_ONLY_BEFORE_DATE would break before. */
 function lineHasDate(line: string, lookahead: number): boolean {
@@ -392,12 +390,11 @@ export function breakLines(
     // Splunk default: BREAK_ONLY_BEFORE_DATE=true when SHOULD_LINEMERGE=true.
     // Only disabled when explicitly set to a false spelling.
     const breakOnlyBeforeDate = parseSplunkBool(breakOnlyBeforeDateStr, true);
-    // Read exactly as timestampExtractor reads it, so the window a date is
-    // looked for in here is the one the extractor will then parse it from.
-    const lookaheadStr = getDirective(directives, 'MAX_TIMESTAMP_LOOKAHEAD');
-    const parsedLookahead = lookaheadStr !== undefined ? parseInt(lookaheadStr.trim(), 10) : DEFAULT_TIMESTAMP_LOOKAHEAD;
-    const timestampLookahead =
-      Number.isFinite(parsedLookahead) && parsedLookahead > 0 ? parsedLookahead : DEFAULT_TIMESTAMP_LOOKAHEAD;
+    // Read by timestampExtractor's own resolver, so the window a date is
+    // looked for in here is the one the extractor will then parse it from —
+    // including 0 and -1 meaning "no limit", which a local copy of the parse
+    // read as the 128-character default (#331).
+    const timestampLookahead = resolveLookahead(getDirective(directives, 'MAX_TIMESTAMP_LOOKAHEAD'));
     const mustBreakAfterRegex = mustBreakAfterStr
       ? safeRegex(mustBreakAfterStr)
       : null;
@@ -532,7 +529,11 @@ export function breakLines(
   const events: SplunkEvent[] = mergedSegments.map((seg) => {
     const lineNums = {
       start: lineAtOffset(newlines, seg.offset),
-      end: lineAtOffset(newlines, seg.end),
+      // `seg.end` is exclusive: the line of its LAST character, not of the one
+      // after it. A segment ending in `\n` (a custom LINE_BREAKER whose capture
+      // group leaves the newline in the event) otherwise reported its end on
+      // the following line (#331).
+      end: lineAtOffset(newlines, Math.max(seg.offset, seg.end - 1)),
     };
     const event: SplunkEvent = {
       _raw: seg.text,

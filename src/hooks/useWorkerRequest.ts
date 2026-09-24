@@ -16,14 +16,20 @@
 // ---------------------------------------------------------------------------
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { MAX_WORKER_LOAD_FAILURES, isWorkerLoadFailure } from './workerLifecycle';
 
-// How many workers in a row may die without ever answering before the hook
-// stops constructing them and runs everything inline (#309). `new Worker` does
-// not throw when its script cannot be fetched (a 404 after a redeploy, a CSP
+// After MAX_WORKER_LOAD_FAILURES workers in a row fail to load, the hook stops
+// constructing them and runs everything inline (#309). `new Worker` does not
+// throw when its script cannot be fetched (a 404 after a redeploy, a CSP
 // block); that failure arrives as an `error` event, which used to restart the
-// worker unconditionally — forever, for a chunk that is gone. Matches the cap in
-// `useProcessingPipeline`.
-const MAX_WORKER_START_FAILURES = 2;
+// worker unconditionally — forever, for a chunk that is gone. The cap is shared
+// with `useProcessingPipeline`.
+//
+// Crashes do not count toward it (#326). #309 counted every death of a worker
+// that had not yet answered, and a replacement has not answered by definition,
+// so two crashing requests in a row — a pattern that blows the stack, say —
+// switched the hook to inline for good: every later pattern ran on the tab's
+// own thread, which is exactly the ReDoS exposure the worker exists to prevent.
 
 export type WorkerRequestStatus = 'idle' | 'pending' | 'ok' | 'timeout' | 'invalid';
 
@@ -102,8 +108,12 @@ export function useWorkerRequest<TReq extends object, TRes, TData>(
       }
     }
 
-    // Consecutive deaths of workers that never answered; reset by any message.
-    let startFailures = 0;
+    // Consecutive workers that failed to start; reset by any message. Crashes
+    // while running a request do not count (#326) — see onerror.
+    let loadFailures = 0;
+    // Workers that have been handed a request. One that throws before answering
+    // without ever having been given one died of its own script.
+    const givenWork = new WeakSet<Worker>();
     // The request in flight, kept so a worker that failed to load can have it
     // resent or run inline rather than dropped (#309). Null when nothing is in
     // flight, which is also how onerror knows there is nothing to report.
@@ -116,7 +126,7 @@ export function useWorkerRequest<TReq extends object, TRes, TData>(
       clearTimer();
       workerRef.current?.terminate();
       workerRef.current = null;
-      if (startFailures < MAX_WORKER_START_FAILURES) init();
+      if (loadFailures < MAX_WORKER_LOAD_FAILURES) init();
     }
 
     function fail() {
@@ -135,6 +145,7 @@ export function useWorkerRequest<TReq extends object, TRes, TData>(
 
     function post(worker: Worker, request: TReq, id: number) {
       inFlight = { request, id };
+      givenWork.add(worker);
       setStatus('pending');
       timeoutRef.current = setTimeout(() => {
         timeoutRef.current = null;
@@ -163,7 +174,7 @@ export function useWorkerRequest<TReq extends object, TRes, TData>(
       worker.onmessage = (e: MessageEvent<TRes & { id: number }>) => {
         // Any message, stale or not, proves the script loaded and ran.
         answered = true;
-        startFailures = 0;
+        loadFailures = 0;
         if (e.data.id !== idRef.current) return; // stale response
         clearTimer();
         inFlight = null;
@@ -178,8 +189,14 @@ export function useWorkerRequest<TReq extends object, TRes, TData>(
         // script cannot be fetched or parsed; an exception from code that ran is
         // an `ErrorEvent` with one. No code saw the request in a load failure, so
         // it is resent (or run inline past the cap) rather than reported (#309).
-        const loadFailure = !answered && !(e as Partial<ErrorEvent>).message;
-        if (!answered) startFailures += 1;
+        const loadFailure = isWorkerLoadFailure(e, answered);
+        // Only failures to start count toward the cap (#309, #326): a load
+        // failure, or a worker that threw before answering without ever having
+        // been handed a request — a script that throws while evaluating, which
+        // would otherwise be rebuilt in a loop. A crash while running a request
+        // is the request's doing; the script evidently loaded, and a fresh
+        // worker is still where the next request belongs.
+        if (loadFailure || (!answered && !givenWork.has(worker))) loadFailures += 1;
         const pending = inFlight;
         restart();
 
@@ -190,7 +207,8 @@ export function useWorkerRequest<TReq extends object, TRes, TData>(
 
         if (!loadFailure) {
           // The worker died mid-run (e.g. a runaway pattern). Report it the way
-          // a timeout is reported, so the caller recovers identically.
+          // a timeout is reported, so the caller recovers identically. Never
+          // inline: this request is known to take a thread down (#326).
           inFlight = null;
           setStatus('timeout');
           setData(configRef.current.empty);

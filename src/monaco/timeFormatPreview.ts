@@ -10,21 +10,21 @@
 // ---------------------------------------------------------------------------
 
 import { formatStrftime, strftimeToRegex, parseTimestamp, unsupportedSpecifiers } from '../utils/strftime';
-import { safeRegex, validateRegex } from '../utils/splunkRegex';
+import { validateRegex } from '../utils/splunkRegex';
 import { escapeMarkdown, inlineCode } from './markdown';
+import { matchTimePrefix, TIME_PREFIX_TIMEOUT_MS } from './timePrefixMatcher';
+import type { CancellationLike, PrefixMatcher } from './timePrefixMatcher';
 
 /**
  * The most of the sample line the preview will search (#297).
  *
- * The hover runs on the main thread, with none of the worker watchdogs that
- * guard the pipeline, so the TIME_PREFIX match is the one user regex in the
- * editor that could freeze the tab. `safeRegex` refuses the structurally
- * catastrophic shapes, but it is a heuristic — `(a|aa)+` slips past it — and
- * the other half of the defence is input length: backtracking cost grows with
- * the text, and 4 KB keeps even a polynomial blow-up to a stutter. The engine
- * cannot share this bound (it searches the whole event, off-thread), and a
- * prefix that only matches beyond 4 KB into the first line is not a case this
- * preview needs to get right.
+ * TIME_PREFIX itself runs in a terminatable worker (#334) — `safeRegex` is a
+ * heuristic and `(a|aa)+b` slips past it, and no input cap bounds an
+ * exponential pattern — so this cap is no longer the ReDoS defence. It still
+ * bounds what is copied to the worker and what the generated TIME_FORMAT regex
+ * scans on the main thread. The engine cannot share this bound (it searches
+ * the whole event), and a prefix that only matches beyond 4 KB into the first
+ * line is not a case this preview needs to get right.
  */
 export const MAX_PREVIEW_SAMPLE_LENGTH = 4096;
 
@@ -38,35 +38,67 @@ export interface TimeFormatPreview {
     | { status: 'unparseable'; text: string }
     /** TIME_PREFIX was not run: it is invalid, or refused as ReDoS-prone. */
     | { status: 'prefix-refused'; reason: string }
+    /** TIME_PREFIX ran past the watchdog and its worker was terminated (#334). */
+    | { status: 'prefix-timed-out'; timeoutMs: number }
+    /** TIME_PREFIX ran and threw. */
+    | { status: 'prefix-error'; reason: string }
     | null;
   unsupported: { specifier: string; index: number }[];
 }
+
+export interface TimeFormatPreviewOptions {
+  now?: Date;
+  sampleLine?: string;
+  timePrefix?: string;
+  /** Honoured while TIME_PREFIX is in the worker: a cancelled preview resolves to null. */
+  token?: CancellationLike;
+  /** Where TIME_PREFIX is matched. Defaults to the shared worker; tests inject one. */
+  matchPrefix?: PrefixMatcher;
+}
+
+/** `attemptSample` gave up: the caller cancelled, or there was no worker to ask. */
+const CANCELLED = Symbol('cancelled');
+const OMITTED = Symbol('omitted');
 
 /**
  * Try `format` against `sampleLine`, honouring TIME_PREFIX the way
  * `timestampExtractor` does — the preview is worthless if it answers a
  * different question from the engine.
  */
-function attemptSample(
+async function attemptSample(
   format: string,
   fullSampleLine: string,
   timePrefix: string | undefined,
-): TimeFormatPreview['sample'] {
+  matchPrefix: PrefixMatcher,
+  token: CancellationLike | undefined,
+): Promise<TimeFormatPreview['sample'] | typeof CANCELLED | typeof OMITTED> {
   const sampleLine = fullSampleLine.slice(0, MAX_PREVIEW_SAMPLE_LENGTH);
   let searchStart = 0;
   if (timePrefix) {
-    // Compiled exactly as the engine compiles it — PCRE translated, ReDoS
-    // guard applied — so `(?i)ts=` or `(?P<p>…)` previews the way it
-    // extracts, and a pattern the engine would refuse is never run here.
-    // `validateRegex` applies the same translation and guard, and says why.
+    // Checked here exactly as the engine compiles it — PCRE translated, ReDoS
+    // guard applied — so a pattern the engine would refuse is reported with
+    // its reason and never sent anywhere. Compiling does not execute it; the
+    // match itself happens only in the worker (#334), with the same
+    // `safeRegex`, so `(?i)ts=` or `(?P<p>…)` previews the way it extracts.
     const refusal = validateRegex(timePrefix);
-    const prefixRegex = refusal === null ? safeRegex(timePrefix) : null;
-    if (!prefixRegex) {
-      return { status: 'prefix-refused', reason: refusal ?? 'the pattern could not be compiled' };
+    if (refusal !== null) return { status: 'prefix-refused', reason: refusal };
+
+    const outcome = await matchPrefix(timePrefix, sampleLine, token);
+    switch (outcome.status) {
+      case 'cancelled':
+        return CANCELLED;
+      case 'unavailable':
+        return OMITTED;
+      case 'timed-out':
+        return { status: 'prefix-timed-out', timeoutMs: TIME_PREFIX_TIMEOUT_MS };
+      case 'error':
+        return { status: 'prefix-error', reason: outcome.message };
+      case 'no-match':
+        return { status: 'no-match', searchedFrom: 0 };
+      case 'matched':
+        searchStart = outcome.end;
+        break;
     }
-    const prefixMatch = prefixRegex.exec(sampleLine);
-    if (!prefixMatch) return { status: 'no-match', searchedFrom: 0 };
-    searchStart = prefixMatch.index + prefixMatch[0].length;
   }
 
   const region = sampleLine.slice(searchStart);
@@ -92,10 +124,12 @@ function attemptSample(
     : { status: 'unparseable', text: match[0] };
 }
 
-export function buildTimeFormatPreview(
-  format: string,
-  options: { now?: Date; sampleLine?: string; timePrefix?: string } = {},
-): TimeFormatPreview {
+/**
+ * The parts of the preview that need no sample line — what the pattern renders
+ * as, and what it contains that the simulator will not honour. Synchronous,
+ * for the completion detail, which runs no user regex at all.
+ */
+export function describeTimeFormat(format: string, now: Date = new Date()): TimeFormatPreview {
   const trimmed = format.trim();
   if (trimmed === '') {
     return { rendered: null, sample: null, unsupported: [] };
@@ -103,20 +137,40 @@ export function buildTimeFormatPreview(
 
   let rendered: string | null;
   try {
-    rendered = formatStrftime(options.now ?? new Date(), trimmed);
+    rendered = formatStrftime(now, trimmed);
   } catch {
     // An unrenderable pattern is still worth reporting on for its specifiers.
     rendered = null;
   }
+  return { rendered, sample: null, unsupported: unsupportedSpecifiers(trimmed) };
+}
 
-  return {
-    rendered,
-    sample:
-      options.sampleLine !== undefined && options.sampleLine !== ''
-        ? attemptSample(trimmed, options.sampleLine, options.timePrefix)
-        : null,
-    unsupported: unsupportedSpecifiers(trimmed),
-  };
+/**
+ * The full preview, including the sample line. Asynchronous because a
+ * TIME_PREFIX is matched in a worker (#334). Resolves to null when
+ * `options.token` is cancelled before that returns. When no worker is
+ * available the sample is omitted (`sample: null`) rather than matched on
+ * this thread.
+ */
+export async function buildTimeFormatPreview(
+  format: string,
+  options: TimeFormatPreviewOptions = {},
+): Promise<TimeFormatPreview | null> {
+  const preview = describeTimeFormat(format, options.now);
+  const trimmed = format.trim();
+  if (trimmed === '' || options.sampleLine === undefined || options.sampleLine === '') {
+    return preview;
+  }
+
+  const attempted = await attemptSample(
+    trimmed,
+    options.sampleLine,
+    options.timePrefix,
+    options.matchPrefix ?? matchTimePrefix,
+    options.token,
+  );
+  if (attempted === CANCELLED) return null;
+  return { ...preview, sample: attempted === OMITTED ? null : attempted };
 }
 
 /**
@@ -156,6 +210,14 @@ export function renderTimeFormatPreview(preview: TimeFormatPreview): string {
         parts.push(
           `**Sample:** not tried — TIME_PREFIX was not run: ${escapeMarkdown(preview.sample.reason)}`,
         );
+        break;
+      case 'prefix-timed-out':
+        parts.push(
+          `**Sample:** preview timed out — TIME_PREFIX ran for over ${preview.sample.timeoutMs / 1000} s against the sample line and was stopped.`,
+        );
+        break;
+      case 'prefix-error':
+        parts.push(`**Sample:** not tried — TIME_PREFIX failed: ${escapeMarkdown(preview.sample.reason)}`);
         break;
     }
   }
