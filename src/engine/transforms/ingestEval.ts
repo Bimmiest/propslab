@@ -4,6 +4,7 @@ import { stripLeadingUnderscoreForField } from '../utils/internalFields';
 import { deleteField, setField } from '../utils/fieldBag';
 import { atDirective } from '../parser/provenance';
 import { effectiveDirective } from '../utils/directiveValues';
+import { appendTraceStep, metadataChanges } from '../utils/traceStep';
 
 // Split "field=expr, field2=fn(a,b)" on top-level commas only — not inside parens
 // and not inside a string literal (e.g. msg="a,b" must stay one assignment).
@@ -43,6 +44,14 @@ function splitAssignments(s: string): string[] {
  * as the keys INGEST_EVAL writes into the event itself.
  */
 const METADATA_KEYS = new Set<string>(['index', 'host', 'source', 'sourcetype']);
+
+/** The DEST_KEY that rewrites the same metadata, as the trace names it. */
+const METADATA_DEST_KEYS = {
+  index: 'MetaData:Index',
+  host: 'MetaData:Host',
+  source: 'MetaData:Source',
+  sourcetype: 'MetaData:Sourcetype',
+} as const;
 
 function isMetadataKey(name: string): name is 'index' | 'host' | 'source' | 'sourcetype' {
   return METADATA_KEYS.has(name);
@@ -182,16 +191,25 @@ export function applyIngestEval(
       }
     }
 
-    return {
-      ...currentEvent,
-      processingTrace: [
-        ...event.processingTrace,
-        {
-          processor: 'INGEST_EVAL',
-          phase: 'index-time' as const,
-          description: `Evaluated ${totalExpressions} ingest-time expression(s)`,
-        },
-      ],
-    };
+    // The step says what it rewrote: `_raw` through the same mutation record
+    // DEST_KEY = _raw leaves, so field attribution reaches it, and metadata as
+    // old → new, which the bare expression count hid (#346). The description
+    // names each key as its DEST_KEY, as a DEST_KEY = MetaData:* step does.
+    const changes = metadataChanges(event.metadata, currentEvent.metadata);
+    const description =
+      `Evaluated ${totalExpressions} ingest-time expression(s)` +
+      (changes.length > 0
+        ? `; set ${changes.map((c) => `${METADATA_DEST_KEYS[c.key]} "${c.from}" → "${c.to}"`).join(', ')}`
+        : '');
+    return appendTraceStep(
+      currentEvent,
+      {
+        processor: 'INGEST_EVAL',
+        phase: 'index-time' as const,
+        description,
+        ...(changes.length > 0 ? { metadataChanges: changes } : {}),
+      },
+      event._raw,
+    );
   });
 }

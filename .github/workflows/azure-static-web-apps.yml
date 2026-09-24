@@ -66,8 +66,46 @@ on:
 # together. Per-job groups would let a newer run build and resolve while an
 # older run's deploy was still waiting, and the two uploads could again land
 # in either order.
+#
+# Rollback, and why it needs the DEPLOY_PAUSED switch (#345). The queue above
+# worked against a rollback in two ways. A dispatch waiting behind a running
+# deploy is the group's pending run, so the next CI completion on main queued
+# a workflow_run behind it and silently cancelled it — newest pending wins,
+# whatever the trigger. And a rollback that did run lasted only until the next
+# green push CI on main, because the automatic path redeploys the newest green
+# commit; re-running the bad commit's CI was enough to put it back.
+#
+# Splitting the triggers into separate groups would not help: the two paths
+# would then race each other's uploads, and a shared job-level group on
+# `deploy` has the same newest-pending-wins rule, so an automatic deploy job
+# could still displace a waiting manual one. Instead, the repository variable
+# DEPLOY_PAUSED takes the automatic path out of the queue entirely. While it is
+# 'true', a workflow_run run is put in a group of its own, where it can
+# displace nothing but another paused automatic run, and its build job's `if`
+# skips it, so it deploys nothing either. Dispatches keep the shared group and
+# are not affected by the variable, so rollback while paused is the intended
+# flow. With it unset, every run shares one group, exactly as described above.
+#
+# What that guarantees: a dispatch made *after* DEPLOY_PAUSED is set to 'true'
+# is never cancelled by, and never overwritten by, an automatic deploy, for as
+# long as the variable stays set. An automatic run queued before the switch
+# either finishes first (the dispatch then waits behind it and deploys last)
+# or is still pending and is displaced by the dispatch; one that has not
+# started its build job by then skips, since the `if` reads the variable
+# again. It guarantees nothing for a dispatch made while the variable is
+# unset — that is the old behaviour, and the rollback will not stick.
+#
+# Rollback procedure (also in the README and CONTRIBUTING):
+#   1. Settings → Secrets and variables → Actions → Variables: set
+#      DEPLOY_PAUSED to `true`.
+#   2. Dispatch this workflow on main with `sha` = the commit to put back.
+#   3. Once the fix is merged and main's push CI is green, delete
+#      DEPLOY_PAUSED (or set it to anything but `true`), then dispatch with
+#      `sha` empty, or wait for the next push, to resume automatic deploys.
 concurrency:
-  group: deploy-static-web-app
+  group: >-
+    ${{ github.event_name == 'workflow_run' && vars.DEPLOY_PAUSED == 'true' &&
+    'deploy-static-web-app-paused' || 'deploy-static-web-app' }}
   cancel-in-progress: false
 
 jobs:
@@ -85,10 +123,15 @@ jobs:
   build:
     # `conclusion` is the whole run's verdict, so every CI job — app, MCP
     # server and audit — has to be green. `event` is the event CI itself ran
-    # on; only a push to main is a candidate for production.
+    # on; only a push to main is a candidate for production. DEPLOY_PAUSED
+    # stops the automatic path only — a dispatch is how you roll back while
+    # paused (#345; see the concurrency note). It is read again here, not just
+    # in the group expression, so a run queued before the switch was set and
+    # still waiting skips when it finally starts.
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      (github.event.workflow_run.conclusion == 'success' &&
+      (vars.DEPLOY_PAUSED != 'true' &&
+       github.event.workflow_run.conclusion == 'success' &&
        github.event.workflow_run.event == 'push')
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -130,26 +173,38 @@ jobs:
       # reaches the shell through `env`, never interpolated into the script,
       # and must look like a commit hash before anything else touches it; the
       # next steps hold it to commits main has contained (#314, #333).
+      #
+      # The check is bash's `[[ =~ ]]`, which matches the whole string (#345).
+      # It used to be `printf | grep -E`, and grep is line-oriented: a
+      # multi-line input passed as long as one line looked like a hash, its
+      # other lines were then written to $GITHUB_OUTPUT as extra outputs, and
+      # the error message echoed the raw input, where a line starting `::`
+      # would be read as a workflow command. So the input is never echoed —
+      # the messages here are fixed text — and every value that reaches
+      # $GITHUB_OUTPUT, including the SHA `gh` returns, passes the same check
+      # first. The API only ever returns a full hash, so that one is held to
+      # exactly 40 hex characters; anything else is a failed lookup.
       - name: Resolve commit
         id: target
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           INPUT_SHA: ${{ inputs.sha }}
         run: |
           if [ -n "$INPUT_SHA" ]; then
-            if ! printf '%s' "$INPUT_SHA" | grep -Eq '^[0-9a-fA-F]{7,40}$'; then
-              echo "::error::The 'sha' input must be a commit hash (7-40 hex characters), got: $INPUT_SHA"
+            if [[ ! $INPUT_SHA =~ ^[0-9a-fA-F]{7,40}$ ]]; then
+              echo "::error::The 'sha' input must be a commit hash: 7-40 hex characters on one line, nothing else."
               exit 1
             fi
             sha="$INPUT_SHA"
           else
             sha=$(gh run list --workflow ci.yml --branch main --event push \
               --status success --limit 1 --json headSha --jq '.[0].headSha')
-          fi
-          if [ -z "$sha" ] || [ "$sha" = "null" ]; then
-            echo "::error::Could not resolve a commit to deploy"
-            exit 1
+            if [[ ! $sha =~ ^[0-9a-f]{40}$ ]]; then
+              echo "::error::Could not resolve a commit to deploy: no successful push CI run on main, or the lookup returned something that is not a commit hash."
+              exit 1
+            fi
           fi
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
 
@@ -184,13 +239,23 @@ jobs:
       #
       # `rev-parse` also turns an abbreviated `sha` input into the full hash,
       # which is what the deploy job logs and what the output carries.
+      #
+      # Its output is held to a full 40-character hash before it is written,
+      # for the same reason as above (#345): nothing reaches $GITHUB_OUTPUT
+      # unchecked. `$SHA` itself is safe to echo — the previous step validated
+      # it.
       - name: Refuse commits not on main
         id: verify
+        shell: bash
         env:
           SHA: ${{ steps.target.outputs.sha }}
         run: |
           if ! full=$(git rev-parse --verify --quiet "${SHA}^{commit}"); then
             echo "::error::Refusing to deploy $SHA: no such commit in this repository's history."
+            exit 1
+          fi
+          if [[ ! $full =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Refusing to deploy $SHA: it did not resolve to a single full commit hash."
             exit 1
           fi
           if ! git merge-base --is-ancestor "$full" origin/main; then
@@ -283,7 +348,8 @@ jobs:
 
       # Into dist/ in an otherwise empty workspace: no checkout, so nothing
       # from the repository runs here — only the bundle the build job made,
-      # and the pinned Azure action.
+      # and the Azure action (whose pin covers less than it looks: see the
+      # next step).
       - name: Download build
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
@@ -293,7 +359,29 @@ jobs:
       - name: Build And Deploy
         id: builddeploy
         # Third-party and holding the deployment token, on a ref the upstream
-        # can move. Worth pinning to a commit SHA.
+        # can move. Worth pinning to a commit SHA — but the SHA pins less than
+        # every other pin in this repo, and that is a residual risk (#345).
+        #
+        # What the SHA fixes is the action's wrapper: action.yml, a two-line
+        # entrypoint.sh (`cd /bin/staticsites/ && ./StaticSitesClient
+        # $INPUT_ACTION`) and a Dockerfile. The Dockerfile starts
+        # `FROM mcr.microsoft.com/appsvc/staticappsclient:stable`, a movable
+        # tag, and the runner builds it fresh on every run. So StaticSitesClient
+        # — the binary that actually reads the token and uploads — is whatever
+        # Microsoft has published as `stable` that day, and no pin in this file
+        # constrains it. (Checked against this SHA's tree, 2026-09-24.)
+        #
+        # Pinning the image by digest instead — a `docker://…staticappsclient
+        # @sha256:…` step with the inputs passed as INPUT_* env — was
+        # considered and not done. It relies on an undocumented contract (the
+        # image layout, the working directory, which INPUT_* and GITHUB_*
+        # variables the client reads), nothing here can test it short of a
+        # production deploy, and a frozen client is the same trap as the frozen
+        # `v1` tag below: the service moves on and starts rejecting it. The
+        # trust placed in Microsoft's `stable` tag is the same trust placed in
+        # the service the token authenticates to; the token being scoped to
+        # this one Static Web App (and rotatable in the portal) bounds what a
+        # bad image could do with it.
         #
         # The trap: upstream publishes `v1` as BOTH a tag and a branch, and they
         # are years apart. The tag is frozen at 2021-03-03; the branch is where

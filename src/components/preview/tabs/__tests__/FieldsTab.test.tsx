@@ -127,29 +127,57 @@ describe('FieldsTab — nested field counts (#316)', () => {
     // Parents collapse on load, so only `a` and `z` show, with a's two
     // immediate children (a.b, a.e) counted — not a.b's own.
     expect(within(container).getByText('(2)')).toBeInTheDocument();
-    fireEvent.click(within(container).getByRole('button', { name: 'Expand a' }));
-    const expands = within(container).getAllByRole('button', { name: /^Expand / });
+    fireEvent.click(within(container).getByRole('button', { name: 'Toggle a' }));
+    const expands = within(container)
+      .getAllByRole('button', { name: /^Toggle / })
+      .filter((b) => b.getAttribute('aria-expanded') === 'false');
     expect(expands).toHaveLength(1); // a.b, still collapsed
     expect(within(container).getByText('(2)')).toBeInTheDocument();
   });
 
   // #335: every toggle was a bare "Expand"/"Collapse" with no state, so a
   // screen reader heard a column of identical buttons.
-  it('names each toggle for its field and announces its state', () => {
+  // #347: the name then flipped between "Expand a" and "Collapse a" as well as
+  // `aria-expanded`, so each toggle announced its new state twice. The name is
+  // now fixed and the state is in `aria-expanded` alone.
+  it('names each toggle for its field and announces its state once', () => {
     useAppStore.setState(initial, true);
     const json = makeEvent({ a: '{}', 'a.b': '{}', 'a.b.c': '1' }, []);
     useAppStore.setState({
       processingResult: { events: [json], originalRaw: '', eventCount: 1, processingSteps: [], inputMetadata: { index: 'main', host: '', source: '', sourcetype: '' } },
     });
     const { container } = render(<FieldsTab />);
-    const top = within(container).getByRole('button', { name: 'Expand a' });
+    const top = within(container).getByRole('button', { name: 'Toggle a' });
     expect(top).toHaveAttribute('aria-expanded', 'false');
     fireEvent.click(top);
-    expect(within(container).getByRole('button', { name: 'Collapse a' })).toHaveAttribute('aria-expanded', 'true');
+    expect(top).toHaveAccessibleName('Toggle a');
+    expect(top).toHaveAttribute('aria-expanded', 'true');
 
     // The nested toggle carries the full dotted name, not just its leaf.
-    const nested = within(container).getByRole('button', { name: 'Expand a.b' });
+    const nested = within(container).getByRole('button', { name: 'Toggle a.b' });
     expect(nested).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(nested);
+    expect(nested).toHaveAccessibleName('Toggle a.b');
+    expect(nested).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('points an expanded toggle at the child rows it shows (#347)', () => {
+    useAppStore.setState(initial, true);
+    const json = makeEvent({ a: '{}', 'a.b': '{}', 'a.b.c': '1', 'a.e': '2' }, []);
+    useAppStore.setState({
+      processingResult: { events: [json], originalRaw: '', eventCount: 1, processingSteps: [], inputMetadata: { index: 'main', host: '', source: '', sourcetype: '' } },
+    });
+    const { container } = render(<FieldsTab />);
+    const top = within(container).getByRole('button', { name: 'Toggle a' });
+    // Collapsed, the child rows are not rendered, so there is nothing to point at.
+    expect(top).not.toHaveAttribute('aria-controls');
+
+    fireEvent.click(top);
+    const controlled = (top.getAttribute('aria-controls') ?? '').split(' ').map((id) => document.getElementById(id));
+    expect(controlled).toHaveLength(2);
+    // Its immediate children, a.b and a.e — not the grandchild a.b.c.
+    expect(controlled.map((row) => row?.tagName)).toEqual(['TR', 'TR']);
+    expect(controlled.map((row) => row?.querySelector('[title]')?.getAttribute('title')).sort()).toEqual(['a.b', 'a.e']);
   });
 });
 

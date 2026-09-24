@@ -1,11 +1,9 @@
 import { useMemo, useState } from 'react';
-import { useAppStore } from '../../../store/useAppStore';
 import { parseConf } from '../../../engine/parser/confParser';
 import { mergeDirectives, resolveStanzasForEvent } from '../../../engine/parser/stanzaMatcher';
 import { resolveLookahead } from '../../../engine/processors/timestampExtractor';
 import { useTimestampMatch } from '../../../hooks/useTimestampMatch';
-import { useDebounce } from '../../../hooks/useDebounce';
-import { PIPELINE_DEBOUNCE_MS } from '../../../hooks/workerLifecycle';
+import { usePipelineInputs, type PipelineInputs } from './shared/usePipelineInputs';
 import type { TimeConfig, TimestampProbe } from '../../../engine/timestampMatch';
 import type { EventMetadata, SplunkEvent, TimeSource } from '../../../engine/types';
 import type { EnrichedEvent } from '../PreviewPanel';
@@ -14,6 +12,13 @@ interface TimestampTabProps {
   items: EnrichedEvent[];
   currentPage: number;
   eventsPerPage: number;
+  /**
+   * The inputs of the last pipeline run, from PreviewPanel. This tab unmounts
+   * whenever another sub-tab is shown, which is when edits happen, so an
+   * instance of the hook here would start from unrun edits (#347). The
+   * fallback serves a tab rendered on its own.
+   */
+  inputs?: PipelineInputs;
 }
 
 // Theme-aware highlight colours (no hard-coded hex — see design system in CLAUDE.md).
@@ -180,41 +185,6 @@ function parseTimeConfig(propsConf: string, metadata: EventMetadata): TimeConfig
   };
 }
 
-/**
- * The props.conf and metadata the events on screen were produced from, as near
- * as the tab can tell.
- *
- * The tab used to read the live editor state, so its highlights ran ahead of
- * the `_time` badges beside them: in manual-apply mode they showed a config
- * that had not been run, and in auto mode every keystroke re-probed before the
- * pipeline had caught up (#316). Here the inputs follow the pipeline instead —
- * debounced like its auto-run, or frozen at the last "Run pipeline" click in
- * manual-apply mode, which is the moment the pipeline reads them too.
- *
- * The store does not record what a run used, so a tab that mounts while
- * manual-apply changes are pending starts from the editor state.
- */
-function usePipelineInputs(): { propsConf: string; metadata: EventMetadata } {
-  const propsConf = useAppStore((s) => s.propsConf);
-  const metadata = useAppStore((s) => s.metadata);
-  const manualApply = useAppStore((s) => s.settings.manualApply);
-  const manualRunTick = useAppStore((s) => s.manualRunTick);
-
-  const live = useMemo(() => ({ propsConf, metadata }), [propsConf, metadata]);
-  const debounced = useDebounce(live, PIPELINE_DEBOUNCE_MS);
-
-  // Adjusted during render rather than in an effect, as React recommends for
-  // state derived from props, so the frame after a Run click already probes
-  // what was run. In auto mode it tracks the debounced inputs, so turning
-  // manual-apply on freezes it at the last auto run.
-  const [applied, setApplied] = useState({ tick: manualRunTick, inputs: live });
-  const target = !manualApply ? debounced : applied.tick !== manualRunTick ? live : applied.inputs;
-  if (applied.tick !== manualRunTick || applied.inputs !== target) {
-    setApplied({ tick: manualRunTick, inputs: target });
-  }
-  return target;
-}
-
 /** Extract strftime directives from a format string */
 function extractDirectives(format: string): { directive: string; description: string }[] {
   const result: { directive: string; description: string }[] = [];
@@ -242,8 +212,9 @@ function extractDirectives(format: string): { directive: string; description: st
   return result;
 }
 
-export function TimestampTab({ items, currentPage, eventsPerPage }: TimestampTabProps) {
-  const { propsConf, metadata } = usePipelineInputs();
+export function TimestampTab({ items, currentPage, eventsPerPage, inputs }: TimestampTabProps) {
+  const ownInputs = usePipelineInputs();
+  const { propsConf, metadata } = inputs ?? ownInputs;
   const [refOpen, setRefOpen] = useState(false);
   const [refSearch, setRefSearch] = useState('');
 

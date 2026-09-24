@@ -6,7 +6,7 @@
 import type { SplunkEvent } from '../../types';
 import { getMetadataField } from '../../utils/metadataFields';
 import { getField as getOwnField } from '../../utils/fieldBag';
-import { type EvalValue, addOrConcat, arith, compare, numArg, toBool, toStr } from './values';
+import { type EvalValue, addOrConcat, arith, compare, numArg, toBool, toStr, toTri } from './values';
 import { type Node, parseExpression } from './parser';
 import { type EvalCtx, evalBuiltin } from './builtins';
 
@@ -51,21 +51,43 @@ export function evalNode(node: Node, ctx: EvalCtx): EvalValue {
       const n = numArg(evalNode(node.operand, ctx));
       return n === null ? null : -n;
     }
-    case 'not':
-      return !toBool(evalNode(node.operand, ctx));
+    case 'not': {
+      // Three-valued: NOT NULL is NULL (#343). Collapsing NULL to false here
+      // made `NOT (missing == "a")` true while `missing != "a"` is NULL.
+      const v = toTri(evalNode(node.operand, ctx));
+      return v === null ? null : !v;
+    }
     case 'logical': {
       // Short-circuit: Splunk does not evaluate the right operand once the left
-      // settles the result. All three operators yield a boolean. XOR has no
-      // short circuit: its answer always depends on both sides (#312).
-      const left = evalNode(node.left, ctx);
-      if (node.op === 'XOR') return toBool(left) !== toBool(evalNode(node.right, ctx));
-      if (node.op === 'OR') return toBool(left) ? true : toBool(evalNode(node.right, ctx));
-      return !toBool(left) ? false : toBool(evalNode(node.right, ctx));
+      // settles the result. XOR has no short circuit: its answer always depends
+      // on both sides (#312).
+      //
+      // Three-valued logic, as SPL documents it for NULL operands (#343):
+      // NULL AND false is false, NULL AND true is NULL, NULL OR true is true,
+      // NULL OR false is NULL, and NULL XOR anything is NULL. Only a definite
+      // false (AND) or true (OR) on the left settles the answer early.
+      const left = toTri(evalNode(node.left, ctx));
+      if (node.op === 'XOR') {
+        const right = toTri(evalNode(node.right, ctx));
+        return left === null || right === null ? null : left !== right;
+      }
+      if (node.op === 'OR') {
+        if (left === true) return true;
+        const right = toTri(evalNode(node.right, ctx));
+        return right === true ? true : left === null || right === null ? null : false;
+      }
+      if (left === false) return false;
+      const right = toTri(evalNode(node.right, ctx));
+      return right === false ? false : left === null || right === null ? null : true;
     }
     case 'in': {
       const left = evalNode(node.value, ctx);
+      // A NULL value is in no list and out of none: the answer is NULL, so
+      // neither `missing IN ("")` nor `missing NOT IN ("a")` holds (#343). A
+      // NULL list item simply never matches (its comparison is NULL).
+      if (left === null || left === undefined) return null;
       // `some` stops at the first match — no need to evaluate the rest of the list.
-      const match = node.list.some((n) => compare(left, evalNode(n, ctx), '='));
+      const match = node.list.some((n) => compare(left, evalNode(n, ctx), '=') === true);
       return node.negate ? !match : match;
     }
     case 'call':

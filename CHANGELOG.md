@@ -27,6 +27,29 @@ All notable changes to Propslab are documented here, newest first.
 
 ### Fixed
 
+Entries #341 and #343–#349 are the rest of the fourth review's findings. Engine tests are derived from the documentation and say so, and the Splunk 10.4.0 fixtures still pass.
+
+- **Eval comparisons with a missing field give NULL, not a comparison against `""`** ([#343](https://github.com/Bimmiest/propslab/issues/343)).
+  - **The bug.** `missing==""` and `missing!="a"` were both true. So a guard such as `INGEST_EVAL queue=if(level!="INFO","nullQueue","indexQueue")` dropped every event that had no `level` field.
+  - **The fix.** These now return NULL for a NULL operand:
+    - the comparison operators, `LIKE`, and `IN` / `NOT IN` / `in()`;
+    - `like()`, `match()` and `cidrmatch()`.
+  - **How NULL is treated.** NULL counts as false in `if()`, `case()` and STOP_PROCESSING_IF. NOT, AND, OR and XOR follow SPL's three-valued logic. An EVAL whose result is NULL writes no field.
+- **A `]` straight after `[` or `[^` in a regex is a literal, as in PCRE** ([#341](https://github.com/Bimmiest/propslab/issues/341)). In JavaScript, `[]a]` is an empty class followed by `a]`, and `[^]` matches any character, so these patterns used to match something different from Splunk. The property tests from #340 found this.
+- **XML_IE_* wildcard lists are matched as globs in linear time** ([#344](https://github.com/Bimmiest/propslab/issues/344)). Each `*` used to compile to `.*` in a backtracking regex that skipped the ReDoS guard, and the list is run against event values. A handful of stars against a long value could make every pipeline run time out.
+- **INGEST_EVAL rewrites now show in the trace** ([#346](https://github.com/Bimmiest/propslab/issues/346)).
+  - A `_raw=` rewrite records its before and after, and which fields it destroyed, the same way `DEST_KEY = _raw` does.
+  - Metadata assignments show old → new.
+  - A matched stanza that extracts nothing no longer prints an empty field list.
+- **UI fixes** ([#347](https://github.com/Bimmiest/propslab/issues/347)).
+  - **Last-run inputs.** Effective config and the Timestamp tab now show the inputs the last run used, which PreviewPanel holds. Before, they could show unrun edits in manual-apply mode.
+  - **Toggle labels.** The Fields tab and metadata toggles keep a fixed name and use `aria-expanded` for the state. Before, screen readers heard the state twice.
+  - **Regex tab while re-matching.** The cards now come from the current events, reusing results for events that have already been tested. They no longer show old events next to pagination reset for the new filter.
+- **Each MCP stdio message is capped at 8 MiB before it is parsed** ([#349](https://github.com/Bimmiest/propslab/issues/349)).
+  - **Before.** The schema limits only applied after the SDK had buffered and parsed the whole message on the server's main thread. On older SDK releases that let memory grow without limit; on newer ones, one line over 10 MB closed the transport.
+  - **Now.** An oversize line is dropped as it streams in and answered with a JSON-RPC error, and later messages keep working.
+- **End-to-end tests now load both match workers and the TIME_FORMAT hover** ([#348](https://github.com/Bimmiest/propslab/issues/348)). The tests check that the worker itself replied. If a worker fails to load, the tabs fall back to the main thread and show identical output, so the UI alone would pass with both workers broken.
+
 Entries #337–#341 came out of a fourth review of the whole project. Rather than another broad fix round, this change targets the causes of the regressions the last three rounds produced. The three copies of the worker lifecycle are now one module (#339). The eval parser and the PCRE translation now have property-based tests (#340); these found two bugs, one fixed here and one filed as #341.
 
 - **`NOT IN` works in any casing again** ([#337](https://github.com/Bimmiest/propslab/issues/337)). This is a regression from #332, which made keyword operators contextual. The word after `NOT` was then lexed as an identifier that kept its casing, so only an upper-case `IN` matched, and `x not in (...)` threw "Unexpected token: NOT". The word after a `NOT` that follows a value is now lexed as the IN operator.
@@ -117,6 +140,11 @@ The entries from #280 to #300, and the follow-ups #303 and #304, came out of one
 
 ### Changed
 
+- **Rollbacks stay in place while the `DEPLOY_PAUSED` repository variable is `true`** ([#345](https://github.com/Bimmiest/propslab/issues/345)).
+  - **Before.** A queued rollback could be displaced by the next automatic run. One that did deploy was undone by the next green push CI.
+  - **Now.** While the variable is set, automatic runs neither queue nor deploy, and manual dispatches still work.
+  - **The `sha` input** is matched as a whole string instead of line by line, and it is never echoed back. Every value written to `$GITHUB_OUTPUT` is validated.
+  - **The workflow comments** now say the action's SHA pins only its wrapper. The client image it runs uses Microsoft's movable `:stable` tag.
 - **Rollback is a dispatch on `main` with a `sha` input, and build and deploy run as separate jobs** ([#333](https://github.com/Bimmiest/propslab/issues/333)).
   - **Why the tag route is gone.** A dispatch runs the workflow file from the dispatched ref. The `v*` tag allowance recommended in #314 therefore let a tag on an unmerged commit remove the ancestor check from its own copy of the file. A dispatch from any ref other than `main` now fails, and the `production` environment should allow `main` only.
   - **How rollback works.** The commit to deploy is now data: it is checked to look like a hash, resolved, and must be an ancestor of `main`.

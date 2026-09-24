@@ -27,6 +27,7 @@ import { setField } from '../utils/fieldBag';
 import { atDirective } from '../parser/provenance';
 import { parseXmlDocument, xmlChildElements, type XmlElement } from '../utils/xmlReader';
 import { effectiveDirective, parseSplunkBool } from '../utils/directiveValues';
+import { compileWildcard, type WildcardMatcher } from '../utils/wildcardMatch';
 
 export type XmlIndexedMode = 'xml' | 'xmlkv' | 'xmlkv-winevt';
 
@@ -34,11 +35,11 @@ const PIPELINES = new Set(['structuredparsing', 'wineventlog', 'typing', 'exec']
 const WRAPPER_OPEN = '<_root_>';
 
 interface XmlOptions {
-  include: RegExp[];
-  exclude: RegExp[];
-  includeMv: RegExp[];
-  excludeMv: RegExp[];
-  excludeVals: RegExp[];
+  include: WildcardMatcher[];
+  exclude: WildcardMatcher[];
+  includeMv: WildcardMatcher[];
+  excludeMv: WildcardMatcher[];
+  excludeVals: WildcardMatcher[];
   skipEncoded: boolean;
   maxValueBytes: number;
   cutoffBytes: number;
@@ -150,23 +151,23 @@ function xmlOptions(find: (key: string) => ConfDirective | undefined, mode: XmlI
 /**
  * A comma-separated list whose entries accept `*` as a wildcard, compiled to
  * whole-string matchers. Entries may be double-quoted.
+ *
+ * Matched as globs rather than compiled to `.*` regexes (#344): the lists are
+ * tested against values taken from the event (XML_IE_EXCLUDE_VALS), and a
+ * backtracking regex made a handful of stars take seconds on a long value.
  */
-function wildcardList(raw: string): RegExp[] {
-  const out: RegExp[] = [];
+function wildcardList(raw: string): WildcardMatcher[] {
+  const out: WildcardMatcher[] = [];
   for (const part of raw.split(',')) {
     const entry = part.trim().replace(/^"(.*)"$/, '$1');
     if (!entry) continue;
-    const source = entry
-      .split('*')
-      .map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-      .join('.*');
-    out.push(new RegExp(`^${source}$`, 's'));
+    out.push(compileWildcard(entry));
   }
   return out;
 }
 
-function matchesAny(patterns: RegExp[], s: string): boolean {
-  return patterns.some((p) => p.test(s));
+function matchesAny(patterns: WildcardMatcher[], s: string): boolean {
+  return patterns.some((matches) => matches(s));
 }
 
 function utf8Length(s: string): number {

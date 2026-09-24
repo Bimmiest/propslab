@@ -221,34 +221,55 @@ export function RegexTab({ items, allEvents, currentPage, eventsPerPage }: Regex
   // request is posted from an effect, so the results in hand still index the
   // previous array; indexing them by position into the new events put one
   // event's match on another's card and the old total beside the new one (#329).
-  // They are rendered against their own inputs instead, and kept on screen
-  // while the re-run is in flight rather than flashing the list to pending.
+  // They are kept on screen while the re-run is in flight rather than flashing
+  // the list to pending, and aligned to the new events by text (below, #347).
   const settled = match.settled !== null && match.settled.pattern === requestedPattern ? match.settled : null;
   const status = settled ? 'ok' : match.pattern === requestedPattern ? match.status : 'pending';
-  const results = settled?.results ?? NO_RESULTS;
   // Settled results for the typed pattern standing in while newer inputs are matched.
   const refreshing = settled !== null && (match.status === 'pending' || settled.inputs !== rawInputs);
 
-  // Aligned to `settled.inputs`; the rendered page starts at this offset into it.
+  // The settled results, aligned to the events on screen: `undefined` marks an
+  // event whose text the settled run never saw. A match depends only on the
+  // pattern and the text, so an event that was in the previous inputs already
+  // has its answer. The tab used to render the previous inputs' page slice
+  // while a re-run was in flight, but a search change resets the shared
+  // pagination at once, so events the new filter excludes sat beside page
+  // controls for the new filter, numbered by their old position (#347). Now
+  // the cards, their numbers and the pagination all describe the same events;
+  // a search refinement, whose events are a subset, is answered in full
+  // before the worker replies.
+  const aligned = useMemo<readonly (RegexMatchInfo | null | undefined)[]>(() => {
+    if (!settled) return NO_RESULTS;
+    if (settled.inputs === rawInputs) return settled.results;
+    const byRaw = new Map<string, RegexMatchInfo | null>();
+    settled.inputs.forEach((raw, i) => byRaw.set(raw, settled.results[i] ?? null));
+    return rawInputs.map((raw) => byRaw.get(raw));
+  }, [settled, rawInputs]);
+
+  // The rendered page starts at this offset into `rawInputs`.
   const pageOffset = (currentPage - 1) * eventsPerPage;
 
-  /** Page events that matched, each carrying its raw text and its index in the matched dataset. */
-  const matchedPageItems = useMemo(() => {
+  /** The page's events, each with its index in the filtered dataset and its match (if known yet). */
+  const pageEntries = useMemo(() => {
     if (!pattern || validationError || !settled) return [];
-    // The current page's events when the results describe them; otherwise the
-    // same page of the inputs the results were matched over (#329).
-    const pageRaws = settled.inputs === rawInputs
-      ? items.map((item) => item.event._raw)
-      : settled.inputs.slice(pageOffset, pageOffset + eventsPerPage);
-    return pageRaws
-      .map((raw, i) => ({ raw, datasetIdx: pageOffset + i }))
-      .filter(({ datasetIdx }) => settled.results[datasetIdx] != null);
-  }, [pattern, validationError, settled, rawInputs, items, pageOffset, eventsPerPage]);
+    return items.map((item, i) => ({
+      raw: item.event._raw,
+      datasetIdx: pageOffset + i,
+      info: aligned[pageOffset + i],
+    }));
+  }, [pattern, validationError, settled, items, pageOffset, aligned]);
+  const matchedPageItems = pageEntries.filter((e) => e.info != null);
+  const untestedOnPage = pageEntries.filter((e) => e.info === undefined).length;
 
+  // Exact over the events on screen when every one of them has an answer;
+  // otherwise the settled run's own count, marked as updating (#347).
+  const countExact = settled !== null && aligned.length === rawInputs.length && !aligned.includes(undefined);
   const matchStats = useMemo(() => {
+    if (countExact) return { matched: aligned.reduce((n, r) => (r != null ? n + 1 : n), 0), total: rawInputs.length };
+    const results = settled?.results ?? NO_RESULTS;
     const matched = results.reduce((n, r) => (r != null ? n + 1 : n), 0);
     return { matched, total: settled ? settled.inputs.length : allEvents.length };
-  }, [results, settled, allEvents]);
+  }, [countExact, aligned, rawInputs, settled, allEvents]);
 
   // Adding needs a settled 'ok' run of exactly this pattern over exactly these
   // events — the rule the Create EXTRACT dialog applies (#329). Gated only on
@@ -325,7 +346,7 @@ export function RegexTab({ items, allEvents, currentPage, eventsPerPage }: Regex
           {pattern && !validationError && status === 'ok' && matchStats.total > 0 && (
             <span className="text-[10px] text-[var(--color-text-muted)] ml-auto">
               {matchStats.matched}/{matchStats.total} events matched
-              {refreshing && ' \u00b7 updating\u2026'}
+              {refreshing && !countExact && ' \u00b7 updating\u2026'}
             </span>
           )}
         </div>
@@ -527,21 +548,30 @@ export function RegexTab({ items, allEvents, currentPage, eventsPerPage }: Regex
           </div>
         ) : matchedPageItems.length === 0 ? (
           <div className="flex items-center justify-center py-12 text-[var(--color-text-muted)] text-sm">
-            {matchStats.matched > 0
-              ? `No events matched on this page — ${matchStats.matched} matched elsewhere in the dataset`
-              : 'No events matched'}
+            {untestedOnPage > 0
+              ? 'Testing pattern…'
+              : matchStats.matched > 0
+                ? `No events matched on this page — ${matchStats.matched} matched elsewhere in the dataset`
+                : 'No events matched'}
           </div>
         ) : (
-          matchedPageItems.map(({ raw, datasetIdx }) => (
-            <RegexEventCard
-              key={datasetIdx}
-              raw={raw}
-              globalIdx={datasetIdx + 1}
-              hasPattern={!!pattern}
-              matchInfo={results[datasetIdx] ?? null}
-              groupColorMap={groupColorMap}
-            />
-          ))
+          <>
+            {matchedPageItems.map(({ raw, datasetIdx, info }) => (
+              <RegexEventCard
+                key={datasetIdx}
+                raw={raw}
+                globalIdx={datasetIdx + 1}
+                hasPattern={!!pattern}
+                matchInfo={info ?? null}
+                groupColorMap={groupColorMap}
+              />
+            ))}
+            {untestedOnPage > 0 && (
+              <p className="text-xs text-[var(--color-text-muted)]">
+                Testing {untestedOnPage} more event{untestedOnPage !== 1 ? 's' : ''} on this page…
+              </p>
+            )}
+          </>
         )}
       </div>
     </div>

@@ -179,6 +179,44 @@ describe('DEST_KEY = _raw field attribution', () => {
   });
 });
 
+describe('INGEST_EVAL _raw= field attribution (#346)', () => {
+  // The repro from #346. INGEST_EVAL's `_raw=` rewrites the event exactly as
+  // DEST_KEY = _raw does, so it must be attributed the same way; it used to be
+  // traced as a bare expression count, naming nothing it destroyed.
+  const propsConf = props('TRANSFORMS-m = scrub', 'EXTRACT-s = secret=(?<secret>\\S+)');
+  const viaIngestEval = '[scrub]\nINGEST_EVAL = _raw=replace(_raw,"secret=\\\\S+","")\n';
+  const viaDestKey = '[scrub]\nREGEX = ^(.*)secret=\\S+(.*)$\nFORMAT = $1$2\nDEST_KEY = _raw\n';
+
+  it('names the field an INGEST_EVAL _raw rewrite destroyed', () => {
+    const step = stepFor('user=alice secret=hunter2', propsConf, (s) => s.processor === 'INGEST_EVAL', viaIngestEval);
+
+    expect(step.fieldsRemoved).toEqual(['secret']);
+    expect(step.fieldsModified).toEqual([]);
+    expect(step.inputSnapshot).toContain('secret=hunter2');
+    expect(step.outputSnapshot).not.toContain('secret');
+  });
+
+  it('agrees with the equivalent DEST_KEY = _raw transform', () => {
+    const destKey = stepFor('user=alice secret=hunter2', propsConf, (s) => s.processor.includes('scrub'), viaDestKey);
+    const ingest = stepFor('user=alice secret=hunter2', propsConf, (s) => s.processor === 'INGEST_EVAL', viaIngestEval);
+
+    expect(ingest.fieldsRemoved).toEqual(destKey.fieldsRemoved);
+    expect(ingest.fieldsModified).toEqual(destKey.fieldsModified);
+  });
+
+  it('leaves an INGEST_EVAL that does not touch _raw unattributed', () => {
+    const step = stepFor(
+      'user=alice secret=hunter2',
+      propsConf,
+      (s) => s.processor === 'INGEST_EVAL',
+      '[scrub]\nINGEST_EVAL = tag="x"\n',
+    );
+
+    expect(step.fieldsRemoved).toBeUndefined();
+    expect(step.inputSnapshot).toBeUndefined();
+  });
+});
+
 describe('trace snapshots window on the change', () => {
   it('shows the substitution rather than a prefix that omits it', () => {
     const pad = 'a'.repeat(400);

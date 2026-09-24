@@ -6,7 +6,7 @@
  */
 import './v8Flags';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { createStdioTransport } from './messageLimit';
 import { registerTools } from './tools';
 // The version the server reports in its MCP `initialize` handshake. It used to
 // be a string literal here that duplicated package.json and had to be bumped by
@@ -33,7 +33,8 @@ export function createServer(options: CreateServerOptions = {}): McpServer {
 
 export async function start(): Promise<void> {
   const server = createServer();
-  await server.connect(new StdioServerTransport());
+  // Bounds each message before the SDK buffers and parses it (#349).
+  await server.connect(createStdioTransport());
   // stdout belongs to the protocol; anything human-facing goes to stderr.
   console.error('propslab MCP server listening on stdio');
 }

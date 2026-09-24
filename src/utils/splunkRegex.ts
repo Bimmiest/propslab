@@ -171,8 +171,15 @@ export function translatePcreToJs(
         out += pattern.slice(i); // unterminated — the compiler reports it
         break;
       }
-      // Verbatim: PCRE's `x` does not touch whitespace inside a class either.
-      out += pattern.slice(i, end + 1);
+      // Verbatim: PCRE's `x` does not touch whitespace inside a class either —
+      // except a `]` straight after `[` or `[^`, which PCRE reads as a literal
+      // member (`[]a]` is "`]` or `a`") and JS as the end of an empty class
+      // (`[]`, never matches) or of "any character" (`[^]`). findClassEnd
+      // already skips it when finding the class end; escaping it makes JS
+      // read the same class (#341).
+      const open = pattern[i + 1] === '^' ? 2 : 1;
+      const body = pattern.slice(i + open, end + 1);
+      out += pattern.slice(i, i + open) + (body.startsWith(']') ? `\\${body}` : body);
       i = end + 1;
       continue;
     }
@@ -359,7 +366,7 @@ const PROBE_CHARS: string[] = (() => {
 function findClassEnd(source: string, start: number): number {
   let i = start + 1;
   if (source[i] === '^') i++;
-  if (source[i] === ']') i++; // a leading `]` is a literal
+  if (source[i] === ']') i++; // a leading `]` is a literal (PCRE; translatePcreToJs escapes it, #341)
   for (; i < source.length; i++) {
     if (source[i] === '\\') { i++; continue; }
     if (source[i] === ']') return i;

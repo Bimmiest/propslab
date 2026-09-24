@@ -519,3 +519,44 @@ describe('#87 — CLONE_SOURCETYPE', () => {
     expect(events).toHaveLength(1);
   });
 });
+
+describe('applyTransforms — the step describes what the transform did (#346)', () => {
+  // Trace content only, not a Splunk behaviour claim.
+  const reportDir = (name: string): ConfDirective[] => [
+    { key: 'REPORT-x', value: name, line: 1, directiveType: 'REPORT', className: 'x' },
+  ];
+  const lastStep = (e: SplunkEvent | undefined) => e?.processingTrace[e.processingTrace.length - 1];
+
+  it('does not claim "extracted fields" over an empty list for a CLONE_SOURCETYPE-only stanza', () => {
+    const conf = transformsConf('cloner', { REGEX: '.', CLONE_SOURCETYPE: 'copy' });
+    const [original] = applyTransforms([event('x')], transformsDir('cloner'), conf, 'index-time');
+    const step = lastStep(original);
+    expect(step?.description).not.toContain('extracted fields');
+    expect(step?.description).toContain('CLONE_SOURCETYPE = copy');
+    expect(step?.fieldsAdded).toEqual([]);
+  });
+
+  it('says a match with nothing to capture extracted nothing', () => {
+    const conf = transformsConf('noop', { REGEX: '.', FORMAT: '' });
+    const [out] = applyTransforms([event('x')], reportDir('noop'), conf, 'search-time');
+    expect(lastStep(out)?.description).toBe('Transform matched; it extracted no fields');
+  });
+
+  it('still lists the fields a transform did extract', () => {
+    const conf = transformsConf('ex', { REGEX: 'user=(?<user>\\w+)' });
+    const [out] = applyTransforms([event('user=alice')], reportDir('ex'), conf, 'search-time');
+    expect(lastStep(out)?.description).toBe('Transform extracted fields: user');
+  });
+
+  it('records a DEST_KEY = MetaData:* rewrite old → new, as INGEST_EVAL does', () => {
+    const conf = transformsConf('route', { REGEX: '.', FORMAT: 'host::web01', DEST_KEY: 'MetaData:Host' });
+    const [out] = applyTransforms([event('x')], transformsDir('route'), conf, 'index-time');
+    expect(lastStep(out)?.metadataChanges).toEqual([{ key: 'host', from: 'h', to: 'web01' }]);
+  });
+
+  it('records no metadata change for a transform that routes elsewhere', () => {
+    const conf = transformsConf('q', { REGEX: '.', FORMAT: 'nullQueue', DEST_KEY: 'queue' });
+    const [out] = applyTransforms([event('x')], transformsDir('q'), conf, 'index-time');
+    expect(lastStep(out)?.metadataChanges).toBeUndefined();
+  });
+});

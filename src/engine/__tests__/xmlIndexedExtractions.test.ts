@@ -166,6 +166,34 @@ describe('XML_IE_EXCLUDE_VALS (#271)', () => {
     const f = fieldsOf('<r><a>-</a><a>x</a></r>', xmlDirs('xmlkv', d('XML_IE_EXCLUDE_VALS', '-')));
     expect(f['a']).toBe('x');
   });
+
+  it('matches * entries as globs, including across a multi-line value', () => {
+    const f = fieldsOf(
+      '<r><a>N/A (none)</a><b>line one\nline two</b><c>kept</c></r>',
+      xmlDirs('xmlkv', d('XML_IE_EXCLUDE_VALS', 'N/A*,line*two')),
+    );
+    expect(f['a']).toBeUndefined();
+    expect(f['b']).toBeUndefined();
+    expect(f['c']).toBe('kept');
+  });
+
+  it('tests a many-star entry against a long value quickly (#344)', () => {
+    // The value comes from the event, so the matcher's cost is the event's to
+    // choose. Compiled to a backtracking regex this took seconds at 200 chars.
+    const long = 'a'.repeat(10_000);
+    const started = performance.now();
+    const f = fieldsOf(
+      `<r><a>${long}</a></r>`,
+      xmlDirs(
+        'xmlkv',
+        d('XML_IE_EXCLUDE_VALS', '*a*a*a*a*b,*a*a*a*a*a*a*ab*'),
+        d('XML_IE_MAX_EXTRACTED_VALUE_SIZE', '20000'),
+        d('extraction_cutoff', '20000'),
+      ),
+    );
+    expect(performance.now() - started).toBeLessThan(200);
+    expect(f['a']).toBe(long);
+  });
 });
 
 describe('XML_IE_SKIP_XML_ENCODED_VALS (#271)', () => {

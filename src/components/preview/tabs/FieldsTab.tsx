@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { useState, useMemo, useCallback, useEffect, useId, useRef } from 'react';
 import { useAppStore } from '../../../store/useAppStore';
 import { copyQuietly } from '../../../utils/clipboard';
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuLabel } from '../../ui/ContextMenu';
@@ -285,6 +285,23 @@ export function FieldsTab() {
     return counts;
   }, [fieldSummary]);
 
+  // Row ids, so a parent's toggle can name the child rows it shows and hides
+  // in `aria-controls` (#347). By position rather than by name: a field name
+  // may hold spaces, which would split an id reference list.
+  const rowIdPrefix = useId();
+  const { rowIds, childRowIds } = useMemo(() => {
+    const ids = new Map<string, string>();
+    fieldSummary.forEach((f, i) => ids.set(f.name, `${rowIdPrefix}-row-${i}`));
+    const children = new Map<string, string[]>();
+    for (const f of fieldSummary) {
+      if (f.parentName === null) continue;
+      const list = children.get(f.parentName) ?? [];
+      list.push(ids.get(f.name)!);
+      children.set(f.parentName, list);
+    }
+    return { rowIds: ids, childRowIds: children };
+  }, [fieldSummary, rowIdPrefix]);
+
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center gap-2 px-3 py-2 border-b border-[var(--color-border-subtle)] bg-[var(--color-bg-secondary)]">
@@ -359,10 +376,11 @@ export function FieldsTab() {
               .filter((field) => isFieldVisible(field, effectiveCollapsed, parentIndex))
               .map((field) => {
                 const childCount = field.isParent ? childCounts.get(field.name) ?? 0 : 0;
+                const collapsed = effectiveCollapsed.has(field.name);
                 return (
               <ContextMenu key={field.name}>
               <ContextMenuTrigger>
-              <tr className="border-b border-[var(--color-border-subtle)] hover:bg-[var(--color-bg-secondary)] transition-colors">
+              <tr id={rowIds.get(field.name)} className="border-b border-[var(--color-border-subtle)] hover:bg-[var(--color-bg-secondary)] transition-colors">
                 <td className="py-1.5 px-3 font-mono font-medium" style={{ width: columnWidths.name }}>
                   <div className="flex items-center gap-1.5">
                     <FieldNameCell
@@ -370,8 +388,10 @@ export function FieldsTab() {
                       depth={field.depth}
                       isParent={field.isParent}
                       parentName={field.parentName}
-                      collapsed={effectiveCollapsed.has(field.name)}
+                      collapsed={collapsed}
                       childCount={childCount}
+                      // Only while expanded: collapsed, the child rows are not rendered.
+                      controls={collapsed ? undefined : childRowIds.get(field.name)?.join(' ')}
                       onToggle={toggleCollapse}
                     />
                     {field.maskedBy.size > 0 && (
@@ -444,7 +464,7 @@ export function FieldsTab() {
 }
 
 function FieldNameCell({
-  name, depth, isParent, parentName, collapsed, childCount, onToggle,
+  name, depth, isParent, parentName, collapsed, childCount, controls, onToggle,
 }: {
   name: string;
   depth: number;
@@ -452,6 +472,8 @@ function FieldNameCell({
   parentName: string | null;
   collapsed: boolean;
   childCount: number;
+  /** Space-separated ids of the child rows the toggle shows and hides, when rendered. */
+  controls: string | undefined;
   onToggle: (parent: string) => void;
 }) {
   // Leaf name relative to immediate parent (e.g. "instanceId" from "responseElements.instancesSet.items.0.instanceId")
@@ -466,8 +488,12 @@ function FieldNameCell({
             onClick={() => onToggle(name)}
             // Named for the field it toggles: a column of bare "Expand"
             // buttons gave a screen reader no way to tell them apart (#335).
-            aria-label={`${collapsed ? 'Expand' : 'Collapse'} ${name}`}
+            // The name stays fixed and `aria-expanded` carries the state: a
+            // name that flipped between "Expand" and "Collapse" announced the
+            // change twice (#347).
+            aria-label={`Toggle ${name}`}
             aria-expanded={!collapsed}
+            aria-controls={controls}
           >
             <svg
               className="w-3 h-3 transition-transform"
@@ -509,8 +535,9 @@ function FieldNameCell({
         <button
           className="flex items-center justify-center w-4 h-4 rounded hover:bg-[var(--color-bg-tertiary)] cursor-pointer bg-transparent border-none p-0 transition-colors"
           onClick={() => onToggle(name)}
-          aria-label={`${collapsed ? 'Expand' : 'Collapse'} ${name}`}
+          aria-label={`Toggle ${name}`}
           aria-expanded={!collapsed}
+          aria-controls={controls}
         >
           <svg
             className="w-3 h-3 transition-transform"

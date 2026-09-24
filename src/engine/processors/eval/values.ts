@@ -142,7 +142,24 @@ export function minMax(args: EvalValue[], which: 'min' | 'max'): EvalValue {
   return best ?? null;
 }
 
-export function compare(left: EvalArg, right: EvalArg, op: string): boolean {
+/**
+ * A value read as a condition under SPL's three-valued logic: NULL stays NULL
+ * (neither true nor false), anything else is {@link toBool}'s answer. NOT, AND,
+ * OR and XOR combine these; if()/case() and every other consumer that needs a
+ * yes or no treat NULL as not-true (#343).
+ */
+export function toTri(v: EvalArg): boolean | null {
+  return v === null || v === undefined ? null : toBool(v);
+}
+
+export function compare(left: EvalArg, right: EvalArg, op: string): boolean | null {
+  // Any comparison involving NULL is NULL, not a comparison against "" (#343).
+  // Coercing an absent field to "" made `missing == ""` true and `missing != "a"`
+  // true, so a guard written to test a field's value fired on events that do not
+  // have the field at all. NULL is falsy wherever a condition is read, and
+  // isnull()/isnotnull()/coalesce() are how an expression tests for absence.
+  if (left === null || left === undefined || right === null || right === undefined) return null;
+
   // Splunk eval: compare numerically only when BOTH sides are numeric (a number
   // or a string that parses cleanly as one). Otherwise compare as strings. This
   // avoids coercing a non-numeric operand to 0 — `"abc" == 0` must be false, not

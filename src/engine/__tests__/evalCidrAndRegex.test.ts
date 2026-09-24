@@ -81,9 +81,16 @@ describe('cidrmatch() (#291)', () => {
     expect(cidr(range, ip)).toBe('false');
   });
 
-  it('answers false for an absent address, as the other predicates do', () => {
+  // This used to assert 'false' for an absent address. #343 made NULL propagate
+  // through the comparison operators, like() and match(), and cidrmatch() follows
+  // them: the result is NULL, so the EVAL writes no field, and an if() guard
+  // still takes its else branch. Doc-derived (NULL is falsy in a condition), not
+  // captured.
+  it('yields NULL for an absent address, as the comparison operators do (#343)', () => {
     const r = applyEvalExpressions([event()], [evalDir('r', 'cidrmatch("10.0.0.0/8", nope)')])[0]!;
-    expect(r.fields['r']).toBe('false');
+    expect(r.fields['r']).toBeUndefined();
+    const guarded = applyEvalExpressions([event()], [evalDir('r', 'if(cidrmatch("10.0.0.0/8", nope), "in", "out")')])[0]!;
+    expect(guarded.fields['r']).toBe('out');
   });
 
   it('no longer warns that it is not simulated', () => {
