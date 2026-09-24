@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
 // EffectiveConfigTab.tsx
-// What `splunk btool props list <sourcetype> --debug` prints, for the metadata
-// currently configured (#86).
+// What `splunk btool props list <sourcetype> --debug` prints, for the
+// props.conf and metadata the pipeline last ran with (#86, #347).
 //
 // The simulator has always computed this to decide what to run; it just never
 // showed it. The row that earns the panel is the contested one -- a directive
@@ -19,6 +19,7 @@ import {
 } from '../../../engine/parser/effectiveConfig';
 import { getEditor } from '../../editor/editorRegistry';
 import { Icon } from '../../ui/Icon';
+import type { PipelineInputs } from './shared/usePipelineInputs';
 
 /** Jump the props.conf editor to a line, the way the validation list does. */
 function jumpTo(line: number): void {
@@ -117,9 +118,26 @@ function DirectiveRow({ directive }: { directive: EffectiveDirective }) {
   );
 }
 
-export function EffectiveConfigTab() {
-  const propsConf = useAppStore((s) => s.propsConf);
-  const metadata = useAppStore((s) => s.metadata);
+interface EffectiveConfigTabProps {
+  /**
+   * What the pipeline ran with, from `usePipelineInputs` in PreviewPanel. The
+   * tab read the live editor state, so in manual-apply mode it listed config
+   * that had not been run under a footer saying it resolved config the way the
+   * preview does (#347). Taken as a prop rather than called here because the
+   * hook can only freeze inputs while mounted, and this tab unmounts whenever
+   * another output tab is selected — which is when props.conf gets edited.
+   */
+  inputs: PipelineInputs;
+}
+
+export function EffectiveConfigTab({ inputs }: EffectiveConfigTabProps) {
+  const { propsConf, metadata } = inputs;
+  const manualApply = useAppStore((s) => s.settings.manualApply);
+  const livePropsConf = useAppStore((s) => s.propsConf);
+  const liveMetadata = useAppStore((s) => s.metadata);
+  // Only in manual-apply mode: in auto mode the pipeline catches up by itself
+  // within its debounce, and a notice would flash on every keystroke.
+  const pendingChanges = manualApply && (livePropsConf !== propsConf || liveMetadata !== metadata);
   const [contestedOnly, setContestedOnly] = useState(false);
 
   // Resolved with `resolveStanzasForEvent`, as the pipeline does, so an
@@ -136,9 +154,17 @@ export function EffectiveConfigTab() {
   const contestedCount = effective.filter((d) => d.overriddenByStanza.length > 0).length;
   const shown = contestedOnly ? effective.filter((d) => d.overriddenByStanza.length > 0) : effective;
 
+  const pendingNotice = pendingChanges && (
+    <p className="text-xs text-[var(--color-warning)]" role="status">
+      props.conf or the metadata has changed since the pipeline last ran. This shows the configuration that run
+      used; run the pipeline to resolve the changes.
+    </p>
+  );
+
   if (effective.length === 0) {
     return (
-      <div className="h-full overflow-auto p-3">
+      <div className="h-full overflow-auto p-3 space-y-2">
+        {pendingNotice}
         <p className="text-xs text-[var(--color-text-muted)]">
           {propsConf.trim() === ''
             ? 'No props.conf yet.'
@@ -166,6 +192,10 @@ export function EffectiveConfigTab() {
         )}
       </div>
 
+      {pendingNotice && (
+        <div className="px-3 py-2 border-b border-[var(--color-border-subtle)]">{pendingNotice}</div>
+      )}
+
       {assignedSourcetype !== undefined && (
         <p className="px-3 py-2 text-xs text-[var(--color-text-muted)] border-b border-[var(--color-border-subtle)]">
           Sourcetype assigned at input: <span className="font-mono">{metadata.sourcetype}</span> →{' '}
@@ -181,8 +211,8 @@ export function EffectiveConfigTab() {
       </div>
 
       <p className="px-3 py-2 text-xs text-[var(--color-text-muted)]">
-        Resolved for the metadata above, the same way the preview resolves it. Stanza precedence is
-        source:: over host:: over sourcetype over default.
+        Resolved for the props.conf and metadata the pipeline last ran with, the same way the preview
+        resolves it. Stanza precedence is source:: over host:: over sourcetype over default.
       </p>
     </div>
   );

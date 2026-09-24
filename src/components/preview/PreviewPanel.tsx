@@ -22,6 +22,7 @@ import { PreviewFilterBar } from './PreviewFilterBar';
 import { EventPagination } from './EventPagination';
 import { usePagination } from '../../hooks/usePagination';
 import { useDebounce } from '../../hooks/useDebounce';
+import { usePipelineInputs, type PipelineInputs } from './tabs/shared/usePipelineInputs';
 
 export interface EnrichedEvent {
   event: SplunkEvent;
@@ -57,6 +58,10 @@ export function PreviewPanel() {
   const result = useAppStore((s) => s.processingResult);
   const isProcessing = useAppStore((s) => s.isProcessing);
   const tabsId = useId();
+  // Held here rather than in the Effective config tab, which unmounts when
+  // another output tab is selected: in manual-apply mode the inputs of the last
+  // run have to survive the edits made while it is hidden (#347).
+  const pipelineInputs = usePipelineInputs();
   const diagnostics = useAppStore((s) => s.validationDiagnostics);
   // A run that produced no result at all — watchdog timeout, repeated worker
   // crash, an engine throw — clears `processingResult` and says why in an error
@@ -98,7 +103,12 @@ export function PreviewPanel() {
         aria-labelledby={tabId(tabsId, activeTab)}
         aria-busy={isProcessing}
       >
-        <TabContent tab={activeTab} hasData={!!result && result.events.length > 0} failure={failure} />
+        <TabContent
+          tab={activeTab}
+          hasData={!!result && result.events.length > 0}
+          failure={failure}
+          pipelineInputs={pipelineInputs}
+        />
         {isProcessing && (
           <div
             className="absolute inset-0 flex items-center justify-center pointer-events-none"
@@ -113,12 +123,17 @@ export function PreviewPanel() {
   );
 }
 
-function TabContent({ tab, hasData, failure }: { tab: OutputTabId; hasData: boolean; failure: string | null }) {
+function TabContent({ tab, hasData, failure, pipelineInputs }: {
+  tab: OutputTabId;
+  hasData: boolean;
+  failure: string | null;
+  pipelineInputs: PipelineInputs;
+}) {
   if (tab === 'architecture') return <ArchitecturePanel embedded />;
-  // Resolves props.conf against the configured metadata, so it has an answer
+  // Resolves the last run's props.conf and metadata, so it has an answer
   // before any data has been processed — the same reason Architecture sits
   // above the gate rather than inside the switch.
-  if (tab === 'effective') return <EffectiveConfigTab />;
+  if (tab === 'effective') return <EffectiveConfigTab inputs={pipelineInputs} />;
 
   if (failure !== null) {
     return <FailureState message={failure} />;

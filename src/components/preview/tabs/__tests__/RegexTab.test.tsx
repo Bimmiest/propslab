@@ -319,17 +319,62 @@ describe('RegexTab — results follow the events they were matched over (#329)',
     rerender(<RegexTab items={next} allEvents={next} currentPage={1} eventsPerPage={10} />);
 
     // Not flashed to pending, and not the old results laid over the new events
-    // (which would badge "no ip here" as Event #1, matched).
+    // (which would badge "no ip here" as Event #1, matched). The two events the
+    // settled run already saw keep their answers at their new positions (#347);
+    // the two it never saw wait for the re-run, as does the count.
     expect(within(container).queryByText('Testing pattern…')).not.toBeInTheDocument();
-    expect(cardTitles(container)).toEqual(['Event #1', 'Event #2']);
+    expect(cardTitles(container)).toEqual(['Event #3', 'Event #4']);
     expect(container.textContent).toContain('192.168.1.1 - GET /foo 200');
     expect(container.textContent).not.toContain('no ip here');
+    expect(within(container).getByText('Testing 2 more events on this page…')).toBeInTheDocument();
     expect(within(container).getByText(/2\/3 events matched/).textContent).toContain('updating');
 
     act(() => { worker().respond(); });
     expect(cardTitles(container)).toEqual(['Event #3', 'Event #4']);
     expect(within(container).getByText('2/4 events matched')).toBeInTheDocument();
     expect(container.textContent).not.toContain('updating');
+    expect(container.textContent).not.toContain('more event');
+  });
+
+  // #347: while the re-run was in flight the tab rendered the previous inputs'
+  // page slice. A search change resets the shared pagination to page 1 at once,
+  // so events the new filter excludes showed beside page controls for the new
+  // filter, numbered by their position in the old dataset.
+  it('pages and numbers the events on screen while a narrowed filter is re-matched (#347)', () => {
+    const all = [
+      makeItem('GET /a 10.0.0.1'),
+      makeItem('POST /b 10.0.0.2'),
+      makeItem('GET /c 10.0.0.3'),
+      makeItem('POST /d 10.0.0.4'),
+    ];
+    const { container, rerender } = render(
+      <RegexTab items={all.slice(2, 4)} allEvents={all} currentPage={2} eventsPerPage={2} />,
+    );
+    fireEvent.change(within(container).getByPlaceholderText(/\\d\+/), { target: { value: '10\\.0\\.0\\.\\d' } });
+    act(() => { vi.advanceTimersByTime(250); });
+    act(() => { worker().respond(); });
+    expect(cardTitles(container)).toEqual(['Event #3', 'Event #4']);
+    expect(within(container).getByText('4/4 events matched')).toBeInTheDocument();
+
+    // A search for "POST" keeps two events and puts the pagination back on page 1.
+    const posts = [all[1]!, all[3]!];
+    rerender(<RegexTab items={posts} allEvents={posts} currentPage={1} eventsPerPage={2} />);
+
+    // Before the worker answers: the filtered events, numbered in the filtered
+    // dataset — not page 1 of the old one ("GET /a", "POST /b" as #1 and #2).
+    expect(worker().posted.at(-1)?.inputs).toEqual(posts.map((p) => p.event._raw));
+    expect(cardTitles(container)).toEqual(['Event #1', 'Event #2']);
+    expect(container.textContent).toContain('POST /b 10.0.0.2');
+    expect(container.textContent).toContain('POST /d 10.0.0.4');
+    expect(container.textContent).not.toContain('GET /a');
+    expect(container.textContent).not.toContain('GET /c');
+    // Every event on screen was in the settled run, so the count is already exact.
+    expect(within(container).getByText('2/2 events matched')).toBeInTheDocument();
+    expect(container.textContent).not.toContain('updating');
+
+    act(() => { worker().respond(); });
+    expect(cardTitles(container)).toEqual(['Event #1', 'Event #2']);
+    expect(within(container).getByText('2/2 events matched')).toBeInTheDocument();
   });
 
   it('shows the timeout, not stale results, when the re-run is stopped', () => {

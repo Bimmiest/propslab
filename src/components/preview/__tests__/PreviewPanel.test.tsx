@@ -147,3 +147,32 @@ describe('PreviewPanel — search is debounced (#335)', () => {
     expect(container.textContent).not.toContain('POST /b 500');
   });
 });
+
+// #347: the Effective config tab unmounts while another output tab is shown,
+// which is when props.conf gets edited, so the inputs of the last run are held
+// by the panel rather than the tab.
+describe('PreviewPanel — Effective config shows the last run in manual-apply mode (#347)', () => {
+  beforeEach(() => {
+    useAppStore.setState(
+      {
+        ...initial,
+        activeOutputTab: 'architecture',
+        settings: { perEventPipeline: false, manualApply: true },
+        metadata: { index: 'main', host: 'h', source: 's', sourcetype: 'st' },
+        propsConf: '[st]\nTRUNCATE = 500\n',
+      },
+      true,
+    );
+  });
+
+  it('keeps the run config across edits made while the tab was hidden', () => {
+    render(<PreviewPanel />);
+    act(() => useAppStore.getState().setPropsConf('[st]\nTRUNCATE = 123\n'));
+    act(() => useAppStore.getState().setActiveOutputTab('effective'));
+    expect(screen.getByText('= 500')).toBeInTheDocument();
+    expect(screen.queryByText('= 123')).not.toBeInTheDocument();
+
+    act(() => useAppStore.getState().triggerManualRun());
+    expect(screen.getByText('= 123')).toBeInTheDocument();
+  });
+});
