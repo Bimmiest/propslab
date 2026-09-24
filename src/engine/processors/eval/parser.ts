@@ -18,7 +18,7 @@ export type Node =
   | { kind: 'arith'; op: string; left: Node; right: Node }
   | { kind: 'concat'; left: Node; right: Node }
   | { kind: 'compare'; op: string; left: Node; right: Node }
-  | { kind: 'logical'; op: 'AND' | 'OR'; left: Node; right: Node }
+  | { kind: 'logical'; op: 'AND' | 'OR' | 'XOR'; left: Node; right: Node }
   | { kind: 'not'; operand: Node }
   | { kind: 'neg'; operand: Node }
   | { kind: 'in'; value: Node; list: Node[]; negate: boolean };
@@ -79,11 +79,13 @@ class Parser {
       throw new Error('Expression nesting depth limit exceeded (max 50)');
     }
     try {
+      // XOR shares OR's precedence level in the SPL eval operator table, and
+      // like OR it is left-associative (#312).
       let left = this.parseAnd();
-      while (this.peek()?.value === 'OR' || this.peek()?.value === '||') {
+      for (let tok = this.peek(); tok?.type === 'op' && ['OR', '||', 'XOR'].includes(tok.value); tok = this.peek()) {
         this.consume();
         const right = this.parseAnd();
-        left = { kind: 'logical', op: 'OR', left, right };
+        left = { kind: 'logical', op: tok.value === 'XOR' ? 'XOR' : 'OR', left, right };
       }
       return left;
     } finally {
@@ -102,11 +104,18 @@ class Parser {
   }
 
   private parseNot(): Node {
-    if (this.peek()?.value === 'NOT' || this.peek()?.value === '!') {
+    // NOT applies to a NOT expression, not only to a comparison: `NOT NOT x`
+    // used to hand the second NOT to parseComparison, which cannot start with
+    // an operator, and threw (#312). Counted in a loop rather than by recursion
+    // so a long run of NOTs cannot exhaust the stack past the depth guard.
+    let nots = 0;
+    while (this.peek()?.type === 'op' && (this.peek()?.value === 'NOT' || this.peek()?.value === '!')) {
       this.consume();
-      return { kind: 'not', operand: this.parseComparison() };
+      nots++;
     }
-    return this.parseComparison();
+    let node = this.parseComparison();
+    for (; nots > 0; nots--) node = { kind: 'not', operand: node };
+    return node;
   }
 
   private parseComparison(): Node {
@@ -122,6 +131,16 @@ class Parser {
       this.consume(); // NOT
       this.consume(); // IN
       return this.parseInList(left, true);
+    }
+
+    // `a LIKE b` is the like() function written as a comparison operator, in
+    // the same precedence tier as `=`/`!=` (#312). It becomes a call so the
+    // operator and the function cannot drift apart: same wildcard translation,
+    // same ReDoS handling for runs of `%`, same regex-failure diagnostic.
+    if (tok?.type === 'op' && tok.value === 'LIKE') {
+      this.consume();
+      const right = this.parseConcat();
+      return { kind: 'call', name: 'like', args: [left, right] };
     }
 
     if (tok?.type === 'op' && ['==', '=', '!=', '<', '>', '<=', '>='].includes(tok.value)) {
@@ -211,23 +230,21 @@ class Parser {
       return { kind: 'lit', value: parseFloat(this.consume().value) };
     }
 
+    // `like(...)` in operand position is the like() function, even though the
+    // lexer now reads the word as the LIKE operator (#312). An operator cannot
+    // start an operand, so there is no ambiguity.
+    if (tok.type === 'op' && tok.value === 'LIKE' && this.tokens[this.pos + 1]?.value === '(') {
+      this.consume();
+      return this.parseCall('like');
+    }
+
     // Function call or field reference
     if (tok.type === 'ident') {
       const name = this.consume().value;
 
       // Check for function call
       if (this.peek()?.type === 'paren' && this.peek()?.value === '(') {
-        this.consume(); // (
-        const args: Node[] = [];
-        if (this.peek()?.type !== 'paren' || this.peek()?.value !== ')') {
-          args.push(this.parseOr());
-          while (this.peek()?.type === 'comma') {
-            this.consume();
-            args.push(this.parseOr());
-          }
-        }
-        this.expect('paren', ')');
-        return { kind: 'call', name, args };
+        return this.parseCall(name);
       }
 
       // Boolean literals
@@ -239,6 +256,21 @@ class Parser {
     }
 
     throw new Error(`Unexpected token: ${tok.value}`);
+  }
+
+  /** The argument list of a call to `name`; the next token is its `(`. */
+  private parseCall(name: string): Node {
+    this.expect('paren', '(');
+    const args: Node[] = [];
+    if (this.peek()?.type !== 'paren' || this.peek()?.value !== ')') {
+      args.push(this.parseOr());
+      while (this.peek()?.type === 'comma') {
+        this.consume();
+        args.push(this.parseOr());
+      }
+    }
+    this.expect('paren', ')');
+    return { kind: 'call', name, args };
   }
 }
 
