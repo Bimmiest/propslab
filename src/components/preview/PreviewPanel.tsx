@@ -144,7 +144,7 @@ function TabContent({ tab, hasData, failure, pipelineInputs }: {
   }
 
   switch (tab) {
-    case 'preview': return <PreviewSubTab />;
+    case 'preview': return <PreviewSubTab pipelineInputs={pipelineInputs} />;
     case 'cim': return <CimModelsTab />;
     case 'fields': return <FieldsTab />;
     case 'transforms': return <TransformsTab />;
@@ -248,7 +248,7 @@ function EmptyState() {
   );
 }
 
-function PreviewSubTab() {
+function PreviewSubTab({ pipelineInputs }: { pipelineInputs: PipelineInputs }) {
   const result = useAppStore((s) => s.processingResult);
   const events = useMemo(() => result?.events ?? [], [result]);
   const originalRaw = result?.originalRaw ?? '';
@@ -370,7 +370,7 @@ function PreviewSubTab() {
         {subTab === 'raw' && <RawTab items={paginatedItems} currentPage={currentPage} eventsPerPage={eventsPerPage} search={debouncedSearch} />}
         {subTab === 'highlighted' && <HighlightedTab items={paginatedItems} allEvents={filteredEvents} currentPage={currentPage} eventsPerPage={eventsPerPage} />}
         {subTab === 'diff' && <DiffTab items={paginatedItems} currentPage={currentPage} eventsPerPage={eventsPerPage} />}
-        {subTab === 'timestamp' && <TimestampTab items={paginatedItems} currentPage={currentPage} eventsPerPage={eventsPerPage} />}
+        {subTab === 'timestamp' && <TimestampTab items={paginatedItems} currentPage={currentPage} eventsPerPage={eventsPerPage} inputs={pipelineInputs} />}
         {subTab === 'regex' && <RegexTab items={paginatedItems} allEvents={filteredEvents} currentPage={currentPage} eventsPerPage={eventsPerPage} />}
       </div>
 

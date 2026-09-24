@@ -23,7 +23,6 @@ export function MetadataPanel() {
         onClick={() => toggleCollapse('metadata')}
         className="w-full flex items-center gap-2 px-3 py-2 hover:opacity-80 transition-opacity border-t border-[var(--color-border-subtle)]"
         aria-expanded={!collapsed}
-        aria-label={collapsed ? 'Expand metadata' : 'Collapse metadata'}
       >
         <Icon
           name="chevron-down"

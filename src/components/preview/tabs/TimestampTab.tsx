@@ -3,7 +3,7 @@ import { parseConf } from '../../../engine/parser/confParser';
 import { mergeDirectives, resolveStanzasForEvent } from '../../../engine/parser/stanzaMatcher';
 import { resolveLookahead } from '../../../engine/processors/timestampExtractor';
 import { useTimestampMatch } from '../../../hooks/useTimestampMatch';
-import { usePipelineInputs } from './shared/usePipelineInputs';
+import { usePipelineInputs, type PipelineInputs } from './shared/usePipelineInputs';
 import type { TimeConfig, TimestampProbe } from '../../../engine/timestampMatch';
 import type { EventMetadata, SplunkEvent, TimeSource } from '../../../engine/types';
 import type { EnrichedEvent } from '../PreviewPanel';
@@ -12,6 +12,13 @@ interface TimestampTabProps {
   items: EnrichedEvent[];
   currentPage: number;
   eventsPerPage: number;
+  /**
+   * The inputs of the last pipeline run, from PreviewPanel. This tab unmounts
+   * whenever another sub-tab is shown, which is when edits happen, so an
+   * instance of the hook here would start from unrun edits (#347). The
+   * fallback serves a tab rendered on its own.
+   */
+  inputs?: PipelineInputs;
 }
 
 // Theme-aware highlight colours (no hard-coded hex — see design system in CLAUDE.md).
@@ -205,8 +212,9 @@ function extractDirectives(format: string): { directive: string; description: st
   return result;
 }
 
-export function TimestampTab({ items, currentPage, eventsPerPage }: TimestampTabProps) {
-  const { propsConf, metadata } = usePipelineInputs();
+export function TimestampTab({ items, currentPage, eventsPerPage, inputs }: TimestampTabProps) {
+  const ownInputs = usePipelineInputs();
+  const { propsConf, metadata } = inputs ?? ownInputs;
   const [refOpen, setRefOpen] = useState(false);
   const [refSearch, setRefSearch] = useState('');
 
