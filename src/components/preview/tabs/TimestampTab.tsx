@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react';
 import { useAppStore } from '../../../store/useAppStore';
 import { parseConf } from '../../../engine/parser/confParser';
-import { matchStanzas, mergeDirectives } from '../../../engine/parser/stanzaMatcher';
+import { mergeDirectives, resolveStanzasForEvent } from '../../../engine/parser/stanzaMatcher';
 import { resolveLookahead } from '../../../engine/processors/timestampExtractor';
 import { useTimestampMatch } from '../../../hooks/useTimestampMatch';
 import { useDebounce } from '../../../hooks/useDebounce';
+import { PIPELINE_DEBOUNCE_MS } from '../../../hooks/workerLifecycle';
 import type { TimeConfig, TimestampProbe } from '../../../engine/timestampMatch';
 import type { EventMetadata, SplunkEvent, TimeSource } from '../../../engine/types';
 import type { EnrichedEvent } from '../PreviewPanel';
@@ -158,11 +159,16 @@ const STRPTIME_REFERENCE: StrptimeCategory[] = [
 // metadata — using the same parse → stanza-match → merge path as the pipeline —
 // rather than flat-scanning every line. A flat scan would surface a TIME_FORMAT
 // from a stanza that never matched this event's sourcetype/host/source.
+// `resolveStanzasForEvent`, as the pipeline resolves them, so a `sourcetype =`
+// assigned in a [source::] or [host::] stanza picks the time settings of the
+// stanza it names rather than those of the sourcetype it replaced (#328).
 function parseTimeConfig(propsConf: string, metadata: EventMetadata): TimeConfig {
-  const directives = mergeDirectives(matchStanzas(parseConf(propsConf, 'props.conf').stanzas, metadata));
+  const { stanzas } = resolveStanzasForEvent(parseConf(propsConf, 'props.conf').stanzas, metadata);
+  const directives = mergeDirectives(stanzas);
   const get = (key: string) => directives.find((d) => d.key === key)?.value.trim();
   return {
-    timePrefix: get('TIME_PREFIX') ?? null,
+    // An empty TIME_PREFIX is unset, as the extractor reads it (#328).
+    timePrefix: get('TIME_PREFIX') || null,
     timeFormat: get('TIME_FORMAT') ?? null,
     // Shared with the engine so 0 / -1 (no limit) draw the window it scans.
     maxLookahead: resolveLookahead(get('MAX_TIMESTAMP_LOOKAHEAD')),
@@ -173,9 +179,6 @@ function parseTimeConfig(propsConf: string, metadata: EventMetadata): TimeConfig
     tzAlias: get('TZ_ALIAS') ?? null,
   };
 }
-
-/** The pipeline's auto-run debounce, in `useProcessingPipeline`. */
-const PIPELINE_DEBOUNCE_MS = 300;
 
 /**
  * The props.conf and metadata the events on screen were produced from, as near
@@ -249,7 +252,10 @@ export function TimestampTab({ items, currentPage, eventsPerPage }: TimestampTab
   // Probing runs in a terminatable worker (#117): TIME_PREFIX is a user regex,
   // and executing it during render had nothing to interrupt it. Memoised so the
   // hook re-probes when the events or the config change, not on every render.
-  const raws = useMemo(() => items.map((item) => item.event._raw), [items]);
+  // The text probed is the text the extractor read, not the final `_raw`: a
+  // SEDCMD or an index-time transform runs after timestamping and may have
+  // rewritten the very prefix the tab would then fail to find (#328).
+  const raws = useMemo(() => items.map((item) => timestampTextOf(item.event)), [items]);
   const { status, probes, error } = useTimestampMatch(raws, config);
 
   const directives = useMemo(
@@ -399,7 +405,8 @@ export function TimestampTab({ items, currentPage, eventsPerPage }: TimestampTab
             return (
               <TimestampEventCard
                 key={idx}
-                raw={item.event._raw}
+                raw={raws[idx] ?? item.event._raw}
+                rewritten={raws[idx] !== undefined && raws[idx] !== item.event._raw}
                 globalIdx={globalIdx}
                 config={config}
                 probe={probes[idx] ?? null}
@@ -430,6 +437,15 @@ function ConfigValue({ label, value, color }: { label: string; value: string | n
   );
 }
 
+/**
+ * The text timestamp extraction read for this event — `_raw` before SEDCMD,
+ * DEST_KEY = _raw and INGEST_EVAL rewrote it — or `_raw` itself when the
+ * extractor recorded none (#328).
+ */
+function timestampTextOf(event: SplunkEvent): string {
+  return event.timestampText ?? event._raw;
+}
+
 /** How the pipeline actually resolved this event's `_time` (#85). */
 function resolvedTimeSource(event: SplunkEvent): TimeSource | undefined {
   return event.processingTrace
@@ -452,6 +468,7 @@ const FALLBACK_LABEL: Partial<Record<TimeSource, string>> = {
 
 function TimestampEventCard({
   raw,
+  rewritten,
   globalIdx,
   config,
   probe,
@@ -460,6 +477,8 @@ function TimestampEventCard({
   timeSource,
 }: {
   raw: string;
+  /** Whether `_raw` was rewritten after timestamping, so `raw` is not the final text. */
+  rewritten: boolean;
   globalIdx: number;
   config: TimeConfig;
   probe: TimestampProbe | null;
@@ -476,6 +495,14 @@ function TimestampEventCard({
       <div className="flex items-center justify-between px-3 py-1.5 border-b border-[var(--color-border)] bg-[var(--color-bg-tertiary)]">
         <span className="text-xs font-medium text-[var(--color-text-muted)]">
           Event #{globalIdx}
+          {rewritten && (
+            <span
+              className="ml-2 font-normal italic"
+              title="SEDCMD or an index-time transform rewrote _raw after its timestamp was read. Shown is the text timestamp extraction saw."
+            >
+              as read before _raw was rewritten
+            </span>
+          )}
         </span>
         <div className="flex items-center gap-2">
           {pending ? (

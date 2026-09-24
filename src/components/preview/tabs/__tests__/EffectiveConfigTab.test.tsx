@@ -85,6 +85,32 @@ describe('EffectiveConfigTab (#86)', () => {
     expect(within(container).getByText('No props.conf yet.')).toBeInTheDocument();
   });
 
+  it('resolves an input-time sourcetype assignment, as the preview does (#328)', () => {
+    // [source::…] assigns `assigned`; the pipeline then re-matches against it,
+    // so [assigned]'s TRUNCATE applies and [my_app]'s never did.
+    setConf(
+      [
+        '[source::/var/log/app.log]',
+        'sourcetype = assigned',
+        '',
+        '[my_app]',
+        'TRUNCATE = 500',
+        '',
+        '[assigned]',
+        'TRUNCATE = 777',
+      ].join('\n'),
+    );
+    const { container } = render(<EffectiveConfigTab />);
+    expect(within(container).getByText('= 777')).toBeInTheDocument();
+    expect(within(container).queryByText('= 500')).not.toBeInTheDocument();
+    expect(container.textContent).toContain('Sourcetype assigned at input: my_app → assigned');
+  });
+
+  it('says nothing about assignment when there is none', () => {
+    const { container } = render(<EffectiveConfigTab />);
+    expect(container.textContent).not.toContain('Sourcetype assigned at input');
+  });
+
   it('needs no processed events — it resolves config, not output', () => {
     // processingResult is left null by setConf; the panel still answers.
     const { container } = render(<EffectiveConfigTab />);

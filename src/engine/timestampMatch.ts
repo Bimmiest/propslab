@@ -82,7 +82,7 @@ const EMPTY: TimestampProbe = { match: null, prefix: null };
  */
 interface CompiledTimeConfig {
   config: TimeConfig;
-  /** undefined: no TIME_PREFIX. null: one that will not compile. */
+  /** undefined: no TIME_PREFIX, or an empty one. null: one that will not compile. */
   prefixRegex: RegExp | null | undefined;
   formatRegex: RegExp | null;
   tzAlias: ReadonlyMap<string, string>;
@@ -90,7 +90,9 @@ interface CompiledTimeConfig {
 }
 
 function compile(config: TimeConfig): CompiledTimeConfig {
-  const prefixRegex = config.timePrefix ? safeRegex(config.timePrefix) : undefined;
+  // Trimmed, and empty read as unset, the way the extractor reads it (#328).
+  const timePrefix = config.timePrefix?.trim() || undefined;
+  const prefixRegex = timePrefix !== undefined ? safeRegex(timePrefix) : undefined;
   return {
     config,
     prefixRegex,

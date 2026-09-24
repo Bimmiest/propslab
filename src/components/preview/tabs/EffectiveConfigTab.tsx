@@ -12,7 +12,7 @@
 import { useMemo, useState } from 'react';
 import { useAppStore } from '../../../store/useAppStore';
 import { parseConf } from '../../../engine/parser/confParser';
-import { matchStanzas } from '../../../engine/parser/stanzaMatcher';
+import { resolveStanzasForEvent } from '../../../engine/parser/stanzaMatcher';
 import {
   resolveEffectiveConfig,
   type EffectiveDirective,
@@ -122,10 +122,15 @@ export function EffectiveConfigTab() {
   const metadata = useAppStore((s) => s.metadata);
   const [contestedOnly, setContestedOnly] = useState(false);
 
-  const effective = useMemo(() => {
-    if (propsConf.trim() === '') return [];
+  // Resolved with `resolveStanzasForEvent`, as the pipeline does, so an
+  // input-time `sourcetype =` in a [source::] or [host::] stanza brings in the
+  // stanza it assigns. `matchStanzas` alone listed the settings of the
+  // sourcetype being replaced, which the preview never applied (#328).
+  const { effective, assignedSourcetype } = useMemo(() => {
+    if (propsConf.trim() === '') return { effective: [], assignedSourcetype: undefined };
     const { stanzas } = parseConf(propsConf, 'props.conf');
-    return resolveEffectiveConfig(matchStanzas(stanzas, metadata));
+    const resolved = resolveStanzasForEvent(stanzas, metadata);
+    return { effective: resolveEffectiveConfig(resolved.stanzas), assignedSourcetype: resolved.assignedSourcetype };
   }, [propsConf, metadata]);
 
   const contestedCount = effective.filter((d) => d.overriddenByStanza.length > 0).length;
@@ -137,7 +142,7 @@ export function EffectiveConfigTab() {
         <p className="text-xs text-[var(--color-text-muted)]">
           {propsConf.trim() === ''
             ? 'No props.conf yet.'
-            : `No stanza in props.conf matches sourcetype "${metadata.sourcetype}", source "${metadata.source}" or host "${metadata.host}".`}
+            : `No stanza in props.conf matches sourcetype "${assignedSourcetype ?? metadata.sourcetype}", source "${metadata.source}" or host "${metadata.host}".`}
         </p>
       </div>
     );
@@ -160,6 +165,14 @@ export function EffectiveConfigTab() {
           </button>
         )}
       </div>
+
+      {assignedSourcetype !== undefined && (
+        <p className="px-3 py-2 text-xs text-[var(--color-text-muted)] border-b border-[var(--color-border-subtle)]">
+          Sourcetype assigned at input: <span className="font-mono">{metadata.sourcetype}</span> →{' '}
+          <span className="font-mono text-[var(--color-text-primary)]">{assignedSourcetype}</span>. Stanzas are resolved
+          against the assigned sourcetype.
+        </p>
+      )}
 
       <div>
         {shown.map((directive) => (

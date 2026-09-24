@@ -139,6 +139,18 @@ export interface SplunkEvent {
    * events a caller receives.
    */
   rawMutations?: RawMutation[];
+  /**
+   * The text timestamp extraction read: `_raw` as it stood after line breaking
+   * and TRUNCATE, before SEDCMD, DEST_KEY = _raw or INGEST_EVAL could rewrite
+   * it. Set by `timestampExtractor` on every event it reads, absent when it read
+   * nothing (DATETIME_CONFIG = CURRENT / NONE).
+   *
+   * The Timestamp tab probes this rather than the final `_raw`, whose TIME_PREFIX
+   * a SEDCMD may already have masked away — the tab then reported "no match" on
+   * an event whose `_time` had been read without trouble (#328). The same string
+   * as `_raw` unless a later step replaced it, so it costs nothing until then.
+   */
+  timestampText?: string;
 }
 
 /** One directive that did nothing to one event, and why (#84). */
@@ -158,10 +170,14 @@ export interface ProcessingResult {
   eventCount: number;
   processingSteps: ProcessingStep[];
   /**
-   * The metadata the run was given, before any input-time assignment or
-   * index-time rewrite. Carried on the result so a view can say which events
-   * a run changed without reading the metadata fields as they are now, which
-   * may have been edited since (#316).
+   * The metadata the events were broken with: the run's input after any
+   * input-time `sourcetype =` assignment from a `[source::]`/`[host::]`
+   * stanza, but before any index-time rewrite (#330). This is the baseline a
+   * view compares events against — an assignment applies to every event and
+   * is not a change the run made to any one of them. Carried on the result so
+   * a view can say which events a run changed without reading the metadata
+   * fields as they are now, which may have been edited since (#316). With no
+   * input to process it is the caller's metadata unchanged.
    */
   inputMetadata: EventMetadata;
 }
