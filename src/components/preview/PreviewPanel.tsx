@@ -241,7 +241,10 @@ function PreviewSubTab() {
   const [selectedStatus, setSelectedStatus] = useState<Set<string>>(new Set());
   const [selectedChangeState, setSelectedChangeState] = useState<Set<string>>(new Set());
 
-  const originalMetadata = useAppStore((s) => s.metadata);
+  // The metadata of the run that produced these events, not the live fields:
+  // comparing with the fields flagged every event as modified while the user
+  // typed, and rebuilt the event lists on each keystroke (#316).
+  const originalMetadata = result?.inputMetadata;
 
   // Enrich events with original raw + change/drop status
   const enrichedEvents = useMemo(() => {
@@ -254,7 +257,7 @@ function PreviewSubTab() {
         event,
         originalRaw: origSlice,
         hasChanges: normalise(origSlice) !== normalise(event._raw),
-        hasMetadataChanges: hasMetadataDiff(event.metadata, originalMetadata),
+        hasMetadataChanges: originalMetadata !== undefined && hasMetadataDiff(event.metadata, originalMetadata),
         isDropped: event._meta._queue === 'nullQueue',
       };
     });

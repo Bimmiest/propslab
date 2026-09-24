@@ -78,7 +78,7 @@ export function runPipeline(
 
   if (!rawData.trim()) {
     return {
-      result: { events: [], originalRaw: rawData, eventCount: 0, processingSteps: [] },
+      result: { events: [], originalRaw: rawData, eventCount: 0, processingSteps: [], inputMetadata: metadata },
       diagnostics,
     };
   }
@@ -336,6 +336,7 @@ export function runPipeline(
       originalRaw: truncatedRaw,
       eventCount: events.length,
       processingSteps,
+      inputMetadata: metadata,
     },
     diagnostics,
   };

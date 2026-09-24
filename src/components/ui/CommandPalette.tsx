@@ -4,6 +4,7 @@ import { Command } from 'cmdk';
 import { useAppStore } from '../../store/useAppStore';
 import { SAMPLE_CONFIGS } from '../../engine/sampleData';
 import { getAllDirectives } from '../../engine/directiveRegistry';
+import type { OutputTabId } from '../../engine/types';
 import { Icon } from './Icon';
 import { Overlay } from './Overlay';
 
@@ -13,13 +14,12 @@ import { Overlay } from './Overlay';
 // keys would collide as React list keys.
 const DIRECTIVE_KEYS = [...new Set(getAllDirectives().map((d) => d.key))];
 
-type OutputTabId = 'preview' | 'cim' | 'fields' | 'transforms' | 'architecture';
-
 const OUTPUT_TABS: { id: OutputTabId; label: string }[] = [
   { id: 'preview', label: 'Preview' },
   { id: 'cim', label: 'CIM Models' },
   { id: 'fields', label: 'Fields' },
   { id: 'transforms', label: 'Pipeline' },
+  { id: 'effective', label: 'Effective config' },
   { id: 'architecture', label: 'Architecture' },
 ];
 

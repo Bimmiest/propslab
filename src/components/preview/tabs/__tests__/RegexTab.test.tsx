@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import { useAppStore } from '../../../../store/useAppStore';
 import { RegexTab } from '../RegexTab';
@@ -139,5 +139,90 @@ describe('RegexTab — one-click Add to props.conf (#88)', () => {
 
     typePattern(container, '(unbalanced');
     expect(within(container).queryByRole('button', { name: 'Add to props.conf' })).not.toBeInTheDocument();
+  });
+});
+
+describe('RegexTab — results follow the typed pattern (#315)', () => {
+  it('treats the previous pattern\'s results as pending until the new one is matched', async () => {
+    useAppStore.setState(initialState, true);
+    const { container } = render(<RegexTab {...defaultProps} />);
+    const input = within(container).getByPlaceholderText(/\\d\+/);
+
+    fireEvent.change(input, { target: { value: '\\d+\\.\\d+\\.\\d+\\.\\d+' } });
+    expect(await within(container).findAllByText(/Event #/)).toHaveLength(2);
+    expect(within(container).getByText('2/3 events matched')).toBeInTheDocument();
+
+    // Inside the debounce window the old results must not be shown as the
+    // new pattern's — the "Add to props.conf" button already writes this one.
+    fireEvent.change(input, { target: { value: 'this_text_does_not_appear' } });
+    expect(within(container).queryByText(/Event #/)).not.toBeInTheDocument();
+    expect(within(container).queryByText(/events matched/)).not.toBeInTheDocument();
+    expect(within(container).getByText('Testing pattern…')).toBeInTheDocument();
+    expect(within(container).getByRole('button', { name: 'Add to props.conf' })).toBeInTheDocument();
+
+    expect(await within(container).findByText('No events matched')).toBeInTheDocument();
+    expect(within(container).getByText('0/3 events matched')).toBeInTheDocument();
+  });
+});
+
+describe('RegexTab — reference keyboard access (#320)', () => {
+  it('announces the reference disclosure state', () => {
+    render(<RegexTab {...defaultProps} />);
+    const toggle = screen.getByRole('button', { name: 'Regex Reference' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('inserts a reference pattern from the keyboard', () => {
+    render(<RegexTab {...defaultProps} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Regex Reference' }));
+    const input = screen.getByPlaceholderText(/\\d\+/);
+
+    const append = screen.getByRole('button', { name: 'Append \\d' });
+    expect(append).toHaveAttribute('tabIndex', '0');
+    fireEvent.keyDown(append, { key: 'Enter' });
+    expect(input).toHaveValue('\\d');
+    fireEvent.keyDown(append, { key: ' ' });
+    expect(input).toHaveValue('\\d\\d');
+
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Use pattern (?P<pid>\\d+)' }), { key: 'Enter' });
+    expect(input).toHaveValue('(?P<pid>\\d+)');
+  });
+});
+
+describe('RegexTab — timers (#322)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    Reflect.deleteProperty(navigator, 'clipboard');
+  });
+
+  it('clears the confirmation-label timers when it unmounts', async () => {
+    useAppStore.setState(initialState, true);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: () => Promise.resolve() },
+    });
+    useAppStore.setState({ metadata: { index: 'main', host: 'h', source: 's', sourcetype: 'my_app' } });
+    // The labels' 1.5 s timers, told apart from the debounce and React's own.
+    const labelTimers: unknown[] = [];
+    const realSetTimeout = globalThis.setTimeout;
+    vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: () => void, ms?: number) => {
+      const id = realSetTimeout(fn, ms);
+      if (ms === 1500) labelTimers.push(id);
+      return id;
+    }) as typeof setTimeout);
+    const clearSpy = vi.spyOn(globalThis, 'clearTimeout');
+
+    const { container, unmount } = render(<RegexTab {...defaultProps} />);
+    fireEvent.change(within(container).getByPlaceholderText(/\\d\+/), { target: { value: 'GET' } });
+    fireEvent.click(within(container).getByRole('button', { name: 'Copy' }));
+    expect(await within(container).findByRole('button', { name: 'Copied!' })).toBeInTheDocument();
+    fireEvent.click(within(container).getByRole('button', { name: 'Add to props.conf' }));
+    expect(within(container).getByRole('button', { name: 'Added!' })).toBeInTheDocument();
+    expect(labelTimers).toHaveLength(2);
+
+    unmount();
+    for (const id of labelTimers) expect(clearSpy).toHaveBeenCalledWith(id);
   });
 });

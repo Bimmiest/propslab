@@ -2,9 +2,10 @@
 // A run that failed outright used to fall through to the first-run "No data
 // yet" invitation (#294); it has to say that the run failed, and why.
 import { describe, it, expect, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { PreviewPanel } from '../PreviewPanel';
 import { useAppStore } from '../../../store/useAppStore';
+import type { EventMetadata, ProcessingResult } from '../../../engine/types';
 
 const initial = useAppStore.getState();
 
@@ -48,5 +49,52 @@ describe('PreviewPanel', () => {
     });
     render(<PreviewPanel />);
     expect(screen.getByText('No data yet')).toBeInTheDocument();
+  });
+});
+
+describe('PreviewPanel — metadata changes are relative to the run (#316)', () => {
+  const runMeta: EventMetadata = { index: 'main', host: 'web01', source: '/var/log/app.log', sourcetype: 'app' };
+
+  function resultWith(host: string): ProcessingResult {
+    return {
+      events: [{
+        _raw: 'GET /index.html 200',
+        _time: null,
+        _meta: {},
+        fields: {},
+        metadata: { ...runMeta, host },
+        lineNumbers: { start: 1, end: 1 },
+        processingTrace: [],
+      }],
+      originalRaw: 'GET /index.html 200',
+      eventCount: 1,
+      processingSteps: [],
+      inputMetadata: runMeta,
+    };
+  }
+
+  function metadataModifiedCount(): string | null {
+    fireEvent.click(screen.getByRole('button', { name: /Changes/ }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Metadata Modified' }));
+    return screen.getByText(/^\d+ \/ \d+$/).textContent;
+  }
+
+  beforeEach(() => {
+    useAppStore.setState({ ...initial, activeOutputTab: 'preview' }, true);
+  });
+
+  it('does not flag events when the metadata is edited after the run', () => {
+    useAppStore.setState({ metadata: runMeta, processingResult: resultWith('web01') });
+    render(<PreviewPanel />);
+    // Typing a new host (manual-apply: no run follows) is not a change the
+    // pipeline made to these events.
+    act(() => { useAppStore.getState().setMetadataField('host', 'web02'); });
+    expect(metadataModifiedCount()).toBe('0 / 1');
+  });
+
+  it('still flags an event whose metadata the run rewrote', () => {
+    useAppStore.setState({ metadata: runMeta, processingResult: resultWith('rewritten') });
+    render(<PreviewPanel />);
+    expect(metadataModifiedCount()).toBe('1 / 1');
   });
 });

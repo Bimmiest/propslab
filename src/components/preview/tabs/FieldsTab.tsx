@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useAppStore } from '../../../store/useAppStore';
 import { copyQuietly } from '../../../utils/clipboard';
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuLabel } from '../../ui/ContextMenu';
@@ -76,7 +76,10 @@ export function FieldsTab() {
     return map;
   }, [events]);
 
-  const fieldSummary = useMemo(() => {
+  // The events × fields × trace walk depends on the events alone, so it has its
+  // own memo. Sharing one with search, sort and the phase filter re-ran it on
+  // every keystroke in the search box and every header click (#316).
+  const aggregatedFields = useMemo(() => {
     const fields = new Map<string, {
       name: string;
       values: Set<string>;
@@ -132,7 +135,13 @@ export function FieldsTab() {
       fields.delete(target);
     }
 
-    let entries = Array.from(fields.values());
+    return Array.from(fields.values());
+  }, [events, aliasMap]);
+
+  const fieldSummary = useMemo(() => {
+    // Filtered into a new array; the aggregated entries themselves are shared
+    // with later passes and never mutated here.
+    let entries = aggregatedFields;
 
     if (search) {
       const lower = search.toLowerCase();
@@ -239,7 +248,7 @@ export function FieldsTab() {
     }
 
     return result;
-  }, [events, search, sortKey, sortDir, aliasMap, phaseFilter]);
+  }, [aggregatedFields, search, sortKey, sortDir, phaseFilter]);
 
   // Auto-collapse all parents on initial load
   const allParentNames = useMemo(
@@ -264,6 +273,17 @@ export function FieldsTab() {
   // Name → parent, so the ancestor walk below is O(depth) instead of scanning
   // the whole field list at every step.
   const parentIndex = useMemo(() => buildParentIndex(fieldSummary), [fieldSummary]);
+
+  // Immediate-child counts for the collapsed "(n)" badge, counted in one pass.
+  // Filtering the whole summary for each visible parent row was O(rows²) on
+  // every render — noticeable on wide JSON events with many nested parents.
+  const childCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const f of fieldSummary) {
+      if (f.parentName !== null) counts.set(f.parentName, (counts.get(f.parentName) ?? 0) + 1);
+    }
+    return counts;
+  }, [fieldSummary]);
 
   return (
     <div className="flex flex-col h-full">
@@ -291,6 +311,9 @@ export function FieldsTab() {
             <button
               key={f}
               onClick={() => setPhaseFilter(f)}
+              // A toggle group: without aria-pressed the selected phase was
+              // conveyed by styling alone (#320).
+              aria-pressed={phaseFilter === f}
               className={[
                 'px-1.5 py-0.5 text-[10px] rounded transition-colors cursor-pointer border-none',
                 phaseFilter === f
@@ -302,13 +325,12 @@ export function FieldsTab() {
             </button>
           ))}
         </div>
-        {fieldSummary.some((f) => f.isParent) && (() => {
-          const allParents = fieldSummary.filter((f) => f.isParent).map((f) => f.name);
-          const allCollapsed = allParents.length > 0 && allParents.every((p) => effectiveCollapsed.has(p));
+        {allParentNames.length > 0 && (() => {
+          const allCollapsed = allParentNames.every((p) => effectiveCollapsed.has(p));
           return (
             <button
               className="text-xs text-[var(--color-text-muted)] hover:text-[var(--color-accent)] transition-colors cursor-pointer bg-transparent border-none p-0"
-              onClick={() => setCollapsedParents(allCollapsed ? new Set() : new Set(allParents))}
+              onClick={() => setCollapsedParents(allCollapsed ? new Set() : new Set(allParentNames))}
             >
               {allCollapsed ? 'Expand all' : 'Collapse all'}
             </button>
@@ -336,9 +358,7 @@ export function FieldsTab() {
             {fieldSummary
               .filter((field) => isFieldVisible(field, effectiveCollapsed, parentIndex))
               .map((field) => {
-                const childCount = field.isParent
-                  ? fieldSummary.filter((f) => f.parentName === field.name).length
-                  : 0;
+                const childCount = field.isParent ? childCounts.get(field.name) ?? 0 : 0;
                 return (
               <ContextMenu key={field.name}>
               <ContextMenuTrigger>
@@ -541,11 +561,20 @@ function ResizableHeader({
 }) {
   const isActive = sortKey === col.key;
 
+  // Teardown for a drag in progress. Kept so an unmount mid-drag — the tab
+  // switched, or a new result emptied the table — can remove the document
+  // listeners and give the page its cursor and text selection back. Only
+  // mouseup did that, and it never arrived for a header that was gone, leaving
+  // the whole app on a col-resize cursor with selection disabled (#322).
+  const endDragRef = useRef<(() => void) | null>(null);
+  useEffect(() => () => endDragRef.current?.(), []);
+
   // Attach the document-level drag listeners only for the duration of a resize.
   // Registering them once per column in an effect kept N global mousemove
   // handlers running for the table's whole lifetime, firing on every mouse move.
   const startResize = (e: React.MouseEvent) => {
     e.preventDefault();
+    endDragRef.current?.();
     const startX = e.clientX;
     const startWidth = width;
     document.body.style.cursor = 'col-resize';
@@ -554,18 +583,26 @@ function ResizableHeader({
     function onMouseMove(ev: MouseEvent) {
       onResize(Math.max(col.minWidth, startWidth + (ev.clientX - startX)));
     }
-    function onMouseUp() {
+    function endDrag() {
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
       document.removeEventListener('mousemove', onMouseMove);
-      document.removeEventListener('mouseup', onMouseUp);
+      document.removeEventListener('mouseup', endDrag);
+      endDragRef.current = null;
     }
     document.addEventListener('mousemove', onMouseMove);
-    document.addEventListener('mouseup', onMouseUp);
+    document.addEventListener('mouseup', endDrag);
+    endDragRef.current = endDrag;
   };
 
   return (
-    <th className="relative py-2 px-3 font-medium select-none" style={{ width }}>
+    <th
+      className="relative py-2 px-3 font-medium select-none"
+      style={{ width }}
+      // Only the sorted column carries it, per the APG sortable-table pattern;
+      // the arrow icon alone left the order invisible to a screen reader (#320).
+      aria-sort={isActive ? (sortDir === 'asc' ? 'ascending' : 'descending') : undefined}
+    >
       <button
         className="flex items-center gap-1 cursor-pointer bg-transparent border-none p-0 font-medium text-xs"
         style={{ color: isActive ? 'var(--color-accent)' : 'var(--color-text-muted)' }}

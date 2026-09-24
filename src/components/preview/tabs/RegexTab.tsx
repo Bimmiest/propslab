@@ -1,4 +1,4 @@
-import { useId, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { validateRegex } from '../../../utils/splunkRegex';
 import { copyToClipboard } from '../../../utils/clipboard';
 import { useRegexMatch } from '../../../hooks/useRegexMatch';
@@ -6,6 +6,7 @@ import type { RegexMatchInfo } from '../../../engine/regexMatch';
 import type { EnrichedEvent } from '../PreviewPanel';
 import { fieldColorAt } from './shared/fieldColors';
 import { useApplyDirective } from './shared/useApplyDirective';
+import { pressable } from '../../ui/pressable';
 
 // ─── Regex Reference Data ────────────────────────────────────────────────────
 
@@ -146,6 +147,11 @@ export function RegexTab({ items, allEvents, currentPage, eventsPerPage }: Regex
     return validateRegex(pattern);
   }, [pattern]);
 
+  // From the live pattern, like the directive below: the chips, the legend and
+  // the directive all describe what is typed. The cards that use the colour map
+  // render only once the match results belong to that same pattern (see
+  // `status` below), so a group's colour in a card always agrees with the
+  // legend beside it (#315).
   const namedGroups = useMemo(() => extractNamedGroups(pattern), [pattern]);
   const groupColorMap = useMemo(() => buildGroupColorMap(namedGroups), [namedGroups]);
 
@@ -179,7 +185,16 @@ export function RegexTab({ items, allEvents, currentPage, eventsPerPage }: Regex
   // confidence a regex tester exists to prevent. Matching runs in a terminatable
   // worker, so the whole-dataset cost is bounded.
   const rawInputs = useMemo(() => allEvents.map((item) => item.event._raw), [allEvents]);
-  const { status, results } = useRegexMatch(validationError ? '' : pattern, rawInputs);
+  const requestedPattern = validationError ? '' : pattern;
+  const match = useRegexMatch(requestedPattern, rawInputs);
+  // Matching runs on a debounced copy of the pattern, so for 250 ms after each
+  // keystroke the results still describe the previous one. Reported as 'ok',
+  // they put the old pattern's counts, cards and highlights next to an "Add to
+  // props.conf" button that writes the new one — a pattern that matched nothing
+  // could be committed under the previous pattern's "3/3 events matched"
+  // (#315). Until the results catch up with what is typed, they are pending.
+  const status = match.pattern === requestedPattern ? match.status : 'pending';
+  const results = match.results;
 
   // Aligned to `allEvents`; the rendered page starts at this offset into it.
   const pageOffset = (currentPage - 1) * eventsPerPage;
@@ -209,18 +224,36 @@ export function RegexTab({ items, allEvents, currentPage, eventsPerPage }: Regex
     if (!pattern || validationError) return;
     applyDirective(`EXTRACT-${className}`, pattern);
     setAdded(true);
-    setTimeout(() => setAdded(false), 1500);
   };
 
   const handleCopy = () => {
     if (extractDirective) {
       // Use the shared helper so copying still works in insecure contexts where
       // navigator.clipboard is unavailable (it falls back to execCommand).
-      void copyToClipboard(extractDirective);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
+      // Settled rather than voided: a rejected copy must not flip the label to
+      // "Copied!", and a floating rejection reaches the console (as CopyButton).
+      copyToClipboard(extractDirective).then(
+        () => setCopied(true),
+        () => {},
+      );
     }
   };
+
+  // The confirmation labels reset from effects rather than a bare setTimeout in
+  // the click handlers, so the timers are cleared if the tab unmounts first —
+  // switching sub-tab within 1.5 s of a click left them to fire into an
+  // unmounted component (#322).
+  useEffect(() => {
+    if (!copied) return;
+    const t = setTimeout(() => setCopied(false), 1500);
+    return () => clearTimeout(t);
+  }, [copied]);
+
+  useEffect(() => {
+    if (!added) return;
+    const t = setTimeout(() => setAdded(false), 1500);
+    return () => clearTimeout(t);
+  }, [added]);
 
   return (
     <div className="flex flex-col h-full">
@@ -228,7 +261,9 @@ export function RegexTab({ items, allEvents, currentPage, eventsPerPage }: Regex
       <div className="flex-shrink-0 px-3 py-2 border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
         <div className="flex items-center gap-2 mb-1">
           <label htmlFor={patternId} className="text-xs font-medium text-[var(--color-text-muted)]">Regex Pattern</label>
-          {pattern && !validationError && matchStats.total > 0 && (
+          {/* Only settled counts: while matching is pending this read "0/N"
+              for a pattern that had not been tried yet (#315). */}
+          {pattern && !validationError && status === 'ok' && matchStats.total > 0 && (
             <span className="text-[10px] text-[var(--color-text-muted)] ml-auto">
               {matchStats.matched}/{matchStats.total} events matched
             </span>
@@ -322,6 +357,7 @@ export function RegexTab({ items, allEvents, currentPage, eventsPerPage }: Regex
       <div className="flex-shrink-0 border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
         <button
           onClick={() => setRefOpen(!refOpen)}
+          aria-expanded={refOpen}
           className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-[var(--color-bg-tertiary)] transition-colors cursor-pointer text-left"
         >
           <svg
@@ -458,8 +494,12 @@ function RegexCategoryRows({ category, onInsert, onReplace }: { category: RegexC
       {category.directives.map((d) => (
         <tr
           key={d.pattern}
-          className="hover:bg-[var(--color-bg-tertiary)] transition-colors cursor-pointer"
-          onClick={() => isReplace ? onReplace(d.pattern) : onInsert(d.pattern)}
+          className="hover:bg-[var(--color-bg-tertiary)] focus-visible:bg-[var(--color-bg-tertiary)] transition-colors cursor-pointer"
+          // A row, not a button, so the three cells stay aligned with the
+          // header; pressable gives it the tab stop and Enter/Space it lacked,
+          // which left the reference mouse-only (#320).
+          {...pressable(() => isReplace ? onReplace(d.pattern) : onInsert(d.pattern))}
+          aria-label={isReplace ? `Use pattern ${d.pattern}` : `Append ${d.pattern}`}
           title={isReplace ? `Use pattern: ${d.pattern}` : `Append: ${d.pattern}`}
         >
           <td className="py-0.5 pr-3">
