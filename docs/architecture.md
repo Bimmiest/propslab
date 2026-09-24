@@ -15,7 +15,7 @@ activeView / dictionarySelection                    Rail view + dictionary deep 
 settings / pipelineDirty / manualRunTick            Simulator options and the manual-apply run trigger
 ```
 
-localStorage is limited to UI layout state (split-pane sizes, seen-intro flag, theme), read inside try/catch with typed fallbacks. Raw logs and configuration are not persisted — a refresh clears them.
+localStorage holds preferences only: UI state (split-pane sizes, seen-intro flag, theme) and the simulator settings (`propslab:settings` — per-event pipeline and manual-apply, so a reload keeps the mode the user chose), each read inside try/catch with typed fallbacks. Raw logs and configuration are not persisted — a refresh clears them.
 
 Monaco editor instances live in a module-level `Map` in `editorRegistry.ts`, not in the Zustand store.
 

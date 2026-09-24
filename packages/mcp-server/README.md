@@ -80,6 +80,15 @@ reviewed. `docs/engine.md`'s closing section is the spec this implements:
   guidance to shrink the input, instead of growing until the whole server
   dies. 512 MB is what the worst input the schemas accept needs (1 MB of
   very short lines, ~125k events); 256 MB was measured to be too little.
+  That includes the conf side, which is why it has a combined bound:
+  per field the schemas admit 20 layers of 1M characters, but
+  `props_conf` and `transforms_conf` together may carry at most 2M
+  characters across all their layers. More comes back as
+  `{"error": "input_too_large", "conf_chars": …, "max_conf_chars": …}`
+  before any worker starts. The bound also caps what a timeout re-parses
+  on the server's own thread to list regex suspects — a few hundred
+  milliseconds at the limit. A 1 MB sample of one-character lines beside
+  2M characters of conf was measured to complete within 512 MB.
   Process-wide V8 heap flags override worker limits, so the launcher strips
   `--max-old-space-size` / `--max-semi-space-size` / `--max-heap-size` from
   its own arguments and from `NODE_OPTIONS` before re-exec'ing, and says so
@@ -93,6 +102,14 @@ reviewed. `docs/engine.md`'s closing section is the spec this implements:
   at most its own budget (30 s at the most), and the MCP client's request
   timeout stays the outer limit. A slot is freed when its worker has actually
   exited, so a terminated run still counts against the cap until it stops.
+- **The queue is bounded too**, at four waiting calls per slot (16 at most).
+  A queued call holds its whole input in the server's own heap, outside
+  any worker's limit, so an unbounded queue only moved a burst from the
+  workers onto the main thread. A call that arrives with the queue full is
+  refused at once with `{"error": "busy", "max_concurrent": …,
+  "max_queued": …}`. Nothing is wrong with its input; retry once calls in
+  flight finish. The bound also keeps any queued call's wait to at most
+  four budgets.
 - **A cancelled request gives up its slot.** When the client cancels a call
   (`notifications/cancelled`) or the transport closes, a call still in the
   queue leaves it without ever starting a worker, and a running call's

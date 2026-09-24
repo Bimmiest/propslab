@@ -17,7 +17,7 @@ The second install is not optional if you intend to lint. `npm run lint` is type
 
 ## The CI checks
 
-[`ci.yml`](.github/workflows/ci.yml) runs three jobs, independently, on every PR, on pushes to main, weekly and on demand. A PR needs all three green — and so does a deploy, which only ships a commit whose whole CI run passed.
+[`ci.yml`](.github/workflows/ci.yml) runs three jobs, independently, on every PR, on pushes to main, weekly and on demand. A PR needs all three green — and so does the automatic deploy, which runs only after a push to main's CI run passes and then ships the newest commit on main whose whole CI run passed. A manual deploy is not CI-gated: dispatching the deploy workflow on `main` redeploys that same newest green commit, or, with its `sha` input set, rolls back to any commit main has contained, whether or not its CI passed. The [README](README.md#tests) describes the deploy workflow in full.
 
 **`ci`** — the app, in this order:
 

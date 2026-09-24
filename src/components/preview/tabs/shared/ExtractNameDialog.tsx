@@ -17,7 +17,8 @@ type Capture =
  * In-app dialog for "Create EXTRACT from selection". The field name and the regex
  * pattern are both editable; the pattern stays derived from the field name until the
  * user edits it directly. A live capture runs the pattern against this event's raw
- * (via the engine's safeRegex) so you can see exactly what it grabs before applying.
+ * in the regex-match worker, behind its watchdog, so you can see exactly what it
+ * grabs before applying; Add stays disabled until that capture has settled (#329).
  */
 export function ExtractNameDialog({
   raw,

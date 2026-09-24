@@ -22,7 +22,13 @@
  *   `ERR_WORKER_OUT_OF_MEMORY` and is reported as a `WorkerOutOfMemoryError`.
  * - **Concurrency.** A burst of calls used to spawn a worker each, all at once;
  *   each can hold its full heap limit and a core for its full budget. Calls now
- *   pass through a small semaphore and queue beyond it.
+ *   pass through a small semaphore and queue beyond it — and the queue is
+ *   bounded too (#335). Every queued call holds its whole input (up to a
+ *   megabyte of sample plus two million characters of conf) in the server's
+ *   own heap, outside any worker's limit, so an unbounded queue only moved
+ *   the burst from the workers to the main thread. Past the bound a call is
+ *   refused at once with `WorkerBusyError`, which the tools report as a
+ *   structured `busy` error.
  * - **Cancellation.** A slot is scarce, so a call whose MCP request has been
  *   cancelled gives it up: aborting `options.signal` takes a queued call out
  *   of the queue before it ever holds a slot, and terminates a running call's
@@ -35,7 +41,9 @@
  * rewrite a correct regex because a neighbour was slow. The cost is that a
  * queued call's end-to-end latency is its wait plus its budget. That wait is
  * itself bounded — every call ahead of it holds a slot for at most its own
- * budget (≤30s) — and the MCP client's request timeout remains the outer limit.
+ * budget (≤30s), and with the queue bounded at four calls per slot no call
+ * waits behind more than four budgets — and the MCP client's request timeout
+ * remains the outer limit.
  */
 import { Worker, type ResourceLimits } from 'node:worker_threads';
 import os from 'node:os';
@@ -48,6 +56,24 @@ export class WorkerTimeoutError extends Error {
     super(`Worker exceeded its ${budgetMs}ms wall-clock budget and was terminated`);
     this.name = 'WorkerTimeoutError';
     this.budgetMs = budgetMs;
+  }
+}
+
+/**
+ * The concurrency queue was full, so the call was refused without queuing
+ * (#335). Its own type so the tool reports "try again shortly" rather than an
+ * engine failure; nothing about the input is wrong.
+ */
+export class WorkerBusyError extends Error {
+  readonly maxConcurrent: number;
+  readonly maxQueued: number;
+  constructor(maxConcurrent: number, maxQueued: number) {
+    super(
+      `Server is busy: ${maxConcurrent} run(s) in progress and ${maxQueued} queued, the most it will hold`,
+    );
+    this.name = 'WorkerBusyError';
+    this.maxConcurrent = maxConcurrent;
+    this.maxQueued = maxQueued;
   }
 }
 
@@ -87,12 +113,20 @@ export class WorkerCancelledError extends Error {
 
 /**
  * Per-worker V8 heap limits, sized from the worst input the schemas admit
- * rather than a typical one. That is a 1MB sample of very short lines: about
- * 125,000 events, each carrying its own trace, and measured it runs out of
- * heap at 256MB and completes at 512MB. A limit below that would turn a valid
- * (if silly) request into an error, so 512MB it is — hitting it means the run
- * is runaway, not merely big. Young generation is capped too because V8
- * otherwise sizes it off the machine's memory, not the old-generation limit.
+ * rather than a typical one. The sample dominates: a 1MB sample of very short
+ * lines is about 125,000 events, each carrying its own trace, and measured it
+ * runs out of heap at 256MB and completes at 512MB. The conf side is bounded
+ * too — at most two million characters across every layer of both files
+ * (`MAX_TOTAL_CONF_CHARS` in tools.ts, #335), where the per-field limits alone
+ * would admit forty million. Measured with both at their maximum — a 1MB
+ * sample of one-character lines (500,000 events) beside two million
+ * characters of conf, some 47,000 stanzas of EXTRACT / FIELDALIAS / REGEX —
+ * the run still completes at 512MB, and a conf whose directives all apply to
+ * every event exhausts the 30s budget before the heap. A limit below that
+ * would turn a valid (if silly) request into an error, so 512MB it is —
+ * hitting it means the run is runaway, not merely big. Young generation is
+ * capped too because V8 otherwise sizes it off the machine's memory, not the
+ * old-generation limit.
  * `stackSizeMb` stays at Node's default: the engine does not recurse deeply,
  * and a stack overflow already surfaces as an ordinary RangeError inside the
  * worker.
@@ -108,18 +142,24 @@ export const DEFAULT_RESOURCE_LIMITS: Readonly<ResourceLimits> = Object.freeze({
 /**
  * A counting semaphore: at most `max` holders, the rest wait FIFO. FIFO
  * matters — a stack would let a steady stream of new calls starve the first
- * one queued.
+ * one queued. At most `maxQueued` may wait; beyond that `acquire` rejects
+ * with `WorkerBusyError` rather than queuing (#335). Unbounded unless given.
  */
 export class Semaphore {
   readonly max: number;
+  readonly maxQueued: number;
   private held = 0;
   private readonly waiters: (() => void)[] = [];
 
-  constructor(max: number) {
+  constructor(max: number, maxQueued = Infinity) {
     if (!Number.isInteger(max) || max < 1) {
       throw new RangeError(`Semaphore max must be a positive integer, got ${max}`);
     }
+    if (maxQueued !== Infinity && (!Number.isInteger(maxQueued) || maxQueued < 0)) {
+      throw new RangeError(`Semaphore maxQueued must be a non-negative integer, got ${maxQueued}`);
+    }
     this.max = max;
+    this.maxQueued = maxQueued;
   }
 
   /** Slots currently held. */
@@ -137,13 +177,18 @@ export class Semaphore {
    * free it. If `signal` aborts first, the caller leaves the queue without
    * ever holding a slot and this rejects with `WorkerCancelledError` — a
    * cancelled request must not keep its place in line, or everything queued
-   * behind it waits on a run nobody will read.
+   * behind it waits on a run nobody will read. If no slot is free and the
+   * queue already holds `maxQueued` callers, this rejects with
+   * `WorkerBusyError` at once.
    */
   async acquire(signal?: AbortSignal): Promise<() => void> {
     if (signal?.aborted) throw new WorkerCancelledError(false, signal.reason);
     if (this.held < this.max) {
       this.held++;
     } else {
+      if (this.waiters.length >= this.maxQueued) {
+        throw new WorkerBusyError(this.max, this.maxQueued);
+      }
       // The releasing caller hands its slot straight to us (see release), so
       // `held` is never decremented and re-incremented in between — nothing
       // arriving meanwhile can jump the queue.
@@ -184,7 +229,16 @@ export class Semaphore {
  */
 export const DEFAULT_MAX_CONCURRENT_WORKERS = Math.max(1, Math.min(4, os.availableParallelism()));
 
-const defaultLimiter = new Semaphore(DEFAULT_MAX_CONCURRENT_WORKERS);
+/**
+ * Four waiting calls per slot (#335). Enough that an agent fanning out a
+ * handful of calls never sees `busy`, few enough that no queued call waits
+ * behind more than four budgets (two minutes at the 30s maximum), and that
+ * the inputs parked in the server's own heap stay bounded: sixteen calls at
+ * the schema maximum is on the order of a hundred megabytes.
+ */
+export const DEFAULT_MAX_QUEUED_CALLS = 4 * DEFAULT_MAX_CONCURRENT_WORKERS;
+
+const defaultLimiter = new Semaphore(DEFAULT_MAX_CONCURRENT_WORKERS, DEFAULT_MAX_QUEUED_CALLS);
 
 export interface RunInWorkerOptions {
   /** Worker script. Defaults to the sibling `simulateWorker.js` bundle. */
