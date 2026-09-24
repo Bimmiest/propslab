@@ -12,6 +12,11 @@
 // an `error` event rather than a throw, and used to be recreated forever.
 // Only load failures count toward that bound (#326): counting crashes too sent
 // the hook inline for good after two crashing patterns, losing the watchdog.
+//
+// A load failure is any error before the worker's ready signal (#339), so the
+// fake loads before it responds or crashes, and `throwOnLoad` is a module that
+// throws while evaluating — which, on the first worker, used to be reported as
+// the first request timing out.
 // ---------------------------------------------------------------------------
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -27,6 +32,7 @@ class FakeWorker {
   onerror: ((e: ErrorEvent) => void) | null = null;
   posted: (Req & { id: number })[] = [];
   terminated = false;
+  loaded = false;
 
   constructor() {
     FakeWorker.instances.push(this);
@@ -37,16 +43,28 @@ class FakeWorker {
   terminate() {
     this.terminated = true;
   }
+  /** The module finished evaluating: what every worker entry posts first (#339). */
+  ready() {
+    if (this.loaded) return;
+    this.loaded = true;
+    this.onmessage?.({ data: { type: 'ready' } } as unknown as MessageEvent<Res>);
+  }
   /** What the browser fires when the script cannot be fetched: a plain Event, no message. */
   failToLoad() {
     this.onerror?.(new Event('error') as ErrorEvent);
   }
-  /** An exception thrown by worker code that did run. */
+  /** A module that throws while evaluating: an ErrorEvent with a message, before ready (#339). */
+  throwOnLoad() {
+    this.onerror?.({ message: 'SyntaxError' } as ErrorEvent);
+  }
+  /** An exception thrown by worker code that did run: the module loaded first. */
   crash() {
+    this.ready();
     this.onerror?.({ message: 'boom' } as ErrorEvent);
   }
   /** Deliver a response as the real worker would. */
   respond(id: number, echo: string) {
+    this.ready();
     this.onmessage?.({ data: { id, echo } } as MessageEvent<Res>);
   }
 }
@@ -172,6 +190,7 @@ describe('useWorkerRequest', () => {
     const { result } = setup();
     const first = latest();
     act(() => result.current.run({ value: 'slow' }));
+    act(() => first.ready());
 
     act(() => void vi.advanceTimersByTime(1000));
 
@@ -267,15 +286,19 @@ describe('useWorkerRequest', () => {
   });
 
   it('keeps restarting a worker that has answered before, however often it crashes', () => {
-    // The cap counts only workers that never answered; one that loaded and
-    // later crashes resets it, so a long session is never pushed inline.
+    // The cap counts only workers that never loaded; one that loaded and later
+    // crashes resets it, so a long session is never pushed inline. A worker
+    // that dies with nothing in flight is replaced when next needed rather
+    // than at once (#339), so each crash costs one construction, not two.
     const { result } = setup();
     for (let i = 1; i <= 4; i++) {
       act(() => result.current.run({ value: 'a' }));
+      expect(latest().posted.at(-1)).toEqual({ value: 'a', id: i });
       act(() => latest().respond(i, 'A'));
+      expect(result.current.data).toBe('A');
       act(() => latest().crash());
     }
-    expect(FakeWorker.instances).toHaveLength(5);
+    expect(FakeWorker.instances).toHaveLength(4);
   });
   it('keeps using workers however many requests in a row crash them (#326)', () => {
     // #309 counted each replacement's crash as a start failure — it had not
@@ -320,9 +343,56 @@ describe('useWorkerRequest', () => {
     // being handed a request died of its own script, and would otherwise be
     // rebuilt for as long as the tab is open.
     setup();
-    act(() => latest().crash());
-    act(() => latest().crash());
+    act(() => latest().throwOnLoad());
+    act(() => latest().throwOnLoad());
     expect(FakeWorker.instances).toHaveLength(2);
     expect(FakeWorker.instances.every((w) => w.terminated)).toBe(true);
+  });
+
+  describe('a worker whose script throws at top level (#339)', () => {
+    it('is a load failure for the first request: resent, then run inline at the cap', () => {
+      // The request is posted before the script has run. The top-level throw
+      // used to be charged to it, and the first pattern reported a timeout.
+      const { result } = setup();
+      act(() => result.current.run({ value: 'a' }));
+
+      act(() => latest().throwOnLoad());
+      expect(result.current.status).toBe('pending');
+      expect(FakeWorker.instances).toHaveLength(2);
+      expect(latest().posted).toEqual([{ value: 'a', id: 1 }]);
+
+      act(() => latest().throwOnLoad());
+      expect(FakeWorker.instances).toHaveLength(2); // capped
+      expect(result.current.status).toBe('ok');
+      expect(result.current.data).toBe('inline:a');
+
+      act(() => result.current.run({ value: 'b' }));
+      expect(result.current.data).toBe('inline:b');
+      expect(FakeWorker.instances).toHaveLength(2);
+    });
+
+    it('is a crash once the worker has loaded, whatever the error carries', () => {
+      const { result } = setup();
+      act(() => result.current.run({ value: 'a' }));
+      act(() => latest().ready());
+      act(() => latest().failToLoad()); // a plain Event, but after ready
+      expect(result.current.status).toBe('timeout');
+      expect(FakeWorker.instances).toHaveLength(2);
+      expect(latest().posted).toEqual([]);
+    });
+
+    it('resets the load-failure count when a worker loads', () => {
+      // "In a row": a worker that loaded in between clears the count.
+      const { result } = setup();
+      act(() => latest().throwOnLoad());
+      act(() => latest().ready());
+      act(() => result.current.run({ value: 'a' }));
+      act(() => latest().crash());
+      act(() => latest().throwOnLoad());
+      expect(FakeWorker.instances).toHaveLength(4);
+      act(() => result.current.run({ value: 'b' }));
+      expect(result.current.status).toBe('pending');
+      expect(latest().posted).toEqual([{ value: 'b', id: 2 }]);
+    });
   });
 });

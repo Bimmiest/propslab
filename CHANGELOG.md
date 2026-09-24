@@ -8,6 +8,12 @@ All notable changes to Propslab are documented here, newest first.
 
 ### Added
 
+- **Property-based tests for the eval parser and the PCRE→JS translation** ([#340](https://github.com/Bimmiest/propslab/issues/340)). Hand-written example tests only cover the cases someone thought of, and #332 and #337 were both combinations of casing and position that nobody had written down. fast-check (a dev-only dependency, run with a fixed seed) now generates inputs from each grammar and checks that:
+  - the parser throws only its own errors;
+  - keyword casing and whitespace never change a result;
+  - the operator equivalences hold;
+  - an AST survives being printed and parsed again;
+  - translation leaves JS-compatible patterns, `(?i)` scoping and class contents intact.
 - **The `ignored` roster is empty: every directive the registry knows is simulated or deliberately out of scope** ([#271](https://github.com/Bimmiest/propslab/issues/271)–[#275](https://github.com/Bimmiest/propslab/issues/275)). Counts finish at 75 simulated, 74 documented, 0 ignored. All of the new simulations are doc-derived — the fixture corpus is closed — and their tests say so.
   - **`INDEXED_EXTRACTIONS = xml`, `xmlkv` and `xmlkv-winevt`** ([#271](https://github.com/Bimmiest/propslab/issues/271), [src/engine/processors/xmlIndexedExtractions.ts](src/engine/processors/xmlIndexedExtractions.ts)), with all nine supporting attributes: the include/exclude lists and their multivalue variants, excluded values, skipping entity-encoded values, the value size cap, and `extraction_cutoff`. `XML_INDEXED_EXTRACTIONS_PIPELINE` is the switch the spec says makes these modes active at all, so without it they extract nothing and say why. The spec does not say how fields are named; `xml` borrows `KV_MODE = xml`'s naming, `xmlkv` the `xmlkv` search command's, and `xmlkv-winevt` names a leaf by its `Name` attribute — each entry says it is borrowed. Unlike the line-per-record formats, the xml modes keep line merging on by default, because an XML record spans lines.
   - **The header-side delimited overrides** ([#272](https://github.com/Bimmiest/propslab/issues/272)): `FIELD_HEADER_REGEX`, `HEADER_FIELD_DELIMITER`, `HEADER_FIELD_QUOTE`, `HEADER_FIELD_ACCEPTABLE_SPECIAL_CHARACTERS` and `MISSING_VALUE_REGEX`, for csv, tsv and psv. Spaces in header names are still replaced with `_`, as before; the spec reads as though they are kept, but nothing recorded settles it.
@@ -20,6 +26,18 @@ All notable changes to Propslab are documented here, newest first.
 - **A scheduled check stopped being the only thing watching the roster, and immediately earned its keep.** Classifying the new entries found that [#184](https://github.com/Bimmiest/propslab/issues/184) — cited in the README as tracking the delimited-extraction gap — **is closed**, the same rot that produced #227. It is replaced by [#272](https://github.com/Bimmiest/propslab/issues/272).
 
 ### Fixed
+
+Entries #337–#341 came out of a fourth review of the whole project. Rather than another broad fix round, this change targets the causes of the regressions the last three rounds produced. The three copies of the worker lifecycle are now one module (#339). The eval parser and the PCRE translation now have property-based tests (#340); these found two bugs, one fixed here and one filed as #341.
+
+- **`NOT IN` works in any casing again** ([#337](https://github.com/Bimmiest/propslab/issues/337)). This is a regression from #332, which made keyword operators contextual. The word after `NOT` was then lexed as an identifier that kept its casing, so only an upper-case `IN` matched, and `x not in (...)` threw "Unexpected token: NOT". The word after a `NOT` that follows a value is now lexed as the IN operator.
+- **The Regex tab's "Add to props.conf" waits for the pattern to finish testing successfully, and rejects class names props.conf can't read** ([#338](https://github.com/Bimmiest/propslab/issues/338)). #329 gated only the Create EXTRACT dialog. Here, a pattern already shown as timed out, such as `(a|aa)+b`, went into props.conf in one click, and every pipeline run then hit the watchdog. The button now follows the dialog's rule and shows why it is disabled. Class names are limited to letters, digits, `_`, `-` and `.`.
+- **A worker whose script throws while loading counts as a load failure everywhere, and the worker lifecycle exists once** ([#339](https://github.com/Bimmiest/propslab/issues/339)). The old rule, "a worker given nothing that died is a load failure", could never cover the first worker: the first request is posted before the worker's script has run. As a result:
+  - The pipeline reported its mount request as having "crashed repeatedly" and left the preview empty.
+  - The matchers reported a timeout.
+  - The hover built a new worker on every hover and blamed the user's prefix.
+
+  Each worker now posts a ready signal, and one module, `createManagedWorker`, owns construction, the watchdog, crash-vs-load classification, the cap and rebuilds. The three callers now supply only their fallback policy. See the new Workers section of `docs/architecture.md`.
+- **`"x" . .5` parses** ([#340](https://github.com/Bimmiest/propslab/issues/340)). The property tests found that the concatenation `.` was missing from the tokens after which a value is expected.
 
 Entries #326–#335 came out of a third review of the whole project, which went back over #324's own fixes. Six of those entries correct or finish work from #324. Engine tests are derived from the documentation and say so. The Splunk 10.4.0 fixtures still pass.
 

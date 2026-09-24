@@ -6,11 +6,12 @@
  *
  * Message protocol:
  *   in  → PipelineWorkerRequest
- *   out → PipelineWorkerResponse
+ *   out → WORKER_READY once, when the module has loaded (#339); then PipelineWorkerResponse
  */
 
 import { runPipeline } from './pipeline';
 import type { ConfInput, EventMetadata, PipelineOptions } from './types';
+import { WORKER_READY } from './workerProtocol';
 
 export interface PipelineWorkerRequest {
   id: number;
@@ -55,3 +56,8 @@ self.onmessage = (e: MessageEvent<PipelineWorkerRequest>) => {
     self.postMessage(response);
   }
 };
+
+// Last, so it is only sent once every import above has evaluated and the
+// handler is installed. Anything the worker throws before this point is a
+// failure to load, not something a request did to it (#339).
+self.postMessage(WORKER_READY);

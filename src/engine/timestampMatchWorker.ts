@@ -7,11 +7,12 @@
  *
  * Message protocol:
  *   in  → TimestampMatchRequest
- *   out → TimestampMatchResponse
+ *   out → WORKER_READY once, when the module has loaded (#339); then TimestampMatchResponse
  */
 
 import { probeTimestamps } from './timestampMatch';
 import type { TimeConfig, TimestampProbe } from './timestampMatch';
+import { WORKER_READY } from './workerProtocol';
 
 export interface TimestampMatchRequest {
   id: number;
@@ -41,3 +42,8 @@ self.onmessage = (e: MessageEvent<TimestampMatchRequest>) => {
   }
   self.postMessage(response);
 };
+
+// Last, so it is only sent once every import above has evaluated and the
+// handler is installed. Anything the worker throws before this point is a
+// failure to load, not something a request did to it (#339).
+self.postMessage(WORKER_READY);

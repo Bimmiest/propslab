@@ -26,6 +26,8 @@ async function loadWorker() {
   vi.stubGlobal('self', fakeSelf);
   vi.resetModules();
   await import('../timestampMatchWorker');
+  // The ready signal (#339) is pinned in workerReady.test.ts; these are about responses.
+  expect(posted.shift()).toEqual({ type: 'ready' });
   const send = (request: TimestampMatchRequest) =>
     fakeSelf.onmessage!({ data: request } as MessageEvent<TimestampMatchRequest>);
   return { posted, send };

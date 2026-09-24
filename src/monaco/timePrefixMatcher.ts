@@ -12,14 +12,23 @@
 // span alone, compiled by the same `safeRegex` the engine uses. One worker is
 // kept alive and shared by every hover; a watchdog terminates it when a match
 // overruns, and the next request gets a fresh one. It is a plain module rather
-// than `useWorkerRequest` because hover providers live outside React.
+// than `useWorkerRequest` because hover providers live outside React; the
+// worker's lifecycle is the same `createManagedWorker` the hooks use (#339).
 //
 // There is deliberately no inline fallback. A worker that cannot load (a CSP
 // block, a chunk gone after a redeploy, no `Worker` at all) makes the preview
 // omit its sample line — running the prefix here instead is the bug.
+//
+// Several hovers can be in flight at once, and the worker runs them in order,
+// so only the oldest was running when a worker hung or crashed. That one is
+// reported; the rest never ran and are replayed on the fresh worker rather
+// than blamed. Before #339 a crash reported every queued entry as an error
+// while a hang replayed them, and a worker whose script threw at top level
+// counted as a crash — uncapped — so every hover built a new worker and
+// blamed its prefix.
 // ---------------------------------------------------------------------------
 
-import { isWorkerLoadFailure, MAX_WORKER_LOAD_FAILURES } from '../hooks/workerLifecycle';
+import { createManagedWorker } from '../hooks/workerLifecycle';
 import type { TimestampMatchRequest, TimestampMatchResponse } from '../engine/timestampMatchWorker';
 
 /**
@@ -55,105 +64,63 @@ export type PrefixMatcher = (
 ) => Promise<PrefixMatchOutcome>;
 
 interface Pending {
-  request: TimestampMatchRequest;
-  /** Null once the caller cancelled: the entry stays so a hang is still reaped. */
+  /** Null once the caller cancelled: the request stays in flight so a hang is still reaped. */
   settle: ((outcome: PrefixMatchOutcome) => void) | null;
-  timer: ReturnType<typeof setTimeout>;
   cancelSub: { dispose(): void } | undefined;
 }
 
 const createWorker = () =>
   new Worker(new URL('../engine/timestampMatchWorker.ts', import.meta.url), { type: 'module' });
 
-let worker: Worker | null = null;
-/** Whether the current worker has answered anything, i.e. is known to have loaded. */
-let answered = false;
-let loadFailures = 0;
 let nextId = 1;
 const pending = new Map<number, Pending>();
 
-function finish(entry: Pending, outcome: PrefixMatchOutcome): void {
-  clearTimeout(entry.timer);
+function finish(id: number, outcome: PrefixMatchOutcome): void {
+  const entry = pending.get(id);
+  if (!entry) return;
+  pending.delete(id);
   entry.cancelSub?.dispose();
-  pending.delete(entry.request.id);
   entry.settle?.(outcome);
   entry.settle = null;
 }
 
-function discardWorker(): void {
-  worker?.terminate();
-  worker = null;
-  answered = false;
+/**
+ * Post entries that were in flight behind a hang or a crash to the fresh
+ * worker, with a fresh budget — they never ran, so they must not inherit the
+ * blame. An entry nobody is waiting for any more is dropped instead.
+ */
+function replay(requests: TimestampMatchRequest[]): void {
+  for (const request of requests) {
+    if (!pending.get(request.id)?.settle) finish(request.id, { status: 'cancelled' });
+    else if (!managed.post(request)) finish(request.id, { status: 'unavailable' });
+  }
 }
 
-function ensureWorker(): Worker | null {
-  if (worker) return worker;
-  if (typeof Worker === 'undefined' || loadFailures >= MAX_WORKER_LOAD_FAILURES) return null;
-  let w: Worker;
-  try {
-    w = createWorker();
-  } catch {
-    loadFailures++;
-    return null;
-  }
-  w.onmessage = (e: MessageEvent<TimestampMatchResponse>) => {
-    if (w !== worker) return;
-    answered = true;
-    loadFailures = 0;
-    const entry = pending.get(e.data.id);
-    if (!entry) return;
-    if (e.data.error !== undefined) {
-      finish(entry, { status: 'error', message: e.data.error });
+const managed = createManagedWorker<TimestampMatchRequest, TimestampMatchResponse>({
+  create: createWorker,
+  timeoutMs: TIME_PREFIX_TIMEOUT_MS,
+  onResponse(response) {
+    if (response.error !== undefined) {
+      finish(response.id, { status: 'error', message: response.error });
       return;
     }
-    const prefix = e.data.probes[0]?.prefix ?? null;
-    finish(entry, prefix ? { status: 'matched', end: prefix.end } : { status: 'no-match' });
-  };
-  w.onerror = (e: Event) => {
-    if (w !== worker) return;
-    const loadFailure = isWorkerLoadFailure(e, answered);
-    if (loadFailure) loadFailures++;
-    const message = (e as Partial<ErrorEvent>).message || 'the preview worker failed';
-    discardWorker();
-    // Nothing in flight is answered by a dead worker. A load failure is not
-    // the pattern's fault, so the preview just goes quiet; a crash is reported.
-    for (const entry of [...pending.values()]) {
-      finish(entry, loadFailure ? { status: 'unavailable' } : { status: 'error', message });
-    }
-  };
-  worker = w;
-  return w;
-}
-
-function startWatchdog(id: number): ReturnType<typeof setTimeout> {
-  return setTimeout(() => onTimeout(id), TIME_PREFIX_TIMEOUT_MS);
-}
-
-/**
- * The request `id` overran. Kill the worker, report the timeout, and replay
- * anything that was queued behind it on a fresh worker with a fresh budget —
- * those requests never ran, so they must not inherit the blame.
- */
-function onTimeout(id: number): void {
-  const entry = pending.get(id);
-  if (!entry) return;
-  discardWorker();
-  finish(entry, { status: 'timed-out' });
-
-  const queued = [...pending.values()];
-  if (queued.length === 0) return;
-  const fresh = ensureWorker();
-  for (const q of queued) {
-    clearTimeout(q.timer);
-    if (!fresh || q.settle === null) {
-      // Nothing to replay onto, or nobody is waiting for the answer.
-      finish(q, { status: 'unavailable' });
-      continue;
-    }
-    q.timer = startWatchdog(q.request.id);
-    fresh.postMessage(q.request);
-  }
-}
+    const prefix = response.probes[0]?.prefix ?? null;
+    finish(response.id, prefix ? { status: 'matched', end: prefix.end } : { status: 'no-match' });
+  },
+  onTimeout(request, others) {
+    finish(request.id, { status: 'timed-out' });
+    replay(others);
+  },
+  onCrash([running, ...queued], message) {
+    if (running) finish(running.id, { status: 'error', message: message || 'the preview worker failed' });
+    replay(queued);
+  },
+  // No code saw any of these, so none is the pattern's fault: the preview just
+  // goes quiet, and past the cap no worker is built again this session (#309).
+  onLoadFailure(inFlight) {
+    for (const request of inFlight) finish(request.id, { status: 'unavailable' });
+  },
+});
 
 /**
  * Where `pattern` (a TIME_PREFIX, PCRE as written) first matches in `sample`,
@@ -162,40 +129,35 @@ function onTimeout(id: number): void {
  */
 export const matchTimePrefix: PrefixMatcher = (pattern, sample, token) => {
   if (token?.isCancellationRequested) return Promise.resolve({ status: 'cancelled' });
-  const w = ensureWorker();
-  if (!w) return Promise.resolve({ status: 'unavailable' });
 
+  const request: TimestampMatchRequest = {
+    id: nextId++,
+    raws: [sample],
+    // `timeFormat: null` makes the prober stop after the prefix, which is all
+    // the hover needs from it: the format side is a regex this app generates.
+    config: { timePrefix: pattern, timeFormat: null, maxLookahead: 0, tz: null },
+  };
   return new Promise<PrefixMatchOutcome>((resolve) => {
-    const request: TimestampMatchRequest = {
-      id: nextId++,
-      raws: [sample],
-      // `timeFormat: null` makes the prober stop after the prefix, which is all
-      // the hover needs from it: the format side is a regex this app generates.
-      config: { timePrefix: pattern, timeFormat: null, maxLookahead: 0, tz: null },
-    };
-    const entry: Pending = {
-      request,
-      settle: resolve,
-      timer: startWatchdog(request.id),
-      cancelSub: undefined,
-    };
-    // Cancelling answers the caller at once, but the entry keeps its watchdog:
-    // if the abandoned match is the one that hangs, it is still reaped rather
-    // than left blocking every later hover.
+    const entry: Pending = { settle: resolve, cancelSub: undefined };
+    pending.set(request.id, entry);
+    if (!managed.post(request)) {
+      finish(request.id, { status: 'unavailable' });
+      return;
+    }
+    // Cancelling answers the caller at once, but the request stays in flight
+    // under its watchdog: if the abandoned match is the one that hangs, it is
+    // still reaped rather than left blocking every later hover.
     entry.cancelSub = token?.onCancellationRequested?.(() => {
       entry.settle?.({ status: 'cancelled' });
       entry.settle = null;
     });
-    pending.set(request.id, entry);
-    w.postMessage(request);
   });
 };
 
 /** Test hook: drop the worker and all state, as on a fresh page load. */
 export function resetTimePrefixMatcherForTests(): void {
-  for (const entry of pending.values()) clearTimeout(entry.timer);
+  managed.dispose();
+  for (const entry of pending.values()) entry.cancelSub?.dispose();
   pending.clear();
-  discardWorker();
-  loadFailures = 0;
   nextId = 1;
 }
