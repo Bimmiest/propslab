@@ -205,6 +205,63 @@ export function resolveLookahead(value: string | undefined): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 128;
 }
 
+/**
+ * The regex a TIME_FORMAT is searched for with.
+ *
+ * When TIME_PREFIX is set, props.conf.spec requires the TIME_FORMAT to start
+ * reading immediately after the prefix — "the TIME_PREFIX regex must match up
+ * to and including the character before the TIME_FORMAT date". An unanchored
+ * scan would instead accept the format at ANY offset in the lookahead window,
+ * masking a broken TIME_PREFIX (a mid-line date gets extracted as _time even
+ * though production strptime would fail at the prefix). So with a prefix the
+ * regex is anchored to the region start, allowing only the leading whitespace
+ * strptime skips; without one it scans the lookahead window.
+ *
+ * Exported with `matchTimeFormat` so the Timestamp tab's prober searches the
+ * way this extractor does. It used to carry its own copy of the search, which
+ * lost the anchoring and highlighted timestamps the pipeline rejected (#313).
+ */
+export function timeFormatRegex(timeFormat: string, anchored: boolean): RegExp {
+  const formatRegex = strftimeToRegex(timeFormat);
+  return anchored ? new RegExp(`^\\s*(?:${formatRegex.source})`, formatRegex.flags) : formatRegex;
+}
+
+/** Where a TIME_FORMAT matched in `_raw`, and the text to parse. */
+export interface TimeFormatMatch {
+  /**
+   * The matched text, as handed to the parser. May carry the leading
+   * whitespace the anchored form admits, which is why `start` is separate.
+   */
+  text: string;
+  /** Offset in `_raw` of the timestamp itself, after any leading whitespace. */
+  start: number;
+  /** End offset in `_raw`, exclusive. */
+  end: number;
+}
+
+/**
+ * Search `raw[searchStart, searchEnd)` — the lookahead window after TIME_PREFIX
+ * — with a regex from `timeFormatRegex`. Shared with the Timestamp tab (#313).
+ */
+export function matchTimeFormat(
+  raw: string,
+  searchStart: number,
+  searchEnd: number,
+  formatRegex: RegExp,
+): TimeFormatMatch | null {
+  const formatMatch = formatRegex.exec(raw.substring(searchStart, searchEnd));
+  if (!formatMatch) return null;
+  const text = formatMatch[0];
+  // The anchored form lets leading whitespace into the match; the timestamp
+  // itself starts after it.
+  const matchStart = searchStart + formatMatch.index;
+  return {
+    text,
+    start: matchStart + (text.length - text.trimStart().length),
+    end: matchStart + text.length,
+  };
+}
+
 export function extractTimestamps(
   events: SplunkEvent[],
   directives: ConfDirective[],
@@ -339,18 +396,8 @@ export function extractTimestamps(
       directiveKey: 'TIME_PREFIX',
     });
   }
-  const formatRegex = timeFormat ? strftimeToRegex(timeFormat) : null;
-  // When TIME_PREFIX is set, props.conf.spec requires the TIME_FORMAT to start
-  // reading immediately after the prefix — "the TIME_PREFIX regex must match up
-  // to and including the character before the TIME_FORMAT date". An unanchored
-  // scan would instead accept the format at ANY offset in the lookahead window,
-  // masking a broken TIME_PREFIX (a mid-line date gets extracted as _time even
-  // though production strptime would fail at the prefix). Anchor to the region
-  // start (allowing only leading whitespace, which strptime skips).
-  const formatRegexAnchored =
-    timeFormat && formatRegex && timePrefixRegex
-      ? new RegExp(`^\\s*(?:${formatRegex.source})`, formatRegex.flags)
-      : null;
+  // Anchored after TIME_PREFIX, unanchored without one — see timeFormatRegex.
+  const formatRegex = timeFormat ? timeFormatRegex(timeFormat, timePrefixRegex !== null) : null;
 
   // Splunk assigns an event with no parseable timestamp the `_time` of the
   // event before it, and only falls back to the time of ingest when there is no
@@ -574,17 +621,13 @@ export function extractTimestamps(
     }
 
     const searchEnd = Math.min(searchStart + maxLookahead, raw.length);
-    const searchRegion = raw.substring(searchStart, searchEnd);
 
     // Explicit TIME_FORMAT path.
     if (timeFormat && formatRegex) {
-      // With TIME_PREFIX configured, require the format right after the prefix;
-      // otherwise (no prefix) scan the lookahead window from the start.
-      const activeRegex = formatRegexAnchored ?? formatRegex;
-      const formatMatch = activeRegex.exec(searchRegion);
+      const formatMatch = matchTimeFormat(raw, searchStart, searchEnd, formatRegex);
       if (!formatMatch) return inherit(event, 'TIME_FORMAT did not match this event');
 
-      const timestampStr = formatMatch[0];
+      const { text: timestampStr, start, end } = formatMatch;
       const parseWith = (dateForDateless?: CalendarDate) =>
         parseTimestampDetailed(timestampStr, timeFormat, { tz, onUnresolvedTz, tzAlias, now, dateForDateless });
       let parsed = parseWith();
@@ -598,10 +641,6 @@ export function extractTimestamps(
       // it inherits rather than leaving the event unplaced.
       if (!parsed) return inherit(event, `Could not parse "${timestampStr}" with TIME_FORMAT`);
 
-      // The anchored form lets leading whitespace into the match; the
-      // timestamp itself starts after it.
-      const start = searchStart + formatMatch.index + (timestampStr.length - timestampStr.trimStart().length);
-      const end = searchStart + formatMatch.index + timestampStr.length;
       const label = `Extracted timestamp: ${parsed.date.toISOString()}`;
       return accept(
         event,
@@ -614,6 +653,7 @@ export function extractTimestamps(
     }
 
     // No TIME_FORMAT → automatic timestamp recognition (datetime.xml-style).
+    const searchRegion = raw.substring(searchStart, searchEnd);
     const auto = autoRecognize(searchRegion, tz, onUnresolvedTz, tzAlias, now);
     if (!auto) return inherit(event, 'No recognisable timestamp in this event');
 

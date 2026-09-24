@@ -30,6 +30,13 @@ export interface PipelineWorkerResponse {
   id: number;
   result: ReturnType<typeof runPipeline> | null;
   error?: string;
+  /**
+   * The stack of the error that `error` describes, when it was an `Error` that
+   * had one. A separate optional field so every existing reader of `error`
+   * keeps getting the bare message: this is for diagnosing a throw that escaped
+   * runPipeline, which the message alone rarely locates (#322).
+   */
+  stack?: string;
 }
 
 self.onmessage = (e: MessageEvent<PipelineWorkerRequest>) => {
@@ -43,6 +50,7 @@ self.onmessage = (e: MessageEvent<PipelineWorkerRequest>) => {
       id,
       result: null,
       error: err instanceof Error ? err.message : String(err),
+      ...(err instanceof Error && err.stack !== undefined ? { stack: err.stack } : {}),
     };
     self.postMessage(response);
   }
