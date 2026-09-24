@@ -201,3 +201,46 @@ describe('runPipeline — INGEST_EVAL metadata rewrites re-match stanzas (#327)'
     expect(diagnostics.some((d) => d.message.includes('sourcetype/host/source rewritten'))).toBe(true);
   });
 });
+
+describe('applyIngestEval — the trace says what was rewritten (#346)', () => {
+  // Trace content, not Splunk behaviour: nothing here is a fidelity claim.
+  const step = (e: SplunkEvent) => e.processingTrace[e.processingTrace.length - 1]!;
+
+  it('records each metadata rewrite old → new, structured and in the description', () => {
+    const out = applyIngestEval([event('x')], ingestDir('index="security", host="web01", tag="t"'))[0]!;
+    expect(step(out).metadataChanges).toEqual([
+      { key: 'index', from: 'main', to: 'security' },
+      { key: 'host', from: 'h', to: 'web01' },
+    ]);
+    // Named by DEST_KEY, as a DEST_KEY = MetaData:* step is, so the Raw tab's
+    // metadata-change row finds the step that made the change.
+    expect(step(out).description).toContain('MetaData:Index "main" → "security"');
+    expect(step(out).description).toContain('MetaData:Host "h" → "web01"');
+  });
+
+  it('records the net change when one list rewrites a key twice', () => {
+    const out = applyIngestEval([event('x')], ingestDir('index="a", index="b"'))[0]!;
+    expect(step(out).metadataChanges).toEqual([{ key: 'index', from: 'main', to: 'b' }]);
+  });
+
+  it('records nothing for an assignment that leaves the metadata as it was', () => {
+    const out = applyIngestEval([event('x')], ingestDir('index="main", host=null(), tag="t"'))[0]!;
+    expect(step(out).metadataChanges).toBeUndefined();
+    expect(step(out).description).toBe('Evaluated 3 ingest-time expression(s)');
+  });
+
+  it('records a _raw rewrite as a mutation of its own step, with before/after text', () => {
+    const input = { ...event('user=alice secret=hunter2'), processingTrace: [{ processor: 'p', phase: 'index-time' as const, description: 'd' }] };
+    const out = applyIngestEval([input], ingestDir('_raw=replace(_raw, "secret=\\\\S+", "")'))[0]!;
+    expect(out._raw).toBe('user=alice ');
+    expect(out.rawMutations).toEqual([{ traceIndex: 1, rawBefore: 'user=alice secret=hunter2', rawAfter: 'user=alice ' }]);
+    expect(step(out).inputSnapshot).toContain('secret=hunter2');
+    expect(step(out).outputSnapshot).toBe('user=alice ');
+  });
+
+  it('records no mutation when _raw is assigned its own value', () => {
+    const out = applyIngestEval([event('x')], ingestDir('_raw=_raw'))[0]!;
+    expect(out.rawMutations).toBeUndefined();
+    expect(step(out).inputSnapshot).toBeUndefined();
+  });
+});

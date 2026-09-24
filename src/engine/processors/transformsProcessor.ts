@@ -5,7 +5,7 @@ import { applyDestKey } from '../transforms/destKeyRouter';
 import { applyIngestEval } from '../transforms/ingestEval';
 import { evaluateStopCondition } from '../transforms/stopProcessing';
 import { byClassName } from '../utils/asciiCompare';
-import { changeWindow } from '../utils/changeWindow';
+import { appendTraceStep, metadataChanges } from '../utils/traceStep';
 import { SIMULATED_DEST_KEYS, VALID_UNSIMULATED_DEST_KEYS, normaliseDestKey } from '../transforms/destKeys';
 import { atDirective, atStanza } from '../parser/provenance';
 import { effectiveDirective, parseSplunkBool } from '../utils/directiveValues';
@@ -198,10 +198,17 @@ export function applyTransforms(
             warnUnknownDestKey(result.destKey, stanzaName, transformStanza, diagnostics, warnedUnknownDestKey);
           }
           // DEST_KEY = _raw overwrites the whole event with the FORMAT output,
-          // destroying field values by the same mechanism as SEDCMD. Record the
-          // rewrite so the same counterfactual attribution applies, and carry
-          // the before/after text — this step previously logged neither.
-          const rewroteRaw = result.destKey === '_raw' && routed._raw !== beforeRaw;
+          // destroying field values by the same mechanism as SEDCMD. The
+          // rewrite is recorded (appendTraceStep) so the same counterfactual
+          // attribution applies, with the before/after text — the path
+          // INGEST_EVAL's `_raw=` now shares (#346). Only DEST_KEY = _raw can
+          // change _raw here, so an unchanged _raw records nothing.
+          const extracted = Object.keys(result.fields);
+          const cloneType =
+            phase === 'index-time'
+              ? effectiveDirective(transformStanza.directives, 'CLONE_SOURCETYPE')?.value.trim()
+              : undefined;
+          const metaChanges = metadataChanges(currentEvent.metadata, routed.metadata);
           const step: ProcessingStep = {
             processor: `${listLabel}:${stanzaName}`,
             phase,
@@ -209,29 +216,24 @@ export function applyTransforms(
               ? `Transform routed to ${result.destKey}`
               : discardedFields.length > 0
                 ? `Transform matched, but without WRITE_META = true or a DEST_KEY its fields are not stored: ${discardedFields.join(', ')}`
-                : `Transform extracted fields: ${Object.keys(result.fields).join(', ')}`,
+                : extracted.length > 0
+                  ? `Transform extracted fields: ${extracted.join(', ')}`
+                  // A stanza that exists for CLONE_SOURCETYPE, or a REGEX with
+                  // nothing to capture, matched and extracted nothing — say
+                  // what it did instead of "extracted fields:" over an empty
+                  // list (#346).
+                  : cloneType
+                    ? `Transform matched; it extracts no fields, and CLONE_SOURCETYPE = ${cloneType} copies the event`
+                    : 'Transform matched; it extracted no fields',
             fieldsAdded: Object.keys(effective.fields),
-            ...(rewroteRaw ? changeWindow(beforeRaw, routed._raw) : {}),
+            ...(metaChanges.length > 0 ? { metadataChanges: metaChanges } : {}),
           };
-          currentEvent = {
-            ...routed,
-            processingTrace: [...routed.processingTrace, step],
-            rawMutations: rewroteRaw
-              ? [
-                  ...(routed.rawMutations ?? []),
-                  { traceIndex: routed.processingTrace.length, rawBefore: beforeRaw, rawAfter: routed._raw },
-                ]
-              : routed.rawMutations,
-          };
+          currentEvent = appendTraceStep(routed, step, beforeRaw);
           // CLONE_SOURCETYPE is index-time only. Splunk emits a copy carrying
           // the new sourcetype and lets the original continue untouched; the
           // copy re-enters the pipeline and picks up the new sourcetype's props
           // — its SEDCMD and TRANSFORMS in cloneSourcetype.ts, its search-time
           // config through the per-event path for any event whose metadata changed.
-          const cloneType =
-            phase === 'index-time'
-              ? effectiveDirective(transformStanza.directives, 'CLONE_SOURCETYPE')?.value.trim()
-              : undefined;
           if (cloneType) {
             clones.push({
               ...currentEvent,

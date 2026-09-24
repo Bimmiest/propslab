@@ -74,6 +74,14 @@ export interface ProcessingStep {
    * answered: case sensitivity, line continuations, and which stanza applies.
    */
   evalExpressions?: Record<string, string>;
+  /**
+   * The event metadata this step rewrote, old value to new (#346). Set by
+   * INGEST_EVAL assignments to index/host/source/sourcetype and by DEST_KEY =
+   * MetaData:*; absent when the step left the metadata as it found it.
+   * Structured for the same reason as `fieldAliases`: `description` names the
+   * change too, but only as prose.
+   */
+  metadataChanges?: { key: keyof EventMetadata; from: string; to: string }[];
 }
 
 /**
