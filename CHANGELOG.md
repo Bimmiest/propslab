@@ -25,6 +25,14 @@ All notable changes to Propslab are documented here, newest first.
 - **The registry covers `props.conf.spec` 10.4.3, and 47 attributes stop being invisible** ([#178](https://github.com/Bimmiest/propslab/issues/178), [src/engine/directiveRegistry.ts](src/engine/directiveRegistry.ts)). The registry drives autocomplete, hover and linting, so a valid directive it did not know about produced no completion, no hover and **no warning** — the preview behaved as though the line were not there, which is the one outcome the declared-surface mechanism ([#153](https://github.com/Bimmiest/propslab/issues/153)) exists to prevent. #178 counted 32 missing against Splunk 10.4.0 and 29 remained; checked against 10.4.3 the real figure was **47**, and **21 of those were not named in `UNDOCUMENTED_ATTRIBUTES` either** — unknown rather than merely unimplemented. All 47 are now registered with their value type, default and enumerated values read from the spec. The descriptions are written here and not copied: the structural facts are facts, the prose is Splunk's.
 - **A scheduled check stopped being the only thing watching the roster, and immediately earned its keep.** Classifying the new entries found that [#184](https://github.com/Bimmiest/propslab/issues/184) — cited in the README as tracking the delimited-extraction gap — **is closed**, the same rot that produced #227. It is replaced by [#272](https://github.com/Bimmiest/propslab/issues/272).
 
+### Changed
+
+- **Line breaking, timestamp extraction and the scaffold share one timestamp recogniser** ([#369](https://github.com/Bimmiest/propslab/issues/369)). The three kept separate copies of the date patterns, which had drifted (#352, #353): lines dated `2024/01/15`, `1/15/24` or `15 Jan 2024` started events whose `_time` was then inherited from the event before, a line starting with a weekday name started an event, and extraction read any 10-digit number as an epoch. Now a line that starts an event under `BREAK_ONLY_BEFORE_DATE` is one whose date becomes `_time`, and a suggested `TIME_FORMAT` is one extraction reads.
+  - An epoch is recognised at the start of a line or after a delimiter (`time=1768471200`, `[1768471200]`), and only when plausible.
+  - Month and weekday names match in any case (`15-JAN-2026 10:00:00`); a month and day with neither year nor time is no longer taken for a date.
+  - ctime and RFC 2822 stamps are read whole.
+  - A `TIME_PREFIX` that will not compile finds no date for line breaking either, as it already found no `_time`.
+
 ### Fixed
 
 Entries #351–#366 are the fifth review's findings. Engine tests are derived from the documentation and say so, and the Splunk 10.4.0 fixtures still pass.
