@@ -150,19 +150,16 @@ describe('buildTimeFormatPreview', () => {
     expect(preview.sample?.status === 'prefix-refused' ? preview.sample.reason : '').not.toBe('');
   });
 
-  it('refuses a ReDoS-prone TIME_PREFIX instead of running it on the main thread (#297)', async () => {
-    // `(a+)+$` against a long run of `a`s ending in a mismatch is the textbook
-    // catastrophic case: run for real, this hangs the tab.
-    const started = Date.now();
+  it('runs a backtracking-prone TIME_PREFIX rather than refusing it (#368)', async () => {
+    // `(a+)+$` used to be refused by a structural ReDoS check. It is valid PCRE
+    // and Splunk runs it, so the preview does too — in the worker, where PCRE's
+    // match limit and the watchdog bound it.
     const preview = await buildTimeFormatPreview('%Y-%m-%d', {
       now: NOW,
-      sampleLine: `${'a'.repeat(40)}! 2024-01-15`,
+      sampleLine: `${'a'.repeat(16)}! 2024-01-15`,
       timePrefix: '(a+)+$',
     });
-    expect(Date.now() - started).toBeLessThan(1000);
-    expect(preview.sample?.status).toBe('prefix-refused');
-    expect(preview.sample?.status === 'prefix-refused' ? preview.sample.reason : '').toMatch(/catastrophic backtracking/);
-    expect(renderTimeFormatPreview(preview)).toMatch(/TIME_PREFIX was not run: .*catastrophic backtracking/);
+    expect(preview.sample?.status).toBe('no-match');
   });
 
   it('translates PCRE in TIME_PREFIX the way the engine does (#297)', async () => {

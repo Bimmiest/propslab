@@ -240,7 +240,7 @@ export function extractTimestamps(
   // that hides the mistake.
   if (finder.prefixBroken && diagnostics && location.timePrefix !== undefined) {
     const pattern = location.timePrefix;
-    const why = validateRegex(pattern) ?? 'rejected as ReDoS-prone';
+    const why = validateRegex(pattern) ?? 'invalid regex';
     diagnostics.push({
       level: 'error',
       message:

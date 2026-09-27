@@ -5,13 +5,14 @@
  * even for large inputs or expensive regex transforms.
  *
  * Message protocol:
- *   in  → PipelineWorkerRequest
- *   out → WORKER_READY once, when the module has loaded (#339); then PipelineWorkerResponse
+ *   in  → WorkerInitMessage first, with the compiled regex engine; then PipelineWorkerRequest
+ *   out → WORKER_READY once, when the engine is instantiated (#339); then PipelineWorkerResponse
  */
 
 import { runPipeline } from './pipeline';
 import type { ConfInput, EventMetadata, PipelineOptions } from './types';
-import { WORKER_READY } from './workerProtocol';
+import { initRegexEngineSync } from '../utils/splunkRegex';
+import { isWorkerInitMessage, WORKER_READY, type WorkerInitMessage } from './workerProtocol';
 
 export interface PipelineWorkerRequest {
   id: number;
@@ -40,7 +41,14 @@ export interface PipelineWorkerResponse {
   stack?: string;
 }
 
-self.onmessage = (e: MessageEvent<PipelineWorkerRequest>) => {
+self.onmessage = (e: MessageEvent<PipelineWorkerRequest | WorkerInitMessage>) => {
+  if (isWorkerInitMessage(e.data)) {
+    // The page's first message: the engine it compiled once. Ready follows
+    // only once it is instantiated; a throw here is a failure to load (#339).
+    initRegexEngineSync(e.data.regexEngine);
+    self.postMessage(WORKER_READY);
+    return;
+  }
   const { id, rawData, metadata, propsConfText, transformsConfText, options } = e.data;
   try {
     const output = runPipeline(rawData, metadata, propsConfText, transformsConfText, options);
@@ -56,8 +64,3 @@ self.onmessage = (e: MessageEvent<PipelineWorkerRequest>) => {
     self.postMessage(response);
   }
 };
-
-// Last, so it is only sent once every import above has evaluated and the
-// handler is installed. Anything the worker throws before this point is a
-// failure to load, not something a request did to it (#339).
-self.postMessage(WORKER_READY);

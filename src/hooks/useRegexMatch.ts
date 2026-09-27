@@ -4,9 +4,10 @@ import { useWorkerRequest } from './useWorkerRequest';
 import { matchInputs } from '../engine/regexMatch';
 import type { RegexMatchInfo } from '../engine/regexMatch';
 import type { RegexMatchResponse } from '../engine/regexMatchWorker';
+import { withRegexEngine } from '../utils/regexEngineLoader';
 
 const createWorker = () =>
-  new Worker(new URL('../engine/regexMatchWorker.ts', import.meta.url), { type: 'module' });
+  withRegexEngine(new Worker(new URL('../engine/regexMatchWorker.ts', import.meta.url), { type: 'module' }));
 
 // Shorter than the main pipeline's 5 s: the live tester runs on every keystroke,
 // so a runaway pattern should be cut quickly. A catastrophic regex hangs the
@@ -63,9 +64,9 @@ const EMPTY_MATCHED: Matched = { pattern: '', inputs: EMPTY_INPUTS, results: EMP
 /**
  * Match a Splunk regex against many inputs in a terminatable Web Worker.
  *
- * Unlike a synchronous `regex.exec` on the main thread, a catastrophic pattern
- * that slips the ReDoS heuristic only hangs the worker — the watchdog kills it,
- * restarts it, and reports `timeout`, so the Regex tab stays responsive. The
+ * PCRE's limits bound each match but not the total over every input, so a
+ * slow pattern only stalls the worker — the watchdog kills it, restarts it, and
+ * reports `timeout`, so the Regex tab stays responsive. The
  * lifecycle around that lives in `useWorkerRequest` (#151).
  *
  * Where `Worker` is unavailable (tests / SSR) it falls back to matching on the

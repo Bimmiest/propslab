@@ -39,13 +39,16 @@ const BUDGETS_KB = {
   // Workers: off the startup path, but each is a whole download of its own.
   'pipelineWorker.js': 70, // 61.4
   'editor.worker.js': 97, // 85.9
+  // PCRE2, the regex engine every user pattern runs on (#368). Fetched once
+  // by the page at startup and handed to the workers as a compiled module.
+  'pcre2.wasm': 95, // 83.5
 };
 const DEFAULT_KB = 25;
 
 const dir = join(process.argv[2] ?? 'dist', 'assets');
 let files;
 try {
-  files = readdirSync(dir).filter((f) => /\.(js|css)$/.test(f));
+  files = readdirSync(dir).filter((f) => /\.(js|css|wasm)$/.test(f));
 } catch {
   console.error(`No build output at ${dir} — run \`npm run build\` first.`);
   process.exit(1);

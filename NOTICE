@@ -67,3 +67,21 @@ here was recorded in August 2026 from Splunk Enterprise 10.4.0 by the
 maintainer, whose property those results are under section 18.2 of the Splunk
 General Terms. No capture tooling ships with this repository and no further
 capture is planned; src/engine/__tests__/fixtures/README.md explains why.
+
+--------------------------------------------------------------------------
+PCRE2
+--------------------------------------------------------------------------
+
+packages/pcre2-wasm/pcre2.wasm, which the app and the MCP server ship and run,
+is PCRE2 compiled to WebAssembly:
+
+    PCRE2 - Perl-Compatible Regular Expressions
+    https://github.com/PCRE2Project/pcre2
+    Copyright (c) 1997-2007 University of Cambridge
+    Copyright (c) 2007-2024 Philip Hazel
+    SPDX-License-Identifier: BSD-3-Clause WITH PCRE2-exception
+
+PCRE2's licence is reproduced in full in packages/pcre2-wasm/LICENCE-PCRE2.md,
+and packages/pcre2-wasm/NOTICE describes what that package contains. The PCRE2
+source is not vendored; the package's build script downloads the pinned
+release and verifies its checksum.

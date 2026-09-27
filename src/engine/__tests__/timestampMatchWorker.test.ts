@@ -8,6 +8,8 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { TimestampMatchRequest, TimestampMatchResponse } from '../timestampMatchWorker';
+import type { WorkerInitMessage } from '../workerProtocol';
+import { regexEngineModule } from '../../utils/splunkRegex';
 
 // A plain variable rather than a `vi.fn`: vitest fails a test whose mock
 // throws, even when the code under test catches it, and throwing is the point.
@@ -26,10 +28,12 @@ async function loadWorker() {
   vi.stubGlobal('self', fakeSelf);
   vi.resetModules();
   await import('../timestampMatchWorker');
-  // The ready signal (#339) is pinned in workerReady.test.ts; these are about responses.
-  expect(posted.shift()).toEqual({ type: 'ready' });
-  const send = (request: TimestampMatchRequest) =>
+  const send = (request: TimestampMatchRequest | WorkerInitMessage) =>
     fakeSelf.onmessage!({ data: request } as MessageEvent<TimestampMatchRequest>);
+  // The init and ready handshake (#339) is pinned in workerReady.test.ts;
+  // these are about responses.
+  send({ type: 'init', regexEngine: regexEngineModule() });
+  expect(posted.shift()).toEqual({ type: 'ready' });
   return { posted, send };
 }
 

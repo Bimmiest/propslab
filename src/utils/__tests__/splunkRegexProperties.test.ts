@@ -1,29 +1,33 @@
 // ---------------------------------------------------------------------------
 // splunkRegexProperties.test.ts
-// Property-based tests for the PCRE → JS translation in translatePcreToJs (#340).
+// Differential property tests: PCRE2 (the engine) against JS's own RegExp, on
+// the syntax the two read the same way (#340, #368).
 //
-// Patterns are generated from a subset of regex syntax that PCRE and JS read
-// the same way — literals, escapes, character classes (with regex
-// metacharacters inside them), greedy and lazy quantifiers, capturing,
-// non-capturing, named and lookaround groups, alternation and anchors — and
-// the translation is checked against JS's own reading of the equivalent
-// pattern, on generated subject strings.
+// Patterns are generated from literals, escapes, character classes (with
+// regex metacharacters inside them), greedy and lazy quantifiers, capturing,
+// non-capturing, named and lookaround groups, alternation and anchors, rendered
+// once in JS spelling and once in PCRE spelling (`(?P<name>…)`). One class
+// spelling differs: a `]` first in a class is a member in PCRE and written
+// `\]` for JS (#341).
 //
-// One class spelling differs between the two: a `]` first in a class (`[]a]`,
-// `[^]a]`) is a literal member in PCRE, while JS reads `[]` as an empty class
-// and `[^]` as "any character". The generator produces it, rendered as `[]a]`
-// for PCRE and `[\]a]` for JS, so the properties check the translator escapes
-// it (#341).
-//
-// Excluded from generation, with the reason:
-//  - `[:` inside a class, which PCRE reads as the start of a POSIX class.
+// Differences the comparison steps around, each pinned by an example test in
+// splunkRegex.test.ts instead:
+//  - `$` also matches before a final newline in PCRE; compiled here with
+//    DOLLAR_ENDONLY so the two agree.
+//  - Iteration after an empty match, and captures inside repeated groups:
+//    compared by first match per start offset, whole match only.
+//  - A backreference to a group that did not participate matches empty in JS
+//    and fails in PCRE, so the generator makes none.
+//  - A lookbehind of unbounded length is a JS-only feature.
+//  - `[:` inside a class, which PCRE reads as the start of a POSIX class, is
+//    never generated.
 //
 // The seed is fixed so a run is reproducible.
 // ---------------------------------------------------------------------------
 
 import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';
-import { translatePcreToJs, SUPPORTS_SCOPED_MODIFIERS } from '../splunkRegex';
+import { safeRegex, type SplunkRegex } from '../splunkRegex';
 
 fc.configureGlobal({ seed: 340, numRuns: 300 });
 
@@ -39,7 +43,6 @@ type Atom =
   | { t: 'text'; s: string; pcre?: string }
   | { t: 'anchor'; s: string }
   | { t: 'group'; kind: 'cap' | 'nc' | 'named' | 'la' | 'nla' | 'lb' | 'nlb'; body: Alt }
-  | { t: 'backref' } // to the most recent named group, if any
   | { t: 'quant'; atom: Atom; q: string };
 type Seq = Atom[];
 type Alt = Seq[];
@@ -93,7 +96,6 @@ const { alt } = fc.letrec<{ alt: Alt; seq: Seq; atom: Atom; group: Atom }>((tie)
     { depthSize: 'small', withCrossShrink: true },
     textAtom,
     anchor,
-    fc.constant<Atom>({ t: 'backref' }),
     tie('group'),
     // Anchors and lookarounds are not quantifiable in both engines; everything else is.
     fc
@@ -108,10 +110,9 @@ const { alt } = fc.letrec<{ alt: Alt; seq: Seq; atom: Atom; group: Atom }>((tie)
 
 const seqOnly = fc.array(fc.oneof(textAtom, anchor), { maxLength: 4 });
 
-/** Render as JS (`(?<g0>…)`, `\k<g0>`) or PCRE (`(?P<g0>…)`, `(?P=g0)`) source. */
+/** Render as JS (`(?<g0>…)`) or PCRE (`(?P<g0>…)`) source. */
 function render(pattern: Alt, flavour: 'js' | 'pcre'): string {
   let named = 0;
-  let lastName: string | undefined;
   const opens: Record<string, string> = { cap: '(', nc: '(?:', la: '(?=', nla: '(?!', lb: '(?<=', nlb: '(?<!' };
   const atom = (a: Atom): string => {
     switch (a.t) {
@@ -119,19 +120,12 @@ function render(pattern: Alt, flavour: 'js' | 'pcre'): string {
         return flavour === 'pcre' ? a.pcre ?? a.s : a.s;
       case 'anchor':
         return a.s;
-      case 'backref':
-        // A backreference to a group that is not yet defined is legal in both
-        // engines but means different things (JS: empty; PCRE: fails), so only
-        // refer back to a group that has closed.
-        if (lastName === undefined) return '';
-        return flavour === 'js' ? `\\k<${lastName}>` : `(?P=${lastName})`;
       case 'quant':
         return atom(a.atom) + a.q;
       case 'group': {
         if (a.kind === 'named') {
           const name = `g${named++}`;
           const body = alternation(a.body);
-          lastName = name;
           return `${flavour === 'js' ? '(?<' : '(?P<'}${name}>${body})`;
         }
         return `${opens[a.kind]!}${alternation(a.body)})`;
@@ -142,73 +136,104 @@ function render(pattern: Alt, flavour: 'js' | 'pcre'): string {
   return alternation(pattern);
 }
 
-const jsPattern = alt.map((p) => render(p, 'js'));
+const pcrePattern = alt.map((p) => ({ js: render(p, 'js'), pcre: render(p, 'pcre') }));
 
 const subject = fc.string({ unit: fc.constantFrom(...SUBJECT_CHARS), maxLength: 12 });
 const subjects = fc.array(subject, { minLength: 1, maxLength: 6 });
 
-/** Every match `re` finds in `s`, with its index and captures. */
-function allMatches(re: RegExp, s: string) {
-  const g = new RegExp(re.source, re.flags.includes('g') ? re.flags : `${re.flags}g`);
-  return [...s.matchAll(g)].map((m) => ({ index: m.index, captures: [...m], groups: m.groups ? { ...m.groups } : undefined }));
+/**
+ * PCRE2 rejects a lookbehind whose branches have no maximum length; JS accepts
+ * any lookbehind. The generator produces both, and these are the only
+ * patterns PCRE may refuse.
+ */
+const UNBOUNDED_LOOKBEHIND = /\(\?<[=!].*(?:[*+]|\{\d+,\})/;
+
+/**
+ * The first match at each start offset, as [index, text]. Whole-match spans
+ * only: capture groups inside a repeated group keep their last value in PCRE
+ * but are reset per iteration in JS, a documented difference.
+ */
+function pcreFirstMatches(re: SplunkRegex, s: string) {
+  const out: [number, string][] = [];
+  for (let i = 0; i <= s.length; i++) {
+    const m = re.exec(s, i);
+    out.push(m ? [m.index, m[0]] : [-1, '']);
+  }
+  return out;
 }
 
-function expectSameMatches(actual: RegExp, expected: RegExp, strings: string[]) {
+function jsFirstMatches(re: RegExp, s: string) {
+  const g = new RegExp(re.source, `${re.flags}g`);
+  const out: [number, string][] = [];
+  for (let i = 0; i <= s.length; i++) {
+    g.lastIndex = i;
+    const m = g.exec(s);
+    out.push(m ? [m.index, m[0]] : [-1, '']);
+  }
+  return out;
+}
+
+function expectSameMatches(pcre: SplunkRegex, js: RegExp, strings: string[]) {
   for (const s of strings) {
-    expect(allMatches(actual, s), `/${actual.source}/${actual.flags} vs /${expected.source}/${expected.flags} on ${JSON.stringify(s)}`).toEqual(
-      allMatches(expected, s),
+    expect(pcreFirstMatches(pcre, s), `${pcre.source} vs /${js.source}/${js.flags} on ${JSON.stringify(s)}`).toEqual(
+      jsFirstMatches(js, s),
     );
   }
 }
 
-function compiles(source: string, flags = ''): boolean {
+/** Compiled as the engine compiles it, but with `$` at the very end only, as in JS. */
+function pcre(source: string): SplunkRegex | null {
+  return safeRegex(source, 'D');
+}
+
+const SUPPORTS_SCOPED_MODIFIERS = (() => {
   try {
-    new RegExp(source, flags);
+    new RegExp('(?i:a)');
     return true;
   } catch {
     return false;
   }
-}
+})();
 
 // ── Properties ──────────────────────────────────────────
 
-describe('translatePcreToJs properties (#340)', () => {
-  it('generates patterns JS accepts', () => {
-    // Guards the generator: every other property assumes its patterns compile.
+describe('PCRE2 agrees with JS on the syntax the two share (#368)', () => {
+  it('compiles every generated pattern but a lookbehind of unbounded length', () => {
     fc.assert(
-      fc.property(jsPattern, (p) => {
-        expect(compiles(p), p).toBe(true);
+      fc.property(pcrePattern, ({ js, pcre: p }) => {
+        expect(() => new RegExp(js), js).not.toThrow();
+        if (!UNBOUNDED_LOOKBEHIND.test(p)) expect(pcre(p), p).not.toBeNull();
       }),
     );
   });
 
-  it('leaves a pattern JS already accepts unchanged, so it matches identically', () => {
+  it('finds the same first match from every offset', () => {
     fc.assert(
-      fc.property(jsPattern, subjects, (p, strings) => {
-        const t = translatePcreToJs(p);
-        expect(t, p).toEqual({ source: p, flags: '', warnings: [] });
-        expectSameMatches(new RegExp(t.source, t.flags), new RegExp(p), strings);
+      fc.property(pcrePattern, subjects, ({ js, pcre: p }, strings) => {
+        const re = pcre(p);
+        if (!re) return;
+        expectSameMatches(re, new RegExp(js), strings);
       }),
     );
   });
 
-  it('reads PCRE (?P<name>…) and (?P=name) as JS named groups and backreferences', () => {
+  it('reads the JS spelling of named groups the same as the PCRE one', () => {
     fc.assert(
-      fc.property(alt, subjects, (p, strings) => {
-        const t = translatePcreToJs(render(p, 'pcre'));
-        expect(t.source).toBe(render(p, 'js'));
-        expectSameMatches(new RegExp(t.source, t.flags), new RegExp(render(p, 'js')), strings);
+      fc.property(pcrePattern, subjects, ({ js, pcre: p }, strings) => {
+        const re = pcre(js);
+        if (!re) return;
+        expectSameMatches(re, new RegExp(js), strings);
+        expect(pcre(p)?.names).toEqual(re.names);
       }),
     );
   });
 
   it('treats a leading (?i) as the JS i flag', () => {
     fc.assert(
-      fc.property(jsPattern, subjects, (p, strings) => {
-        const t = translatePcreToJs(`(?i)${p}`);
-        expect(t.flags).toBe('i');
-        expect(t.warnings).toEqual([]);
-        expectSameMatches(new RegExp(t.source, t.flags), new RegExp(p, 'i'), strings);
+      fc.property(pcrePattern, subjects, ({ js, pcre: p }, strings) => {
+        const re = pcre(`(?i)${p}`);
+        if (!re) return;
+        expectSameMatches(re, new RegExp(js, 'i'), strings);
       }),
     );
   });
@@ -237,84 +262,10 @@ describe('translatePcreToJs properties (#340)', () => {
         const bodyJs = `${seqText(pre)}(?i:(?:${seqText(post)}))${tailJs}`;
         const [beforePcre, afterPcre] = outer.map((o) => seqText(o, 'pcre')) as [string, string];
         const [before, after] = outer.map((o) => seqText(o)) as [string, string];
-        const pcre = inGroup ? `${beforePcre}(${body})${afterPcre}` : body;
+        const p = inGroup ? `${beforePcre}(${body})${afterPcre}` : body;
         const js = inGroup ? `${before}(${bodyJs})${after}` : bodyJs;
-        const t = translatePcreToJs(pcre, '', { scopedModifiers: true });
-        expect(t.warnings).toEqual([]);
-        expectSameMatches(new RegExp(t.source, t.flags), new RegExp(js), strings);
+        expectSameMatches(pcre(p)!, new RegExp(js), strings);
       }),
-    );
-  });
-
-  it('hoists a mid-pattern (?i) to the whole pattern, with a warning, where scoped groups are unavailable', () => {
-    fc.assert(
-      fc.property(midPattern, subjects, ({ outer, inGroup, pre, post, rest }, strings) => {
-        const text = (f: 'js' | 'pcre') => {
-          const tail = rest === undefined ? '' : `|${seqText(rest, f)}`;
-          const [before, after] = outer.map((o) => seqText(o, f)) as [string, string];
-          const wrap = (body: string) => (inGroup ? `${before}(${body})${after}` : body);
-          return { wrap, pre: seqText(pre, f), post: seqText(post, f), tail };
-        };
-        const p = text('pcre');
-        const j = text('js');
-        const t = translatePcreToJs(p.wrap(`${p.pre}(?i)${p.post}${p.tail}`), '', { scopedModifiers: false });
-        const hoisted = j.wrap(`${j.pre}${j.post}${j.tail}`);
-        expect(t.source).toBe(hoisted);
-        expect(t.flags).toBe('i');
-        // A (?i) at the very start is a leading group, which a flag expresses exactly.
-        const leading = !inGroup && seqText(pre) === '';
-        expect(t.warnings).toHaveLength(leading ? 0 : 1);
-        expectSameMatches(new RegExp(t.source, t.flags), new RegExp(hoisted, 'i'), strings);
-      }),
-    );
-  });
-
-  it('never alters the contents of a character class, beyond escaping a leading ] (#341)', () => {
-    // PCRE-only syntax around the classes, so the translator has work to do
-    // everywhere except inside them.
-    const pcreNoise = fc.constantFrom('a++', '\\d*+', 'x?+', '(?>b)', '(?P<n>c)', '(?i)', 'd{2}+', ' # c\n', '|', '(e)');
-    const piece = fc.oneof(
-      charClass.map((c) => ({ cls: c.pcre, js: c.js })),
-      pcreNoise.map((s) => ({ text: s })),
-    );
-    fc.assert(
-      fc.property(fc.boolean(), fc.array(piece, { maxLength: 8 }), fc.boolean(), (extended, pieces, scoped) => {
-        const pattern = (extended ? '(?x)' : '') + pieces.map((p) => ('cls' in p ? p.cls : p.text)).join('');
-        const { source } = translatePcreToJs(pattern, '', { scopedModifiers: scoped });
-        let from = 0;
-        for (const p of pieces) {
-          if (!('cls' in p)) continue;
-          const at = source.indexOf(p.js, from);
-          expect(at, `${p.js} in ${source}`).toBeGreaterThanOrEqual(0);
-          from = at + p.js.length;
-        }
-      }),
-    );
-  });
-
-  it('never throws, and leaves anything JS accepts compiling and unchanged', () => {
-    const regexChar = fc.constantFrom(
-      '(', ')', '[', ']', '{', '}', '?', '*', '+', '|', '^', '$', '\\', '.', 'a', '1', ',', '<', '>', '=', '!', ':', 'P', 'i', 'x', '-', ' ', '#', '\n',
-    );
-    fc.assert(
-      fc.property(fc.string({ unit: regexChar, maxLength: 16 }), fc.boolean(), (s, scoped) => {
-        const t = translatePcreToJs(s, '', { scopedModifiers: scoped });
-        // Spellings JS accepts but reads differently from PCRE, which the
-        // translator rewrites or refuses: a class opening `[]` or `[^]` (#341);
-        // a letter escape such as `\a` (BEL) or `\P` (a Unicode property) that
-        // JS reads as the bare letter, and `\x` without two hex digits (#355);
-        // and, where scoped groups are off, a written `(?i:…)`, which falls
-        // back to a hoisted flag. The skips are conservative: they also match
-        // inside a class or after an escaped backslash.
-        const pcreDiffers =
-          /\[\^?\]/.test(s) ||
-          /\\(?![dDwWsStnrfbB]|x[0-9a-fA-F]{2}|c[A-Za-z]|[^A-Za-z])/.test(s) ||
-          (!scoped && /\(\?[a-zA-Z]*-?[a-zA-Z]*:/.test(s));
-        if (compiles(s) && !pcreDiffers) {
-          expect(t, s).toEqual({ source: s, flags: '', warnings: [] });
-        }
-      }),
-      { numRuns: 500 },
     );
   });
 });

@@ -42,18 +42,19 @@ describe('SEDCMD replacement — whole-match references (#121)', () => {
 
 // #122: a pattern safeRegex refuses left no trace at all.
 describe('SEDCMD — an uncompilable pattern warns rather than vanishing (#122)', () => {
-  it('warns when the ReDoS heuristic rejects the pattern', () => {
-    const { raw, diagnostics } = run('s/(a+)+$/Z/', 'aaaa!');
-    expect(raw).toBe('aaaa!');
-    expect(diagnostics).toHaveLength(1);
-    expect(diagnostics[0]!.level).toBe('warning');
-    expect(diagnostics[0]!.message).toMatch(/could not be compiled safely/);
-    expect(diagnostics[0]!.directiveKey).toBe('SEDCMD-x');
+  it('runs a backtracking-prone pattern rather than refusing it (#368)', () => {
+    const { raw, diagnostics } = run('s/(a+)+$/Z/', 'aaaa');
+    expect(raw).toBe('Z');
+    expect(diagnostics).toEqual([]);
   });
 
-  it('warns when the pattern is not valid regex at all', () => {
-    const { diagnostics } = run('s/[unclosed/Z/', 'abc');
-    expect(diagnostics.some((d) => /could not be compiled safely/.test(d.message))).toBe(true);
+  it('warns when the pattern is not valid regex, with PCRE\'s reason', () => {
+    const { raw, diagnostics } = run('s/[unclosed/Z/', 'abc');
+    expect(raw).toBe('abc');
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0]!.level).toBe('warning');
+    expect(diagnostics[0]!.message).toMatch(/does not compile \(missing terminating \]/);
+    expect(diagnostics[0]!.directiveKey).toBe('SEDCMD-x');
   });
 });
 

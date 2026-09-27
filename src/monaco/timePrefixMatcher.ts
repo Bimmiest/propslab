@@ -3,13 +3,12 @@
 // Runs the TIME_FORMAT hover's TIME_PREFIX match off the main thread (#334).
 //
 // The hover used to exec the user's TIME_PREFIX against the sample line on the
-// main thread, bounded only by a 4 KB input cap. `safeRegex` is a structural
-// heuristic that misses alternation-overlap shapes such as `(a|aa)+b`, and
-// those blow up exponentially: 4 KB bounds nothing, and hovering froze the tab.
+// main thread, where nothing could stop a pattern that backtracked badly, and
+// hovering froze the tab.
 //
 // This reuses the Timestamp tab's worker (`timestampMatchWorker.ts`) rather
 // than adding one: a request with `timeFormat: null` asks it for the prefix
-// span alone, compiled by the same `safeRegex` the engine uses. One worker is
+// span alone, compiled by the same PCRE2 the engine uses. One worker is
 // kept alive and shared by every hover; a watchdog terminates it when a match
 // overruns, and the next request gets a fresh one. It is a plain module rather
 // than `useWorkerRequest` because hover providers live outside React; the
@@ -30,6 +29,7 @@
 
 import { createManagedWorker } from '../hooks/workerLifecycle';
 import type { TimestampMatchRequest, TimestampMatchResponse } from '../engine/timestampMatchWorker';
+import { withRegexEngine } from '../utils/regexEngineLoader';
 
 /**
  * Watchdog budget for one hover's prefix match. Shorter than the Regex and
@@ -70,7 +70,7 @@ interface Pending {
 }
 
 const createWorker = () =>
-  new Worker(new URL('../engine/timestampMatchWorker.ts', import.meta.url), { type: 'module' });
+  withRegexEngine(new Worker(new URL('../engine/timestampMatchWorker.ts', import.meta.url), { type: 'module' }));
 
 let nextId = 1;
 const pending = new Map<number, Pending>();

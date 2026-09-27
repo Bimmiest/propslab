@@ -3,9 +3,10 @@ import { useWorkerRequest } from './useWorkerRequest';
 import { probeTimestamps } from '../engine/timestampMatch';
 import type { TimeConfig, TimestampProbe } from '../engine/timestampMatch';
 import type { TimestampMatchResponse } from '../engine/timestampMatchWorker';
+import { withRegexEngine } from '../utils/regexEngineLoader';
 
 const createWorker = () =>
-  new Worker(new URL('../engine/timestampMatchWorker.ts', import.meta.url), { type: 'module' });
+  withRegexEngine(new Worker(new URL('../engine/timestampMatchWorker.ts', import.meta.url), { type: 'module' }));
 
 // Matches the Regex tab's tester: this re-runs whenever props.conf changes, so a
 // runaway TIME_PREFIX should be cut quickly rather than held for the pipeline's 5 s.
@@ -27,11 +28,10 @@ export interface TimestampMatchState {
 /**
  * Probe events for their timestamp in a terminatable Web Worker.
  *
- * TIME_PREFIX is a user-supplied regex, and `safeRegex`'s heuristic is explicit
- * that it does not catch alternation-overlap forms. Executed synchronously in a
- * `useMemo` on the render path there was nothing to terminate — a permitted but
- * ambiguous pattern froze the tab for tens of seconds with no diagnostic. Here it
- * only hangs the worker, which the watchdog kills and restarts.
+ * TIME_PREFIX is a user-supplied regex. PCRE's limits bound each match but not
+ * the total over every event, and executed synchronously in a `useMemo` on the
+ * render path there was nothing to terminate. Here a slow pattern only stalls
+ * the worker, which the watchdog kills and restarts.
  *
  * The lifecycle around that — construction, staleness, watchdog, teardown —
  * lives in `useWorkerRequest` (#151).

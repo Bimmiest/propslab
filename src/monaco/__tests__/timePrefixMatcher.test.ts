@@ -14,7 +14,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { editor, Position, languages, CancellationToken } from 'monaco-editor';
 import type { TimestampMatchRequest, TimestampMatchResponse } from '../../engine/timestampMatchWorker';
 import { probeTimestamps } from '../../engine/timestampMatch';
-import { translatePcreToJs } from '../../utils/splunkRegex';
+import { SplunkRegex } from '../../utils/splunkRegex';
 import { useAppStore } from '../../store/useAppStore';
 import { createHoverProvider } from '../splunkConfHover';
 import { buildTimeFormatPreview, renderTimeFormatPreview } from '../timeFormatPreview';
@@ -24,6 +24,7 @@ import {
   TIME_PREFIX_TIMEOUT_MS,
   type PrefixMatcher,
 } from '../timePrefixMatcher';
+import { isWorkerInitMessage, type WorkerInitMessage } from '../../engine/workerProtocol';
 
 class FakeWorker {
   static instances: FakeWorker[] = [];
@@ -50,7 +51,9 @@ class FakeWorker {
     this.ready();
     this.onerror?.(new ErrorEvent('error', { message }));
   }
-  postMessage(message: TimestampMatchRequest) {
+  postMessage(message: TimestampMatchRequest | WorkerInitMessage) {
+    // The engine handed over as each worker is built is not a request.
+    if (isWorkerInitMessage(message)) return;
     this.posted.push(message);
   }
   terminate() {
@@ -301,24 +304,15 @@ describe('TIME_FORMAT hover — TIME_PREFIX in a worker (#334)', () => {
 describe('TIME_FORMAT preview — no main-thread TIME_PREFIX execution (#334)', () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it('never executes the prefix regex on this thread, even for a pattern safeRegex allows', async () => {
-    // `(a|aa)+b` is the alternation-overlap shape `safeRegex` documents it
-    // cannot see; against a run of `a`s it is exponential.
+  it('never executes the prefix regex on this thread, even one that compiles', async () => {
+    // `(a|aa)+b` against a run of `a`s is exponential; PCRE's limit stops each
+    // match, but the hover must not pay even that on the main thread.
     const prefix = '(a|aa)+b';
-    const { source } = translatePcreToJs(prefix);
     const executed: string[] = [];
-    const record = function (this: RegExp) {
+    const exec = SplunkRegex.prototype.exec;
+    vi.spyOn(SplunkRegex.prototype, 'exec').mockImplementation(function (this: SplunkRegex, s: string, start?: number) {
       executed.push(this.source);
-    };
-    const exec = RegExp.prototype.exec;
-    const test = RegExp.prototype.test;
-    vi.spyOn(RegExp.prototype, 'exec').mockImplementation(function (this: RegExp, s: string) {
-      record.call(this);
-      return exec.call(this, s);
-    });
-    vi.spyOn(RegExp.prototype, 'test').mockImplementation(function (this: RegExp, s: string) {
-      record.call(this);
-      return test.call(this, s);
+      return exec.call(this, s, start);
     });
 
     const seen: string[] = [];
@@ -333,7 +327,7 @@ describe('TIME_FORMAT preview — no main-thread TIME_PREFIX execution (#334)', 
     });
 
     expect(seen).toEqual([prefix]);
-    expect(executed).not.toContain(source);
+    expect(executed).not.toContain(prefix);
     expect(renderTimeFormatPreview(preview!)).toContain('**Sample:** preview timed out');
   });
 });

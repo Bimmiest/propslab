@@ -1,14 +1,16 @@
 import type { SplunkEvent, ConfDirective, DirectiveNoOp, RawMutation, ValidationDiagnostic } from '../types';
 import { longestPartialMatch } from '../noOpExplainer';
-import { safeRegex } from '../../utils/splunkRegex';
+import { safeRegex, validateRegex, type RegexMatch, type SplunkRegex } from '../../utils/splunkRegex';
 import { byClassName } from '../utils/asciiCompare';
 import { changeWindow } from '../utils/changeWindow';
 import { atDirective } from '../parser/provenance';
 
 interface SedCommand {
   className: string;
-  pattern: RegExp;
-  replacement: string;
+  /** The `s///` pattern; absent for `y///`. */
+  pattern?: SplunkRegex;
+  /** The `s///` replacement, expanded per match. */
+  replacement: (match: RegexMatch) => string;
   global: boolean;
   /**
    * Character map for the `y///` transliterate form. When present the command
@@ -18,38 +20,53 @@ interface SedCommand {
   translate?: Map<string, string>;
 }
 
+/** A replacement template: literal text, or a group number (0 = whole match). */
+type ReplacementPart = string | number;
+
 /**
- * Turn a parsed sed replacement string into a JS `String.replace` replacement.
- * The parser preserves backslashes verbatim, so this single left-to-right pass
- * resolves the escapes with sed's semantics:
- *   - `\1`..`\9`  → capture-group backreferences (`$1`..`$9`)
- *   - `\0` and a bare `&` → the whole match, which JS spells `$&`. Mapping `\0`
- *                   to `$0` emitted the marker itself: JS does not recognise
- *                   `$0` as a substitution, so `s/b/[\0]/` on "abc" produced
- *                   the literal "a[$0]c" rather than "a[b]c".
+ * Parse a sed replacement string. The expression parser preserves backslashes
+ * verbatim, so this single left-to-right pass resolves the escapes with sed's
+ * semantics — not PCRE2's substitution syntax, which Splunk does not use:
+ *   - `\1`..`\9`  → that capture group (empty when it did not participate)
+ *   - `\0` and a bare `&` → the whole match
  *   - `\<char>`   → the escaped literal, with the backslash dropped (this covers
  *                   an escaped delimiter like `s/b/x\/y/` → `x/y`, plus `\\` → `\`
  *                   and `\&` → a literal ampersand)
- *   - a bare `$`  → escaped to `$$` so JS doesn't read it as a substitution
- *                   pattern (sed treats `$` as an ordinary character)
+ *   - `$` is an ordinary character
  */
-function buildReplacement(raw: string): string {
-  let out = '';
+function buildReplacement(raw: string): (match: RegexMatch) => string {
+  const parts: ReplacementPart[] = [];
+  let literal = '';
+  const flush = () => {
+    if (literal) parts.push(literal);
+    literal = '';
+  };
   for (let i = 0; i < raw.length; i++) {
-    const c = raw[i];
+    const c = raw.charAt(i);
     if (c === '\\' && i + 1 < raw.length) {
       const next = raw.charAt(i + 1);
-      if (next === '0') out += '$&';
-      else if (next >= '1' && next <= '9') out += '$' + next;
-      else if (next === '$') out += '$$';
-      else out += next;
+      if (next >= '0' && next <= '9') {
+        flush();
+        parts.push(Number(next));
+      } else {
+        literal += next;
+      }
       i++;
       continue;
     }
-    if (c === '&') { out += '$&'; continue; }
-    out += c === '$' ? '$$' : c;
+    if (c === '&') {
+      flush();
+      parts.push(0);
+      continue;
+    }
+    literal += c;
   }
-  return out;
+  flush();
+  return (match) => {
+    let out = '';
+    for (const part of parts) out += typeof part === 'string' ? part : (match[part] ?? '');
+    return out;
+  };
 }
 
 /**
@@ -136,12 +153,9 @@ function parseTransliterate(
     if (!translate.has(ch)) translate.set(ch, to[i] ?? ch);
   });
 
-  // Escaped for a character class, where `-` and `^` are the meaningful ones.
-  const escaped = [...translate.keys()].map((c) => c.replace(/[\\\]^-]/g, '\\$&')).join('');
   return {
     className: '',
-    pattern: new RegExp(`[${escaped}]`, 'g'),
-    replacement: '',
+    replacement: () => '',
     global: true,
     translate,
   };
@@ -229,7 +243,7 @@ export function parseSedExpression(
     );
   }
 
-  const regex = safeRegex(patternStr, isGlobal ? 'g' : '');
+  const regex = safeRegex(patternStr);
   if (!regex) {
     // Every other regex-bearing directive already warns here (LINE_BREAKER,
     // BREAK_ONLY_BEFORE, MUST_BREAK_AFTER, EXTRACT, TRANSFORMS). SEDCMD is the
@@ -239,8 +253,8 @@ export function parseSedExpression(
     diagnostics?.push(
       sedWarning(
         dir,
-        `the pattern (${patternStr}) could not be compiled safely (invalid regex or rejected as ` +
-          'ReDoS-prone). The substitution was skipped, so the event is shown unmodified.',
+        `the pattern (${patternStr}) does not compile (${validateRegex(patternStr) ?? 'invalid regex'}). ` +
+          'The substitution was skipped, so the event is shown unmodified.',
       ),
     );
     return null;
@@ -288,9 +302,13 @@ export function applySedCommands(
     for (const cmd of commands) {
       const before = raw;
       const table = cmd.translate;
-      raw = table
-        ? raw.replace(cmd.pattern, (ch) => table.get(ch) ?? ch)
-        : raw.replace(cmd.pattern, cmd.replacement);
+      if (table) {
+        let out = '';
+        for (const ch of raw) out += table.get(ch) ?? ch;
+        raw = out;
+      } else if (cmd.pattern) {
+        raw = cmd.pattern.replace(raw, cmd.replacement, cmd.global);
+      }
 
       if (raw !== before) {
         // Each command is attributed separately: two SEDCMDs masking two
@@ -308,15 +326,20 @@ export function applySedCommands(
           ...changeWindow(before, raw),
         });
       } else {
-        const partial = longestPartialMatch(cmd.pattern.source, before);
+        const limitHit = cmd.pattern?.lastError;
+        const partial =
+          limitHit === undefined && cmd.pattern ? longestPartialMatch(cmd.pattern.source, before) : null;
         noOps.push({
           directive: cmd.directive.key,
           file: 'props.conf',
           line: cmd.directive.line,
           phase: 'index-time',
-          reason: partial
-            ? { kind: 'no-match', partialEnd: partial.end, partialPattern: partial.prefix }
-            : { kind: 'no-match' },
+          reason:
+            limitHit !== undefined
+              ? { kind: 'regex-limit', error: limitHit }
+              : partial
+                ? { kind: 'no-match', partialEnd: partial.end, partialPattern: partial.prefix }
+                : { kind: 'no-match' },
         });
       }
     }

@@ -1,12 +1,12 @@
 /**
  * Sandbox worker entry point. The parent holds a wall-clock budget and calls
- * `worker.terminate()` when it expires — hard termination is the mechanism
- * that makes running conf-derived regexes safe (docs/engine.md), and it only
- * works because the regexes execute HERE, on a thread the parent can kill,
- * never on the server's own thread.
+ * `worker.terminate()` when it expires. Conf-derived regexes run on PCRE2,
+ * whose match limits bound each match; termination bounds the whole run
+ * (docs/engine.md), and it only works because the regexes execute HERE, on a
+ * thread the parent can kill, never on the server's own thread.
  *
  * `./v8Flags` must stay the first import: it arms V8's linear-time regex
- * fallback before the engine's modules load.
+ * fallback, for the engine's own JS regexes, before the engine's modules load.
  */
 import './v8Flags';
 import { parentPort, workerData } from 'node:worker_threads';
@@ -15,6 +15,7 @@ import { runPipeline } from '../../../src/engine/pipeline';
 import { parseConf } from '../../../src/engine/parser/confParser';
 import { mergeDirectives, resolveStanzasForEvent } from '../../../src/engine/parser/stanzaMatcher';
 import type { ConfDirective, ConfStanza } from '../../../src/engine/types';
+import { initRegexEngineSync } from '../../../src/utils/splunkRegex';
 import type {
   ExplainDirective,
   ExplainRequest,
@@ -23,6 +24,7 @@ import type {
   SimulateRequest,
   SimulateResponse,
   ValidateRequest,
+  WorkerData,
   ValidateResponse,
   WorkerRequest,
   WorkerResponse,
@@ -132,7 +134,9 @@ const port = parentPort;
 if (port) {
   let response: WorkerResponse;
   try {
-    response = { ok: true, data: handle(workerData as WorkerRequest) };
+    const { regexEngine, ...request } = workerData as WorkerData;
+    initRegexEngineSync(regexEngine);
+    response = { ok: true, data: handle(request) };
   } catch (err) {
     response = { ok: false, error: err instanceof Error ? err.message : String(err) };
   }

@@ -140,7 +140,7 @@ class Parser {
     // `a LIKE b` is the like() function written as a comparison operator, in
     // the same precedence tier as `=`/`!=` (#312). It becomes a call so the
     // operator and the function cannot drift apart: same wildcard translation,
-    // same ReDoS handling for runs of `%`, same regex-failure diagnostic.
+    // same collapsing of runs of `%`, same regex-failure diagnostic.
     if (tok?.type === 'op' && tok.value === 'LIKE') {
       this.consume();
       const right = this.parseConcat();

@@ -5,7 +5,7 @@
 // because they decide which argument nodes to evaluate at all.
 
 import type { SplunkEvent } from '../../types';
-import { safeRegex, validateRegex } from '../../../utils/splunkRegex';
+import { safeRegex, validateRegex, type RegexMatch, type SplunkRegex } from '../../../utils/splunkRegex';
 import { formatStrftime } from '../../../utils/strftime';
 import {
   type EvalValue,
@@ -42,13 +42,13 @@ const REGEX_FAILURE_RESULT: Readonly<Record<string, string>> = {
 
 /** The shared tail of an eval regex-failure warning, for EVAL- and INGEST_EVAL alike. */
 export function regexFailureMessage(fn: string, pattern: string): string {
-  const why = validateRegex(pattern) ?? 'rejected as ReDoS-prone';
+  const why = validateRegex(pattern) ?? 'invalid regex';
   return `${fn}() pattern "${pattern}" could not be compiled (${why}), so it ${REGEX_FAILURE_RESULT[fn] ?? 'failed'}.`;
 }
 
 /** Compile an eval regex argument, reporting a pattern that will not compile. */
-function evalRegex(ctx: EvalCtx, fn: string, pattern: string, flags?: string): RegExp | null {
-  const regex = safeRegex(pattern, flags);
+function evalRegex(ctx: EvalCtx, fn: string, pattern: string): SplunkRegex | null {
+  const regex = safeRegex(pattern);
   if (regex === null) ctx.onRegexError?.(fn, pattern);
   return regex;
 }
@@ -82,9 +82,9 @@ export function evalBuiltin(fn: string, args: EvalValue[], ctx: EvalCtx): EvalVa
     case 'replace': {
       const s = strArg(args[0]);
       if (s === null) return null;
-      const regex = evalRegex(ctx, 'replace', toStr(args[1]), 'g');
+      const regex = evalRegex(ctx, 'replace', toStr(args[1]));
       if (!regex) return s;
-      return s.replace(regex, splunkReplacementToJs(toStr(args[2])));
+      return regex.replace(s, splunkReplacement(toStr(args[2])), true);
     }
     case 'trim': { const s = strArg(args[0]); return s === null ? null : s.trim(); }
     case 'ltrim': {
@@ -306,20 +306,16 @@ export function evalBuiltin(fn: string, args: EvalValue[], ctx: EvalCtx): EvalVa
       const likePattern = strArg(args[1]);
       if (value === null || likePattern === null) return null;
       // Escape regex metacharacters first, then translate SQL-style wildcards.
-      // A run of `%` collapses to ONE `.*` first. It means the same thing --
-      // any number of any-string wildcards in a row match any string -- but
-      // `.*.*` is exactly the adjacent-quantifier shape the ReDoS guard refuses,
-      // so `like(x, "a%%b")` compiled to nothing and quietly answered false for
-      // every event (#303). After the collapse the regex holds only literals,
-      // `.` and non-adjacent `.*`, which the guard accepts.
+      // A run of `%` collapses to ONE `.*`: it means the same thing, and
+      // `.*.*` backtracks for nothing (#303).
       const pattern = likePattern
         .replace(/[.+*?^${}()|[\]\\]/g, '\\$&')
         .replace(/%+/g, '.*')
         .replace(/_/g, '.');
       // Splunk's like() is case-sensitive. Compiled through evalRegex so that a
-      // pattern the guard still refuses is reported like replace()/match()/
-      // mvfind() are, rather than failing without a word; the message quotes
-      // the regex like() built, since that is what failed to compile.
+      // pattern that fails is reported like replace()/match()/mvfind() are,
+      // rather than failing without a word; the message quotes the regex like()
+      // built, since that is what failed to compile.
       const regex = evalRegex(ctx, 'like', `^${pattern}$`);
       return regex ? regex.test(value) : false;
     }
@@ -429,22 +425,22 @@ function cidrMatch(cidr: string, ip: string): boolean {
 }
 
 /**
- * Translate a Splunk `replace()` replacement string into the JS equivalent.
+ * Expand a Splunk `replace()` replacement string against one match.
  *
- * Splunk uses PCRE-style `\1` backreferences, while `String.prototype.replace`
- * uses `$1` and additionally treats `$&`, `` $` ``, `$'` and `$$` as
- * substitutions Splunk has no notion of. So `\N` becomes `$N`, `\0` becomes the
- * whole match, and any literal `$` is escaped to survive verbatim.
+ * `\N` is capture group N and `\0` the whole match; `\\` is a backslash; any
+ * other backslash, and every `$`, is literal. A digit run longer than the
+ * pattern has groups takes the longest leading run that names one, the rest
+ * being literal digits (`\10` with one group is group 1, then `0`).
  */
-function splunkReplacementToJs(replacement: string): string {
-  let out = '';
-  for (let i = 0; i < replacement.length; i++) {
-    const c = replacement.charAt(i);
-    if (c === '$') {
-      out += '$$'; // a literal dollar, not a JS substitution
-      continue;
-    }
-    if (c === '\\' && i + 1 < replacement.length) {
+function splunkReplacement(replacement: string): (match: RegexMatch) => string {
+  return (match) => {
+    let out = '';
+    for (let i = 0; i < replacement.length; i++) {
+      const c = replacement.charAt(i);
+      if (c !== '\\' || i + 1 >= replacement.length) {
+        out += c;
+        continue;
+      }
       const next = replacement.charAt(i + 1);
       if (next >= '0' && next <= '9') {
         let digits = '';
@@ -452,20 +448,14 @@ function splunkReplacementToJs(replacement: string): string {
           digits += replacement.charAt(i + 1);
           i++;
         }
-        // PCRE `\0` is the whole match; JS spells that `$&`.
-        out += Number(digits) === 0 ? '$&' : `$${digits}`;
+        let len = digits.length;
+        while (len > 0 && Number(digits.slice(0, len)) >= match.length) len--;
+        out += len === 0 ? `\\${digits}` : (match[Number(digits.slice(0, len))] ?? '') + digits.slice(len);
         continue;
       }
-      if (next === '\\') {
-        out += '\\';
-        i++;
-        continue;
-      }
-      out += `\\${next}`;
+      out += next === '\\' ? '\\' : `\\${next}`;
       i++;
-      continue;
     }
-    out += c;
-  }
-  return out;
+    return out;
+  };
 }

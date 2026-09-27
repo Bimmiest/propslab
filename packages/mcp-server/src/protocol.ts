@@ -10,6 +10,7 @@
  */
 import type { ConfInput, EventMetadata, ValidationDiagnostic } from '../../../src/engine/types';
 import type { SerializedSimulation } from './serialize';
+import type { RegexEngineModule } from '../../../src/utils/splunkRegex';
 
 export interface SimulateRequest {
   op: 'simulate';
@@ -39,6 +40,12 @@ export interface ExplainRequest {
 }
 
 export type WorkerRequest = SimulateRequest | ValidateRequest | ExplainRequest;
+
+/**
+ * What a sandbox worker is started with: its request, plus the regex engine
+ * the server compiled once (see regexEngine.ts).
+ */
+export type WorkerData = WorkerRequest & { regexEngine: RegexEngineModule };
 
 export type SimulateResponse = SerializedSimulation;
 

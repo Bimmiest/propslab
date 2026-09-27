@@ -167,6 +167,35 @@ jobs:
       - name: Test
         run: npm test
 
+  # The regex engine's WebAssembly binary is committed, so this is what makes
+  # it trustworthy: rebuild it from the pinned PCRE2 release with the pinned
+  # toolchain and fail unless the result is byte-identical to what is checked
+  # in (and to its recorded SHA-256). Then the package's own tests, which need
+  # no install.
+  pcre2-wasm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: packages/pcre2-wasm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version-file: .nvmrc
+
+      - name: Install clang and wasm-ld
+        # The major version is part of the reproducibility contract; build.sh
+        # names the one the committed module was built with.
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends clang-18 lld-18
+
+      - name: Rebuild pcre2.wasm and compare with the committed module
+        run: CLANG=clang-18 WASM_LD=wasm-ld-18 build/build.sh --check
+
+      - name: Test
+        run: npm test
+
   # Split out of the main job on purpose. Sequentially, a new advisory turned
   # the whole run red after five minutes of tests, and the tests' own verdict
   # was lost behind it — the two ask unrelated questions and should be able to

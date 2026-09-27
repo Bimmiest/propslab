@@ -11,6 +11,7 @@ import { renderHook, act } from '@testing-library/react';
 import { useTimestampMatch } from '../useTimestampMatch';
 import type { TimeConfig, TimestampProbe } from '../../engine/timestampMatch';
 import type { TimestampMatchRequest, TimestampMatchResponse } from '../../engine/timestampMatchWorker';
+import { isWorkerInitMessage, type WorkerInitMessage } from '../../engine/workerProtocol';
 
 class FakeWorker {
   static instances: FakeWorker[] = [];
@@ -20,7 +21,9 @@ class FakeWorker {
   constructor() {
     FakeWorker.instances.push(this);
   }
-  postMessage(message: TimestampMatchRequest) {
+  postMessage(message: TimestampMatchRequest | WorkerInitMessage) {
+    // The engine handed over as each worker is built is not a request.
+    if (isWorkerInitMessage(message)) return;
     this.posted.push(message);
   }
   terminate() {}

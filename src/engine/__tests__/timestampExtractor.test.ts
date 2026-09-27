@@ -648,10 +648,13 @@ describe('#286 — a TIME_PREFIX that does not compile', () => {
     expect(errors[0]?.message).toContain('ts=(');
   });
 
-  it('names the ReDoS guard when that is what refused it', () => {
+  it('gives PCRE\'s reason, and does not refuse a pattern for backtracking (#368)', () => {
     const diagnostics: ValidationDiagnostic[] = [];
-    extractTimestamps([event('x')], [dir('TIME_PREFIX', '(a+)+')], diagnostics, NOW);
-    expect(diagnostics.find((d) => d.directiveKey === 'TIME_PREFIX')?.message).toMatch(/ReDoS/);
+    extractTimestamps([event('x')], [dir('TIME_PREFIX', '(?<=a+)b')], diagnostics, NOW);
+    expect(diagnostics.find((d) => d.directiveKey === 'TIME_PREFIX')?.message).toMatch(/lookbehind/);
+    const quiet: ValidationDiagnostic[] = [];
+    extractTimestamps([event('x')], [dir('TIME_PREFIX', '(a+)+')], quiet, NOW);
+    expect(quiet.filter((d) => d.directiveKey === 'TIME_PREFIX')).toEqual([]);
   });
 });
 

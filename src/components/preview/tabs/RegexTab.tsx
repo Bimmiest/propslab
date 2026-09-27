@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useState } from 'react';
-import { validateRegex } from '../../../utils/splunkRegex';
+import { safeRegex, validateRegex } from '../../../utils/splunkRegex';
 import { copyToClipboard } from '../../../utils/clipboard';
 import { useRegexMatch } from '../../../hooks/useRegexMatch';
 import type { RegexMatchInfo } from '../../../engine/regexMatch';
@@ -97,16 +97,13 @@ const REGEX_REFERENCE: RegexCategory[] = [
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-/** Extract named capture group names from either Splunk or JS syntax */
+/**
+ * Named capture groups, in group order, as PCRE2 reads the pattern — every
+ * spelling (`(?<n>`, `(?P<n>`, `(?'n'`) included. Compiling cannot backtrack,
+ * so this is safe on the main thread. None while the pattern does not compile.
+ */
 function extractNamedGroups(pattern: string): string[] {
-  const groups: string[] = [];
-  const regex = /\(\?P?<(\w+)>/g;
-  let match: RegExpExecArray | null;
-  while ((match = regex.exec(pattern)) !== null) {
-    const name = match[1];
-    if (name !== undefined) groups.push(name);
-  }
-  return groups;
+  return pattern ? [...(safeRegex(pattern)?.names ?? [])] : [];
 }
 
 /** Assign a color from FIELD_COLORS to each named group */
@@ -162,9 +159,8 @@ export function RegexTab({ items, allEvents, currentPage, eventsPerPage }: Regex
   const [added, setAdded] = useState(false);
   const { stanza, isPlaceholderStanza, apply: applyDirective } = useApplyDirective();
 
-  // Compile-only validation (safe on the main thread — compiling can't backtrack).
-  // Pass the raw Splunk pattern so validateRegex runs the single canonical
-  // Splunk→JS translation internally. Actual matching happens in the worker below.
+  // Compile-only validation (safe on the main thread — compiling can't backtrack),
+  // on the same PCRE2 the pipeline runs. Matching happens in the worker below.
   const validationError = useMemo(() => {
     if (!pattern) return null;
     return validateRegex(pattern);
@@ -198,10 +194,10 @@ export function RegexTab({ items, allEvents, currentPage, eventsPerPage }: Regex
     })).filter((cat) => cat.directives.length > 0);
   }, [refSearch]);
 
-  // Run the live matching in a terminatable Web Worker so a catastrophic pattern
-  // that slips the ReDoS heuristic can't freeze this tab — the watchdog kills the
-  // worker and reports a timeout instead. A pattern with a known validation error
-  // is not sent (we already show that error).
+  // Run the live matching in a terminatable Web Worker. PCRE's limits bound each
+  // match, but not the total over thousands of events, so the watchdog still
+  // kills a run that takes too long and reports a timeout instead. A pattern
+  // with a known validation error is not sent (we already show that error).
   // Matched over the WHOLE filtered dataset, not just the visible page. The
   // header reads "{matched}/{total} events matched" with no scope qualifier, so
   // page-scoped counts said "8/10" while 500 events were loaded — a pattern that
@@ -541,7 +537,7 @@ export function RegexTab({ items, allEvents, currentPage, eventsPerPage }: Regex
           <div className="flex flex-col items-center justify-center gap-1 py-12 text-[var(--color-error)] text-sm text-center px-4">
             <span className="font-medium">This pattern is too slow to evaluate and was stopped.</span>
             <span className="text-[var(--color-text-muted)] text-xs">
-              It likely triggers catastrophic backtracking (ReDoS). Simplify it — e.g. avoid nested or overlapping quantifiers.
+              It backtracks heavily across many events. Simplify it — e.g. avoid nested or overlapping quantifiers.
             </span>
           </div>
         ) : status === 'pending' ? (

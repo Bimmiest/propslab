@@ -122,13 +122,14 @@ describe('simulate', () => {
   });
 
   it('hard-terminates a catastrophic regex and returns a structured timeout', async () => {
-    // (a|aa)+ is the documented blind spot of the engine's structural ReDoS
-    // heuristic (docs/engine.md): safeRegex compiles it, and the trailing
-    // lookahead declines V8's linear-time fallback — so only the worker
-    // watchdog can end this run.
+    // (a|aa)+ backtracks exponentially, and MATCH_LIMIT = 0 / DEPTH_LIMIT = 0
+    // switch off the PCRE limits that would otherwise stop it — so only the
+    // worker watchdog can end this run.
     const evilProps = [
       '[evil]',
       'SHOULD_LINEMERGE = false',
+      'MATCH_LIMIT = 0',
+      'DEPTH_LIMIT = 0',
       'EXTRACT-boom = ^(?<boom>(a|aa)+)(?=b)$',
     ].join('\n');
     const raw = `${'a'.repeat(200)}\n`;
@@ -176,7 +177,7 @@ describe('validate', () => {
       'SEDCMD-s = s/[/x/g',
       'TRANSFORMS-t = t',
     ].join('\n');
-    const transforms = ['[t]', 'REGEX = (a+)+b', 'FORMAT = f::$1', 'WRITE_META = true'].join('\n');
+    const transforms = ['[t]', 'REGEX = (?<=a+)b', 'FORMAT = f::$1', 'WRITE_META = true'].join('\n');
     const out = payload(
       await handleValidate(
         { props_conf: props, transforms_conf: transforms, timeout_ms: 10_000 },
@@ -187,12 +188,12 @@ describe('validate', () => {
       out.diagnostics.filter((d: { directiveKey?: string }) => d.directiveKey === key);
     expect(byKey('EXTRACT-a')).toHaveLength(1);
     expect(byKey('EXTRACT-a')[0]).toMatchObject({ level: 'error', file: 'props.conf', line: 2 });
-    expect(byKey('EXTRACT-a')[0].message).toMatch(/Unterminated group/);
+    expect(byKey('EXTRACT-a')[0].message).toMatch(/missing closing parenthesis/);
     expect(byKey('SEDCMD-s')).toHaveLength(1);
     const regex = byKey('REGEX');
     expect(regex).toHaveLength(1);
     expect(regex[0]).toMatchObject({ file: 'transforms.conf', line: 2 });
-    expect(regex[0].message).toMatch(/ReDoS/);
+    expect(regex[0].message).toMatch(/lookbehind/);
     // Valid patterns, including an EXTRACT's `in <field>` suffix, pass.
     expect(byKey('EXTRACT-ok')).toEqual([]);
     expect(byKey('LINE_BREAKER')).toEqual([]);

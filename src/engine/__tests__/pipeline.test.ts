@@ -174,18 +174,18 @@ describe('runPipeline — per-event mode does not duplicate config diagnostics (
 
 describe('runPipeline — search-time REPORT compile failures are reported (#75.1)', () => {
   const PROPS = '[aws:cloudtrail]\nREPORT-r = broken';
-  const TRANSFORMS = '[broken]\nREGEX = (a+)+\nFORMAT = f::$1';
+  const TRANSFORMS = '[broken]\nREGEX = (a+\nFORMAT = f::$1';
 
   it('warns when a REPORT stanza regex cannot be compiled', () => {
     const { diagnostics } = runPipeline('some line', META, PROPS, TRANSFORMS);
-    expect(diagnostics.some((d) => d.message.includes('could not be compiled safely'))).toBe(true);
+    expect(diagnostics.some((d) => d.message.includes('does not compile'))).toBe(true);
   });
 
   it('warns once, not once per event, in per-event mode', () => {
     const raw = Array.from({ length: 12 }, (_, i) => `line ${i}`).join('\n');
     const props = '[aws:cloudtrail]\nSHOULD_LINEMERGE = false\nREPORT-r = broken';
     const { diagnostics } = runPipeline(raw, META, props, TRANSFORMS, { perEventPipeline: true });
-    expect(diagnostics.filter((d) => d.message.includes('could not be compiled safely'))).toHaveLength(1);
+    expect(diagnostics.filter((d) => d.message.includes('does not compile'))).toHaveLength(1);
   });
 });
 

@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 
@@ -7,6 +8,8 @@ export default defineConfig({
   // reading the version throws under test.
   define: {
     __APP_VERSION__: JSON.stringify('test'),
+    // Read by src/test/setup.ts to instantiate the regex engine.
+    __PCRE2_WASM_PATH__: JSON.stringify(fileURLToPath(new URL('./packages/pcre2-wasm/pcre2.wasm', import.meta.url))),
   },
   test: {
     // Default to node for engine tests; component tests opt into jsdom via

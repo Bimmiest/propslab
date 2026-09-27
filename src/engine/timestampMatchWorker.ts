@@ -1,18 +1,19 @@
 /**
  * Web Worker entry point for the Timestamp tab's live prober.
  *
- * Runs the user's TIME_PREFIX off the main thread so a catastrophic pattern that
- * slips the ReDoS heuristic hangs THIS worker — which the caller terminates via
- * a watchdog — instead of freezing the tab while someone is editing props.conf.
+ * Runs the user's TIME_PREFIX off the main thread, under the caller's watchdog,
+ * so a slow pattern stalls THIS worker rather than the tab while someone is
+ * editing props.conf.
  *
  * Message protocol:
- *   in  → TimestampMatchRequest
- *   out → WORKER_READY once, when the module has loaded (#339); then TimestampMatchResponse
+ *   in  → WorkerInitMessage first, with the compiled regex engine; then TimestampMatchRequest
+ *   out → WORKER_READY once, when the engine is instantiated (#339); then TimestampMatchResponse
  */
 
 import { probeTimestamps } from './timestampMatch';
 import type { TimeConfig, TimestampProbe } from './timestampMatch';
-import { WORKER_READY } from './workerProtocol';
+import { initRegexEngineSync } from '../utils/splunkRegex';
+import { isWorkerInitMessage, WORKER_READY, type WorkerInitMessage } from './workerProtocol';
 
 export interface TimestampMatchRequest {
   id: number;
@@ -32,7 +33,14 @@ export interface TimestampMatchResponse {
   error?: string;
 }
 
-self.onmessage = (e: MessageEvent<TimestampMatchRequest>) => {
+self.onmessage = (e: MessageEvent<TimestampMatchRequest | WorkerInitMessage>) => {
+  if (isWorkerInitMessage(e.data)) {
+    // The page's first message: the engine it compiled once. Ready follows
+    // only once it is instantiated; a throw here is a failure to load (#339).
+    initRegexEngineSync(e.data.regexEngine);
+    self.postMessage(WORKER_READY);
+    return;
+  }
   const { id, raws, config } = e.data;
   let response: TimestampMatchResponse;
   try {
@@ -42,8 +50,3 @@ self.onmessage = (e: MessageEvent<TimestampMatchRequest>) => {
   }
   self.postMessage(response);
 };
-
-// Last, so it is only sent once every import above has evaluated and the
-// handler is installed. Anything the worker throws before this point is a
-// failure to load, not something a request did to it (#339).
-self.postMessage(WORKER_READY);

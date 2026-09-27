@@ -69,7 +69,12 @@ export function parseFormatPairs(format: string): FormatPair[] {
   return pairs;
 }
 
-export function expandFormat(format: string, match: RegExpExecArray, priorDestValue?: string): string {
+/** A match as FORMAT reads it: group texts by number, and named groups. */
+export type FormatMatch = ArrayLike<string | undefined> & {
+  groups?: Record<string, string | undefined> | undefined;
+};
+
+export function expandFormat(format: string, match: FormatMatch, priorDestValue?: string): string {
   // match[0] is the whole match; match[1..maxIndex] are the capture groups.
   const maxIndex = match.length - 1;
   const groups = match.groups;

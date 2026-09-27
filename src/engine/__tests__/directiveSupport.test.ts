@@ -134,11 +134,12 @@ describe('directive support classification (#153)', () => {
     expect(Number(stated?.[1])).toBe(UNDOCUMENTED_ATTRIBUTES.size);
   });
 
-  it('never marks a directive simulated without the engine reading it', () => {
-    // A cheap direction check on the two the registry defines per conf file:
-    // both are `documented`, so neither should ever be claimed as simulated.
-    expect(DIRECTIVE_SUPPORT['MATCH_LIMIT']?.support).toBe('documented');
-    expect(DIRECTIVE_SUPPORT['DEPTH_LIMIT']?.support).toBe('documented');
+  it('classifies the two keys the registry defines per conf file once, for both', () => {
+    // Simulated since patterns run on PCRE2 (#368); the note carries the caveat
+    // that DEPTH_LIMIT counts differently from PCRE1.
+    expect(DIRECTIVE_SUPPORT['MATCH_LIMIT']?.support).toBe('simulated');
+    expect(DIRECTIVE_SUPPORT['DEPTH_LIMIT']?.support).toBe('simulated');
+    expect(DIRECTIVE_SUPPORT['DEPTH_LIMIT']?.note).toMatch(/Approximate/);
   });
 });
 

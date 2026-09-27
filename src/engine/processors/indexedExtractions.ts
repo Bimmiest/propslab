@@ -1,7 +1,7 @@
 import type { ConfDirective, SplunkEvent, ValidationDiagnostic } from '../types';
 import { flattenJson, flattenArray } from '../utils/flattenJson';
 import { getField, setField } from '../utils/fieldBag';
-import { safeRegex } from '../../utils/splunkRegex';
+import { safeRegex, validateRegex, type SplunkRegex } from '../../utils/splunkRegex';
 import { atDirective } from '../parser/provenance';
 import { extractTimestamps } from './timestampExtractor';
 import { extractXmlIndexed } from './xmlIndexedExtractions';
@@ -94,17 +94,17 @@ interface DelimitedOptions extends LineSyntax {
    */
   header: LineSyntax;
   /** FIELD_HEADER_REGEX: marks the header line; the header is the text after the match. */
-  fieldHeaderRegex: RegExp | null;
+  fieldHeaderRegex: SplunkRegex | null;
   /** HEADER_FIELD_ACCEPTABLE_SPECIAL_CHARACTERS: characters header cleaning keeps. */
   acceptableSpecialChars: string;
   /** MISSING_VALUE_REGEX: a value matching this is absent, not a value. */
-  missingValueRegex: RegExp | null;
+  missingValueRegex: SplunkRegex | null;
   /** FIELD_NAMES: explicit header, for data with no header line. */
   fieldNames: string[] | null;
   /** HEADER_FIELD_LINE_NUMBER: 1-based header line; 0 locates it automatically. */
   headerLineNumber: number;
   /** PREAMBLE_REGEX: leading lines matching this are not data. */
-  preambleRegex: RegExp | null;
+  preambleRegex: SplunkRegex | null;
   /** TIMESTAMP_FIELDS: extracted fields that together hold the timestamp. */
   timestampFields: string[] | null;
 }
@@ -237,7 +237,7 @@ function compileOption(
   dir: ConfDirective | undefined,
   consequence: string,
   diagnostics?: ValidationDiagnostic[],
-): RegExp | null {
+): SplunkRegex | null {
   if (!dir) return null;
   const pattern = dir.value.trim();
   if (pattern === '') return null;
@@ -245,7 +245,7 @@ function compileOption(
   if (!compiled && diagnostics) {
     diagnostics.push({
       level: 'warning',
-      message: `${dir.key} (${pattern}) could not be compiled safely (invalid regex or rejected as ReDoS-prone). ${consequence}`,
+      message: `${dir.key} (${pattern}) does not compile (${validateRegex(pattern) ?? 'invalid regex'}). ${consequence}`,
       file: 'props.conf',
       ...atDirective(dir),
       directiveKey: dir.key,
@@ -479,7 +479,7 @@ function sanitizeHeaderName(name: string, acceptable = ''): string {
  * matched decoration is not part of any field name. A line it does not match
  * (possible when HEADER_FIELD_LINE_NUMBER chose the line) is read whole.
  */
-function stripHeaderPrefix(raw: string, fieldHeaderRegex: RegExp | null): string {
+function stripHeaderPrefix(raw: string, fieldHeaderRegex: SplunkRegex | null): string {
   const m = fieldHeaderRegex?.exec(raw);
   return m ? raw.slice(m.index + m[0].length) : raw;
 }

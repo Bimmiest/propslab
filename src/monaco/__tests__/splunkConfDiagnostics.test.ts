@@ -157,18 +157,17 @@ describe('computeDiagnostics — unsimulated strftime specifiers (#90)', () => {
   });
 });
 
-describe('computeDiagnostics — PCRE translation warnings (#290)', () => {
-  it('warns when a regex compiles but its translation only approximates PCRE', () => {
-    // A mid-pattern (?x) is not applied, on any runtime.
-    const markers = computeDiagnostics(fakeModel('[st]\nREGEX = a (?x) b'), 'transforms.conf');
-    const warning = markers.find((m) => /approximated in preview/.test(m.message));
-    expect(warning).toMatchObject({ severity: 4, startLineNumber: 2 });
-    expect(markers.some((m) => /Invalid regex/.test(m.message))).toBe(false);
+describe('computeDiagnostics — regexes are checked by PCRE2 itself (#368)', () => {
+  it('accepts PCRE syntax a JS regex lacks, with no approximation warning', () => {
+    for (const pattern of ['a (?x) b', '\\Aab\\z', 'x++(?>y)', '(?<=\\})\\K\\w+', '\\((?:[^()]|(?R))*\\)']) {
+      const markers = computeDiagnostics(fakeModel(`[st]\nREGEX = ${pattern}`), 'transforms.conf');
+      expect(markers.filter((m) => m.startLineNumber === 2), pattern).toEqual([]);
+    }
   });
 
-  it('says nothing for a pattern the translation represents exactly', () => {
-    const markers = computeDiagnostics(fakeModel('[st]\nREGEX = (?x) (?i) a \\s+ b'), 'transforms.conf');
-    expect(markers.some((m) => /approximated in preview/.test(m.message))).toBe(false);
+  it('reports what PCRE2 rejects, in its words', () => {
+    const markers = computeDiagnostics(fakeModel('[st]\nREGEX = (?<=a+)b'), 'transforms.conf');
+    expect(markers.find((m) => /Invalid regex/.test(m.message))?.message).toMatch(/lookbehind/);
   });
 });
 

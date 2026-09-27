@@ -4,12 +4,12 @@
 // the sibling format.ts, delims.ts and keyCleaning.ts.
 
 import type { SplunkEvent, ConfStanza, ConfDirective } from '../types';
-import { safeRegex, convertSplunkToJsRegex, validateRegex } from '../../utils/splunkRegex';
+import { extractionLimits, safeRegex, validateRegex, type SplunkRegex } from '../../utils/splunkRegex';
 import { longestPartialMatch, type NoOpReason } from '../noOpExplainer';
 import { getField, hasField, setField, addFieldValue } from '../utils/fieldBag';
 import { stripLeadingUnderscoreForField } from '../utils/internalFields';
 import { getSourceKeyValue } from '../utils/metadataFields';
-import { effectiveDirective, parseSplunkBool } from '../utils/directiveValues';
+import { effectiveDirective, effectiveValue, parseSplunkBool } from '../utils/directiveValues';
 import { expandFormat, parseFormatPairs } from './format';
 import { keyCleaner } from './keyCleaning';
 import { applyDelimsExtraction } from './delims';
@@ -31,8 +31,6 @@ export interface TransformResult {
   noOp?: NoOpReason;
 }
 
-interface CompiledRegex { plain: RegExp; global: RegExp }
-
 // Cache compiled regexes per stanza to avoid re-compiling on every event.
 // WeakMap so entries are GC'd when stanza objects are collected.
 //
@@ -42,7 +40,7 @@ interface CompiledRegex { plain: RegExp; global: RegExp }
 // and nothing said so. A caller that mutated a stanza in place, or reused a
 // ParsedConf across runs, would silently get the previous pattern back, and a
 // stale regex is a *valid* regex: no error, just quietly wrong extractions.
-const regexCache = new WeakMap<ConfStanza, Map<string, CompiledRegex | null>>();
+const regexCache = new WeakMap<ConfStanza, Map<string, SplunkRegex | null>>();
 
 // These DEST_KEY targets are single-valued slots in Splunk's pipeline.
 // FORMAT is applied to the first match only — multi-value accumulation would
@@ -58,19 +56,24 @@ const SINGLE_VALUE_DEST_KEYS = new Set([
   'queue',
 ]);
 
-function getCompiledRegex(transformStanza: ConfStanza, jsPattern: string): CompiledRegex | null {
+/**
+ * The stanza's REGEX, compiled under the stanza's own MATCH_LIMIT and
+ * DEPTH_LIMIT (Splunk's defaults when unset).
+ */
+function getCompiledRegex(transformStanza: ConfStanza, pattern: string): SplunkRegex | null {
   let byPattern = regexCache.get(transformStanza);
   if (!byPattern) {
     byPattern = new Map();
     regexCache.set(transformStanza, byPattern);
   }
-  const cached = byPattern.get(jsPattern);
+  const matchLimit = effectiveValue(transformStanza.directives, 'MATCH_LIMIT');
+  const depthLimit = effectiveValue(transformStanza.directives, 'DEPTH_LIMIT');
+  const key = `${matchLimit ?? ''}\u0000${depthLimit ?? ''}\u0000${pattern}`;
+  const cached = byPattern.get(key);
   if (cached !== undefined) return cached;
 
-  const plain = safeRegex(jsPattern);
-  const global = safeRegex(jsPattern, 'g');
-  const result = plain && global ? { plain, global } : null;
-  byPattern.set(jsPattern, result);
+  const result = safeRegex(pattern, '', extractionLimits(matchLimit, depthLimit));
+  byPattern.set(key, result);
   return result;
 }
 
@@ -179,24 +182,17 @@ export function applyRegexTransform(
     if (sourceValue.length > lookahead) sourceValue = sourceValue.slice(0, lookahead);
   }
 
-  const jsPattern = convertSplunkToJsRegex(regexDir.value.trim());
-  const compiled = getCompiledRegex(transformStanza, jsPattern);
+  const compiled = getCompiledRegex(transformStanza, regexDir.value.trim());
   if (!compiled) {
-    // Invalid PCRE-ism or a pattern the ReDoS heuristic refused — the transform
-    // silently does nothing, so let the caller surface a diagnostic.
+    // The transform silently does nothing, so let the caller surface a diagnostic.
     onInvalidRegex?.(regexDir.value.trim());
-    result.noOp = {
-      kind: 'regex-invalid',
-      error:
-        validateRegex(regexDir.value.trim()) ??
-        'refused by the ReDoS guard — it can backtrack catastrophically',
-    };
+    result.noOp = { kind: 'regex-invalid', error: validateRegex(regexDir.value.trim()) ?? 'invalid regex' };
     return result;
   }
 
-  // Match once with the plain (non-global) regex; reused below to decide named vs
-  // numbered handling and as the first match for non-REPEAT_MATCH extraction.
-  const firstMatch = compiled.plain.exec(sourceValue);
+  // The first match decides named vs numbered handling and is the only match
+  // for non-REPEAT_MATCH extraction.
+  const firstMatch = compiled.exec(sourceValue);
   if (!firstMatch) {
     // DEFAULT_VALUE: an index-time transform whose REGEX fails writes this value
     // to DEST_KEY instead of doing nothing, so the destination is written for
@@ -215,6 +211,10 @@ export function applyRegexTransform(
     // the reader to rewrite something that is already correct.
     if (sourceValue === '') {
       result.noOp = { kind: 'source-key-empty', sourceKey: sourceKeyDir?.value.trim() ?? '_raw' };
+      return result;
+    }
+    if (compiled.lastError !== undefined) {
+      result.noOp = { kind: 'regex-limit', error: compiled.lastError };
       return result;
     }
     const partial = longestPartialMatch(regexDir.value.trim(), sourceValue);
@@ -249,43 +249,29 @@ export function applyRegexTransform(
       // first match — it is NOT a sed-style substitution. Anything the regex does
       // not capture and FORMAT does not reproduce is discarded. (SEDCMD is the
       // tool for substituting in place while keeping the rest of the event.)
-      const m = compiled.plain.exec(sourceValue);
-      if (m) {
-        result.destKey = destKey;
-        result.destValue = expandFormat(format, m, priorDestValue);
-      }
+      result.destKey = destKey;
+      result.destValue = expandFormat(format, firstMatch, priorDestValue);
     } else if (destKey) {
       // Normalise _MetaData:X alias so lookup works for both forms.
       const normalisedDestKey = destKey.replace(/^_(?=MetaData:)/i, '');
 
       if (SINGLE_VALUE_DEST_KEYS.has(normalisedDestKey)) {
         // Single-valued metadata slot: FORMAT applies to the first match only.
-        const m = compiled.plain.exec(sourceValue);
-        if (m) {
-          result.destKey = destKey;
-          result.destValue = expandFormat(format, m, priorDestValue);
-        }
+        result.destKey = destKey;
+        result.destValue = expandFormat(format, firstMatch, priorDestValue);
       } else {
         // DEST_KEY=<field> or _meta: one value per match, accumulated as a
         // multi-value field or a run of `key::value` pairs — under REPEAT_MATCH
         // only, since without it the REGEX runs once.
-        const { global } = compiled;
-        global.lastIndex = 0;
-        let m: RegExpExecArray | null;
         let firstValue: string | undefined;
         const extraValues: string[] = [];
-        while ((m = global.exec(sourceValue)) !== null) {
+        for (const m of repeatMatch ? compiled.matchAll(sourceValue) : [firstMatch]) {
           const formatted = expandFormat(format, m, priorDestValue);
           if (firstValue === undefined) {
             firstValue = formatted;
           } else {
             extraValues.push(formatted);
           }
-          if (!repeatMatch) break;
-          // Guard against zero-length matches (e.g. a regex like `(.*)` that can
-          // match the empty string) — without advancing, lastIndex never moves and
-          // global.exec loops forever.
-          if (m.index === global.lastIndex) global.lastIndex++;
         }
         if (firstValue !== undefined) {
           result.destKey = destKey;
@@ -307,10 +293,8 @@ export function applyRegexTransform(
         (p) => !/\$0(?!\d)/.test(p.key) && !/\$0(?!\d)/.test(p.value),
       );
       const keepFirstMatchOnly = phase === 'search-time' && !mvAdd;
-      const { global } = compiled;
-      global.lastIndex = 0;
-      let m: RegExpExecArray | null;
-      while ((m = global.exec(sourceValue)) !== null) {
+      // Index time without REPEAT_MATCH: the REGEX runs once (#285).
+      for (const m of scanAll ? compiled.matchAll(sourceValue) : [firstMatch]) {
         for (const pair of pairs) {
           // Cleaned because FORMAT can name a field from the DATA (`$1::$2`), so
           // the key is only as well-formed as whatever the capture group caught.
@@ -326,10 +310,6 @@ export function applyRegexTransform(
           if (keepFirstMatchOnly && hasField(result.fields, field)) continue;
           addMultiValue(result.fields, field, expandFormat(pair.value, m));
         }
-        // Index time without REPEAT_MATCH: the REGEX runs once (#285).
-        if (!scanAll) break;
-        // Guard against zero-length outer matches looping forever.
-        if (m.index === global.lastIndex) global.lastIndex++;
       }
     }
   } else {
@@ -340,9 +320,7 @@ export function applyRegexTransform(
     // first value and discards the rest. This used to take the first match only
     // at search time unless REPEAT_MATCH was set, so MV_ADD on named groups did
     // nothing there while the same MV_ADD on a FORMAT stanza worked (#285).
-    const matches: RegExpMatchArray[] = scanAll
-      ? [...sourceValue.matchAll(compiled.global)]
-      : [firstMatch];
+    const matches = scanAll ? compiled.matchAll(sourceValue) : [firstMatch];
 
     // Whether a field captured again by a later match keeps the later value.
     // The same rule as `keepFirstMatchOnly` in the FORMAT path, stated the other

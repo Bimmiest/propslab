@@ -18,11 +18,9 @@ import type { CancellationLike, PrefixMatcher } from './timePrefixMatcher';
 /**
  * The most of the sample line the preview will search (#297).
  *
- * TIME_PREFIX itself runs in a terminatable worker (#334) — `safeRegex` is a
- * heuristic and `(a|aa)+b` slips past it, and no input cap bounds an
- * exponential pattern — so this cap is no longer the ReDoS defence. It still
- * bounds what is copied to the worker and what the generated TIME_FORMAT regex
- * scans on the main thread. The engine cannot share this bound (it searches
+ * TIME_PREFIX itself runs in a terminatable worker (#334), so this cap is not
+ * what bounds a runaway pattern. It bounds what is copied to the worker and
+ * what the generated TIME_FORMAT regex scans on the main thread. The engine cannot share this bound (it searches
  * the whole event), and a prefix that only matches beyond 4 KB into the first
  * line is not a case this preview needs to get right.
  */
@@ -36,7 +34,7 @@ export interface TimeFormatPreview {
     | { status: 'matched'; text: string; iso: string }
     | { status: 'no-match'; searchedFrom: number }
     | { status: 'unparseable'; text: string }
-    /** TIME_PREFIX was not run: it is invalid, or refused as ReDoS-prone. */
+    /** TIME_PREFIX was not run: it does not compile. */
     | { status: 'prefix-refused'; reason: string }
     /** TIME_PREFIX ran past the watchdog and its worker was terminated (#334). */
     | { status: 'prefix-timed-out'; timeoutMs: number }
@@ -75,11 +73,10 @@ async function attemptSample(
   const sampleLine = fullSampleLine.slice(0, MAX_PREVIEW_SAMPLE_LENGTH);
   let searchStart = 0;
   if (timePrefix) {
-    // Checked here exactly as the engine compiles it — PCRE translated, ReDoS
-    // guard applied — so a pattern the engine would refuse is reported with
-    // its reason and never sent anywhere. Compiling does not execute it; the
-    // match itself happens only in the worker (#334), with the same
-    // `safeRegex`, so `(?i)ts=` or `(?P<p>…)` previews the way it extracts.
+    // Compiled here by the engine's own PCRE2, so a pattern the engine would
+    // refuse is reported with its reason and never sent anywhere. Compiling
+    // does not execute it; the match itself happens only in the worker (#334),
+    // on the same engine, so it previews the way it extracts.
     const refusal = validateRegex(timePrefix);
     if (refusal !== null) return { status: 'prefix-refused', reason: refusal };
 

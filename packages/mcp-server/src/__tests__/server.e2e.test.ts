@@ -107,11 +107,13 @@ describe('MCP server end to end', () => {
 
   it('frees sandbox slots when the client cancels a call', async () => {
     // Occupy every slot of the process-wide concurrency cap with a run that
-    // would hold it for its whole 30s budget: (a|aa)+ with a trailing
-    // lookahead declines V8's linear-time fallback (see tools.test.ts).
+    // would hold it for its whole 30s budget: (a|aa)+ with the PCRE limits
+    // switched off (see tools.test.ts).
     const evilProps = [
       '[evil]',
       'SHOULD_LINEMERGE = false',
+      'MATCH_LIMIT = 0',
+      'DEPTH_LIMIT = 0',
       'EXTRACT-boom = ^(?<boom>(a|aa)+)(?=b)$',
     ].join('\n');
     const controller = new AbortController();

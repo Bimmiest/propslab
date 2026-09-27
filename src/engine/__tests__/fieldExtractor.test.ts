@@ -112,33 +112,8 @@ describe('extractFields — captureOffsets (#118)', () => {
     expect(e.fieldOffsets?.['user']).toBeUndefined();
   });
 
-  it('declining offsets drops the `d` flag — the whole reason the option exists', () => {
-    // V8's linear-time fallback cannot compile a regex carrying `d`, `i` or `u`,
-    // so a Node consumer that keeps `d` keeps the largest user-controlled regex
-    // surface outside what the fallback can bound. Measured on this pattern:
-    // 8 ms compiled bare against 91,696 ms compiled with `d`.
-    //
-    // Asserting on the compiled flags rather than on elapsed time keeps this a
-    // unit test — a timing assertion here would take a minute and a half to fail.
-    // Filtered by pattern source: extractFields is not the only thing running a
-    // regex here, so position in the call log is not a reliable handle.
-    const flagsFor = (captureOffsets: boolean): string => {
-      const seen: string[] = [];
-      const spy = RegExp.prototype.exec;
-      RegExp.prototype.exec = function (this: RegExp, s: string) {
-        if (this.source.includes('user=')) seen.push(this.flags);
-        return spy.call(this, s);
-      };
-      try {
-        extractFields([event(raw)], dirs, undefined, captureOffsets);
-      } finally {
-        RegExp.prototype.exec = spy;
-      }
-      expect(seen).toHaveLength(1);
-      return seen[0]!;
-    };
-
-    expect(flagsFor(false)).not.toContain('d');
-    expect(flagsFor(true)).toContain('d');
+  it('reports the same offsets PCRE gives, in JS string indices', () => {
+    const e = extractFields([event('é😀 user=admin')], dirs)[0]!;
+    expect(e.fieldOffsets?.['user']).toEqual([[9, 14]]);
   });
 });

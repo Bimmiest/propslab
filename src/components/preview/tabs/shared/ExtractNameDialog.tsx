@@ -65,14 +65,11 @@ export function ExtractNameDialog({
   const nameAdjusted = name.trim() !== '' && cleanName !== name.trim();
 
   // The live capture runs the user's pattern in a terminatable Web Worker rather
-  // than on this thread. A catastrophic pattern typed here used to freeze the tab
-  // outright: the 5 s pipeline watchdog does not cover the main thread, and the
-  // ReDoS heuristic is deliberately not a complete analysis.
+  // than on this thread, like every other run of a user's pattern.
   const inputs = useMemo(() => [raw], [raw]);
   const trimmed = pattern.trim();
   // Compile-only check on this thread, as the Regex tab does: compiling cannot
-  // backtrack, and it catches both a syntax error and a pattern the ReDoS
-  // heuristic refuses before anything is sent to the worker.
+  // backtrack, and a syntax error is caught before anything is sent to the worker.
   const validationError = useMemo(() => (trimmed ? validateRegex(trimmed) : null), [trimmed]);
   const requestedPattern = validationError ? '' : trimmed;
   const { status, results, pattern: matchedPattern, inputs: matchedInputs } = useRegexMatch(requestedPattern, inputs);

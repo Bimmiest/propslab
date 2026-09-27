@@ -5,14 +5,16 @@
  * parses conf text and inspects patterns but never EXECUTES them, so it is
  * safe outside the worker sandbox.
  *
- * `hasReDoSRisk` is the engine's own heuristic and is structural: it
- * documents that it cannot see alternation-overlap forms like `(a|aa)+`, so
- * an empty suspect list does not prove the conf innocent — the timeout error
+ * Patterns run on PCRE2, whose match limits bound each match, so a timeout is
+ * the sum of many bounded matches rather than one runaway. `hasReDoSRisk` is a
+ * structural, advisory heuristic for which pattern is likeliest to be doing
+ * that work: it cannot see alternation-overlap forms like `(a|aa)+`, so an
+ * empty suspect list does not prove the conf innocent — the timeout error
  * says so.
  */
 import { parseConf } from '../../../src/engine/parser/confParser';
 import { getDirectiveInfo } from '../../../src/engine/directiveRegistry';
-import { hasReDoSRisk } from '../../../src/utils/splunkRegex';
+import { hasReDoSRisk } from '../../../src/utils/redosHeuristic';
 import type { ConfDirective, ConfInput, ConfStanza } from '../../../src/engine/types';
 
 export interface RegexSuspect {

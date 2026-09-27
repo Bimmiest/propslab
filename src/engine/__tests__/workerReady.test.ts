@@ -1,15 +1,18 @@
 // ---------------------------------------------------------------------------
 // workerReady.test.ts
-// Every worker entry announces that its module has evaluated (#339).
+// Every worker entry announces that it is up (#339): its module has evaluated
+// and it has instantiated the regex engine the page sent it (#368).
 //
 // The page tells a worker that never started from one that started and then
 // died by whether it has sent WORKER_READY: an error before it is a load
 // failure and is not charged to the request in flight. So the signal must come
-// once, after the handler is installed, and before any response.
+// once, after the handler is installed and the engine is up, and before any
+// response.
 // ---------------------------------------------------------------------------
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { WORKER_READY } from '../workerProtocol';
+import { WORKER_READY, type WorkerInitMessage } from '../workerProtocol';
+import { regexEngineModule } from '../../utils/splunkRegex';
 
 type Handler = ((e: MessageEvent) => void) | null;
 
@@ -43,13 +46,27 @@ const entries: [string, () => Promise<unknown>, unknown][] = [
 describe('worker entries post WORKER_READY (#339)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it.each(entries)('%s posts it once, after installing its handler, before any response', async (_name, entry, request) => {
+  // The compiled module from this file's own (initialised) engine: the entry
+  // is loaded after resetModules, so it has a fresh, empty one, as a real
+  // worker does.
+  const init = (): WorkerInitMessage => ({ type: 'init', regexEngine: regexEngineModule() });
+
+  it.each(entries)('%s posts it once, after the engine it is sent is up, before any response', async (_name, entry, request) => {
     const { posted, send } = await load(entry);
+    expect(posted).toEqual([]);
+
+    send(init());
     expect(posted).toEqual([{ message: WORKER_READY, handlerInstalled: true }]);
 
     send(request);
     expect(posted).toHaveLength(2);
     expect(posted[1]!.message).toMatchObject({ id: 4 });
     expect(posted.filter((p) => (p.message as { type?: string }).type === 'ready')).toHaveLength(1);
+  });
+
+  it.each(entries)('%s throws before ready when the engine will not instantiate', async (_name, entry) => {
+    const { posted, send } = await load(entry);
+    expect(() => send({ type: 'init', regexEngine: {} })).toThrow();
+    expect(posted).toEqual([]);
   });
 });

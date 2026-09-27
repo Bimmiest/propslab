@@ -13,15 +13,22 @@
 // matched this event sends them to rewrite a working pattern.
 // ---------------------------------------------------------------------------
 
-import { safeRegex, validateRegex } from '../utils/splunkRegex';
+import { extractionLimits, safeRegex, validateRegex, type RegexLimits } from '../utils/splunkRegex';
+
+const PROBE_LIMITS = extractionLimits();
 
 export type NoOpReason =
   /** The stanza holding this directive did not match the event's metadata. */
   | { kind: 'stanza-not-matched'; stanza: string; wonInstead?: string }
   /** A TRANSFORMS/REPORT reference to a transforms.conf stanza that is not there. */
   | { kind: 'transforms-stanza-missing'; name: string }
-  /** The pattern did not compile, or was refused by the ReDoS gate. */
+  /** The pattern did not compile. */
   | { kind: 'regex-invalid'; error: string }
+  /**
+   * PCRE gave up before deciding: MATCH_LIMIT or DEPTH_LIMIT (or the backtracking
+   * memory cap) was reached. Splunk counts that as no match.
+   */
+  | { kind: 'regex-limit'; error: string }
   /** SOURCE_KEY (or an `in <field>` source) resolved to nothing. */
   | { kind: 'source-key-empty'; sourceKey: string }
   /**
@@ -50,6 +57,8 @@ export function describeNoOp(reason: NoOpReason): string {
       return `references [${reason.name}], which is not defined in transforms.conf`;
     case 'regex-invalid':
       return `the pattern did not compile: ${reason.error}`;
+    case 'regex-limit':
+      return `PCRE stopped before finding a match (${reason.error}), which counts as no match — simplify the pattern or raise MATCH_LIMIT / DEPTH_LIMIT`;
     case 'source-key-empty':
       return `${reason.sourceKey} is empty on this event, so there was nothing to match against`;
     case 'no-match':
@@ -140,7 +149,9 @@ export function longestPartialMatch(
     const cut = boundaries[i];
     if (cut === undefined || cut === 0) continue;
     const prefix = pattern.slice(0, cut);
-    const compiled = safeRegex(prefix);
+    // Splunk's extraction limits bound each probe, so explaining a no-op can
+    // never cost more than one extraction attempt per prefix.
+    const compiled = safeRegex(prefix, '', PROBE_LIMITS);
     if (!compiled) continue;
 
     const match = compiled.exec(text);
@@ -159,23 +170,17 @@ export function explainRegexNoOp(
   pattern: string,
   source: string | undefined,
   sourceKeyName: string,
+  limits: RegexLimits = {},
 ): NoOpReason | null {
-  const invalid = validateRegex(pattern);
-  if (invalid !== null) return { kind: 'regex-invalid', error: invalid };
-
-  const compiled = safeRegex(pattern);
-  if (!compiled) {
-    return {
-      kind: 'regex-invalid',
-      error: 'refused by the ReDoS guard — it can backtrack catastrophically',
-    };
-  }
+  const compiled = safeRegex(pattern, '', limits);
+  if (!compiled) return { kind: 'regex-invalid', error: validateRegex(pattern) ?? 'invalid regex' };
 
   if (source === undefined || source === '') {
     return { kind: 'source-key-empty', sourceKey: sourceKeyName };
   }
 
   if (compiled.exec(source)) return null;
+  if (compiled.lastError !== undefined) return { kind: 'regex-limit', error: compiled.lastError };
 
   const partial = longestPartialMatch(pattern, source);
   return partial

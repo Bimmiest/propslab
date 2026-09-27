@@ -32,6 +32,7 @@ import { renderHook, act, waitFor } from '@testing-library/react';
 import { useProcessingPipeline } from '../useProcessingPipeline';
 import { useAppStore } from '../../store/useAppStore';
 import type { PipelineWorkerRequest } from '../../engine/pipelineWorker';
+import { isWorkerInitMessage, type WorkerInitMessage } from '../../engine/workerProtocol';
 
 const initial = useAppStore.getState();
 
@@ -60,7 +61,9 @@ class FakeWorker {
     if (FakeWorker.instances.length >= FakeWorker.failAfter) throw new Error('blocked by CSP');
     FakeWorker.instances.push(this);
   }
-  postMessage(message: PipelineWorkerRequest) {
+  postMessage(message: PipelineWorkerRequest | WorkerInitMessage) {
+    // The engine handed over as each worker is built is not a request.
+    if (isWorkerInitMessage(message)) return;
     this.posted.push(message);
   }
   terminate() {
@@ -183,7 +186,7 @@ describe('useProcessingPipeline', () => {
     const state = useAppStore.getState();
     expect(state.isProcessing).toBe(false);
     expect(state.processingResult).toBeNull();
-    expect(state.validationDiagnostics[0]?.message).toMatch(/timed out.*ReDoS/);
+    expect(state.validationDiagnostics[0]?.message).toMatch(/timed out.*backtracking/);
     expect(FakeWorker.instances[0]!.terminated).toBe(true);
     expect(FakeWorker.instances).toHaveLength(2);
   });
@@ -423,7 +426,7 @@ describe('useProcessingPipeline', () => {
 
       act(() => FakeWorker.instances[0]!.ready());
       act(() => void vi.advanceTimersByTime(5_000));
-      expect(useAppStore.getState().validationDiagnostics[0]?.message).toMatch(/ReDoS/);
+      expect(useAppStore.getState().validationDiagnostics[0]?.message).toMatch(/backtracking/);
 
       act(() => FakeWorker.instances[1]!.failToLoad());
       act(() => FakeWorker.instances[2]!.failToLoad());
@@ -431,7 +434,7 @@ describe('useProcessingPipeline', () => {
       await settleInline();
       const state = useAppStore.getState();
       expect(state.processingResult).toBeNull();
-      expect(state.validationDiagnostics[0]?.message).toMatch(/ReDoS/);
+      expect(state.validationDiagnostics[0]?.message).toMatch(/backtracking/);
     });
   });
 
@@ -523,7 +526,7 @@ describe('useProcessingPipeline', () => {
       act(() => void vi.advanceTimersByTime(5_000));
       act(() => FakeWorker.instances[1]!.ready());
       act(() => void vi.advanceTimersByTime(5_000));
-      expect(useAppStore.getState().validationDiagnostics[0]?.message).toMatch(/ReDoS/);
+      expect(useAppStore.getState().validationDiagnostics[0]?.message).toMatch(/backtracking/);
     });
   });
 

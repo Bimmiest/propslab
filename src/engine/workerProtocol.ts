@@ -1,13 +1,15 @@
 /**
- * The one message every worker entry sends unprompted (#339).
+ * The two messages every worker exchanges before its first request (#339).
  *
- * Each entry posts `WORKER_READY` as the last statement of its module, so it
- * arrives only once every import has evaluated and `self.onmessage` is in
- * place. The page uses it to tell a worker that never started from one that
- * started and then died: an `error` before `ready` is a load failure — a chunk
- * that 404s, a CSP block, a module that throws while evaluating — and says
- * nothing about the request in flight; an `error` after it is a crash, and the
- * request is the suspect.
+ * The page's first message to a worker is `WorkerInitMessage`, carrying the
+ * compiled regex engine; the worker instantiates it and answers
+ * `WORKER_READY`, so ready arrives only once every import has evaluated,
+ * `self.onmessage` is in place and the engine is up. The page uses ready to
+ * tell a worker that never started from one that started and then died: an
+ * `error` before `ready` is a load failure — a chunk that 404s, a CSP block, a
+ * module that throws while evaluating, an engine that will not instantiate —
+ * and says nothing about the request in flight; an `error` after it is a
+ * crash, and the request is the suspect.
  *
  * Before this the page guessed from whether the worker had answered anything,
  * and a fresh worker had never answered by definition: the first request is
@@ -17,6 +19,18 @@
  * Kept in the engine, with no DOM or worker types, so the worker entries can
  * import it under the engine's ES2022-only type check.
  */
+
+import type { RegexEngineModule } from '../utils/splunkRegex';
+
+export interface WorkerInitMessage {
+  type: 'init';
+  /** The compiled PCRE2 `WebAssembly.Module`, compiled once by the page. */
+  regexEngine: RegexEngineModule;
+}
+
+export function isWorkerInitMessage(data: unknown): data is WorkerInitMessage {
+  return typeof data === 'object' && data !== null && (data as { type?: unknown }).type === 'init';
+}
 
 export interface WorkerReadyMessage {
   type: 'ready';
