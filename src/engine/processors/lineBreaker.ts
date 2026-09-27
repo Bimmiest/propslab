@@ -10,8 +10,7 @@ import type { ConfDirective, EventMetadata, SplunkEvent, ValidationDiagnostic } 
 import { safeRegex, translatePcreToJs } from '../../utils/splunkRegex';
 import { atDirective } from '../parser/provenance';
 import { effectiveDirective, parseSplunkBool } from '../utils/directiveValues';
-import { parseTimestampDetailed } from '../../utils/strftime';
-import { matchTimeFormat, resolveLookahead, timeFormatRegex } from './timestampExtractor';
+import { createTimestampFinder, readTimestampLocation } from './timestampRecognizer';
 
 const XML_EXTRACTIONS = new Set(['xml', 'xmlkv', 'xmlkv-winevt']);
 
@@ -57,94 +56,20 @@ function getDirective(directives: ConfDirective[], key: string): string | undefi
 }
 
 /**
- * Date forms BREAK_ONLY_BEFORE_DATE recognises ANYWHERE in the lookahead
- * window of a line, not only at its start (#287). Splunk runs its timestamp
- * recognizer over the line, so `[2026-09-22 10:00:00] a` and a syslog line
- * behind its `<34>` priority both start events there; anchoring at `^` merged
- * every such line into the one before it.
- *
- * The digit guards keep a date from being found inside a longer number, and
- * month names must stand as words (`Mar 5` is a date, `Market 5` is not).
- */
-const MONTH = '(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)';
-const DATE_ANYWHERE_PATTERN = safeRegex(
-  '(?<!\\d)\\d{4}[\\-/]\\d{1,2}[\\-/]\\d{1,2}(?!\\d)' +           // 2024-01-15 or 2024/01/15
-    '|(?<![\\d/\\-])\\d{1,2}[\\-/]\\d{1,2}[\\-/]\\d{2,4}(?![\\d/\\-])' + // 01-15-2024 or 1/15/24
-    `|(?<![A-Za-z])${MONTH}\\.?\\s+\\d{1,2}(?!\\d)` +               // Jan 15, Sep 22 10:00:02
-    `|(?<!\\d)\\d{1,2}[/\\- ]${MONTH}[/\\- ]\\d{2,4}(?!\\d)`,        // 15/Jan/2024 (CLF), 15 Jan 2024
-);
-
-/**
- * Forms recognised only at the START of a line, because anywhere else they
- * are more often data than a timestamp. A weekday alone (`Mon `) keeps the
- * reading it always had. Epoch time is a bare number, so in mid-line it is as
- * likely an id, a byte count or a port; at the start it is still accepted only
- * as a plausible epoch — 10 digits of seconds (2001–2033) or 13 of
- * milliseconds, optionally fractional, and not the prefix of a longer number.
- * Any 10–13 digit run used to count, so an 11- or 12-digit order id began a
- * new event.
- */
-const DATE_AT_START_PATTERN = safeRegex(
-  '^\\s*(?:' +
-    '(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\\s' +
-    '|1\\d{9}(?:\\d{3})?(?:\\.\\d+)?(?![\\d.])' +
-    ')',
-);
-
-/** Whether a line carries a date BREAK_ONLY_BEFORE_DATE would break before. */
-function lineHasDate(line: string, lookahead: number): boolean {
-  if (DATE_AT_START_PATTERN?.test(line)) return true;
-  // Only the lookahead window is searched, as it is for timestamp extraction:
-  // a date deep inside a continuation line (a stack frame quoting a log line,
-  // say) is past where Splunk's recognizer looks, and must not split the event.
-  return DATE_ANYWHERE_PATTERN?.test(line.slice(0, lookahead)) ?? false;
-}
-
-/**
  * The test BREAK_ONLY_BEFORE_DATE applies to a line.
  *
  * props.conf.spec: a new event starts "only if it encounters a new line with
  * a date", and the setting is "not meaningful" when DATETIME_CONFIG stops
- * timestamps being identified — the date is the one timestamp recognition
- * finds, so the stanza's TIME_PREFIX, TIME_FORMAT and MAX_TIMESTAMP_LOOKAHEAD
- * decide it (doc-derived). The built-in patterns alone knew nothing of
- * `%d.%m.%Y` or a bare `%Y%m%d%H%M%S`, so every such line merged into one
- * event (#352).
- *
- * With TIME_FORMAT set, a line starts an event when that format matches where
- * the extractor would look (after TIME_PREFIX, within the lookahead) and
- * parses. With only TIME_PREFIX, the prefix must match and the built-in
- * patterns are searched after it. With neither — or a prefix that does not
- * compile and no format, which the extractor already reports — the built-in
- * patterns stand in for Splunk's automatic recognition, as before.
+ * timestamps being identified -- the date is the one timestamp recognition
+ * finds (doc-derived). So a line has a date exactly when the extractor would
+ * read a timestamp from it: the same recogniser, under the stanza's
+ * TIME_PREFIX, TIME_FORMAT and MAX_TIMESTAMP_LOOKAHEAD. A date past the
+ * lookahead (a stack frame quoting a log line) does not split the event, and a
+ * TIME_PREFIX that will not compile finds no date, as it finds no `_time`.
  */
 function dateLineTest(directives: ConfDirective[]): (line: string) => boolean {
-  // Read by timestampExtractor's own resolver, so the window a date is looked
-  // for in here is the one the extractor will then parse it from — including
-  // 0 and -1 meaning "no limit", which a local copy of the parse read as the
-  // 128-character default (#331).
-  const lookahead = resolveLookahead(getDirective(directives, 'MAX_TIMESTAMP_LOOKAHEAD'));
-  const timeFormat = getDirective(directives, 'TIME_FORMAT')?.trim() || undefined;
-  const timePrefix = getDirective(directives, 'TIME_PREFIX')?.trim() || undefined;
-  const prefixRegex = timePrefix !== undefined ? safeRegex(timePrefix) : null;
-  if (timeFormat === undefined && prefixRegex === null) {
-    return (line) => lineHasDate(line, lookahead);
-  }
-  // Anchored after a prefix, exactly as the extractor searches (timeFormatRegex).
-  const formatRegex = timeFormat !== undefined ? timeFormatRegex(timeFormat, prefixRegex !== null) : null;
-  return (line) => {
-    let start = 0;
-    if (prefixRegex !== null) {
-      const m = prefixRegex.exec(line);
-      if (!m) return false;
-      start = m.index + m[0].length;
-    }
-    if (timeFormat === undefined || formatRegex === null) {
-      return lineHasDate(line.slice(start), lookahead);
-    }
-    const found = matchTimeFormat(line, start, Math.min(start + lookahead, line.length), formatRegex);
-    return found !== null && parseTimestampDetailed(found.text, timeFormat) !== null;
-  };
+  const finder = createTimestampFinder(readTimestampLocation(directives));
+  return (line) => finder.find(line).found;
 }
 
 /**

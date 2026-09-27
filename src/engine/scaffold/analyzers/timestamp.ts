@@ -1,10 +1,6 @@
-import { AUTO_TIME_FORMATS, execAutoFormat } from '../../processors/timestampExtractor';
-import { strftimeToRegex } from '../../../utils/strftime';
+import { recognizeTimestamp, type RecognizedTimestamp } from '../../processors/timestampRecognizer';
 import { escapeRegex } from '../../../utils/splunkRegex';
 import type { Confidence, ScaffoldSuggestion } from '../types';
-
-// Reuse the engine's priority-ordered recognition table (single source of truth).
-const PATTERNS = AUTO_TIME_FORMATS.map((fmt) => ({ fmt, regex: strftimeToRegex(fmt) }));
 
 const SAMPLE_SIZE = 20;
 
@@ -12,40 +8,22 @@ export function detectTimestamp(lines: string[]): ScaffoldSuggestion[] {
   const sample = lines.filter((l) => l.trim().length > 0).slice(0, SAMPLE_SIZE);
   if (sample.length === 0) return [];
 
-  // Leading epoch → TIME_FORMAT. A 13-digit value is milliseconds: real Splunk's
-  // %s reads only whole seconds, so a bare %s misparses it — it needs %s%3N.
-  const epochMatches = sample
-    .map((l) => /^\s*\d{10}(\d{3})?(?!\d)/.exec(l))
-    .filter((m): m is RegExpExecArray => m !== null);
-  if (epochMatches.length / sample.length >= 0.8) {
-    const millis = epochMatches.filter((m) => m[1] !== undefined).length;
-    const isMillis = millis >= epochMatches.length / 2;
-    const conf: Confidence = epochMatches.length === sample.length ? 'high' : 'medium';
-    return [{
-      key: 'TIME_FORMAT',
-      value: isMillis ? '%s%3N' : '%s',
-      confidence: conf,
-      evidence: `${epochMatches.length}/${sample.length} lines start with ${isMillis ? 'a millisecond ' : 'an '}epoch timestamp`,
-      enabledByDefault: true,
-    }];
-  }
-
-  // Tally the highest-priority format that matches each line.
-  const tally = new Map<string, { count: number; match: RegExpExecArray; line: string }>();
+  // Tally the format automatic recognition reads from each line, so the
+  // suggested TIME_FORMAT is one extraction itself would have used. The whole
+  // line is searched: the suggested lookahead is derived from where it is found.
+  // A 13-digit epoch comes back as %s%3N, which real Splunk needs -- its %s
+  // reads only whole seconds.
+  const tally = new Map<string, { count: number; match: RecognizedTimestamp; line: string }>();
   for (const line of sample) {
-    for (const { fmt, regex } of PATTERNS) {
-      const m = execAutoFormat(fmt, regex, line);
-      if (!m) continue;
-      const e = tally.get(fmt);
-      if (e) e.count++;
-      else tally.set(fmt, { count: 1, match: m, line });
-      break;
-    }
+    const m = recognizeTimestamp(line);
+    if (!m) continue;
+    const e = tally.get(m.format);
+    if (e) e.count++;
+    else tally.set(m.format, { count: 1, match: m, line });
   }
-  if (tally.size === 0) return [];
 
   let bestFmt = '';
-  let best: { count: number; match: RegExpExecArray; line: string } | null = null;
+  let best: { count: number; match: RecognizedTimestamp; line: string } | null = null;
   for (const [fmt, e] of tally) {
     if (!best || e.count > best.count) {
       bestFmt = fmt;
@@ -60,9 +38,9 @@ export function detectTimestamp(lines: string[]): ScaffoldSuggestion[] {
     { key: 'TIME_FORMAT', value: bestFmt, confidence, evidence: `Matched in ${best.count}/${sample.length} sample lines`, enabledByDefault: true },
   ];
 
-  const matchEnd = best.match.index + best.match[0].length;
-  const tsLen = best.match[0].length;
-  const prefix = derivePrefix(best.line.slice(0, best.match.index));
+  const matchEnd = best.match.end;
+  const tsLen = best.match.end - best.match.start;
+  const prefix = derivePrefix(best.line.slice(0, best.match.start));
 
   if (prefix) {
     out.push({

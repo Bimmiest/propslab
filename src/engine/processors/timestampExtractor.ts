@@ -1,115 +1,18 @@
 import type { SplunkEvent, ConfDirective, ValidationDiagnostic } from '../types';
-import { safeRegex, validateRegex } from '../../utils/splunkRegex';
+import { validateRegex } from '../../utils/splunkRegex';
 import {
   parseTimestampDetailed,
   parseTzAlias,
-  strftimeToRegex,
   type CalendarDate,
   type ParsedTimestamp,
 } from '../../utils/strftime';
 import { atDirective } from '../parser/provenance';
 import { setField } from '../utils/fieldBag';
 import { effectiveBool, effectiveDirective, effectiveValue } from '../utils/directiveValues';
+import { createTimestampFinder, readTimestampLocation, type TimestampSearch } from './timestampRecognizer';
 
-/**
- * Priority-ordered formats for automatic timestamp recognition when no
- * TIME_FORMAT is configured. A pragmatic subset of Splunk's datetime.xml —
- * ordered most-specific first so an ISO 8601 timestamp with a zone offset is
- * preferred over a variant without one (and over a bare date).
- *
- * ISO-style date-times are expanded over every fraction width from 9 digits
- * down to 1, with the zone attached or after a space. A fixed `.%3N` stopped
- * at the third digit of `.123456+05:00` and left the zone unread, so the stamp
- * was taken as UTC; a space before the zone (`10:00:00 +0500`) was likewise
- * never looked at (#353).
- */
-const FRACTION_WIDTHS = [9, 8, 7, 6, 5, 4, 3, 2, 1];
-function isoDateTimeFormats(separator: string): string[] {
-  const base = `%Y-%m-%d${separator}%H:%M:%S`;
-  const fractions = FRACTION_WIDTHS.map((w) => `${base}.%${w}N`);
-  return [
-    ...fractions.map((f) => `${f}%z`),
-    ...fractions.map((f) => `${f} %z`),
-    `${base}%z`,
-    `${base} %z`,
-    ...fractions,
-    base,
-  ];
-}
-
-export const AUTO_TIME_FORMATS = [
-  ...isoDateTimeFormats('T'),
-  ...isoDateTimeFormats(' '),
-  '%d/%b/%Y:%H:%M:%S %z', // Apache access log
-  '%b %e %H:%M:%S',        // syslog (no year → current year, space-padded day)
-  '%m/%d/%Y %H:%M:%S',
-  '%Y/%m/%d %H:%M:%S',
-  '%m/%d/%Y',
-  '%Y-%m-%d',
-];
-
-// Compile the recognition regexes once. They are non-global, so `.exec` is
-// stateless across events and calls.
-const AUTO_PATTERNS = AUTO_TIME_FORMATS.map((fmt) => ({ fmt, regex: strftimeToRegex(fmt) }));
-
-/**
- * Search `text` with one AUTO_TIME_FORMATS pattern. A trailing zone must not
- * run on into a word or number: `%z` accepts a bare `Z`, so without the check
- * `10:00:00 Zookeeper started` would be read as UTC over the stanza's TZ.
- */
-export function execAutoFormat(fmt: string, regex: RegExp, text: string): RegExpExecArray | null {
-  const m = regex.exec(text);
-  if (m && fmt.endsWith('%z') && /[A-Za-z0-9]/.test(text.charAt(m.index + m[0].length))) return null;
-  return m;
-}
-
-/**
- * Try to find a timestamp in `region` using the auto-recognition patterns, then
- * a leading-epoch fallback. Returns the parsed date plus the format that matched.
- *
- * Splunk's datetime recognition is positional, so candidates are scored by match
- * position (earliest wins) and then by format specificity (the priority order of
- * AUTO_TIME_FORMATS). This prevents a more-specific format that matches deep in a
- * message body from beating the intended timestamp at the front of the region.
- */
-function autoRecognize(
-  region: string,
-  tz?: string,
-  onUnresolvedTz?: (tz: string) => void,
-  tzAlias?: ReadonlyMap<string, string>,
-  now?: Date,
-): { parsed: ParsedTimestamp; format: string; index: number; length: number } | null {
-  let best: { index: number; length: number; parsed: ParsedTimestamp; format: string } | null = null;
-  for (const { fmt, regex } of AUTO_PATTERNS) {
-    const m = execAutoFormat(fmt, regex, region);
-    if (!m) continue;
-    const parsed = parseTimestampDetailed(m[0], fmt, { tz, onUnresolvedTz, tzAlias, now });
-    if (!parsed || isNaN(parsed.date.getTime())) continue;
-    // Earliest match wins; a tie is broken by the more specific format, which
-    // is the one iterated first -- hence the strict `<`.
-    if (best === null || m.index < best.index) {
-      best = { index: m.index, length: m[0].length, parsed, format: fmt };
-    }
-  }
-  if (best) return best;
-  // Epoch seconds (10 digits) or milliseconds (13) at the very start of the region.
-  // Anchored to avoid mistaking arbitrary long numbers elsewhere for a timestamp.
-  const epoch = /^\s*(\d{13}|\d{10})(?![0-9])/.exec(region);
-  if (epoch) {
-    const digits = epoch[1] ?? '';
-    const ms = digits.length >= 13 ? Number(digits) : Number(digits) * 1000;
-    const date = new Date(ms);
-    if (!isNaN(date.getTime())) {
-      return {
-        parsed: { date, wallAsUtcMs: ms, offsetMinutes: 0, hasDate: true },
-        format: 'epoch',
-        index: epoch[0].length - digits.length,
-        length: digits.length,
-      };
-    }
-  }
-  return null;
-}
+// Re-exported for the Timestamp tab's prober, which searches the way this does.
+export { matchTimeFormat, resolveLookahead, timeFormatRegex, type TimeFormatMatch } from './timestampRecognizer';
 
 /**
  * ADD_EXTRA_TIME_FIELDS, per the registry's reading of props.conf.spec 10.4.3:
@@ -217,78 +120,6 @@ function numericDirective(
   return Number.isFinite(parsed) && parsed > 0 ? parsed : BOUND_DEFAULTS[key];
 }
 
-/**
- * MAX_TIMESTAMP_LOOKAHEAD as a character count. props.conf.spec: the default is
- * 128, and "a value of 0 or -1 disables the length constraint". Those two used
- * to fall through to 128 along with genuinely unusable values, so a config that
- * turned the limit off to reach a deep timestamp still missed it (#286). An
- * unlimited window is `Infinity`, which `Math.min` against the event length
- * turns back into "the rest of the event".
- */
-export function resolveLookahead(value: string | undefined): number {
-  if (value === undefined) return 128;
-  const parsed = parseInt(value.trim(), 10);
-  if (parsed === 0 || parsed === -1) return Infinity;
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 128;
-}
-
-/**
- * The regex a TIME_FORMAT is searched for with.
- *
- * When TIME_PREFIX is set, props.conf.spec requires the TIME_FORMAT to start
- * reading immediately after the prefix — "the TIME_PREFIX regex must match up
- * to and including the character before the TIME_FORMAT date". An unanchored
- * scan would instead accept the format at ANY offset in the lookahead window,
- * masking a broken TIME_PREFIX (a mid-line date gets extracted as _time even
- * though production strptime would fail at the prefix). So with a prefix the
- * regex is anchored to the region start, allowing only the leading whitespace
- * strptime skips; without one it scans the lookahead window.
- *
- * Exported with `matchTimeFormat` so the Timestamp tab's prober searches the
- * way this extractor does. It used to carry its own copy of the search, which
- * lost the anchoring and highlighted timestamps the pipeline rejected (#313).
- */
-export function timeFormatRegex(timeFormat: string, anchored: boolean): RegExp {
-  const formatRegex = strftimeToRegex(timeFormat);
-  return anchored ? new RegExp(`^\\s*(?:${formatRegex.source})`, formatRegex.flags) : formatRegex;
-}
-
-/** Where a TIME_FORMAT matched in `_raw`, and the text to parse. */
-export interface TimeFormatMatch {
-  /**
-   * The matched text, as handed to the parser. May carry the leading
-   * whitespace the anchored form admits, which is why `start` is separate.
-   */
-  text: string;
-  /** Offset in `_raw` of the timestamp itself, after any leading whitespace. */
-  start: number;
-  /** End offset in `_raw`, exclusive. */
-  end: number;
-}
-
-/**
- * Search `raw[searchStart, searchEnd)` — the lookahead window after TIME_PREFIX
- * — with a regex from `timeFormatRegex`. Shared with the Timestamp tab (#313).
- */
-export function matchTimeFormat(
-  raw: string,
-  searchStart: number,
-  searchEnd: number,
-  formatRegex: RegExp,
-): TimeFormatMatch | null {
-  const formatMatch = formatRegex.exec(raw.substring(searchStart, searchEnd));
-  if (!formatMatch) return null;
-  const text = formatMatch[0];
-  // The anchored form lets leading whitespace into the match; the timestamp
-  // itself starts after it.
-  const matchStart = searchStart + formatMatch.index;
-  return {
-    text,
-    start: matchStart + (text.length - text.trimStart().length),
-    end: matchStart + text.length,
-  };
-}
-
 export function extractTimestamps(
   events: SplunkEvent[],
   directives: ConfDirective[],
@@ -303,7 +134,6 @@ export function extractTimestamps(
 ): SplunkEvent[] {
   const timePrefixDir = effectiveDirective(directives, 'TIME_PREFIX');
   const timeFormatDir = effectiveDirective(directives, 'TIME_FORMAT');
-  const maxLookaheadDir = effectiveDirective(directives, 'MAX_TIMESTAMP_LOOKAHEAD');
   const tzDir = effectiveDirective(directives, 'TZ');
   const tzAliasDir = effectiveDirective(directives, 'TZ_ALIAS');
   const datetimeConfigDir = effectiveDirective(directives, 'DATETIME_CONFIG');
@@ -363,8 +193,7 @@ export function extractTimestamps(
   const maxDiffSecsAgo = numericDirective(directives, 'MAX_DIFF_SECS_AGO');
   const maxDiffSecsHence = numericDirective(directives, 'MAX_DIFF_SECS_HENCE');
 
-  const timeFormat = timeFormatDir?.value.trim();
-  const maxLookahead = resolveLookahead(maxLookaheadDir?.value);
+  const location = readTimestampLocation(directives);
   const tz = tzDir?.value.trim();
 
   // TZ_ALIAS only ever rewrites a zone the event itself carried, so a table
@@ -403,21 +232,14 @@ export function extractTimestamps(
       }
     : undefined;
 
-  // An empty `TIME_PREFIX =` is unset, as an empty value is for every other
-  // setting read here (TIME_FORMAT, TZ) and for the regex options of
-  // INDEXED_EXTRACTIONS. It used to compile to the empty regex, which matches
-  // at offset 0 and so anchored TIME_FORMAT to the start of the event — a date
-  // anywhere else in the lookahead window was missed (#328).
-  const timePrefix = timePrefixDir?.value.trim() || undefined;
-  const timePrefixRegex = timePrefix !== undefined ? safeRegex(timePrefix) : null;
-  // A TIME_PREFIX that will not compile used to be dropped, and the scan began
-  // at offset 0 — so a broken prefix could still produce a plausible `_time`
-  // read from the wrong place, which is the one outcome that hides the mistake.
-  // It is treated as a prefix that never matches instead: every event takes the
-  // ordinary no-timestamp fallback, and the error says why (#286).
-  const timePrefixBroken = timePrefix !== undefined && timePrefixRegex === null;
-  if (timePrefixBroken && diagnostics) {
-    const pattern = timePrefix;
+  // Located by the shared recogniser, which line breaking also uses, so a
+  // line that starts an event under BREAK_ONLY_BEFORE_DATE is read here too.
+  const finder = createTimestampFinder(location, { tz, onUnresolvedTz, tzAlias, now });
+  // A TIME_PREFIX that will not compile is treated as never matching: dropping
+  // it would read a plausible `_time` from the wrong place, the one outcome
+  // that hides the mistake.
+  if (finder.prefixBroken && diagnostics && location.timePrefix !== undefined) {
+    const pattern = location.timePrefix;
     const why = validateRegex(pattern) ?? 'rejected as ReDoS-prone';
     diagnostics.push({
       level: 'error',
@@ -429,8 +251,6 @@ export function extractTimestamps(
       directiveKey: 'TIME_PREFIX',
     });
   }
-  // Anchored after TIME_PREFIX, unanchored without one — see timeFormatRegex.
-  const formatRegex = timeFormat ? timeFormatRegex(timeFormat, timePrefixRegex !== null) : null;
 
   // Splunk assigns an event with no parseable timestamp the `_time` of the
   // event before it, and only falls back to the time of ingest when there is no
@@ -643,64 +463,56 @@ export function extractTimestamps(
     };
   };
 
-  return events.map((event) => {
-    const raw = event._raw;
-    let searchStart = 0;
-
-    if (timePrefixBroken) return inherit(event, 'TIME_PREFIX could not be compiled, so it never matches');
-    if (timePrefixRegex) {
-      const match = timePrefixRegex.exec(raw);
-      if (match) {
-        searchStart = match.index + match[0].length;
-      } else {
-        return inherit(event, 'TIME_PREFIX did not match this event');
-      }
+  const notFound = (search: Exclude<TimestampSearch, { found: true }>): string => {
+    switch (search.reason) {
+      case 'prefix-broken': return 'TIME_PREFIX could not be compiled, so it never matches';
+      case 'prefix-unmatched': return 'TIME_PREFIX did not match this event';
+      case 'format-unmatched': return 'TIME_FORMAT did not match this event';
+      case 'unparsable': return `Could not parse "${search.text}" with TIME_FORMAT`;
+      case 'unrecognised': return 'No recognisable timestamp in this event';
     }
+  };
 
-    const searchEnd = Math.min(searchStart + maxLookahead, raw.length);
+  return events.map((event) => {
+    const search = finder.find(event._raw);
+    if (!search.found) {
+      // A match that will not parse is still a failure to read a timestamp, so
+      // it inherits rather than leaving the event unplaced.
+      return inherit(event, notFound(search));
+    }
+    const position = { start: search.start, end: search.end };
 
-    // Explicit TIME_FORMAT path.
-    if (timeFormat && formatRegex) {
-      const formatMatch = matchTimeFormat(raw, searchStart, searchEnd, formatRegex);
-      if (!formatMatch) return inherit(event, 'TIME_FORMAT did not match this event');
-
-      const { text: timestampStr, start, end } = formatMatch;
-      const parseWith = (dateForDateless?: CalendarDate) =>
-        parseTimestampDetailed(timestampStr, timeFormat, { tz, onUnresolvedTz, tzAlias, now, dateForDateless });
-      let parsed = parseWith();
+    if (search.source === 'TIME_FORMAT') {
+      const format = search.format;
+      let parsed: ParsedTimestamp | null = search.parsed;
       let dateless: string | undefined;
-      if (parsed && !parsed.hasDate) {
-        const supplied = supplyDate(parsed, parseWith);
+      if (!parsed.hasDate) {
+        const reparse = (dateForDateless: CalendarDate) =>
+          parseTimestampDetailed(search.text, format, { tz, onUnresolvedTz, tzAlias, now, dateForDateless });
+        const supplied = supplyDate(parsed, reparse);
         parsed = supplied?.parsed ?? null;
         dateless = supplied?.how;
       }
-      // A match that will not parse is still a failure to read a timestamp, so
-      // it inherits rather than leaving the event unplaced.
-      if (!parsed) return inherit(event, `Could not parse "${timestampStr}" with TIME_FORMAT`);
+      if (!parsed) return inherit(event, `Could not parse "${search.text}" with TIME_FORMAT`);
 
       const label = `Extracted timestamp: ${parsed.date.toISOString()}`;
       return accept(
         event,
         parsed,
-        { start, end },
+        position,
         'TIME_FORMAT',
-        timeFormat,
+        format,
         dateless !== undefined ? `${label} (no date in the timestamp: ${dateless})` : label,
       );
     }
 
-    // No TIME_FORMAT → automatic timestamp recognition (datetime.xml-style).
-    const searchRegion = raw.substring(searchStart, searchEnd);
-    const auto = autoRecognize(searchRegion, tz, onUnresolvedTz, tzAlias, now);
-    if (!auto) return inherit(event, 'No recognisable timestamp in this event');
-
     return accept(
       event,
-      auto.parsed,
-      { start: searchStart + auto.index, end: searchStart + auto.index + auto.length },
+      search.parsed,
+      position,
       'auto-recognition',
-      auto.format,
-      `Auto-recognized timestamp (${auto.format}): ${auto.parsed.date.toISOString()}`,
+      search.format,
+      `Auto-recognized timestamp (${search.format}): ${search.parsed.date.toISOString()}`,
     );
   });
 }
