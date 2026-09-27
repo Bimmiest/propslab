@@ -16,10 +16,44 @@ export function convertSplunkToJsRegex(pattern: string): string {
 const JS_REPRESENTABLE_INLINE_FLAGS = 'ims';
 /** All PCRE inline mode-modifier letters we recognise as a flag group (others are dropped). */
 const PCRE_INLINE_FLAG_LETTERS = 'imsxuUJADX';
-/** A whole inline flag group such as `(?i)` or `(?ims)`, anchored at the scan position. */
-const INLINE_FLAG_GROUP = /^\(\?([a-zA-Z]+)\)/;
+/**
+ * A whole inline flag group such as `(?i)`, `(?ims)`, `(?-i)` or `(?i-s)`,
+ * anchored at the scan position; with `:` in place of `)` it opens a scoped
+ * group, `(?i:…)`.
+ */
+const INLINE_FLAG_GROUP = /^\(\?([a-zA-Z]*)(?:-([a-zA-Z]*))?\)/;
+const SCOPED_FLAG_GROUP = /^\(\?([a-zA-Z]*)(?:-([a-zA-Z]*))?:/;
 /** A bounded quantifier (`{2}`, `{2,}`, `{2,5}`), anchored at the scan position. */
 const BOUNDED_QUANTIFIER = /^\{\d+(?:,\d*)?\}/;
+
+/** PCRE `\h` (horizontal whitespace), as JS class members. */
+const PCRE_HSPACE = '\\t \\xa0\\u1680\\u180e\\u2000-\\u200a\\u202f\\u205f\\u3000';
+/** PCRE `\v` (vertical whitespace), as JS class members. JS `\v` is only VT. */
+const PCRE_VSPACE = '\\n\\x0b\\f\\r\\x85\\u2028\\u2029';
+
+/**
+ * POSIX bracket classes, as JS class members. ASCII only, which is what PCRE
+ * gives them without the UCP option.
+ */
+const POSIX_CLASSES: Record<string, string> = {
+  alpha: 'a-zA-Z',
+  digit: '0-9',
+  alnum: 'a-zA-Z0-9',
+  upper: 'A-Z',
+  lower: 'a-z',
+  space: '\\t\\n\\x0b\\f\\r ',
+  blank: ' \\t',
+  xdigit: '0-9A-Fa-f',
+  punct: '!-\\/:-@\\[-`{-~',
+  word: '\\w',
+  cntrl: '\\x00-\\x1f\\x7f',
+  print: ' -~',
+  graph: '!-~',
+  ascii: '\\x00-\\x7f',
+};
+
+/** Escapes that mean the same in PCRE and JS, inside a class or out. */
+const SHARED_ESCAPE_LETTERS = 'dDwWsStnrf';
 
 /**
  * Whether this runtime accepts scoped modifier groups, `(?i:…)` (ES2025).
@@ -49,6 +83,14 @@ export interface PcreTranslation {
    * the pattern still compiles — but its matches may differ from Splunk's.
    */
   warnings: string[];
+  /**
+   * Set when the pattern uses PCRE syntax the translator cannot express and
+   * that JS would otherwise accept with a different meaning (`\G`, `\p{L}`,
+   * an unknown POSIX class). `safeRegex` refuses such a pattern and
+   * `validateRegex` reports this reason, rather than letting it match
+   * something Splunk would not.
+   */
+  error?: string;
 }
 
 export interface PcreTranslationOptions {
@@ -65,26 +107,93 @@ function isExtendedWhitespace(c: string): boolean {
   return c === ' ' || c === '\t' || c === '\n' || c === '\r' || c === '\f' || c === '\v';
 }
 
+/** A code point as a JS escape; an astral one as a grouped surrogate pair. */
+function codePointEscape(cp: number): string {
+  const unit = (u: number) => `\\u${u.toString(16).padStart(4, '0')}`;
+  if (cp <= 0xffff) return unit(cp);
+  const off = cp - 0x10000;
+  return `(?:${unit(0xd800 + (off >> 10))}${unit(0xdc00 + (off & 0x3ff))})`;
+}
+
+/** Escape a literal character for use as a class member. */
+function escapeClassMember(c: string): string {
+  return /[\\\]^[-]/.test(c) ? `\\${c}` : c;
+}
+
+type EscapeResult = { text: string; length: number } | { error: string };
+
+/**
+ * Translate a character escape both contexts share — one that names a single
+ * character, so it is valid inside a class and out — or return null when the
+ * escape at `i` is not one.
+ */
+function translateCharEscape(pattern: string, i: number, inClass: boolean): EscapeResult | null {
+  const next = pattern.charAt(i + 1);
+  if (!next) return null;
+  switch (next) {
+    case 'e':
+      return { text: '\\x1b', length: 2 };
+    case 'a':
+      return { text: '\\x07', length: 2 };
+    case 'x': {
+      const braced = /^\{([0-9a-fA-F]+)\}/.exec(pattern.slice(i + 2));
+      if (braced) {
+        const cp = parseInt(braced[1]!, 16);
+        // Without the `u` flag an astral character is two code units, which
+        // a class cannot hold as one member.
+        if (cp > 0x10ffff || (inClass && cp > 0xffff)) {
+          return { error: `\\x{${braced[1]!}} is not supported in the preview.` };
+        }
+        return { text: codePointEscape(cp), length: 2 + braced[0].length };
+      }
+      // PCRE takes one or two hex digits; JS needs exactly two.
+      const hex = /^[0-9a-fA-F]{1,2}/.exec(pattern.slice(i + 2));
+      if (!hex) return { error: '\\x without hex digits is not supported in the preview.' };
+      return { text: `\\x${hex[0].padStart(2, '0')}`, length: 2 + hex[0].length };
+    }
+    case 'c':
+      // JS only takes a letter after \c; PCRE any printable ASCII.
+      if (/[A-Za-z]/.test(pattern.charAt(i + 2))) return { text: pattern.slice(i, i + 3), length: 3 };
+      return { error: `\\c${pattern.charAt(i + 2)} is not supported in the preview.` };
+    default:
+      if (SHARED_ESCAPE_LETTERS.includes(next) || /[0-9]/.test(next)) return { text: pattern.slice(i, i + 2), length: 2 };
+      return null;
+  }
+}
+
 /**
  * Translate the subset of PCRE (Splunk regex) syntax that the JS engine does not
- * accept into an equivalent JS form, returning the rewritten source plus any
- * flags that must be applied. Without this, common Splunk patterns throw at
- * compile time and `safeRegex` returns null, silently producing no extraction.
+ * accept, or accepts with a different meaning, into an equivalent JS form,
+ * returning the rewritten source plus any flags that must be applied. Without
+ * this, common Splunk patterns throw at compile time and `safeRegex` returns
+ * null, silently producing no extraction — or worse, compile and match
+ * something else (`\A` is a literal `A` to JS).
  *
  * Handled:
- *  - `(?P<name>…)` / `(?P=name)`  → `(?<name>…)` / `\k<name>`
- *  - leading inline flag groups `(?i)`, `(?ims)` → merged into the flags, which
- *    is exact: a leading group governs the whole pattern
+ *  - `(?P<name>…)` / `(?'name'…)` / `(?P=name)` / `\k'name'` / `\g{N}` → JS
+ *    named groups and backreferences
+ *  - leading inline flag groups `(?i)`, `(?ims)`, `(?-i)` → merged into (or
+ *    removed from) the flags, which is exact: a leading group governs the whole
+ *    pattern
  *  - a mid-pattern flag group `a(?i)b` → a scoped group `a(?i:b)` running to the
  *    end of the enclosing group. PCRE carries the option into that group's later
  *    alternatives too, but one scoped group spanning a `|` would capture the
  *    alternation (`a(?i)b|c` would become "a, then b or c"), so each alternative
- *    is wrapped separately: `a(?i:b)|(?i:c)`. Where the runtime lacks scoped
- *    groups the flag is hoisted to the whole pattern, with a warning.
+ *    is wrapped separately: `a(?i:b)|(?i:c)`. Negative letters (`(?-i)`,
+ *    `(?i-s)`) become `(?-i:…)` the same way. Where the runtime lacks scoped
+ *    groups a positive flag is hoisted to the whole pattern, and a negative one
+ *    dropped, with a warning — and a written `(?i:…)` group gets the same
+ *    fallback rather than being refused by the compiler.
  *  - a leading `(?x)` → extended mode applied here, since JS has no `x` flag:
  *    unescaped whitespace and `#…` comments outside character classes are removed
+ *  - `(?#…)` comments → removed
  *  - atomic groups `(?>…)`        → non-capturing `(?:…)` (loses atomicity only)
  *  - possessive quantifiers `a++`, `\d*+`, `x?+`, `{2,3}+` → greedy equivalents
+ *  - anchors `\A`, `\z`, `\Z` → `^` (a lookbehind if `m` may be on), `(?![\s\S])`,
+ *    `(?=\n?(?![\s\S]))`
+ *  - `\h`, `\H`, `\v`, `\V`, `\R`, `\N`, `\e`, `\a`, `\x{…}`, `\xh` and `\Q…\E`
+ *    literals, inside a class or out
+ *  - POSIX classes inside brackets, `[[:digit:]]`, `[[:^alpha:]]`
  *
  * The rewrite is one left-to-right scan that tracks escapes and character
  * classes, because every construct above is syntax only OUTSIDE a class: `[*+]`
@@ -92,8 +201,10 @@ function isExtendedWhitespace(c: string): boolean {
  * backslash followed by a possessive plus. Regex-replace passes over the raw
  * source could not tell those apart.
  *
- * Not handled (still throw → null): conditionals `(?(…)…)`, recursion, `\p{…}`
- * outside unicode mode, POSIX classes `[[:alpha:]]`.
+ * Refused, with `error` set: any other letter escape (`\G`, `\K`, `\X`,
+ * `\p{…}`, …), unknown POSIX class names and collating elements, and relative
+ * or subroutine `\g` forms. Constructs JS itself rejects — conditionals
+ * `(?(…)…)`, recursion — are left for the compiler to report.
  */
 export function translatePcreToJs(
   pattern: string,
@@ -102,16 +213,64 @@ export function translatePcreToJs(
 ): PcreTranslation {
   const scopedModifiers = options.scopedModifiers ?? SUPPORTS_SCOPED_MODIFIERS;
   const warnings: string[] = [];
+  let error: string | undefined;
+  const refuse = (message: string) => {
+    error ??= message;
+  };
   let extraFlags = '';
+  /** Flags a leading `(?-x)` switched off for the whole pattern. */
+  const removedFlags = new Set<string>();
   let extended = false;
 
   const addFlags = (letters: string) => {
     for (const c of letters) {
-      if (JS_REPRESENTABLE_INLINE_FLAGS.includes(c) && !extraFlags.includes(c)) extraFlags += c;
+      if (!JS_REPRESENTABLE_INLINE_FLAGS.includes(c)) continue;
+      removedFlags.delete(c);
+      if (!extraFlags.includes(c)) extraFlags += c;
     }
   };
+  const flagIsOn = (c: string) => (flags.includes(c) || extraFlags.includes(c)) && !removedFlags.has(c);
   // Anything else (`(?Q)`) is not a flag group — left for the compiler to reject.
-  const isFlagGroup = (letters: string) => [...letters].every((c) => PCRE_INLINE_FLAG_LETTERS.includes(c));
+  const isFlagGroup = (on: string, off: string | undefined) =>
+    (on !== '' || !!off) && [...on + (off ?? '')].every((c) => PCRE_INLINE_FLAG_LETTERS.includes(c));
+  /** The JS modifier spelling (`i`, `-i`, `i-s`) of a PCRE flag group, `''` if none applies. */
+  const jsModifiers = (on: string, off: string) => {
+    const js = (letters: string) => [...new Set(letters)].filter((l) => JS_REPRESENTABLE_INLINE_FLAGS.includes(l));
+    const offJs = js(off);
+    const onJs = js(on).filter((l) => !offJs.includes(l)); // PCRE applies `-` last
+    return onJs.join('') + (offJs.length ? `-${offJs.join('')}` : '');
+  };
+  /**
+   * A flag group JS cannot scope: hoist its positive letters to the whole
+   * pattern, and say which of its negative letters stay in force.
+   */
+  const unscopedFlags = (spelling: string, on: string, off: string) => {
+    const onJs = [...new Set(on)].filter((l) => JS_REPRESENTABLE_INLINE_FLAGS.includes(l) && !off.includes(l));
+    if (onJs.length) {
+      addFlags(onJs.join(''));
+      warnings.push(
+        `Mid-pattern (?${onJs.join('')}) was applied to the whole pattern: this browser does not support scoped modifier groups, so text before it is matched with the same flags.`,
+      );
+    }
+    const stillOn = [...new Set(off)].filter((l) => JS_REPRESENTABLE_INLINE_FLAGS.includes(l) && flagIsOn(l));
+    if (stillOn.length) {
+      warnings.push(
+        `${spelling} could not switch off ${stillOn.join('')}: this browser does not support scoped modifier groups, so text after it is matched with the flag still on.`,
+      );
+    }
+  };
+  const warnMidPatternX = (on: string, off: string) => {
+    if (on.includes('x') || off.includes('x')) {
+      warnings.push(
+        '(?x) is only applied at the start of a pattern; mid-pattern it is ignored, so whitespace after it is read as it would be without it.',
+      );
+    }
+  };
+
+  // `\A` is the absolute start. JS `^` is that only while `m` is off, so where
+  // a flag group may turn `m` on, a lookbehind stands in for it.
+  const mayBeMultiline = flags.includes('m') || /\(\?[a-zA-Z]*m/.test(pattern);
+  const absoluteStart = mayBeMultiline ? '(?<![\\s\\S])' : '^';
 
   // Index just past any extended-mode whitespace and `#…` comments at `from`.
   const skipIgnorable = (from: number): number => {
@@ -130,6 +289,162 @@ export function translatePcreToJs(
     return i;
   };
 
+  /** The text between `\Q` at `from` and the next `\E` (or the end), and the index past it. */
+  const quoted = (from: number): { text: string; next: number } => {
+    const end = pattern.indexOf('\\E', from + 2);
+    return end < 0
+      ? { text: pattern.slice(from + 2), next: pattern.length }
+      : { text: pattern.slice(from + 2, end), next: end + 2 };
+  };
+
+  /**
+   * Translate the character class opening at `start`. Returns the JS text and
+   * the index past the class, or null when it is unterminated.
+   *
+   * Members are copied verbatim unless PCRE reads them differently. A negated
+   * member set (`\H`, `[:^alpha:]`) cannot sit inside a JS class without the
+   * `v` flag, so a class holding one becomes an equivalent group:
+   * `[a\H]` → `(?:[a]|[^\t …])`, and `[^a\H]` → `(?![a])[\t …]`.
+   */
+  const translateClass = (start: number): { text: string; next: number } | null => {
+    let j = start + 1;
+    const negated = pattern[j] === '^';
+    if (negated) j++;
+    let members = '';
+    const complements: string[] = [];
+    // A `]` straight after `[` or `[^` is a literal member in PCRE (`[]a]` is
+    // "`]` or `a`") but ends the class in JS — an empty class `[]`, or "any
+    // character" `[^]` — so it is escaped (#341).
+    if (pattern[j] === ']') {
+      members += '\\]';
+      j++;
+    }
+    while (j < pattern.length) {
+      const c = pattern.charAt(j);
+      if (c === ']') break;
+      if (c === '[') {
+        const posix = /^\[:(\^?)([a-z]+):\]/.exec(pattern.slice(j));
+        if (posix) {
+          const set = POSIX_CLASSES[posix[2]!];
+          if (set === undefined) refuse(`Unknown POSIX class [:${posix[2]!}:].`);
+          else if (posix[1]) complements.push(set);
+          else members += set;
+          j += posix[0].length;
+          continue;
+        }
+        if (/^\[([.=])[^\]]*\1\]/.test(pattern.slice(j))) {
+          refuse('POSIX collating elements ([.x.], [=x=]) are not supported.');
+        }
+        members += c;
+        j++;
+        continue;
+      }
+      if (c !== '\\') {
+        members += c;
+        j++;
+        continue;
+      }
+      if (j + 1 >= pattern.length) return null;
+      const next = pattern.charAt(j + 1);
+      if (next === 'Q') {
+        const q = quoted(j);
+        members += [...q.text].map(escapeClassMember).join('');
+        j = q.next;
+        continue;
+      }
+      if (next === 'E') {
+        j += 2; // a stray \E is ignored
+        continue;
+      }
+      if (next === 'h' || next === 'v') {
+        members += next === 'h' ? PCRE_HSPACE : PCRE_VSPACE;
+        j += 2;
+        continue;
+      }
+      if (next === 'H' || next === 'V') {
+        complements.push(next === 'H' ? PCRE_HSPACE : PCRE_VSPACE);
+        j += 2;
+        continue;
+      }
+      if (next === 'b') {
+        members += '\\b'; // backspace, in both
+        j += 2;
+        continue;
+      }
+      const esc = translateCharEscape(pattern, j, true);
+      if (esc && 'error' in esc) refuse(esc.error);
+      if (esc && 'text' in esc) {
+        members += esc.text;
+        j += esc.length;
+        continue;
+      }
+      if (/[A-Za-z]/.test(next)) refuse(`\\${next} inside a character class is not supported in the preview.`);
+      members += pattern.slice(j, j + 2);
+      j += 2;
+    }
+    if (j >= pattern.length) return null;
+
+    if (complements.length === 0) return { text: `[${negated ? '^' : ''}${members}]`, next: j + 1 };
+    if (!negated) {
+      const alts = [...(members ? [`[${members}]`] : []), ...complements.map((set) => `[^${set}]`)];
+      return { text: `(?:${alts.join('|')})`, next: j + 1 };
+    }
+    // Neither a member nor outside any complement: inside every complemented set.
+    const last = complements.pop()!;
+    const text = (members ? `(?![${members}])` : '') + complements.map((set) => `(?=[${set}])`).join('') + `[${last}]`;
+    return { text: `(?:${text})`, next: j + 1 };
+  };
+
+  /** Translate the escape at `i`, outside a class. */
+  const translateEscape = (i: number): EscapeResult => {
+    const next = pattern.charAt(i + 1);
+    const rest = pattern.slice(i + 2);
+    switch (next) {
+      case 'A':
+        return { text: absoluteStart, length: 2 };
+      case 'z':
+        return { text: '(?![\\s\\S])', length: 2 };
+      case 'Z':
+        return { text: '(?=\\n?(?![\\s\\S]))', length: 2 };
+      case 'h':
+        return { text: `[${PCRE_HSPACE}]`, length: 2 };
+      case 'H':
+        return { text: `[^${PCRE_HSPACE}]`, length: 2 };
+      case 'v':
+        return { text: `[${PCRE_VSPACE}]`, length: 2 };
+      case 'V':
+        return { text: `[^${PCRE_VSPACE}]`, length: 2 };
+      case 'R':
+        return { text: `(?:\\r\\n|[${PCRE_VSPACE}])`, length: 2 };
+      case 'N':
+        return /^\{/.test(rest) ? { error: '\\N{…} is not supported.' } : { text: '[^\\n]', length: 2 };
+      case 'b':
+      case 'B':
+        return { text: pattern.slice(i, i + 2), length: 2 };
+      case 'k': {
+        const name = /^(?:<(\w+)>|'(\w+)'|\{(\w+)\})/.exec(rest);
+        if (!name) return { error: '\\k must be followed by a group name.' };
+        return { text: `\\k<${name[1] ?? name[2] ?? name[3]!}>`, length: 2 + name[0].length };
+      }
+      case 'g': {
+        const ref = /^(?:(\d+)|\{(\d+)\}|\{([A-Za-z_]\w*)\})/.exec(rest);
+        if (!ref) return { error: 'Relative (\\g{-1}) and subroutine (\\g<…>) references are not supported.' };
+        const number = ref[1] ?? ref[2];
+        return { text: number !== undefined ? `\\${number}` : `\\k<${ref[3]!}>`, length: 2 + ref[0].length };
+      }
+      default: {
+        const esc = translateCharEscape(pattern, i, false);
+        if (esc) return esc;
+        // Every other letter escape is either PCRE-only (`\G`, `\K`, `\X`,
+        // `\p{…}`) or an error in PCRE, while JS would read it as the letter.
+        if (/[A-Za-z]/.test(next)) return { error: `\\${next} is not supported in the preview.` };
+        // An escaped non-letter is that character in both — and a trailing
+        // lone `\` is left for the compiler to reject.
+        return { text: pattern.slice(i, i + 2), length: Math.max(1, Math.min(2, pattern.length - i)) };
+      }
+    }
+  };
+
   // Leading flag groups govern the whole pattern, which a JS flag expresses
   // exactly. Once `(?x)` is seen, whitespace between later leading groups is
   // already insignificant, so `(?x) (?i)` is still two leading groups.
@@ -137,9 +452,12 @@ export function translatePcreToJs(
   for (;;) {
     if (extended) i = skipIgnorable(i);
     const m = INLINE_FLAG_GROUP.exec(pattern.slice(i));
-    if (!m || !isFlagGroup(m[1]!)) break;
-    addFlags(m[1]!);
+    if (!m || !isFlagGroup(m[1]!, m[2])) break;
+    const off = m[2] ?? '';
+    addFlags([...m[1]!].filter((l) => !off.includes(l)).join(''));
+    for (const l of off) if (JS_REPRESENTABLE_INLINE_FLAGS.includes(l)) removedFlags.add(l);
     if (m[1]!.includes('x')) extended = true;
+    if (off.includes('x')) extended = false;
     i += m[0].length;
   }
 
@@ -158,29 +476,38 @@ export function translatePcreToJs(
     afterQuantifier = false;
 
     if (c === '\\') {
-      // Copied verbatim, so an escaped `+`, `(`, `[`, `#` or space is never
-      // read as syntax. A trailing lone `\` is left for the compiler to reject.
-      out += pattern.slice(i, i + 2);
-      i += 2;
+      if (pattern.charAt(i + 1) === 'Q') {
+        // Everything up to `\E` is literal, extended-mode whitespace included.
+        const q = quoted(i);
+        out += escapeRegex(q.text);
+        i = q.next;
+        continue;
+      }
+      if (pattern.charAt(i + 1) === 'E') {
+        i += 2; // a stray \E is ignored
+        continue;
+      }
+      const esc = translateEscape(i);
+      if ('error' in esc) {
+        refuse(esc.error);
+        out += pattern.slice(i, i + 2);
+        i += 2;
+      } else {
+        out += esc.text;
+        i += esc.length;
+      }
       continue;
     }
 
     if (c === '[') {
-      const end = findClassEnd(pattern, i);
-      if (end < 0) {
+      // PCRE's `x` does not touch whitespace inside a class.
+      const cls = translateClass(i);
+      if (!cls) {
         out += pattern.slice(i); // unterminated — the compiler reports it
         break;
       }
-      // Verbatim: PCRE's `x` does not touch whitespace inside a class either —
-      // except a `]` straight after `[` or `[^`, which PCRE reads as a literal
-      // member (`[]a]` is "`]` or `a`") and JS as the end of an empty class
-      // (`[]`, never matches) or of "any character" (`[^]`). findClassEnd
-      // already skips it when finding the class end; escaping it makes JS
-      // read the same class (#341).
-      const open = pattern[i + 1] === '^' ? 2 : 1;
-      const body = pattern.slice(i + open, end + 1);
-      out += pattern.slice(i, i + open) + (body.startsWith(']') ? `\\${body}` : body);
-      i = end + 1;
+      out += cls.text;
+      i = cls.next;
       continue;
     }
 
@@ -217,9 +544,9 @@ export function translatePcreToJs(
 
     if (c === '(') {
       const rest = pattern.slice(i);
-      const named = /^\(\?P<(\w+)>/.exec(rest);
+      const named = /^\(\?(?:P<(\w+)>|'(\w+)')/.exec(rest);
       if (named) {
-        out += `(?<${named[1]!}>`;
+        out += `(?<${named[1] ?? named[2]!}>`;
         i += named[0].length;
         frames.push({ scoped: [] });
         continue;
@@ -230,6 +557,12 @@ export function translatePcreToJs(
         i += backref[0].length;
         continue;
       }
+      if (rest.startsWith('(?#')) {
+        const end = pattern.indexOf(')', i);
+        i = end < 0 ? pattern.length : end + 1;
+        afterQuantifier = wasAfterQuantifier;
+        continue;
+      }
       if (rest.startsWith('(?>')) {
         out += '(?:'; // JS has no atomic groups
         i += 3;
@@ -237,25 +570,33 @@ export function translatePcreToJs(
         continue;
       }
       const flagGroup = INLINE_FLAG_GROUP.exec(rest);
-      if (flagGroup && isFlagGroup(flagGroup[1]!)) {
-        const letters = flagGroup[1]!;
-        i += flagGroup[0].length;
-        if (letters.includes('x')) {
-          warnings.push(
-            '(?x) is only applied at the start of a pattern; mid-pattern it is ignored, so whitespace after it is matched literally.',
-          );
-        }
-        const js = [...new Set(letters)].filter((l) => JS_REPRESENTABLE_INLINE_FLAGS.includes(l)).join('');
+      if (flagGroup && isFlagGroup(flagGroup[1]!, flagGroup[2])) {
+        const [spelling, on = '', off = ''] = flagGroup;
+        i += spelling.length;
+        warnMidPatternX(on, off);
+        const js = jsModifiers(on, off);
         if (!js) continue;
         if (scopedModifiers) {
           out += `(?${js}:`;
           current().scoped.push(js);
         } else {
-          addFlags(js);
-          warnings.push(
-            `Mid-pattern (?${js}) was applied to the whole pattern: this browser does not support scoped modifier groups, so text before it is matched with the same flags.`,
-          );
+          unscopedFlags(spelling, on, off);
         }
+        continue;
+      }
+      const scopedGroup = SCOPED_FLAG_GROUP.exec(rest);
+      if (scopedGroup && isFlagGroup(scopedGroup[1]!, scopedGroup[2])) {
+        const [spelling, on = '', off = ''] = scopedGroup;
+        i += spelling.length;
+        warnMidPatternX(on, off);
+        const js = jsModifiers(on, off);
+        if (js && scopedModifiers) {
+          out += `(?${js}:`;
+        } else {
+          out += '(?:';
+          if (js) unscopedFlags(`${spelling}…)`, on, off);
+        }
+        frames.push({ scoped: [] });
         continue;
       }
       // Any other group: copy the `(` and its `?` introducer, so the `?` is not
@@ -289,12 +630,12 @@ export function translatePcreToJs(
   // Close wrappers still open at the end of the pattern, innermost group first.
   for (let f = frames.length - 1; f >= 0; f--) out += ')'.repeat(frames[f]!.scoped.length);
 
-  let mergedFlags = flags;
+  let mergedFlags = [...flags].filter((c) => !removedFlags.has(c)).join('');
   for (const c of extraFlags) {
     if (!mergedFlags.includes(c)) mergedFlags += c;
   }
 
-  return { source: out, flags: mergedFlags, warnings };
+  return { source: out, flags: mergedFlags, warnings, ...(error === undefined ? {} : { error }) };
 }
 
 /**
@@ -331,7 +672,9 @@ export function translatePcreToJs(
  * main-thread caller must bound its input rather than rely on this check alone.
  */
 const REDOS_NESTED_GROUP = /\((?:[^()\\]|\\.)*[*+][^()]*\)(?:[*+]|\{\d+,?\d*\})/;
-const REDOS_ADJACENT_QUANTIFIER = /(\\?[A-Za-z0-9.])[*+]\1[*+]/;
+// The atom must start on an even run of backslashes: in `\d+d+` the second `d`
+// is a literal, not a repeat of `\d`, while in `\\d+d+` both are literals.
+const REDOS_ADJACENT_QUANTIFIER = /(?<!\\)(?:\\\\)*(\\?[A-Za-z0-9.])[*+]\1[*+]/;
 
 /**
  * Above this source length the structural analysis is skipped in favour of the
@@ -661,8 +1004,8 @@ function computeReDoSRisk(pattern: string): boolean {
  * or patterns with known ReDoS risk.
  */
 export function safeRegex(pattern: string, flags?: string): RegExp | null {
-  const { source, flags: mergedFlags } = translatePcreToJs(pattern, flags ?? '');
-  if (hasReDoSRisk(source)) return null;
+  const { source, flags: mergedFlags, error } = translatePcreToJs(pattern, flags ?? '');
+  if (error !== undefined || hasReDoSRisk(source)) return null;
   try {
     return new RegExp(source, mergedFlags);
   } catch {
@@ -677,7 +1020,8 @@ export function safeRegex(pattern: string, flags?: string): RegExp | null {
  *          if the pattern compiles successfully.
  */
 export function validateRegex(pattern: string): string | null {
-  const { source, flags } = translatePcreToJs(pattern);
+  const { source, flags, error } = translatePcreToJs(pattern);
+  if (error !== undefined) return error;
   if (hasReDoSRisk(source)) {
     return 'Pattern contains a structure prone to catastrophic backtracking (ReDoS risk).';
   }

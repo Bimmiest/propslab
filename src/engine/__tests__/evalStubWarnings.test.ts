@@ -36,7 +36,7 @@ describe('eval — every unsimulated builtin warns (#127)', () => {
   it('a fully simulated function does not warn', () => {
     expect(warningsFor('round(n, 2)')).toHaveLength(0);
     // Simulated since #291, so it left the stub list.
-    expect(warningsFor('cidrmatch("10.0.0.0/8", "10.1.2.3")')).toHaveLength(0);
+    expect(warningsFor('if(cidrmatch("10.0.0.0/8", "10.1.2.3"), 1, 0)')).toHaveLength(0);
   });
 
   it('sigfig still returns a usable value alongside the warning', () => {

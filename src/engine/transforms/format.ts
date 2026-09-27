@@ -3,9 +3,11 @@
 // of a pair). Nothing here knows about DEST_KEY beyond taking the value `$0`
 // stands for.
 
-// Pre-compiled patterns for format string substitution.
-const CAPTURE_REF_PATTERN = /\$(\d+)/g;
-const NAMED_REF_PATTERN = /\$\{(\w+)\}/g;
+/**
+ * `$N` or `${name}`, pre-compiled and matched together so the FORMAT is expanded in one pass: a
+ * second pass would re-expand `${…}` text that a capture brought in.
+ */
+const FORMAT_REF_PATTERN = /\$(?:(\d+)|\{(\w+)\})/g;
 
 /** One `key::value` token from a search-time FORMAT, still holding its `$N` references. */
 export interface FormatPair {
@@ -70,7 +72,12 @@ export function parseFormatPairs(format: string): FormatPair[] {
 export function expandFormat(format: string, match: RegExpExecArray, priorDestValue?: string): string {
   // match[0] is the whole match; match[1..maxIndex] are the capture groups.
   const maxIndex = match.length - 1;
-  let result = format.replace(CAPTURE_REF_PATTERN, (whole: string, digits: string) => {
+  const groups = match.groups;
+  return format.replace(FORMAT_REF_PATTERN, (whole: string, digits: string | undefined, name: string | undefined) => {
+    if (digits === undefined) {
+      if (!groups) return whole;
+      return groups[name!] ?? '';
+    }
     // The pattern greedily grabs every trailing digit, but a reference resolves
     // to at most `maxIndex`. Mirror PCRE/JS `$nn` fallback: take the LONGEST
     // leading digit-run that names an existing group; any remaining digits are
@@ -90,9 +97,4 @@ export function expandFormat(format: string, match: RegExpExecArray, priorDestVa
     // No leading digit-run names a real group — leave the `$N` text untouched.
     return whole;
   });
-  if (match.groups) {
-    const groups = match.groups;
-    result = result.replace(NAMED_REF_PATTERN, (_: string, name: string) => groups[name] ?? '');
-  }
-  return result;
 }

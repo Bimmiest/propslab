@@ -1,6 +1,7 @@
 import type { SplunkEvent } from '../types';
 import type { TransformResult } from './regexTransform';
 import { VALID_UNSIMULATED_DEST_KEYS } from './destKeys';
+import { addFieldValue } from '../utils/fieldBag';
 
 export function applyDestKey(event: SplunkEvent, result: TransformResult): SplunkEvent {
   if (!result.matched || result.destKey === undefined || result.destValue === undefined) {
@@ -27,13 +28,15 @@ export function applyDestKey(event: SplunkEvent, result: TransformResult): Splun
     case '_meta': {
       // _meta values are space-separated key::value pairs. Values may be quoted to
       // contain spaces (key::"two words"), so parse with quote awareness rather than
-      // a naive whitespace split that would break a quoted value apart.
+      // a naive whitespace split that would break a quoted value apart. Indexed
+      // fields are multivalue, so a repeated key (`tag::a tag::b`, or one pair
+      // per REPEAT_MATCH match) keeps every value rather than the last.
       const meta = { ...event._meta };
       const pairRe = /(\S+?)::(?:"([^"]*)"|(\S+))/g;
       let m: RegExpExecArray | null;
       while ((m = pairRe.exec(destValue)) !== null) {
         const key = m[1];
-        if (key !== undefined) meta[key] = m[2] ?? m[3] ?? '';
+        if (key !== undefined) addFieldValue(meta, key, m[2] ?? m[3] ?? '');
       }
       return { ...event, _meta: meta, fields: { ...event.fields, ...result.fields } };
     }

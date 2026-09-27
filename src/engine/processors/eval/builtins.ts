@@ -12,6 +12,7 @@ import {
   isNumericValue,
   minMax,
   numArg,
+  parseDecimal,
   strArg,
   toMv,
   toNum,
@@ -71,9 +72,12 @@ export function evalBuiltin(fn: string, args: EvalValue[], ctx: EvalCtx): EvalVa
       const s = strArg(args[0]);
       if (s === null) return null;
       const start = toNum(args[1]);
-      const startIdx = start > 0 ? start - 1 : s.length + start;
+      const startIdx = Math.max(0, start > 0 ? start - 1 : s.length + start);
       const len = args[2] !== undefined ? toNum(args[2]) : undefined;
-      return len !== undefined ? s.substring(startIdx, startIdx + len) : s.substring(startIdx);
+      // slice, not substring: substring swaps reversed bounds, so a negative
+      // length read backwards from the start instead of giving nothing.
+      if (len === undefined) return s.slice(startIdx);
+      return len > 0 ? s.slice(startIdx, startIdx + len) : '';
     }
     case 'replace': {
       const s = strArg(args[0]);
@@ -121,10 +125,7 @@ export function evalBuiltin(fn: string, args: EvalValue[], ctx: EvalCtx): EvalVa
     case 'tonumber': {
       const val = toStr(args[0]).trim();
       const base = args[1] !== undefined ? Math.floor(toNum(args[1])) : 10;
-      if (base === 10) {
-        if (!/^-?\d+(\.\d+)?$/.test(val)) return null;
-        return parseFloat(val);
-      }
+      if (base === 10) return parseDecimal(val);
       const validChars = '0123456789abcdefghijklmnopqrstuvwxyz'.slice(0, base);
       if (!new RegExp(`^[${validChars}]+$`, 'i').test(val)) return null;
       const n = parseInt(val, base);
@@ -169,7 +170,7 @@ export function evalBuiltin(fn: string, args: EvalValue[], ctx: EvalCtx): EvalVa
     }
     case 'isnull': return args[0] === null || args[0] === undefined;
     case 'isnotnull': return args[0] !== null && args[0] !== undefined;
-    case 'isint': return isNumericValue(args[0]) && Number.isInteger(Number(args[0]));
+    case 'isint': return isNumericValue(args[0]) && Number.isInteger(numArg(args[0]));
     case 'isnum': return isNumericValue(args[0]);
     // Informational functions mirror `typeof`'s type model: they report the
     // value's actual type rather than what it could be coerced to.

@@ -2,7 +2,7 @@ import type { SplunkEvent, ConfDirective, DirectiveNoOp, ValidationDiagnostic } 
 import { fieldQuotingWarning } from '../utils/fieldRef';
 import { deleteField, setField } from '../utils/fieldBag';
 import { atDirective } from '../parser/provenance';
-import type { EvalValue } from './eval/values';
+import { BOOLEAN_ASSIGNMENT_ERROR, type EvalValue } from './eval/values';
 import { parseExpression } from './eval/parser';
 import { evalNode } from './eval/evaluator';
 import { regexFailureMessage } from './eval/builtins';
@@ -131,6 +131,9 @@ export function applyEvalExpressions(
           onStubWarning: (fn) => pushStub(c.dir, fn),
           onRegexError: (fn, pattern) => pushRegex(c.dir, c.fieldName, fn, pattern),
         });
+        // Splunk refuses the assignment outright; writing "true" would show a
+        // field the real search never produces.
+        if (typeof value === 'boolean') throw new Error(BOOLEAN_ASSIGNMENT_ERROR);
         results.set(c.fieldName, { value, expression: c.dir.value.trim() });
       } catch (err) {
         pushError(c.dir, c.fieldName, err instanceof Error ? err.message : String(err));
