@@ -8,6 +8,10 @@ All notable changes to Propslab are documented here, newest first.
 
 ### Added
 
+- **Accessibility checks in the end-to-end suite** ([#372](https://github.com/Bimmiest/propslab/issues/372)). Every main view — simulator, each output tab, dictionary, command palette, settings, pipeline reference, mobile layout — is scanned with axe-core against WCAG 2.2 AA in both themes, and any violation fails CI. The contrast failures it found are fixed at the colour tokens, so the palette changes visibly: muted, accent and status colours meet 4.5:1 on every surface, dark mode's accent is lighter with dark text on accent buttons, and field highlights have a set per theme. The status bar, activity rail and welcome banner are proper landmarks, the Pipeline tab's info buttons have names, the Timestamp list scrolls from the keyboard, and field-tree rows meet the 24px target size.
+- **A bundle-size budget** ([#375](https://github.com/Bimmiest/propslab/issues/375)). The editor loads after the page instead of before it and ships only the Monaco features the app uses: Monaco's download drops from 913 to 800 kB gzip and the initial script from 162 to 146 kB. The entry chunk used to preload all of Monaco through a worker import that landed in its chunk group. CI now fails if any chunk grows past its budget.
+- **A large-input performance budget** ([#376](https://github.com/Bimmiest/propslab/issues/376)). A 20,000-event paste, through the editor's real paste path, is part of the end-to-end suite, with time budgets for the pipeline run and for switching to every output tab.
+
 - **Property-based tests for the eval parser and the PCRE→JS translation** ([#340](https://github.com/Bimmiest/propslab/issues/340)). Hand-written example tests only cover the cases someone thought of, and #332 and #337 were both combinations of casing and position that nobody had written down. fast-check (a dev-only dependency, run with a fixed seed) now generates inputs from each grammar and checks that:
   - the parser throws only its own errors;
   - keyword casing and whitespace never change a result;
