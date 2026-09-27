@@ -75,6 +75,11 @@ jobs:
         # checks and only fails later, during the deploy on main.
         run: npm run build
 
+      - name: Bundle size budget
+        # gzip size per chunk against the budgets in the script. Vite only
+        # warns past 500 kB, and a warning on every build is read by no one.
+        run: node scripts/check-bundle-size.mjs
+
       - name: Test
         # --coverage rather than a bare `vitest run`: the thresholds live in
         # vitest.config.ts, so this is the same verdict `npm run test:coverage`

@@ -5,14 +5,52 @@ import { useEffect, useRef } from 'react';
 // alone being ~7 MB). This app registers its own conf languages, so it needs
 // none of them. vite.config.ts chunks on this exact specifier.
 import * as monaco from 'monaco-editor/esm/vs/editor/editor.api';
-// The editor CONTRIBUTIONS, which editor.api does not pull in — it re-exports
-// the API surface and nothing else. Without this the providers registered in
-// splunkMonacoSetup are inert: no hover widget, no suggest widget, no folding
-// controls, and no find, multi-cursor, word/line operations or clipboard
-// commands either. Everything below is editor-side only; the language services
-// that made the barrel expensive live in editor.main and stay out.
-import 'monaco-editor/esm/vs/editor/editor.all.js';
+// The editor CONTRIBUTIONS, which editor.api does not pull in. Named one by
+// one rather than via editor.all, which also registers sticky scroll, rename,
+// code lens, parameter hints, semantic tokens and ~40 more contributions this
+// app never enables (#375). Dropping one silently disables its feature, so
+// each line names what depends on it; the e2e suite covers hover, suggest,
+// code actions, folding and find.
+import 'monaco-editor/esm/vs/editor/browser/coreCommands.js';
+import 'monaco-editor/esm/vs/editor/browser/widget/codeEditor/codeEditorWidget.js';
+// Directive/TIME_FORMAT hovers, and the marker hover on lint squiggles.
+import 'monaco-editor/esm/vs/editor/contrib/hover/browser/hoverContribution.js';
+// Directive completion; snippets back its InsertAsSnippet items.
+import 'monaco-editor/esm/vs/editor/contrib/suggest/browser/suggestController.js';
+import 'monaco-editor/esm/vs/editor/contrib/snippet/browser/snippetController2.js';
+// Quick fixes for miscased keys (splunkConfCodeActions).
+import 'monaco-editor/esm/vs/editor/contrib/codeAction/browser/codeActionContributions.js';
+// F8 / Shift+F8 between lint markers.
+import 'monaco-editor/esm/vs/editor/contrib/gotoError/browser/gotoError.js';
+// Stanza folding (splunkConfFolding).
+import 'monaco-editor/esm/vs/editor/contrib/folding/browser/folding.js';
+// Ctrl+F / Ctrl+H.
+import 'monaco-editor/esm/vs/editor/contrib/find/browser/findController.js';
+// Plain editing ergonomics users expect from any code editor.
+import 'monaco-editor/esm/vs/editor/contrib/bracketMatching/browser/bracketMatching.js';
+import 'monaco-editor/esm/vs/editor/contrib/clipboard/browser/clipboard.js';
+import 'monaco-editor/esm/vs/editor/contrib/cursorUndo/browser/cursorUndo.js';
+import 'monaco-editor/esm/vs/editor/contrib/linesOperations/browser/linesOperations.js';
+import 'monaco-editor/esm/vs/editor/contrib/multicursor/browser/multicursor.js';
+import 'monaco-editor/esm/vs/editor/contrib/wordHighlighter/browser/wordHighlighter.js';
+import 'monaco-editor/esm/vs/editor/contrib/wordOperations/browser/wordOperations.js';
+// Screen reader: Ctrl+M toggles Tab between indenting and moving focus.
+import 'monaco-editor/esm/vs/editor/contrib/toggleTabFocusMode/browser/toggleTabFocusMode.js';
+import 'monaco-editor/esm/vs/editor/common/standaloneStrings.js';
+import 'monaco-editor/esm/vs/base/browser/ui/codicons/codicon/codicon.css';
+import 'monaco-editor/esm/vs/base/browser/ui/codicons/codicon/codicon-modifiers.css';
 import type { editor } from 'monaco-editor';
+import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
+
+// Point Monaco at the locally bundled worker instead of a CDN. Set here, not in
+// main.tsx, so it rides the lazy editor chunk: the `?worker` wrapper matches
+// the monaco-editor chunk group, and importing it at startup made the entry
+// statically depend on (and wait for) the whole editor chunk.
+self.MonacoEnvironment = {
+  getWorker() {
+    return new editorWorker();
+  },
+};
 
 export interface MonacoEditorProps {
   value: string;

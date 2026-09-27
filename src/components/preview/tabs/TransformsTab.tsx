@@ -134,14 +134,15 @@ function StepSection({ title, steps, phaseColor }: { title: string; steps: StepS
 
   return (
     <div>
-      <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: phaseColor }}>
+      {/* h2: the first heading below the page's h1 (axe heading-order). */}
+      <h2 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: phaseColor }}>
         {title} ({steps.length} step{steps.length !== 1 ? 's' : ''})
         <Tooltip content={PHASE_HINTS[title]} side="right">
-          <button type="button" className="text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)] transition-colors p-0 border-none bg-transparent cursor-default opacity-70 hover:opacity-100">
+          <button type="button" aria-label={`About ${title}`} className="text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)] transition-colors p-0 border-none bg-transparent cursor-default">
             <Icon name="info" className="w-3 h-3" />
           </button>
         </Tooltip>
-      </h3>
+      </h2>
       <div className="space-y-1">
         {steps.map((step, idx) => (
           <div

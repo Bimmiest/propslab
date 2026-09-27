@@ -14,21 +14,24 @@
 
   --color-text-primary: #27272a;       /* zinc-800 — softer than near-black */
   --color-text-secondary: #52525b;     /* zinc-600 */
-  --color-text-muted: #71717a;         /* 4.6:1 on #f4f4f5 — passes WCAG AA */
+  --color-text-muted: #63636b;         /* ≥4.5:1 on every light surface, incl. #e4e4e7 */
 
   --color-border: #e4e4e7;             /* zinc-200 */
   --color-border-subtle: rgba(228,228,231,0.5);  /* for internal dividers */
   --color-border-hover: #a1a1aa;       /* zinc-400 */
 
-  /* Indigo accent — distinct from default Tailwind blue */
-  --color-accent: #6366f1;
-  --color-accent-hover: #4f46e5;
+  /* Indigo accent, -700: ≥4.5:1 as text on every surface and its own /10 tint */
+  --color-accent: #4338ca;
+  --color-accent-hover: #3730a3;
   --color-text-on-accent: #ffffff;
+  --color-text-on-error: #ffffff;
 
-  --color-error: #ef4444;
-  --color-warning: #f59e0b;
-  --color-success: #22c55e;
-  --color-info: #6366f1;
+  /* Status colours double as text on their own /10 tint, which the -500s
+     failed at 2–3.8:1; the -800s clear 4.5:1 on every surface. */
+  --color-error: #991b1b;
+  --color-warning: #92400e;
+  --color-success: #166534;
+  --color-info: #4338ca;
 }
 
 .dark {
@@ -41,22 +44,24 @@
   --color-bg-tertiary: #3f3f46;        /* zinc-700 */
 
   --color-text-primary: #f4f4f5;       /* zinc-100 */
-  --color-text-secondary: #a1a1aa;     /* zinc-400 */
-  --color-text-muted: #71717a;         /* 5.1:1 on #27272a — passes WCAG AA */
+  --color-text-secondary: #c4c4cc;     /* ≥6:1 on every dark surface */
+  --color-text-muted: #acacb4;         /* ≥4.5:1 on every dark surface, incl. #3f3f46 */
 
   --color-border: #3f3f46;             /* zinc-700 */
   --color-border-subtle: rgba(63,63,70,0.5);
   --color-border-hover: #52525b;       /* zinc-600 */
 
-  /* Softer indigo for dark mode readability */
-  --color-accent: #818cf8;
-  --color-accent-hover: #6366f1;
-  --color-text-on-accent: #ffffff;
+  /* Light enough to read as text on #3f3f46 and on its own /10 tint, which
+     makes it too light for white text: text on an accent fill is dark here. */
+  --color-accent: #b4befe;
+  --color-accent-hover: #a5b4fc;
+  --color-text-on-accent: #18181b;
+  --color-text-on-error: #18181b;
 
-  --color-error: #f87171;
+  --color-error: #fca5a5;
   --color-warning: #fbbf24;
   --color-success: #4ade80;
-  --color-info: #818cf8;
+  --color-info: #b4befe;
 }
 
 html, body, #root {

@@ -36,7 +36,7 @@ export function CopyButton({ getText }: CopyButtonProps) {
       onClick={handleCopy}
       className="flex items-center gap-1 px-2 py-1 text-xs rounded
         bg-[var(--color-bg-tertiary)] text-[var(--color-text-secondary)]
-        hover:bg-[var(--color-accent)] hover:text-white transition-colors"
+        hover:bg-[var(--color-accent)] hover:text-[var(--color-text-on-accent)] transition-colors"
       aria-label={copied ? 'Copied!' : 'Copy to clipboard'}
     >
       {copied ? (

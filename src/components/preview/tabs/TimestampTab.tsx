@@ -342,7 +342,9 @@ export function TimestampTab({ items, currentPage, eventsPerPage, inputs }: Time
       </div>
 
       {/* Events */}
-      <div className="flex-1 overflow-auto p-3 space-y-3">
+      {/* Focusable so the list scrolls from the keyboard: the cards hold no
+          focusable content of their own (axe scrollable-region-focusable). */}
+      <div className="flex-1 overflow-auto p-3 space-y-3" tabIndex={0} role="region" aria-label="Timestamp matches">
         {!config.timeFormat ? (
           <div className="flex items-center justify-center py-12 text-[var(--color-text-muted)] text-sm">
             No TIME_FORMAT configured in props.conf
@@ -402,7 +404,7 @@ function ConfigValue({ label, value, color }: { label: string; value: string | n
           {value}
         </code>
       ) : (
-        <span className="italic opacity-60">not set</span>
+        <span className="italic">not set</span>
       )}
     </span>
   );
@@ -485,7 +487,7 @@ function TimestampEventCard({
             // event's text, so it is warned about rather than shown as a match.
             <>
               <span
-                className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-warning)]/20 text-[var(--color-warning)] font-medium"
+                className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-warning)]/10 text-[var(--color-warning)] font-medium"
                 title="This _time was not read from the event text"
               >
                 {fallbackLabel}
@@ -497,11 +499,11 @@ function TimestampEventCard({
               )}
             </>
           ) : parsedTime ? (
-            <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-success)]/20 text-[var(--color-success)] font-medium font-mono">
+            <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-success)]/10 text-[var(--color-success)] font-medium font-mono">
               {parsedTime.toISOString()}
             </span>
           ) : (
-            <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-error)]/20 text-[var(--color-error)] font-medium">
+            <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-error)]/10 text-[var(--color-error)] font-medium">
               {config.timeFormat ? 'No match' : 'No format'}
             </span>
           )}
@@ -529,7 +531,7 @@ function TimestampOverlay({ raw, probe, config }: { raw: string; probe: Timestam
         const laEnd = prefix.lookaheadEnd;
         const segments: React.ReactNode[] = [];
         if (pStart > 0) {
-          segments.push(<span key="pre" className="text-[var(--color-text-primary)] opacity-40">{raw.substring(0, pStart)}</span>);
+          segments.push(<span key="pre" className="text-[var(--color-text-muted)]">{raw.substring(0, pStart)}</span>);
         }
         segments.push(
           <span key="prefix" style={{ backgroundColor: tint(PREFIX_COLOR, 19), borderBottom: `2px solid ${PREFIX_COLOR}` }} className="rounded-sm px-0.5">
@@ -545,12 +547,12 @@ function TimestampOverlay({ raw, probe, config }: { raw: string; probe: Timestam
           <span key="la-marker" style={{ color: LOOKAHEAD_COLOR, fontWeight: 'bold' }}>]</span>
         );
         if (laEnd < raw.length) {
-          segments.push(<span key="post" className="text-[var(--color-text-primary)] opacity-40">{raw.substring(laEnd)}</span>);
+          segments.push(<span key="post" className="text-[var(--color-text-muted)]">{raw.substring(laEnd)}</span>);
         }
         return <>{segments}</>;
       }
     }
-    return <span className="text-[var(--color-text-primary)] opacity-60">{raw}</span>;
+    return <span className="text-[var(--color-text-secondary)]">{raw}</span>;
   }
 
   const segments: React.ReactNode[] = [];
@@ -559,7 +561,7 @@ function TimestampOverlay({ raw, probe, config }: { raw: string; probe: Timestam
   // Before prefix
   if (result.prefixStart > cursor) {
     segments.push(
-      <span key="pre-prefix" className="text-[var(--color-text-primary)] opacity-40">
+      <span key="pre-prefix" className="text-[var(--color-text-muted)]">
         {raw.substring(cursor, result.prefixStart)}
       </span>
     );
@@ -618,7 +620,7 @@ function TimestampOverlay({ raw, probe, config }: { raw: string; probe: Timestam
   // After lookahead
   if (cursor < raw.length) {
     segments.push(
-      <span key="post" className="text-[var(--color-text-primary)] opacity-40">
+      <span key="post" className="text-[var(--color-text-muted)]">
         {raw.substring(cursor)}
       </span>
     );

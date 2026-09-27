@@ -30,7 +30,7 @@ export function FieldTreeNode({
 
   const row = (
       <div
-        className="flex items-center gap-1 px-1.5 py-0.5 rounded cursor-pointer select-none group"
+        className="flex items-center gap-1 px-1.5 py-0.5 min-h-6 rounded cursor-pointer select-none group"
         style={{
           backgroundColor: pinned ? node.color + '20' : (active && focused ? node.color + '15' : 'transparent'),
           borderLeft: active && focused ? `2px solid ${node.color}` : '2px solid transparent',

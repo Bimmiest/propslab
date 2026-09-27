@@ -79,7 +79,7 @@ export function Header() {
                 'flex items-center justify-center w-8 h-8 rounded-md border-none outline-none',
                 'focus-visible:ring-2 transition-colors cursor-pointer',
                 settingsOpen
-                  ? 'bg-[var(--color-accent)] text-white'
+                  ? 'bg-[var(--color-accent)] text-[var(--color-text-on-accent)]'
                   : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-tertiary)] hover:text-[var(--color-text-primary)]',
               ].join(' ')}
             >
@@ -95,7 +95,7 @@ export function Header() {
                 'flex items-center justify-center w-8 h-8 rounded-md border-none outline-none',
                 'focus-visible:ring-2 transition-colors cursor-pointer',
                 helpOpen
-                  ? 'bg-[var(--color-accent)] text-white'
+                  ? 'bg-[var(--color-accent)] text-[var(--color-text-on-accent)]'
                   : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-tertiary)] hover:text-[var(--color-text-primary)]',
               ].join(' ')}
             >

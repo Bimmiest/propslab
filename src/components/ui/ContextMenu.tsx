@@ -61,7 +61,7 @@ export function ContextMenuItem({
       disabled={disabled}
       onSelect={onSelect}
       className="flex items-center gap-2 mx-1 px-2 py-1.5 rounded text-xs cursor-pointer outline-none select-none
-        text-[var(--color-text-primary)] data-[highlighted]:bg-[var(--color-accent)] data-[highlighted]:text-white
+        text-[var(--color-text-primary)] data-[highlighted]:bg-[var(--color-accent)] data-[highlighted]:text-[var(--color-text-on-accent)]
         data-[disabled]:opacity-40 data-[disabled]:cursor-not-allowed"
     >
       {children}

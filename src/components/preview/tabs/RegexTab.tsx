@@ -5,6 +5,7 @@ import { useRegexMatch } from '../../../hooks/useRegexMatch';
 import type { RegexMatchInfo } from '../../../engine/regexMatch';
 import type { EnrichedEvent } from '../PreviewPanel';
 import { fieldColorAt } from './shared/fieldColors';
+import { useAppStore } from '../../../store/useAppStore';
 import { useApplyDirective } from './shared/useApplyDirective';
 
 // ─── Regex Reference Data ────────────────────────────────────────────────────
@@ -109,10 +110,10 @@ function extractNamedGroups(pattern: string): string[] {
 }
 
 /** Assign a color from FIELD_COLORS to each named group */
-function buildGroupColorMap(groups: string[]): Map<string, string> {
+function buildGroupColorMap(groups: string[], theme: 'light' | 'dark'): Map<string, string> {
   const map = new Map<string, string>();
   groups.forEach((name, idx) => {
-    map.set(name, fieldColorAt(idx));
+    map.set(name, fieldColorAt(idx, theme));
   });
   return map;
 }
@@ -175,7 +176,8 @@ export function RegexTab({ items, allEvents, currentPage, eventsPerPage }: Regex
   // `status` below), so a group's colour in a card always agrees with the
   // legend beside it (#315).
   const namedGroups = useMemo(() => extractNamedGroups(pattern), [pattern]);
-  const groupColorMap = useMemo(() => buildGroupColorMap(namedGroups), [namedGroups]);
+  const theme = useAppStore((s) => s.theme);
+  const groupColorMap = useMemo(() => buildGroupColorMap(namedGroups, theme), [namedGroups, theme]);
 
   const extractDirective = useMemo(() => {
     if (!pattern || validationError) return null;
@@ -666,12 +668,12 @@ function RegexEventCard({
         <span className="text-xs font-medium text-[var(--color-text-muted)]">Event #{globalIdx}</span>
         <div className="flex items-center gap-2">
           {hasPattern && matchInfo && (
-            <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-success)]/20 text-[var(--color-success)] font-medium">
+            <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-success)]/10 text-[var(--color-success)] font-medium">
               Matched{capturedFields.length > 0 && ` \u2013 ${capturedFields.length} group${capturedFields.length !== 1 ? 's' : ''}`}
             </span>
           )}
           {hasPattern && !matchInfo && (
-            <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-error)]/20 text-[var(--color-error)] font-medium">
+            <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-error)]/10 text-[var(--color-error)] font-medium">
               No match
             </span>
           )}
@@ -730,7 +732,7 @@ function RegexHighlightedRaw({
     // Text before match
     if (fullMatchStart > 0) {
       result.push(
-        <span key="pre" className="text-[var(--color-text-primary)] opacity-40">
+        <span key="pre" className="text-[var(--color-text-muted)]">
           {raw.substring(0, fullMatchStart)}
         </span>,
       );
@@ -806,7 +808,7 @@ function RegexHighlightedRaw({
     // Text after match
     if (fullMatchEnd < raw.length) {
       result.push(
-        <span key="post" className="text-[var(--color-text-primary)] opacity-40">
+        <span key="post" className="text-[var(--color-text-muted)]">
           {raw.substring(fullMatchEnd)}
         </span>,
       );
@@ -816,7 +818,7 @@ function RegexHighlightedRaw({
   }, [raw, matchInfo, groupColorMap]);
 
   if (!segments) {
-    return <span className="text-[var(--color-text-primary)] opacity-60">{raw}</span>;
+    return <span className="text-[var(--color-text-secondary)]">{raw}</span>;
   }
   return <>{segments}</>;
 }

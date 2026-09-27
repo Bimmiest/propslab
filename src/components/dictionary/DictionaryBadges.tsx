@@ -8,7 +8,8 @@ const TONE_COLORS: Record<Tone, string> = {
   // pipeline reference drawer already uses for the two phases.
   index: 'var(--color-warning)',
   search: 'var(--color-accent)',
-  neutral: 'var(--color-text-muted)',
+  // Secondary, not muted: muted has no margin left for the tint beneath it.
+  neutral: 'var(--color-text-secondary)',
   danger: 'var(--color-error)',
 };
 
@@ -33,7 +34,7 @@ export function Chip({
       // `var(--color-…)` references, and appending hex digits to a var() call
       // produces a declaration the browser drops — which is why these pills
       // rendered as bare coloured text with no fill.
-      style={{ backgroundColor: `color-mix(in srgb, ${color} 15%, transparent)`, color }}
+      style={{ backgroundColor: `color-mix(in srgb, ${color} 10%, transparent)`, color }}
     >
       {children}
     </span>

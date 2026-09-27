@@ -311,7 +311,7 @@ function registerSplunkConfLanguage() {
     colors: {
       'editor.background': '#ffffff',        /* --color-bg-elevated */
       'editor.foreground': '#27272a',
-      'editorLineNumber.foreground': '#a1a1aa',
+      'editorLineNumber.foreground': '#63636b',  /* --color-text-muted */
       'editorLineNumber.activeForeground': '#27272a',
       'editor.selectionBackground': '#6366f130',
       'editor.lineHighlightBackground': '#f4f4f5',  /* --color-bg-secondary */
@@ -324,16 +324,16 @@ function registerSplunkConfLanguage() {
     base: 'vs-dark',
     inherit: true,
     rules: [
-      { token: 'comment', foreground: '6a9955', fontStyle: 'italic' },
+      { token: 'comment', foreground: '86b86f', fontStyle: 'italic' },
       { token: 'tag', foreground: 'c586c0' },
       { token: 'tag.bracket', foreground: 'c586c0' },
-      { token: 'keyword', foreground: '818cf8' },      /* indigo-400 */
-      { token: 'keyword.other', foreground: '818cf8' },
+      { token: 'keyword', foreground: 'a5b4fc' },      /* indigo-300; 400 was 4.4:1 (#372) */
+      { token: 'keyword.other', foreground: 'a5b4fc' },
       { token: 'variable.name', foreground: 'fb923c' }, /* orange-400 */
       { token: 'delimiter', foreground: 'e4e4e7' },
-      { token: 'string', foreground: 'a5b4fc' },        /* indigo-300 */
+      { token: 'string', foreground: 'c7d2fe' },        /* indigo-200 */
       { token: 'number', foreground: '34d399' },        /* emerald-400 */
-      { token: 'constant.language', foreground: '818cf8' },
+      { token: 'constant.language', foreground: 'a5b4fc' },
       { token: 'regexp', foreground: 'f87171' },        /* red-400 */
       { token: 'regexp.escape', foreground: 'f87171', fontStyle: 'bold' },
       { token: 'type', foreground: '2dd4bf' },          /* teal-400 */
@@ -342,12 +342,12 @@ function registerSplunkConfLanguage() {
       { token: 'support.function', foreground: 'fbbf24' },
       { token: 'operator', foreground: 'e4e4e7' },
       { token: 'variable', foreground: '93c5fd' },
-      { token: 'escape', foreground: '6a9955', fontStyle: 'bold' },
+      { token: 'escape', foreground: '86b86f', fontStyle: 'bold' },
     ],
     colors: {
       'editor.background': '#303036',        /* --color-bg-elevated */
       'editor.foreground': '#f4f4f5',
-      'editorLineNumber.foreground': '#71717a',
+      'editorLineNumber.foreground': '#acacb4',  /* --color-text-muted */
       'editorLineNumber.activeForeground': '#f4f4f5',
       'editor.selectionBackground': '#818cf850',
       'editor.inactiveSelectionBackground': '#818cf830',

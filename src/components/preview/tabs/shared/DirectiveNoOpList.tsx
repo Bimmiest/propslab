@@ -64,7 +64,7 @@ function NoOpRow({ group, totalEvents }: { group: GroupedNoOp; totalEvents: numb
             <ul className="mt-1 space-y-0.5 pl-3">
               {group.reasons.slice(1).map((reason) => (
                 <li key={reason.text} className="text-xs text-[var(--color-text-muted)]">
-                  {reason.text} <span className="opacity-70">({reason.events} events)</span>
+                  {reason.text} <span>({reason.events} events)</span>
                 </li>
               ))}
             </ul>

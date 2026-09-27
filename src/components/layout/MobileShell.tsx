@@ -3,7 +3,7 @@ import { RawPanel } from '../raw/RawPanel';
 import { PropsConfEditor } from '../editor/PropsConfEditor';
 import { TransformsConfEditor } from '../editor/TransformsConfEditor';
 import { PreviewPanel } from '../preview/PreviewPanel';
-import { DictionaryView } from '../dictionary/DictionaryView';
+import { DictionaryView } from './lazyViews';
 import { ErrorBoundary } from '../ui/ErrorBoundary';
 import { Icon } from '../ui/Icon';
 import type { IconName } from '../ui/Icon';

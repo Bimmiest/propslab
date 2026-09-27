@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { getField, hasField } from '../../../engine/utils/fieldBag';
 import type { EnrichedEvent } from '../PreviewPanel';
 import { fieldColorAt, isFieldActive, isAnyFocused, useFieldFocus } from './shared/useFieldFocus';
+import { useAppStore } from '../../../store/useAppStore';
 import { FieldEventCard } from './shared/FieldEventCard';
 import { FieldSidebar } from './shared/FieldSidebar';
 import { FieldSplitLayout } from './shared/FieldSplitLayout';
@@ -85,6 +86,7 @@ export function HighlightedTab({ items, allEvents, currentPage, eventsPerPage }:
     return containers;
   }, [allEvents]);
 
+  const theme = useAppStore((s) => s.theme);
   const fieldColorMap = useMemo(() => {
     const map = new Map<string, string>();
     let colorIdx = 0;
@@ -104,13 +106,13 @@ export function HighlightedTab({ items, allEvents, currentPage, eventsPerPage }:
           (includeAuto && isAuto) || (includeManual && isManual) || (includeCalc && isCalc);
         if (!inSelectedFilter) continue;
         if (!map.has(key)) {
-          map.set(key, fieldColorAt(colorIdx));
+          map.set(key, fieldColorAt(colorIdx, theme));
           colorIdx++;
         }
       }
     }
     return map;
-  }, [allEvents, autoFields, manualFields, calcFields, fieldFilter]);
+  }, [allEvents, autoFields, manualFields, calcFields, fieldFilter, theme]);
 
   const highlightColorMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -290,7 +292,7 @@ export function HighlightedTab({ items, allEvents, currentPage, eventsPerPage }:
                 }}
               >
                 {label}
-                {count > 0 && <span className="ml-1 opacity-70">({count})</span>}
+                {count > 0 && <span className="ml-1">({count})</span>}
               </button>
             ))}
           </div>
@@ -386,17 +388,17 @@ export function HighlightedTab({ items, allEvents, currentPage, eventsPerPage }:
                 badges={
                   <>
                     {autoCount > 0 && (
-                      <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-warning)]/15 text-[var(--color-warning)]">
+                      <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-warning)]/10 text-[var(--color-warning)]">
                         {autoCount} auto
                       </span>
                     )}
                     {manualCount > 0 && (
-                      <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-accent)]/15 text-[var(--color-accent)]">
+                      <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-accent)]/10 text-[var(--color-accent)]">
                         {manualCount} manual
                       </span>
                     )}
                     {calcCount > 0 && (
-                      <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-success)]/15 text-[var(--color-success)]">
+                      <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-success)]/10 text-[var(--color-success)]">
                         {calcCount} calc
                       </span>
                     )}
