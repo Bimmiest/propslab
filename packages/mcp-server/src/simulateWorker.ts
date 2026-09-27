@@ -10,28 +10,32 @@
  */
 import './v8Flags';
 import { parentPort, workerData } from 'node:worker_threads';
+import { lintConfigs } from '../../../src/engine/configLint';
 import { runPipeline } from '../../../src/engine/pipeline';
 import { parseConf } from '../../../src/engine/parser/confParser';
 import { mergeDirectives, resolveStanzasForEvent } from '../../../src/engine/parser/stanzaMatcher';
-import type { ConfDirective, ConfStanza, EventMetadata } from '../../../src/engine/types';
+import type { ConfDirective, ConfStanza } from '../../../src/engine/types';
 import type {
   ExplainDirective,
   ExplainRequest,
   ExplainResponse,
   ExplainStanza,
   SimulateRequest,
+  SimulateResponse,
   ValidateRequest,
+  ValidateResponse,
   WorkerRequest,
   WorkerResponse,
 } from './protocol';
+import { lintRegexDirectives } from './regexLint';
+import { serializeSimulation } from './serialize';
 
 /**
- * A sourcetype no real conf should match, so a validate run exercises the
- * config-level checks without dragging event-level processing into it.
+ * Serialized here rather than on the server's thread: the raw ProcessingResult
+ * grows with the event count, and posting it whole put all of it on the main
+ * thread, which has no heap limit, before anything was trimmed (#351).
  */
-export const VALIDATE_SOURCETYPE = '__propslab_mcp_validate__';
-
-function handleSimulate(request: SimulateRequest) {
+function handleSimulate(request: SimulateRequest): SimulateResponse {
   const { result, diagnostics } = runPipeline(
     request.raw,
     request.metadata,
@@ -39,36 +43,26 @@ function handleSimulate(request: SimulateRequest) {
     request.transformsConf,
     { perEventPipeline: request.perEventPipeline, captureOffsets: request.captureOffsets },
   );
-  return { result, diagnostics };
+  return serializeSimulation(result, diagnostics, {
+    maxEvents: request.maxEvents,
+    includeSnapshots: request.includeSnapshots,
+  });
 }
 
 /**
- * The config-level diagnostics (parse errors, unknown/mis-cased keys, missing
- * transform references, inert settings, type mismatches, unsimulated-directive
- * boundaries) all live inside `runPipeline` — issue #202 rules out engine
- * changes, so rather than fork that logic, run the pipeline over a one-line
- * dummy sample under a sourcetype nothing matches and keep only the
- * diagnostics that are about the conf text itself.
+ * The same parse and config lint `runPipeline` runs first, plus a compile of
+ * every stanza's regexes. No pipeline run: validate used to push a dummy
+ * event through one, which reported a bad regex only in stanzas that event
+ * happened to match, and let diagnostics about the dummy event itself out
+ * through `[default]` and `[host::…]` stanzas (#360).
  */
-function handleValidate(request: ValidateRequest) {
-  const metadata: EventMetadata = {
-    index: 'main',
-    host: 'localhost',
-    source: '',
-    sourcetype: VALIDATE_SOURCETYPE,
-  };
-  const { diagnostics } = runPipeline(
-    'validate\n',
-    metadata,
-    request.propsConf,
-    request.transformsConf,
-    { perEventPipeline: false, captureOffsets: false },
-  );
-  return {
-    diagnostics: diagnostics.filter(
-      (d) => d.file !== 'raw' && !d.message.includes(VALIDATE_SOURCETYPE),
-    ),
-  };
+function handleValidate(request: ValidateRequest): ValidateResponse {
+  const propsConf = parseConf(request.propsConf, 'props.conf');
+  const transformsConf = parseConf(request.transformsConf, 'transforms.conf');
+  const diagnostics = [...propsConf.errors, ...transformsConf.errors];
+  lintConfigs(propsConf, transformsConf, diagnostics);
+  diagnostics.push(...lintRegexDirectives(propsConf, transformsConf));
+  return { diagnostics };
 }
 
 function toExplainDirective(d: ConfDirective): ExplainDirective {

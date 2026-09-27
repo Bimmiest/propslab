@@ -61,6 +61,13 @@ on:
 # with a green push CI at the moment it starts, not the commit that happened to
 # trigger it. Whichever run survives, it ships the newest green bundle.
 #
+# Only runs that can deploy join the queue (#361). The group is evaluated
+# before the build job's `if`, so a workflow_run that job is bound to skip —
+# CI on a pull request (a fork's branch can be called `main`), CI's weekly
+# schedule, a manual CI dispatch, a failed CI run — used to join it anyway,
+# where it could displace a pending real deploy and then deploy nothing. Such
+# a run now gets a group keyed on its own run id, so it contends with no one.
+#
 # The group stays at workflow level rather than moving onto a job when build
 # and deploy split (#333), so it still holds a whole run, build and deploy
 # together. Per-job groups would let a newer run build and resolve while an
@@ -84,7 +91,8 @@ on:
 # displace nothing but another paused automatic run, and its build job's `if`
 # skips it, so it deploys nothing either. Dispatches keep the shared group and
 # are not affected by the variable, so rollback while paused is the intended
-# flow. With it unset, every run shares one group, exactly as described above.
+# flow. With it unset, every run that can deploy shares one group, exactly as
+# described above.
 #
 # What that guarantees: a dispatch made *after* DEPLOY_PAUSED is set to 'true'
 # is never cancelled by, and never overwritten by, an automatic deploy, for as
@@ -103,8 +111,14 @@ on:
 #      DEPLOY_PAUSED (or set it to anything but `true`), then dispatch with
 #      `sha` empty, or wait for the next push, to resume automatic deploys.
 concurrency:
+  # The first branch must mirror the build job's `if` for workflow_run: any
+  # run that `if` would skip on event or conclusion goes in its own group.
   group: >-
-    ${{ github.event_name == 'workflow_run' && vars.DEPLOY_PAUSED == 'true' &&
+    ${{ github.event_name == 'workflow_run' &&
+    (github.event.workflow_run.event != 'push' ||
+    github.event.workflow_run.conclusion != 'success') &&
+    format('deploy-static-web-app-skip-{0}', github.run_id) ||
+    github.event_name == 'workflow_run' && vars.DEPLOY_PAUSED == 'true' &&
     'deploy-static-web-app-paused' || 'deploy-static-web-app' }}
   cancel-in-progress: false
 

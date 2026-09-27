@@ -2,18 +2,14 @@
  * Message shapes between the server process and the sandbox worker.
  *
  * Every operation that EXECUTES conf-derived regexes — simulate (the full
- * pipeline), validate (a pipeline run over a dummy sample to surface the
- * config-level diagnostics), explain (stanza matching runs `[source::…]` /
- * `[host::…]` patterns) — crosses this boundary and runs inside a worker
- * thread the parent can terminate. Only `lookup_directive`, which reads the
- * static registry and executes nothing, stays in-process.
+ * pipeline), explain (stanza matching runs `[source::…]` / `[host::…]`
+ * patterns) — crosses this boundary and runs inside a worker thread the
+ * parent can terminate. Validate executes none, but parses and compiles the
+ * whole conf, so it runs there too, under the same time and heap limits.
+ * Only `lookup_directive`, which reads the static registry, stays in-process.
  */
-import type {
-  ConfInput,
-  EventMetadata,
-  ProcessingResult,
-  ValidationDiagnostic,
-} from '../../../src/engine/types';
+import type { ConfInput, EventMetadata, ValidationDiagnostic } from '../../../src/engine/types';
+import type { SerializedSimulation } from './serialize';
 
 export interface SimulateRequest {
   op: 'simulate';
@@ -23,6 +19,9 @@ export interface SimulateRequest {
   transformsConf: ConfInput;
   perEventPipeline: boolean;
   captureOffsets: boolean;
+  /** Serialization happens in the worker, so the result it posts is bounded. */
+  maxEvents: number;
+  includeSnapshots: boolean;
 }
 
 export interface ValidateRequest {
@@ -41,10 +40,7 @@ export interface ExplainRequest {
 
 export type WorkerRequest = SimulateRequest | ValidateRequest | ExplainRequest;
 
-export interface SimulateResponse {
-  result: ProcessingResult;
-  diagnostics: ValidationDiagnostic[];
-}
+export type SimulateResponse = SerializedSimulation;
 
 export interface ValidateResponse {
   diagnostics: ValidationDiagnostic[];

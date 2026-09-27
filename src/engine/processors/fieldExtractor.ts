@@ -190,7 +190,7 @@ export function extractFields(
   });
 }
 
-function parseExtractValue(value: string): { pattern: string; sourceField?: string } {
+export function parseExtractValue(value: string): { pattern: string; sourceField?: string } {
   const trimmed = value.trim();
   // Greedy match: consume as much as possible before the last " in <field>" suffix.
   // This avoids mis-splitting on regex bodies that contain the word "in". The source

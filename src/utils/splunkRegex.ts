@@ -1022,16 +1022,19 @@ export function safeRegex(pattern: string, flags?: string): RegExp | null {
 export function validateRegex(pattern: string): string | null {
   const { source, flags, error } = translatePcreToJs(pattern);
   if (error !== undefined) return error;
-  if (hasReDoSRisk(source)) {
-    return 'Pattern contains a structure prone to catastrophic backtracking (ReDoS risk).';
-  }
+  // Compiled first: the structural scanner assumes the worst of a pattern it
+  // cannot parse, so an unclosed group was reported as a ReDoS risk rather
+  // than as the syntax error it is. Compiling never executes the pattern.
   try {
     new RegExp(source, flags);
-    return null;
   } catch (e: unknown) {
     if (e instanceof SyntaxError) {
       return e.message;
     }
     return String(e);
   }
+  if (hasReDoSRisk(source)) {
+    return 'Pattern contains a structure prone to catastrophic backtracking (ReDoS risk).';
+  }
+  return null;
 }

@@ -147,7 +147,12 @@ function parseTransliterate(
   };
 }
 
-function parseSedExpression(
+/**
+ * Parse and compile one SEDCMD value, pushing a diagnostic for anything that
+ * stops it applying. Exported for static lint (the MCP validate tool), which
+ * checks every stanza's SEDCMDs whether or not a sample would reach them.
+ */
+export function parseSedExpression(
   value: string,
   dir?: ConfDirective,
   diagnostics?: ValidationDiagnostic[],

@@ -10,6 +10,7 @@ import {
   validateInputShape,
 } from '../tools';
 import { z } from 'zod';
+import { MAX_RESPONSE_CHARS } from '../serialize';
 import { collectRegexSuspects } from '../suspects';
 
 /**
@@ -70,6 +71,42 @@ describe('simulate', () => {
     expect(out.truncationNote).toMatch(/max_events/);
   });
 
+  it('keeps the response bounded however many events the sample breaks into (#351)', async () => {
+    // 100k one-character events used to return every event's trace steps in
+    // processingSteps — some 80 MB — whatever max_events said.
+    const result = await handleSimulate(
+      simulateArgs({
+        raw: 'a\n'.repeat(100_000),
+        props_conf: '[access_log]\nSHOULD_LINEMERGE = false\n',
+        max_events: 1,
+      }),
+      WORKER_PATH,
+    );
+    expect(result.content[0].text.length).toBeLessThan(10_000);
+    const out = payload(result);
+    expect(out.eventCount).toBe(100_000);
+    expect(out.returnedEvents).toBe(1);
+    expect(out.processingSteps).toEqual(out.events[0].processingTrace);
+    expect(out.truncationNote).toMatch(/processingSteps/);
+  }, 20_000);
+
+  it('holds the response under the size cap when max_events would exceed it (#351)', async () => {
+    // 300 events of 2,500 characters, each with a SEDCMD step carrying
+    // before/after snapshots of it: several megabytes if returned whole.
+    const raw = `${'b'.repeat(2_500)}\n`.repeat(300);
+    const props = ['[access_log]', 'SHOULD_LINEMERGE = false', 'SEDCMD-x = s/b/c/g'].join('\n');
+    const result = await handleSimulate(
+      simulateArgs({ raw, props_conf: props, max_events: 500, include_snapshots: true }),
+      WORKER_PATH,
+    );
+    expect(result.content[0].text.length).toBeLessThanOrEqual(MAX_RESPONSE_CHARS);
+    const out = payload(result);
+    expect(out.eventCount).toBe(300);
+    expect(out.returnedEvents).toBeGreaterThan(0);
+    expect(out.returnedEvents).toBeLessThan(300);
+    expect(out.truncationNote).toMatch(/capped at/);
+  }, 20_000);
+
   it('strips trace snapshots unless include_snapshots is set', async () => {
     const lean = payload(await handleSimulate(simulateArgs(), WORKER_PATH));
     for (const step of lean.events[0].processingTrace) {
@@ -127,6 +164,55 @@ describe('validate', () => {
     expect(messages.some((m: string) => m.match(/boolean/i))).toBe(true);
     // Nothing event-level leaks out of the dummy-sample run.
     expect(out.diagnostics.every((d: { file: string }) => d.file !== 'raw')).toBe(true);
+  });
+
+  // #360: a bad regex was reported only in stanzas the dummy event matched.
+  it('reports a regex that will not compile in any stanza, matched or not', async () => {
+    const props = [
+      '[foo]',
+      'EXTRACT-a = (unclosed',
+      'EXTRACT-ok = (?P<n>\\d+) in some_field',
+      'LINE_BREAKER = ([\\r\\n]+)',
+      'SEDCMD-s = s/[/x/g',
+      'TRANSFORMS-t = t',
+    ].join('\n');
+    const transforms = ['[t]', 'REGEX = (a+)+b', 'FORMAT = f::$1', 'WRITE_META = true'].join('\n');
+    const out = payload(
+      await handleValidate(
+        { props_conf: props, transforms_conf: transforms, timeout_ms: 10_000 },
+        WORKER_PATH,
+      ),
+    );
+    const byKey = (key: string) =>
+      out.diagnostics.filter((d: { directiveKey?: string }) => d.directiveKey === key);
+    expect(byKey('EXTRACT-a')).toHaveLength(1);
+    expect(byKey('EXTRACT-a')[0]).toMatchObject({ level: 'error', file: 'props.conf', line: 2 });
+    expect(byKey('EXTRACT-a')[0].message).toMatch(/Unterminated group/);
+    expect(byKey('SEDCMD-s')).toHaveLength(1);
+    const regex = byKey('REGEX');
+    expect(regex).toHaveLength(1);
+    expect(regex[0]).toMatchObject({ file: 'transforms.conf', line: 2 });
+    expect(regex[0].message).toMatch(/ReDoS/);
+    // Valid patterns, including an EXTRACT's `in <field>` suffix, pass.
+    expect(byKey('EXTRACT-ok')).toEqual([]);
+    expect(byKey('LINE_BREAKER')).toEqual([]);
+  });
+
+  it('says nothing about a dummy event in stanzas that match every event', async () => {
+    // [default] and [host::localhost] used to match the internal dummy sample,
+    // so its processing leaked out as diagnostics about text nobody sent.
+    // This conf drew "replaced the event and dropped 7 of 8 characters".
+    const props = ['[default]', 'TRANSFORMS-mask = mask', '[host::localhost]', 'SEDCMD-x = s/v/w/'].join(
+      '\n',
+    );
+    const transforms = ['[mask]', 'REGEX = (v)', 'FORMAT = $1', 'DEST_KEY = _raw'].join('\n');
+    const out = payload(
+      await handleValidate(
+        { props_conf: props, transforms_conf: transforms, timeout_ms: 10_000 },
+        WORKER_PATH,
+      ),
+    );
+    expect(out.diagnostics).toEqual([]);
   });
 
   it('flags transforms settings that are inert in the phase they are used in', async () => {
