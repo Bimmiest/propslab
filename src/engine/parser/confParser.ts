@@ -278,6 +278,20 @@ function parseLayer(
   for (const [i, line] of lines.entries()) {
     const lineNumber = i + 1; // 1-based
 
+    // --- Continuation lines (Splunk: previous directive value ends with a single \) ---
+    // Checked before anything else: the line after a continuation belongs to the
+    // value whatever it looks like, which is also how the editor's linter reads
+    // it. Classifying the line first skipped a `#` line and appended the NEXT
+    // directive instead, and left a value followed by a blank line with its
+    // backslash still on.
+    if (lastDirective && endsWithContinuation(lastDirective.value)) {
+      // Drop the continuation backslash and append the next line verbatim — Splunk
+      // preserves the continuation line's leading whitespace (no trimStart). A
+      // blank line appends nothing, so the continuation simply ends there.
+      lastDirective.value = lastDirective.value.slice(0, -1) + line;
+      continue;
+    }
+
     // --- Comments ---
     if (COMMENT_RE.test(line)) {
       continue;
@@ -285,8 +299,6 @@ function parseLayer(
 
     // --- Blank lines ---
     if (BLANK_RE.test(line)) {
-      // Reset continuation tracking -- a blank line terminates continuation.
-      lastDirective = null;
       continue;
     }
 
@@ -307,14 +319,6 @@ function parseLayer(
         ...from,
       };
       lastDirective = null;
-      continue;
-    }
-
-    // --- Continuation lines (Splunk: previous directive value ends with a single \) ---
-    if (lastDirective && endsWithContinuation(lastDirective.value)) {
-      // Drop the continuation backslash and append the next line verbatim — Splunk
-      // preserves the continuation line's leading whitespace (no trimStart).
-      lastDirective.value = lastDirective.value.slice(0, -1) + line;
       continue;
     }
 

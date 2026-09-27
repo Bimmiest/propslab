@@ -27,6 +27,14 @@ All notable changes to Propslab are documented here, newest first.
 
 ### Fixed
 
+Entries #351–#366 are the fifth review's findings. Engine tests are derived from the documentation and say so, and the Splunk 10.4.0 fixtures still pass.
+
+- **BREAK_ONLY_BEFORE_DATE recognises dates by the stanza's own timestamp settings** ([#352](https://github.com/Bimmiest/propslab/issues/352)). Only the built-in date patterns counted, so a stanza with `TIME_FORMAT = %d.%m.%Y %H:%M:%S` or `%Y%m%d%H%M%S` merged every line into one event. When TIME_FORMAT or TIME_PREFIX is set, a line now starts an event if that format matches and parses where the extractor would look (after TIME_PREFIX, within MAX_TIMESTAMP_LOOKAHEAD). Stanzas with neither behave as before.
+- **Automatic timestamp recognition keeps the zone after long fractions and after a space** ([#353](https://github.com/Bimmiest/propslab/issues/353)). `2025-12-31T10:00:00.123456+05:00` and `2025-12-31 10:00:00 +0500` were read as UTC, because the zone was only recognised after exactly three fraction digits and never after a space. Fractions of 1–9 digits with `Z`, an attached offset or a space-separated offset now keep their zone. A zone that runs into a following word (`10:00:00 Zookeeper`) is no longer taken as `Z`.
+- **A backslash continuation takes the next line whatever it contains** ([#354](https://github.com/Bimmiest/propslab/issues/354)). A `#` line after `REGEX = foo\` was skipped, which glued the following directive onto the value and lost it; a blank line left the value ending in its backslash. The parser now appends the next line before classifying it, as the editor's linter already did.
+- **Yearless timestamps take the most recent year, from UTC** ([#356](https://github.com/Bimmiest/propslab/issues/356)). `Dec 31 23:59:00` read on 1 January landed eleven months in the future; it now falls in the previous year, following the syslog convention. The year also came from the host's local zone, so the same injected `now` could give different years on different machines. `%b`/`%B` and `%a`/`%A` accept both full and abbreviated names, as POSIX strptime does. The Truncation stage help now says TRUNCATE caps each line, not the event.
+- **Hitting the JSON depth limit no longer drops the rest of the event** ([#357](https://github.com/Bimmiest/propslab/issues/357)). One over-deep subtree stopped the whole flatten, so `{"a":…,"deep":{…12 levels…},"status":"ok"}` yielded only `a`. Only the part past the limit is skipped now, for `KV_MODE = json` and `INDEXED_EXTRACTIONS = json` alike.
+
 Entries #341 and #343–#349 are the rest of the fourth review's findings. Engine tests are derived from the documentation and say so, and the Splunk 10.4.0 fixtures still pass.
 
 - **Eval comparisons with a missing field give NULL, not a comparison against `""`** ([#343](https://github.com/Bimmiest/propslab/issues/343)).

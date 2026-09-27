@@ -10,7 +10,8 @@ import type { ConfDirective, EventMetadata, SplunkEvent, ValidationDiagnostic } 
 import { safeRegex, translatePcreToJs } from '../../utils/splunkRegex';
 import { atDirective } from '../parser/provenance';
 import { effectiveDirective, parseSplunkBool } from '../utils/directiveValues';
-import { resolveLookahead } from './timestampExtractor';
+import { parseTimestampDetailed } from '../../utils/strftime';
+import { matchTimeFormat, resolveLookahead, timeFormatRegex } from './timestampExtractor';
 
 const XML_EXTRACTIONS = new Set(['xml', 'xmlkv', 'xmlkv-winevt']);
 
@@ -97,6 +98,53 @@ function lineHasDate(line: string, lookahead: number): boolean {
   // a date deep inside a continuation line (a stack frame quoting a log line,
   // say) is past where Splunk's recognizer looks, and must not split the event.
   return DATE_ANYWHERE_PATTERN?.test(line.slice(0, lookahead)) ?? false;
+}
+
+/**
+ * The test BREAK_ONLY_BEFORE_DATE applies to a line.
+ *
+ * props.conf.spec: a new event starts "only if it encounters a new line with
+ * a date", and the setting is "not meaningful" when DATETIME_CONFIG stops
+ * timestamps being identified — the date is the one timestamp recognition
+ * finds, so the stanza's TIME_PREFIX, TIME_FORMAT and MAX_TIMESTAMP_LOOKAHEAD
+ * decide it (doc-derived). The built-in patterns alone knew nothing of
+ * `%d.%m.%Y` or a bare `%Y%m%d%H%M%S`, so every such line merged into one
+ * event (#352).
+ *
+ * With TIME_FORMAT set, a line starts an event when that format matches where
+ * the extractor would look (after TIME_PREFIX, within the lookahead) and
+ * parses. With only TIME_PREFIX, the prefix must match and the built-in
+ * patterns are searched after it. With neither — or a prefix that does not
+ * compile and no format, which the extractor already reports — the built-in
+ * patterns stand in for Splunk's automatic recognition, as before.
+ */
+function dateLineTest(directives: ConfDirective[]): (line: string) => boolean {
+  // Read by timestampExtractor's own resolver, so the window a date is looked
+  // for in here is the one the extractor will then parse it from — including
+  // 0 and -1 meaning "no limit", which a local copy of the parse read as the
+  // 128-character default (#331).
+  const lookahead = resolveLookahead(getDirective(directives, 'MAX_TIMESTAMP_LOOKAHEAD'));
+  const timeFormat = getDirective(directives, 'TIME_FORMAT')?.trim() || undefined;
+  const timePrefix = getDirective(directives, 'TIME_PREFIX')?.trim() || undefined;
+  const prefixRegex = timePrefix !== undefined ? safeRegex(timePrefix) : null;
+  if (timeFormat === undefined && prefixRegex === null) {
+    return (line) => lineHasDate(line, lookahead);
+  }
+  // Anchored after a prefix, exactly as the extractor searches (timeFormatRegex).
+  const formatRegex = timeFormat !== undefined ? timeFormatRegex(timeFormat, prefixRegex !== null) : null;
+  return (line) => {
+    let start = 0;
+    if (prefixRegex !== null) {
+      const m = prefixRegex.exec(line);
+      if (!m) return false;
+      start = m.index + m[0].length;
+    }
+    if (timeFormat === undefined || formatRegex === null) {
+      return lineHasDate(line.slice(start), lookahead);
+    }
+    const found = matchTimeFormat(line, start, Math.min(start + lookahead, line.length), formatRegex);
+    return found !== null && parseTimestampDetailed(found.text, timeFormat) !== null;
+  };
 }
 
 /**
@@ -390,11 +438,7 @@ export function breakLines(
     // Splunk default: BREAK_ONLY_BEFORE_DATE=true when SHOULD_LINEMERGE=true.
     // Only disabled when explicitly set to a false spelling.
     const breakOnlyBeforeDate = parseSplunkBool(breakOnlyBeforeDateStr, true);
-    // Read by timestampExtractor's own resolver, so the window a date is
-    // looked for in here is the one the extractor will then parse it from —
-    // including 0 and -1 meaning "no limit", which a local copy of the parse
-    // read as the 128-character default (#331).
-    const timestampLookahead = resolveLookahead(getDirective(directives, 'MAX_TIMESTAMP_LOOKAHEAD'));
+    const lineStartsWithDate = dateLineTest(directives);
     const mustBreakAfterRegex = mustBreakAfterStr
       ? safeRegex(mustBreakAfterStr)
       : null;
@@ -462,7 +506,7 @@ export function breakLines(
       const bobBreak =
         breakOnlyBeforeAnchoredRegex !== null && breakOnlyBeforeAnchoredRegex.test(seg.text);
       const dateBreak =
-        breakOnlyBeforeDate && lineHasDate(seg.text, timestampLookahead);
+        breakOnlyBeforeDate && lineStartsWithDate(seg.text);
 
       let reason:
         | 'must-break-after'

@@ -33,6 +33,14 @@ describe('computeDiagnostics — continuation gating (#24)', () => {
     // Line 2 is part of TIME_FORMAT's value — it must not be flagged.
     expect(markers.some((m) => m.startLineNumber === 2)).toBe(false);
   });
+
+  it('reads the directive after a continued # line as a directive, as confParser does (#354)', () => {
+    const text = '[s]\nREGEX = foo\\\n# note\nkv_mode = json';
+    const markers = computeDiagnostics(fakeModel(text), 'props.conf');
+    // Line 3 is REGEX's value; line 4 is its own (mis-cased) directive.
+    expect(markers.some((m) => m.startLineNumber === 3)).toBe(false);
+    expect(markers.some((m) => m.startLineNumber === 4 && /case-sensitive/.test(m.message))).toBe(true);
+  });
 });
 
 describe('computeDiagnostics — continued values are validated as a whole (#70.1)', () => {

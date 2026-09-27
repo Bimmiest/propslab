@@ -16,14 +16,30 @@ import { effectiveBool, effectiveDirective, effectiveValue } from '../utils/dire
  * TIME_FORMAT is configured. A pragmatic subset of Splunk's datetime.xml —
  * ordered most-specific first so an ISO 8601 timestamp with a zone offset is
  * preferred over a variant without one (and over a bare date).
+ *
+ * ISO-style date-times are expanded over every fraction width from 9 digits
+ * down to 1, with the zone attached or after a space. A fixed `.%3N` stopped
+ * at the third digit of `.123456+05:00` and left the zone unread, so the stamp
+ * was taken as UTC; a space before the zone (`10:00:00 +0500`) was likewise
+ * never looked at (#353).
  */
+const FRACTION_WIDTHS = [9, 8, 7, 6, 5, 4, 3, 2, 1];
+function isoDateTimeFormats(separator: string): string[] {
+  const base = `%Y-%m-%d${separator}%H:%M:%S`;
+  const fractions = FRACTION_WIDTHS.map((w) => `${base}.%${w}N`);
+  return [
+    ...fractions.map((f) => `${f}%z`),
+    ...fractions.map((f) => `${f} %z`),
+    `${base}%z`,
+    `${base} %z`,
+    ...fractions,
+    base,
+  ];
+}
+
 export const AUTO_TIME_FORMATS = [
-  '%Y-%m-%dT%H:%M:%S.%3N%z',
-  '%Y-%m-%dT%H:%M:%S%z',
-  '%Y-%m-%dT%H:%M:%S.%3N',
-  '%Y-%m-%dT%H:%M:%S',
-  '%Y-%m-%d %H:%M:%S.%3N',
-  '%Y-%m-%d %H:%M:%S',
+  ...isoDateTimeFormats('T'),
+  ...isoDateTimeFormats(' '),
   '%d/%b/%Y:%H:%M:%S %z', // Apache access log
   '%b %e %H:%M:%S',        // syslog (no year → current year, space-padded day)
   '%m/%d/%Y %H:%M:%S',
@@ -35,6 +51,17 @@ export const AUTO_TIME_FORMATS = [
 // Compile the recognition regexes once. They are non-global, so `.exec` is
 // stateless across events and calls.
 const AUTO_PATTERNS = AUTO_TIME_FORMATS.map((fmt) => ({ fmt, regex: strftimeToRegex(fmt) }));
+
+/**
+ * Search `text` with one AUTO_TIME_FORMATS pattern. A trailing zone must not
+ * run on into a word or number: `%z` accepts a bare `Z`, so without the check
+ * `10:00:00 Zookeeper started` would be read as UTC over the stanza's TZ.
+ */
+export function execAutoFormat(fmt: string, regex: RegExp, text: string): RegExpExecArray | null {
+  const m = regex.exec(text);
+  if (m && fmt.endsWith('%z') && /[A-Za-z0-9]/.test(text.charAt(m.index + m[0].length))) return null;
+  return m;
+}
 
 /**
  * Try to find a timestamp in `region` using the auto-recognition patterns, then
@@ -54,7 +81,7 @@ function autoRecognize(
 ): { parsed: ParsedTimestamp; format: string; index: number; length: number } | null {
   let best: { index: number; length: number; parsed: ParsedTimestamp; format: string } | null = null;
   for (const { fmt, regex } of AUTO_PATTERNS) {
-    const m = regex.exec(region);
+    const m = execAutoFormat(fmt, regex, region);
     if (!m) continue;
     const parsed = parseTimestampDetailed(m[0], fmt, { tz, onUnresolvedTz, tzAlias, now });
     if (!parsed || isNaN(parsed.date.getTime())) continue;

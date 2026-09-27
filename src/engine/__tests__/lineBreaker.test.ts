@@ -492,3 +492,53 @@ describe('breakLines — the SHOULD_LINEMERGE default INDEXED_EXTRACTIONS implie
     expect(breakLines(raw, [dir('INDEXED_EXTRACTIONS', 'csv'), dir('SHOULD_LINEMERGE', 'true')], META)).toHaveLength(1);
   });
 });
+
+describe('breakLines — BREAK_ONLY_BEFORE_DATE honours the stanza timestamp settings (#352)', () => {
+  // Doc-derived: props.conf.spec says BREAK_ONLY_BEFORE_DATE starts an event
+  // "only if it encounters a new line with a date", and that the setting is not
+  // meaningful when DATETIME_CONFIG stops timestamps being identified — so the
+  // date is the one the stanza's timestamp settings recognise. No capture
+  // covers a custom TIME_FORMAT with line merging.
+  it('breaks before each line TIME_FORMAT recognises, and merges the rest', () => {
+    const raw = '15.01.2026 10:00:01 a\n15.01.2026 10:00:02 b\n  continuation\n15.01.2026 10:00:03 c';
+    const events = breakLines(raw, [dir('TIME_FORMAT', '%d.%m.%Y %H:%M:%S')], META);
+    expect(events.map((e) => e._raw)).toEqual([
+      '15.01.2026 10:00:01 a',
+      '15.01.2026 10:00:02 b\n  continuation',
+      '15.01.2026 10:00:03 c',
+    ]);
+  });
+
+  it('recognises a compact numeric TIME_FORMAT the built-in patterns do not', () => {
+    const raw = '20260115100000 a\n20260115100001 a\n20260115100002 a';
+    expect(breakLines(raw, [dir('TIME_FORMAT', '%Y%m%d%H%M%S')], META)).toHaveLength(3);
+  });
+
+  it('reads the format only after TIME_PREFIX', () => {
+    const raw = 'ts=10:00:00 a\nts=10:00:01 b\nnote 10:00:02 no prefix\nts=10:00:03 c';
+    const events = breakLines(raw, [dir('TIME_PREFIX', 'ts='), dir('TIME_FORMAT', '%H:%M:%S')], META);
+    expect(events.map((e) => e._raw)).toEqual([
+      'ts=10:00:00 a',
+      'ts=10:00:01 b\nnote 10:00:02 no prefix',
+      'ts=10:00:03 c',
+    ]);
+  });
+
+  it('looks for the format only within MAX_TIMESTAMP_LOOKAHEAD', () => {
+    const raw = 'first 15.01.2026 10:00:01\nlater 15.01.2026 10:00:02';
+    const directives = [dir('TIME_FORMAT', '%d.%m.%Y %H:%M:%S')];
+    expect(breakLines(raw, directives, META)).toHaveLength(2);
+    expect(breakLines(raw, [...directives, dir('MAX_TIMESTAMP_LOOKAHEAD', '10')], META)).toHaveLength(1);
+  });
+
+  it('does not break on a match TIME_FORMAT cannot parse', () => {
+    // 45.01.2026 has the format's shape but is not a date.
+    const raw = '15.01.2026 10:00:01 a\n45.01.2026 10:00:02 b';
+    expect(breakLines(raw, [dir('TIME_FORMAT', '%d.%m.%Y %H:%M:%S')], META)).toHaveLength(1);
+  });
+
+  it('with TIME_PREFIX alone, looks for the built-in date forms after the prefix', () => {
+    const raw = 'at=2026-01-15 10:00:00 a\nx 2026-01-15 10:00:01 no prefix\nat=2026-01-15 10:00:02 b';
+    expect(breakLines(raw, [dir('TIME_PREFIX', 'at=')], META)).toHaveLength(2);
+  });
+});

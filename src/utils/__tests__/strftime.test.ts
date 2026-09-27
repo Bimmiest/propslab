@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { parseTimestamp, parseTzAlias, strftimeToRegex } from '../strftime';
 
 /** Helper: ISO string of a parsed timestamp, or null. */
@@ -227,5 +227,69 @@ describe('parseTzAlias (#227)', () => {
     const { aliases, invalid } = parseTzAlias('');
     expect(aliases.size).toBe(0);
     expect(invalid).toEqual([]);
+  });
+});
+
+describe('strftime — the year of a yearless timestamp (#356)', () => {
+  const SYSLOG = '%b %d %H:%M:%S';
+  const at = (text: string, now: string, format = SYSLOG) =>
+    parseTimestamp(text, format, undefined, undefined, undefined, new Date(now))?.toISOString() ?? null;
+
+  // Convention-derived, not captured: syslog readers place a yearless RFC 3164
+  // stamp in the most recent year that does not put it in the future.
+  it('rolls back to last year a date that would otherwise be in the future', () => {
+    expect(at('Dec 31 23:59:00', '2026-01-01T00:30:00Z')).toBe('2025-12-31T23:59:00.000Z');
+  });
+
+  it('keeps this year for a date in the past or only slightly ahead of the clock', () => {
+    expect(at('Jan 1 00:10:00', '2026-01-01T00:30:00Z')).toBe('2026-01-01T00:10:00.000Z');
+    expect(at('Jan 2 00:10:00', '2026-01-01T00:30:00Z')).toBe('2026-01-02T00:10:00.000Z');
+  });
+
+  it('finds 29 February in the previous year when this one has none', () => {
+    expect(at('Feb 29 10:00:00', '2025-03-01T00:00:00Z')).toBe('2024-02-29T10:00:00.000Z');
+  });
+
+  it('does not touch a format that carries a year', () => {
+    expect(at('Dec 31 2026 23:59:00', '2026-01-01T00:30:00Z', '%b %d %Y %H:%M:%S')).toBe('2026-12-31T23:59:00.000Z');
+  });
+
+  it('takes the year from UTC, not the host zone', () => {
+    // The process TZ is fixed when Node starts, so stand in for a host west of
+    // UTC at New Year: every local accessor reads a day earlier. The result
+    // must not move.
+    const dayEarlier = (d: Date) => new Date(d.getTime() - 86_400_000);
+    const spies = [
+      vi.spyOn(Date.prototype, 'getFullYear').mockImplementation(function (this: Date) {
+        return dayEarlier(this).getUTCFullYear();
+      }),
+      vi.spyOn(Date.prototype, 'getMonth').mockImplementation(function (this: Date) {
+        return dayEarlier(this).getUTCMonth();
+      }),
+      vi.spyOn(Date.prototype, 'getDate').mockImplementation(function (this: Date) {
+        return dayEarlier(this).getUTCDate();
+      }),
+    ];
+    try {
+      expect(new Date('2026-01-01T00:30:00Z').getFullYear()).toBe(2025);
+      expect(at('Jan 1 00:10:00', '2026-01-01T00:30:00Z')).toBe('2026-01-01T00:10:00.000Z');
+    } finally {
+      for (const spy of spies) spy.mockRestore();
+    }
+  });
+});
+
+describe('strftime — month and weekday names accept either length (#356)', () => {
+  // Doc-derived: POSIX strptime defines %b/%B (and %a/%A) as equivalent, each
+  // matching the full or the abbreviated name.
+  it('reads a full month name with %b and an abbreviation with %B', () => {
+    expect(iso('September 5 2024 10:00:00', '%b %d %Y %H:%M:%S')).toBe('2024-09-05T10:00:00.000Z');
+    expect(iso('Sep 5 2024 10:00:00', '%B %d %Y %H:%M:%S')).toBe('2024-09-05T10:00:00.000Z');
+    expect(iso('may 5 2024 10:00:00', '%B %d %Y %H:%M:%S')).toBe('2024-05-05T10:00:00.000Z');
+  });
+
+  it('reads a full weekday name with %a and an abbreviation with %A', () => {
+    expect(iso('Thursday 2024-09-05 10:00:00', '%a %Y-%m-%d %H:%M:%S')).toBe('2024-09-05T10:00:00.000Z');
+    expect(iso('Thu 2024-09-05 10:00:00', '%A %Y-%m-%d %H:%M:%S')).toBe('2024-09-05T10:00:00.000Z');
   });
 });
