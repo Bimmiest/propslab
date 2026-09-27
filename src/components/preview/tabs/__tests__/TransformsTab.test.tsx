@@ -78,10 +78,9 @@ describe('TransformsTab', () => {
   // quadratic; 20k events took over a second to switch to.
   it('renders no detail rows until opened, then a page at a time', () => {
     useAppStore.setState({ processingResult: resultOf(manyEvents(20_000)) });
-    const start = performance.now();
+    // Asserted by what reaches the DOM rather than by wall-clock time, which
+    // would flake on a loaded runner.
     const { container } = render(<TransformsTab />);
-    // Generous: the quadratic version took seconds, not hundreds of ms.
-    expect(performance.now() - start).toBeLessThan(1_500);
 
     expect(container.querySelectorAll('li')).toHaveLength(0);
     const details = container.querySelector('details')!;

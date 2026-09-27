@@ -10,7 +10,7 @@
 // ---------------------------------------------------------------------------
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { createManagedWorker, MAX_WORKER_LOAD_FAILURES, type ManagedWorkerConfig } from '../workerLifecycle';
+import { createManagedWorker, LOAD_WAIT_FACTOR, MAX_WORKER_LOAD_FAILURES, type ManagedWorkerConfig } from '../workerLifecycle';
 import { WORKER_READY, isWorkerReadyMessage } from '../../engine/workerProtocol';
 
 interface Req { id: number; value: string }
@@ -433,6 +433,18 @@ describe('createManagedWorker (#339)', () => {
       managed.ensure();
       managed.postWhenReady(req(1));
       latest().failFetch();
+      expect(calls.load).toHaveBeenCalledWith([req(1)], false);
+    });
+
+    it('gives up on a worker that neither loads nor errors', () => {
+      const { managed, calls } = setup();
+      managed.ensure();
+      const hung = latest();
+      managed.postWhenReady(req(1));
+      vi.advanceTimersByTime(1000 * LOAD_WAIT_FACTOR - 1);
+      expect(calls.load).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(1);
+      expect(hung.terminated).toBe(true);
       expect(calls.load).toHaveBeenCalledWith([req(1)], false);
     });
 

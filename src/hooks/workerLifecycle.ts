@@ -22,6 +22,9 @@ export const PIPELINE_DEBOUNCE_MS = 300;
  */
 export const MAX_WORKER_LOAD_FAILURES = 2;
 
+/** How many run budgets `postWhenReady` waits for a worker to load. */
+export const LOAD_WAIT_FACTOR = 6;
+
 // ---------------------------------------------------------------------------
 // createManagedWorker (#339)
 //
@@ -138,6 +141,10 @@ export function createManagedWorker<TReq extends { id: number }, TRes extends { 
   const inFlight = new Map<number, Tracked<TReq>>();
   // Waiting for the current worker's ready signal before they are posted.
   let deferred: TReq[] = [];
+  // Bounds the wait for that signal: a replacement whose fetch hangs neither
+  // loads nor errors, and nothing else would ever settle what waits on it.
+  // Generous next to the run budget, since a slow load is what put it here.
+  let loadTimer: ReturnType<typeof setTimeout> | null = null;
 
   const capped = () => loadFailures >= MAX_WORKER_LOAD_FAILURES;
 
@@ -164,7 +171,13 @@ export function createManagedWorker<TReq extends { id: number }, TRes extends { 
     head.timer = setTimeout(() => expire(head), config.timeoutMs);
   }
 
+  function clearLoadTimer() {
+    if (loadTimer !== null) clearTimeout(loadTimer);
+    loadTimer = null;
+  }
+
   function discard() {
+    clearLoadTimer();
     worker?.terminate();
     worker = null;
     ready = false;
@@ -190,6 +203,7 @@ export function createManagedWorker<TReq extends { id: number }, TRes extends { 
       if (!ready) {
         ready = true;
         loadFailures = 0;
+        clearLoadTimer();
         const waiting = deferred;
         deferred = [];
         for (const request of waiting) post(request);
@@ -262,6 +276,15 @@ export function createManagedWorker<TReq extends { id: number }, TRes extends { 
       if (!build()) return false;
       if (ready) return post(request);
       deferred.push(request);
+      loadTimer ??= setTimeout(() => {
+        loadTimer = null;
+        if (ready) return;
+        const requests = takeAll();
+        discard();
+        loadFailures += 1;
+        build();
+        config.onLoadFailure(requests, capped());
+      }, config.timeoutMs * LOAD_WAIT_FACTOR);
       return true;
     },
     forget() {
