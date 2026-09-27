@@ -71,29 +71,52 @@ const CORPUS: Case[] = [
   { line: 'due 15/Jan/2026', format: '%d/%b/%Y', iso: '2026-01-15T00:00:00.000Z' },
   { line: 'due 15-Jan-2026', format: '%d-%b-%Y', iso: '2026-01-15T00:00:00.000Z' },
   { line: 'due 15 Jan 2026', format: '%d %b %Y', iso: '2026-01-15T00:00:00.000Z' },
-  { line: 'Jan 15 rollover', format: '%b %e', iso: '2026-01-15T00:00:00.000Z' },
+  // Month and weekday names in any case, as datetime.xml matches them
+  // (doc-derived): Oracle, IBM and mainframe sources write them in capitals.
+  { line: '15-JAN-2026 10:00:00 ORA-00600', format: '%d-%b-%Y %H:%M:%S', iso: '2026-01-15T10:00:00.000Z' },
+  { line: 'JAN 15 10:00:00 SYSLOG', format: '%b %e %H:%M:%S', iso: '2026-01-15T10:00:00.000Z' },
+  { line: 'THU JAN 15 10:00:00 2026 IPL', format: '%a %b %e %H:%M:%S %Y', iso: '2026-01-15T10:00:00.000Z' },
+  { line: 'due 15-jan-2026', format: '%d-%b-%Y', iso: '2026-01-15T00:00:00.000Z' },
   { line: '1768471200 a', format: '%s', iso: '2026-01-15T10:00:00.000Z' },
   { line: '  1768471200 indented', format: '%s', iso: '2026-01-15T10:00:00.000Z' },
   { line: '1768471200123 b', format: '%s%3N', iso: '2026-01-15T10:00:00.123Z' },
   { line: '1768471200.5 c', format: '%s.%1N', iso: '2026-01-15T10:00:00.500Z' },
+  // An epoch after any of datetime.xml's UTC-epoch delimiters -- whitespace,
+  // # , " = ( [ | { -- not only at the start (doc-derived).
+  { line: 'time=1768471200 msg=x', format: '%s', iso: '2026-01-15T10:00:00.000Z' },
+  { line: '[1768471200] x', format: '%s', iso: '2026-01-15T10:00:00.000Z' },
+  { line: 'id 1768471200 e', format: '%s', iso: '2026-01-15T10:00:00.000Z' },
+  { line: '{"ts": 1768471200123}', format: '%s%3N', iso: '2026-01-15T10:00:00.123Z' },
+  { line: 'a|1768471200.25|b', format: '%s.%2N', iso: '2026-01-15T10:00:00.250Z' },
+  { line: 'f(1768471200) #1768471201', format: '%s', iso: '2026-01-15T10:00:00.000Z' },
   // The earliest timestamp wins over a more specific one further in.
   { line: '01/15/2026 note 2026-01-10T08:00:00Z', format: '%m/%d/%Y', iso: '2026-01-15T00:00:00.000Z' },
   { line: '1768471200 at 2026-01-10T08:00:00Z', format: '%s', iso: '2026-01-15T10:00:00.000Z' },
+  { line: 'at 2026-01-10T08:00:00Z id=1768471200', format: '%Y-%m-%dT%H:%M:%S%z', iso: '2026-01-10T08:00:00.000Z' },
 
   // A weekday alone names no date.
   { line: 'Thu started', format: null },
-  // Month names stand as capitalised words.
+  { line: 'THU started', format: null },
+  // Month names stand as words, and a month and day with neither year nor
+  // time is not a timestamp: in any case it reads prose.
   { line: 'Market 5 closed', format: null },
   { line: 'Decimal 12 places', format: null },
   { line: 'you may 12 things', format: null },
+  { line: 'in March 3 times', format: null },
+  { line: 'Jan 15 rollover', format: null },
   // A date is not read out of a longer number.
   { line: 'id 120260922-01-15', format: null },
   { line: 'ref 3/4/2026/7', format: null },
-  // Epoch only at the start, and only a plausible one.
+  // Only a plausible epoch, standing alone after a delimiter.
   { line: '17684712001 b', format: null },
   { line: '176847120012 c', format: null },
   { line: '9999999999 d', format: null },
-  { line: 'id 1768471200 e', format: null },
+  { line: 'id-1768471200 e', format: null },
+  { line: 'v1768471200 e', format: null },
+  // `:` is not one of the delimiters, so compact JSON's `"ts":1768471200` is not either.
+  { line: 'id:1768471200 e', format: null },
+  { line: '{"ts":1768471200}', format: null },
+  { line: '1768471200.1234567890 e', format: null },
   // Shaped like a date, not one.
   { line: '2026-13-45 bad', format: null },
   { line: 'no digits here', format: null },

@@ -24,8 +24,6 @@ interface AutoFormat {
   /** The strftime format the stamp is parsed with, and the TIME_FORMAT that reads it. */
   format: string;
   regex: RegExp;
-  /** Recognised only at the start of the region, after leading whitespace. */
-  atStart: boolean;
 }
 
 /**
@@ -63,9 +61,15 @@ function isoDateTimeFormats(separator: string): string[] {
  * read with it and a date-time is not cut down to its date. A pragmatic subset
  * of Splunk's datetime.xml.
  *
- * The date-only and month-day forms are here because a line carrying one is a
- * dated line for BREAK_ONLY_BEFORE_DATE, and the date it carries is the one
- * extraction must then read -- not a line that breaks with nothing to place it.
+ * The date-only forms are here because a line carrying one is a dated line
+ * for BREAK_ONLY_BEFORE_DATE, and the date it carries is the one extraction
+ * must then read -- not a line that breaks with nothing to place it.
+ *
+ * Month and weekday names match in any case, as datetime.xml's do: Oracle,
+ * IBM and mainframe sources write `15-JAN-2026` and `JAN 15 10:00:00`. So a
+ * name-led form must carry a year or a time to count. A bare month and day
+ * (`%b %e`) is not in the table: case-insensitive, it reads prose such as
+ * `you may 12` or `in March 3 times` as a date.
  */
 const ISO_FORMATS = [...isoDateTimeFormats('T'), ...isoDateTimeFormats(' ')];
 const OTHER_FORMATS = [
@@ -73,6 +77,7 @@ const OTHER_FORMATS = [
   '%a %b %e %H:%M:%S %Y',     // ctime
   '%d/%b/%Y:%H:%M:%S %z',     // Apache access log
   '%d %b %Y %H:%M:%S',
+  '%d-%b-%Y %H:%M:%S',        // Oracle
   '%b %e %H:%M:%S',           // syslog: no year, so the most recent one it can be
   '%Y/%m/%d %H:%M:%S',
   '%m/%d/%Y %H:%M:%S',
@@ -85,21 +90,27 @@ const OTHER_FORMATS = [
   '%d/%b/%Y',
   '%d-%b-%Y',
   '%d %b %Y',
-  '%b %e',
 ];
 
 /**
- * Epoch time, only at the start of the region: a bare number mid-line is as
- * likely an id, a byte count or a port. Only a plausible epoch counts -- ten
- * digits of seconds from 2001 to 2033 or thirteen of milliseconds, optionally
- * with a fraction, and not the prefix of a longer number -- so an 11- or
- * 12-digit order id is not a timestamp.
+ * Epoch time. Only a plausible epoch counts -- ten digits of seconds from 2001
+ * to 2033 or thirteen of milliseconds, optionally with a fraction, and not part
+ * of a longer number -- so an 11- or 12-digit order id is not a timestamp.
  */
 const EPOCH_FORMATS: { format: string; pattern: string }[] = [
   ...FRACTION_WIDTHS.map((w) => ({ format: `%s.%${w}N`, pattern: `1\\d{9}\\.\\d{${w}}` })),
   { format: '%s%3N', pattern: '1\\d{12}' },
   { format: '%s', pattern: '1\\d{9}' },
 ];
+
+/**
+ * An epoch starts the region or follows one of the delimiters datetime.xml
+ * allows before its UTC epoch: whitespace, `#`, `,`, `"`, `=`, `(`, `[`, `|`
+ * or `{`. So `time=1768471200` and `[1768471200]` are read, while a number
+ * glued to other text (`id-1768471200`, `v1768471200`) is not.
+ */
+const EPOCH_BEFORE = '(?:^|(?<=[\\s#,"=(\\[|{]))';
+const EPOCH_AFTER = '(?!\\d)(?!\\.\\d)';
 
 const DATE_TOKENS = /%[Ymdey]$/;
 
@@ -121,28 +132,27 @@ function guarded(format: string): string {
   return `${before}(?:${body})${after}`;
 }
 
-// Case-sensitive: log writers capitalise month and weekday names, and prose
-// does not -- `you may 12` is not a date.
-function family(gate: string | null, entries: { format: string; pattern: string; atStart: boolean }[]): AutoFamily {
+function family(gate: string | null, entries: { format: string; pattern: string }[]): AutoFamily {
   return {
     // A gate the regex guard refuses only costs speed: the family is then always searched.
     gate: gate === null ? null : safeRegex(gate),
-    formats: entries.flatMap(({ format, pattern, atStart }) => {
-      const regex = safeRegex(pattern);
-      return regex ? [{ format, regex, atStart }] : [];
+    formats: entries.flatMap(({ format, pattern }) => {
+      // Case-insensitive, like strftimeToRegex and datetime.xml.
+      const regex = safeRegex(pattern, 'i');
+      return regex ? [{ format, regex }] : [];
     }),
   };
 }
 
-const anywhere = (format: string) => ({ format, pattern: guarded(format), atStart: false });
+const anywhere = (format: string) => ({ format, pattern: guarded(format) });
 
 // In priority order, family by family.
 const AUTO_FAMILIES: AutoFamily[] = [
   family('\\d-\\d{1,2}-\\d{1,2}(?:T|\\s+)\\d{1,2}:\\d{1,2}:\\d', ISO_FORMATS.map(anywhere)),
   family(null, OTHER_FORMATS.map(anywhere)),
   family(
-    '^\\s*1\\d{9}',
-    EPOCH_FORMATS.map(({ format, pattern }) => ({ format, pattern: `^\\s*${pattern}(?![\\d.])`, atStart: true })),
+    '1\\d{9}',
+    EPOCH_FORMATS.map(({ format, pattern }) => ({ format, pattern: `${EPOCH_BEFORE}${pattern}${EPOCH_AFTER}` })),
   ),
 ];
 
@@ -173,12 +183,11 @@ export function recognizeTimestamp(
   let best: RecognizedTimestamp | null = null;
   for (const { gate, formats } of AUTO_FAMILIES) {
     if (gate !== null && !gate.test(region)) continue;
-    for (const { format, regex, atStart } of formats) {
+    for (const { format, regex } of formats) {
       const m = regex.exec(region);
       if (!m) continue;
-      // The start-anchored forms admit leading whitespace; the stamp follows it.
-      const text = atStart ? m[0].trimStart() : m[0];
-      const start = m.index + (m[0].length - text.length);
+      const text = m[0];
+      const start = m.index;
       // Strictly earlier: an equal offset keeps the more specific format.
       if (best !== null && start >= best.start) continue;
       const parsed = parseTimestampDetailed(text, format, options);
