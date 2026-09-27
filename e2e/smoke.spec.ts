@@ -181,6 +181,29 @@ test.describe('accessibility affordances', () => {
     expect(complaints.all, 'browser errors during overlay interaction').toEqual([]);
   });
 
+  test('Ctrl+K opens the palette while an editor has focus', async ({ page }) => {
+    // #363: Monaco takes Ctrl+K as a chord prefix, so the window-level
+    // shortcut never fired from inside an editor.
+    await openApp(page);
+    const propsEditor = page.getByRole('textbox', { name: 'props.conf' });
+    await page.locator('.monaco-editor').nth(1).click();
+    await expect(propsEditor).toBeFocused();
+
+    await page.keyboard.press('Control+k');
+    await expect(page.getByRole('dialog')).toBeVisible();
+    // The chord never started, so Escape closes the palette rather than
+    // being swallowed as its second key.
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).toBeHidden();
+  });
+
+  test('each editor has its own accessible name', async ({ page }) => {
+    await openApp(page);
+    for (const name of ['Raw log', 'props.conf', 'transforms.conf']) {
+      await expect(page.getByRole('textbox', { name, exact: true })).toHaveCount(1);
+    }
+  });
+
   test('a raw-event selection can be made and acted on from the keyboard', async ({ page, complaints }) => {
     // #300: token selection was mouse-only. Shift+F10 is delivered as a
     // `contextmenu` event on the focused element, which is what opens the menu.

@@ -278,6 +278,8 @@ class FakeWorker {
   constructor() { FakeWorker.instances.push(this); }
   postMessage(message: RegexMatchRequest) { this.posted.push(message); }
   terminate() {}
+  /** The module has loaded: a timeout after this is the pattern's, not the load's (#364). */
+  ready() { this.onmessage?.({ data: { type: 'ready' } } as unknown as MessageEvent<RegexMatchResponse>); }
   respond() {
     const req = this.posted[this.posted.length - 1]!;
     this.onmessage?.({ data: { id: req.id, results: matchInputs(req.pattern, req.inputs) } } as MessageEvent<RegexMatchResponse>);
@@ -474,6 +476,7 @@ describe('RegexTab — Add to props.conf waits for a settled match (#338)', () =
     const { container } = render(<RegexTab {...defaultProps} />);
     typePattern(container, '(a|aa)+b');
     act(() => { vi.advanceTimersByTime(250); });
+    act(() => { worker().ready(); });
     act(() => { vi.advanceTimersByTime(2_000); });
     expect(within(container).getByText(/too slow to evaluate/)).toBeInTheDocument();
 

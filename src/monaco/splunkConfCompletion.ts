@@ -115,9 +115,16 @@ function getDirectiveSuggestions(
     }
   }
 
-  // Also add directives not categorized
+  // Also add directives not categorized. Tracked by key rather than compared
+  // against `label`, which is an object for unsimulated directives and so never
+  // equalled the key -- every one of those was listed twice.
+  const listed = new Set<string>();
+  for (const [, categoryDirectives] of categories) {
+    for (const dir of categoryDirectives) listed.add(dir.key);
+  }
   for (const dir of directives) {
-    if (!items.some((i) => i.label === dir.key)) {
+    if (!listed.has(dir.key)) {
+      listed.add(dir.key);
       items.push(directiveToCompletionItem(dir, range, dir.category, sortOrder++));
     }
   }

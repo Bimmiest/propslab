@@ -54,6 +54,8 @@ describe('ExtractNameDialog — only a settled result for this pattern enables A
     constructor() { FakeWorker.instances.push(this); }
     postMessage(message: RegexMatchRequest) { this.posted.push(message); }
     terminate() {}
+    /** The module has loaded: a timeout after this is the pattern's, not the load's (#364). */
+    ready() { this.onmessage?.({ data: { type: 'ready' } } as unknown as MessageEvent<RegexMatchResponse>); }
     respond() {
       const req = this.posted[this.posted.length - 1]!;
       this.onmessage?.({ data: { id: req.id, results: matchInputs(req.pattern, req.inputs) } } as MessageEvent<RegexMatchResponse>);
@@ -123,6 +125,7 @@ describe('ExtractNameDialog — only a settled result for this pattern enables A
   it('keeps Add disabled when the pattern times out', () => {
     const { onApply } = setup();
     act(() => { vi.advanceTimersByTime(250); });
+    act(() => { worker().ready(); });
     act(() => { vi.advanceTimersByTime(2_000); });
     expect(screen.getByText(/took too long to run/)).toBeInTheDocument();
     expect(addButton()).toBeDisabled();
