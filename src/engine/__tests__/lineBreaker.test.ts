@@ -135,8 +135,15 @@ describe('#287 — BREAK_ONLY_BEFORE_DATE finds a date anywhere in the lookahead
 
   it('does not treat any 10–13 digit run as an epoch', () => {
     // An 11- or 12-digit id, a 10-digit number that is not a plausible epoch,
-    // and an epoch-looking number in mid-line all stay continuation lines.
-    expect(raws('1768471200 a\n17684712001 b\n176847120012 c\n9999999999 d\nid 1768471200 e')).toHaveLength(1);
+    // and an epoch glued to other text all stay continuation lines.
+    expect(raws('1768471200 a\n17684712001 b\n176847120012 c\n9999999999 d\nid-1768471200 e')).toHaveLength(1);
+  });
+
+  // Doc-derived: datetime.xml reads a UTC epoch after whitespace or one of
+  // # , " = ( [ | {, not only at the start of a line. This test used to assert
+  // that `id 1768471200 e` stays a continuation line.
+  it('accepts a plausible epoch after a delimiter in mid-line', () => {
+    expect(raws('1768471200 a\ntime=1768471201 b\n[1768471202] c\nid 1768471203 d')).toHaveLength(4);
   });
 });
 
