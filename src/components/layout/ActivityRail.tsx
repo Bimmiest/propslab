@@ -53,44 +53,47 @@ export function ActivityRail() {
   };
 
   return (
-    <div
-      ref={railRef}
-      role="tablist"
-      aria-label="Workspace views"
-      aria-orientation="vertical"
-      onKeyDown={handleKeyDown}
-      className="shrink-0 w-12 flex flex-col items-center gap-1 py-2"
-      style={{
-        backgroundColor: 'var(--color-bg-secondary)',
-        borderRight: '1px solid var(--color-border)',
-      }}
-    >
-      {ITEMS.map((item) => {
-        const isActive = item.id === activeView;
-        return (
-          <Tooltip key={item.id} content={item.label} side="right">
-            <button
-              type="button"
-              role="tab"
-              id={`view-tab-${item.id}`}
-              aria-label={item.label}
-              aria-selected={isActive}
-              aria-controls={`view-panel-${item.id}`}
-              tabIndex={isActive ? 0 : -1}
-              onClick={() => setActiveView(item.id)}
-              className={[
-                'flex items-center justify-center w-9 h-9 rounded-md border-none cursor-pointer',
-                'outline-none focus-visible:ring-2 transition-colors',
-                isActive
-                  ? 'bg-[var(--color-accent)] text-white'
-                  : 'bg-transparent text-[var(--color-text-muted)] hover:bg-[var(--color-bg-tertiary)] hover:text-[var(--color-text-primary)]',
-              ].join(' ')}
-            >
-              <Icon name={item.icon} className="w-[18px] h-[18px]" />
-            </button>
-          </Tooltip>
-        );
-      })}
-    </div>
+    // Wrapped in a <nav> so the rail sits inside a landmark (axe `region`).
+    <nav aria-label="Views" className="shrink-0 flex">
+      <div
+        ref={railRef}
+        role="tablist"
+        aria-label="Workspace views"
+        aria-orientation="vertical"
+        onKeyDown={handleKeyDown}
+        className="shrink-0 w-12 flex flex-col items-center gap-1 py-2"
+        style={{
+          backgroundColor: 'var(--color-bg-secondary)',
+          borderRight: '1px solid var(--color-border)',
+        }}
+      >
+        {ITEMS.map((item) => {
+          const isActive = item.id === activeView;
+          return (
+            <Tooltip key={item.id} content={item.label} side="right">
+              <button
+                type="button"
+                role="tab"
+                id={`view-tab-${item.id}`}
+                aria-label={item.label}
+                aria-selected={isActive}
+                aria-controls={`view-panel-${item.id}`}
+                tabIndex={isActive ? 0 : -1}
+                onClick={() => setActiveView(item.id)}
+                className={[
+                  'flex items-center justify-center w-9 h-9 rounded-md border-none cursor-pointer',
+                  'outline-none focus-visible:ring-2 transition-colors',
+                  isActive
+                    ? 'bg-[var(--color-accent)] text-[var(--color-text-on-accent)]'
+                    : 'bg-transparent text-[var(--color-text-muted)] hover:bg-[var(--color-bg-tertiary)] hover:text-[var(--color-text-primary)]',
+                ].join(' ')}
+              >
+                <Icon name={item.icon} className="w-[18px] h-[18px]" />
+              </button>
+            </Tooltip>
+          );
+        })}
+      </div>
+    </nav>
   );
 }

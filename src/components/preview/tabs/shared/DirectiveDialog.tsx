@@ -65,7 +65,7 @@ export function DirectiveDialog({
           <button
             onClick={onApply}
             disabled={applyDisabled}
-            className="px-3 py-1.5 text-sm rounded-md cursor-pointer border-none font-medium text-white disabled:opacity-40 disabled:cursor-not-allowed"
+            className="px-3 py-1.5 text-sm rounded-md cursor-pointer border-none font-medium text-[var(--color-text-on-accent)] disabled:opacity-40 disabled:cursor-not-allowed"
             style={{ backgroundColor: 'var(--color-accent)' }}
           >
             {applyLabel}

@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { useAppStore } from '../../store/useAppStore';
-import { SplunkEditor } from './SplunkEditor';
+import { SplunkEditor } from './LazyEditors';
 import { CopyButton } from './CopyButton';
 import { ClearButton } from './ClearButton';
 import { EditorValidationList } from './EditorValidationList';

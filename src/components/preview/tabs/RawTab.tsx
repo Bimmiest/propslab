@@ -133,7 +133,7 @@ function EventRow({ item, globalIdx, originalMetadata, search }: { item: Enriche
           </span>
           {truncateTrace && (
             <span
-              className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-warning)]/20 text-[var(--color-warning)] font-medium"
+              className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-warning)]/10 text-[var(--color-warning)] font-medium"
               title={truncateTrace.description}
             >
               Truncated{truncatedByDefault ? ' (default)' : ''}
@@ -146,14 +146,14 @@ function EventRow({ item, globalIdx, originalMetadata, search }: { item: Enriche
           */}
           {event.clonedFrom !== undefined && (
             <span
-              className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-info)]/20 text-[var(--color-info)] font-medium"
+              className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-info)]/10 text-[var(--color-info)] font-medium"
               title={`Emitted by CLONE_SOURCETYPE from an event with sourcetype "${event.clonedFrom}"`}
             >
               Cloned from {event.clonedFrom}
             </span>
           )}
           {hasMetadataChanges && (
-            <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-warning)]/20 text-[var(--color-warning)] font-medium">
+            <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-warning)]/10 text-[var(--color-warning)] font-medium">
               Metadata modified
             </span>
           )}

@@ -238,17 +238,16 @@ function CommandItem({
   return (
     <Command.Item
       onSelect={onSelect}
-      className="flex items-center gap-3 px-3 py-2 mx-1 rounded-lg text-sm cursor-pointer outline-none
-        aria-selected:bg-[var(--color-accent)] aria-selected:text-white"
-      style={{ color: 'var(--color-text-primary)' }}
+      // Colours are classes, not inline styles: an inline colour outranked the
+      // aria-selected one, leaving dark-on-accent text on the highlighted row.
+      className="group flex items-center gap-3 px-3 py-2 mx-1 rounded-lg text-sm cursor-pointer outline-none
+        text-[var(--color-text-primary)]
+        aria-selected:bg-[var(--color-accent)] aria-selected:text-[var(--color-text-on-accent)]"
     >
-      <Icon name={icon} className="w-4 h-4 shrink-0 text-[var(--color-text-muted)] aria-selected:text-white" />
+      <Icon name={icon} className="w-4 h-4 shrink-0 text-[var(--color-text-muted)] group-aria-selected:text-[var(--color-text-on-accent)]" />
       <span className="flex-1">{label}</span>
       {hint && (
-        <span
-          className="text-[11px] truncate max-w-[180px]"
-          style={{ color: 'var(--color-text-muted)' }}
-        >
+        <span className="text-[11px] truncate max-w-[180px] text-[var(--color-text-muted)] group-aria-selected:text-[var(--color-text-on-accent)]">
           {hint}
         </span>
       )}

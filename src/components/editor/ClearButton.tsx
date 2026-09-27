@@ -34,8 +34,8 @@ export function ClearButton({ onClear, label = 'Clear' }: ClearButtonProps) {
         className={[
           'flex items-center gap-1 px-2 py-1 text-xs rounded transition-colors',
           confirming
-            ? 'bg-[var(--color-error)] text-white'
-            : 'bg-[var(--color-bg-tertiary)] text-[var(--color-text-secondary)] hover:bg-[var(--color-error)] hover:text-white',
+            ? 'bg-[var(--color-error)] text-[var(--color-text-on-error)]'
+            : 'bg-[var(--color-bg-tertiary)] text-[var(--color-text-secondary)] hover:bg-[var(--color-error)] hover:text-[var(--color-text-on-error)]',
         ].join(' ')}
         aria-label={confirming ? 'Click again to confirm clear' : label}
       >

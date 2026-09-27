@@ -32,7 +32,9 @@ export function StatusBar() {
     : null;
 
   return (
-    <div
+    // A <footer>, so the bar is a contentinfo landmark rather than stray
+    // content outside every landmark (axe `region`, #372).
+    <footer
       className="flex items-center justify-between px-4 h-6 shrink-0 text-[11px] select-none"
       style={{
         backgroundColor: 'var(--color-bg-secondary)',
@@ -65,7 +67,7 @@ export function StatusBar() {
           >
             <button
               onClick={toggleSettings}
-              className="flex items-center gap-1 px-1.5 h-4 rounded text-[10px] font-medium border border-[var(--color-accent)] text-[var(--color-accent)] hover:bg-[var(--color-accent)] hover:text-white transition-colors cursor-pointer bg-transparent"
+              className="flex items-center gap-1 px-1.5 h-4 rounded text-[10px] font-medium border border-[var(--color-accent)] text-[var(--color-accent)] hover:bg-[var(--color-accent)] hover:text-[var(--color-text-on-accent)] transition-colors cursor-pointer bg-transparent"
             >
               Per-event pipeline
             </button>
@@ -86,7 +88,7 @@ export function StatusBar() {
                   isProcessing
                     ? 'opacity-40 cursor-not-allowed border-[var(--color-border)] text-[var(--color-text-muted)]'
                     : pipelineDirty
-                      ? 'border-[var(--color-accent)] text-[var(--color-accent)] hover:bg-[var(--color-accent)] hover:text-white'
+                      ? 'border-[var(--color-accent)] text-[var(--color-accent)] hover:bg-[var(--color-accent)] hover:text-[var(--color-text-on-accent)]'
                       : 'border-[var(--color-border)] text-[var(--color-text-muted)] hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]',
                 ].join(' ')}
               >
@@ -121,6 +123,6 @@ export function StatusBar() {
           v{__APP_VERSION__}
         </span>
       </div>
-    </div>
+    </footer>
   );
 }

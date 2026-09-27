@@ -7,12 +7,11 @@ import { ErrorBoundary } from '../ui/ErrorBoundary';
 import { HelpPanel } from '../help/HelpPanel';
 import { SettingsPanel } from '../settings/SettingsPanel';
 import { FirstRunBanner } from '../onboarding/FirstRunBanner';
-import { DictionaryView } from '../dictionary/DictionaryView';
+import { DictionaryView, ScaffoldModal } from './lazyViews';
 import { useProcessingPipeline } from '../../hooks/useProcessingPipeline';
 import { useAppStore } from '../../store/useAppStore';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { CommandPalette } from '../ui/CommandPalette';
-import { ScaffoldModal } from '../scaffold/ScaffoldModal';
 import { MobileShell } from './MobileShell';
 
 export function AppShell() {

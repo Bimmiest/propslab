@@ -1,3 +1,4 @@
+import type { Page } from '@playwright/test';
 import {
   test,
   expect,
@@ -74,6 +75,54 @@ test.describe('monaco', () => {
     await page.getByRole('button', { name: 'Click again to confirm clear' }).click();
 
     await expect(squiggles).toHaveCount(0, { timeout: 15_000 });
+  });
+});
+
+/**
+ * Each editor contribution MonacoEditor.tsx imports by hand (#375). Dropping
+ * one type-checks, builds and mounts fine, and silently removes its feature;
+ * hover is covered by the dictionary and TIME_FORMAT tests below.
+ */
+test.describe('monaco contributions', () => {
+  const typeIntoProps = async (page: Page, text: string) => {
+    await openApp(page);
+    await page.locator('.monaco-editor').nth(1).click();
+    await page.keyboard.type(text);
+    await page.keyboard.press('Escape');
+  };
+
+  test('suggest offers directive completions', async ({ page }) => {
+    await typeIntoProps(page, '[web]\n');
+    await page.keyboard.type('TIME_PRE');
+    const suggest = page.locator('.suggest-widget');
+    await expect(suggest).toBeVisible();
+    await expect(suggest.getByText('TIME_PREFIX').first()).toBeVisible();
+  });
+
+  test('a quick fix renames a mis-cased key', async ({ page }) => {
+    await typeIntoProps(page, '[web]\ntime_prefix = x');
+    await expect(page.locator('.squiggly-warning, .squiggly-error, .squiggly-info').first())
+      .toBeVisible({ timeout: 15_000 });
+
+    await page.keyboard.press('Home');
+    await page.keyboard.press('Control+.');
+    await expect(page.getByText('Change "time_prefix" to "TIME_PREFIX"')).toBeVisible();
+    await page.keyboard.press('Enter');
+    await expect(page.locator('.monaco-editor').nth(1).locator('.view-lines')).toContainText('TIME_PREFIX = x');
+  });
+
+  test('stanzas fold', async ({ page }) => {
+    await typeIntoProps(page, '[web]\nTRUNCATE = 1\n[db]\nTRUNCATE = 2');
+    const props = page.locator('.monaco-editor').nth(1);
+    await props.locator('.codicon-folding-expanded').first().click({ force: true });
+    await expect(props.locator('.codicon-folding-collapsed')).toHaveCount(1);
+    await expect(props.locator('.view-lines')).not.toContainText('TRUNCATE = 1');
+  });
+
+  test('find opens its widget', async ({ page }) => {
+    await typeIntoProps(page, '[web]\nTRUNCATE = 1');
+    await page.keyboard.press('Control+f');
+    await expect(page.locator('.monaco-editor').nth(1).locator('.find-widget.visible')).toBeVisible();
   });
 });
 
@@ -280,7 +329,7 @@ test.describe('dictionary', () => {
     await openApp(page);
 
     // Monaco's hover widget is a contribution, not part of the editor API — it
-    // only exists if editor.all made it into the bundle, which is exactly the
+    // only exists if MonacoEditor.tsx imports it, which is exactly the
     // kind of bundling question a production-build test is here to answer.
     const props = page.locator('.monaco-editor').nth(1);
     await props.click();

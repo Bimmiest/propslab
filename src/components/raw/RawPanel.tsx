@@ -4,8 +4,7 @@ import { useAppStore } from '../../store/useAppStore';
 import { MetadataPanel } from '../metadata/MetadataPanel';
 import { Icon } from '../ui/Icon';
 import { ClearButton } from '../editor/ClearButton';
-import { MonacoEditor } from '../editor/MonacoEditor';
-import { ensureSplunkMonaco } from '../editor/splunkMonacoSetup';
+import { MonacoEditor } from '../editor/LazyEditors';
 import { registerEditor, unregisterEditor } from '../editor/editorRegistry';
 import { EditorValidationList } from '../editor/EditorValidationList';
 
@@ -83,7 +82,6 @@ export function RawPanel() {
           value={rawData}
           onChange={setRawData}
           onMount={handleMount}
-          beforeMount={ensureSplunkMonaco}
           theme={theme === 'dark' ? 'splunk-dark' : 'splunk-light'}
           options={EDITOR_OPTIONS}
         />
@@ -95,7 +93,7 @@ export function RawPanel() {
             <Icon name="terminal" className="w-8 h-8 text-[var(--color-border)]" />
             <div className="text-center">
               <p className="text-sm font-medium text-[var(--color-text-muted)]">Paste raw log data here</p>
-              <p className="text-xs text-[var(--color-text-muted)] mt-1 opacity-70">
+              <p className="text-xs text-[var(--color-text-muted)] mt-1">
                 Or load an example from the Output panel →
               </p>
             </div>

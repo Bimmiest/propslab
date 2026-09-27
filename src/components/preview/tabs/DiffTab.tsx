@@ -24,7 +24,7 @@ export function DiffTab({ items, currentPage, eventsPerPage }: DiffTabProps) {
                 <span className="text-xs font-medium text-[var(--color-text-muted)]">
                   Event #{globalIdx}
                 </span>
-                <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-success)]/20 text-[var(--color-success)]">
+                <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-success)]/10 text-[var(--color-success)]">
                   Unchanged
                 </span>
               </div>
@@ -47,7 +47,7 @@ function DiffEventCard({ globalIdx, originalRaw, modifiedRaw }: { globalIdx: num
         <span className="text-xs font-medium text-[var(--color-text-muted)]">
           Event #{globalIdx}
         </span>
-        <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-warning)]/20 text-[var(--color-warning)]">
+        <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-warning)]/10 text-[var(--color-warning)]">
           Modified
         </span>
       </div>

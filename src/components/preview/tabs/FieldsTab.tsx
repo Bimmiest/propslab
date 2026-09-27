@@ -396,7 +396,7 @@ export function FieldsTab() {
                     />
                     {field.maskedBy.size > 0 && (
                       <span
-                        className="inline-block flex-shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium font-sans bg-[var(--color-warning)]/15 text-[var(--color-warning)]"
+                        className="inline-block flex-shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium font-sans bg-[var(--color-warning)]/10 text-[var(--color-warning)]"
                         title={`Value rewritten at index time by ${Array.from(field.maskedBy).join(', ')}. The extraction works — the value it finds is not the original.`}
                       >
                         masked

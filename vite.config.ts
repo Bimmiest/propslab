@@ -23,8 +23,8 @@ export default defineConfig({
         // ids it named INTO the graph, which is why editor.all had to be listed
         // beside editor.api or every contribution scattered into the app chunk.
         // A group only claims modules the graph already reached. Nothing is lost
-        // here — `MonacoEditor.tsx` imports editor.all directly, and the pattern
-        // below covers the whole slim `esm/vs` tree both entries pull in.
+        // here — `MonacoEditor.tsx` imports each contribution directly, and the
+        // pattern below covers the whole slim `esm/vs` tree they pull in.
         //
         // Matching on path also cannot drag anything in, so the `monaco-editor`
         // barrel stays out on its own merit: nothing imports it, which is what

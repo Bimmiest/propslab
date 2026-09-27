@@ -38,7 +38,7 @@ function Segmented<T extends string>({
                 'flex-1 min-w-0 truncate px-2 py-1 text-[11px] font-medium cursor-pointer border-none',
                 'outline-none focus-visible:ring-2 transition-colors',
                 isActive
-                  ? 'bg-[var(--color-accent)] text-white'
+                  ? 'bg-[var(--color-accent)] text-[var(--color-text-on-accent)]'
                   : 'bg-transparent text-[var(--color-text-muted)] hover:bg-[var(--color-bg-tertiary)] hover:text-[var(--color-text-primary)]',
               ].join(' ')}
             >

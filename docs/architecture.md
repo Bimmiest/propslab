@@ -36,18 +36,21 @@ A new worker entry must post `WORKER_READY`. A caller must not handle `onerror` 
 
 ## Monaco bundling
 
-Monaco's widgets (hover, suggest, folding, find, multi-cursor) are *contributions*, imported separately from the API surface in `MonacoEditor.tsx` via `editor.all`. `editor.api` alone registers providers that nothing ever renders. `vite.config.ts` groups the slim `esm/vs` tree both entries pull in via `codeSplitting` (Rolldown's replacement for `manualChunks` — it claims modules the graph already reached rather than naming ids to pull in, so `editor.all` is held there by its own import in `MonacoEditor.tsx`). A bad split type-checks and builds, then fails to mount an editor — which is one of the things the e2e suite exists to catch (see the README's Tests section).
+Monaco's widgets (hover, suggest, code actions, folding, find, multi-cursor) are *contributions*, imported separately from the API surface in `MonacoEditor.tsx` — one by one, not through `editor.all`, which also registers sticky scroll, rename, code lens and ~40 more contributions the app never enables. `editor.api` alone registers providers that nothing ever renders, so dropping a contribution silently removes its feature; the e2e suite exercises each one. `vite.config.ts` groups the slim `esm/vs` tree via `codeSplitting` (Rolldown's replacement for `manualChunks` — it claims modules the graph already reached rather than naming ids to pull in). A bad split type-checks and builds, then fails to mount an editor — which is one of the things the e2e suite exists to catch (see the README's Tests section).
+
+The whole editor loads lazily: `LazyEditors.tsx` is the only thing the shell imports, and it reaches `MonacoEditor`, `SplunkEditor` and `splunkMonacoSetup` through one dynamic import (`editorRuntime.tsx`), so the entry chunk neither contains nor waits for Monaco. Anything that imports monaco at runtime must stay behind that boundary — including `MonacoEnvironment`'s `?worker` import, which the chunk group claims. `scripts/check-bundle-size.mjs` holds each chunk to a gzip budget in CI.
 
 ## Accessibility
 
 - Skip-to-content link (visible on focus).
-- Semantic HTML (`<main>`, `<header>`, proper heading hierarchy).
+- Semantic HTML and landmarks (`<header>`, `<nav>` around the activity rail, `<main>`, `<footer>` for the status bar, a labelled `<section>` for the first-run banner), with a heading hierarchy that does not skip levels.
 - WAI-ARIA tablist: `role="tablist"` / `role="tab"` / `role="tabpanel"`, `aria-selected`, `aria-controls`, `aria-labelledby`.
 - Arrow keys navigate tabs; Home/End jump to first/last. The activity rail is vertical and declares `aria-orientation`.
 - The rail's buttons carry `aria-label`, not just a tooltip: they have no visible text, and a Radix tooltip contributes `aria-describedby`, which supplements an accessible name rather than supplying one.
 - The dictionary list is a `role="listbox"` driven by `aria-activedescendant`, so one Tab stop covers 80-odd rows.
 - Inputs have an accessible name: an associated `<label>` via `htmlFor`/`id` (ids from `useId`), or `aria-label` where there is no visible label.
 - A global `:focus-visible` outline in `index.css` is the floor for every focusable element; components that draw their own `focus-visible:ring-*` take precedence over it. Do not add `outline-none` without a replacement ring.
+- Colour tokens in `index.css` are chosen for 4.5:1 as text on every surface they meet, including their own 10% tint (status chips) — which is why the dark accent is light enough to need dark text on an accent fill (`--color-text-on-accent`). Do not reach for `text-white` on an accent or error fill, or for opacity to de-emphasise text; use `--color-text-muted`. Field highlight colours come in a light and a dark set for the same reason. `e2e/a11y.spec.ts` fails on any regression.
 - Clickable spans and divs that cannot be `<button>`s go through `components/ui/pressable.ts`, which adds the tab stop, `role="button"` and Enter/Space. The highlighted spans inside raw event text are the deliberate exception: one tab stop per value would bury the page, and the field sidebar offers the same pin action.
 - Raw-text selection (`SelectableRaw`) has a keyboard path: arrows select tokens, Shift extends, Shift+F10 or the Menu key opens the row's context menu.
 - `eslint-plugin-jsx-a11y` is not wired into lint: its peer range ends at eslint 9. Tracked in #302.

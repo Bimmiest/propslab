@@ -54,8 +54,8 @@ export function FirstRunBanner() {
   };
 
   return (
-    <div
-      role="banner"
+    <section
+      aria-label="Getting started"
       className="shrink-0 flex items-start sm:items-center gap-2 sm:gap-4 px-4 py-2.5 border-b"
       style={{
         backgroundColor: 'var(--color-bg-elevated)',
@@ -95,6 +95,6 @@ export function FirstRunBanner() {
         <Icon name="x" className="w-3.5 h-3.5" />
         <span className="hidden sm:inline">Got it</span>
       </button>
-    </div>
+    </section>
   );
 }
