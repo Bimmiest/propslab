@@ -40,6 +40,17 @@ describe('applyIndexedExtractions — JSON', () => {
     expect(events[0]!.fields['request.path']).toBe('/api');
   });
 
+  it('keeps shallow siblings of an over-deep subtree (#357)', () => {
+    // Not doc-derived: the depth limit is the simulator's own guard; it must
+    // cost only the subtree past it, not the keys that follow.
+    let deep = '"bottom"';
+    for (let i = 0; i < 12; i++) deep = `{"n":${deep}}`;
+    const events = applyIndexedExtractions([event(`{"a":"first","deep":${deep},"status":"ok"}`)], [dir('json')]);
+    expect(events[0]!.fields['a']).toBe('first');
+    expect(events[0]!.fields['status']).toBe('ok');
+    expect(events[0]!.processingTrace.at(-1)?.description).toMatch(/depth limit reached/);
+  });
+
   it('returns event unchanged for invalid JSON', () => {
     const events = applyIndexedExtractions([event('not json')], [dir('json')]);
     expect(events[0]!.fields).toEqual({});

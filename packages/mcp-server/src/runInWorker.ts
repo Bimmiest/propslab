@@ -113,18 +113,18 @@ export class WorkerCancelledError extends Error {
 
 /**
  * Per-worker V8 heap limits, sized from the worst input the schemas admit
- * rather than a typical one. The sample dominates: a 1MB sample of very short
- * lines is about 125,000 events, each carrying its own trace, and measured it
- * runs out of heap at 256MB and completes at 512MB. The conf side is bounded
- * too — at most two million characters across every layer of both files
- * (`MAX_TOTAL_CONF_CHARS` in tools.ts, #335), where the per-field limits alone
- * would admit forty million. Measured with both at their maximum — a 1MB
- * sample of one-character lines (500,000 events) beside two million
- * characters of conf, some 47,000 stanzas of EXTRACT / FIELDALIAS / REGEX —
- * the run still completes at 512MB, and a conf whose directives all apply to
- * every event exhausts the 30s budget before the heap. A limit below that
- * would turn a valid (if silly) request into an error, so 512MB it is —
- * hitting it means the run is runaway, not merely big. Young generation is
+ * rather than a typical one. The sample dominates: a 1MB sample of
+ * one-character lines is 500,000 events, each carrying its own trace. The
+ * conf side is bounded too — at most two million characters across every
+ * layer of both files (`MAX_TOTAL_CONF_CHARS` in tools.ts, #335), where the
+ * per-field limits alone would admit forty million. Measured with both near
+ * their maximum — 500,000 events beside 1.9 million characters of conf, with
+ * an EXTRACT, SEDCMD, FIELDALIAS and EVAL applying to every event — the run
+ * completes at 512MB in about 12s; the sample alone completes even at 256MB.
+ * That holds only because the worker trims the result before posting it
+ * (serialize.ts, #351): posting it whole failed between 400,000 and 500,000
+ * events. 512MB leaves room for shapes not measured, so hitting it means the
+ * run is runaway, not merely big. Young generation is
  * capped too because V8 otherwise sizes it off the machine's memory, not the
  * old-generation limit.
  * `stackSizeMb` stays at Node's default: the engine does not recurse deeply,

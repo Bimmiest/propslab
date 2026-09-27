@@ -69,6 +69,10 @@ export function describeNoOp(reason: NoOpReason): string {
  * it. Cutting anywhere else produces garbage — `(?<user>\w` is not a shorter
  * version of `(?<user>\w+)@`, it is a syntax error — which is why this walks the
  * pattern rather than slicing it by character count.
+ *
+ * A pattern with a top-level `|` has none: a prefix ending after it (`ERROR|`)
+ * matches the empty string anywhere, and one before it describes only the
+ * first alternative, not how far the pattern got.
  */
 function atomBoundaries(pattern: string): number[] {
   const boundaries: number[] = [];
@@ -93,6 +97,8 @@ function atomBoundaries(pattern: string): number[] {
     } else if (c === ')') {
       groupDepth--;
       i++;
+    } else if (c === '|' && groupDepth === 0) {
+      return [];
     } else {
       i++;
     }
@@ -138,7 +144,8 @@ export function longestPartialMatch(
     if (!compiled) continue;
 
     const match = compiled.exec(text);
-    if (match) return { end: match.index + match[0].length, prefix };
+    // An empty match (a leading `(?i)`, `a*`) agrees with nothing.
+    if (match && match[0] !== '') return { end: match.index + match[0].length, prefix };
   }
   return null;
 }

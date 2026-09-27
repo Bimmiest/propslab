@@ -38,9 +38,13 @@ export function getMetadataField(event: SplunkEvent, name: string): string | und
 }
 
 /** Serialise `_meta` back to the space-separated `key::value` form Splunk stores. */
-function serialiseMeta(meta: Record<string, string>): string {
+function serialiseMeta(meta: Record<string, string | string[]>): string {
   return Object.entries(meta)
-    .map(([key, value]) => (/\s/.test(value) ? `${key}::"${value}"` : `${key}::${value}`))
+    .flatMap(([key, values]) =>
+      (Array.isArray(values) ? values : [values]).map((value) =>
+        /\s/.test(value) ? `${key}::"${value}"` : `${key}::${value}`,
+      ),
+    )
     .join(' ');
 }
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { safeRegex, translatePcreToJs, hasReDoSRisk, SUPPORTS_SCOPED_MODIFIERS } from '../splunkRegex';
+import { safeRegex, translatePcreToJs, hasReDoSRisk, validateRegex, SUPPORTS_SCOPED_MODIFIERS } from '../splunkRegex';
 
 describe('translatePcreToJs', () => {
   it('hoists a leading inline flag group into the flags', () => {
@@ -304,5 +304,133 @@ describe('hasReDoSRisk — ambiguity analysis (#55)', () => {
   ])('flags ambiguous repeated group %s', (p) => {
     expect(hasReDoSRisk(p)).toBe(true);
     expect(safeRegex(p)).toBeNull();
+  });
+});
+
+// Doc-derived (PCRE2 pcre2pattern): constructs JS compiles with another
+// meaning — `\A` is a literal `A` to JS, and `[[:digit:]]` the class
+// `[[:digit:]` followed by a literal `]` — so they must be translated or
+// refused, never passed on.
+describe('translatePcreToJs — PCRE-only escapes, POSIX classes and flag groups (#355)', () => {
+  const matches = (pattern: string, s: string) => {
+    const re = safeRegex(pattern);
+    expect(re, pattern).not.toBeNull();
+    return re!.test(s);
+  };
+
+  it('anchors \\A, \\z and \\Z at the subject, not at a letter', () => {
+    expect(matches('\\Afoo', 'foo bar')).toBe(true);
+    expect(matches('\\Afoo', 'Afoo')).toBe(false);
+    expect(matches('bar\\z', 'foo bar')).toBe(true);
+    expect(matches('bar\\z', 'foo bar\n')).toBe(false);
+    expect(matches('bar\\Z', 'foo bar\n')).toBe(true);
+    expect(matches('bar\\Z', 'foo bar\n\n')).toBe(false);
+  });
+
+  it('keeps \\A at the absolute start when multiline may be on', () => {
+    expect(translatePcreToJs('\\Afoo').source).toBe('^foo');
+    expect(matches('(?m)\\Afoo', 'x\nfoo')).toBe(false);
+    expect(matches('(?m)^foo', 'x\nfoo')).toBe(true);
+  });
+
+  it('reads \\h, \\H, \\v, \\V and \\R as PCRE whitespace sets', () => {
+    expect(matches('a\\hb', 'a\tb')).toBe(true);
+    expect(matches('a\\hb', 'a b')).toBe(true);
+    expect(matches('a\\hb', 'a\nb')).toBe(false);
+    expect(matches('a\\Hb', 'axb')).toBe(true);
+    expect(matches('a\\Hb', 'a b')).toBe(false);
+    expect(matches('a\\vb', 'a\rb')).toBe(true);
+    expect(matches('a\\Vb', 'a\nb')).toBe(false);
+    expect(matches('^a\\Rb$', 'a\r\nb')).toBe(true);
+  });
+
+  it('handles \\h and \\H inside a character class, negated or not', () => {
+    expect(matches('^[x\\h]+$', 'x \tx')).toBe(true);
+    expect(matches('^[x\\H]$', ' ')).toBe(false);
+    expect(matches('^[x\\H]$', 'y')).toBe(true);
+    expect(matches('^[^x\\H]$', ' ')).toBe(true);
+    expect(matches('^[^x\\H]$', 'y')).toBe(false);
+  });
+
+  it('matches \\Q…\\E text literally, inside a class or out', () => {
+    expect(translatePcreToJs('\\Qa.b*\\E+').source).toBe('a\\.b\\*+');
+    expect(matches('^\\Q(1+1)\\E$', '(1+1)')).toBe(true);
+    expect(matches('^\\Qa.b', 'axb')).toBe(false);
+    expect(matches('^[\\Q]-^\\E]+$', '^]-')).toBe(true);
+    expect(matches('(?x) \\Qa b\\E', 'a b')).toBe(true);
+  });
+
+  it('translates POSIX classes inside brackets, negated with [:^…:]', () => {
+    expect(translatePcreToJs('[[:digit:]]+').source).toBe('[0-9]+');
+    expect(matches('^[[:alpha:][:digit:]_]+$', 'ab_12')).toBe(true);
+    expect(matches('^[[:xdigit:]]+$', 'deadBEEF')).toBe(true);
+    expect(matches('^[[:punct:]]+$', '!/:@[`{~')).toBe(true);
+    expect(matches('^[[:punct:]]$', 'a')).toBe(false);
+    expect(matches('^[[:^digit:]]$', '5')).toBe(false);
+    expect(matches('^[[:^digit:]]$', 'x')).toBe(true);
+    expect(matches('^[^[:^digit:]]$', '5')).toBe(true);
+  });
+
+  it('refuses an unknown POSIX class rather than reading it as a set of letters', () => {
+    expect(translatePcreToJs('[[:digt:]]').error).toMatch(/Unknown POSIX class/);
+    expect(safeRegex('[[:digt:]]')).toBeNull();
+    expect(validateRegex('[[:digt:]]')).toMatch(/Unknown POSIX class/);
+  });
+
+  it('refuses PCRE-only escapes JS would read as the bare letter', () => {
+    for (const p of ['\\Gfoo', 'a\\Kb', '\\p{L}+', '\\X', '[\\A]', '\\g{-1}']) {
+      expect(translatePcreToJs(p).error, p).toBeDefined();
+      expect(safeRegex(p), p).toBeNull();
+      expect(validateRegex(p), p).not.toBeNull();
+    }
+  });
+
+  it('translates the character escapes JS spells differently', () => {
+    expect(translatePcreToJs('\\e\\a\\x{41}\\x9').source).toBe('\\x1b\\x07\\u0041\\x09');
+    expect(translatePcreToJs("(?'n'a)\\k'n'\\g{n}\\g1").source).toBe('(?<n>a)\\k<n>\\k<n>\\1');
+    expect(translatePcreToJs('a(?#comment)b').source).toBe('ab');
+  });
+
+  it('applies negative and mixed flag groups through scoped modifiers', () => {
+    const scoped = { scopedModifiers: true };
+    expect(translatePcreToJs('(?i)a(?-i)b', '', scoped)).toEqual({ source: 'a(?-i:b)', flags: 'i', warnings: [] });
+    expect(translatePcreToJs('a(?i-s)b', '', scoped).source).toBe('a(?i-s:b)');
+    expect(translatePcreToJs('a(?i-x:b)', '', scoped).source).toBe('a(?i:b)');
+    // A leading negative group governs the whole pattern, like a positive one.
+    expect(translatePcreToJs('(?-i)a', 'i', scoped)).toEqual({ source: 'a', flags: '', warnings: [] });
+  });
+
+  it('falls back for a written (?i:…) group where scoped modifiers are unavailable', () => {
+    const t = translatePcreToJs('a(?i:b)c', '', { scopedModifiers: false });
+    expect(t.source).toBe('a(?:b)c');
+    expect(t.flags).toBe('i');
+    expect(t.warnings).toHaveLength(1);
+    expect(t.error).toBeUndefined();
+  });
+
+  it('warns when a negative flag group cannot switch its flag off', () => {
+    const t = translatePcreToJs('(?i)a(?-i)b', '', { scopedModifiers: false });
+    expect(t.source).toBe('ab');
+    expect(t.flags).toBe('i');
+    expect(t.warnings.join(' ')).toMatch(/could not switch off i/);
+    // Switching off a flag that is not on changes nothing, so needs no warning.
+    expect(translatePcreToJs('a(?-i)b', '', { scopedModifiers: false }).warnings).toEqual([]);
+  });
+
+  it.runIf(SUPPORTS_SCOPED_MODIFIERS)('matches with a negative flag group scoped to the text after it', () => {
+    const re = safeRegex('(?i)a(?-i)b')!;
+    expect(re.test('Ab')).toBe(true);
+    expect(re.test('AB')).toBe(false);
+  });
+});
+
+describe('hasReDoSRisk — adjacent quantifiers compare whole atoms (#365)', () => {
+  it.each(['\\d+d+', '\\.+.+', 'd+\\d+', '\\w*w*'])('does not read an escape and its bare letter as one atom: %s', (p) => {
+    expect(hasReDoSRisk(p)).toBe(false);
+    expect(safeRegex(p)).not.toBeNull();
+  });
+
+  it.each(['\\\\d+d+', '\\.+\\.+', 'x\\d+\\d+'])('still flags a repeated atom after escaped backslashes: %s', (p) => {
+    expect(hasReDoSRisk(p)).toBe(true);
   });
 });

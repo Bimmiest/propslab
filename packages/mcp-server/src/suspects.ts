@@ -13,7 +13,7 @@
 import { parseConf } from '../../../src/engine/parser/confParser';
 import { getDirectiveInfo } from '../../../src/engine/directiveRegistry';
 import { hasReDoSRisk } from '../../../src/utils/splunkRegex';
-import type { ConfInput } from '../../../src/engine/types';
+import type { ConfDirective, ConfInput, ConfStanza } from '../../../src/engine/types';
 
 export interface RegexSuspect {
   file: 'props.conf' | 'transforms.conf';
@@ -24,6 +24,28 @@ export interface RegexSuspect {
   pattern: string;
   /** True when the engine's structural ReDoS heuristic flags the pattern. */
   redos_risk: boolean;
+}
+
+/**
+ * Every directive in `stanzas` whose non-empty value is a regex the engine
+ * compiles. Shared with validate's static regex check (regexLint.ts), so the
+ * two agree on what counts as regex-bearing.
+ */
+export function* regexDirectives(
+  stanzas: ConfStanza[],
+  file: 'props.conf' | 'transforms.conf',
+): Generator<{ stanza: ConfStanza; dir: ConfDirective }> {
+  for (const stanza of stanzas) {
+    for (const dir of stanza.directives) {
+      const baseKey = dir.className ? dir.directiveType : dir.key;
+      const info = getDirectiveInfo(baseKey, file);
+      // SEDCMD's value embeds its regex in sed syntax rather than being
+      // typed `regex` in the registry; it executes against `_raw` all the
+      // same, so it belongs on the list.
+      const carriesRegex = info?.valueType === 'regex' || dir.directiveType === 'SEDCMD';
+      if (carriesRegex && dir.value.trim()) yield { stanza, dir };
+    }
+  }
 }
 
 export function collectRegexSuspects(
@@ -37,26 +59,17 @@ export function collectRegexSuspects(
   ];
 
   for (const [file, input] of files) {
-    for (const stanza of parseConf(input, file).stanzas) {
-      for (const dir of stanza.directives) {
-        const baseKey = dir.className ? dir.directiveType : dir.key;
-        const info = getDirectiveInfo(baseKey, file);
-        // SEDCMD's value embeds its regex in sed syntax rather than being
-        // typed `regex` in the registry; it executes against `_raw` all the
-        // same, so it belongs on the suspect list.
-        const carriesRegex = info?.valueType === 'regex' || dir.directiveType === 'SEDCMD';
-        const pattern = dir.value.trim();
-        if (!carriesRegex || !pattern) continue;
-        suspects.push({
-          file,
-          stanza: stanza.name,
-          key: dir.key,
-          line: dir.line,
-          ...(dir.layer !== undefined ? { layer: dir.layer } : {}),
-          pattern,
-          redos_risk: hasReDoSRisk(pattern),
-        });
-      }
+    for (const { stanza, dir } of regexDirectives(parseConf(input, file).stanzas, file)) {
+      const pattern = dir.value.trim();
+      suspects.push({
+        file,
+        stanza: stanza.name,
+        key: dir.key,
+        line: dir.line,
+        ...(dir.layer !== undefined ? { layer: dir.layer } : {}),
+        pattern,
+        redos_risk: hasReDoSRisk(pattern),
+      });
     }
   }
 

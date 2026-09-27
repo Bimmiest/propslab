@@ -11,7 +11,7 @@ Implements [#202](https://github.com/Bimmiest/propslab/issues/202).
 | Tool | Wraps | Returns |
 |---|---|---|
 | `simulate` | `runPipeline` | Per-event `_time`, `fields`, indexed fields, and a `processingTrace` naming every processor that touched the event, plus diagnostics |
-| `validate` | the pipeline's config-level parse/lint path | `ValidationDiagnostic[]` for conf text alone — no sample needed |
+| `validate` | `parseConf` + `lintConfigs` (the pipeline's config-level lint) + a compile of every stanza's regexes | `ValidationDiagnostic[]` for conf text alone — no sample needed |
 | `explain_precedence` | layered `parseConf` + `resolveStanzasForEvent` + `mergeDirectives` | btool-style provenance: which layer won each attribute (`overrides` / `overriddenBy` / `layers`), and the effective directive set for a sourcetype |
 | `lookup_directive` | `directiveRegistry` | Curated directive documentation, including the simulation-support level, so an agent cites the registry instead of recalling spec |
 
@@ -78,21 +78,36 @@ reviewed. `docs/engine.md`'s closing section is the spec this implements:
   generation, 64 MB young). A run that exceeds it kills only its own worker
   and comes back as `{"error": "out_of_memory", "heap_limit_mb": …}` with
   guidance to shrink the input, instead of growing until the whole server
-  dies. 512 MB is what the worst input the schemas accept needs (1 MB of
-  very short lines, ~125k events); 256 MB was measured to be too little.
-  That includes the conf side, which is why it has a combined bound:
+  dies. The worst sample the schemas accept is 1 MB of one-character lines
+  with `SHOULD_LINEMERGE = false`: 500,000 events, each with its own trace.
+  While the worker posted the whole result for the server to trim, that ran
+  out of 512 MB somewhere between 400k and 500k events; now that the worker
+  trims it before posting (next bullet), 500k events were measured to
+  complete within 512 MB — and within 256 MB. The limit covers the conf
+  side too, which is why it has a combined bound:
   per field the schemas admit 20 layers of 1M characters, but
   `props_conf` and `transforms_conf` together may carry at most 2M
   characters across all their layers. More comes back as
   `{"error": "input_too_large", "conf_chars": …, "max_conf_chars": …}`
   before any worker starts. The bound also caps what a timeout re-parses
   on the server's own thread to list regex suspects — a few hundred
-  milliseconds at the limit. A 1 MB sample of one-character lines beside
-  2M characters of conf was measured to complete within 512 MB.
+  milliseconds at the limit. Measured: a 1 MB sample of one-character lines
+  (500k events) beside 1.9M characters of conf (33,000 stanzas), with an
+  EXTRACT, SEDCMD, FIELDALIAS and EVAL applying to every event and
+  `include_snapshots` on, completes within 512 MB — in about 12 s, so it
+  needs a `timeout_ms` above the 5 s default.
   Process-wide V8 heap flags override worker limits, so the launcher strips
   `--max-old-space-size` / `--max-semi-space-size` / `--max-heap-size` from
   its own arguments and from `NODE_OPTIONS` before re-exec'ing, and says so
   on stderr. With `PROPSLAB_MCP_NO_REEXEC=1` nothing is stripped.
+- **Each `simulate` response is bounded** (#351). The worker shapes the
+  response itself and posts only that, so the full result — which grows
+  with the event count — never reaches the server's own thread, where no
+  heap limit applies. `max_events` bounds `events` and `processingSteps`
+  alike (the latter covers the returned events only), and the whole
+  response is capped at 2M characters (`MAX_RESPONSE_CHARS`): events that
+  would not fit are left out, diagnostics may take at most half of it, and
+  `truncationNote` says which cut applied.
 - **At most `min(4, os.availableParallelism())` workers run at once**; further
   calls queue first come, first served. The `timeout_ms` budget starts when a
   call's worker starts, not when it is queued: a timeout is reported as "your

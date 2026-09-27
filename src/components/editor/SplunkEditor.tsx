@@ -49,6 +49,13 @@ const EDITOR_OPTIONS: editor.IStandaloneEditorConstructionOptions = {
   },
 };
 
+// One options object per file, each named for screen readers, so the three
+// editors are not all announced as the same generic "Editor content".
+const OPTIONS_BY_FILE: Record<'props.conf' | 'transforms.conf', editor.IStandaloneEditorConstructionOptions> = {
+  'props.conf': { ...EDITOR_OPTIONS, ariaLabel: 'props.conf' },
+  'transforms.conf': { ...EDITOR_OPTIONS, ariaLabel: 'transforms.conf' },
+};
+
 export function SplunkEditor({ value, onChange, fileType = 'props.conf', language, onEditorReady }: SplunkEditorProps) {
   // Each conf file maps to its own language so it only offers its own directives (UI-4).
   const resolvedLanguage = language ?? (fileType === 'transforms.conf' ? TRANSFORMS_LANGUAGE_ID : PROPS_LANGUAGE_ID);
@@ -119,7 +126,7 @@ export function SplunkEditor({ value, onChange, fileType = 'props.conf', languag
       onChange={onChange}
       onMount={handleMount}
       theme={theme === 'dark' ? 'splunk-dark' : 'splunk-light'}
-      options={EDITOR_OPTIONS}
+      options={OPTIONS_BY_FILE[fileType]}
       beforeMount={ensureSplunkMonaco}
     />
   );

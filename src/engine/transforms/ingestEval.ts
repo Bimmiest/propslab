@@ -5,6 +5,7 @@ import { deleteField, setField } from '../utils/fieldBag';
 import { atDirective } from '../parser/provenance';
 import { effectiveDirective } from '../utils/directiveValues';
 import { appendTraceStep, metadataChanges } from '../utils/traceStep';
+import { BOOLEAN_ASSIGNMENT_ERROR, numArg } from '../processors/eval/values';
 
 // Split "field=expr, field2=fn(a,b)" on top-level commas only — not inside parens
 // and not inside a string literal (e.g. msg="a,b" must stay one assignment).
@@ -137,11 +138,13 @@ export function applyIngestEval(
               });
             }
           });
+          // Refused as in EVAL-: the assignment writes nothing, not "true".
+          if (typeof result === 'boolean') throw new Error(BOOLEAN_ASSIGNMENT_ERROR);
           // INGEST_EVAL can rewrite the event's timestamp and raw text, not just
           // add indexed fields. Route _time/_raw to the event rather than fields.
           if (fieldName === '_time') {
-            const epoch = result === null ? NaN : Number(Array.isArray(result) ? result[0] : result);
-            if (!Number.isNaN(epoch)) currentEvent._time = new Date(epoch * 1000);
+            const epoch = numArg(result);
+            if (epoch !== null) currentEvent._time = new Date(epoch * 1000);
           } else if (fieldName === '_raw') {
             currentEvent._raw =
               result === null ? '' : Array.isArray(result) ? result.join('\n') : String(result);

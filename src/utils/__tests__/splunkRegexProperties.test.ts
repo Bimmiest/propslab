@@ -299,10 +299,18 @@ describe('translatePcreToJs properties (#340)', () => {
     fc.assert(
       fc.property(fc.string({ unit: regexChar, maxLength: 16 }), fc.boolean(), (s, scoped) => {
         const t = translatePcreToJs(s, '', { scopedModifiers: scoped });
-        // A class opening `[]` or `[^]` is the one spelling JS accepts but reads
-        // differently from PCRE, so the translator rewrites it (#341). The test
-        // is conservative: it also skips a `[]` that sits inside a class.
-        if (compiles(s) && !/\[\^?\]/.test(s)) {
+        // Spellings JS accepts but reads differently from PCRE, which the
+        // translator rewrites or refuses: a class opening `[]` or `[^]` (#341);
+        // a letter escape such as `\a` (BEL) or `\P` (a Unicode property) that
+        // JS reads as the bare letter, and `\x` without two hex digits (#355);
+        // and, where scoped groups are off, a written `(?i:…)`, which falls
+        // back to a hoisted flag. The skips are conservative: they also match
+        // inside a class or after an escaped backslash.
+        const pcreDiffers =
+          /\[\^?\]/.test(s) ||
+          /\\(?![dDwWsStnrfbB]|x[0-9a-fA-F]{2}|c[A-Za-z]|[^A-Za-z])/.test(s) ||
+          (!scoped && /\(\?[a-zA-Z]*-?[a-zA-Z]*:/.test(s));
+        if (compiles(s) && !pcreDiffers) {
           expect(t, s).toEqual({ source: s, flags: '', warnings: [] });
         }
       }),

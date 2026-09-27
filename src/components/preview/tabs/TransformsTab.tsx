@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { DirectiveNoOpList } from './shared/DirectiveNoOpList';
 import { useAppStore } from '../../../store/useAppStore';
 import { Icon } from '../../ui/Icon';
@@ -9,6 +9,8 @@ interface StepSummary {
   phase: 'index-time' | 'search-time';
   /** Distinct per-event descriptions, in first-seen order. */
   descriptions: string[];
+  /** The one line shown for the step. */
+  summaryText: string;
   eventsAffected: number;
   totalEvents: number;
   fieldsAdded: string[];
@@ -22,6 +24,9 @@ interface StepSummary {
 // index-time step collapse to one representative summary line.
 const stripDetail = (d: string) => d.replace(/\s*\([^)]*\)\s*$/, '');
 
+/** Per-event detail rows rendered at first, and added per "show more". */
+const DETAIL_PAGE_SIZE = 100;
+
 export function TransformsTab() {
   const result = useAppStore((s) => s.processingResult);
 
@@ -32,7 +37,19 @@ export function TransformsTab() {
     // Group by processor (not processor+description) so index-time steps with
     // per-event descriptions collapse into one row per processor, consistent with
     // the search-time section. Distinct event count and per-event detail are kept.
-    const stepMap = new Map<string, StepSummary & { events: Set<number> }>();
+    // Sets (which keep first-seen order), not Array.includes: a step with a
+    // distinct description per event made this quadratic, over a second at
+    // 20k events (#366).
+    interface Accumulator {
+      processor: string;
+      phase: StepSummary['phase'];
+      descriptions: Set<string>;
+      fieldsAdded: Set<string>;
+      fieldsModified: Set<string>;
+      fieldsRemoved: Set<string>;
+      events: Set<number>;
+    }
+    const stepMap = new Map<string, Accumulator>();
 
     result.events.forEach((event, eventIdx) => {
       for (const step of event.processingTrace) {
@@ -41,34 +58,38 @@ export function TransformsTab() {
           entry = {
             processor: step.processor,
             phase: step.phase,
-            descriptions: [],
-            eventsAffected: 0,
-            totalEvents,
-            fieldsAdded: [],
-            fieldsModified: [],
-            fieldsRemoved: [],
+            descriptions: new Set(),
+            fieldsAdded: new Set(),
+            fieldsModified: new Set(),
+            fieldsRemoved: new Set(),
             events: new Set<number>(),
           };
           stepMap.set(step.processor, entry);
         }
         entry.events.add(eventIdx);
-        if (!entry.descriptions.includes(step.description)) entry.descriptions.push(step.description);
-        for (const f of step.fieldsAdded ?? []) {
-          if (!entry.fieldsAdded.includes(f)) entry.fieldsAdded.push(f);
-        }
-        for (const f of step.fieldsModified ?? []) {
-          if (!entry.fieldsModified.includes(f)) entry.fieldsModified.push(f);
-        }
-        for (const f of step.fieldsRemoved ?? []) {
-          if (!entry.fieldsRemoved.includes(f)) entry.fieldsRemoved.push(f);
-        }
+        entry.descriptions.add(step.description);
+        for (const f of step.fieldsAdded ?? []) entry.fieldsAdded.add(f);
+        for (const f of step.fieldsModified ?? []) entry.fieldsModified.add(f);
+        for (const f of step.fieldsRemoved ?? []) entry.fieldsRemoved.add(f);
       }
     });
 
     const indexTime: StepSummary[] = [];
     const searchTime: StepSummary[] = [];
-    for (const { events, ...s } of stepMap.values()) {
-      const step: StepSummary = { ...s, eventsAffected: events.size };
+    for (const entry of stepMap.values()) {
+      const descriptions = [...entry.descriptions];
+      const reps = new Set(descriptions.map(stripDetail));
+      const step: StepSummary = {
+        processor: entry.processor,
+        phase: entry.phase,
+        descriptions,
+        summaryText: reps.size === 1 ? reps.values().next().value! : descriptions[0]!,
+        eventsAffected: entry.events.size,
+        totalEvents,
+        fieldsAdded: [...entry.fieldsAdded],
+        fieldsModified: [...entry.fieldsModified],
+        fieldsRemoved: [...entry.fieldsRemoved],
+      };
       if (step.phase === 'index-time') indexTime.push(step);
       else searchTime.push(step);
     }
@@ -139,31 +160,10 @@ function StepSection({ title, steps, phaseColor }: { title: string; steps: StepS
                   ({step.eventsAffected}/{step.totalEvents} events)
                 </span>
               </div>
-              {(() => {
-                const reps = [...new Set(step.descriptions.map(stripDetail))];
-                const summaryText = reps.length === 1 ? reps[0] : step.descriptions[0];
-                return (
-                  <>
-                    <div className="text-xs text-[var(--color-text-secondary)] mt-0.5">
-                      {summaryText}
-                    </div>
-                    {step.descriptions.length > 1 && (
-                      <details className="mt-1">
-                        <summary className="text-[10px] text-[var(--color-text-muted)] cursor-pointer hover:text-[var(--color-text-secondary)] transition-colors select-none">
-                          Per-event detail ({step.descriptions.length})
-                        </summary>
-                        <ul className="mt-1 space-y-0.5">
-                          {step.descriptions.map((d, i) => (
-                            <li key={i} className="text-[11px] text-[var(--color-text-muted)] pl-2 border-l border-[var(--color-border-subtle)]">
-                              {d}
-                            </li>
-                          ))}
-                        </ul>
-                      </details>
-                    )}
-                  </>
-                );
-              })()}
+              <div className="text-xs text-[var(--color-text-secondary)] mt-0.5">
+                {step.summaryText}
+              </div>
+              {step.descriptions.length > 1 && <PerEventDetail descriptions={step.descriptions} />}
               {(step.fieldsAdded.length > 0 || step.fieldsModified.length > 0 || step.fieldsRemoved.length > 0) && (
                 <div className="flex flex-wrap gap-1 mt-1">
                   {step.fieldsAdded.map((f) => (
@@ -195,5 +195,44 @@ function StepSection({ title, steps, phaseColor }: { title: string; steps: StepS
         ))}
       </div>
     </div>
+  );
+}
+
+/**
+ * The per-event descriptions of one step. Rendered only while open, and a page
+ * at a time: every row of every step used to be in the DOM, closed or not,
+ * which is most of what made switching to this tab slow on large inputs (#366).
+ */
+function PerEventDetail({ descriptions }: { descriptions: string[] }) {
+  const [open, setOpen] = useState(false);
+  const [shown, setShown] = useState(DETAIL_PAGE_SIZE);
+  const remaining = descriptions.length - shown;
+
+  return (
+    <details className="mt-1" onToggle={(e) => setOpen(e.currentTarget.open)}>
+      <summary className="text-[10px] text-[var(--color-text-muted)] cursor-pointer hover:text-[var(--color-text-secondary)] transition-colors select-none">
+        Per-event detail ({descriptions.length})
+      </summary>
+      {open && (
+        <>
+          <ul className="mt-1 space-y-0.5">
+            {descriptions.slice(0, shown).map((d, i) => (
+              <li key={i} className="text-[11px] text-[var(--color-text-muted)] pl-2 border-l border-[var(--color-border-subtle)]">
+                {d}
+              </li>
+            ))}
+          </ul>
+          {remaining > 0 && (
+            <button
+              type="button"
+              onClick={() => setShown((n) => n + DETAIL_PAGE_SIZE)}
+              className="mt-1 text-[10px] text-[var(--color-accent)] hover:underline cursor-pointer border-none bg-transparent p-0"
+            >
+              Show {Math.min(remaining, DETAIL_PAGE_SIZE)} more ({remaining} not shown)
+            </button>
+          )}
+        </>
+      )}
+    </details>
   );
 }

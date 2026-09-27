@@ -1,4 +1,4 @@
-import { AUTO_TIME_FORMATS } from '../../processors/timestampExtractor';
+import { AUTO_TIME_FORMATS, execAutoFormat } from '../../processors/timestampExtractor';
 import { strftimeToRegex } from '../../../utils/strftime';
 import { escapeRegex } from '../../../utils/splunkRegex';
 import type { Confidence, ScaffoldSuggestion } from '../types';
@@ -34,7 +34,7 @@ export function detectTimestamp(lines: string[]): ScaffoldSuggestion[] {
   const tally = new Map<string, { count: number; match: RegExpExecArray; line: string }>();
   for (const line of sample) {
     for (const { fmt, regex } of PATTERNS) {
-      const m = regex.exec(line);
+      const m = execAutoFormat(fmt, regex, line);
       if (!m) continue;
       const e = tally.get(fmt);
       if (e) e.count++;

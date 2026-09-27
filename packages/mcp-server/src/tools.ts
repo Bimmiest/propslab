@@ -21,7 +21,7 @@ import {
   WorkerTimeoutError,
   type RunInWorkerOptions,
 } from './runInWorker';
-import { serializeResult } from './serialize';
+import { MAX_RESPONSE_CHARS } from './serialize';
 import { collectRegexSuspects } from './suspects';
 
 // ---------------------------------------------------------------------------
@@ -157,7 +157,17 @@ export const simulateInputShape = {
     .boolean()
     .default(false)
     .describe('Include before/after _raw snapshots on each trace step (verbose).'),
-  max_events: z.number().int().min(1).max(500).default(20),
+  max_events: z
+    .number()
+    .int()
+    .min(1)
+    .max(500)
+    .default(20)
+    .describe(
+      'Most events to return; processingSteps covers the returned events only. The whole ' +
+        `response is also capped at ${MAX_RESPONSE_CHARS} characters, and returns fewer ` +
+        'events when they would not fit — truncationNote says when either cut applies.',
+    ),
   timeout_ms: timeoutSchema,
 };
 
@@ -319,7 +329,7 @@ export async function handleSimulate(args: SimulateArgs, worker?: string | RunIn
     sourcetype: args.sourcetype,
   };
   try {
-    const { result, diagnostics } = await runInWorker<SimulateResponse>(
+    const response = await runInWorker<SimulateResponse>(
       {
         op: 'simulate',
         raw: args.raw,
@@ -328,17 +338,13 @@ export async function handleSimulate(args: SimulateArgs, worker?: string | RunIn
         transformsConf: args.transforms_conf,
         perEventPipeline: args.per_event_pipeline,
         captureOffsets: args.capture_offsets,
+        maxEvents: args.max_events,
+        includeSnapshots: args.include_snapshots,
       },
       args.timeout_ms,
       worker,
     );
-    return json({
-      ...serializeResult(result, {
-        maxEvents: args.max_events,
-        includeSnapshots: args.include_snapshots,
-      }),
-      diagnostics,
-    });
+    return json(response);
   } catch (err) {
     return workerFailure(err, args.props_conf, args.transforms_conf);
   }
@@ -482,8 +488,10 @@ export function registerTools(server: McpServer, options?: { workerPath?: string
       description:
         'Lint props.conf / transforms.conf text alone: parse errors, unknown or mis-cased ' +
         'keys, values of the wrong type, TRANSFORMS-/REPORT- references to missing stanzas, ' +
-        'settings that are inert in the phase they are used in, and directives the simulator ' +
-        'does not honour. Use it to check a config you have drafted before simulating it.',
+        'settings that are inert in the phase they are used in, directives the simulator ' +
+        'does not honour, and regexes (in every stanza) that will not compile or that the ' +
+        'simulator refuses as ReDoS-prone. Use it to check a config you have drafted before ' +
+        'simulating it.',
       inputSchema: validateInputShape,
     },
     (args, extra) => handleValidate(args, worker(extra)),

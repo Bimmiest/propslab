@@ -90,23 +90,25 @@ describe('applyEvalExpressions — arithmetic', () => {
   });
 });
 
+// Predicates are read through if() here: a field cannot be assigned a boolean
+// result (#358).
 describe('applyEvalExpressions — numeric predicates', () => {
   it('isnum() is false for non-numeric strings', () => {
-    const r = applyEvalExpressions([event({ a: 'abc' })], [evalDir('n', 'isnum(a)')])[0]!;
+    const r = applyEvalExpressions([event({ a: 'abc' })], [evalDir('n', 'if(isnum(a), "true", "false")')])[0]!;
     expect(r.fields['n']).toBe('false');
   });
 
   it('isnum() is true for numeric strings', () => {
-    const r = applyEvalExpressions([event({ a: '3.14' })], [evalDir('n', 'isnum(a)')])[0]!;
+    const r = applyEvalExpressions([event({ a: '3.14' })], [evalDir('n', 'if(isnum(a), "true", "false")')])[0]!;
     expect(r.fields['n']).toBe('true');
   });
 
   it('isint() is false for non-numeric and non-integer input', () => {
-    const r1 = applyEvalExpressions([event({ a: 'abc' })], [evalDir('n', 'isint(a)')])[0]!;
+    const r1 = applyEvalExpressions([event({ a: 'abc' })], [evalDir('n', 'if(isint(a), "true", "false")')])[0]!;
     expect(r1.fields['n']).toBe('false');
-    const r2 = applyEvalExpressions([event({ a: '5.5' })], [evalDir('n', 'isint(a)')])[0]!;
+    const r2 = applyEvalExpressions([event({ a: '5.5' })], [evalDir('n', 'if(isint(a), "true", "false")')])[0]!;
     expect(r2.fields['n']).toBe('false');
-    const r3 = applyEvalExpressions([event({ a: '5' })], [evalDir('n', 'isint(a)')])[0]!;
+    const r3 = applyEvalExpressions([event({ a: '5' })], [evalDir('n', 'if(isint(a), "true", "false")')])[0]!;
     expect(r3.fields['n']).toBe('true');
   });
 
@@ -284,7 +286,7 @@ describe('applyEvalExpressions — IN / NOT IN operator', () => {
   it('IN returns true when field value is in the list', () => {
     const r = applyEvalExpressions(
       [event({ eventName: 'DeleteUser' })],
-      [evalDir('hit', 'eventName IN ("DeleteUser","UpdateUser","CreateUser")')]
+      [evalDir('hit', 'if(eventName IN ("DeleteUser","UpdateUser","CreateUser"), "true", "false")')]
     )[0]!;
     expect(r.fields['hit']).toBe('true');
   });
@@ -292,7 +294,7 @@ describe('applyEvalExpressions — IN / NOT IN operator', () => {
   it('IN returns false when field value is not in the list', () => {
     const r = applyEvalExpressions(
       [event({ eventName: 'ListBuckets' })],
-      [evalDir('hit', 'eventName IN ("DeleteUser","UpdateUser","CreateUser")')]
+      [evalDir('hit', 'if(eventName IN ("DeleteUser","UpdateUser","CreateUser"), "true", "false")')]
     )[0]!;
     expect(r.fields['hit']).toBe('false');
   });
@@ -300,7 +302,7 @@ describe('applyEvalExpressions — IN / NOT IN operator', () => {
   it('NOT IN returns true when value is absent from list', () => {
     const r = applyEvalExpressions(
       [event({ eventName: 'ListBuckets' })],
-      [evalDir('hit', 'eventName NOT IN ("DeleteUser","UpdateUser")')]
+      [evalDir('hit', 'if(eventName NOT IN ("DeleteUser","UpdateUser"), "true", "false")')]
     )[0]!;
     expect(r.fields['hit']).toBe('true');
   });
@@ -308,7 +310,7 @@ describe('applyEvalExpressions — IN / NOT IN operator', () => {
   it('NOT IN returns false when value is present in list', () => {
     const r = applyEvalExpressions(
       [event({ eventName: 'DeleteUser' })],
-      [evalDir('hit', 'eventName NOT IN ("DeleteUser","UpdateUser")')]
+      [evalDir('hit', 'if(eventName NOT IN ("DeleteUser","UpdateUser"), "true", "false")')]
     )[0]!;
     expect(r.fields['hit']).toBe('false');
   });
@@ -316,7 +318,7 @@ describe('applyEvalExpressions — IN / NOT IN operator', () => {
   it('IN works with numeric comparison', () => {
     const r = applyEvalExpressions(
       [event({ code: '200' })],
-      [evalDir('ok', 'code IN (200, 201, 204)')]
+      [evalDir('ok', 'if(code IN (200, 201, 204), "true", "false")')]
     )[0]!;
     expect(r.fields['ok']).toBe('true');
   });
@@ -491,7 +493,7 @@ describe('applyEvalExpressions — string escapes reach regex functions intact (
   it('match() honours a single-backslash class', () => {
     const result = applyEvalExpressions(
       [event({}, 'abc123')],
-      [evalDir('m', 'match(_raw, "\\d+")')],
+      [evalDir('m', 'if(match(_raw, "\\d+"), "true", "false")')],
     )[0]!;
     expect(result.fields['m']).toBe('true');
   });
@@ -499,7 +501,7 @@ describe('applyEvalExpressions — string escapes reach regex functions intact (
   it('still accepts the double-backslash form', () => {
     const result = applyEvalExpressions(
       [event({}, 'abc123')],
-      [evalDir('m', 'match(_raw, "\\\\d+")')],
+      [evalDir('m', 'if(match(_raw, "\\\\d+"), "true", "false")')],
     )[0]!;
     expect(result.fields['m']).toBe('true');
   });

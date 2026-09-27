@@ -153,7 +153,9 @@ describe('useWorkerRequest', () => {
     expect(result.current.data).toBe('');
   });
 
-  it('cancels the watchdog of a request superseded by an idle one', () => {
+  it('reaps a request superseded by an idle one without reporting it', () => {
+    // The worker is still busy with the superseded request (#364), so a hang
+    // must still free it for the next one, but nobody is waiting on it.
     const { result } = setup();
     const first = latest();
     act(() => result.current.run({ value: 'slow' }));
@@ -161,7 +163,56 @@ describe('useWorkerRequest', () => {
 
     act(() => void vi.advanceTimersByTime(5000));
     expect(result.current.status).toBe('idle');
-    expect(first.terminated).toBe(false);
+    expect(first.terminated).toBe(true);
+    expect(FakeWorker.instances).toHaveLength(2);
+  });
+
+  it('times a request from when the worker reaches it, not from its post (#364)', () => {
+    const { result } = setup();
+    act(() => result.current.run({ value: 'a' }));
+    act(() => latest().ready());
+    act(() => void vi.advanceTimersByTime(700));
+    act(() => result.current.run({ value: 'b' }));
+    // `a` finishes just inside its own budget; `b` then gets a full one.
+    act(() => void vi.advanceTimersByTime(250));
+    act(() => latest().respond(1, 'A'));
+    act(() => void vi.advanceTimersByTime(900));
+    expect(result.current.status).toBe('pending');
+    act(() => latest().respond(2, 'B'));
+    expect(result.current.status).toBe('ok');
+    expect(result.current.data).toBe('B');
+    expect(FakeWorker.instances).toHaveLength(1);
+  });
+
+  it('re-posts a request that timed out before its worker loaded, once the replacement loads (#364)', () => {
+    const { result } = setup();
+    act(() => result.current.run({ value: 'a' }));
+    const slow = latest();
+    act(() => void vi.advanceTimersByTime(1000));
+    expect(slow.terminated).toBe(true);
+    // Never ran, so it is neither a timeout nor handed to the replacement
+    // before that has loaded (its load would eat the budget again).
+    expect(result.current.status).toBe('pending');
+    const replacement = latest();
+    expect(replacement.posted).toEqual([]);
+
+    act(() => void vi.advanceTimersByTime(5000));
+    act(() => replacement.ready());
+    expect(replacement.posted).toEqual([{ value: 'a', id: 1 }]);
+    act(() => void vi.advanceTimersByTime(999));
+    act(() => replacement.respond(1, 'A'));
+    expect(result.current.status).toBe('ok');
+    expect(result.current.data).toBe('A');
+  });
+
+  it('runs inline a request that timed out before load if the replacement cannot load either', () => {
+    const { result } = setup();
+    act(() => result.current.run({ value: 'a' }));
+    act(() => void vi.advanceTimersByTime(1000));
+    act(() => latest().failToLoad());
+    act(() => latest().failToLoad());
+    expect(result.current.status).toBe('ok');
+    expect(result.current.data).toBe('inline:a');
   });
 
   it('returns the same run across renders', () => {
@@ -321,6 +372,7 @@ describe('useWorkerRequest', () => {
     act(() => result.current.run({ value: 'boom3' }));
     expect(result.current.status).toBe('pending');
     expect(latest().posted).toEqual([{ value: 'boom3', id: 5 }]);
+    act(() => latest().ready());
     act(() => void vi.advanceTimersByTime(1000));
     expect(result.current.status).toBe('timeout');
     expect(FakeWorker.instances).toHaveLength(5);

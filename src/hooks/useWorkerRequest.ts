@@ -23,6 +23,8 @@ import { createManagedWorker } from './workerLifecycle';
 //   resent to the replacement, and past MAX_WORKER_LOAD_FAILURES it runs
 //   inline (#309): `new Worker` does not throw when its script cannot be
 //   fetched, and the hook used to rebuild such a worker forever.
+// - A timeout before the worker loaded is not the request's doing either: it
+//   is posted again once the replacement has loaded (#364).
 // - A crash is the request's doing. It is reported as `timeout` and never run
 //   inline (#326) — counting crashes toward the cap once sent the hook inline
 //   for good after two crashing patterns, and every later pattern ran on the
@@ -133,8 +135,15 @@ export function useWorkerRequest<TReq extends object, TRes, TData>(
         setStatus(outcome.status);
         setData(outcome.status === 'ok' ? outcome.data : configRef.current.empty);
       },
-      onTimeout(request) {
-        if (request.id === idRef.current) reportTimeout();
+      onTimeout(request, _others, loaded) {
+        if (request.id !== idRef.current) return;
+        // The worker never loaded, so the request never ran and says nothing
+        // about the pattern: run it once the replacement has loaded (#364).
+        if (!loaded && latest?.id === request.id) {
+          if (!managed.postWhenReady(request)) applyInline(latest.request);
+          return;
+        }
+        reportTimeout();
       },
       onCrash(inFlight) {
         // Nothing was requested, so there is nothing to report. A crash with

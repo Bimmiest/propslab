@@ -39,6 +39,21 @@ describe('longestPartialMatch', () => {
     expect(longestPartialMatch(String.raw`ZZZ\d+`, 'nothing alike here')).toBeNull();
   });
 
+  it('reports nothing for a top-level alternation rather than an empty-matching prefix (#365)', () => {
+    // `ERROR|` matches the empty string at 0, which is not agreement.
+    expect(longestPartialMatch('ERROR|FATAL', 'all good here')).toBeNull();
+    expect(explainRegexNoOp('ERROR|FATAL', 'all good here', '_raw')).toEqual({ kind: 'no-match' });
+  });
+
+  it('does not count an empty match as agreement', () => {
+    expect(longestPartialMatch(String.raw`x*ZZZ`, 'nothing alike here')).toBeNull();
+  });
+
+  it('still cuts inside a group that holds an alternation', () => {
+    const partial = longestPartialMatch(String.raw`(?:GET|POST) /api`, 'GET /web');
+    expect(partial?.end).toBe('GET /'.length);
+  });
+
   it('does not report a partial for a pattern that matches outright', () => {
     // Callers only reach this after a failed match; if it does match, the
     // longest proper prefix is still reported rather than the whole pattern.

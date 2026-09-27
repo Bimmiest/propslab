@@ -32,7 +32,7 @@ export const PIPELINE_STAGES: PipelineStage[] = [
     name: 'Truncation',
     phase: 'index-time',
     description:
-      'Truncates events that exceed the maximum allowed length. Prevents runaway events from consuming excessive index space. Events are cut at the TRUNCATE byte boundary.',
+      'Truncates lines that exceed the maximum allowed length. Prevents runaway data from consuming excessive index space. TRUNCATE caps each line (as LINE_BREAKER delimits them, before line merging) at that many bytes, rounded down to a whole character, so a merged multi-line event can be longer than TRUNCATE.',
     directives: ['TRUNCATE'],
   },
   {

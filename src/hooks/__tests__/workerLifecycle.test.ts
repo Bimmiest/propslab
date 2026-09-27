@@ -10,7 +10,7 @@
 // ---------------------------------------------------------------------------
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { createManagedWorker, MAX_WORKER_LOAD_FAILURES, type ManagedWorkerConfig } from '../workerLifecycle';
+import { createManagedWorker, LOAD_WAIT_FACTOR, MAX_WORKER_LOAD_FAILURES, type ManagedWorkerConfig } from '../workerLifecycle';
 import { WORKER_READY, isWorkerReadyMessage } from '../../engine/workerProtocol';
 
 interface Req { id: number; value: string }
@@ -136,7 +136,7 @@ describe('createManagedWorker (#339)', () => {
       expect(calls.response).not.toHaveBeenCalled();
     });
 
-    it('drops answers to forgotten requests, and their watchdogs with them', () => {
+    it('drops answers to forgotten requests', () => {
       const { managed, calls } = setup();
       managed.post(req(1));
       managed.forget();
@@ -333,6 +333,52 @@ describe('createManagedWorker (#339)', () => {
       expect(calls.timeout).toHaveBeenCalledWith(req(1), [], false);
     });
 
+    it('starts a queued request\'s budget when the one ahead is answered (#364)', () => {
+      const { managed, calls } = setup();
+      managed.post(req(1));
+      latest().ready();
+      vi.advanceTimersByTime(600);
+      managed.post(req(2));
+      vi.advanceTimersByTime(300);
+      latest().respond(1);
+      vi.advanceTimersByTime(999);
+      expect(calls.timeout).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(1);
+      expect(calls.timeout).toHaveBeenCalledWith(req(2), [], true);
+    });
+
+    it('keeps a forgotten request under its watchdog, and re-posts the newer ones unblamed when it hangs (#364)', () => {
+      const { managed, calls } = setup();
+      managed.post(req(1));
+      const hung = latest();
+      hung.ready();
+      managed.forget();
+      managed.post(req(2));
+      vi.advanceTimersByTime(1000);
+      expect(hung.terminated).toBe(true);
+      expect(calls.timeout).not.toHaveBeenCalled();
+      expect(latest().posted).toEqual([req(2)]);
+      latest().respond(2);
+      expect(calls.response).toHaveBeenCalledWith({ id: 2, echo: 'ok' }, req(2));
+    });
+
+    it('hands newer requests to onLoadFailure when no replacement can be built after a superseded hang', () => {
+      let built = 0;
+      const { managed, calls } = setup({
+        create: () => {
+          if (built++ > 0) throw new Error('blocked');
+          return new FakeWorker() as unknown as Worker;
+        },
+      });
+      managed.post(req(1));
+      latest().ready();
+      managed.forget();
+      managed.post(req(2));
+      vi.advanceTimersByTime(1000);
+      expect(calls.load).toHaveBeenCalledTimes(1);
+      expect(calls.load.mock.calls[0]![0]).toEqual([req(2)]);
+    });
+
     it('reads the budget at each post', () => {
       // useWorkerRequest passes a getter over its latest config.
       let budget = 1000;
@@ -353,6 +399,68 @@ describe('createManagedWorker (#339)', () => {
       expect(onTimeout).not.toHaveBeenCalled();
       vi.advanceTimersByTime(1);
       expect(onTimeout).toHaveBeenCalled();
+    });
+  });
+
+  describe('postWhenReady (#364)', () => {
+    it('posts at once to a worker that has loaded', () => {
+      const { managed } = setup();
+      managed.ensure();
+      latest().ready();
+      expect(managed.postWhenReady(req(1))).toBe(true);
+      expect(latest().posted).toEqual([req(1)]);
+    });
+
+    it('holds a request until the worker loads, then times its run alone', () => {
+      const { managed, calls } = setup();
+      managed.post(req(1));
+      vi.advanceTimersByTime(1000);
+      expect(calls.timeout).toHaveBeenCalledWith(req(1), [], false);
+      expect(managed.postWhenReady(req(1))).toBe(true);
+      const replacement = latest();
+      vi.advanceTimersByTime(5000);
+      expect(replacement.posted).toEqual([]);
+      replacement.ready();
+      expect(replacement.posted).toEqual([req(1)]);
+      vi.advanceTimersByTime(999);
+      expect(calls.timeout).toHaveBeenCalledTimes(1);
+      vi.advanceTimersByTime(1);
+      expect(calls.timeout).toHaveBeenLastCalledWith(req(1), [], true);
+    });
+
+    it('hands a held request to onLoadFailure if the worker fails to load', () => {
+      const { managed, calls } = setup();
+      managed.ensure();
+      managed.postWhenReady(req(1));
+      latest().failFetch();
+      expect(calls.load).toHaveBeenCalledWith([req(1)], false);
+    });
+
+    it('gives up on a worker that neither loads nor errors', () => {
+      const { managed, calls } = setup();
+      managed.ensure();
+      const hung = latest();
+      managed.postWhenReady(req(1));
+      vi.advanceTimersByTime(1000 * LOAD_WAIT_FACTOR - 1);
+      expect(calls.load).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(1);
+      expect(hung.terminated).toBe(true);
+      expect(calls.load).toHaveBeenCalledWith([req(1)], false);
+    });
+
+    it('drops a held request on forget', () => {
+      const { managed } = setup();
+      managed.ensure();
+      managed.postWhenReady(req(1));
+      managed.forget();
+      latest().ready();
+      expect(latest().posted).toEqual([]);
+    });
+
+    it('is false when no worker can be had', () => {
+      vi.stubGlobal('Worker', undefined);
+      const { managed } = setup();
+      expect(managed.postWhenReady(req(1))).toBe(false);
     });
   });
 

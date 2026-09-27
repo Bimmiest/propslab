@@ -445,3 +445,31 @@ describe('applyKvMode — KV_TRIM_SPACES (#274)', () => {
     expect(off.fields['msg']).toBe(' say "hi" ');
   });
 });
+
+describe('applyKvMode — json depth limit skips only the deep subtree (#357)', () => {
+  // Not doc-derived: the depth limit is this simulator's own guard, so the
+  // assertion is only that it costs nothing beyond the subtree it cuts off.
+  const nest = (levels: number): string =>
+    levels === 0 ? '"bottom"' : `{"v":"level${levels}","n":${nest(levels - 1)}}`;
+
+  it('keeps shallow siblings that follow an over-deep object', () => {
+    const r = applyKvMode([event(`{"a":"first","deep":${nest(12)},"status":"ok"}`)], [dir('json')])[0]!;
+    expect(r.fields['a']).toBe('first');
+    expect(r.fields['status']).toBe('ok');
+    // Shallow parts of the deep branch survive too; only past the limit is lost.
+    expect(r.fields['deep.v']).toBe('level12');
+    expect(Object.values(r.fields)).not.toContain('bottom');
+    expect(r.processingTrace.at(-1)?.description).toMatch(/depth limit reached/);
+  });
+
+  it('keeps later array elements after an over-deep one', () => {
+    const r = applyKvMode([event(`{"items":[${nest(12)},{"id":"2"}],"status":"ok"}`)], [dir('json')])[0]!;
+    expect(r.fields['items{}.id']).toBe('2');
+    expect(r.fields['status']).toBe('ok');
+  });
+
+  it('does not report the limit when nothing was cut off', () => {
+    const r = applyKvMode([event(`{"a":"first","deep":${nest(3)}}`)], [dir('json')])[0]!;
+    expect(r.processingTrace.at(-1)?.description).not.toMatch(/depth limit/);
+  });
+});

@@ -12,6 +12,8 @@ import { EditorValidationList } from '../editor/EditorValidationList';
 // Module-level so the identity is stable: MonacoEditor treats a new `options`
 // object as a change and re-runs updateOptions.
 const EDITOR_OPTIONS: editor.IStandaloneEditorConstructionOptions = {
+  // Distinguishes this editor from the two conf editors for screen readers.
+  ariaLabel: 'Raw log',
   minimap: { enabled: false },
   wordWrap: 'on',
   lineNumbers: 'on',

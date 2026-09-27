@@ -93,10 +93,21 @@ describe('parseConf — line continuation (SEM-18)', () => {
     expect(value(text, 's', 'OTHER')).toBe('x');
   });
 
-  it('a blank line terminates continuation', () => {
+  it('a blank line ends the continuation and takes the backslash with it (#354)', () => {
     const text = '[s]\nKEY = a\\\n\nOTHER = b';
-    // The backslash-terminated value keeps its trailing backslash (continuation reset).
+    // The blank line is the continuation, contributing nothing — the value used
+    // to keep its dangling backslash.
+    expect(value(text, 's', 'KEY')).toBe('a');
     expect(value(text, 's', 'OTHER')).toBe('b');
+  });
+
+  it('appends a # line after a continuation instead of skipping it (#354)', () => {
+    // Doc-derived: the .conf spec continues a value onto the next line when it
+    // ends in `\`, and makes no exception for a next line starting with `#`.
+    // Skipping that line joined the NEXT directive into the value instead.
+    const text = '[s]\nREGEX = foo\\\n# note\nTRUNCATE = 5';
+    expect(value(text, 's', 'REGEX')).toBe('foo# note');
+    expect(value(text, 's', 'TRUNCATE')).toBe('5');
   });
 });
 

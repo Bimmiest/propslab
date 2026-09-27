@@ -19,7 +19,8 @@ const MAX_WORKER_RETRIES = 1;
 // crash-vs-load classification and the load-failure cap — is
 // `createManagedWorker` (#339). This hook's policy on top of it:
 //
-// - Timeout: terminal error, and the input is not retried.
+// - Timeout: terminal error, and the input is not retried — unless the worker
+//   had not loaded, when it is posted again once the replacement has (#364).
 // - Crash (the worker had loaded): replay once on the replacement, then a
 //   terminal error. A crashed input is never run inline (#326): #309 counted
 //   crashes toward the load cap, so an input that crashed a few workers was
@@ -172,8 +173,10 @@ export function useProcessingPipeline() {
       options: { perEventPipeline: opts.perEventPipeline },
     };
 
-    // Answers to earlier requests are stale now; their watchdogs go with them.
-    // If one of them hangs, this request's watchdog is what reaps it.
+    // Answers to earlier requests are stale now. The worker is still running
+    // them, so they keep their watchdogs, and this request's starts when the
+    // worker reaches it (#364): an edit mid-run must not charge the new input
+    // for the old one's run time.
     const managed = workerRef.current;
     managed?.forget();
     latestRef.current = { request, state: 'running' };
@@ -242,10 +245,12 @@ export function useProcessingPipeline() {
         retryCountRef.current = 0;
         if (!loaded) {
           // The worker never started, so the input never ran and says nothing
-          // about ReDoS. It is left runnable: if the workers that follow fail
-          // to load as well, the cap re-runs it inline (see onLoadFailure).
+          // about ReDoS. Run it once the replacement has loaded, so a slow
+          // first load does not leave the preview on a timeout until the next
+          // edit (#364). If the replacement fails to load, onLoadFailure gets
+          // it; with no worker at all it never ran, so inline is safe.
           if (latestRef.current) latestRef.current.state = 'unrun';
-          report(`Pipeline timed out after ${WORKER_TIMEOUT_MS / 1000} s waiting for its worker to start, so the input never ran.`);
+          if (!managed.postWhenReady(request)) runInline(request);
           return;
         }
         giveUp(`Pipeline timed out after ${WORKER_TIMEOUT_MS / 1000} s — the input may contain a regex prone to catastrophic backtracking (ReDoS). Try simplifying your EXTRACT or TRANSFORMS pattern.`);

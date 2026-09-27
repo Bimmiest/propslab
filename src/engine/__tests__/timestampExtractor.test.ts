@@ -654,3 +654,35 @@ describe('#286 — a TIME_PREFIX that does not compile', () => {
     expect(diagnostics.find((d) => d.directiveKey === 'TIME_PREFIX')?.message).toMatch(/ReDoS/);
   });
 });
+
+describe('extractTimestamps — auto-recognition keeps the zone (#353)', () => {
+  // Doc-derived: ISO 8601 allows any number of fraction digits before the
+  // offset, and a zone written in the event places it ahead of TZ, which
+  // props.conf.spec applies only to timestamps without one. No capture covers
+  // these shapes.
+  const auto = (raw: string, directives: ConfDirective[] = []) =>
+    iso(extractTimestamps([event(raw)], directives, undefined, NOW)[0]!._time);
+
+  it('reads a zone after a microsecond fraction', () => {
+    expect(auto('2025-12-31T10:00:00.123456+05:00 msg')).toBe('2025-12-31T05:00:00.123Z');
+  });
+
+  it('reads a zone separated from the time by a space', () => {
+    expect(auto('2025-12-31 10:00:00 +0500 msg')).toBe('2025-12-31T05:00:00.000Z');
+    expect(auto('2025-12-31 10:00:00.250 -0130 msg')).toBe('2025-12-31T11:30:00.250Z');
+  });
+
+  it('reads fractions of every width from 1 to 9 digits, with Z or an offset', () => {
+    const digits = '123456789';
+    for (let w = 1; w <= 9; w++) {
+      const frac = digits.slice(0, w);
+      const ms = frac.padEnd(3, '0').slice(0, 3);
+      expect(auto(`2025-12-31T10:00:00.${frac}Z msg`)).toBe(`2025-12-31T10:00:00.${ms}Z`);
+      expect(auto(`2025-12-31T10:00:00.${frac}+05:00 msg`)).toBe(`2025-12-31T05:00:00.${ms}Z`);
+    }
+  });
+
+  it('does not read the start of a following word as a Z zone', () => {
+    expect(auto('2025-12-31 10:00:00 Zookeeper started', [dir('TZ', '+0500')])).toBe('2025-12-31T05:00:00.000Z');
+  });
+});

@@ -44,18 +44,21 @@ export function CommandPalette() {
   // Escape (topmost layer only), the focus trap that `aria-modal` promises, and
   // focus restore on close all come from the shared overlay hook.
 
-  // Global Ctrl+K / Cmd+K shortcut
+  // Global Ctrl+K / Cmd+K shortcut. Capture phase, and the event stops here:
+  // Monaco takes Ctrl+K as a chord prefix on its own element, so a bubbling
+  // listener never saw the key while an editor had focus.
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       // Compare case-insensitively: with Caps Lock on, `e.key` is "K", and the
       // shortcut did nothing at all.
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
+        e.stopPropagation();
         toggleCommandPalette();
       }
     }
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    window.addEventListener('keydown', onKeyDown, { capture: true });
+    return () => window.removeEventListener('keydown', onKeyDown, { capture: true });
   }, [toggleCommandPalette]);
 
   const run = useCallback(

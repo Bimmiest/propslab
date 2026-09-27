@@ -560,3 +560,41 @@ describe('applyTransforms — the step describes what the transform did (#346)',
     expect(lastStep(out)?.metadataChanges).toBeUndefined();
   });
 });
+
+// Doc-derived (transforms.conf.spec): REPEAT_MATCH is documented for index-time
+// extraction into _meta, and indexed fields are multivalue.
+describe('applyTransforms — DEST_KEY=_meta keeps every match and value (#359)', () => {
+  it('adds one pair per match under REPEAT_MATCH', () => {
+    const conf = transformsConf('nums', {
+      REGEX: 'n=(\\d+)',
+      FORMAT: 'num::$1',
+      DEST_KEY: '_meta',
+      REPEAT_MATCH: 'true',
+      WRITE_META: 'true',
+    });
+    const e = applyTransforms([event('n=1 n=2 n=3')], transformsDir('nums'), conf, 'index-time')[0]!;
+    expect(e._meta.num).toEqual(['1', '2', '3']);
+  });
+
+  it('writes the first match only without REPEAT_MATCH', () => {
+    const conf = transformsConf('nums', { REGEX: 'n=(\\d+)', FORMAT: 'num::$1', DEST_KEY: '_meta' });
+    const e = applyTransforms([event('n=1 n=2 n=3')], transformsDir('nums'), conf, 'index-time')[0]!;
+    expect(e._meta.num).toBe('1');
+  });
+});
+
+// Doc-derived (transforms.conf.spec FORMAT): `$N` and `${name}` are substituted
+// from the match; text a capture brings in is data, not another reference.
+describe('applyTransforms — FORMAT is expanded in one pass (#365)', () => {
+  it('does not re-expand ${name} text that came from a capture', () => {
+    const conf = transformsConf('f', { REGEX: '(?<a>\\S+) (\\S+)', FORMAT: 'f::$2', WRITE_META: 'true' });
+    const e = applyTransforms([event('x ${a}')], transformsDir('f'), conf, 'index-time')[0]!;
+    expect(e.fields.f).toBe('${a}');
+  });
+
+  it('still expands a written ${name} reference', () => {
+    const conf = transformsConf('f', { REGEX: '(?<a>\\S+) (\\S+)', FORMAT: 'f::${a}-$2', WRITE_META: 'true' });
+    const e = applyTransforms([event('x y')], transformsDir('f'), conf, 'index-time')[0]!;
+    expect(e.fields.f).toBe('x-y');
+  });
+});

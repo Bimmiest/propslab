@@ -77,7 +77,7 @@ describe('like() reports a pattern the guard refuses (#303)', () => {
     vi.mocked(splunkRegex.safeRegex).mockReturnValue(null);
     const diagnostics: ValidationDiagnostic[] = [];
     const events = Array.from({ length: 5 }, () => event({ s: 'abc' }));
-    const out = applyEvalExpressions(events, [evalDir('r', 'like(s, "a%")')], diagnostics);
+    const out = applyEvalExpressions(events, [evalDir('r', 'if(like(s, "a%"), "true", "false")')], diagnostics);
 
     expect(out[0]!.fields['r']).toBe('false');
     expect(diagnostics).toHaveLength(1);

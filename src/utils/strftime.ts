@@ -29,6 +29,9 @@ const WEEKDAY_NAMES_ABBR = [
   'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat',
 ] as const;
 
+const MONTH_NAME_REGEX = `(${[...MONTH_NAMES_FULL, ...MONTH_NAMES_ABBR].join('|')})`;
+const WEEKDAY_NAME_REGEX = `(${[...WEEKDAY_NAMES_FULL, ...WEEKDAY_NAMES_ABBR].join('|')})`;
+
 // ---------------------------------------------------------------------------
 // Directive metadata: maps a strftime token to its regex fragment and a
 // symbolic capture-group name.
@@ -55,10 +58,13 @@ function buildDirectiveMap(): Record<string, DirectiveMeta> {
     '%M': { regex: '(\\d{1,2})', capture: 'minute' },
     '%S': { regex: '(\\d{1,2})', capture: 'second' },
     '%p': { regex: '([AaPp][Mm])', capture: 'ampm' },
-    '%b': { regex: `(${MONTH_NAMES_ABBR.join('|')})`, capture: 'monthAbbr' },
-    '%B': { regex: `(${MONTH_NAMES_FULL.join('|')})`, capture: 'monthFull' },
-    '%a': { regex: `(${WEEKDAY_NAMES_ABBR.join('|')})`, capture: 'weekdayAbbr' },
-    '%A': { regex: `(${WEEKDAY_NAMES_FULL.join('|')})`, capture: 'weekdayFull' },
+    // POSIX strptime treats %b/%B (and %a/%A) as synonyms: each accepts the
+    // full or the abbreviated name, so `%b` reads `September` and `%B` reads
+    // `Sep`. Full names are listed first so the longer spelling is consumed.
+    '%b': { regex: MONTH_NAME_REGEX, capture: 'monthName' },
+    '%B': { regex: MONTH_NAME_REGEX, capture: 'monthName' },
+    '%a': { regex: WEEKDAY_NAME_REGEX, capture: 'weekdayName' },
+    '%A': { regex: WEEKDAY_NAME_REGEX, capture: 'weekdayName' },
     '%Z': { regex: '([A-Za-z][A-Za-z0-9_/+-]*)', capture: 'tzName' },
     // ISO-8601 'Z' (Zulu/UTC), ±HH:MM / ±HHMM, and ±HH-only offsets.
     '%z': { regex: '(Z|[+-]\\d{2}:?\\d{2}|[+-]\\d{2})', capture: 'tzOffset' },
@@ -69,6 +75,12 @@ function buildDirectiveMap(): Record<string, DirectiveMeta> {
     '%3N': { regex: '(\\d{3})', capture: 'milliseconds' },
     '%6N': { regex: '(\\d{6})', capture: 'microseconds' },
     '%9N': { regex: '(\\d{9})', capture: 'nanoseconds' },
+    // The width is Splunk's digit count, so the other widths read the same
+    // way: automatic recognition needs them for fractions such as .NET's
+    // seven-digit ticks, whose zone would otherwise be lost (#353).
+    ...Object.fromEntries(
+      [1, 2, 4, 5, 7, 8].map((w) => [`%${w}N`, { regex: `(\\d{${w}})`, capture: 'subseconds' }]),
+    ),
     // Bare %N is Splunk shorthand for %9N (nanoseconds).
     '%N': { regex: '(\\d{9})', capture: 'nanoseconds' },
     // %Q family: subsecond digits, bare %Q == %3Q (milliseconds).
@@ -379,11 +391,16 @@ function resolveTzOffsetMinutes(tz: string): number | null {
  * Convert captured subsecond digits into whole milliseconds.
  *
  * Handles %3N/%6N/%9N and the %Q family (which share the milliseconds/
- * microseconds/nanoseconds captures) plus %f. Returns 0 when none are present.
+ * microseconds/nanoseconds captures), the other %<n>N widths, and %f.
+ * Returns 0 when none are present.
  */
 function computeSubMilliseconds(bag: Record<string, string>): number {
   if (bag.milliseconds) {
     return parseInt(bag.milliseconds, 10);
+  }
+  if (bag.subseconds) {
+    // A decimal fraction of any width: its first three digits are the ms.
+    return parseInt(bag.subseconds.padEnd(3, '0').slice(0, 3), 10);
   }
   if (bag.microseconds) {
     return Math.floor(parseInt(bag.microseconds, 10) / 1000);
@@ -451,8 +468,10 @@ export function parseTzAlias(value: string): {
  * @param tzAlias - `TZ_ALIAS` remapping table from {@link parseTzAlias}, applied
  *                 to a zone read out of the event (%Z) before it is resolved.
  * @param now    - The current moment, which supplies the year for a format
- *                 that has none (syslog's `%b %e %H:%M:%S`). Injectable so a
- *                 yearless timestamp parses the same way next year as today.
+ *                 that has none (syslog's `%b %e %H:%M:%S`): its UTC year, or
+ *                 the one before when that would put the stamp in the future.
+ *                 Injectable so a yearless timestamp parses the same way next
+ *                 year as today.
  * @returns A `Date` object if parsing succeeded, or `null` otherwise.
  */
 export function parseTimestamp(
@@ -516,7 +535,49 @@ export function parseTimestampDetailed(
   format: string,
   options: ParseTimestampOptions = {},
 ): ParsedTimestamp | null {
-  const { tz, onUnresolvedTz, tzAlias, now = new Date(), dateForDateless } = options;
+  const { now = new Date() } = options;
+  // The UTC year, not the host's: `now` is injected so a run is reproducible,
+  // and the local year differs from it around New Year in every zone but UTC.
+  const thisYear = now.getUTCFullYear();
+  const { captures } = tokenise(format);
+  const yearless =
+    !captures.some((c) => YEAR_CAPTURES.has(c)) && captures.some((c) => DATE_CAPTURES.has(c));
+  const current = assembleTimestamp(text, format, options, thisYear);
+  if (!yearless) return current;
+
+  // A date written without a year is the most recent one it can be, the
+  // convention syslog readers follow for RFC 3164 stamps: `Dec 31 23:59:00`
+  // read on 1 January is last year's, not eleven months ahead. Convention-
+  // derived; no capture covers it. A stamp slightly ahead of the clock (skew)
+  // stays in this year. The previous year is also tried when this one cannot
+  // hold the date at all (29 February).
+  if (current && current.date.getTime() - now.getTime() <= YEARLESS_FUTURE_TOLERANCE_MS) return current;
+  return assembleTimestamp(text, format, options, thisYear - 1) ?? current;
+}
+
+/** Captures that name a year, or an instant outright. */
+const YEAR_CAPTURES: ReadonlySet<string> = new Set(['year4', 'year2', 'epoch']);
+/** Captures that place a timestamp on a calendar day, year aside. */
+const DATE_CAPTURES: ReadonlySet<string> = new Set(['month', 'monthName', 'day', 'dayOfYear']);
+
+/**
+ * How far into the future a yearless timestamp may fall and still be read in
+ * the current year: the MAX_DAYS_HENCE default, beyond which the extractor
+ * would reject it as too far ahead anyway.
+ */
+const YEARLESS_FUTURE_TOLERANCE_MS = 2 * 86_400_000;
+
+/**
+ * The body of {@link parseTimestampDetailed}, with the year a yearless format
+ * takes passed in.
+ */
+function assembleTimestamp(
+  text: string,
+  format: string,
+  options: ParseTimestampOptions,
+  yearForYearless: number,
+): ParsedTimestamp | null {
+  const { tz, onUnresolvedTz, tzAlias, dateForDateless } = options;
   const { regex, captures } = tokenise(format);
   const match = text.match(regex);
   if (!match) {
@@ -550,7 +611,7 @@ export function parseTimestampDetailed(
   }
 
   // A weekday alone (%a) does not name a date, so it does not count.
-  const hasDate = [bag.year4, bag.year2, bag.month, bag.monthAbbr, bag.monthFull, bag.day, bag.dayOfYear]
+  const hasDate = [bag.year4, bag.year2, bag.month, bag.monthName, bag.day, bag.dayOfYear]
     .some((v) => v !== undefined);
   const suppliedDate = hasDate ? undefined : dateForDateless;
 
@@ -567,8 +628,8 @@ export function parseTimestampDetailed(
     // POSIX %y pivot: 69-99 → 1969-1999, 00-68 → 2000-2068.
     year = y2 >= 69 ? 1900 + y2 : 2000 + y2;
   } else {
-    // Default to current year when the format doesn't include a year.
-    year = now.getFullYear();
+    // No year in the format: the caller decides which (see parseTimestampDetailed).
+    year = yearForYearless;
   }
 
   let month: number; // 0-indexed
@@ -576,15 +637,10 @@ export function parseTimestampDetailed(
     month = suppliedDate.month;
   } else if (bag.month) {
     month = parseInt(bag.month, 10) - 1;
-  } else if (bag.monthAbbr) {
-    month = MONTH_NAMES_ABBR.indexOf(
-      bag.monthAbbr.charAt(0).toUpperCase() + bag.monthAbbr.slice(1).toLowerCase() as typeof MONTH_NAMES_ABBR[number],
-    );
-    if (month === -1) month = 0;
-  } else if (bag.monthFull) {
-    month = MONTH_NAMES_FULL.indexOf(
-      bag.monthFull.charAt(0).toUpperCase() + bag.monthFull.slice(1).toLowerCase() as typeof MONTH_NAMES_FULL[number],
-    );
+  } else if (bag.monthName) {
+    // Full or abbreviated: every full name starts with its abbreviation.
+    const abbr = bag.monthName.slice(0, 3).toLowerCase();
+    month = MONTH_NAMES_ABBR.findIndex((m) => m.toLowerCase() === abbr);
     if (month === -1) month = 0;
   } else {
     month = 0;

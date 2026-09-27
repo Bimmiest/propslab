@@ -12,6 +12,31 @@ export type EvalValue = string | number | boolean | null | string[];
  */
 export type EvalArg = EvalValue | undefined;
 
+/**
+ * Splunk's own wording for assigning a comparison's result to a field
+ * (`EVAL-x = a==b`). Both EVAL- and INGEST_EVAL raise it and write nothing.
+ */
+export const BOOLEAN_ASSIGNMENT_ERROR =
+  'Fields cannot be assigned a boolean result. Instead, try if([bool expr], [expr], [expr]).';
+
+/** A decimal number: optional sign, digits with an optional fraction (or a bare fraction), optional exponent. */
+const DECIMAL_NUMBER = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/;
+
+/**
+ * The one string → number coercion eval uses: arithmetic, comparisons,
+ * isnum()/isint() and tonumber() without a base all read a string through
+ * this, so they can never disagree about whether it is a number. Decimal
+ * only — JS `Number()` also accepts `0x10`, `0b11`, `Infinity` and a blank
+ * string (as 0), none of which Splunk reads as a number. Surrounding
+ * whitespace is tolerated, as `Number()` did.
+ */
+export function parseDecimal(s: string): number | null {
+  const t = s.trim();
+  if (!DECIMAL_NUMBER.test(t)) return null;
+  const n = Number(t);
+  return Number.isFinite(n) ? n : null;
+}
+
 export function toBool(v: EvalArg): boolean {
   if (v === null || v === undefined) return false;
   if (typeof v === 'boolean') return v;
@@ -25,10 +50,7 @@ export function toNum(v: EvalArg): number {
   if (v === null || v === undefined) return 0;
   if (typeof v === 'number') return v;
   if (typeof v === 'boolean') return v ? 1 : 0;
-  if (typeof v === 'string') {
-    const n = parseFloat(v);
-    return isNaN(n) ? 0 : n;
-  }
+  if (typeof v === 'string') return parseDecimal(v) ?? 0;
   if (Array.isArray(v)) return v.length > 0 ? toNum(v[0]) : 0;
   return 0;
 }
@@ -47,7 +69,7 @@ export function toStr(v: EvalArg): string {
  */
 export function addOrConcat(l: EvalArg, r: EvalArg): EvalValue {
   if (l === null || l === undefined || r === null || r === undefined) return null;
-  if (isNumericValue(l) && isNumericValue(r)) return toNum(l) + toNum(r);
+  if (isNumericValue(l) && isNumericValue(r)) return numArg(l)! + numArg(r)!;
   return toStr(l) + toStr(r);
 }
 
@@ -76,7 +98,7 @@ export function numArg(v: EvalArg): number | null {
   if (typeof v === 'number') return Number.isFinite(v) ? v : null;
   if (typeof v === 'boolean') return v ? 1 : 0;
   if (Array.isArray(v)) return v.length > 0 ? numArg(v[0]) : null;
-  return isNumericString(v) ? Number(v) : null;
+  return parseDecimal(v);
 }
 
 /** `-`, `*`, `/`, `%` with NULL propagation (null or non-numeric operand → null). */
@@ -98,11 +120,6 @@ export function toMv(v: EvalArg): string[] {
   return [String(v)];
 }
 
-function isNumericString(v: EvalArg): boolean {
-  if (typeof v !== 'string' || v === '') return false;
-  return !isNaN(Number(v));
-}
-
 /**
  * True when the value is genuinely numeric — a number, or a string that parses
  * cleanly as one. Used by isnum()/isint(); unlike toNum() it does not coerce
@@ -110,7 +127,7 @@ function isNumericString(v: EvalArg): boolean {
  */
 export function isNumericValue(v: EvalArg): boolean {
   if (typeof v === 'number') return Number.isFinite(v);
-  return isNumericString(v);
+  return typeof v === 'string' && parseDecimal(v) !== null;
 }
 
 /**
@@ -119,11 +136,11 @@ export function isNumericValue(v: EvalArg): boolean {
  * Returns <0 if a<b, >0 if a>b, 0 if equal.
  */
 function compareEvalValues(a: EvalArg, b: EvalArg): number {
-  const aNum = isNumericValue(a);
-  const bNum = isNumericValue(b);
-  if (aNum && bNum) return Number(a) - Number(b);
-  if (aNum) return -1; // number < string
-  if (bNum) return 1;
+  const aNum = isNumericValue(a) ? numArg(a) : null;
+  const bNum = isNumericValue(b) ? numArg(b) : null;
+  if (aNum !== null && bNum !== null) return aNum - bNum;
+  if (aNum !== null) return -1; // number < string
+  if (bNum !== null) return 1;
   const as = toStr(a);
   const bs = toStr(b);
   return as < bs ? -1 : as > bs ? 1 : 0;
@@ -166,8 +183,8 @@ export function compare(left: EvalArg, right: EvalArg, op: string): boolean | nu
   // true (which is what `0 === toNum("abc")` used to produce).
   const bothNumeric = isNumericValue(left) && isNumericValue(right);
 
-  const l = bothNumeric ? Number(left) : toStr(left);
-  const r = bothNumeric ? Number(right) : toStr(right);
+  const l = bothNumeric ? numArg(left)! : toStr(left);
+  const r = bothNumeric ? numArg(right)! : toStr(right);
 
   switch (op) {
     case '==': case '=': return l === r;

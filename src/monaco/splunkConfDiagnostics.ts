@@ -77,9 +77,10 @@ export function computeDiagnostics(
     const trimmed = line.trim();
     const endsWithBackslash = endsWithContinuation(line.trimEnd());
 
-    if (inDirectiveValue && trimmed !== '') {
-      // Part of the previous directive's value — skip it. It continues the
-      // value further only if it too ends with a trailing backslash.
+    if (inDirectiveValue) {
+      // Part of the previous directive's value — skip it, whatever it contains
+      // (a `#` line or a blank one included), as confParser does. It continues
+      // the value further only if it too ends with a trailing backslash.
       inDirectiveValue = endsWithBackslash;
       continue;
     }

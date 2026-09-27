@@ -15,7 +15,9 @@ const MAX_DEPTH = 10;
  * - Scalars become strings; JSON `null` yields an empty value.
  * - Arrays nested directly inside arrays are stringified (Splunk's deeper `{}{}`
  *   notation is not simulated).
- * - Returns true if the depth limit was hit (caller can surface a diagnostic).
+ * - A subtree nested deeper than the limit is skipped on its own; its siblings
+ *   are still flattened. Returns true if any subtree was skipped (caller can
+ *   surface a diagnostic).
  */
 export interface FlattenOptions {
   /**
@@ -108,6 +110,9 @@ export function flattenArray(
   // A top-level array has no name to trim back to, and an empty string is not
   // a field name, so it keeps its bare `{}` even when trimming.
   const arrayName = options.trimArrayBraces && name !== '' ? name : `${name}{}`;
+  // An over-deep element is skipped, not the rest of the array: stopping at the
+  // first one dropped every later element and every later sibling with it.
+  let limited = false;
   for (const item of arr) {
     if (item === null || item === undefined) continue;
     if (Array.isArray(item)) {
@@ -115,13 +120,13 @@ export function flattenArray(
       addValue(fields, added, arrayName, JSON.stringify(item));
     } else if (typeof item === 'object') {
       if (flattenJson(item as Record<string, unknown>, fields, added, arrayName, depth + 1, options)) {
-        return true;
+        limited = true;
       }
     } else if (isJsonScalar(item)) {
       addValue(fields, added, arrayName, String(item));
     }
   }
-  return false;
+  return limited;
 }
 
 export function flattenJson(
@@ -134,6 +139,9 @@ export function flattenJson(
 ): boolean {
   if (depth > MAX_DEPTH) return true;
 
+  // As in flattenArray: only the over-deep subtree is lost, never the shallow
+  // keys that follow it (`{"deep":{…},"status":"ok"}` still yields `status`).
+  let limited = false;
   for (const [rawKey, value] of Object.entries(obj)) {
     const key = options.stripLeadingUnderscore ? rawKey.replace(/^_+/, '') : rawKey;
     if (!key) continue;
@@ -146,7 +154,7 @@ export function flattenJson(
       options.sourceKeys[fieldName] = rawKey;
     }
 
-    if (flattenValue(value, fields, added, fieldName, depth, options)) return true;
+    if (flattenValue(value, fields, added, fieldName, depth, options)) limited = true;
   }
-  return false;
+  return limited;
 }

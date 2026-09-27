@@ -28,8 +28,9 @@ function event(fields: Record<string, string> = {}): SplunkEvent {
 const evalDir = (className: string, value: string): ConfDirective =>
   ({ key: `EVAL-${className}`, value, line: 3, directiveType: 'EVAL', className });
 
+// Read through if(): a field cannot be assigned a boolean result (#358).
 const cidr = (range: string, ip: string) =>
-  applyEvalExpressions([event({ ip })], [evalDir('r', `cidrmatch("${range}", ip)`)])[0]!.fields['r'];
+  applyEvalExpressions([event({ ip })], [evalDir('r', `if(cidrmatch("${range}", ip), "true", "false")`)])[0]!.fields['r'];
 
 describe('cidrmatch() (#291)', () => {
   it.each([
@@ -95,7 +96,7 @@ describe('cidrmatch() (#291)', () => {
 
   it('no longer warns that it is not simulated', () => {
     const diagnostics: ValidationDiagnostic[] = [];
-    applyEvalExpressions([event({ ip: '10.0.0.1' })], [evalDir('r', 'cidrmatch("10.0.0.0/8", ip)')], diagnostics);
+    applyEvalExpressions([event({ ip: '10.0.0.1' })], [evalDir('r', 'if(cidrmatch("10.0.0.0/8", ip), 1, 0)')], diagnostics);
     expect(diagnostics).toEqual([]);
   });
 });
@@ -118,7 +119,7 @@ describe('eval regex arguments that do not compile (#291)', () => {
   });
 
   it('match() warns and says it evaluated to false', () => {
-    const { out, diagnostics } = run('match(s, "[")');
+    const { out, diagnostics } = run('if(match(s, "["), "true", "false")');
     expect(out[0]!.fields['r']).toBe('false');
     expect(diagnostics[0]?.message).toContain('evaluated to false');
   });
@@ -141,7 +142,7 @@ describe('eval regex arguments that do not compile (#291)', () => {
 
   it('a pattern built from event data warns once for each distinct pattern', () => {
     const events = [event({ p: '(' }), event({ p: '(' }), event({ p: '[' })];
-    const { diagnostics } = run('match("x", p)', events);
+    const { diagnostics } = run('if(match("x", p), 1, 0)', events);
     expect(diagnostics).toHaveLength(2);
   });
 

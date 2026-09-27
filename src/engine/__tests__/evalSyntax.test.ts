@@ -177,7 +177,7 @@ describe('eval in() function (#332)', () => {
   });
 
   it('works as a whole expression and under NOT', () => {
-    expect(run('in(a, "x")', { a: 'x' }).value).toBe('true');
+    expect(run('if(in(a, "x"), "true", "false")', { a: 'x' }).value).toBe('true');
     expect(run('if(NOT in(a, "x"), 1, 0)', { a: 'x' }).value).toBe('0');
   });
 
@@ -239,7 +239,7 @@ describe('eval NOT IN in any casing (#337)', () => {
   it.each(combos)('parses a %s %s (...) operator', (not, inWord) => {
     expect(run(`if(a ${not} ${inWord} ("x", "y"), 1, 0)`, { a: 'z' }).value).toBe('1');
     expect(run(`if(a ${not} ${inWord} ("x", "y"), 1, 0)`, { a: 'x' }).value).toBe('0');
-    expect(run(`a ${not} ${inWord} ("x")`, { a: 'z' }).value).toBe('true');
+    expect(run(`if(a ${not} ${inWord} ("x"), "true", "false")`, { a: 'z' }).value).toBe('true');
   });
 
   it('parses NOT IN with no space before the list', () => {

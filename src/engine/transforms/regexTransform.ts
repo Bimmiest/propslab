@@ -47,13 +47,13 @@ const regexCache = new WeakMap<ConfStanza, Map<string, CompiledRegex | null>>();
 // These DEST_KEY targets are single-valued slots in Splunk's pipeline.
 // FORMAT is applied to the first match only — multi-value accumulation would
 // produce a mangled string (e.g. "auditd\nsourcetype::auditd\n…") that the
-// router cannot correctly parse.
+// router cannot correctly parse. `_meta` is not one: it holds a list of
+// indexed fields, and REPEAT_MATCH exists precisely to add one pair per match.
 const SINGLE_VALUE_DEST_KEYS = new Set([
   'MetaData:Host',
   'MetaData:Index',
   'MetaData:Source',
   'MetaData:Sourcetype',
-  '_meta',
   '_time',
   'queue',
 ]);
@@ -266,8 +266,9 @@ export function applyRegexTransform(
           result.destValue = expandFormat(format, m, priorDestValue);
         }
       } else {
-        // DEST_KEY=<field>: one value per match, accumulated as a multi-value
-        // field — under REPEAT_MATCH only, since without it the REGEX runs once.
+        // DEST_KEY=<field> or _meta: one value per match, accumulated as a
+        // multi-value field or a run of `key::value` pairs — under REPEAT_MATCH
+        // only, since without it the REGEX runs once.
         const { global } = compiled;
         global.lastIndex = 0;
         let m: RegExpExecArray | null;

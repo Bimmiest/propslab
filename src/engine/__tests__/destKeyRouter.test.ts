@@ -129,6 +129,14 @@ describe('applyDestKey — _meta (SEM-11)', () => {
     expect(event._meta.label).toBe('two words');
     expect(event._meta.n).toBe('5');
   });
+
+  it('keeps every value of a repeated key, since indexed fields are multivalue (#359)', () => {
+    const event = applyDestKey(baseEvent(), result('_meta', 'tag::a tag::b'));
+    expect(event._meta.tag).toEqual(['a', 'b']);
+    const again = applyDestKey(event, result('_meta', 'tag::c'));
+    expect(again._meta.tag).toEqual(['a', 'b', 'c']);
+    expect(event._meta.tag).toEqual(['a', 'b']); // the input event is not mutated
+  });
 });
 
 describe('applyDestKey — unsimulated routing keys are not written as fields (#75.3)', () => {

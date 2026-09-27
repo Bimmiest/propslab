@@ -104,7 +104,11 @@ export interface RawMutation {
 export interface SplunkEvent {
   _raw: string;
   _time: Date | null;
-  _meta: Record<string, string>;
+  /**
+   * Indexed fields written through `DEST_KEY = _meta` — multivalue, like
+   * `fields` — plus the single-valued `_queue` routing slot.
+   */
+  _meta: { _queue?: string } & Record<string, string | string[]>;
   fields: Record<string, string | string[]>;
   /**
    * Maps stripped field name → original raw key when underscore-stripping occurred
