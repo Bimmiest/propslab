@@ -1,7 +1,7 @@
 import type { ParsedConf, SplunkEvent, ValidationDiagnostic } from '../types';
 import { matchStanzas, mergeDirectives } from '../parser/stanzaMatcher';
 import { applySedCommands } from './sedCmd';
-import { applyTransforms } from './transformsProcessor';
+import { applyTransforms, newTransformsWarned, type TransformsWarned } from './transformsProcessor';
 
 /**
  * How many clone generations are followed before giving up. A cycle is caught
@@ -37,6 +37,12 @@ export function applyCloneIndexTime(
   diagnostics: ValidationDiagnostic[],
   /** Epoch ms that INGEST_EVAL's now()/time() read. See `PipelineOptions.now`. */
   now: number = Date.now(),
+  /**
+   * The TRANSFORMS stage's warning ledgers. Each clone is its own
+   * applyTransforms call, and fresh ledgers would repeat every INGEST_EVAL or
+   * stanza warning once per clone.
+   */
+  warned: TransformsWarned = newTransformsWarned(),
 ): SplunkEvent[] {
   if (!events.some((e) => e.clonedFrom !== undefined)) return events;
 
@@ -66,7 +72,7 @@ export function applyCloneIndexTime(
 
     const directives = mergeDirectives(matchStanzas(propsConf.stanzas, clone.metadata));
     let out = applySedCommands([clone], directives, diagnostics);
-    out = applyTransforms(out, directives, transformsConf, 'index-time', diagnostics, now);
+    out = applyTransforms(out, directives, transformsConf, 'index-time', diagnostics, now, warned);
 
     // applyTransforms returns the clone first and any clones IT emitted after.
     const [processed, ...grandchildren] = out;

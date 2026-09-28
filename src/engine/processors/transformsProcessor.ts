@@ -52,30 +52,51 @@ function orderedTransformLists(directives: ConfDirective[], phase: Phase): ConfD
   return phase === 'index-time' ? [...byType('TRANSFORMS'), ...byType('RULESET')] : byType('REPORT');
 }
 
-/** One applyTransforms call: its settings, and the once-per-stanza warning ledgers. */
+/**
+ * The once-per-stanza warning ledgers. The index-time stage and the
+ * CLONE_SOURCETYPE pass share one, so a clone, which is its own
+ * applyTransforms call, does not repeat what the originals reported.
+ */
+export interface TransformsWarned {
+  /** The DEST_KEY=_raw data-loss warning. */
+  rawLoss: Set<string>;
+  /** Index-time transforms that extract fields with no WRITE_META/DEST_KEY. */
+  noWriteMeta: Set<string>;
+  /** A REGEX that does not compile. */
+  invalidRegex: Set<string>;
+  /** Routing via an unknown/unsimulated DEST_KEY. */
+  unknownDestKey: Set<string>;
+  /** DEST_KEY = _time given a value no Date can hold. */
+  timeOutOfRange: Set<string>;
+  /** DEST_KEY reached through a search-time REPORT-, where Splunk ignores it. */
+  searchTimeDestKey: Set<string>;
+  searchOnlyAttrs: Set<string>;
+  searchTimeNoFormat: Set<string>;
+  /** INGEST_EVAL errors and warnings, which it would otherwise repeat per event. */
+  ingestEval: IngestEvalReported;
+}
+
+export function newTransformsWarned(): TransformsWarned {
+  return {
+    rawLoss: new Set(),
+    noWriteMeta: new Set(),
+    invalidRegex: new Set(),
+    unknownDestKey: new Set(),
+    timeOutOfRange: new Set(),
+    searchTimeDestKey: new Set(),
+    searchOnlyAttrs: new Set(),
+    searchTimeNoFormat: new Set(),
+    ingestEval: newIngestEvalReported(),
+  };
+}
+
+/** One applyTransforms call: its settings, and the warning ledgers it reports against. */
 interface TransformsRun {
   phase: Phase;
   diagnostics: ValidationDiagnostic[] | undefined;
   now: number;
   stanzaMap: Map<string, TransformStanza>;
-  warned: {
-    /** The DEST_KEY=_raw data-loss warning. */
-    rawLoss: Set<string>;
-    /** Index-time transforms that extract fields with no WRITE_META/DEST_KEY. */
-    noWriteMeta: Set<string>;
-    /** A REGEX that does not compile. */
-    invalidRegex: Set<string>;
-    /** Routing via an unknown/unsimulated DEST_KEY. */
-    unknownDestKey: Set<string>;
-    /** DEST_KEY = _time given a value no Date can hold. */
-    timeOutOfRange: Set<string>;
-    /** DEST_KEY reached through a search-time REPORT-, where Splunk ignores it. */
-    searchTimeDestKey: Set<string>;
-    searchOnlyAttrs: Set<string>;
-    searchTimeNoFormat: Set<string>;
-    /** INGEST_EVAL errors and warnings, which it would otherwise repeat per event. */
-    ingestEval: IngestEvalReported;
-  };
+  warned: TransformsWarned;
 }
 
 /** One event on its way through the transform lists. */
@@ -345,6 +366,8 @@ export function applyTransforms(
   diagnostics?: ValidationDiagnostic[],
   /** Epoch ms that INGEST_EVAL's now()/time() read. See `PipelineOptions.now`. */
   now: number = Date.now(),
+  /** What this pipeline run has already warned about; see TransformsWarned. */
+  warned: TransformsWarned = newTransformsWarned(),
 ): SplunkEvent[] {
   const transformDirectives = orderedTransformLists(directives, phase);
   if (transformDirectives.length === 0) return events;
@@ -354,17 +377,7 @@ export function applyTransforms(
     diagnostics,
     now,
     stanzaMap: new Map(transformsConf.stanzas.map((s) => [s.name, s])),
-    warned: {
-      rawLoss: new Set(),
-      noWriteMeta: new Set(),
-      invalidRegex: new Set(),
-      unknownDestKey: new Set(),
-      timeOutOfRange: new Set(),
-      searchTimeDestKey: new Set(),
-      searchOnlyAttrs: new Set(),
-      searchTimeNoFormat: new Set(),
-      ingestEval: newIngestEvalReported(),
-    },
+    warned,
   };
 
   return events.flatMap((event) => {

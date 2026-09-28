@@ -301,3 +301,17 @@ describe('runPipeline — INGEST_EVAL reports each problem once per run (#418)',
     expect(count((d) => d.message.includes('INGEST_EVAL _time'))).toBe(1);
   });
 });
+
+describe('runPipeline — CLONE_SOURCETYPE does not repeat INGEST_EVAL problems per clone (#452)', () => {
+  // Each clone is its own applyTransforms call, so the warning ledgers have to
+  // belong to the pipeline run, not the call.
+  const meta: EventMetadata = { index: 'main', host: 'h', source: 's', sourcetype: 'st' };
+  const props = '[st]\nSHOULD_LINEMERGE = false\nTRANSFORMS-c = copy, ev\n\n[cloned]\nTRANSFORMS-e = ev\n';
+  const transforms = '[copy]\nREGEX = .\nCLONE_SOURCETYPE = cloned\n\n[ev]\nINGEST_EVAL = b=(1==1)\n';
+
+  it.each([false, true])('perEventPipeline=%s: three events and three clones, one error', (perEventPipeline) => {
+    const { result, diagnostics } = runPipeline('one\ntwo\nthree', meta, props, transforms, { perEventPipeline });
+    expect(result.events.filter((e) => e.clonedFrom !== undefined)).toHaveLength(3);
+    expect(diagnostics.filter((d) => d.message.startsWith('INGEST_EVAL b:'))).toHaveLength(1);
+  });
+});

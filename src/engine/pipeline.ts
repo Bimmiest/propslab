@@ -8,7 +8,7 @@ import { routeEventsByAge } from './processors/routeByAge';
 import { applyIndexedExtractions } from './processors/indexedExtractions';
 import { annotatePunct } from './processors/punctAnnotator';
 import { applySedCommands } from './processors/sedCmd';
-import { applyTransforms } from './processors/transformsProcessor';
+import { applyTransforms, newTransformsWarned } from './processors/transformsProcessor';
 import { applyCloneIndexTime } from './processors/cloneSourcetype';
 import { extractFields } from './processors/fieldExtractor';
 import { applyKvMode } from './processors/kvMode';
@@ -178,11 +178,14 @@ function runIndexTime(rawData: string, ctx: RunContext): SplunkEvent[] {
   // INGEST_EVAL / STOP_PROCESSING_IF stanzas are all applied here, interleaved
   // in TRANSFORMS-<class> list order, then every RULESET-<class> after them
   // (only when a props.conf stanza references them).
-  events = safeProcessor('TRANSFORMS', events, () => applyTransforms(events, directives, transformsConf, 'index-time', diagnostics, now), diagnostics, 'transforms.conf');
+  // One set of warning ledgers for this stage and the clone pass, which calls
+  // applyTransforms once per clone.
+  const warned = newTransformsWarned();
+  events = safeProcessor('TRANSFORMS', events, () => applyTransforms(events, directives, transformsConf, 'index-time', diagnostics, now, warned), diagnostics, 'transforms.conf');
 
   // Step 7b: CLONE_SOURCETYPE copies get the SEDCMD and TRANSFORMS of the
   // sourcetype they were cloned to.
-  events = safeProcessor('CLONE_SOURCETYPE', events, () => applyCloneIndexTime(events, propsConf, transformsConf, diagnostics, now), diagnostics, 'transforms.conf');
+  events = safeProcessor('CLONE_SOURCETYPE', events, () => applyCloneIndexTime(events, propsConf, transformsConf, diagnostics, now, warned), diagnostics, 'transforms.conf');
 
   // Step 8: ANNOTATE_PUNCT — the annotation processor runs after regex
   // replacement, so the punct signature reflects _raw as indexed (post-SEDCMD,
