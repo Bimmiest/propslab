@@ -9,6 +9,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { runPipeline } from '../pipeline';
+import { regexCompileCount } from '../../utils/splunkRegex';
 import type { EventMetadata, DirectiveNoOp } from '../types';
 
 const metadata: EventMetadata = {
@@ -121,7 +122,7 @@ describe('#84 — no-op explanations reach the caller', () => {
 });
 
 describe('#415 — explaining no-ops stays cheap at volume', () => {
-  it('runs 5,000 events past 16 mostly non-matching EXTRACTs quickly', () => {
+  it('runs 5,000 events past 16 mostly non-matching EXTRACTs without recompiling', () => {
     // Each explanation probes one truncated pattern per atom. Through the
     // pipeline's own 256-entry cache those probes evicted the EXTRACTs
     // themselves, and this took about 17 s.
@@ -141,12 +142,16 @@ describe('#415 — explaining no-ops stays cheap at volume', () => {
     ).join('\n');
     const props = `[my_app]\nSHOULD_LINEMERGE = false\nLINE_BREAKER = ([\\r\\n]+)\n${extracts}\n`;
 
-    const started = performance.now();
+    const before = regexCompileCount();
     const { result } = runPipeline(raw, metadata, props, '', { perEventPipeline: false, captureOffsets: false });
-    const elapsed = performance.now() - started;
+    const compiles = regexCompileCount() - before;
 
     expect(result.events).toHaveLength(5000);
     expect(result.events[0]?.noOps).toHaveLength(16);
-    expect(elapsed).toBeLessThan(3000);
+    // Compiles, not wall time: under coverage on a loaded runner a 1 s run
+    // took 10 s. Thrashing recompiled the config for every event, hundreds of
+    // thousands of compiles; a working cache compiles each pattern and probe
+    // about once.
+    expect(compiles).toBeLessThan(2000);
   });
 });

@@ -113,6 +113,7 @@ export function extractionLimits(matchLimit?: string, depthLimit?: string): Rege
 class RegexCache {
   readonly #entries = new Map<string, Pcre2Regex>();
   readonly #limit: number;
+  compiles = 0;
 
   constructor(limit: number) {
     this.#limit = limit;
@@ -135,6 +136,7 @@ class RegexCache {
       return hit;
     }
     const regex = new Pcre2Regex(source, flags, limits);
+    this.compiles++;
     if (this.#entries.size >= this.#limit) {
       const oldest = this.#entries.keys().next();
       if (!oldest.done) {
@@ -158,6 +160,15 @@ const probeCache = new RegexCache(256);
 /** How many compiled patterns wasm memory holds; for the cache-bound test. */
 export function cachedRegexCount(): number {
   return cache.size;
+}
+
+/**
+ * How many times either cache has compiled a pattern. A cost test counts
+ * compiles rather than timing a run, which coverage instrumentation and a
+ * loaded CI runner make meaningless.
+ */
+export function regexCompileCount(): number {
+  return cache.compiles + probeCache.compiles;
 }
 
 /** How many compiled probes the separate probe cache holds; for tests. */
