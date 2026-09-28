@@ -176,3 +176,53 @@ describe('PreviewPanel — Effective config shows the last run in manual-apply m
     expect(screen.getByText('= 123')).toBeInTheDocument();
   });
 });
+
+// The change check strips trailing whitespace on the main thread for every
+// event, and /\s+$/ backtracks quadratically over a long run of whitespace
+// that is not at the end.
+describe('PreviewPanel — the change check is linear in whitespace (#427)', () => {
+  const meta: EventMetadata = { index: 'main', host: 'h', source: 's', sourcetype: 'st' };
+  function resultOf(raw: string, originalRaw: string): ProcessingResult {
+    return {
+      events: [{
+        _raw: raw,
+        _time: null,
+        _meta: {},
+        fields: {},
+        metadata: meta,
+        lineNumbers: { start: 1, end: 1 },
+        processingTrace: [],
+      }],
+      originalRaw,
+      eventCount: 1,
+      processingSteps: [],
+      inputMetadata: meta,
+    };
+  }
+
+  function unmodifiedCount(): string | null {
+    fireEvent.click(screen.getByRole('button', { name: /Changes/ }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Unmodified' }));
+    return screen.getByText(/^\d+ \/ \d+$/).textContent;
+  }
+
+  beforeEach(() => {
+    useAppStore.setState({ ...initial, activeOutputTab: 'preview' }, true);
+  });
+
+  it('ignores CRLF and trailing whitespace when deciding an event changed', () => {
+    useAppStore.setState({ processingResult: resultOf('GET /a 200 \t', 'GET /a 200\r') });
+    render(<PreviewPanel />);
+    expect(unmodifiedCount()).toBe('1 / 1');
+  });
+
+  it('checks an event with a long inner run of whitespace quickly', () => {
+    // 80k spaces took several seconds with the regex strip.
+    const raw = `a${' '.repeat(80_000)}b`;
+    useAppStore.setState({ processingResult: resultOf(raw, raw) });
+    const start = performance.now();
+    render(<PreviewPanel />);
+    expect(performance.now() - start).toBeLessThan(1500);
+    expect(unmodifiedCount()).toBe('1 / 1');
+  });
+});

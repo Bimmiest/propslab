@@ -1,6 +1,8 @@
 import { createContext, memo, useContext, useId, useState, useMemo, type ReactNode } from 'react';
 
-const normalise = (s: string) => s.replace(/\r\n/g, '\n').replace(/\s+$/, '');
+// trimEnd, not /\s+$/: the regex backtracks quadratically over a long inner
+// run of whitespace, and this runs on the main thread for every event.
+const normalise = (s: string) => s.replace(/\r\n/g, '\n').trimEnd();
 import type React from 'react';
 import { useAppStore } from '../../store/useAppStore';
 import { Tabs } from '../ui/Tabs';
