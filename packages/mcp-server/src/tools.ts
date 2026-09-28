@@ -22,6 +22,12 @@ import {
   type RunInWorkerOptions,
 } from './runInWorker';
 import { MAX_RESPONSE_CHARS } from './serialize';
+import {
+  explainOutputShape,
+  lookupOutputShape,
+  simulateOutputShape,
+  validateOutputShape,
+} from './outputSchemas';
 import { collectRegexSuspects } from './suspects';
 
 // ---------------------------------------------------------------------------
@@ -220,13 +226,25 @@ interface ToolText {
   // return type must be assignable to.
   [key: string]: unknown;
   content: { type: 'text'; text: string }[];
+  structuredContent?: Record<string, unknown>;
   isError?: boolean;
 }
 
-function json(payload: unknown, isError = false): ToolText {
+/**
+ * A success carries the payload twice: as `structuredContent` for clients
+ * that read the output schema, and as pretty-printed text for those that do
+ * not. Both come from the one object, and its compact JSON is never longer
+ * than the pretty text, so the simulate cap (`MAX_RESPONSE_CHARS`, measured
+ * on the text) bounds the structured copy too.
+ *
+ * An error omits `structuredContent`: its payload does not match the output
+ * schema, and the SDK client validates `structuredContent` whenever present,
+ * error or not. The error JSON stays in the text.
+ */
+function json(payload: object, isError = false): ToolText {
   return {
     content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }],
-    ...(isError ? { isError: true } : {}),
+    ...(isError ? { isError: true } : { structuredContent: payload as Record<string, unknown> }),
   };
 }
 
@@ -457,6 +475,18 @@ export function handleLookupDirective(args: LookupArgs): ToolText {
 // Registration
 // ---------------------------------------------------------------------------
 
+/**
+ * Every tool only reads its input and the static registry: nothing is
+ * written, nothing outside the process is reached, and the same input gives
+ * the same answer — so clients need not confirm a call before running it.
+ */
+const annotations = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: false,
+} as const;
+
 export function registerTools(server: McpServer, options?: { workerPath?: string }): void {
   const workerPath = options?.workerPath;
   // Each call carries its own request's cancellation signal, so a cancelled
@@ -478,6 +508,8 @@ export function registerTools(server: McpServer, options?: { workerPath?: string
         'to real data instead of predicting it; read the diagnostics too — they name ' +
         'directives the simulator recognises but does not honour.',
       inputSchema: simulateInputShape,
+      outputSchema: simulateOutputShape,
+      annotations,
     },
     (args, extra) => handleSimulate(args, worker(extra)),
   );
@@ -493,6 +525,8 @@ export function registerTools(server: McpServer, options?: { workerPath?: string
         'does not honour, and regexes (in every stanza) that PCRE will not compile. Use it to ' +
         'check a config you have drafted before simulating it.',
       inputSchema: validateInputShape,
+      outputSchema: validateOutputShape,
+      annotations,
     },
     (args, extra) => handleValidate(args, worker(extra)),
   );
@@ -508,6 +542,8 @@ export function registerTools(server: McpServer, options?: { workerPath?: string
         'sourcetype to also resolve which stanzas match such an event and get the effective ' +
         'merged directive set, i.e. what `btool props list --debug` would answer.',
       inputSchema: explainInputShape,
+      outputSchema: explainOutputShape,
+      annotations,
     },
     (args, extra) => handleExplainPrecedence(args, worker(extra)),
   );
@@ -523,6 +559,8 @@ export function registerTools(server: McpServer, options?: { workerPath?: string
         'instead of recalling Splunk documentation from memory. Omit `key` to list all ' +
         'known directives.',
       inputSchema: lookupInputShape,
+      outputSchema: lookupOutputShape,
+      annotations,
     },
     (args) => handleLookupDirective(args),
   );

@@ -11,7 +11,9 @@
 //  - a simulate response stays under MAX_RESPONSE_CHARS, however large the
 //    events, traces and diagnostics behind it;
 //  - validate reports every regex-bearing directive whose pattern fails
-//    validateRegex.
+//    validateRegex;
+//  - every success carries structuredContent that equals the text payload
+//    and parses against the tool's output schema.
 //
 // The handlers run in a worker thread per call, so those properties take few
 // runs; the cap and the regex lint are also checked in-process, where runs
@@ -24,8 +26,10 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import fc from 'fast-check';
 import { fileURLToPath } from 'node:url';
+import { z } from 'zod';
 import { handleExplainPrecedence, handleSimulate, handleValidate } from '../tools';
 import { MAX_RESPONSE_CHARS, serializeSimulation } from '../serialize';
+import { explainOutputShape, simulateOutputShape, validateOutputShape } from '../outputSchemas';
 import { lintRegexDirectives } from '../regexLint';
 import { regexEngineModule } from '../regexEngine';
 import { parseConf } from '../../../../src/engine/parser/confParser';
@@ -123,6 +127,16 @@ const sample = fc
 // ── Helpers ─────────────────────────────────────────────
 
 const text = (r: { content: { text: string }[] }) => r.content[0].text;
+
+/** A success's structuredContent is its text payload, valid against `shape`. */
+function expectStructured(
+  r: { content: { text: string }[]; structuredContent?: Record<string, unknown> },
+  shape: z.ZodRawShape,
+) {
+  expect(r.structuredContent).toEqual(JSON.parse(text(r)));
+  const parsed = z.strictObject(shape).safeParse(r.structuredContent);
+  expect(parsed.error).toBeUndefined();
+}
 
 /** Every directive the regex lint must see, with the pattern it compiles. */
 function regexBearing(input: ConfInput, file: File) {
@@ -261,8 +275,16 @@ describe('tool handlers — random input never throws out of the handler', () =>
           expect(text(result).length).toBeLessThanOrEqual(MAX_RESPONSE_CHARS);
           const out = JSON.parse(text(result));
           // An error result is structured; the engine itself must not fail.
-          if (result.isError) expect(out.error).not.toBe('engine_failure');
-          else expect(out.returnedEvents).toBeLessThanOrEqual(maxEvents);
+          if (result.isError) {
+            expect(out.error).not.toBe('engine_failure');
+            expect(result).not.toHaveProperty('structuredContent');
+          } else {
+            expect(out.returnedEvents).toBeLessThanOrEqual(maxEvents);
+            expectStructured(result, simulateOutputShape);
+            expect(JSON.stringify(result.structuredContent).length).toBeLessThanOrEqual(
+              MAX_RESPONSE_CHARS,
+            );
+          }
         },
       ),
       { numRuns: 12 },
@@ -277,6 +299,7 @@ describe('tool handlers — random input never throws out of the handler', () =>
           WORKER_PATH,
         );
         expect(result.isError).toBeUndefined();
+        expectStructured(result, validateOutputShape);
         const { diagnostics } = JSON.parse(text(result)) as { diagnostics: ValidationDiagnostic[] };
         expectEveryBadPatternReported(props, 'props.conf', diagnostics);
         expectEveryBadPatternReported(transforms, 'transforms.conf', diagnostics);
@@ -298,6 +321,7 @@ describe('tool handlers — random input never throws out of the handler', () =>
           );
           expect(result.isError).toBeUndefined();
           expect(JSON.parse(text(result))).toHaveProperty('stanzas');
+          expectStructured(result, explainOutputShape);
         },
       ),
       { numRuns: 8 },

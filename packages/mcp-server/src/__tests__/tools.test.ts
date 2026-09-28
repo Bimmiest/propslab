@@ -100,6 +100,8 @@ describe('simulate', () => {
       WORKER_PATH,
     );
     expect(result.content[0].text.length).toBeLessThanOrEqual(MAX_RESPONSE_CHARS);
+    // The structured copy is the same payload, so the cap bounds it as well.
+    expect(JSON.stringify(result.structuredContent).length).toBeLessThanOrEqual(MAX_RESPONSE_CHARS);
     const out = payload(result);
     expect(out.eventCount).toBe(300);
     expect(out.returnedEvents).toBeGreaterThan(0);
