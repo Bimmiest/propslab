@@ -6,6 +6,7 @@ import { atDirective } from '../parser/provenance';
 import { effectiveDirective } from '../utils/directiveValues';
 import { appendTraceStep, metadataChanges } from '../utils/traceStep';
 import { BOOLEAN_ASSIGNMENT_ERROR, numArg } from '../processors/eval/values';
+import { dateFromEpochSeconds, epochOutOfRangeMessage } from '../utils/epochTime';
 
 // Split "field=expr, field2=fn(a,b)" on top-level commas only — not inside parens
 // and not inside a string literal (e.g. msg="a,b" must stay one assignment).
@@ -80,6 +81,35 @@ function splitAssignment(expr: string): { fieldName: string; evalExpr: string } 
   };
 }
 
+/**
+ * `_time=<epoch>`. A number no Date can hold keeps the event's previous
+ * `_time`, with a warning deduplicated against the list itself, as regex
+ * failures are: the transforms pass runs this once per event.
+ */
+function assignTime(
+  event: SplunkEvent,
+  epoch: number | null,
+  dir: ConfDirective,
+  diagnostics: ValidationDiagnostic[] | undefined,
+): void {
+  if (epoch === null) return;
+  const time = dateFromEpochSeconds(epoch);
+  if (time) {
+    event._time = time;
+    return;
+  }
+  const message = epochOutOfRangeMessage('INGEST_EVAL _time', epoch);
+  if (diagnostics && !diagnostics.some((d) => d.message === message)) {
+    diagnostics.push({
+      level: 'warning',
+      message,
+      file: 'transforms.conf',
+      ...atDirective(dir),
+      directiveKey: dir.key,
+    });
+  }
+}
+
 export function applyIngestEval(
   events: SplunkEvent[],
   directives: ConfDirective[],
@@ -142,8 +172,7 @@ export function applyIngestEval(
           // INGEST_EVAL can rewrite the event's timestamp and raw text, not just
           // add indexed fields. Route _time/_raw to the event rather than fields.
           if (fieldName === '_time') {
-            const epoch = numArg(result);
-            if (epoch !== null) currentEvent._time = new Date(epoch * 1000);
+            assignTime(currentEvent, numArg(result), ingestEvalDir, diagnostics);
           } else if (fieldName === '_raw') {
             currentEvent._raw =
               result === null ? '' : Array.isArray(result) ? result.join('\n') : String(result);

@@ -40,7 +40,9 @@ function serializeStep(step: ProcessingStep, includeSnapshots: boolean) {
 function serializeEvent(event: SplunkEvent, includeSnapshots: boolean) {
   return {
     _raw: event._raw,
-    _time: event._time ? event._time.toISOString() : null,
+    // The engine never sets an Invalid Date (epochTime.ts), but toISOString()
+    // throws on one, which would fail the whole call over one field.
+    _time: event._time && !Number.isNaN(event._time.getTime()) ? event._time.toISOString() : null,
     metadata: event.metadata,
     fields: event.fields,
     indexedFields: event._meta,

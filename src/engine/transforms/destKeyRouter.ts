@@ -2,8 +2,14 @@ import type { SplunkEvent } from '../types';
 import type { TransformResult } from './regexTransform';
 import { VALID_UNSIMULATED_DEST_KEYS } from './destKeys';
 import { addFieldValue } from '../utils/fieldBag';
+import { dateFromEpochSeconds } from '../utils/epochTime';
 
-export function applyDestKey(event: SplunkEvent, result: TransformResult): SplunkEvent {
+export function applyDestKey(
+  event: SplunkEvent,
+  result: TransformResult,
+  /** Called with a DEST_KEY = _time value no Date can hold; `_time` is kept. */
+  onTimeOutOfRange?: (value: string) => void,
+): SplunkEvent {
   if (!result.matched || result.destKey === undefined || result.destValue === undefined) {
     // No routing, just add extracted fields.
     // Test for `undefined` rather than falsiness: a FORMAT that legitimately
@@ -43,9 +49,11 @@ export function applyDestKey(event: SplunkEvent, result: TransformResult): Splun
 
     case '_time': {
       const epoch = parseFloat(destValue);
+      const time = isNaN(epoch) ? null : dateFromEpochSeconds(epoch);
+      if (!time && !isNaN(epoch)) onTimeOutOfRange?.(destValue);
       return {
         ...event,
-        _time: isNaN(epoch) ? event._time : new Date(epoch * 1000),
+        _time: time ?? event._time,
         fields: { ...event.fields, ...result.fields },
       };
     }

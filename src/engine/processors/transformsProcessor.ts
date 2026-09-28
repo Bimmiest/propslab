@@ -10,6 +10,7 @@ import { SIMULATED_DEST_KEYS, VALID_UNSIMULATED_DEST_KEYS, normaliseDestKey } fr
 import { atDirective, atStanza } from '../parser/provenance';
 import { effectiveDirective, parseSplunkBool } from '../utils/directiveValues';
 import { validateRegex } from '../../utils/splunkRegex';
+import { epochOutOfRangeMessage } from '../utils/epochTime';
 
 // A DEST_KEY=_raw transform that shrinks the event by at least this fraction is
 // treated as accidental data loss (FORMAT did not reproduce the rest of the line).
@@ -66,6 +67,8 @@ interface TransformsRun {
     invalidRegex: Set<string>;
     /** Routing via an unknown/unsimulated DEST_KEY. */
     unknownDestKey: Set<string>;
+    /** DEST_KEY = _time given a value no Date can hold. */
+    timeOutOfRange: Set<string>;
     /** DEST_KEY reached through a search-time REPORT-, where Splunk ignores it. */
     searchTimeDestKey: Set<string>;
     searchOnlyAttrs: Set<string>;
@@ -243,7 +246,16 @@ function applyMatch(
   // the event — a later transform in the list can still overwrite the queue
   // (last-wins). nullQueue events are flagged (and shown as dropped) only
   // after the whole list runs; they are never removed mid-list.
-  const routed = applyDestKey(state.event, effective);
+  const routed = applyDestKey(state.event, effective, (value) => {
+    if (!diagnostics || warned.timeOutOfRange.has(stanzaName)) return;
+    warned.timeOutOfRange.add(stanzaName);
+    diagnostics.push({
+      level: 'warning',
+      message: epochOutOfRangeMessage(`DEST_KEY = _time in transform "${stanzaName}"`, value),
+      file: 'transforms.conf',
+      ...positionOfKeyOrStanza(transformStanza, 'DEST_KEY'),
+    });
+  });
   if (result.destKey === '_raw' && diagnostics) {
     warnRawLoss(beforeRaw, routed._raw, stanzaName, transformStanza, diagnostics, warned.rawLoss);
   }
@@ -345,6 +357,7 @@ export function applyTransforms(
       noWriteMeta: new Set(),
       invalidRegex: new Set(),
       unknownDestKey: new Set(),
+      timeOutOfRange: new Set(),
       searchTimeDestKey: new Set(),
       searchOnlyAttrs: new Set(),
       searchTimeNoFormat: new Set(),

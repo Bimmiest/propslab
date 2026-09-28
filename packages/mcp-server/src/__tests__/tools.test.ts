@@ -114,6 +114,18 @@ describe('simulate', () => {
     expect(out.truncationNote).toMatch(/capped at/);
   }, 20_000);
 
+  it('keeps the extracted _time when INGEST_EVAL sets one out of range (#417)', async () => {
+    const props = `${ACCESS_PROPS}\nTRANSFORMS-t = t`;
+    const result = await handleSimulate(
+      simulateArgs({ props_conf: props, transforms_conf: '[t]\nINGEST_EVAL = _time=pow(10,20)' }),
+      WORKER_PATH,
+    );
+    expect(result.isError).toBeFalsy();
+    const out = payload(result);
+    expect(out.events[0]._time).toBe('2026-08-02T10:15:00.000Z');
+    expect(out.diagnostics.some((d: { message: string }) => /out of range/.test(d.message))).toBe(true);
+  });
+
   it('strips trace snapshots unless include_snapshots is set', async () => {
     const lean = payload(await handleSimulate(simulateArgs(), WORKER_PATH));
     for (const step of lean.events[0].processingTrace) {
