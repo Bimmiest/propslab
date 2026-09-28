@@ -266,6 +266,9 @@ const TZ_OFFSETS: Record<string, number> = {
   NZST: 720, NZDT: 780,
 };
 
+/** The zone abbreviations `%Z` resolves without TZ_ALIAS, for recognition to look for. */
+export const KNOWN_ZONE_ABBREVIATIONS: readonly string[] = Object.keys(TZ_OFFSETS);
+
 /**
  * Formatters for IANA zone names, cached because constructing one is expensive
  * and a batch of events shares a single `TZ`. A name the runtime rejects caches
