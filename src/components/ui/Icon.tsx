@@ -2,6 +2,7 @@ import type React from 'react';
 
 export type IconName =
   | 'chevron-down'
+  | 'chevron-up'
   | 'chevron-left'
   | 'chevron-right'
   | 'settings'
@@ -25,10 +26,12 @@ export type IconName =
   | 'sparkles'
   | 'play'
   | 'book'
-  | 'sliders';
+  | 'sliders'
+  | 'sort';
 
 const PATHS: Record<IconName, React.ReactNode> = {
   'chevron-down': <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />,
+  'chevron-up': <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />,
   'chevron-left': <polyline points="15 18 9 12 15 6" />,
   'chevron-right': <polyline points="9 18 15 12 9 6" />,
   'settings': (
@@ -102,15 +105,19 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <line x1="17" y1="16" x2="23" y2="16" />
     </>
   ),
+  // Up and down arrows: a sortable column that is not the sorted one.
+  'sort': <path strokeLinecap="round" strokeLinejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />,
 };
 
 interface IconProps {
   name: IconName;
   className?: string;
   size?: number;
+  /** For a colour or a rotation computed at render time. */
+  style?: React.CSSProperties;
 }
 
-export function Icon({ name, className = 'w-4 h-4', size }: IconProps) {
+export function Icon({ name, className = 'w-4 h-4', size, style }: IconProps) {
   const sizeProps = size ? { width: size, height: size } : {};
   return (
     <svg
@@ -122,6 +129,7 @@ export function Icon({ name, className = 'w-4 h-4', size }: IconProps) {
       strokeLinecap="round"
       strokeLinejoin="round"
       className={className}
+      style={style}
       aria-hidden="true"
       {...sizeProps}
     >

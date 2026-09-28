@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { computeDiff } from '../../../utils/diffEngine';
 import type { EnrichedEvent } from '../PreviewPanel';
+import { DiffLines } from '../../ui/DiffLines';
 
 interface DiffTabProps {
   items: EnrichedEvent[];
@@ -52,34 +53,7 @@ function DiffEventCard({ globalIdx, originalRaw, modifiedRaw }: { globalIdx: num
         </span>
       </div>
       <div className="text-xs font-mono leading-relaxed">
-        {diff.map((segment, si) => {
-          const lines = segment.value.replace(/\n$/, '').split('\n');
-
-          if (segment.removed) {
-            return lines.map((line, li) => (
-              <div key={`${si}-${li}`} className="flex bg-red-500/15">
-                <span className="flex-shrink-0 w-6 text-center text-red-600 dark:text-red-400 select-none">-</span>
-                <pre className="flex-1 px-2 py-0.5 whitespace-pre-wrap break-all text-red-700 dark:text-red-300">{line}</pre>
-              </div>
-            ));
-          }
-
-          if (segment.added) {
-            return lines.map((line, li) => (
-              <div key={`${si}-${li}`} className="flex bg-green-500/15">
-                <span className="flex-shrink-0 w-6 text-center text-green-600 dark:text-green-400 select-none">+</span>
-                <pre className="flex-1 px-2 py-0.5 whitespace-pre-wrap break-all text-green-700 dark:text-green-300">{line}</pre>
-              </div>
-            ));
-          }
-
-          return lines.map((line, li) => (
-            <div key={`${si}-${li}`} className="flex">
-              <span className="flex-shrink-0 w-6 text-center text-[var(--color-text-muted)] select-none">&nbsp;</span>
-              <pre className="flex-1 px-2 py-0.5 whitespace-pre-wrap break-all text-[var(--color-text-primary)]">{line}</pre>
-            </div>
-          ));
-        })}
+        <DiffLines diff={diff} />
       </div>
     </div>
   );

@@ -9,6 +9,7 @@ type ScaffoldResult = ReturnType<typeof scaffoldConfig>;
 import { computeDiff } from '../../utils/diffEngine';
 import { escapeRegex } from '../../utils/splunkRegex';
 import { Icon } from '../ui/Icon';
+import { DiffLines } from '../ui/DiffLines';
 import { Badge } from '../ui/Badge';
 
 const CONFIDENCE_VARIANT: Record<Confidence, 'success' | 'warning' | 'info'> = {
@@ -148,19 +149,6 @@ function SuggestionRow({ suggestion, checked, onToggle }: { suggestion: Scaffold
   );
 }
 
-function DiffLine({ kind, line }: { kind: 'added' | 'removed' | 'ctx'; line: string }) {
-  const sign = kind === 'added' ? '+' : kind === 'removed' ? '-' : ' ';
-  const rowBg = kind === 'added' ? 'bg-green-500/15' : kind === 'removed' ? 'bg-red-500/15' : '';
-  const signColor = kind === 'added' ? 'text-green-600 dark:text-green-400' : kind === 'removed' ? 'text-red-600 dark:text-red-400' : 'text-[var(--color-text-muted)]';
-  const textColor = kind === 'added' ? 'text-green-700 dark:text-green-300' : kind === 'removed' ? 'text-red-700 dark:text-red-300' : 'text-[var(--color-text-primary)]';
-  return (
-    <div className={`flex ${rowBg}`}>
-      <span className={`flex-shrink-0 w-6 text-center select-none ${signColor}`}>{sign}</span>
-      <pre className={`flex-1 px-2 py-0.5 whitespace-pre-wrap break-all ${textColor}`}>{line}</pre>
-    </div>
-  );
-}
-
 function EmptyState({ text }: { text: string }) {
   return (
     <div className="flex flex-col items-center justify-center gap-2 py-12 text-center">
@@ -177,11 +165,7 @@ function ScaffoldDiffPreview({ stanzaName, diff }: { stanzaName: string; diff: R
         props.conf preview — stanza <code className="font-mono">[{stanzaName}]</code>
       </div>
       <div className="rounded border text-xs font-mono leading-relaxed overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
-        {diff.map((segment, si) => {
-          const lines = segment.value.replace(/\n$/, '').split('\n');
-          const cls = segment.added ? 'added' : segment.removed ? 'removed' : 'ctx';
-          return lines.map((line, li) => <DiffLine key={`${si}-${li}`} kind={cls} line={line} />);
-        })}
+        <DiffLines diff={diff} />
       </div>
     </div>
   );

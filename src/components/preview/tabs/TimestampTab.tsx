@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { parseConf } from '../../../engine/parser/confParser';
 import { mergeDirectives, resolveStanzasForEvent } from '../../../engine/parser/stanzaMatcher';
 import { resolveLookahead } from '../../../engine/processors/timestampExtractor';
@@ -8,6 +8,7 @@ import type { TimeConfig, TimestampProbe } from '../../../engine/timestampMatch'
 import type { EventMetadata, SplunkEvent, TimeSource } from '../../../engine/types';
 import type { EnrichedEvent } from '../PreviewPanel';
 import { tint } from '../../../utils/tint';
+import { ReferenceTable } from './shared/ReferenceTable';
 
 interface TimestampTabProps {
   items: EnrichedEvent[];
@@ -318,77 +319,26 @@ function ConfigSummary({ config, directives }: {
   );
 }
 
+const STRPTIME_COLUMNS = [
+  { label: 'Directive', className: 'pb-1 pr-3 font-medium w-16' },
+  { label: 'Description', className: 'pb-1 pr-3 font-medium' },
+  { label: 'Example', className: 'pb-1 font-medium w-32' },
+];
+const strptimeSearchText = (d: StrptimeDirective) => [d.directive, d.description, d.example];
+
 /** The collapsible, searchable strptime reference table. */
 function StrptimeReference({ activeDirectives }: { activeDirectives: string[] }) {
-  const [refOpen, setRefOpen] = useState(false);
-  const [refSearch, setRefSearch] = useState('');
-
-  const filteredRef = useMemo(() => {
-    if (!refSearch) return STRPTIME_REFERENCE;
-    const lower = refSearch.toLowerCase();
-    return STRPTIME_REFERENCE.map((cat) => ({
-      ...cat,
-      directives: cat.directives.filter(
-        (d) => d.directive.toLowerCase().includes(lower) || d.description.toLowerCase().includes(lower) || d.example.toLowerCase().includes(lower)
-      ),
-    })).filter((cat) => cat.directives.length > 0);
-  }, [refSearch]);
-
   return (
-    <div className="flex-shrink-0 border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
-      <button
-        onClick={() => setRefOpen(!refOpen)}
-        aria-expanded={refOpen}
-        aria-controls="strptime-reference"
-        className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-[var(--color-bg-tertiary)] transition-colors cursor-pointer text-left"
-      >
-        <svg
-          className="w-3 h-3 transition-transform flex-shrink-0"
-          style={{ color: 'var(--color-text-muted)', transform: refOpen ? 'rotate(90deg)' : 'rotate(0deg)' }}
-          fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-        </svg>
-        <span className="text-xs font-medium text-[var(--color-text-muted)]">STRPTIME Reference</span>
-      </button>
-      {refOpen && (
-        <div id="strptime-reference" className="px-3 pb-2">
-          <div className="relative mb-2">
-            <svg
-              className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 pointer-events-none"
-              style={{ color: 'var(--color-text-muted)' }}
-              fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-            <input
-              type="text"
-              aria-label="Search strptime directives"
-              placeholder="Search directives..."
-              value={refSearch}
-              onChange={(e) => setRefSearch(e.target.value)}
-              className="w-full max-w-xs pl-6 pr-2 py-1 text-xs rounded border border-[var(--color-border)] bg-[var(--color-bg-primary)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent)]"
-            />
-          </div>
-          <div className="max-h-56 overflow-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="text-left text-[10px] text-[var(--color-text-muted)] uppercase tracking-wider">
-                  <th className="pb-1 pr-3 font-medium w-16">Directive</th>
-                  <th className="pb-1 pr-3 font-medium">Description</th>
-                  <th className="pb-1 font-medium w-32">Example</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredRef.map((cat) => (
-                  <StrptimeCategoryRows key={cat.name} category={cat} activeDirectives={activeDirectives} />
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-    </div>
+    <ReferenceTable
+      title="STRPTIME Reference"
+      searchLabel="Search strptime directives"
+      searchPlaceholder="Search directives..."
+      panelId="strptime-reference"
+      columns={STRPTIME_COLUMNS}
+      categories={STRPTIME_REFERENCE}
+      searchText={strptimeSearchText}
+      renderCategory={(cat) => <StrptimeCategoryRows key={cat.name} category={cat} activeDirectives={activeDirectives} />}
+    />
   );
 }
 

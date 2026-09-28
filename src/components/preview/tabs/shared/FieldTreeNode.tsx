@@ -4,6 +4,7 @@ import { pressable } from '../../../ui/pressable';
 import { copyQuietly } from '../../../../utils/clipboard';
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuLabel } from '../../../ui/ContextMenu';
 import { tint } from '../../../../utils/tint';
+import { Icon } from '../../../ui/Icon';
 
 interface FieldTreeNodeProps {
   node: FieldNode;
@@ -46,13 +47,11 @@ export function FieldTreeNode({
         {...(hasChildren ? { 'aria-expanded': !isCollapsed } : { 'aria-pressed': pinned })}
       >
         {hasChildren ? (
-          <svg
+          <Icon
+            name="chevron-down"
             className="w-3 h-3 flex-shrink-0 transition-transform"
             style={{ color: 'var(--color-text-muted)', transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)' }}
-            fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-          </svg>
+          />
         ) : (
           <span
             className="w-2.5 h-2.5 rounded-sm flex-shrink-0"

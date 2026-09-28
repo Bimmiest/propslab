@@ -4,6 +4,7 @@ import type { EnrichedEvent } from '../PreviewPanel';
 import type { EventMetadata, SplunkEvent } from '../../../engine/types';
 import { EventContextMenu } from './shared/EventContextMenu';
 import { SelectableRaw, type RawSelection } from './shared/SelectableRaw';
+import { Icon } from '../../ui/Icon';
 
 const MAX_COLLAPSED_HEIGHT = 300;
 
@@ -282,9 +283,7 @@ function MetadataDetails({ event, originalMetadata, metadataChanges }: { event: 
                 <span className="font-mono text-[var(--color-text-muted)] line-through">
                   {change.from}
                 </span>
-                <svg className="w-3 h-3 text-[var(--color-text-muted)] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                </svg>
+                <Icon name="arrow-right" className="w-3 h-3 text-[var(--color-text-muted)] flex-shrink-0" />
                 <span className="font-mono font-semibold text-[var(--color-warning)]">
                   {change.to}
                 </span>
