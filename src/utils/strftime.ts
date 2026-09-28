@@ -299,6 +299,16 @@ function ianaFormatter(tz: string): Intl.DateTimeFormat | null {
 }
 
 /**
+ * `Date.UTC`, without its mapping of years 0-99 onto 1900-1999: `%Y` reading
+ * `0050` means the year 50.
+ */
+function utcMs(year: number, month: number, day: number, hour: number, minute: number, second: number, ms = 0): number {
+  const d = new Date(Date.UTC(2000, month, day, hour, minute, second, ms));
+  d.setUTCFullYear(year, month, day);
+  return d.getTime();
+}
+
+/**
  * The offset, in minutes east of UTC, that a zone was actually at a given
  * instant — which is the whole reason a zone name cannot be reduced to a fixed
  * number. Read by formatting the instant *into* the zone and asking how far the
@@ -316,7 +326,7 @@ function ianaOffsetAt(formatter: Intl.DateTimeFormat, atMs: number): number {
   // Some ICU versions render midnight as hour 24 under hour12: false.
   const hour = num('hour') === 24 ? 0 : num('hour');
 
-  const asUtc = Date.UTC(year, num('month') - 1, num('day'), hour, num('minute'), num('second'));
+  const asUtc = utcMs(year, num('month') - 1, num('day'), hour, num('minute'), num('second'));
   return (asUtc - atMs) / 60_000;
 }
 
@@ -549,11 +559,30 @@ export function parseTimestampDetailed(
   // convention syslog readers follow for RFC 3164 stamps: `Dec 31 23:59:00`
   // read on 1 January is last year's, not eleven months ahead. Convention-
   // derived; no capture covers it. A stamp slightly ahead of the clock (skew)
-  // stays in this year. The previous year is also tried when this one cannot
-  // hold the date at all (29 February).
-  if (current && current.date.getTime() - now.getTime() <= YEARLESS_FUTURE_TOLERANCE_MS) return current;
-  return assembleTimestamp(text, format, options, thisYear - 1) ?? current;
+  // stays in this year.
+  const latest = now.getTime() + YEARLESS_FUTURE_TOLERANCE_MS;
+  const fits = (p: ParsedTimestamp | null): p is ParsedTimestamp => p !== null && p.date.getTime() <= latest;
+  if (fits(current)) {
+    // A zone east of UTC is already in next year's 1 January while UTC is
+    // still in this year's 31 December: the stamp's own year is then ahead.
+    if (now.getTime() - current.date.getTime() < YEARLESS_NEXT_YEAR_CHECK_MS) return current;
+    const next = assembleTimestamp(text, format, options, thisYear + 1);
+    return fits(next) ? next : current;
+  }
+  // Earlier years, as far back as a 29 February can be (2096 before 2104).
+  for (let year = thisYear - 1; year >= thisYear - 8; year--) {
+    const earlier = assembleTimestamp(text, format, options, year);
+    if (fits(earlier)) return earlier;
+  }
+  return null;
 }
+
+/**
+ * A yearless stamp read this far or more behind `now` might be next year's in
+ * its own zone: UTC offsets reach 14 hours, so next year starts at most that
+ * long before UTC's, and a stamp read a year back from there is ~364 days old.
+ */
+const YEARLESS_NEXT_YEAR_CHECK_MS = 360 * 86_400_000;
 
 /** Captures that name a year, or an instant outright. */
 const YEAR_CAPTURES: ReadonlySet<string> = new Set(['year4', 'year2', 'epoch']);
@@ -707,7 +736,7 @@ function assembleTimestamp(
   // -----------------------------------------------------------------------
   // The components read as though they were UTC. Every branch below is a
   // question about how far the real instant is from this one.
-  const wallAsUtcMs = Date.UTC(year, month, day, hour, minute, second, milliseconds);
+  const wallAsUtcMs = utcMs(year, month, day, hour, minute, second, milliseconds);
 
   // A zone written in the event (%Z) beats the stanza's TZ, and an explicit
   // numeric offset (%z) beats both — it needs no resolution at all.

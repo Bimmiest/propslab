@@ -7,7 +7,7 @@ import {
 } from '../engine/directiveRegistry';
 import { isUndocumentedAttribute } from '../engine/directiveSupport';
 import { isSplunkBoolLiteral, parseSplunkBool } from '../engine/utils/directiveValues';
-import { DIRECTIVE_RE, miscasedCanonical, MISCASED_MESSAGE } from '../engine/parser/confParser';
+import { DIRECTIVE_RE, STANZA_RE, miscasedCanonical, MISCASED_MESSAGE } from '../engine/parser/confParser';
 import { unsupportedSpecifiers } from '../utils/strftime';
 import { validateRegex } from '../utils/splunkRegex';
 
@@ -75,7 +75,9 @@ export function computeDiagnostics(
   for (let i = 1; i <= lineCount; i++) {
     const line = model.getLineContent(i);
     const trimmed = line.trim();
-    const endsWithBackslash = endsWithContinuation(line.trimEnd());
+    // The backslash must be the line's last character, as confParser reads it:
+    // `\ ` (a space after it) is a literal backslash, not a continuation.
+    const endsWithBackslash = endsWithContinuation(line);
 
     if (inDirectiveValue) {
       // Part of the previous directive's value — skip it, whatever it contains
@@ -89,14 +91,18 @@ export function computeDiagnostics(
     inDirectiveValue = false;
 
     // Skip comments and blank lines. Splunk .conf uses `#` only — `;` is NOT a comment.
-    if (trimmed === '' || trimmed.startsWith('#')) continue;
+    // Like a directive, a comment or header must start the line: indented, it is
+    // malformed to confParser, and reported below with the same reason.
+    if (trimmed === '' || line.startsWith('#')) continue;
 
     // Stanza headers
-    if (trimmed.startsWith('[')) {
-      if (!trimmed.endsWith(']')) {
+    if (line.startsWith('[')) {
+      if (!STANZA_RE.test(line)) {
         markers.push({
           severity: 8,
-          message: 'Missing closing bracket "]" for stanza header',
+          message: trimmed.endsWith(']')
+            ? 'Empty stanza header — expected "[name]"'
+            : 'Missing closing bracket "]" for stanza header',
           startLineNumber: i,
           startColumn: 1,
           endLineNumber: i,
@@ -132,7 +138,7 @@ export function computeDiagnostics(
         severity: 8,
         message: `Malformed line — expected "key = value" or a stanza header. ${
           /^\s/.test(line)
-            ? 'Directive keys cannot be indented; Splunk continues a value with a trailing backslash, not with leading whitespace.'
+            ? 'Directives, headers and comments cannot be indented; Splunk continues a value with a trailing backslash, not with leading whitespace.'
             : 'Splunk .conf lines are "key = value", "[stanza]", or a "#" comment.'
         }`,
         startLineNumber: i,
@@ -359,9 +365,9 @@ function joinContinuedValue(
   firstFragment: string,
   lineCount: number,
 ): string {
-  let joined = firstFragment.trimEnd();
+  let joined = firstFragment;
   for (let line = startLine + 1; line <= lineCount && endsWithContinuation(joined); line++) {
-    joined = joined.slice(0, -1) + model.getLineContent(line).trimEnd();
+    joined = joined.slice(0, -1) + model.getLineContent(line);
   }
   return joined.trim();
 }
