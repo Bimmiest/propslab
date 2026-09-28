@@ -16,6 +16,7 @@ import { applyFieldAliases } from './processors/fieldAlias';
 import { applyEvalExpressions } from './processors/evalProcessor';
 import { attributeRawMutations } from './processors/rawMutationAttribution';
 import { lintConfigs, lintMatchedDirectives } from './configLint';
+import { createRunContext, type RunContext, type RunLimits } from './runContext';
 
 function safeProcessor(
   name: string,
@@ -61,10 +62,9 @@ function dedupeDiagnostics(diagnostics: ValidationDiagnostic[]): ValidationDiagn
  * presented as a real one. Losing the partial trailing line is the honest
  * outcome, and the warning says so.
  */
-function capInput(rawData: string, diagnostics: ValidationDiagnostic[]): string {
-  const MAX_RAW_SIZE = 1_000_000;
-  if (rawData.length <= MAX_RAW_SIZE) return rawData;
-  const capped = rawData.slice(0, MAX_RAW_SIZE);
+function capInput(rawData: string, limits: RunLimits, diagnostics: ValidationDiagnostic[]): string {
+  if (rawData.length <= limits.maxRawChars) return rawData;
+  const capped = rawData.slice(0, limits.maxRawChars);
   const lastBreak = capped.lastIndexOf('\n');
   const truncatedRaw = lastBreak > 0 ? capped.slice(0, lastBreak) : capped;
   diagnostics.push({
@@ -78,8 +78,8 @@ function capInput(rawData: string, diagnostics: ValidationDiagnostic[]): string 
   return truncatedRaw;
 }
 
-/** Everything one run's stages share once the conf files are parsed and matched. */
-interface RunContext {
+/** The run context, plus what its stages share once the conf files are parsed and matched. */
+interface PipelineRun {
   propsConf: ParsedConf;
   transformsConf: ParsedConf;
   /** Index-time directives: the stanzas matching the (assigned) metadata, merged. */
@@ -88,9 +88,8 @@ interface RunContext {
   searchTimeDirectives: ConfDirective[];
   /** The metadata the events were broken with: the caller's, after any input-time assignment. */
   effectiveMetadata: EventMetadata;
+  ctx: RunContext;
   diagnostics: ValidationDiagnostic[];
-  now: number;
-  captureOffsets: boolean;
 }
 
 /**
@@ -104,7 +103,7 @@ function resolveDirectives(
   propsConf: ParsedConf,
   metadata: EventMetadata,
   diagnostics: ValidationDiagnostic[],
-): Pick<RunContext, 'directives' | 'searchTimeDirectives' | 'effectiveMetadata'> {
+): Pick<PipelineRun, 'directives' | 'searchTimeDirectives' | 'effectiveMetadata'> {
   const resolved = resolveStanzasForEvent(propsConf.stanzas, metadata);
   const matchedStanzas = resolved.stanzas;
   const effectiveMetadata = resolved.metadata;
@@ -144,8 +143,9 @@ function resolveDirectives(
 }
 
 /** The index-time stages, in Splunk's order. */
-function runIndexTime(rawData: string, ctx: RunContext): SplunkEvent[] {
-  const { directives, diagnostics, now, propsConf, transformsConf } = ctx;
+function runIndexTime(rawData: string, run: PipelineRun): SplunkEvent[] {
+  const { directives, diagnostics, propsConf, transformsConf } = run;
+  const { now } = run.ctx;
   // Step 1-2: Line breaking and merging.
   // The SHOULD_LINEMERGE default that INDEXED_EXTRACTIONS implies (off for the
   // line-per-record formats, on for XML) is decided inside breakLines alone;
@@ -155,7 +155,7 @@ function runIndexTime(rawData: string, ctx: RunContext): SplunkEvent[] {
   // than failing the whole run. With nothing broken there are no events to
   // carry forward, so the fallback
   // is empty rather than the unbroken input.
-  let events = safeProcessor('LINE_BREAKER', [], () => breakLines(rawData, directives, ctx.effectiveMetadata, diagnostics), diagnostics);
+  let events = safeProcessor('LINE_BREAKER', [], () => breakLines(rawData, directives, run.effectiveMetadata, diagnostics), diagnostics);
 
   // Step 3: Truncation
   events = safeProcessor('TRUNCATE', events, () => truncateEvents(events, directives, diagnostics), diagnostics);
@@ -200,10 +200,11 @@ function runIndexTime(rawData: string, ctx: RunContext): SplunkEvent[] {
 function runSearchTimeStages(
   events: SplunkEvent[],
   directives: ConfDirective[],
-  ctx: RunContext,
+  run: PipelineRun,
   diagnostics: ValidationDiagnostic[],
 ): SplunkEvent[] {
-  const { transformsConf, now, captureOffsets } = ctx;
+  const { transformsConf } = run;
+  const { now, captureOffsets } = run.ctx;
   // Step 8: EXTRACT (inline field extraction)
   let ev = safeProcessor('EXTRACT', events, () => extractFields(events, directives, diagnostics, captureOffsets), diagnostics);
   // Step 9: Search-time REPORT transforms (run BEFORE automatic KV — Splunk's
@@ -228,10 +229,10 @@ const metaKey = (m: EventMetadata) => `${m.sourcetype}|${m.host}|${m.source}`;
  * Per-event search time: resolve each event's directives from its own
  * metadata, re-matching stanzas for events whose metadata changed at index time.
  */
-function runSearchTimePerEvent(events: SplunkEvent[], ctx: RunContext, originalMetaKey: string): SplunkEvent[] {
-  const { propsConf } = ctx;
+function runSearchTimePerEvent(events: SplunkEvent[], run: PipelineRun, originalMetaKey: string): SplunkEvent[] {
+  const { propsConf } = run;
   const directivesCache = new Map<string, ConfDirective[]>();
-  directivesCache.set(originalMetaKey, ctx.searchTimeDirectives);
+  directivesCache.set(originalMetaKey, run.searchTimeDirectives);
 
   const eventDirectives = events.map((event) => {
     const key = metaKey(event.metadata);
@@ -258,9 +259,9 @@ function runSearchTimePerEvent(events: SplunkEvent[], ctx: RunContext, originalM
   const perEventDiagnostics: ValidationDiagnostic[] = [];
   const processed = events.flatMap((event, i) => {
     const evDirs = eventDirectives[i] ?? [];
-    return runSearchTimeStages([traceRematch(event, originalMetaKey, evDirs.length)], evDirs, ctx, perEventDiagnostics);
+    return runSearchTimeStages([traceRematch(event, originalMetaKey, evDirs.length)], evDirs, run, perEventDiagnostics);
   });
-  ctx.diagnostics.push(...dedupeDiagnostics(perEventDiagnostics));
+  run.diagnostics.push(...dedupeDiagnostics(perEventDiagnostics));
   return processed;
 }
 
@@ -347,6 +348,14 @@ export function runPipeline(
   options?: PipelineOptions
 ): { result: ProcessingResult; diagnostics: ValidationDiagnostic[] } {
   const diagnostics: ValidationDiagnostic[] = [];
+  const ctx = createRunContext({
+    // Read once, so every stage of one run agrees on what "now" is.
+    now: options?.now ?? Date.now(),
+    // Defaults to true: the browser reads these offsets to highlight extracted
+    // fields, so declining them has to be an explicit choice by a caller that does not.
+    captureOffsets: options?.captureOffsets ?? true,
+    diagnostics,
+  });
 
   if (!rawData.trim()) {
     return {
@@ -355,7 +364,7 @@ export function runPipeline(
     };
   }
 
-  const truncatedRaw = capInput(rawData, diagnostics);
+  const truncatedRaw = capInput(rawData, ctx.limits, diagnostics);
 
   // 1. Parse configurations
   const propsConf = parseConf(propsConfInput, 'props.conf');
@@ -366,32 +375,28 @@ export function runPipeline(
   // stanzas match this event, and none of it changes what the pipeline does.
   lintConfigs(propsConf, transformsConf, diagnostics);
 
-  const ctx: RunContext = {
+  const run: PipelineRun = {
     propsConf,
     transformsConf,
     ...resolveDirectives(propsConf, metadata, diagnostics),
+    ctx,
     diagnostics,
-    // Read once, so every stage of one run agrees on what "now" is.
-    now: options?.now ?? Date.now(),
-    // Defaults to true: the browser reads these offsets to highlight extracted
-    // fields, so declining them has to be an explicit choice by a caller that does not.
-    captureOffsets: options?.captureOffsets ?? true,
   };
-  lintMatchedDirectives(ctx.directives, diagnostics);
+  lintMatchedDirectives(run.directives, diagnostics);
 
-  let events = runIndexTime(truncatedRaw, ctx);
+  let events = runIndexTime(truncatedRaw, run);
 
   // Compared against the metadata the events were BROKEN with, not the caller's:
   // an input-time `sourcetype =` assignment has already been applied to every
   // event by now, and is not an index-time rewrite: keyed on the caller's
   // metadata, batch mode would warn about a DEST_KEY = MetaData:* transform
   // that does not exist and per-event mode would re-match every event.
-  const originalMetaKey = metaKey(ctx.effectiveMetadata);
+  const originalMetaKey = metaKey(run.effectiveMetadata);
   if (options?.perEventPipeline) {
-    events = runSearchTimePerEvent(events, ctx, originalMetaKey);
+    events = runSearchTimePerEvent(events, run, originalMetaKey);
   } else {
     warnBatchMetadataRewrites(events, originalMetaKey, diagnostics);
-    events = runSearchTimeStages(events, ctx.searchTimeDirectives, ctx, diagnostics);
+    events = runSearchTimeStages(events, run.searchTimeDirectives, run, diagnostics);
   }
 
   // Belt and braces: a processor that threw leaves `rawMutations` in place, and
@@ -411,7 +416,7 @@ export function runPipeline(
       // The metadata the events were broken with — the caller's, after any
       // input-time `sourcetype =` assignment, so the UI does not badge every
       // event of an assigned sourcetype as "Metadata Modified".
-      inputMetadata: ctx.effectiveMetadata,
+      inputMetadata: run.effectiveMetadata,
     },
     diagnostics,
   };
