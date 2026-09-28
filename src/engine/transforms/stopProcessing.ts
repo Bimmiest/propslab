@@ -36,6 +36,11 @@ export function evaluateStopCondition(
   stanzaDirectives: ConfDirective[],
   diagnostics: ValidationDiagnostic[] | undefined,
   now: number,
+  /**
+   * Messages this run has already reported. This runs once per event, and a
+   * config problem reported 500 times buries everything else.
+   */
+  reported: Set<string> = new Set(),
 ): { stop: boolean; expression: string } | undefined {
   // Last definition wins, as for every other transforms setting.
   const dir = effectiveDirective(stanzaDirectives, 'STOP_PROCESSING_IF');
@@ -43,10 +48,9 @@ export function evaluateStopCondition(
   const expression = dir.value.trim();
   if (expression === '') return undefined;
 
-  // Deduplicated against the list itself: this runs once per event, and a
-  // config problem reported 500 times buries everything else.
   const report = (level: ValidationDiagnostic['level'], message: string) => {
-    if (!diagnostics || diagnostics.some((d) => d.message === message)) return;
+    if (!diagnostics || reported.has(message)) return;
+    reported.add(message);
     diagnostics.push({ level, message, file: 'transforms.conf', ...atDirective(dir), directiveKey: dir.key });
   };
 

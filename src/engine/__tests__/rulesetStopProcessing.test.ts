@@ -143,6 +143,31 @@ describe('STOP_PROCESSING_IF (#275)', () => {
     expect(stop.filter((d) => d.message.startsWith('STOP_PROCESSING_IF: '))).toHaveLength(1);
   });
 
+  it.each([false, true])(
+    'perEventPipeline=%s: reports each problem once across many events and their clones (#452)',
+    (perEventPipeline) => {
+      // md5() is reported first by an INGEST_EVAL; STOP_PROCESSING_IF's
+      // warning reads the same, so it is not repeated either.
+      const transforms = [
+        '[copy]\nREGEX = .\nCLONE_SOURCETYPE = cloned',
+        '[ev]\nINGEST_EVAL = h=md5(_raw)',
+        '[s1]\nSTOP_PROCESSING_IF = md5(_raw) == "x"',
+        '[s2]\nSTOP_PROCESSING_IF = match(_raw, "(")',
+        '[bad]\nSTOP_PROCESSING_IF = (((',
+      ].join('\n\n');
+      const props =
+        '[st]\nSHOULD_LINEMERGE = false\nTRANSFORMS-c = copy\nRULESET-r = ev, s1, s2, bad\n\n' +
+        '[cloned]\nRULESET-r = s1, s2, bad\n';
+      const raw = Array.from({ length: 500 }, (_, i) => `event ${i}`).join('\n');
+      const r = runPipeline(raw, META, props, transforms, { ...opts, perEventPipeline });
+      expect(r.result.events).toHaveLength(1000);
+      const count = (pred: (m: string) => boolean) => r.diagnostics.filter((d) => pred(d.message)).length;
+      expect(count((m) => m.startsWith('md5() is not fully simulated'))).toBe(1);
+      expect(count((m) => m.startsWith('STOP_PROCESSING_IF: '))).toBe(1);
+      expect(count((m) => m.startsWith('STOP_PROCESSING_IF could not be evaluated'))).toBe(1);
+    },
+  );
+
   it('reads the result as the spec says: numeric 0 and null false, the rest true', () => {
     expect(stopConditionHolds(null)).toBe(false);
     expect(stopConditionHolds(0)).toBe(false);

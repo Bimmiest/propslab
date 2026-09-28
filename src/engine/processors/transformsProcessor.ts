@@ -165,7 +165,7 @@ function runEvalStanza(
   if (ingestEvalDirs.length > 0) {
     state.event = applyIngestEval([state.event], ingestEvalDirs, run.diagnostics, run.now, run.warned.ingestEval)[0] ?? state.event;
   }
-  const stop = evaluateStopCondition(state.event, transformStanza.directives, run.diagnostics, run.now);
+  const stop = evaluateStopCondition(state.event, transformStanza.directives, run.diagnostics, run.now, run.warned.ingestEval.messages);
   if (!stop) return false;
   const { listLabel } = site;
   const description = !stop.stop

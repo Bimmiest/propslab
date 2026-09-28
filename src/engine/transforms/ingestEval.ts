@@ -91,7 +91,11 @@ export interface IngestEvalReported {
   errors: Set<string>;
   /** Builtins that are not fully simulated. */
   stubs: Set<string>;
-  /** Regex failures and out-of-range `_time` warnings, by message. */
+  /**
+   * Warnings, by message: stubs, regex failures and out-of-range `_time`.
+   * STOP_PROCESSING_IF reports into the same set, since its stub warning reads
+   * the same as this one.
+   */
   messages: Set<string>;
 }
 
@@ -129,6 +133,26 @@ function assignTime(
   }
 }
 
+/** A builtin that is not fully simulated, once per function per run. */
+function reportStub(
+  fn: string,
+  dir: ConfDirective,
+  diagnostics: ValidationDiagnostic[] | undefined,
+  reported: IngestEvalReported,
+): void {
+  if (!diagnostics || reported.stubs.has(fn)) return;
+  reported.stubs.add(fn);
+  const message = `${fn}() is not fully simulated — results may differ from real Splunk`;
+  reported.messages.add(message);
+  diagnostics.push({
+    level: 'warning',
+    message,
+    file: 'transforms.conf',
+    ...atDirective(dir),
+    directiveKey: dir.key,
+  });
+}
+
 export function applyIngestEval(
   events: SplunkEvent[],
   directives: ConfDirective[],
@@ -145,7 +169,7 @@ export function applyIngestEval(
   if (lastIngestEval === undefined) return events;
   const ingestEvalDirs = [lastIngestEval];
 
-  const { errors: reportedErrors, stubs: reportedStubs } = reported;
+  const { errors: reportedErrors } = reported;
 
   return events.map((event) => {
     const currentEvent = { ...event, fields: { ...event.fields } };
@@ -162,16 +186,7 @@ export function applyIngestEval(
 
         try {
           const result = evaluateExpression(evalExpr, currentEvent, (fn) => {
-            if (diagnostics && !reportedStubs.has(fn)) {
-              reportedStubs.add(fn);
-              diagnostics.push({
-                level: 'warning',
-                message: `${fn}() is not fully simulated — results may differ from real Splunk`,
-                file: 'transforms.conf',
-                ...atDirective(ingestEvalDir),
-                directiveKey: ingestEvalDir.key,
-              });
-            }
+            reportStub(fn, ingestEvalDir, diagnostics, reported);
           }, now, (fn, pattern) => {
             const message = `INGEST_EVAL ${fieldName}: ${regexFailureMessage(fn, pattern)}`;
             if (diagnostics && !reported.messages.has(message)) {
