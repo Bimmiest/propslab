@@ -117,3 +117,18 @@ describe('extractFields — captureOffsets (#118)', () => {
     expect(e.fieldOffsets?.['user']).toEqual([[9, 14]]);
   });
 });
+
+// Checked on Splunk 10.4.0, not doc-derived (#410). With KV_MODE = none and
+// these three EXTRACTs, the input below gave src=abc and after=abc, and no
+// `reads`: one pass in class-name order, each extraction reading what the
+// earlier ones produced.
+describe('extractFields — `in <field>` reads what earlier EXTRACTs produced', () => {
+  it('sees a field from an EXTRACT whose class sorts first, and only then', () => {
+    const e = extractFields([event('2026-09-28 12:00:00 src="abc"')], [
+      dir('a_reads', '(?<reads>\\w+) in src'),
+      dir('m_src', 'src="(?<src>[^"]*)"'),
+      dir('z_reads_after', '(?<after>\\w+) in src'),
+    ])[0]!;
+    expect(e.fields).toEqual({ src: 'abc', after: 'abc' });
+  });
+});
