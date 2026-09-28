@@ -40,6 +40,11 @@ export type NoOpReason =
   /** It matched, but every field it produces was already set by an earlier rule. */
   | { kind: 'fields-already-set'; fields: string[] }
   /**
+   * It matched, but every value it captured was empty once leading and
+   * trailing whitespace was trimmed, and an empty value creates no field.
+   */
+  | { kind: 'values-empty'; fields: string[] }
+  /**
    * An EVAL expression computed null, which deletes the field rather than
    * setting it — so a directive meant to create a field leaves nothing behind.
    * Null propagation makes this the commonest silent EVAL no-op.
@@ -67,6 +72,8 @@ export function describeNoOp(reason: NoOpReason): string {
         : 'the pattern did not match anywhere in the source';
     case 'fields-already-set':
       return `it matched, but ${reason.fields.join(', ')} ${reason.fields.length === 1 ? 'was' : 'were'} already set by an earlier rule`;
+    case 'values-empty':
+      return `it matched, but ${reason.fields.join(', ')} captured only whitespace, and an empty value creates no field`;
     case 'eval-null':
       return `\`${reason.expression}\` evaluated to null, so no field was written — usually a field referenced in it is absent`;
   }

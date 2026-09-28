@@ -141,6 +141,17 @@ function warnStrippedSourceRef(fields: SplunkEvent['fields'], extraction: Extrac
   });
 }
 
+/**
+ * Splunk trims leading and trailing whitespace from an EXTRACT value, and an
+ * empty result creates no field. Checked on Splunk 10.4.0 (#411): `"  abc"`,
+ * `"abc  "` and tab-wrapped `abc` all gave `abc`, `" a b "` gave `a b`, and
+ * `"   "` and `""` gave no field. Spaces and tabs were observed; the rest of
+ * ASCII whitespace is trimmed with them. Whether non-ASCII spaces such as
+ * U+00A0 are trimmed is unchecked, so they are kept.
+ */
+const LEADING_WHITESPACE = /^[ \t\n\v\f\r]+/;
+const TRAILING_WHITESPACE = /[ \t\n\v\f\r]+$/;
+
 /** Store a match's named groups, first-wins, and trace or explain the outcome. */
 function storeGroups(
   directive: ConfDirective,
@@ -150,8 +161,15 @@ function storeGroups(
 ): void {
   const added: string[] = [];
   const alreadySet: string[] = [];
-  for (const [name, value] of Object.entries(groups)) {
-    if (value === undefined) continue;
+  const emptied: string[] = [];
+  for (const [name, captured] of Object.entries(groups)) {
+    if (captured === undefined) continue;
+    const lead = LEADING_WHITESPACE.exec(captured)?.[0].length ?? 0;
+    const value = captured.slice(lead).replace(TRAILING_WHITESPACE, '');
+    if (value === '') {
+      emptied.push(name);
+      continue;
+    }
     // First-wins (a simplification): this engine keeps the value from
     // the first extraction and discards later ones for the same field name.
     // Real Splunk's behaviour when two search-time extractions yield the same
@@ -165,7 +183,9 @@ function storeGroups(
     added.push(name);
     const span = indices?.[name];
     if (span) {
-      setField(state.offsets, name, [[span[0], span[1]]]);
+      // The highlight covers the value as stored, without what was trimmed.
+      const start = span[0] + lead;
+      setField(state.offsets, name, [[start, start + value.length]]);
       state.offsetsChanged = true;
     }
   }
@@ -181,6 +201,8 @@ function storeGroups(
     // It matched and still produced nothing, which looks identical in the
     // preview to a pattern that never matched at all.
     noteNoOp(state, directive, { kind: 'fields-already-set', fields: alreadySet });
+  } else if (emptied.length > 0) {
+    noteNoOp(state, directive, { kind: 'values-empty', fields: emptied });
   }
 }
 

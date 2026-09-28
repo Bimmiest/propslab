@@ -132,3 +132,32 @@ describe('extractFields — `in <field>` reads what earlier EXTRACTs produced', 
     expect(e.fields).toEqual({ src: 'abc', after: 'abc' });
   });
 });
+
+// Checked on Splunk 10.4.0, not doc-derived (#411). KV_MODE = none and
+// EXTRACT-a_src = src="(?<src>[^"]*)", one event per input line.
+describe('extractFields — values are trimmed, and an empty one creates no field', () => {
+  const extractSrc = (raw: string) => extractFields([event(raw)], [dir('a_src', 'src="(?<src>[^"]*)"')])[0]!;
+
+  it.each([
+    ['src="  abc"', 'abc'],
+    ['src="abc  "', 'abc'],
+    ['src="\tabc\t"', 'abc'],
+    ['src=" a b "', 'a b'],
+    ['src="abc xyz"', 'abc xyz'],
+  ])('%s gives src=%j', (raw, value) => {
+    expect(extractSrc(raw).fields['src']).toBe(value);
+  });
+
+  it.each(['src="   "', 'src=""'])('%s gives no field, and says why', (raw) => {
+    const e = extractSrc(raw);
+    expect(e.fields).toEqual({});
+    expect(e.noOps?.map((n) => n.reason)).toEqual([{ kind: 'values-empty', fields: ['src'] }]);
+  });
+
+  it('highlights the value as stored, without the trimmed whitespace', () => {
+    const raw = 'x src="  abc " y';
+    const e = extractSrc(raw);
+    const [start, end] = e.fieldOffsets!['src']![0]!;
+    expect(raw.slice(start, end)).toBe('abc');
+  });
+});
