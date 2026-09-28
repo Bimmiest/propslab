@@ -1,10 +1,9 @@
 /**
- * Second-layer mitigation for catastrophic regex backtracking, per
- * docs/engine.md: let V8 abandon a backtracking match and finish on its
- * linear-time engine. The PRIMARY mechanism is the terminatable worker with a
- * wall-clock budget in `runInWorker.ts` — these flags only lower how often the
- * watchdog fires, because a pattern carrying a lookahead or backreference
- * declines the fallback entirely.
+ * Lets V8 abandon a backtracking match and finish on its linear-time engine,
+ * per docs/engine.md. User patterns run on PCRE2, not V8, so this covers only
+ * the engine's own JavaScript regexes, built from fixed shapes; what bounds a
+ * user pattern is PCRE2's match limits and the terminatable worker in
+ * `runInWorker.ts`.
  *
  * The launcher (`index.ts`) re-execs node with these as real CLI flags, which
  * is the documented, guaranteed way to set them before anything compiles a

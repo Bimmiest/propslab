@@ -30,8 +30,8 @@ test.describe('boot', () => {
       .getAttribute('content');
 
     expect(policy).toBeTruthy();
-    // 'unsafe-eval' was removed once main.tsx moved to monaco's slim
-    // editor.api entry; nothing may quietly put it back. 'wasm-unsafe-eval'
+    // 'unsafe-eval' was removed once the editor moved to monaco's slim
+    // `monaco-editor/editor` entry; nothing may quietly put it back. 'wasm-unsafe-eval'
     // is the narrower grant PCRE2's WebAssembly needs, and only that.
     expect(policy).not.toContain("'unsafe-eval'");
     expect(policy).toContain("'wasm-unsafe-eval'");

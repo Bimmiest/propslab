@@ -5,13 +5,14 @@
     <link rel="icon" type="image/svg+xml" href="/toolkit.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <!--
-      No 'unsafe-eval': main.tsx imports monaco-editor's slim editor.api entry
-      rather than the barrel, so the TypeScript/JSON/CSS/HTML language services
+      No 'unsafe-eval': MonacoEditor.tsx imports monaco-editor's slim
+      monaco-editor/editor entry and the features/*/register modules it uses,
+      never the barrel, so the TypeScript/JSON/CSS/HTML language services
       (the parts that need eval) are never in the bundle. Verified by loading a
       production build in Chromium with this policy and exercising the editor.
       'wasm-unsafe-eval' permits compiling WebAssembly and nothing else: every
-      user regex runs on PCRE2 compiled to wasm (packages/pcre2-wasm), compiled
-      once on this page and handed to the workers.
+      user regex runs on PCRE2 compiled to wasm (packages/pcre2-wasm), which
+      this page and each worker load for themselves from the one built asset.
       'unsafe-inline' in style-src stays — Tailwind and Monaco's dynamic theming
       both write inline styles. img-src needs data: because Monaco draws its
       error/warning squiggles as inline data: SVGs; with only default-src to
