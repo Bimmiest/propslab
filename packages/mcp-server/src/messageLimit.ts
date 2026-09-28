@@ -185,5 +185,10 @@ export function createStdioTransport(
   stdin.on('error', (err) => limiter.destroy(err));
   stdin.pipe(limiter);
   const transport = new StdioServerTransport(limiter, stdout);
+  // The SDK transport never closes on stdin EOF by itself, and only a close
+  // makes the server abort every in-flight handler's signal: without it a
+  // client that disconnects leaves running workers to their budget and queued
+  // calls to start theirs, keeping the process alive for nobody.
+  limiter.once('end', () => void transport.close());
   return transport;
 }

@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -227,6 +228,71 @@ describe('MCP server end to end', () => {
     expect(result.isError).toBeFalsy();
     expect(Date.now() - startedAt).toBeLessThan(5_000);
   }, 20_000);
+});
+
+describe('client disconnect', () => {
+  it('stops running and queued calls when stdin closes, and the server exits', async () => {
+    // One more call than there are slots, so one is queued behind runs that
+    // would each hold their slot for the whole budget. Before, nothing closed
+    // the transport at stdin EOF: the running workers ran to their budget and
+    // then the queued call started its own.
+    const TIMEOUT_MS = 15_000;
+    const evilProps = [
+      '[evil]',
+      'SHOULD_LINEMERGE = false',
+      'MATCH_LIMIT = 0',
+      'DEPTH_LIMIT = 0',
+      'EXTRACT-boom = ^(?<boom>(a|aa)+)(?=b)$',
+    ].join('\n');
+    const launcher = fileURLToPath(new URL('../../dist/index.js', import.meta.url));
+    const child = spawn(process.execPath, [launcher], { stdio: ['pipe', 'pipe', 'ignore'] });
+    const exited = new Promise<number | null>((resolve) =>
+      child.once('exit', (code) => resolve(code)),
+    );
+    try {
+      const send = (msg: unknown) => child.stdin.write(`${JSON.stringify(msg)}\n`);
+      const initialized = new Promise<void>((resolve) => child.stdout.once('data', () => resolve()));
+      send({
+        jsonrpc: '2.0',
+        id: 0,
+        method: 'initialize',
+        params: {
+          protocolVersion: '2025-06-18',
+          capabilities: {},
+          clientInfo: { name: 'propslab-disconnect-test', version: '0.0.0' },
+        },
+      });
+      await initialized;
+      send({ jsonrpc: '2.0', method: 'notifications/initialized' });
+      for (let id = 1; id <= DEFAULT_MAX_CONCURRENT_WORKERS + 1; id++) {
+        send({
+          jsonrpc: '2.0',
+          id,
+          method: 'tools/call',
+          params: {
+            name: 'simulate',
+            arguments: {
+              raw: `${'a'.repeat(200)}\n`,
+              sourcetype: 'evil',
+              props_conf: evilProps,
+              timeout_ms: TIMEOUT_MS,
+            },
+          },
+        });
+      }
+      // Let the workers start before disconnecting.
+      await new Promise((r) => setTimeout(r, 1_000));
+      const closedAt = Date.now();
+      child.stdin.end();
+      // The process only exits once no worker is left running, so a prompt
+      // exit shows the running workers were terminated and the queued call
+      // never started one.
+      expect(await exited).toBe(0);
+      expect(Date.now() - closedAt).toBeLessThan(5_000);
+    } finally {
+      child.kill('SIGKILL');
+    }
+  }, 60_000);
 });
 
 describe('built launcher', () => {
