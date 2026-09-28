@@ -82,15 +82,33 @@ function splitAssignment(expr: string): { fieldName: string; evalExpr: string } 
 }
 
 /**
+ * What INGEST_EVAL has already reported. The transforms pass calls
+ * applyIngestEval once per event, so it owns one of these for the whole run
+ * and passes it in; sets local to the call would forget between events.
+ */
+export interface IngestEvalReported {
+  /** Fields whose assignment threw. */
+  errors: Set<string>;
+  /** Builtins that are not fully simulated. */
+  stubs: Set<string>;
+  /** Regex failures and out-of-range `_time` warnings, by message. */
+  messages: Set<string>;
+}
+
+export function newIngestEvalReported(): IngestEvalReported {
+  return { errors: new Set(), stubs: new Set(), messages: new Set() };
+}
+
+/**
  * `_time=<epoch>`. A number no Date can hold keeps the event's previous
- * `_time`, with a warning deduplicated against the list itself, as regex
- * failures are: the transforms pass runs this once per event.
+ * `_time`, with a warning.
  */
 function assignTime(
   event: SplunkEvent,
   epoch: number | null,
   dir: ConfDirective,
   diagnostics: ValidationDiagnostic[] | undefined,
+  reported: IngestEvalReported,
 ): void {
   if (epoch === null) return;
   const time = dateFromEpochSeconds(epoch);
@@ -99,7 +117,8 @@ function assignTime(
     return;
   }
   const message = epochOutOfRangeMessage('INGEST_EVAL _time', epoch);
-  if (diagnostics && !diagnostics.some((d) => d.message === message)) {
+  if (diagnostics && !reported.messages.has(message)) {
+    reported.messages.add(message);
     diagnostics.push({
       level: 'warning',
       message,
@@ -116,6 +135,8 @@ export function applyIngestEval(
   diagnostics?: ValidationDiagnostic[],
   /** What now()/time() return, in epoch ms. See `PipelineOptions.now`. */
   now: number = Date.now(),
+  /** What this run has already reported; see IngestEvalReported. */
+  reported: IngestEvalReported = newIngestEvalReported(),
 ): SplunkEvent[] {
   // A stanza may repeat INGEST_EVAL; Splunk's last-definition-wins rule means
   // only the final directive applies (each may still hold several comma-separated
@@ -124,8 +145,7 @@ export function applyIngestEval(
   if (lastIngestEval === undefined) return events;
   const ingestEvalDirs = [lastIngestEval];
 
-  const reportedErrors = new Set<string>();
-  const reportedStubs = new Set<string>();
+  const { errors: reportedErrors, stubs: reportedStubs } = reported;
 
   return events.map((event) => {
     const currentEvent = { ...event, fields: { ...event.fields } };
@@ -153,11 +173,9 @@ export function applyIngestEval(
               });
             }
           }, now, (fn, pattern) => {
-            // Deduplicated against the list itself rather than a local set:
-            // the transforms pass calls this once per event, so a set here
-            // would forget between events and warn on every line.
             const message = `INGEST_EVAL ${fieldName}: ${regexFailureMessage(fn, pattern)}`;
-            if (diagnostics && !diagnostics.some((d) => d.message === message)) {
+            if (diagnostics && !reported.messages.has(message)) {
+              reported.messages.add(message);
               diagnostics.push({
                 level: 'warning',
                 message,
@@ -172,7 +190,7 @@ export function applyIngestEval(
           // INGEST_EVAL can rewrite the event's timestamp and raw text, not just
           // add indexed fields. Route _time/_raw to the event rather than fields.
           if (fieldName === '_time') {
-            assignTime(currentEvent, numArg(result), ingestEvalDir, diagnostics);
+            assignTime(currentEvent, numArg(result), ingestEvalDir, diagnostics, reported);
           } else if (fieldName === '_raw') {
             currentEvent._raw =
               result === null ? '' : Array.isArray(result) ? result.join('\n') : String(result);

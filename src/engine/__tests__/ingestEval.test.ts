@@ -281,3 +281,23 @@ describe('INGEST_EVAL _time out of the Date range (#417)', () => {
     expect(diagnostics).toHaveLength(1);
   });
 });
+
+describe('runPipeline — INGEST_EVAL reports each problem once per run (#418)', () => {
+  // The transforms pass runs INGEST_EVAL one event at a time, so what it has
+  // reported must outlive a single call.
+  const meta: EventMetadata = { index: 'main', host: 'h', source: 's', sourcetype: 'st' };
+  const props = '[st]\nSHOULD_LINEMERGE = false\nTRANSFORMS-e = ev\n';
+  const transforms =
+    '[ev]\nINGEST_EVAL = h=md5(_raw), b=(1==1), r=if(match(_raw, "("), 1, 0), _time=8640000000001\n';
+  const raw = ['one', 'two', 'three', 'four', 'five'].join('\n');
+
+  it.each([false, true])('perEventPipeline=%s: five events, one of each diagnostic', (perEventPipeline) => {
+    const { result, diagnostics } = runPipeline(raw, meta, props, transforms, { perEventPipeline });
+    expect(result.events).toHaveLength(5);
+    const count = (pred: (d: ValidationDiagnostic) => boolean) => diagnostics.filter(pred).length;
+    expect(count((d) => d.message.startsWith('md5() is not fully simulated'))).toBe(1);
+    expect(count((d) => d.level === 'error' && d.message.startsWith('INGEST_EVAL b:'))).toBe(1);
+    expect(count((d) => d.message.startsWith('INGEST_EVAL r:'))).toBe(1);
+    expect(count((d) => d.message.includes('INGEST_EVAL _time'))).toBe(1);
+  });
+});

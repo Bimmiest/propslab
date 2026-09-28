@@ -2,7 +2,7 @@ import type { SplunkEvent, ConfDirective, DirectiveNoOp, ParsedConf, ProcessingS
 import type { NoOpReason } from '../noOpExplainer';
 import { applyRegexTransform } from '../transforms/regexTransform';
 import { applyDestKey } from '../transforms/destKeyRouter';
-import { applyIngestEval } from '../transforms/ingestEval';
+import { applyIngestEval, newIngestEvalReported, type IngestEvalReported } from '../transforms/ingestEval';
 import { evaluateStopCondition } from '../transforms/stopProcessing';
 import { byClassName } from '../utils/asciiCompare';
 import { appendTraceStep, metadataChanges } from '../utils/traceStep';
@@ -73,6 +73,8 @@ interface TransformsRun {
     searchTimeDestKey: Set<string>;
     searchOnlyAttrs: Set<string>;
     searchTimeNoFormat: Set<string>;
+    /** INGEST_EVAL errors and warnings, which it would otherwise repeat per event. */
+    ingestEval: IngestEvalReported;
   };
 }
 
@@ -140,7 +142,7 @@ function runEvalStanza(
 ): boolean {
   if (run.phase !== 'index-time') return false;
   if (ingestEvalDirs.length > 0) {
-    state.event = applyIngestEval([state.event], ingestEvalDirs, run.diagnostics, run.now)[0] ?? state.event;
+    state.event = applyIngestEval([state.event], ingestEvalDirs, run.diagnostics, run.now, run.warned.ingestEval)[0] ?? state.event;
   }
   const stop = evaluateStopCondition(state.event, transformStanza.directives, run.diagnostics, run.now);
   if (!stop) return false;
@@ -361,6 +363,7 @@ export function applyTransforms(
       searchTimeDestKey: new Set(),
       searchOnlyAttrs: new Set(),
       searchTimeNoFormat: new Set(),
+      ingestEval: newIngestEvalReported(),
     },
   };
 
