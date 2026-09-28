@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { render, screen, fireEvent, within, act, waitFor } from '@testing-library/react';
 import { useAppStore } from '../../../../store/useAppStore';
-import { RegexTab } from '../RegexTab';
+import { RegexTab } from '../regex';
 import type { EnrichedEvent } from '../../PreviewPanel';
 import type { SplunkEvent } from '../../../../engine/types';
 import { matchInputs } from '../../../../engine/regexMatch';

@@ -1,0 +1,1 @@
+export { RegexTab } from './RegexTab';

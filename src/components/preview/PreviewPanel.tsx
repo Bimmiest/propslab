@@ -14,7 +14,7 @@ import { RawTab } from './tabs/RawTab';
 import { HighlightedTab } from './tabs/HighlightedTab';
 import { DiffTab } from './tabs/DiffTab';
 import { TimestampTab } from './tabs/TimestampTab';
-import { RegexTab } from './tabs/RegexTab';
+import { RegexTab } from './tabs/regex';
 import { CimModelsTab } from './tabs/CimModelsTab';
 import { EffectiveConfigTab } from './tabs/EffectiveConfigTab';
 import { FieldsTab } from './tabs/FieldsTab';
