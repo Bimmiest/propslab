@@ -73,6 +73,15 @@ interface AppState {
   setMobileView: (view: MobileView) => void;
 
   /**
+   * The Regex tab's pattern and EXTRACT class name. Held here because the tab
+   * unmounts on every sub-tab or output-tab switch, which cleared both.
+   */
+  regexPattern: string;
+  setRegexPattern: (pattern: string) => void;
+  regexClassName: string;
+  setRegexClassName: (name: string) => void;
+
+  /**
    * Directive key the dictionary should show, set when something outside the
    * dictionary deep-links into it (editor hover, pipeline reference, command
    * palette). Null means "no selection yet" — the dictionary falls back to its
@@ -229,6 +238,11 @@ export const useAppStore = create<AppState>((set) => ({
 
   mobileView: 'raw',
   setMobileView: (view) => set({ mobileView: view }),
+
+  regexPattern: '',
+  setRegexPattern: (pattern) => set({ regexPattern: pattern }),
+  regexClassName: 'custom',
+  setRegexClassName: (name) => set({ regexClassName: name }),
 
   dictionarySelection: null,
   openDictionaryAt: (key) => set({ dictionarySelection: key, activeView: 'dictionary' }),

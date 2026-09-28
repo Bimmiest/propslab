@@ -36,6 +36,11 @@ const items: EnrichedEvent[] = [
   makeItem('no ip here, just text'),
 ];
 
+// The pattern and class name live in the store, so each test starts blank.
+beforeEach(() => {
+  useAppStore.setState({ regexPattern: '', regexClassName: 'custom' });
+});
+
 describe('RegexTab', () => {
   it('renders empty-state prompt when no pattern is typed', () => {
     render(<RegexTab items={items} allEvents={items} currentPage={1} eventsPerPage={10} />);

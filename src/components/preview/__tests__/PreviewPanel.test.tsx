@@ -267,4 +267,22 @@ describe('PreviewPanel — the field filter follows the current fields (#432)', 
     act(() => useAppStore.setState({ processingResult: resultWith({ user: ['alice'] }) }));
     expect(screen.queryByText(/^\d+ \/ \d+$/)).not.toBeInTheDocument();
   });
+
+  // The Regex tab unmounts on every sub-tab switch, which used to clear what
+  // was typed into it (#440).
+  it('keeps the Regex tab pattern and class name across tab switches', () => {
+    render(<PreviewPanel />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Regex' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Regular expression pattern' }), { target: { value: 'user=(?<user>\\w+)' } });
+    fireEvent.change(screen.getByRole('textbox', { name: 'EXTRACT class name' }), { target: { value: 'users' } });
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Raw' }));
+    expect(screen.queryByRole('textbox', { name: 'Regular expression pattern' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: 'Fields' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Preview' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Regex' }));
+
+    expect(screen.getByRole('textbox', { name: 'Regular expression pattern' })).toHaveValue('user=(?<user>\\w+)');
+    expect(screen.getByRole('textbox', { name: 'EXTRACT class name' })).toHaveValue('users');
+  });
 });

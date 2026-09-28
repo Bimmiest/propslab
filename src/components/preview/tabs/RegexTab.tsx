@@ -288,8 +288,11 @@ function useFlashFlag(): [boolean, () => void] {
 
 export function RegexTab(props: RegexTabProps) {
   const patternId = useId();
-  const [pattern, setPattern] = useState('');
-  const [className, setClassName] = useState('custom');
+  // In the store, so they survive the tab unmounting on a sub-tab switch.
+  const pattern = useAppStore((s) => s.regexPattern);
+  const setPattern = useAppStore((s) => s.setRegexPattern);
+  const className = useAppStore((s) => s.regexClassName);
+  const setClassName = useAppStore((s) => s.setRegexClassName);
   const copied = useFlashFlag();
   const added = useFlashFlag();
 
@@ -359,7 +362,7 @@ export function RegexTab(props: RegexTabProps) {
         />
       )}
 
-      <RegexReference onInsert={(p) => setPattern((prev) => prev + p)} onReplace={(p) => setPattern(p)} />
+      <RegexReference onInsert={(p) => setPattern(pattern + p)} onReplace={setPattern} />
 
       {/* Legend */}
       {pattern && showGroups && <GroupLegend namedGroups={namedGroups} groupColorMap={groupColorMap} />}
