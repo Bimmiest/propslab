@@ -454,8 +454,8 @@ test.describe('match workers', () => {
 
 /**
  * Every user pattern runs on PCRE2 compiled to WebAssembly (#368). The page
- * compiles the module once and posts it to each worker, so the cost is paid
- * once, before the first render and outside every request's watchdog.
+ * and each worker load it from the one hashed asset URL the build fixed —
+ * never from a message — and compiling it takes milliseconds.
  */
 test.describe('regex engine', () => {
   // Generous next to what Chromium measures (tens of milliseconds, cold), and
@@ -463,7 +463,7 @@ test.describe('regex engine', () => {
   // compilation ever turns into the multi-second, fully optimised kind.
   const LOAD_BUDGET_MS = 2_000;
 
-  test('compiles once per page, fast, and every worker runs on that module', async ({ page, complaints }) => {
+  test('loads fast, from the one built asset, and every worker runs on it', async ({ page, complaints }) => {
     const wasmFetches: string[] = [];
     page.on('request', (request) => {
       if (/\.wasm$/.test(new URL(request.url()).pathname)) wasmFetches.push(request.url());
@@ -496,7 +496,9 @@ test.describe('regex engine', () => {
     );
     test.info().annotations.push({ type: 'regex engine fetch+compile+instantiate (ms)', description: loadMs.toFixed(1) });
     expect(loadMs).toBeLessThan(LOAD_BUDGET_MS);
-    expect(wasmFetches, 'the module is fetched once, by the page, not by each worker').toHaveLength(1);
+    expect(wasmFetches.length, 'the page loads the module').toBeGreaterThan(0);
+    expect(new Set(wasmFetches).size, 'every load is of the one same-origin asset').toBe(1);
+    expect(new URL(wasmFetches[0]).origin).toBe(new URL(page.url()).origin);
 
     expect(complaints.csp, 'blocked by Content-Security-Policy').toEqual([]);
     expect(complaints.all, 'browser errors').toEqual([]);

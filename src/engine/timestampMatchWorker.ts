@@ -6,14 +6,13 @@
  * editing props.conf.
  *
  * Message protocol:
- *   in  → WorkerInitMessage first, with the compiled regex engine; then TimestampMatchRequest
- *   out → WORKER_READY once, when the engine is instantiated (#339); then TimestampMatchResponse
+ *   in  → TimestampMatchRequest
+ *   out → WORKER_READY once, when the worker has loaded its regex engine (#339); then TimestampMatchResponse
  */
 
 import { probeTimestamps } from './timestampMatch';
 import type { TimeConfig, TimestampProbe } from './timestampMatch';
-import { initRegexEngineSync } from '../utils/splunkRegex';
-import { isWorkerInitMessage, WORKER_READY, type WorkerInitMessage } from './workerProtocol';
+import { serveWithRegexEngine } from '../utils/regexEngineLoader';
 
 export interface TimestampMatchRequest {
   id: number;
@@ -33,15 +32,10 @@ export interface TimestampMatchResponse {
   error?: string;
 }
 
-self.onmessage = (e: MessageEvent<TimestampMatchRequest | WorkerInitMessage>) => {
-  if (isWorkerInitMessage(e.data)) {
-    // The page's first message: the engine it compiled once. Ready follows
-    // only once it is instantiated; a throw here is a failure to load (#339).
-    initRegexEngineSync(e.data.regexEngine);
-    self.postMessage(WORKER_READY);
-    return;
-  }
-  const { id, raws, config } = e.data;
+// Loads the regex engine from its fixed asset URL, then signals ready and
+// serves requests in order; see serveWithRegexEngine.
+serveWithRegexEngine<TimestampMatchRequest>(self, (request) => {
+  const { id, raws, config } = request;
   let response: TimestampMatchResponse;
   try {
     response = { id, probes: probeTimestamps(raws, config) };
@@ -49,4 +43,4 @@ self.onmessage = (e: MessageEvent<TimestampMatchRequest | WorkerInitMessage>) =>
     response = { id, probes: [], error: err instanceof Error ? err.message : String(err) };
   }
   self.postMessage(response);
-};
+});

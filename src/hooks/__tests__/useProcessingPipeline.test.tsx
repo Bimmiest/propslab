@@ -32,7 +32,6 @@ import { renderHook, act, waitFor } from '@testing-library/react';
 import { useProcessingPipeline } from '../useProcessingPipeline';
 import { useAppStore } from '../../store/useAppStore';
 import type { PipelineWorkerRequest } from '../../engine/pipelineWorker';
-import { isWorkerInitMessage, type WorkerInitMessage } from '../../engine/workerProtocol';
 
 const initial = useAppStore.getState();
 
@@ -61,9 +60,7 @@ class FakeWorker {
     if (FakeWorker.instances.length >= FakeWorker.failAfter) throw new Error('blocked by CSP');
     FakeWorker.instances.push(this);
   }
-  postMessage(message: PipelineWorkerRequest | WorkerInitMessage) {
-    // The engine handed over as each worker is built is not a request.
-    if (isWorkerInitMessage(message)) return;
+  postMessage(message: PipelineWorkerRequest) {
     this.posted.push(message);
   }
   terminate() {

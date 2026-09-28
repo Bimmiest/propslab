@@ -24,7 +24,6 @@ import {
   TIME_PREFIX_TIMEOUT_MS,
   type PrefixMatcher,
 } from '../timePrefixMatcher';
-import { isWorkerInitMessage, type WorkerInitMessage } from '../../engine/workerProtocol';
 
 class FakeWorker {
   static instances: FakeWorker[] = [];
@@ -51,9 +50,7 @@ class FakeWorker {
     this.ready();
     this.onerror?.(new ErrorEvent('error', { message }));
   }
-  postMessage(message: TimestampMatchRequest | WorkerInitMessage) {
-    // The engine handed over as each worker is built is not a request.
-    if (isWorkerInitMessage(message)) return;
+  postMessage(message: TimestampMatchRequest) {
     this.posted.push(message);
   }
   terminate() {

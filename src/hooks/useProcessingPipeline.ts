@@ -4,11 +4,10 @@ import { useDebounce } from './useDebounce';
 import { PIPELINE_DEBOUNCE_MS, createManagedWorker, type ManagedWorker } from './workerLifecycle';
 import type { PipelineWorkerRequest, PipelineWorkerResponse } from '../engine/pipelineWorker';
 import type { EventMetadata } from '../engine/types';
-import { withRegexEngine } from '../utils/regexEngineLoader';
 
 // Vite worker import — bundled as a separate chunk
 const createWorker = () =>
-  withRegexEngine(new Worker(new URL('../engine/pipelineWorker.ts', import.meta.url), { type: 'module' }));
+  new Worker(new URL('../engine/pipelineWorker.ts', import.meta.url), { type: 'module' });
 
 const WORKER_TIMEOUT_MS = 5_000;
 // How many times a single request may restart the worker after a crash before we

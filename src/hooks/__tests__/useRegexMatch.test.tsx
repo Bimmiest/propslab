@@ -15,7 +15,6 @@ import { renderHook, act } from '@testing-library/react';
 import { useRegexMatch, type RegexMatchState } from '../useRegexMatch';
 import { matchInputs } from '../../engine/regexMatch';
 import type { RegexMatchRequest, RegexMatchResponse } from '../../engine/regexMatchWorker';
-import { isWorkerInitMessage, type WorkerInitMessage } from '../../engine/workerProtocol';
 
 class FakeWorker {
   static instances: FakeWorker[] = [];
@@ -26,9 +25,7 @@ class FakeWorker {
   constructor() {
     FakeWorker.instances.push(this);
   }
-  postMessage(message: RegexMatchRequest | WorkerInitMessage) {
-    // The engine handed over as each worker is built is not a request.
-    if (isWorkerInitMessage(message)) return;
+  postMessage(message: RegexMatchRequest) {
     this.posted.push(message);
   }
   terminate() {}

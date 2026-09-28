@@ -1,16 +1,18 @@
+/// <reference types="vite/client" />
 /**
- * Loading the PCRE2 module in the browser: compiled once per page, streaming,
- * and handed to every worker as the compiled `WebAssembly.Module`, so no worker
- * compiles its own and no request's watchdog is charged for compilation.
+ * Loading the PCRE2 module in the browser. The page and each worker load it
+ * for themselves, from the one same-origin asset URL fixed at build time:
+ * compiling takes a few milliseconds, and taking a compiled module from a
+ * message would let message data decide what code a worker runs.
  *
  * `main.tsx` awaits {@link loadRegexEngine} before the first render, so the
- * main thread (the editor's diagnostics, the inline pipeline fallback) and
- * every worker built afterwards can assume the engine is there.
+ * main thread (the editor's diagnostics, the inline pipeline fallback) can
+ * assume the engine is there. Worker entries use {@link serveWithRegexEngine}.
  */
 
 import wasmUrl from '../../packages/pcre2-wasm/pcre2.wasm?url';
-import { initRegexEngine, regexEngineModule } from './splunkRegex';
-import type { WorkerInitMessage } from '../engine/workerProtocol';
+import { initRegexEngine } from './splunkRegex';
+import { WORKER_READY } from '../engine/workerProtocol';
 
 let loading: Promise<void> | null = null;
 
@@ -45,13 +47,40 @@ export function loadRegexEngine(): Promise<void> {
   return loading;
 }
 
+/** The part of a worker's global scope a worker entry serves requests through. */
+export interface WorkerScope<Req> {
+  onmessage: ((e: MessageEvent<Req>) => void) | null;
+  postMessage(message: unknown): void;
+}
+
 /**
- * Post the compiled engine to a freshly built worker. First, before any
- * request: the worker instantiates it and only then signals ready, so a
- * request can never reach a worker without an engine.
+ * A worker entry's message loop: load the engine, then post `WORKER_READY`,
+ * then handle requests — in arrival order, including any posted while the
+ * engine was loading, which wait for it.
+ *
+ * Both outcomes of the load are acted on in a task of their own rather than in
+ * the promise callback, so a throw is an uncaught worker error the page sees:
+ * an engine that will not load fails before ready, which the page counts as a
+ * failure to load (#339), and a handler that throws after ready is a crash, as
+ * it was before.
  */
-export function withRegexEngine(worker: Worker): Worker {
-  const message: WorkerInitMessage = { type: 'init', regexEngine: regexEngineModule() };
-  worker.postMessage(message);
-  return worker;
+export function serveWithRegexEngine<Req>(scope: WorkerScope<Req>, handle: (request: Req) => void): void {
+  let up = false;
+  const waiting: Req[] = [];
+  scope.onmessage = (e) => {
+    if (up) handle(e.data);
+    else waiting.push(e.data);
+  };
+  loadRegexEngine().then(
+    () =>
+      setTimeout(() => {
+        up = true;
+        scope.postMessage(WORKER_READY);
+        for (const request of waiting.splice(0)) handle(request);
+      }),
+    (err: unknown) =>
+      setTimeout(() => {
+        throw err;
+      }),
+  );
 }

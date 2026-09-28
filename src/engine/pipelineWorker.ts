@@ -5,14 +5,13 @@
  * even for large inputs or expensive regex transforms.
  *
  * Message protocol:
- *   in  → WorkerInitMessage first, with the compiled regex engine; then PipelineWorkerRequest
- *   out → WORKER_READY once, when the engine is instantiated (#339); then PipelineWorkerResponse
+ *   in  → PipelineWorkerRequest
+ *   out → WORKER_READY once, when the worker has loaded its regex engine (#339); then PipelineWorkerResponse
  */
 
 import { runPipeline } from './pipeline';
 import type { ConfInput, EventMetadata, PipelineOptions } from './types';
-import { initRegexEngineSync } from '../utils/splunkRegex';
-import { isWorkerInitMessage, WORKER_READY, type WorkerInitMessage } from './workerProtocol';
+import { serveWithRegexEngine } from '../utils/regexEngineLoader';
 
 export interface PipelineWorkerRequest {
   id: number;
@@ -41,15 +40,10 @@ export interface PipelineWorkerResponse {
   stack?: string;
 }
 
-self.onmessage = (e: MessageEvent<PipelineWorkerRequest | WorkerInitMessage>) => {
-  if (isWorkerInitMessage(e.data)) {
-    // The page's first message: the engine it compiled once. Ready follows
-    // only once it is instantiated; a throw here is a failure to load (#339).
-    initRegexEngineSync(e.data.regexEngine);
-    self.postMessage(WORKER_READY);
-    return;
-  }
-  const { id, rawData, metadata, propsConfText, transformsConfText, options } = e.data;
+// Loads the regex engine from its fixed asset URL, then signals ready and
+// serves requests in order; see serveWithRegexEngine.
+serveWithRegexEngine<PipelineWorkerRequest>(self, (request) => {
+  const { id, rawData, metadata, propsConfText, transformsConfText, options } = request;
   try {
     const output = runPipeline(rawData, metadata, propsConfText, transformsConfText, options);
     const response: PipelineWorkerResponse = { id, result: output };
@@ -63,4 +57,4 @@ self.onmessage = (e: MessageEvent<PipelineWorkerRequest | WorkerInitMessage>) =>
     };
     self.postMessage(response);
   }
-};
+});

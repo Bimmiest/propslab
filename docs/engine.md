@@ -56,21 +56,18 @@ The WebAssembly module is [`packages/pcre2-wasm`](../packages/pcre2-wasm): PCRE2
 The engine API is synchronous, but a WebAssembly module has to be compiled before first use. Do it once, before the first pattern compiles:
 
 ```ts
-import { initRegexEngine, initRegexEngineSync, regexEngineModule } from './src/utils/splunkRegex';
+import { initRegexEngine, initRegexEngineSync } from './src/utils/splunkRegex';
 
 // Node, or a worker: synchronous is fine.
 initRegexEngineSync(readFileSync('packages/pcre2-wasm/pcre2.wasm'));
 
 // A browser's main thread: asynchronous.
 await initRegexEngine(WebAssembly.compileStreaming(fetch(wasmUrl)));
-
-// Hand the compiled module to a worker, which calls initRegexEngineSync(module).
-worker.postMessage({ type: 'init', regexEngine: regexEngineModule() });
 ```
 
 Compiling a pattern before then throws. `runPipeline` itself stays synchronous.
 
-The browser app compiles the module once on the page before its first render and posts it to each worker as the worker's first message (see [architecture.md](architecture.md#workers)); the MCP server compiles it once per process and passes it to each sandbox worker with its request. Neither charges compilation to a request's watchdog. Measured cold: compiling takes 2–7 ms in headless Chromium and about 1 ms in Node, because V8 compiles WebAssembly lazily with its baseline compiler; forcing the optimising compiler up front for the whole module (`--no-liftoff --no-wasm-lazy-compilation`) takes 380–470 ms in Chromium and about 200 ms in Node. The page's fetch, compile and instantiate together measured 76 ms in the end-to-end suite, which holds it to a 2 s budget.
+The browser app loads the module on the page before its first render, and each worker loads its own from the same fixed, same-origin asset URL before it signals ready (see [architecture.md](architecture.md#workers)). A worker never takes the module from a message: that would let message data choose the code it compiles, for a saving of a few milliseconds. The MCP server compiles it once per process and passes it to each sandbox worker it spawns. Compilation is not charged to a request's watchdog on the server, and in the browser it is part of a worker's load, which the lifecycle already allows for. Measured cold: compiling takes 2–7 ms in headless Chromium and about 1 ms in Node, because V8 compiles WebAssembly lazily with its baseline compiler; forcing the optimising compiler up front for the whole module (`--no-liftoff --no-wasm-lazy-compilation`) takes 380–470 ms in Chromium and about 200 ms in Node. The page's fetch, compile and instantiate together measured 76 ms in the end-to-end suite, which holds it to a 2 s budget.
 
 A browser needs `'wasm-unsafe-eval'` in the Content-Security-Policy's `script-src`, which permits compiling WebAssembly and nothing else.
 

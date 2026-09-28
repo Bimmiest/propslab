@@ -29,7 +29,6 @@
 
 import { createManagedWorker } from '../hooks/workerLifecycle';
 import type { TimestampMatchRequest, TimestampMatchResponse } from '../engine/timestampMatchWorker';
-import { withRegexEngine } from '../utils/regexEngineLoader';
 
 /**
  * Watchdog budget for one hover's prefix match. Shorter than the Regex and
@@ -70,7 +69,7 @@ interface Pending {
 }
 
 const createWorker = () =>
-  withRegexEngine(new Worker(new URL('../engine/timestampMatchWorker.ts', import.meta.url), { type: 'module' }));
+  new Worker(new URL('../engine/timestampMatchWorker.ts', import.meta.url), { type: 'module' });
 
 let nextId = 1;
 const pending = new Map<number, Pending>();

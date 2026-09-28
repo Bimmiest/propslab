@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
 // workerReady.test.ts
 // Every worker entry announces that it is up (#339): its module has evaluated
-// and it has instantiated the regex engine the page sent it (#368).
+// and it has loaded its regex engine from the built asset (#368).
 //
 // The page tells a worker that never started from one that started and then
 // died by whether it has sent WORKER_READY: an error before it is a load
@@ -10,9 +10,9 @@
 // response.
 // ---------------------------------------------------------------------------
 
-import { describe, it, expect, vi, afterEach } from 'vitest';
-import { WORKER_READY, type WorkerInitMessage } from '../workerProtocol';
-import { regexEngineModule } from '../../utils/splunkRegex';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
+import { WORKER_READY } from '../workerProtocol';
+import { stubFailingWasmFetch, stubWasmFetch } from '../../test/wasmFetch';
 
 type Handler = ((e: MessageEvent) => void) | null;
 
@@ -44,29 +44,63 @@ const entries: [string, () => Promise<unknown>, unknown][] = [
 ];
 
 describe('worker entries post WORKER_READY (#339)', () => {
-  afterEach(() => vi.unstubAllGlobals());
+  // Only setTimeout: the engine loads through real promises, and the entry
+  // acts on the outcome in a task of its own.
+  beforeEach(() => vi.useFakeTimers({ toFake: ['setTimeout'] }));
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
 
-  // The compiled module from this file's own (initialised) engine: the entry
-  // is loaded after resetModules, so it has a fresh, empty one, as a real
-  // worker does.
-  const init = (): WorkerInitMessage => ({ type: 'init', regexEngine: regexEngineModule() });
+  /**
+   * Until the engine's load has settled and scheduled its task. Polled by
+   * hand: vi.waitFor advances fake timers itself, which would run that task.
+   */
+  const loaded = async () => {
+    const { setImmediate } = (globalThis as unknown as { process: { getBuiltinModule(id: 'node:timers'): { setImmediate(cb: () => void): void } } }).process.getBuiltinModule('node:timers');
+    for (let i = 0; i < 1000 && vi.getTimerCount() === 0; i++) await new Promise<void>((r) => setImmediate(r));
+    expect(vi.getTimerCount()).toBeGreaterThan(0);
+  };
+  /** Let the engine load, then run the task that acts on the outcome. */
+  const settle = async () => {
+    await loaded();
+    vi.runOnlyPendingTimers();
+  };
 
-  it.each(entries)('%s posts it once, after the engine it is sent is up, before any response', async (_name, entry, request) => {
+  it.each(entries)('%s posts it once, after loading its engine, before any response', async (_name, entry, request) => {
+    stubWasmFetch();
     const { posted, send } = await load(entry);
+    // A request that arrives while the engine loads waits for it.
+    send(request);
     expect(posted).toEqual([]);
 
-    send(init());
-    expect(posted).toEqual([{ message: WORKER_READY, handlerInstalled: true }]);
-
-    send(request);
+    await settle();
+    expect(posted[0]).toEqual({ message: WORKER_READY, handlerInstalled: true });
     expect(posted).toHaveLength(2);
     expect(posted[1]!.message).toMatchObject({ id: 4 });
+
+    // Once up, requests are answered as they arrive.
+    send(request);
+    expect(posted).toHaveLength(3);
     expect(posted.filter((p) => (p.message as { type?: string }).type === 'ready')).toHaveLength(1);
   });
 
-  it.each(entries)('%s throws before ready when the engine will not instantiate', async (_name, entry) => {
+  it.each(entries)('%s fails to load, before ready, when its engine cannot be fetched', async (_name, entry, request) => {
+    stubFailingWasmFetch();
     const { posted, send } = await load(entry);
-    expect(() => send({ type: 'init', regexEngine: {} })).toThrow();
+    send(request);
+    await loaded();
+    // Thrown in a task, so it is an uncaught worker error, which the page
+    // counts as a failure to load because no ready came first.
+    expect(() => vi.runOnlyPendingTimers()).toThrow(/asset unavailable/);
     expect(posted).toEqual([]);
+  });
+
+  it('takes nothing from a message but requests: a message shaped like an engine is just a request', async () => {
+    stubWasmFetch();
+    const { posted, send } = await load(entries[1]![1]);
+    await settle();
+    expect(() => send({ type: 'init', regexEngine: {} })).toThrow();
+    expect(posted).toEqual([{ message: WORKER_READY, handlerInstalled: true }]);
   });
 });
