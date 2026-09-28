@@ -32,3 +32,7 @@ CLAUDE.md
 /blob-report/
 /.playwright/
 coverage/
+
+# Stryker (npm run test:mutation): the per-run sandbox and its reports
+.stryker-tmp/
+/reports/

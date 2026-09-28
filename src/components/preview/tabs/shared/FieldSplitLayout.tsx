@@ -54,8 +54,10 @@ export function FieldSplitLayout({ storageKey, collapsed, sidebar, children }: F
     );
   }
 
+  // Preview the drag and apply on release: the events pane can hold thousands
+  // of rows, which otherwise re-wrap on every pointer move.
   return (
-    <Group orientation="horizontal" id={storageKey} defaultLayout={initialLayout} onLayoutChanged={saveLayout}>
+    <Group orientation="horizontal" id={storageKey} defaultLayout={initialLayout} onLayoutChanged={saveLayout} resizePreviewMode="separator">
       <Panel defaultSize="85" minSize="40" id={`${storageKey}-events`}>
         <div className="h-full overflow-auto p-3 space-y-3">
           {children}

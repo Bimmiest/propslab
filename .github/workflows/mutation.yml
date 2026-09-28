@@ -1,0 +1,93 @@
+name: Mutation
+
+# Coverage says a line ran; it does not say a test would notice if the line were
+# wrong. Stryker answers that second question by breaking src/engine/** one small
+# edit at a time and checking that some test fails. A full run takes over an
+# hour, so it lives here rather than in ci.yml, and pull requests mutate only
+# the engine files they change.
+on:
+  # The whole engine, from scratch, held to the floor in stryker.config.mjs.
+  # Later in the morning than ci.yml's weekly run so the two do not share a queue.
+  schedule:
+    - cron: '0 8 * * 1'
+  workflow_dispatch:
+  # Only the engine source files the PR changes are mutated, so the check costs
+  # minutes whatever else is going on. Nothing is cached between runs: a PR's
+  # cost never depends on how recently something else ran.
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/engine/**'
+      - 'stryker.config.mjs'
+      - 'vitest.config.ts'
+      - 'vitest.stryker.config.ts'
+      - '.github/workflows/mutation.yml'
+
+permissions:
+  contents: read
+
+# Same rule as ci.yml: supersede on PRs, never on main.
+concurrency:
+  group: mutation-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  mutation:
+    runs-on: ubuntu-latest
+    # A full run measured 76 minutes on a standard 4-core runner. A PR run
+    # mutates a handful of files; if one outgrows 30 minutes, the PR is
+    # changing more of the engine at once than this check was sized for.
+    timeout-minutes: ${{ github.event_name == 'pull_request' && 30 || 120 }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # The PR diff needs the merge base with main.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # The same exclusions as `mutate` in stryker.config.mjs: tests, type-only
+      # modules, worker entry points and data tables are never mutated. Deleted
+      # files have nothing to mutate, so only added and modified ones count.
+      - name: Find changed engine files
+        id: changed
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          files=$(git diff --name-only --diff-filter=AM "origin/$BASE_REF...HEAD" -- 'src/engine/**/*.ts' \
+            | grep -vE '(/__tests__/|\.test\.ts$|^src/engine/types\.ts$|^src/engine/scaffold/types\.ts$|^src/engine/[^/]*Worker\.ts$|^src/engine/cim/cimModelsData\.ts$|^src/engine/registry/|^src/engine/directiveSupport\.ts$)' \
+            | paste -sd, - || true)
+          echo "files=$files" >> "$GITHUB_OUTPUT"
+          if [ -z "$files" ]; then
+            echo "No mutable engine source changed; the weekly full run covers the rest." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Mutating: \`$files\`" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # The floor (thresholds.break) applies to the changed files taken
+      # together: a PR that touches a weakly tested file adds the tests that
+      # bring it up, rather than inheriting its gaps.
+      - name: Mutation test (changed files)
+        if: github.event_name == 'pull_request' && steps.changed.outputs.files != ''
+        env:
+          FILES: ${{ steps.changed.outputs.files }}
+        run: npm run test:mutation -- --mutate "$FILES"
+
+      - name: Mutation test (whole engine)
+        if: github.event_name != 'pull_request'
+        run: npm run test:mutation
+
+      - name: Upload mutation report
+        if: ${{ !cancelled() && (github.event_name != 'pull_request' || steps.changed.outputs.files != '') }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: mutation-report
+          path: reports/mutation/
+          retention-days: 14

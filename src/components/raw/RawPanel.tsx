@@ -15,6 +15,13 @@ const EDITOR_OPTIONS: editor.IStandaloneEditorConstructionOptions = {
   ariaLabel: 'Raw log',
   minimap: { enabled: false },
   wordWrap: 'on',
+  // Marks where a long event soft-wraps, so a wrapped line doesn't read as
+  // two log lines.
+  wordWrapIndicator: true,
+  // CJK and other full-width characters take exactly two cells, so columns
+  // line up. Rendering only: model offsets, markers and selections are
+  // unchanged.
+  fullwidthCharacterWidth: 'twoCells',
   lineNumbers: 'on',
   fontSize: 14,
   fontFamily: "'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Consolas', monospace",

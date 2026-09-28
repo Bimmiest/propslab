@@ -44,6 +44,22 @@ A few things worth knowing:
 - **The e2e suite runs against `dist/`, not the dev server.** A change that works under `vite dev` and not in a production build will pass locally and fail in CI. On a clean checkout the first run needs the browser: `npx playwright install chromium`.
 - **Coverage is a floor, and a ratchet.** The thresholds live in `vitest.config.ts` so a local run gives the same verdict CI does. The engine is held to a higher bar than the app as a whole, because a simulator whose UI is under-tested is annoying while one whose pipeline is under-tested is wrong. Raise the floor when real work raises coverage; do not lower it to make a branch green.
 
+## Mutation testing
+
+Coverage says a line ran; it does not say a test would notice the line being wrong. [Stryker](https://stryker-mutator.io/) answers that by making small edits to `src/engine/**` — flipping a `<`, emptying a string, deleting a call — and rerunning the tests that reach each one. A mutant no test fails on has *survived*, and marks behaviour nothing asserts.
+
+```bash
+npm run test:mutation                  # full run; about 75 minutes on 4 cores
+npm run test:mutation -- --mutate src/engine/processors/kvMode.ts   # one file, a few minutes
+```
+
+Open `reports/mutation/mutation.html` for the survivors, line by line. The engine scores 79.6%, and `thresholds.break` in [`stryker.config.mjs`](stryker.config.mjs) holds it at 78% — a floor and a ratchet, like coverage.
+
+- **It is not in `ci.yml`.** A full run is too slow for every PR. [`mutation.yml`](.github/workflows/mutation.yml) runs the whole engine weekly and on demand, and on a PR mutates only the engine source files the PR changes, holding those to the same floor. A PR that touches a weakly tested file adds the tests that bring it up.
+- **Kill a survivor with a test that asserts behaviour**, not one written to move the number. Some survivors are *equivalent* — the mutant cannot change any result (a cache miss that recomputes the same value, a `??` whose left side is never nullish). Leave those.
+- **Module-level constants are skipped** (`ignoreStatic`): they cost a full suite each, and there are about 900. Pass `--ignoreStatic false` when you change one.
+- **`vitest.stryker.config.ts` carries a compatibility shim** for `@stryker-mutator/vitest-runner` 10 on vitest 5, without which every mutant inside a `describe()` is reported as surviving. When you bump either package, check that a run still kills mutants; the comment in that file says what to look for.
+
 ## Where a change goes
 
 | What | Where |

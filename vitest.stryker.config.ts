@@ -1,0 +1,58 @@
+import { defineConfig, type Plugin } from 'vitest/config';
+import base from './vitest.config';
+
+// The vitest config Stryker runs (`npm run test:mutation`, stryker.config.mjs).
+// It is the normal one with three changes.
+//
+// 1. Only the engine's own tests. Mutants live in src/engine/**, and the
+//    component tests that also import the engine start jsdom per file — most
+//    of a mutant run's cost, for kills the engine suite should be making
+//    itself. An engine mutant that only a component test notices is a gap in
+//    the engine suite.
+//
+// 2. Not the worker-entry tests. They re-import the engine inside a test
+//    (vi.resetModules), so every module-level constant — a regex, a lookup
+//    table — is attributed to that one test, and Stryker runs each such mutant
+//    against it alone. It cannot fail, so ~700 mutants read as SURVIVED that no
+//    other test was ever given the chance to kill. The worker entry points are
+//    outside `mutate` anyway, and CI still runs these tests.
+//
+// 3. A shim for a Stryker/vitest 5 mismatch that otherwise makes every result
+//    meaningless. Stryker runs each mutant against only the tests that cover
+//    it, by setting `testNamePattern` to their names joined with spaces
+//    ("suite test"). Vitest 5 matches that pattern against names joined with
+//    " > " ("suite > test"), so any test inside a describe() is filtered out,
+//    zero tests run, and the mutant is reported as SURVIVED — the run looks
+//    healthy and scores near zero. The setter below accepts either separator.
+//    Remove it once @stryker-mutator/vitest-runner joins names the way vitest
+//    does; the tell is a run where a mutant nothing could miss survives.
+const strykerTestNamePattern: Plugin = {
+  name: 'propslab:stryker-test-name-pattern',
+  configureVitest({ project }) {
+    let pattern: RegExp | undefined;
+    Object.defineProperty(project.config, 'testNamePattern', {
+      configurable: true,
+      enumerable: true,
+      get: () => pattern,
+      set: (value: RegExp | undefined) => {
+        pattern = value && new RegExp(value.source.replaceAll(' ', '(?: > | )'), value.flags);
+      },
+    });
+  },
+};
+
+// Spread rather than mergeConfig, which concatenates arrays and would ADD this
+// include to the base one instead of replacing it.
+export default defineConfig({
+  ...base,
+  plugins: [...(base.plugins ?? []), strykerTestNamePattern],
+  test: {
+    ...base.test,
+    include: ['src/engine/**/*.test.ts'],
+    exclude: [
+      ...(base.test?.exclude ?? []),
+      'src/engine/__tests__/workerReady.test.ts',
+      'src/engine/__tests__/timestampMatchWorker.test.ts',
+    ],
+  },
+});

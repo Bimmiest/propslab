@@ -36,6 +36,10 @@ const EDITOR_OPTIONS: editor.IStandaloneEditorConstructionOptions = {
   // on its way somewhere else, and these hovers are large — a full directive
   // reference, not a one-line tooltip. Long enough to require intent.
   hover: { delay: 800 },
+  // find.closeOnResult and doubleClickSelectsBlock stay at Monaco's defaults
+  // (off / on): Enter keeps stepping through stanzas with the widget open, and
+  // the conf languages define no bracket pairs, so block-select only acts just
+  // inside a quoted value (selecting its contents) and is otherwise a word select.
   suggestOnTriggerCharacters: true,
   quickSuggestions: true,
   fixedOverflowWidgets: true,
