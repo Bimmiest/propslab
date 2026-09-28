@@ -2,6 +2,7 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import pkg from './package.json' with { type: 'json' }
+import swa from './public/staticwebapp.config.json' with { type: 'json' }
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
@@ -10,6 +11,12 @@ export default defineConfig({
   // place a release number is written.
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
+  },
+  // Serve the deployed headers from `vite preview` too, so the e2e suite runs
+  // the workers under the same CSP they get in production (a worker ignores the
+  // page's <meta> policy and takes its own from its response headers).
+  preview: {
+    headers: swa.globalHeaders,
   },
   build: {
     target: 'es2022',

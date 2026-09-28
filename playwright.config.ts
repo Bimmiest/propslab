@@ -19,8 +19,10 @@ const SKIP_BUILD = process.env.E2E_SKIP_BUILD === '1';
  * These exist to cover the things vitest structurally cannot reach, all of
  * which have failed silently in this repo before:
  *
- *  - **The Content-Security-Policy.** It lives in `index.html` and only takes
- *    effect in a browser. `img-src` was missing for the whole life of the
+ *  - **The Content-Security-Policy.** Its `<meta>` copy lives in `index.html`
+ *    and only takes effect in a browser; `vite preview` also sends the header
+ *    copy from `public/staticwebapp.config.json`, the one the workers obey.
+ *    `img-src` was missing for the whole life of the
  *    policy, so Chromium refused every one of Monaco's `data:` squiggle SVGs
  *    and the lint underlines simply did not draw — visible only as a console
  *    error nobody was watching.
