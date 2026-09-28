@@ -27,7 +27,7 @@ import { gzipSync } from 'node:zlib';
 const BUDGETS_KB = {
   // 792 kB; 903 kB while MonacoEditor.tsx imported all of editor.all.
   'monaco-editor.js': 880,
-  'monaco-editor.css': 21, // 18.8
+  'monaco-editor.css': 26, // 23.2 (monaco-editor 0.57's stylesheet is larger than 0.55's 18.8)
   // 146 kB; 160 kB before the editors, dictionary and scaffold split out.
   'index.js': 165,
   'index.css': 9.5, // 8.4
