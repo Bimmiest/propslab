@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { Overlay } from '../ui/Overlay';
 import { useAppStore } from '../../store/useAppStore';
 import { Icon } from '../ui/Icon';
@@ -11,7 +11,10 @@ export function HelpPanel() {
   const helpOpen = useAppStore((s) => s.helpOpen);
   const toggleHelp = useAppStore((s) => s.toggleHelp);
   const openDictionaryAt = useAppStore((s) => s.openDictionaryAt);
-  const [expandedStep, setExpandedStep] = useState<number | null>(null);
+  // In the store rather than local state so the dictionary's "Runs at" links
+  // can open the drawer at a given stage (openHelpAt).
+  const expandedStep = useAppStore((s) => s.helpStage);
+  const setExpandedStep = useAppStore((s) => s.setHelpStage);
 
   // This drawer answers "what runs when"; the dictionary answers "what does
   // this directive do". Selecting a directive chip hands over to the other and
@@ -160,8 +163,15 @@ function StageCard({
   onToggle: () => void;
   onOpenDirective: (key: string) => void;
 }) {
+  const ref = useRef<HTMLDivElement>(null);
+  // A stage opened from the dictionary may sit below the fold.
+  useEffect(() => {
+    if (isExpanded) ref.current?.scrollIntoView?.({ block: 'nearest' });
+  }, [isExpanded]);
+
   return (
     <div
+      ref={ref}
       className="rounded-lg border overflow-hidden transition-colors"
       style={{
         borderColor: isExpanded ? tint(phaseColor, 38) : 'var(--color-border-subtle)',

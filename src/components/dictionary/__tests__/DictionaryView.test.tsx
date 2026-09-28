@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import * as RadixTooltip from '@radix-ui/react-tooltip';
 import { DictionaryView } from '../DictionaryView';
+import { HelpPanel } from '../../help/HelpPanel';
 import { useAppStore } from '../../../store/useAppStore';
 
 function renderDictionary() {
@@ -245,5 +246,26 @@ describe('DictionaryDetail adapts to how much an entry has to say', () => {
     expect(screen.getByText('Specification')).toBeInTheDocument();
     expect(screen.getByText('Valid values')).toBeInTheDocument();
     expect(screen.getByText('Runs at')).toBeInTheDocument();
+  });
+});
+
+describe('DictionaryDetail — Runs at', () => {
+  beforeEach(() => {
+    useAppStore.setState(initial, true);
+  });
+
+  it('opens the pipeline reference with that stage expanded', () => {
+    useAppStore.setState({ dictionarySelection: 'TIME_PREFIX' });
+    render(
+      <RadixTooltip.Provider>
+        <DictionaryView />
+        <HelpPanel />
+      </RadixTooltip.Provider>,
+    );
+    fireEvent.click(screen.getAllByTitle('Open the pipeline reference at this stage')[0]!);
+
+    const panel = screen.getByRole('dialog', { name: 'Pipeline reference' });
+    // The stage's description only renders inside an expanded card.
+    expect(within(panel).getByText(/TIME_PREFIX anchors the search position/)).toBeInTheDocument();
   });
 });

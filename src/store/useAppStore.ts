@@ -64,6 +64,11 @@ interface AppState {
 
   helpOpen: boolean;
   toggleHelp: () => void;
+  /** The pipeline reference's expanded stage, by step number. */
+  helpStage: number | null;
+  setHelpStage: (step: number | null) => void;
+  /** Open the pipeline reference with one stage expanded. */
+  openHelpAt: (step: number) => void;
 
   commandPaletteOpen: boolean;
   toggleCommandPalette: () => void;
@@ -207,6 +212,9 @@ export const useAppStore = create<AppState>((set) => ({
 
   helpOpen: false,
   toggleHelp: () => set((state) => ({ helpOpen: !state.helpOpen })),
+  helpStage: null,
+  setHelpStage: (step) => set({ helpStage: step }),
+  openHelpAt: (step) => set({ helpOpen: true, helpStage: step }),
 
   commandPaletteOpen: false,
   toggleCommandPalette: () => set((state) => ({ commandPaletteOpen: !state.commandPaletteOpen })),

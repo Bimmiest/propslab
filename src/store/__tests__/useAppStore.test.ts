@@ -69,3 +69,15 @@ describe('dictionary navigation', () => {
     expect(persisted.some((v) => v.includes('dictionary'))).toBe(false);
   });
 });
+
+describe('openHelpAt', () => {
+  beforeEach(() => {
+    useAppStore.setState(initial, true);
+  });
+
+  it('opens the pipeline reference with that stage expanded', () => {
+    useAppStore.getState().openHelpAt(4);
+    expect(useAppStore.getState().helpOpen).toBe(true);
+    expect(useAppStore.getState().helpStage).toBe(4);
+  });
+});
