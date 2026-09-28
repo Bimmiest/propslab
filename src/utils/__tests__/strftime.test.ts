@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import fc from 'fast-check';
-import { cachedFormatCount, formatStrftime, parseTimestamp, parseTzAlias, strftimeToRegex, supportedSpecifiers } from '../strftime';
+import { cachedFormatCount, formatSpecifiers, formatStrftime, parseTimestamp, parseTzAlias, strftimeToRegex, supportedSpecifiers, unsupportedSpecifiers } from '../strftime';
 
 /** Helper: ISO string of a parsed timestamp, or null. */
 function iso(text: string, format: string, tz?: string): string | null {
@@ -420,5 +420,27 @@ describe('tokenise cache (#436)', () => {
     expect(strftimeToRegex('%Y-%m-%d hot')).toBe(hot);
     expect(strftimeToRegex('%Y-%m-%d cold')).not.toBe(cold);
     expect(iso('2024-01-15 cold', '%Y-%m-%d cold')).toBe('2024-01-15T00:00:00.000Z');
+  });
+});
+
+describe('formatSpecifiers (#457)', () => {
+  const tokens = (format: string) => formatSpecifiers(format).map((s) => `${s.index}:${s.specifier}:${s.supported ? 'y' : 'n'}`);
+
+  it('tokenises longest first, as the parser does', () => {
+    expect(tokens('%::z %:z %3N %N %3Q')).toEqual(['0:%::z:y', '5:%:z:y', '9:%3N:y', '13:%N:y', '16:%3Q:y']);
+  });
+
+  it('keeps the composites and the escape whole, so %%Y is not a year', () => {
+    expect(tokens('%F %T %%Y')).toEqual(['0:%F:y', '3:%T:y', '6:%%:y']);
+  });
+
+  it('marks what the simulator does not implement, whole for an unknown width, and a trailing %', () => {
+    expect(tokens('%i %0N %')).toEqual(['0:%i:n', '3:%0N:n', '7:%:n']);
+  });
+
+  it('is what unsupportedSpecifiers reports, less the supported ones', () => {
+    expect(unsupportedSpecifiers('%Y %i %0N %')).toEqual([
+      { specifier: '%i', index: 3 }, { specifier: '%0N', index: 6 }, { specifier: '%', index: 10 },
+    ]);
   });
 });

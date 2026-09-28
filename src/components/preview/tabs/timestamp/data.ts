@@ -5,33 +5,12 @@ export const PREFIX_COLOR = 'var(--color-info)';
 export const FORMAT_COLOR = 'var(--color-success)';
 export const LOOKAHEAD_COLOR = 'var(--color-error)';
 
-/** Human-readable descriptions for strftime directives (used by the format breakdown) */
-export const DIRECTIVE_DESCRIPTIONS: Record<string, string> = {
-  '%Y': '4-digit year',
-  '%y': '2-digit year',
-  '%m': 'Month (01–12)',
-  '%d': 'Day (01–31)',
-  '%e': 'Day (space-padded)',
-  '%H': 'Hour 24h (00–23)',
-  '%I': 'Hour 12h (01–12)',
-  '%M': 'Minute (00–59)',
-  '%S': 'Second (00–59)',
-  '%p': 'AM/PM',
-  '%b': 'Month abbr (Jan)',
-  '%B': 'Month full (January)',
-  '%a': 'Weekday abbr (Mon)',
-  '%A': 'Weekday full (Monday)',
-  '%Z': 'Timezone name',
-  '%z': 'Timezone offset',
-  '%s': 'Epoch seconds',
-  '%3N': 'Milliseconds',
-  '%6N': 'Microseconds',
-  '%9N': 'Nanoseconds',
-  '%T': 'Time (%H:%M:%S)',
-  '%F': 'Date (%Y-%m-%d)',
-};
-
-/** Full strptime reference dictionary grouped by category */
+/**
+ * Full strptime reference dictionary grouped by category, and the one place a
+ * specifier is described: the format breakdown reads its descriptions from
+ * here too. Every specifier strftime.ts implements has a row (a test holds
+ * that); rows for specifiers it does not implement are reference only.
+ */
 export interface StrptimeDirective {
   directive: string;
   description: string;
@@ -95,8 +74,18 @@ export const STRPTIME_REFERENCE: StrptimeCategory[] = [
       { directive: '%3N', description: 'Milliseconds (3 digits)', example: '123' },
       { directive: '%6N', description: 'Microseconds (6 digits)', example: '123456' },
       { directive: '%9N', description: 'Nanoseconds (9 digits)', example: '123456789' },
+      { directive: '%N', description: 'Nanoseconds (same as %9N)', example: '123456789' },
+      { directive: '%1N', description: 'Subseconds (1 digit)', example: '1' },
+      { directive: '%2N', description: 'Subseconds (2 digits)', example: '12' },
+      { directive: '%4N', description: 'Subseconds (4 digits)', example: '1234' },
+      { directive: '%5N', description: 'Subseconds (5 digits)', example: '12345' },
+      { directive: '%7N', description: 'Subseconds (7 digits)', example: '1234567' },
+      { directive: '%8N', description: 'Subseconds (8 digits)', example: '12345678' },
+      { directive: '%Q', description: 'Milliseconds (same as %3Q)', example: '123' },
+      { directive: '%3Q', description: 'Milliseconds (3 digits)', example: '123' },
+      { directive: '%6Q', description: 'Microseconds (6 digits)', example: '123456' },
+      { directive: '%9Q', description: 'Nanoseconds (9 digits)', example: '123456789' },
       { directive: '%s', description: 'Unix epoch seconds', example: '1706745600' },
-      { directive: '%Q', description: 'Unix epoch milliseconds', example: '1706745600000' },
     ],
   },
   {

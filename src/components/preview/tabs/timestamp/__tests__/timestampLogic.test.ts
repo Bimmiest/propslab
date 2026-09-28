@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { overlaySegments, parseTimeConfig, resolvedTimeSource, timestampTextOf } from '../timestampLogic';
+import { extractDirectives, overlaySegments, parseTimeConfig, resolvedTimeSource, timestampTextOf } from '../timestampLogic';
+import { STRPTIME_REFERENCE } from '../data';
+import { supportedSpecifiers } from '../../../../../utils/strftime';
 import { probeTimestamp, type TimeConfig } from '../../../../../engine/timestampMatch';
 import type { SplunkEvent } from '../../../../../engine/types';
 
@@ -45,6 +47,32 @@ describe('timestampTextOf and resolvedTimeSource', () => {
     });
     expect(resolvedTimeSource(event)).toBe('previous-event');
     expect(resolvedTimeSource(makeEvent())).toBeUndefined();
+  });
+});
+
+describe('the strptime reference and the format breakdown (#457)', () => {
+  const referenced = STRPTIME_REFERENCE.flatMap((cat) => cat.directives.map((d) => d.directive));
+
+  it('describes every specifier the parser implements, once', () => {
+    for (const spec of supportedSpecifiers()) expect(referenced, spec).toContain(spec);
+    expect(new Set(referenced).size).toBe(referenced.length);
+  });
+
+  it('breaks a format down as the parser tokenises it, with the reference\'s descriptions', () => {
+    expect(extractDirectives('%Y-%m-%dT%H:%M:%S.%3N%:z')).toEqual([
+      { directive: '%Y', description: '4-digit year' },
+      { directive: '%m', description: 'Month as zero-padded number' },
+      { directive: '%d', description: 'Day of month, zero-padded' },
+      { directive: '%H', description: '24-hour, zero-padded' },
+      { directive: '%M', description: 'Minute (00–59)' },
+      { directive: '%S', description: 'Second (00–60)' },
+      { directive: '%3N', description: 'Milliseconds (3 digits)' },
+      { directive: '%:z', description: 'UTC offset (+HH:MM)' },
+    ]);
+  });
+
+  it('names the specifiers the old breakdown skipped, and leaves out the escape and unsupported ones', () => {
+    expect(extractDirectives('%%Y %j %k %Q %N %c').map((d) => d.directive)).toEqual(['%j', '%k', '%Q', '%N']);
   });
 });
 

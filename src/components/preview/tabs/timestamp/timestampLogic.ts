@@ -3,7 +3,8 @@ import { mergeDirectives, resolveStanzasForEvent } from '../../../../engine/pars
 import { resolveLookahead } from '../../../../engine/processors/timestampExtractor';
 import type { TimeConfig, TimestampProbe } from '../../../../engine/timestampMatch';
 import type { EventMetadata, SplunkEvent, TimeSource } from '../../../../engine/types';
-import { DIRECTIVE_DESCRIPTIONS } from './data';
+import { formatSpecifiers } from '../../../../utils/strftime';
+import { STRPTIME_REFERENCE } from './data';
 
 // TimeConfig / TimestampMatch / the probe itself now live in
 // `engine/timestampMatch`, so the worker and this tab share one definition.
@@ -33,29 +34,17 @@ export function parseTimeConfig(propsConf: string, metadata: EventMetadata): Tim
   };
 }
 
-/** Extract strftime directives from a format string */
+const DESCRIPTIONS = new Map(
+  STRPTIME_REFERENCE.flatMap((cat) => cat.directives.map((d) => [d.directive, d.description] as const)),
+);
+
+/** The directives in a format, in order, as the parser tokenises it, each with its reference description. */
 export function extractDirectives(format: string): { directive: string; description: string }[] {
   const result: { directive: string; description: string }[] = [];
-  let i = 0;
-  while (i < format.length) {
-    if (format[i] === '%') {
-      // Try 3-char directives first (%3N, %6N, %9N)
-      const three = format.slice(i, i + 3);
-      if (DIRECTIVE_DESCRIPTIONS[three]) {
-        result.push({ directive: three, description: DIRECTIVE_DESCRIPTIONS[three] });
-        i += 3;
-        continue;
-      }
-      const two = format.slice(i, i + 2);
-      if (DIRECTIVE_DESCRIPTIONS[two]) {
-        result.push({ directive: two, description: DIRECTIVE_DESCRIPTIONS[two] });
-        i += 2;
-        continue;
-      }
-      i += 1;
-    } else {
-      i += 1;
-    }
+  for (const { specifier, supported } of formatSpecifiers(format)) {
+    // The %% escape is literal text, not a field of the timestamp.
+    const description = DESCRIPTIONS.get(specifier);
+    if (supported && specifier !== '%%' && description) result.push({ directive: specifier, description });
   }
   return result;
 }
