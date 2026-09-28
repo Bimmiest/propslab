@@ -32,7 +32,7 @@ function editorMessages(text: string, fileType: 'props.conf' | 'transforms.conf'
 function expectClean(messages: string[], name: string): void {
   for (const m of messages) {
     expect(m).not.toContain('[native code]');
-    expect(m).not.toMatch(new RegExp(`^${name.replace(/[$]/g, '\\$&')} is recognised`));
+    expect(m.startsWith(`${name} is recognised`)).toBe(false);
     expect(m).not.toContain(' does nothing here');
   }
 }
