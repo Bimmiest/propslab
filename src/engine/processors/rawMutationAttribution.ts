@@ -90,8 +90,7 @@ function extractFromRaw(
   try {
     // captureOffsets: false unconditionally — this probe returns `fields` alone
     // and starts from `fieldOffsets: undefined`, so every span the 'd' flag
-    // would compute here is discarded. Declining it costs nothing and keeps the
-    // replay eligible for V8's linear-time fallback.
+    // would compute here is discarded, so declining them saves the output.
     probed = extractFields(probed, directives, undefined, false);
     probed = applyTransforms(probed, directives, transformsConf, 'search-time');
     probed = applyKvMode(probed, directives);
