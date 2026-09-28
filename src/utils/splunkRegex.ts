@@ -2,7 +2,7 @@
  * Every user-written pattern — LINE_BREAKER, BREAK_ONLY_BEFORE, TIME_PREFIX,
  * EXTRACT, REGEX, SEDCMD, FIELD_HEADER_REGEX, eval's match()/replace(), and
  * the editor's checks of all of them — compiles here, onto PCRE2 running as
- * WebAssembly (packages/pcre2-wasm). Splunk's regexes are PCRE, so this is the
+ * WebAssembly (the pcre2-wasm-utf16 package). Splunk's regexes are PCRE, so this is the
  * engine Splunk runs rather than a translation into JavaScript, and since the
  * pipeline, the editor and the MCP server all come through this one door they
  * cannot disagree about what a pattern means.
@@ -26,7 +26,7 @@ import {
   type CompiledModule,
   type Match,
   type ModuleBytes,
-} from '../../packages/pcre2-wasm/src/index';
+} from 'pcre2-wasm-utf16';
 
 export type RegexMatch = Match;
 export type RegexEngineModule = CompiledModule;

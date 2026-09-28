@@ -72,7 +72,7 @@ Below 768px the rail is replaced by `MobileShell`'s labelled tab strip — the r
 
 ## Using the engine directly
 
-`src/engine/**` is pure logic with no React imports, and it runs unchanged in the browser, in a Web Worker, and under Node. Its one runtime dependency is the regex engine: every user pattern runs on PCRE2 compiled to WebAssembly ([`packages/pcre2-wasm`](packages/pcre2-wasm)), which is initialised once before the first run. `runPipeline` is the entry point. [docs/engine.md](docs/engine.md) covers the API: `PipelineOptions`, layered conf input with override provenance, the regex engine and its semantics, and the caveats that matter when running user-supplied regexes.
+`src/engine/**` is pure logic with no React imports, and it runs unchanged in the browser, in a Web Worker, and under Node. Its one runtime dependency is the regex engine: every user pattern runs on PCRE2 compiled to WebAssembly ([`pcre2-wasm-utf16`](https://github.com/Bimmiest/pcre2-wasm-utf16)), which is initialised once before the first run. `runPipeline` is the entry point. [docs/engine.md](docs/engine.md) covers the API: `PipelineOptions`, layered conf input with override provenance, the regex engine and its semantics, and the caveats that matter when running user-supplied regexes.
 
 [`packages/mcp-server`](packages/mcp-server) is the Node consumer of that API: an MCP server exposing `simulate`, `validate`, `explain_precedence` and `lookup_directive` tools, so an LLM agent can run a config against real sample data instead of guessing about it. It implements the untrusted-regex discipline engine.md prescribes — every engine run happens in a terminatable worker thread under a wall-clock budget. See its [README](packages/mcp-server/README.md).
 
@@ -128,8 +128,6 @@ src/
     └── ui/                    # Tabs, Badge, Tooltip, CommandPalette, etc.
 
 packages/
-├── pcre2-wasm/                # PCRE2 10.48 → WebAssembly: pinned, reproducible build,
-│                              #   generic API; no propslab code in it
 └── mcp-server/                # MCP server over the engine
 
 e2e/                           # Playwright smoke tests (production build, Chromium)
@@ -309,7 +307,7 @@ See [CHANGELOG.md](CHANGELOG.md) for fix history
 
 ## Tech stack
 
-React 19, Vite 8, TypeScript 5.9, Tailwind CSS 4 (CSS-first config), Monaco Editor 0.55 (mounted directly by `MonacoEditor.tsx`), Zustand 5, react-resizable-panels 4.12, `diff` 9, `cmdk` (command palette), Radix UI primitives (`react-tooltip`, `react-dialog`, `react-context-menu`), PCRE2 10.48 compiled to WebAssembly (`packages/pcre2-wasm`).
+React 19, Vite 8, TypeScript 5.9, Tailwind CSS 4 (CSS-first config), Monaco Editor 0.55 (mounted directly by `MonacoEditor.tsx`), Zustand 5, react-resizable-panels 4.12, `diff` 9, `cmdk` (command palette), Radix UI primitives (`react-tooltip`, `react-dialog`, `react-context-menu`), PCRE2 10.48 compiled to WebAssembly ([`pcre2-wasm-utf16`](https://github.com/Bimmiest/pcre2-wasm-utf16)).
 
 ## Contributing
 

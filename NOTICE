@@ -72,8 +72,13 @@ capture is planned; src/engine/__tests__/fixtures/README.md explains why.
 PCRE2
 --------------------------------------------------------------------------
 
-packages/pcre2-wasm/pcre2.wasm, which the app and the MCP server ship and run,
-is PCRE2 compiled to WebAssembly:
+The app and the MCP server ship and run pcre2.wasm, which is PCRE2 compiled to
+WebAssembly. It comes from the pcre2-wasm-utf16 package, a dependency of this
+project maintained in its own repository:
+
+    https://github.com/Bimmiest/pcre2-wasm-utf16
+
+The module is:
 
     PCRE2 - Perl-Compatible Regular Expressions
     https://github.com/PCRE2Project/pcre2
@@ -81,7 +86,8 @@ is PCRE2 compiled to WebAssembly:
     Copyright (c) 2007-2024 Philip Hazel
     SPDX-License-Identifier: BSD-3-Clause WITH PCRE2-exception
 
-PCRE2's licence is reproduced in full in packages/pcre2-wasm/LICENCE-PCRE2.md,
-and packages/pcre2-wasm/NOTICE describes what that package contains. The PCRE2
-source is not vendored; the package's build script downloads the pinned
-release and verifies its checksum.
+PCRE2's licence is reproduced in full in that package's LICENCE-PCRE2.md, and
+its NOTICE describes what the package contains; both are installed with it
+(node_modules/pcre2-wasm-utf16/). The PCRE2 source is not vendored in either
+repository; the package's build script downloads the pinned release and
+verifies its checksum.
