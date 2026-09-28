@@ -16,25 +16,67 @@ import { applyFieldAliases } from './processors/fieldAlias';
 import { applyEvalExpressions } from './processors/evalProcessor';
 import { attributeRawMutations } from './processors/rawMutationAttribution';
 import { lintConfigs, lintMatchedDirectives } from './configLint';
-import { createRunContext, withDiagnostics, type DiagnosticSink, type RunContext, type RunLimits } from './runContext';
+import { createRunContext, withDiagnostics, type RunContext, type RunLimits } from './runContext';
 
+type Stage = (batch: SplunkEvent[], ctx: RunContext) => SplunkEvent[];
+
+const errorText = (err: unknown) => (err instanceof Error ? err.message : 'Unknown error');
+
+/**
+ * Run one stage so that a throw degrades to a diagnostic rather than failing
+ * the run.
+ *
+ * A `per-event` stage's output for an event depends on that event alone, so
+ * when the batch throws it is re-run one event at a time and only the events
+ * that still throw pass through unchanged: one pathological event no longer
+ * strips the stage from the whole batch (#428). The retry reports through a
+ * view that drops what the failed attempt already said, and the run's ledger
+ * is shared, so it does not repeat a warning.
+ *
+ * A `batch` stage reads across events (line breaking, the previous event's
+ * `_time`, a CSV header row), and a retry one event at a time would be a
+ * different computation, so it falls back to `events` unchanged as a whole.
+ */
 function safeProcessor(
   name: string,
   events: SplunkEvent[],
-  fn: () => SplunkEvent[],
-  diagnostics: DiagnosticSink,
-  file: ValidationDiagnostic['file'] = 'props.conf'
+  fn: Stage,
+  ctx: RunContext,
+  file: ValidationDiagnostic['file'] = 'props.conf',
+  shape: 'per-event' | 'batch' = 'per-event',
 ): SplunkEvent[] {
+  const { diagnostics } = ctx;
+  const start = diagnostics.list.length;
   try {
-    return fn();
+    return fn(events, ctx);
   } catch (err) {
+    if (shape === 'batch' || events.length <= 1) {
+      diagnostics.push({ level: 'error', message: `Processor "${name}" failed: ${errorText(err)}`, file });
+      return events; // Return unmodified events on failure
+    }
+  }
+
+  const retry = withDiagnostics(ctx, diagnostics.deduplicating(diagnostics.list.slice(start)));
+  const failures: { line: number; error: string }[] = [];
+  const out = events.flatMap((event) => {
+    try {
+      return fn([event], retry);
+    } catch (err) {
+      failures.push({ line: event.lineNumbers.start, error: errorText(err) });
+      return [event];
+    }
+  });
+  const first = failures[0];
+  if (first !== undefined) {
+    const n = failures.length;
     diagnostics.push({
       level: 'error',
-      message: `Processor "${name}" failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
-      file,
+      file: 'raw',
+      line: first.line,
+      message: `Processor "${name}" failed on ${n} event${n === 1 ? '' : 's'}, which ${n === 1 ? 'passes' : 'pass'} through it unchanged (${first.error}).`,
     });
-    return events; // Return unmodified events on failure
   }
+  return out;
 }
 
 /**
@@ -127,7 +169,6 @@ function resolveDirectives(
 /** The index-time stages, in Splunk's order. */
 function runIndexTime(rawData: string, run: PipelineRun): SplunkEvent[] {
   const { directives, propsConf, transformsConf, ctx } = run;
-  const { diagnostics } = ctx;
   // Step 1-2: Line breaking and merging.
   // The SHOULD_LINEMERGE default that INDEXED_EXTRACTIONS implies (off for the
   // line-per-record formats, on for XML) is decided inside breakLines alone;
@@ -137,24 +178,26 @@ function runIndexTime(rawData: string, run: PipelineRun): SplunkEvent[] {
   // than failing the whole run. With nothing broken there are no events to
   // carry forward, so the fallback
   // is empty rather than the unbroken input.
-  let events = safeProcessor('LINE_BREAKER', [], () => breakLines(rawData, directives, run.effectiveMetadata, ctx), diagnostics);
+  let events = safeProcessor('LINE_BREAKER', [], (_, c) => breakLines(rawData, directives, run.effectiveMetadata, c), ctx, 'props.conf', 'batch');
 
   // Step 3: Truncation
-  events = safeProcessor('TRUNCATE', events, () => truncateEvents(events, directives, ctx), diagnostics);
+  events = safeProcessor('TRUNCATE', events, (batch, c) => truncateEvents(batch, directives, c), ctx);
 
-  // Step 4: Timestamp extraction
-  events = safeProcessor('Timestamp', events, () => extractTimestamps(events, directives, ctx), diagnostics);
+  // Step 4: Timestamp extraction. Batch-shaped: an event with no timestamp
+  // inherits the previous event's.
+  events = safeProcessor('Timestamp', events, (batch, c) => extractTimestamps(batch, directives, c), ctx, 'props.conf', 'batch');
 
   // Step 4b: ROUTE_EVENTS_OLDER_THAN — the spec runs the age test "after
   // timestamp extraction", so it reads the extracted _time, before any
   // index-time transform can rewrite it.
-  events = safeProcessor('ROUTE_EVENTS_OLDER_THAN', events, () => routeEventsByAge(events, directives, ctx), diagnostics);
+  events = safeProcessor('ROUTE_EVENTS_OLDER_THAN', events, (batch, c) => routeEventsByAge(batch, directives, c), ctx);
 
-  // Step 5: Indexed extractions
-  events = safeProcessor('INDEXED_EXTRACTIONS', events, () => applyIndexedExtractions(events, directives, ctx), diagnostics);
+  // Step 5: Indexed extractions. Batch-shaped: CSV's header row names the
+  // fields of every row after it. The XML modes catch per event themselves.
+  events = safeProcessor('INDEXED_EXTRACTIONS', events, (batch, c) => applyIndexedExtractions(batch, directives, c), ctx, 'props.conf', 'batch');
 
   // Step 6: SEDCMD
-  events = safeProcessor('SEDCMD', events, () => applySedCommands(events, directives, ctx), diagnostics);
+  events = safeProcessor('SEDCMD', events, (batch, c) => applySedCommands(batch, directives, c), ctx);
 
   // Step 7: Index-time TRANSFORMS — regex transforms, DEST_KEY routing, and
   // INGEST_EVAL / STOP_PROCESSING_IF stanzas are all applied here, interleaved
@@ -162,16 +205,16 @@ function runIndexTime(rawData: string, run: PipelineRun): SplunkEvent[] {
   // (only when a props.conf stanza references them).
   // This stage and the clone pass, which calls applyTransforms once per clone,
   // report against the run's one warning ledger.
-  events = safeProcessor('TRANSFORMS', events, () => applyTransforms(events, directives, transformsConf, 'index-time', ctx), diagnostics, 'transforms.conf');
+  events = safeProcessor('TRANSFORMS', events, (batch, c) => applyTransforms(batch, directives, transformsConf, 'index-time', c), ctx, 'transforms.conf');
 
   // Step 7b: CLONE_SOURCETYPE copies get the SEDCMD and TRANSFORMS of the
   // sourcetype they were cloned to.
-  events = safeProcessor('CLONE_SOURCETYPE', events, () => applyCloneIndexTime(events, propsConf, transformsConf, ctx), diagnostics, 'transforms.conf');
+  events = safeProcessor('CLONE_SOURCETYPE', events, (batch, c) => applyCloneIndexTime(batch, propsConf, transformsConf, c), ctx, 'transforms.conf');
 
   // Step 8: ANNOTATE_PUNCT — the annotation processor runs after regex
   // replacement, so the punct signature reflects _raw as indexed (post-SEDCMD,
   // post-transforms), not as ingested.
-  return safeProcessor('ANNOTATE_PUNCT', events, () => annotatePunct(events, directives, ctx), diagnostics);
+  return safeProcessor('ANNOTATE_PUNCT', events, (batch, c) => annotatePunct(batch, directives, c), ctx);
 }
 
 /**
@@ -185,23 +228,22 @@ function runSearchTimeStages(
   ctx: RunContext,
 ): SplunkEvent[] {
   const { transformsConf } = run;
-  const { diagnostics } = ctx;
   // Step 8: EXTRACT (inline field extraction)
-  let ev = safeProcessor('EXTRACT', events, () => extractFields(events, directives, ctx), diagnostics);
+  let ev = safeProcessor('EXTRACT', events, (batch, c) => extractFields(batch, directives, c), ctx);
   // Step 9: Search-time REPORT transforms (run BEFORE automatic KV — Splunk's
   // documented order is inline EXTRACT → REPORT field transforms → automatic KV).
-  ev = safeProcessor('REPORT', ev, () => applyTransforms(ev, directives, transformsConf, 'search-time', ctx), diagnostics, 'transforms.conf');
+  ev = safeProcessor('REPORT', ev, (batch, c) => applyTransforms(batch, directives, transformsConf, 'search-time', c), ctx, 'transforms.conf');
   // Step 10: KV_MODE (automatic key-value extraction)
-  ev = safeProcessor('KV_MODE', ev, () => applyKvMode(ev, directives, ctx), diagnostics);
+  ev = safeProcessor('KV_MODE', ev, (batch, c) => applyKvMode(batch, directives, c), ctx);
   // Step 11: FIELDALIAS
-  ev = safeProcessor('FIELDALIAS', ev, () => applyFieldAliases(ev, directives, ctx), diagnostics);
+  ev = safeProcessor('FIELDALIAS', ev, (batch, c) => applyFieldAliases(batch, directives, c), ctx);
   // Step 12: EVAL (calculated fields)
-  ev = safeProcessor('EVAL', ev, () => applyEvalExpressions(ev, directives, ctx), diagnostics);
+  ev = safeProcessor('EVAL', ev, (batch, c) => applyEvalExpressions(batch, directives, c), ctx);
   // Step 13: attribute index-time `_raw` rewrites (SEDCMD, DEST_KEY = _raw) to
   // the fields whose extracted value they changed or destroyed. Runs last
   // because it replays search-time extraction against the pre-rewrite text,
   // which is the only way the association can be computed at all.
-  return safeProcessor('SEDCMD attribution', ev, () => attributeRawMutations(ev, () => directives, transformsConf, ctx), diagnostics);
+  return safeProcessor('SEDCMD attribution', ev, (batch, c) => attributeRawMutations(batch, () => directives, transformsConf, c), ctx);
 }
 
 const metaKey = (m: EventMetadata) => `${m.sourcetype}|${m.host}|${m.source}`;

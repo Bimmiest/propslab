@@ -88,7 +88,8 @@ export function extractXmlIndexed(
   const processor = `INDEXED_EXTRACTIONS(${mode})`;
 
   // Caught per event so one pathological event costs only its own fields:
-  // letting it escape made the pipeline fall back to the whole batch unmodified.
+  // INDEXED_EXTRACTIONS is a batch-shaped stage (CSV headers), so an escaping
+  // throw makes the pipeline fall back to the whole batch unmodified.
   const failures: { line: number; error: string }[] = [];
 
   const result = events.map((event) => {
