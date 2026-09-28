@@ -82,6 +82,28 @@ describe('substr() with a negative or zero length (#358)', () => {
   });
 });
 
+// Captured, not doc-derived: the reference leaves a start of 0, and a negative
+// start past the beginning, undocumented. Run on a local Splunk, 2026-09-28:
+//   | makeresults | eval s="hello"
+//   | eval a=substr(s,0,3), b=substr(s,0,1), c=substr(s,0), d=substr(s,-10,3), e=substr(s,-5,2)
+// gave a="hel", b="h", c="hello", d=NULL, e="he".
+describe('substr() start boundaries, checked against Splunk (#397)', () => {
+  it('reads a start of 0 as 1', () => {
+    expect(value('substr("hello", 0, 3)')).toBe('hel');
+    expect(value('substr("hello", 0, 1)')).toBe('h');
+    expect(value('substr("hello", 0)')).toBe('hello');
+  });
+
+  it('is NULL for a negative start before the first character', () => {
+    expect(value('substr("hello", -10, 3)')).toBeNull();
+    expect(value('substr("hello", -6)')).toBeNull();
+  });
+
+  it('takes a negative start that lands on the first character', () => {
+    expect(value('substr("hello", -5, 2)')).toBe('he');
+  });
+});
+
 describe('assigning a boolean result (#358)', () => {
   const evalDir = (className: string, expr: string): ConfDirective =>
     ({ key: `EVAL-${className}`, value: expr, line: 2, directiveType: 'EVAL', className });

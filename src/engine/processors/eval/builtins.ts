@@ -77,7 +77,10 @@ function substr(args: EvalValue[]): EvalValue {
   const s = strArg(args[0]);
   if (s === null) return null;
   const start = toNum(args[1]);
-  const startIdx = Math.max(0, start > 0 ? start - 1 : s.length + start);
+  // Checked against Splunk (#397): a start of 0 reads as 1, and a negative
+  // start that reaches back past the first character is NULL, not clamped.
+  if (start < -s.length) return null;
+  const startIdx = start > 0 ? start - 1 : start < 0 ? s.length + start : 0;
   const len = args[2] !== undefined ? toNum(args[2]) : undefined;
   // slice, not substring: substring swaps reversed bounds, so a negative
   // length read backwards from the start instead of giving nothing.
