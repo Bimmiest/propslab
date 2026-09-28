@@ -46,13 +46,22 @@ export function SimulatorView() {
     // because the library turns them into flex-grow ratios — but it also meant
     // every minSize was a handful of pixels, so a drag could crush any panel to
     // nothing.
-    <Group orientation="horizontal" id="main-horizontal">
+    //
+    // resizePreviewMode="separator": a pointer drag moves only a copy of the
+    // separator and applies the split on release, so Monaco's automaticLayout
+    // and the output tabs' long event lists re-lay out once instead of on every
+    // pointer move. Keyboard resizing is unaffected (it still applies per key).
+    //
+    // No collapsedThreshold: none of these panels is `collapsible`. The editors
+    // collapse only from their header buttons (store `collapsedPanels`), and a
+    // drag stops at minSize, so there is no drag-to-collapse to tune.
+    <Group orientation="horizontal" id="main-horizontal" resizePreviewMode="separator">
       {/* Left side: Raw, Props, Transforms */}
       <Panel defaultSize="38" minSize="20" id="left-inputs">
         <div className="h-full flex flex-col">
           {/* Resizable area for expanded panels */}
           <div className="flex-1 min-h-0">
-            <Group orientation="vertical" id={`left-vertical-${layoutKey}`} key={layoutKey}>
+            <Group orientation="vertical" id={`left-vertical-${layoutKey}`} key={layoutKey} resizePreviewMode="separator">
               <Panel defaultSize={propsCollapsed && transformsCollapsed ? '100' : propsCollapsed || transformsCollapsed ? '50' : '30'} minSize="10" id="raw-panel">
                 <ErrorBoundary panelName="Raw Data">
                   <RawPanel />

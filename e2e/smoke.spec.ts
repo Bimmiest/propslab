@@ -354,6 +354,45 @@ test.describe('dictionary', () => {
 });
 
 /**
+ * The simulator's splits preview a pointer drag and apply it on release
+ * (resizePreviewMode="separator"); the keyboard still resizes per key press.
+ */
+test.describe('split panels', () => {
+  const separator = (page: Page) => page.locator('#main-horizontal > [role="separator"]');
+  const outputWidth = async (page: Page) =>
+    (await page.locator('#output-panel').boundingBox())?.width ?? 0;
+
+  test('a drag previews the split and applies it on release', async ({ page, complaints }) => {
+    await openApp(page);
+    const box = await separator(page).boundingBox();
+    if (!box) throw new Error('main separator not rendered');
+    const before = await outputWidth(page);
+    const y = box.y + box.height / 2;
+
+    await page.mouse.move(box.x + box.width / 2, y);
+    await page.mouse.down();
+    await page.mouse.move(box.x - 120, y, { steps: 5 });
+    // Mid-drag: a preview is drawn and the panels have not moved.
+    await expect(page.locator('[data-resize-preview]').first()).toBeAttached();
+    expect(await outputWidth(page)).toBeCloseTo(before, 0);
+
+    await page.mouse.up();
+    await expect(page.locator('[data-resize-preview]')).toHaveCount(0);
+    await expect.poll(() => outputWidth(page)).toBeGreaterThan(before + 60);
+    expect(complaints.all, 'browser errors while resizing').toEqual([]);
+  });
+
+  test('the keyboard resizes the split directly', async ({ page }) => {
+    await openApp(page);
+    const handle = separator(page);
+    const before = Number(await handle.getAttribute('aria-valuenow'));
+    await handle.focus();
+    await page.keyboard.press('ArrowRight');
+    await expect.poll(async () => Number(await handle.getAttribute('aria-valuenow'))).toBeGreaterThan(before);
+  });
+});
+
+/**
  * The two on-demand workers. Neither is built until its tab opens or a
  * TIME_FORMAT is hovered, so the boot tests above never load their chunks.
  *
