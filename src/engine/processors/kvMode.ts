@@ -327,7 +327,10 @@ function extractKeyValue(
   // so that a `key=value` substring *inside* a quoted value (e.g.
   // msg="error code=42") isn't mis-extracted as its own field. Blanking with
   // same-length spaces preserves the [\s,;] boundaries the bare pattern anchors on.
-  let bareScan = raw;
+  // The pieces are collected and joined once: re-slicing the whole string per
+  // quoted pair made this quadratic in the event length.
+  const bareParts: string[] = [];
+  let bareFrom = 0;
 
   // Splunk's automatic KV extraction keeps the FIRST occurrence of a repeated
   // key and discards the rest -- `label=a label=b` is `label = "a"`, not a
@@ -362,10 +365,8 @@ function extractKeyValue(
 
   for (const match of raw.matchAll(quoted)) {
     const start = match.index ?? 0;
-    bareScan =
-      bareScan.slice(0, start) +
-      ' '.repeat(match[0].length) +
-      bareScan.slice(start + match[0].length);
+    bareParts.push(raw.slice(bareFrom, start), ' '.repeat(match[0].length));
+    bareFrom = start + match[0].length;
     const key = match[1];
     // Exactly one of the two quote branches participates in a given match.
     let value = match[2] ?? match[3];
@@ -382,6 +383,9 @@ function extractKeyValue(
       candidates.push({ at: start, key, value });
     }
   }
+
+  bareParts.push(raw.slice(bareFrom));
+  const bareScan = bareParts.join('');
 
   for (const match of bareScan.matchAll(bare)) {
     const key = match[1];

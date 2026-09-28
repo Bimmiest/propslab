@@ -83,10 +83,38 @@ export function detectTimestamp(lines: string[]): ScaffoldSuggestion[] {
 export function derivePrefix(before: string): string {
   if (!before) return '';
   // Trailing `"key":` / key= boundary (JSON or key=value), incl. the value's opening quote.
-  const kv = /(["']?[\w.-]+["']?\s*[:=]\s*["']?)$/.exec(before);
-  if (kv) return kv[1] ?? '';
+  const kv = trailingKeyBoundary(before);
+  if (kv) return kv;
   // Otherwise a short trailing punctuation delimiter (e.g. "[").
   const punct = /([^\w\s]{1,4})$/.exec(before);
   if (punct) return punct[1] ?? '';
   return '';
+}
+
+const isQuote = (c: string | undefined) => c === '"' || c === "'";
+const isKeyChar = (c: string | undefined) => c !== undefined && /[\w.-]/.test(c);
+const isSpace = (c: string | undefined) => c !== undefined && /\s/.test(c);
+
+/**
+ * The longest suffix of `s` matching `["']?[\w.-]+["']?\s*[:=]\s*["']?`, or ''.
+ * Scanned backwards because the anchored regex retries from every start
+ * position, which is quadratic on a long run of word characters -- and this
+ * runs on every keystroke in the extract-name dialog. Every part of the
+ * pattern is either greedy-unambiguous or optional with a disjoint class, so
+ * taking each part maximally from the right yields the regex's (leftmost,
+ * hence longest) match.
+ */
+function trailingKeyBoundary(s: string): string {
+  let i = s.length;
+  if (isQuote(s[i - 1])) i--;
+  while (isSpace(s[i - 1])) i--;
+  if (s[i - 1] !== ':' && s[i - 1] !== '=') return '';
+  i--;
+  while (isSpace(s[i - 1])) i--;
+  if (isQuote(s[i - 1])) i--;
+  const keyEnd = i;
+  while (isKeyChar(s[i - 1])) i--;
+  if (i === keyEnd) return '';
+  if (isQuote(s[i - 1])) i--;
+  return s.slice(i);
 }
