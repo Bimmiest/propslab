@@ -17,7 +17,7 @@ The second install is not optional if you intend to lint. `npm run lint` is type
 
 ## The CI checks
 
-[`ci.yml`](.github/workflows/ci.yml) runs three jobs, independently, on every PR, on pushes to main, weekly and on demand. A PR needs all three green — and so does the automatic deploy, which runs only after a push to main's CI run passes and then ships the newest commit on main whose whole CI run passed. A manual deploy is not CI-gated: dispatching the deploy workflow on `main` redeploys that same newest green commit, or, with its `sha` input set, rolls back to any commit main has contained, whether or not its CI passed. A rollback only sticks if the repository variable `DEPLOY_PAUSED` is set to `true` *before* you dispatch it — otherwise the next automatic deploy undoes it, or cancels it while it is still queued — and it stays in place until you delete the variable once the fix is on main. The [README](README.md#tests) describes the deploy workflow in full.
+[`ci.yml`](.github/workflows/ci.yml) runs five jobs, independently, on every PR, on pushes to main, weekly and on demand (`dependency-review` on PRs only). A PR needs all of them green — and so does the automatic deploy, which runs only after a push to main's CI run passes and then ships the newest commit on main whose whole CI run passed. A manual deploy is not CI-gated: dispatching the deploy workflow on `main` redeploys that same newest green commit, or, with its `sha` input set, rolls back to any commit main has contained, whether or not its CI passed. A rollback only sticks if the repository variable `DEPLOY_PAUSED` is set to `true` *before* you dispatch it — otherwise the next automatic deploy undoes it, or cancels it while it is still queued — and it stays in place until you delete the variable once the fix is on main. The [README](README.md#tests) describes the deploy workflow in full.
 
 **`ci`** — the app, in this order:
 
@@ -37,6 +37,10 @@ npm test              # pretest runs typecheck + esbuild bundle, then vitest
 ```
 
 **`audit`** — `npm audit` over both lockfiles, the app's and `packages/mcp-server`'s. A high-severity advisory in a production dependency fails it; dev-only advisories are reported but never fatal. It installs nothing, so there is nothing to run locally beyond `npm audit --omit=dev --audit-level=high` in each directory.
+
+**`workflow-lint`** — [actionlint](https://github.com/rhysd/actionlint) and [zizmor](https://docs.zizmor.sh/) over `.github/`. Locally: `go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 && actionlint`, and `uvx zizmor==1.30.1 .` (or `pipx run`). A zizmor finding that is deliberate gets an inline `# zizmor: ignore[<audit>]` with the reason beside it, as the deploy workflow's `workflow_run` trigger has.
+
+**`dependency-review`** — on PRs, GitHub's dependency review over the PR's dependency diff, failing on a newly added high-severity advisory. CodeQL is not a workflow here: it runs through GitHub's default code-scanning setup (JavaScript/TypeScript and Actions) and reports as the "Analyze" checks.
 
 A few things worth knowing:
 

@@ -61,6 +61,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Verify the regex engine's WebAssembly
+        # pcre2-wasm-utf16 is a git dependency: the lockfile pins its commit
+        # but records no integrity hash, and npm audit cannot see it. The
+        # package ships the checksum its build produced; a binary that does not
+        # match it is not the one upstream built and published.
+        working-directory: node_modules/pcre2-wasm-utf16
+        run: sha256sum --check --strict pcre2.wasm.sha256
+
       - name: Install MCP server dependencies
         # Lint below is type-aware over the whole repo (projectService), and
         # packages/mcp-server resolves @modelcontextprotocol/sdk and zod from
@@ -223,3 +231,53 @@ jobs:
       - name: Report the MCP server's dev-only advisories
         working-directory: packages/mcp-server
         run: npm audit --audit-level=high || true
+
+  # The workflows are code too, and the deploy one holds a token. actionlint
+  # catches what GitHub would only reject at run time (bad expressions, unknown
+  # inputs, shellcheck findings in `run:` blocks); zizmor catches what GitHub
+  # happily runs (template injection, persisted credentials, unpinned or
+  # impostor action refs). zizmor also reads dependabot.yml.
+  workflow-lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: actionlint
+        # Built from a tagged module version rather than fetched by a download
+        # script: the Go checksum database pins the source, so this version
+        # cannot change under us. The runner image ships Go and shellcheck;
+        # GOTOOLCHAIN=auto fetches a newer Go if the module needs one.
+        env:
+          ACTIONLINT_VERSION: v1.7.12
+          GOTOOLCHAIN: auto
+        run: |
+          go install "github.com/rhysd/actionlint/cmd/actionlint@$ACTIONLINT_VERSION"
+          "$(go env GOPATH)/bin/actionlint" -color
+
+      - name: zizmor
+        uses: zizmorcore/zizmor-action@cc914d7f3750a2d13d75c7f184a1060aa0e9d482 # v0.6.4
+        with:
+          # An exact version, which the action maps to an image digest. `latest`
+          # would let a new zizmor audit fail an unrelated PR, the trap the
+          # audit job's comment describes. Raise it when the action's pin moves.
+          version: 1.30.1
+          # Findings as PR annotations and a failed step, not a SARIF upload:
+          # that needs `security-events: write`, and nothing else here does.
+          advanced-security: false
+          annotations: true
+
+  # npm audit reads the lockfile's registry packages after they merge. This
+  # reads the PR's dependency diff from the dependency graph, across both
+  # lockfiles, and refuses a newly added advisory before it lands.
+  dependency-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          # The same bar as the audit job's production gate.
+          fail-on-severity: high
