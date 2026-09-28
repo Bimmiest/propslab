@@ -4,6 +4,7 @@ import { extractTimestamps } from '../processors/timestampExtractor';
 import { breakLines } from '../processors/lineBreaker';
 import { detectTimestamp } from '../scaffold/analyzers/timestamp';
 import type { ConfDirective, EventMetadata, SplunkEvent } from '../types';
+import { runCtx } from './runCtx';
 
 // Doc- and convention-derived, not captured: the Splunk 10.4.0 fixtures only
 // pin ISO 8601 with a Z zone, at the start of a line. What these tests pin is
@@ -31,7 +32,7 @@ function event(raw: string): SplunkEvent {
 
 /** What extraction read from `line`: the source, format and instant, or null. */
 function extracted(line: string, directives: ConfDirective[] = []) {
-  const e = extractTimestamps([event(line)], directives, undefined, NOW)[0]!;
+  const e = extractTimestamps([event(line)], directives, runCtx(undefined, { now: NOW }))[0]!;
   const step = e.processingTrace.at(-1)!;
   if (step.timeSource !== 'auto-recognition' && step.timeSource !== 'TIME_FORMAT') return null;
   const format = /^Auto-recognized timestamp \((.*)\): /.exec(step.description)?.[1];
@@ -40,7 +41,7 @@ function extracted(line: string, directives: ConfDirective[] = []) {
 
 /** Whether BREAK_ONLY_BEFORE_DATE starts an event at `line`. */
 function startsEvent(line: string, directives: ConfDirective[] = []): boolean {
-  return breakLines(`no date here\n${line}`, directives, META).length === 2;
+  return breakLines(`no date here\n${line}`, directives, META, runCtx()).length === 2;
 }
 
 interface Case {
@@ -226,6 +227,6 @@ describe('line breaking, extraction and the scaffold agree', () => {
 
   it('breaks nowhere when TIME_PREFIX will not compile, as extraction reads no timestamp', () => {
     const raw = '2026-01-15T10:00:00Z a\n2026-01-15T10:00:01Z b';
-    expect(breakLines(raw, [dir('TIME_PREFIX', '(')], META)).toHaveLength(1);
+    expect(breakLines(raw, [dir('TIME_PREFIX', '(')], META, runCtx())).toHaveLength(1);
   });
 });

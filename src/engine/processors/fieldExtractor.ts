@@ -1,4 +1,4 @@
-import type { SplunkEvent, ConfDirective, DirectiveNoOp, ValidationDiagnostic } from '../types';
+import type { SplunkEvent, ConfDirective, DirectiveNoOp } from '../types';
 import { extractionLimits, safeRegex, validateRegex, type SplunkRegex } from '../../utils/splunkRegex';
 import { longestPartialMatch, type NoOpReason } from '../noOpExplainer';
 import { effectiveValue } from '../utils/directiveValues';
@@ -8,6 +8,7 @@ import { unquoteFieldName } from '../utils/fieldRef';
 import { getMetadataField } from '../utils/metadataFields';
 import { getField, hasField, setField } from '../utils/fieldBag';
 import { atDirective } from '../parser/provenance';
+import type { RunContext, DiagnosticSink } from '../runContext';
 
 /**
  * Each EXTRACT runs under its stanza's MATCH_LIMIT and DEPTH_LIMIT (Splunk's
@@ -21,9 +22,9 @@ import { atDirective } from '../parser/provenance';
 export function extractFields(
   events: SplunkEvent[],
   directives: ConfDirective[],
-  diagnostics?: ValidationDiagnostic[],
-  captureOffsets: boolean = true,
+  ctx: RunContext,
 ): SplunkEvent[] {
+  const { diagnostics, captureOffsets } = ctx;
   const extractDirectives = directives
     .filter((d) => d.directiveType === 'EXTRACT')
     .sort(byClassName);
@@ -96,7 +97,7 @@ interface ExtractionState {
 }
 
 interface ExtractionOptions {
-  diagnostics: ValidationDiagnostic[] | undefined;
+  diagnostics: DiagnosticSink | undefined;
   captureOffsets: boolean;
   /** Source fields already warned about, so each is reported once per run. */
   reportedStrippedRefs: Set<string>;

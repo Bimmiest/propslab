@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { applyEvalExpressions } from '../processors/evalProcessor';
 import type { ConfDirective, SplunkEvent, ValidationDiagnostic } from '../types';
+import { runCtx } from './runCtx';
 
 const ev = (): SplunkEvent => ({
   _raw: 'x', _time: null, _meta: {}, fields: { n: '3.14159' },
@@ -12,7 +13,7 @@ const evalDir = (expr: string): ConfDirective =>
 
 function warningsFor(expr: string): ValidationDiagnostic[] {
   const diagnostics: ValidationDiagnostic[] = [];
-  applyEvalExpressions([ev()], [evalDir(expr)], diagnostics);
+  applyEvalExpressions([ev()], [evalDir(expr)], runCtx(diagnostics));
   return diagnostics;
 }
 
@@ -39,7 +40,7 @@ describe('eval — every unsimulated builtin warns (#127)', () => {
   });
 
   it('sigfig still returns a usable value alongside the warning', () => {
-    const r = applyEvalExpressions([ev()], [evalDir('sigfig(n)')])[0]!;
+    const r = applyEvalExpressions([ev()], [evalDir('sigfig(n)')], runCtx())[0]!;
     expect(r.fields.out).toBe('3.14159');
   });
 });

@@ -8,7 +8,7 @@ import { routeEventsByAge } from './processors/routeByAge';
 import { applyIndexedExtractions } from './processors/indexedExtractions';
 import { annotatePunct } from './processors/punctAnnotator';
 import { applySedCommands } from './processors/sedCmd';
-import { applyTransforms, newTransformsWarned } from './processors/transformsProcessor';
+import { applyTransforms } from './processors/transformsProcessor';
 import { applyCloneIndexTime } from './processors/cloneSourcetype';
 import { extractFields } from './processors/fieldExtractor';
 import { applyKvMode } from './processors/kvMode';
@@ -16,13 +16,13 @@ import { applyFieldAliases } from './processors/fieldAlias';
 import { applyEvalExpressions } from './processors/evalProcessor';
 import { attributeRawMutations } from './processors/rawMutationAttribution';
 import { lintConfigs, lintMatchedDirectives } from './configLint';
-import { createRunContext, type RunContext, type RunLimits } from './runContext';
+import { createRunContext, withDiagnostics, type DiagnosticSink, type RunContext, type RunLimits } from './runContext';
 
 function safeProcessor(
   name: string,
   events: SplunkEvent[],
   fn: () => SplunkEvent[],
-  diagnostics: ValidationDiagnostic[],
+  diagnostics: DiagnosticSink,
   file: ValidationDiagnostic['file'] = 'props.conf'
 ): SplunkEvent[] {
   try {
@@ -35,23 +35,6 @@ function safeProcessor(
     });
     return events; // Return unmodified events on failure
   }
-}
-
-/**
- * Collapse diagnostics that are identical in everything a reader can see. Used
- * by the per-event pipeline, where config-level problems would otherwise be
- * reported once per event.
- */
-function dedupeDiagnostics(diagnostics: ValidationDiagnostic[]): ValidationDiagnostic[] {
-  const seen = new Set<string>();
-  const out: ValidationDiagnostic[] = [];
-  for (const d of diagnostics) {
-    const key = `${d.level}|${d.file}|${d.layer ?? ''}|${d.line ?? ''}|${d.directiveKey ?? ''}|${d.message}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(d);
-  }
-  return out;
 }
 
 /**
@@ -89,7 +72,6 @@ interface PipelineRun {
   /** The metadata the events were broken with: the caller's, after any input-time assignment. */
   effectiveMetadata: EventMetadata;
   ctx: RunContext;
-  diagnostics: ValidationDiagnostic[];
 }
 
 /**
@@ -144,8 +126,8 @@ function resolveDirectives(
 
 /** The index-time stages, in Splunk's order. */
 function runIndexTime(rawData: string, run: PipelineRun): SplunkEvent[] {
-  const { directives, diagnostics, propsConf, transformsConf } = run;
-  const { now } = run.ctx;
+  const { directives, propsConf, transformsConf, ctx } = run;
+  const { diagnostics } = ctx;
   // Step 1-2: Line breaking and merging.
   // The SHOULD_LINEMERGE default that INDEXED_EXTRACTIONS implies (off for the
   // line-per-record formats, on for XML) is decided inside breakLines alone;
@@ -155,42 +137,41 @@ function runIndexTime(rawData: string, run: PipelineRun): SplunkEvent[] {
   // than failing the whole run. With nothing broken there are no events to
   // carry forward, so the fallback
   // is empty rather than the unbroken input.
-  let events = safeProcessor('LINE_BREAKER', [], () => breakLines(rawData, directives, run.effectiveMetadata, diagnostics), diagnostics);
+  let events = safeProcessor('LINE_BREAKER', [], () => breakLines(rawData, directives, run.effectiveMetadata, ctx), diagnostics);
 
   // Step 3: Truncation
-  events = safeProcessor('TRUNCATE', events, () => truncateEvents(events, directives, diagnostics), diagnostics);
+  events = safeProcessor('TRUNCATE', events, () => truncateEvents(events, directives, ctx), diagnostics);
 
   // Step 4: Timestamp extraction
-  events = safeProcessor('Timestamp', events, () => extractTimestamps(events, directives, diagnostics, new Date(now)), diagnostics);
+  events = safeProcessor('Timestamp', events, () => extractTimestamps(events, directives, ctx), diagnostics);
 
   // Step 4b: ROUTE_EVENTS_OLDER_THAN — the spec runs the age test "after
   // timestamp extraction", so it reads the extracted _time, before any
   // index-time transform can rewrite it.
-  events = safeProcessor('ROUTE_EVENTS_OLDER_THAN', events, () => routeEventsByAge(events, directives, diagnostics, now), diagnostics);
+  events = safeProcessor('ROUTE_EVENTS_OLDER_THAN', events, () => routeEventsByAge(events, directives, ctx), diagnostics);
 
   // Step 5: Indexed extractions
-  events = safeProcessor('INDEXED_EXTRACTIONS', events, () => applyIndexedExtractions(events, directives, diagnostics, new Date(now)), diagnostics);
+  events = safeProcessor('INDEXED_EXTRACTIONS', events, () => applyIndexedExtractions(events, directives, ctx), diagnostics);
 
   // Step 6: SEDCMD
-  events = safeProcessor('SEDCMD', events, () => applySedCommands(events, directives, diagnostics), diagnostics);
+  events = safeProcessor('SEDCMD', events, () => applySedCommands(events, directives, ctx), diagnostics);
 
   // Step 7: Index-time TRANSFORMS — regex transforms, DEST_KEY routing, and
   // INGEST_EVAL / STOP_PROCESSING_IF stanzas are all applied here, interleaved
   // in TRANSFORMS-<class> list order, then every RULESET-<class> after them
   // (only when a props.conf stanza references them).
-  // One set of warning ledgers for this stage and the clone pass, which calls
-  // applyTransforms once per clone.
-  const warned = newTransformsWarned();
-  events = safeProcessor('TRANSFORMS', events, () => applyTransforms(events, directives, transformsConf, 'index-time', diagnostics, now, warned), diagnostics, 'transforms.conf');
+  // This stage and the clone pass, which calls applyTransforms once per clone,
+  // report against the run's one warning ledger.
+  events = safeProcessor('TRANSFORMS', events, () => applyTransforms(events, directives, transformsConf, 'index-time', ctx), diagnostics, 'transforms.conf');
 
   // Step 7b: CLONE_SOURCETYPE copies get the SEDCMD and TRANSFORMS of the
   // sourcetype they were cloned to.
-  events = safeProcessor('CLONE_SOURCETYPE', events, () => applyCloneIndexTime(events, propsConf, transformsConf, diagnostics, now, warned), diagnostics, 'transforms.conf');
+  events = safeProcessor('CLONE_SOURCETYPE', events, () => applyCloneIndexTime(events, propsConf, transformsConf, ctx), diagnostics, 'transforms.conf');
 
   // Step 8: ANNOTATE_PUNCT — the annotation processor runs after regex
   // replacement, so the punct signature reflects _raw as indexed (post-SEDCMD,
   // post-transforms), not as ingested.
-  return safeProcessor('ANNOTATE_PUNCT', events, () => annotatePunct(events, directives), diagnostics);
+  return safeProcessor('ANNOTATE_PUNCT', events, () => annotatePunct(events, directives, ctx), diagnostics);
 }
 
 /**
@@ -201,26 +182,26 @@ function runSearchTimeStages(
   events: SplunkEvent[],
   directives: ConfDirective[],
   run: PipelineRun,
-  diagnostics: ValidationDiagnostic[],
+  ctx: RunContext,
 ): SplunkEvent[] {
   const { transformsConf } = run;
-  const { now, captureOffsets } = run.ctx;
+  const { diagnostics } = ctx;
   // Step 8: EXTRACT (inline field extraction)
-  let ev = safeProcessor('EXTRACT', events, () => extractFields(events, directives, diagnostics, captureOffsets), diagnostics);
+  let ev = safeProcessor('EXTRACT', events, () => extractFields(events, directives, ctx), diagnostics);
   // Step 9: Search-time REPORT transforms (run BEFORE automatic KV — Splunk's
   // documented order is inline EXTRACT → REPORT field transforms → automatic KV).
-  ev = safeProcessor('REPORT', ev, () => applyTransforms(ev, directives, transformsConf, 'search-time', diagnostics), diagnostics, 'transforms.conf');
+  ev = safeProcessor('REPORT', ev, () => applyTransforms(ev, directives, transformsConf, 'search-time', ctx), diagnostics, 'transforms.conf');
   // Step 10: KV_MODE (automatic key-value extraction)
-  ev = safeProcessor('KV_MODE', ev, () => applyKvMode(ev, directives, diagnostics), diagnostics);
+  ev = safeProcessor('KV_MODE', ev, () => applyKvMode(ev, directives, ctx), diagnostics);
   // Step 11: FIELDALIAS
-  ev = safeProcessor('FIELDALIAS', ev, () => applyFieldAliases(ev, directives, diagnostics), diagnostics);
+  ev = safeProcessor('FIELDALIAS', ev, () => applyFieldAliases(ev, directives, ctx), diagnostics);
   // Step 12: EVAL (calculated fields)
-  ev = safeProcessor('EVAL', ev, () => applyEvalExpressions(ev, directives, diagnostics, now), diagnostics);
+  ev = safeProcessor('EVAL', ev, () => applyEvalExpressions(ev, directives, ctx), diagnostics);
   // Step 13: attribute index-time `_raw` rewrites (SEDCMD, DEST_KEY = _raw) to
   // the fields whose extracted value they changed or destroyed. Runs last
   // because it replays search-time extraction against the pre-rewrite text,
   // which is the only way the association can be computed at all.
-  return safeProcessor('SEDCMD attribution', ev, () => attributeRawMutations(ev, () => directives, transformsConf), diagnostics);
+  return safeProcessor('SEDCMD attribution', ev, () => attributeRawMutations(ev, () => directives, transformsConf, ctx), diagnostics);
 }
 
 const metaKey = (m: EventMetadata) => `${m.sourcetype}|${m.host}|${m.source}`;
@@ -253,16 +234,14 @@ function runSearchTimePerEvent(events: SplunkEvent[], run: PipelineRun, original
   // Each processor is called once PER EVENT here, so a diagnostic describing a
   // *config* problem (an invalid KV_MODE regex, an eval parse failure, a REPORT
   // whose REGEX will not compile) would be pushed once per event: 500 events,
-  // 500 identical warnings. Collect into a scratch array and merge the distinct
-  // entries afterwards. Genuinely per-event diagnostics carry their own line
-  // number, so they differ and all survive.
-  const perEventDiagnostics: ValidationDiagnostic[] = [];
-  const processed = events.flatMap((event, i) => {
+  // 500 identical warnings. Report through a view that keeps only the distinct
+  // entries. Genuinely per-event diagnostics carry their own line number, so
+  // they differ and all survive.
+  const ctx = withDiagnostics(run.ctx, run.ctx.diagnostics.deduplicating());
+  return events.flatMap((event, i) => {
     const evDirs = eventDirectives[i] ?? [];
-    return runSearchTimeStages([traceRematch(event, originalMetaKey, evDirs.length)], evDirs, run, perEventDiagnostics);
+    return runSearchTimeStages([traceRematch(event, originalMetaKey, evDirs.length)], evDirs, run, ctx);
   });
-  run.diagnostics.push(...dedupeDiagnostics(perEventDiagnostics));
-  return processed;
 }
 
 /**
@@ -380,7 +359,6 @@ export function runPipeline(
     transformsConf,
     ...resolveDirectives(propsConf, metadata, diagnostics),
     ctx,
-    diagnostics,
   };
   lintMatchedDirectives(run.directives, diagnostics);
 
@@ -396,7 +374,7 @@ export function runPipeline(
     events = runSearchTimePerEvent(events, run, originalMetaKey);
   } else {
     warnBatchMetadataRewrites(events, originalMetaKey, diagnostics);
-    events = runSearchTimeStages(events, run.searchTimeDirectives, run, diagnostics);
+    events = runSearchTimeStages(events, run.searchTimeDirectives, run, ctx);
   }
 
   // Belt and braces: a processor that threw leaves `rawMutations` in place, and

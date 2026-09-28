@@ -4,6 +4,7 @@ import { safeRegex, validateRegex, type RegexMatch, type SplunkRegex } from '../
 import { byClassName } from '../utils/asciiCompare';
 import { changeWindow } from '../utils/changeWindow';
 import { atDirective } from '../parser/provenance';
+import type { RunContext, DiagnosticSink } from '../runContext';
 
 interface SedCommand {
   className: string;
@@ -127,7 +128,7 @@ function parseTransliterate(
   toRaw: string,
   delimiter: string,
   dir?: ConfDirective,
-  diagnostics?: ValidationDiagnostic[],
+  diagnostics?: DiagnosticSink,
 ): SedCommand | null {
   const from = [...unescapeTranslateSet(fromRaw, delimiter)];
   const to = [...unescapeTranslateSet(toRaw, delimiter)];
@@ -169,7 +170,7 @@ function parseTransliterate(
 export function parseSedExpression(
   value: string,
   dir?: ConfDirective,
-  diagnostics?: ValidationDiagnostic[],
+  diagnostics?: DiagnosticSink,
 ): SedCommand | null {
   const trimmed = value.trim();
   if (!trimmed) return null;
@@ -271,8 +272,9 @@ export function parseSedExpression(
 export function applySedCommands(
   events: SplunkEvent[],
   directives: ConfDirective[],
-  diagnostics?: ValidationDiagnostic[],
+  ctx: RunContext,
 ): SplunkEvent[] {
+  const { diagnostics } = ctx;
   const sedDirectives = directives
     .filter((d) => d.directiveType === 'SEDCMD')
     .sort(byClassName);

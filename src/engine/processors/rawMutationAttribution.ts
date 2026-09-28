@@ -3,6 +3,7 @@ import { extractFields } from './fieldExtractor';
 import { applyTransforms } from './transformsProcessor';
 import { applyKvMode } from './kvMode';
 import { getField, hasField } from '../utils/fieldBag';
+import { replayContext, type RunContext } from '../runContext';
 
 type FieldBag = Record<string, string | string[]>;
 
@@ -34,7 +35,9 @@ export function attributeRawMutations(
   events: SplunkEvent[],
   resolveDirectives: (event: SplunkEvent, index: number) => ConfDirective[],
   transformsConf: ParsedConf,
+  ctx: RunContext,
 ): SplunkEvent[] {
+  const replay = replayContext(ctx);
   return events.map((event, index) => {
     const mutations = event.rawMutations;
     if (!mutations || mutations.length === 0) return strip(event);
@@ -46,7 +49,7 @@ export function attributeRawMutations(
     const extract = (raw: string): FieldBag => {
       const hit = cache.get(raw);
       if (hit) return hit;
-      const fields = extractFromRaw(event, raw, directives, transformsConf);
+      const fields = extractFromRaw(event, raw, directives, transformsConf, replay);
       cache.set(raw, fields);
       return fields;
     };
@@ -67,15 +70,16 @@ export function attributeRawMutations(
 
 /**
  * Run the `_raw`-reading extractors over a hypothetical version of the event.
- * Diagnostics are deliberately dropped: this is a replay of rules that already
- * reported themselves on the real pass, and re-reporting would duplicate every
- * warning once per mutation.
+ * Diagnostics are deliberately dropped (`replay` reports nowhere): this is a
+ * replay of rules that already reported themselves on the real pass, and
+ * re-reporting would duplicate every warning once per mutation.
  */
 function extractFromRaw(
   event: SplunkEvent,
   raw: string,
   directives: ConfDirective[],
   transformsConf: ParsedConf,
+  replay: RunContext,
 ): FieldBag {
   const probe: SplunkEvent = {
     ...event,
@@ -88,12 +92,12 @@ function extractFromRaw(
   };
   let probed = [probe];
   try {
-    // captureOffsets: false unconditionally — this probe returns `fields` alone
-    // and starts from `fieldOffsets: undefined`, so every span the 'd' flag
-    // would compute here is discarded, so declining them saves the output.
-    probed = extractFields(probed, directives, undefined, false);
-    probed = applyTransforms(probed, directives, transformsConf, 'search-time');
-    probed = applyKvMode(probed, directives);
+    // The replay context declines capture offsets: this probe returns `fields`
+    // alone and starts from `fieldOffsets: undefined`, so every span the 'd'
+    // flag would compute here is discarded.
+    probed = extractFields(probed, directives, replay);
+    probed = applyTransforms(probed, directives, transformsConf, 'search-time', replay);
+    probed = applyKvMode(probed, directives, replay);
   } catch {
     // A replay that throws yields no attribution for this mutation rather than
     // failing the pipeline — the real pass already surfaced the error.

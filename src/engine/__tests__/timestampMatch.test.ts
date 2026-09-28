@@ -4,6 +4,7 @@ import type { TimeConfig } from '../timestampMatch';
 import { extractTimestamps } from '../processors/timestampExtractor';
 import { runPipeline } from '../pipeline';
 import type { ConfDirective, SplunkEvent, ValidationDiagnostic } from '../types';
+import { runCtx } from './runCtx';
 
 function config(overrides: Partial<TimeConfig> = {}): TimeConfig {
   return { timePrefix: null, timeFormat: null, maxLookahead: 128, tz: null, ...overrides };
@@ -149,7 +150,7 @@ describe('probeTimestamp agrees with extractTimestamps (#313)', () => {
       line: 1,
       directiveType: key,
     }));
-    const extracted = extractTimestamps([event(raw)], directives, undefined, now)[0]!;
+    const extracted = extractTimestamps([event(raw)], directives, runCtx(undefined, { now: now }))[0]!;
     const source = extracted.processingTrace.at(-1)?.timeSource;
     const probe = probeTimestamp(
       raw,
@@ -234,8 +235,7 @@ describe('probeTimestamp agrees with extractTimestamps (#313)', () => {
         { key: 'TIME_PREFIX', value: '', line: 1, directiveType: 'TIME_PREFIX' },
         { key: 'TIME_FORMAT', value: '%Y-%m-%d %H:%M:%S', line: 2, directiveType: 'TIME_FORMAT' },
       ],
-      diagnostics,
-      NOW,
+      runCtx(diagnostics, { now: NOW }),
     );
     expect(diagnostics.filter((d) => d.directiveKey === 'TIME_PREFIX')).toEqual([]);
   });

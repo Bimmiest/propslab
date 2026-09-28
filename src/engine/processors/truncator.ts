@@ -1,7 +1,8 @@
-import type { SplunkEvent, ConfDirective, ValidationDiagnostic } from '../types';
+import type { SplunkEvent, ConfDirective } from '../types';
 import { atDirective } from '../parser/provenance';
 import { segmentLengthsOf } from './lineBreaker';
 import { effectiveDirective } from '../utils/directiveValues';
+import type { RunContext } from '../runContext';
 
 // The engine type-checks against ES2022 alone (tsconfig.engine.json), so that
 // reaching for a browser-only global fails the build instead of failing in a
@@ -82,8 +83,9 @@ function splitIntoSegments(event: SplunkEvent): string[] {
 export function truncateEvents(
   events: SplunkEvent[],
   directives: ConfDirective[],
-  diagnostics?: ValidationDiagnostic[],
+  ctx: RunContext,
 ): SplunkEvent[] {
+  const { diagnostics } = ctx;
   const truncateDir = effectiveDirective(directives, 'TRUNCATE');
   const isDefault = !truncateDir;
   const rawValue = truncateDir?.value.trim() ?? '';

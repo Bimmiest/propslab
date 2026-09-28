@@ -6,11 +6,12 @@
  * merges segments based on SHOULD_LINEMERGE and related directives.
  */
 
-import type { ConfDirective, EventMetadata, SplunkEvent, ValidationDiagnostic } from '../types';
+import type { ConfDirective, EventMetadata, SplunkEvent } from '../types';
 import { safeRegex, validateRegex, type SplunkRegex } from '../../utils/splunkRegex';
 import { atDirective } from '../parser/provenance';
 import { effectiveDirective, parseSplunkBool } from '../utils/directiveValues';
 import { createTimestampFinder, readTimestampLocation } from './timestampRecognizer';
+import type { RunContext, DiagnosticSink } from '../runContext';
 
 const XML_EXTRACTIONS = new Set(['xml', 'xmlkv', 'xmlkv-winevt']);
 
@@ -115,7 +116,7 @@ function warnUncompilableBreakPattern(
   pattern: string | undefined,
   compiled: SplunkRegex | null,
   directives: ConfDirective[],
-  diagnostics?: ValidationDiagnostic[],
+  diagnostics?: DiagnosticSink,
 ): void {
   if (!diagnostics || pattern === undefined || compiled !== null) return;
   diagnostics.push({
@@ -159,7 +160,7 @@ interface MergedSegment extends Segment {
 function resolveLineBreaker(
   declared: string | undefined,
   directives: ConfDirective[],
-  diagnostics?: ValidationDiagnostic[],
+  diagnostics?: DiagnosticSink,
 ): string {
   if (declared === undefined) return DEFAULT_LINE_BREAKER;
   if (countCaptureGroups(declared) > 0) return declared;
@@ -193,7 +194,7 @@ export function splitSegments(
   rawData: string,
   pattern: string,
   directives: ConfDirective[],
-  diagnostics?: ValidationDiagnostic[],
+  diagnostics?: DiagnosticSink,
 ): Segment[] {
   const lineBreakerRegex = safeRegex(pattern);
   if (!lineBreakerRegex) {
@@ -313,7 +314,7 @@ interface MergeRules {
 function compileBreakPattern(
   key: 'BREAK_ONLY_BEFORE' | 'MUST_BREAK_AFTER' | 'MUST_NOT_BREAK_AFTER',
   directives: ConfDirective[],
-  diagnostics: ValidationDiagnostic[] | undefined,
+  diagnostics: DiagnosticSink | undefined,
 ): SplunkRegex | null {
   const pattern = getDirective(directives, key);
   const compiled = pattern ? safeRegex(pattern) : null;
@@ -324,7 +325,7 @@ function compileBreakPattern(
   return compiled;
 }
 
-function readMergeRules(directives: ConfDirective[], diagnostics?: ValidationDiagnostic[]): MergeRules {
+function readMergeRules(directives: ConfDirective[], diagnostics?: DiagnosticSink): MergeRules {
   // Not anchored: a line that matches anywhere starts a new event, and the
   // event starts at the beginning of that line, not at the match. Checked on
   // Splunk 10.4.0 (#323): BREAK_ONLY_BEFORE = EVENT broke before
@@ -543,8 +544,9 @@ export function breakLines(
   rawData: string,
   directives: ConfDirective[],
   metadata: EventMetadata,
-  diagnostics?: ValidationDiagnostic[],
+  ctx: RunContext,
 ): SplunkEvent[] {
+  const { diagnostics } = ctx;
   if (!rawData || rawData.length === 0) {
     return [];
   }

@@ -23,6 +23,7 @@
 import type { ConfDirective, SplunkEvent } from '../types';
 import { setField } from '../utils/fieldBag';
 import { effectiveBool } from '../utils/directiveValues';
+import type { RunContext } from '../runContext';
 
 const PUNCT_MAX_LENGTH = 50;
 
@@ -40,7 +41,8 @@ export function buildPunct(raw: string): string {
   return out;
 }
 
-export function annotatePunct(events: SplunkEvent[], directives: ConfDirective[]): SplunkEvent[] {
+/** Takes the run context like every stage, though punct reads nothing from it and reports nothing. */
+export function annotatePunct(events: SplunkEvent[], directives: ConfDirective[], _ctx: RunContext): SplunkEvent[] {
   // Splunk's default is true; only an explicit false disables the field.
   if (!effectiveBool(directives, 'ANNOTATE_PUNCT', true)) return events;
 

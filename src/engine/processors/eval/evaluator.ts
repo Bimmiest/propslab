@@ -165,8 +165,9 @@ function evalCall(name: string, argNodes: Node[], ctx: EvalCtx): EvalValue {
 export function evaluateExpression(
   expr: string,
   event: SplunkEvent,
-  onStubWarning?: (fn: string) => void,
-  now: number = Date.now(),
+  onStubWarning: ((fn: string) => void) | undefined,
+  /** What now()/time() return, in epoch ms: the run's clock. */
+  now: number,
   onRegexError?: (fn: string, pattern: string) => void,
 ): EvalValue {
   return evalNode(parseExpression(expr), { event, now, onStubWarning, onRegexError });

@@ -14,6 +14,7 @@ import { applyEvalExpressions } from '../processors/evalProcessor';
 import { evaluateExpression } from '../processors/eval/evaluator';
 import { applyIngestEval } from '../transforms/ingestEval';
 import type { SplunkEvent, ConfDirective, ValidationDiagnostic } from '../types';
+import { runCtx } from './runCtx';
 
 function event(fields: Record<string, string> = {}): SplunkEvent {
   return {
@@ -110,7 +111,7 @@ describe('assigning a boolean result (#358)', () => {
 
   it('EVAL- writes no field and reports the error', () => {
     const diagnostics: ValidationDiagnostic[] = [];
-    const out = applyEvalExpressions([event({ a: '1', b: '1' })], [evalDir('x', 'a==b')], diagnostics)[0]!;
+    const out = applyEvalExpressions([event({ a: '1', b: '1' })], [evalDir('x', 'a==b')], runCtx(diagnostics))[0]!;
     expect(out.fields['x']).toBeUndefined();
     expect(diagnostics).toHaveLength(1);
     expect(diagnostics[0]).toMatchObject({ level: 'error', directiveKey: 'EVAL-x' });
@@ -118,7 +119,7 @@ describe('assigning a boolean result (#358)', () => {
   });
 
   it('leaves an if() over the same test working', () => {
-    const out = applyEvalExpressions([event({ a: '1', b: '1' })], [evalDir('x', 'if(a==b, "same", "diff")')])[0]!;
+    const out = applyEvalExpressions([event({ a: '1', b: '1' })], [evalDir('x', 'if(a==b, "same", "diff")')], runCtx())[0]!;
     expect(out.fields['x']).toBe('same');
   });
 
@@ -127,7 +128,7 @@ describe('assigning a boolean result (#358)', () => {
     const dirs: ConfDirective[] = [
       { key: 'INGEST_EVAL', value: 'x=a==b, y="kept"', line: 1, directiveType: 'INGEST_EVAL' },
     ];
-    const out = applyIngestEval([event({ a: '1', b: '2' })], dirs, diagnostics)[0]!;
+    const out = applyIngestEval([event({ a: '1', b: '2' })], dirs, runCtx(diagnostics))[0]!;
     expect(out.fields['x']).toBeUndefined();
     expect(out.fields['y']).toBe('kept');
     expect(diagnostics.filter((d) => d.level === 'error')).toHaveLength(1);

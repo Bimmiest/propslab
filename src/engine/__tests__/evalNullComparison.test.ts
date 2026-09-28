@@ -20,6 +20,7 @@ import { evaluateExpression } from '../processors/eval/evaluator';
 import { applyIngestEval } from '../transforms/ingestEval';
 import { evaluateStopCondition } from '../transforms/stopProcessing';
 import type { SplunkEvent, ConfDirective } from '../types';
+import { runCtx } from './runCtx';
 
 function event(fields: Record<string, string> = {}): SplunkEvent {
   return {
@@ -38,11 +39,11 @@ const evalDir = (value: string): ConfDirective =>
 
 /** What `EVAL-out = expr` writes, or undefined when it writes nothing. */
 function evalWith(expr: string, fields: Record<string, string> = {}) {
-  return applyEvalExpressions([event(fields)], [evalDir(expr)])[0]!.fields['out'];
+  return applyEvalExpressions([event(fields)], [evalDir(expr)], runCtx())[0]!.fields['out'];
 }
 
 /** The raw eval value, for asserting NULL itself rather than its effect. */
-const value = (expr: string, fields: Record<string, string> = {}) => evaluateExpression(expr, event(fields));
+const value = (expr: string, fields: Record<string, string> = {}) => evaluateExpression(expr, event(fields), undefined, Date.now());
 
 describe('comparison operators with a NULL operand (#343)', () => {
   it.each(['=', '==', '!=', '<', '>', '<=', '>='])('missing %s "" is NULL', (op) => {
@@ -151,8 +152,8 @@ describe('consumers of a NULL condition (#343)', () => {
     const dirs: ConfDirective[] = [
       { key: 'INGEST_EVAL', value: 'queue=if(level!="INFO","nullQueue","indexQueue")', line: 1, directiveType: 'INGEST_EVAL' },
     ];
-    expect(applyIngestEval([event()], dirs)[0]!._meta._queue).toBe('indexQueue');
-    expect(applyIngestEval([event({ level: 'DEBUG' })], dirs)[0]!._meta._queue).toBe('nullQueue');
+    expect(applyIngestEval([event()], dirs, runCtx())[0]!._meta._queue).toBe('indexQueue');
+    expect(applyIngestEval([event({ level: 'DEBUG' })], dirs, runCtx())[0]!._meta._queue).toBe('nullQueue');
   });
 
   it('STOP_PROCESSING_IF does not stop on a NULL condition', () => {
@@ -160,7 +161,7 @@ describe('consumers of a NULL condition (#343)', () => {
     const dirs: ConfDirective[] = [
       { key: 'STOP_PROCESSING_IF', value: 'level != "INFO"', line: 1, directiveType: 'STOP_PROCESSING_IF' },
     ];
-    expect(evaluateStopCondition(event(), dirs, [], 0)?.stop).toBe(false);
-    expect(evaluateStopCondition(event({ level: 'DEBUG' }), dirs, [], 0)?.stop).toBe(true);
+    expect(evaluateStopCondition(event(), dirs, runCtx([], { now: 0 }))?.stop).toBe(false);
+    expect(evaluateStopCondition(event({ level: 'DEBUG' }), dirs, runCtx([], { now: 0 }))?.stop).toBe(true);
   });
 });

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { applyFieldAliases } from '../processors/fieldAlias';
 import type { SplunkEvent, ConfDirective, ValidationDiagnostic } from '../types';
+import { runCtx } from './runCtx';
 
 function event(fields: Record<string, string | string[]>): SplunkEvent {
   return {
@@ -20,18 +21,18 @@ function dir(className: string, value: string): ConfDirective {
 
 describe('applyFieldAliases — literal', () => {
   it('creates an alias and keeps the original field', () => {
-    const e = applyFieldAliases([event({ ip: '10.0.0.1' })], [dir('a', 'ip AS ipaddress')])[0]!;
+    const e = applyFieldAliases([event({ ip: '10.0.0.1' })], [dir('a', 'ip AS ipaddress')], runCtx())[0]!;
     expect(e.fields['ipaddress']).toBe('10.0.0.1');
     expect(e.fields['ip']).toBe('10.0.0.1');
   });
 
   it('ASNEW does not overwrite an existing target', () => {
-    const e = applyFieldAliases([event({ ip: '10.0.0.1', addr: 'keep' })], [dir('a', 'ip ASNEW addr')])[0]!;
+    const e = applyFieldAliases([event({ ip: '10.0.0.1', addr: 'keep' })], [dir('a', 'ip ASNEW addr')], runCtx())[0]!;
     expect(e.fields['addr']).toBe('keep');
   });
 
   it('does nothing when the source field is absent', () => {
-    const e = applyFieldAliases([event({ other: 'x' })], [dir('a', 'ip AS ipaddress')])[0]!;
+    const e = applyFieldAliases([event({ other: 'x' })], [dir('a', 'ip AS ipaddress')], runCtx())[0]!;
     expect(e.fields['ipaddress']).toBeUndefined();
   });
 });
@@ -44,7 +45,7 @@ describe('applyFieldAliases — wildcards are not supported (Splunk parity)', ()
     const e = applyFieldAliases(
       [event({ src_ip: '10.0.0.1', src_port: '443' })],
       [dir('w', 'src_* AS dest_*')],
-      diags,
+      runCtx(diags),
     )[0]!;
     expect(e.fields['dest_ip']).toBeUndefined();
     expect(e.fields['dest_port']).toBeUndefined();
@@ -57,7 +58,7 @@ describe('applyFieldAliases — wildcards are not supported (Splunk parity)', ()
     const e = applyFieldAliases(
       [event({ 'event.field1': 'A', 'event.field2': 'B' })],
       [dir('w', 'event.* AS *')],
-      diags,
+      runCtx(diags),
     )[0]!;
     expect(e.fields['field1']).toBeUndefined();
     expect(e.fields['field2']).toBeUndefined();
@@ -67,13 +68,13 @@ describe('applyFieldAliases — wildcards are not supported (Splunk parity)', ()
 
 describe('applyFieldAliases — dotted (nested JSON) field names', () => {
   it('resolves a single-quoted dotted source field', () => {
-    const e = applyFieldAliases([event({ 'event.field': 'V' })], [dir('a', "'event.field' AS myfield")])[0]!;
+    const e = applyFieldAliases([event({ 'event.field': 'V' })], [dir('a', "'event.field' AS myfield")], runCtx())[0]!;
     expect(e.fields['myfield']).toBe('V');
   });
 
   it('warns when an unquoted dotted source name is used', () => {
     const diags: ValidationDiagnostic[] = [];
-    applyFieldAliases([event({ 'event.field': 'V' })], [dir('a', 'event.field AS myfield')], diags);
+    applyFieldAliases([event({ 'event.field': 'V' })], [dir('a', 'event.field AS myfield')], runCtx(diags));
     const warn = diags.find((d) => d.message.includes('event.field'));
     expect(warn).toBeDefined();
     expect(warn!.level).toBe('warning');
@@ -82,7 +83,7 @@ describe('applyFieldAliases — dotted (nested JSON) field names', () => {
 
   it('does not warn for a plain unquoted source with no special characters', () => {
     const diags: ValidationDiagnostic[] = [];
-    applyFieldAliases([event({ ip: '1' })], [dir('a', 'ip AS addr')], diags);
+    applyFieldAliases([event({ ip: '1' })], [dir('a', 'ip AS addr')], runCtx(diags));
     expect(diags).toHaveLength(0);
   });
 });

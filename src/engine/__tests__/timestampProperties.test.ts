@@ -28,6 +28,7 @@ import { formatStrftime, parseTimestamp } from '../../utils/strftime';
 import { recognizeTimestamp } from '../processors/timestampRecognizer';
 import { extractTimestamps } from '../processors/timestampExtractor';
 import type { SplunkEvent } from '../types';
+import { runCtx } from './runCtx';
 
 fc.configureGlobal({ seed: 371, numRuns: 200 });
 
@@ -293,7 +294,7 @@ describe('extractTimestamps — places _time at the instant TIME_FORMAT reads', 
         ({ format, text, expected }, withPrefix, sinceStamp, host) => {
           const directives = [dir('TIME_FORMAT', format), ...(withPrefix ? [dir('TIME_PREFIX', 'ts=')] : [])];
           const [out] = inHostZone(host, () =>
-            extractTimestamps([event(`id=7 ts=${text} done`)], directives, [], new Date(expected + sinceStamp)),
+            extractTimestamps([event(`id=7 ts=${text} done`)], directives, runCtx([], { now: new Date(expected + sinceStamp) })),
           );
           expect(out!._time?.getTime()).toBe(expected);
         },

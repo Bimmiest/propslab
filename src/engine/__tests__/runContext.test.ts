@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createCollector, createRunContext, DEFAULT_LIMITS, replayContext, withDiagnostics } from '../runContext';
 import type { ValidationDiagnostic } from '../types';
+import { runPipeline } from '../pipeline';
 
 const warn = (message: string, line?: number): ValidationDiagnostic => ({
   level: 'warning',
@@ -80,5 +81,28 @@ describe('createRunContext', () => {
     expect(sink).toEqual([]);
     expect(replay.now).toBe(9);
     expect(replay.captureOffsets).toBe(false);
+  });
+});
+
+describe('the run ledger through runPipeline', () => {
+  const metadata = { index: 'main', host: 'h', source: 's', sourcetype: 'st' };
+
+  it('keys transforms warnings by phase, so each pass that reaches a bad REGEX says so', () => {
+    const props = '[st]\nSHOULD_LINEMERGE = false\nTRANSFORMS-a = bad\nREPORT-b = bad\n';
+    const transforms = '[bad]\nREGEX = (unclosed\nFORMAT = x::$1\n';
+    for (const perEventPipeline of [false, true]) {
+      const { diagnostics } = runPipeline('one\ntwo\nthree', metadata, props, transforms, { perEventPipeline });
+      const skipped = diagnostics.filter((d) => d.message.startsWith('Transform "bad" was skipped'));
+      // Once for TRANSFORMS-, once for REPORT-; never once per event.
+      expect(skipped).toHaveLength(2);
+    }
+  });
+
+  it('shares the INGEST_EVAL ledger with every clone', () => {
+    const props = '[st]\nSHOULD_LINEMERGE = false\nTRANSFORMS-a = clone, ev\n[copy]\nTRANSFORMS-a = ev\n';
+    const transforms = '[clone]\nREGEX = .\nCLONE_SOURCETYPE = copy\n[ev]\nINGEST_EVAL = x=1+\n';
+    const { diagnostics } = runPipeline('one\ntwo\nthree', metadata, props, transforms, { perEventPipeline: false });
+    const errors = diagnostics.filter((d) => d.message.startsWith('INGEST_EVAL x:'));
+    expect(errors).toHaveLength(1);
   });
 });

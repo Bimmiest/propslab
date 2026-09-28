@@ -12,6 +12,7 @@ import { describe, it, expect } from 'vitest';
 import { applyEvalExpressions } from '../processors/evalProcessor';
 import { runPipeline } from '../pipeline';
 import type { SplunkEvent, ConfDirective, ValidationDiagnostic } from '../types';
+import { runCtx } from './runCtx';
 
 function event(fields: Record<string, string> = {}): SplunkEvent {
   return {
@@ -30,7 +31,7 @@ const evalDir = (className: string, value: string): ConfDirective =>
 
 // Read through if(): a field cannot be assigned a boolean result.
 const cidr = (range: string, ip: string) =>
-  applyEvalExpressions([event({ ip })], [evalDir('r', `if(cidrmatch("${range}", ip), "true", "false")`)])[0]!.fields['r'];
+  applyEvalExpressions([event({ ip })], [evalDir('r', `if(cidrmatch("${range}", ip), "true", "false")`)], runCtx())[0]!.fields['r'];
 
 describe('cidrmatch() (#291)', () => {
   it.each([
@@ -87,15 +88,15 @@ describe('cidrmatch() (#291)', () => {
   // and an if() guard still takes its else branch. Doc-derived (NULL is falsy
   // in a condition), not captured.
   it('yields NULL for an absent address, as the comparison operators do (#343)', () => {
-    const r = applyEvalExpressions([event()], [evalDir('r', 'cidrmatch("10.0.0.0/8", nope)')])[0]!;
+    const r = applyEvalExpressions([event()], [evalDir('r', 'cidrmatch("10.0.0.0/8", nope)')], runCtx())[0]!;
     expect(r.fields['r']).toBeUndefined();
-    const guarded = applyEvalExpressions([event()], [evalDir('r', 'if(cidrmatch("10.0.0.0/8", nope), "in", "out")')])[0]!;
+    const guarded = applyEvalExpressions([event()], [evalDir('r', 'if(cidrmatch("10.0.0.0/8", nope), "in", "out")')], runCtx())[0]!;
     expect(guarded.fields['r']).toBe('out');
   });
 
   it('no longer warns that it is not simulated', () => {
     const diagnostics: ValidationDiagnostic[] = [];
-    applyEvalExpressions([event({ ip: '10.0.0.1' })], [evalDir('r', 'if(cidrmatch("10.0.0.0/8", ip), 1, 0)')], diagnostics);
+    applyEvalExpressions([event({ ip: '10.0.0.1' })], [evalDir('r', 'if(cidrmatch("10.0.0.0/8", ip), 1, 0)')], runCtx(diagnostics));
     expect(diagnostics).toEqual([]);
   });
 });
@@ -103,7 +104,7 @@ describe('cidrmatch() (#291)', () => {
 describe('eval regex arguments that do not compile (#291)', () => {
   const run = (expr: string, events = [event({ s: 'abc' })]) => {
     const diagnostics: ValidationDiagnostic[] = [];
-    const out = applyEvalExpressions(events, [evalDir('r', expr)], diagnostics);
+    const out = applyEvalExpressions(events, [evalDir('r', expr)], runCtx(diagnostics));
     return { out, diagnostics };
   };
 
