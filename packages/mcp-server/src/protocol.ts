@@ -51,6 +51,9 @@ export type SimulateResponse = SerializedSimulation;
 
 export interface ValidateResponse {
   diagnostics: ValidationDiagnostic[];
+  /** Present only when `diagnostics` was cut to fit the response cap. */
+  diagnosticCount?: number;
+  truncationNote?: string;
 }
 
 /** One directive of a stanza, with the layer provenance parseConf attached. */
@@ -70,11 +73,17 @@ export interface ExplainStanza {
   layer?: string;
   layers?: { layer: string; lineRange: { start: number; end: number } }[];
   directives: ExplainDirective[];
+  /** Present only when `directives` was cut to fit the response cap. */
+  directiveCount?: number;
 }
 
 export interface ExplainResponse {
   parseErrors: ValidationDiagnostic[];
   stanzas: ExplainStanza[];
+  /** The `…Count` fields are present only when that list was cut to fit the response cap. */
+  parseErrorCount?: number;
+  stanzaCount?: number;
+  truncationNote?: string;
   /** Present only for props.conf when event metadata was supplied. */
   resolution?: {
     metadata: EventMetadata;
@@ -84,6 +93,8 @@ export interface ExplainResponse {
     matchedStanzas: { name: string; type: ExplainStanza['type']; layer?: string }[];
     /** The attribute set the event is actually processed with. */
     effectiveDirectives: (ExplainDirective & { stanza: string })[];
+    matchedStanzaCount?: number;
+    effectiveDirectiveCount?: number;
   };
 }
 

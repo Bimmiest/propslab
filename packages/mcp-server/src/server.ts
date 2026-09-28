@@ -5,6 +5,7 @@
  * the fallback for embedders that skip the launcher.
  */
 import './v8Flags';
+import type { Writable } from 'node:stream';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { createStdioTransport } from './messageLimit';
 import { registerTools } from './tools';
@@ -32,7 +33,25 @@ export function createServer(options: CreateServerOptions = {}): McpServer {
   return server;
 }
 
+/**
+ * A failed write to stdout — the client gone (EPIPE), or the pipe refusing
+ * more (ENOBUFS) — is an `error` event nothing else listens for, which Node
+ * turns into an uncaught exception and a stack trace. Nothing more can be
+ * said over the protocol then, so say it on stderr and exit: 0 when the
+ * client simply went away, 1 otherwise.
+ */
+export function exitOnStdoutError(
+  stdout: Writable = process.stdout,
+  exit: (code: number) => void = (code) => process.exit(code),
+): void {
+  stdout.on('error', (err: NodeJS.ErrnoException) => {
+    console.error(`propslab MCP server: cannot write to stdout (${err.code ?? err.message}); exiting`);
+    exit(err.code === 'EPIPE' ? 0 : 1);
+  });
+}
+
 export async function start(): Promise<void> {
+  exitOnStdoutError();
   // Compiled now rather than on the first call: a missing or broken module
   // fails the start, not a request.
   regexEngineModule();
