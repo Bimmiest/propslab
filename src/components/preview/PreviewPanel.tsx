@@ -200,18 +200,13 @@ function FailureState({ message }: { message: string }) {
 }
 
 function EmptyState() {
-  const setRawData = useAppStore((s) => s.setRawData);
-  const setPropsConf = useAppStore((s) => s.setPropsConf);
-  const setTransformsConf = useAppStore((s) => s.setTransformsConf);
-  const setMetadata = useAppStore((s) => s.setMetadata);
+  const loadInputs = useAppStore((s) => s.loadInputs);
 
+  // loadInputs, not the four setters: it also makes the example the clean
+  // baseline, so an unedited example does not count as work to lose.
   const loadExample = (idx: number) => {
     const sample = SAMPLE_CONFIGS[idx];
-    if (!sample) return;
-    setRawData(sample.rawData);
-    setPropsConf(sample.propsConf);
-    setTransformsConf(sample.transformsConf);
-    setMetadata(sample.metadata);
+    if (sample) loadInputs(sample);
   };
 
   return (

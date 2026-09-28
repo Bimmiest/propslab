@@ -4,7 +4,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { PreviewPanel } from '../PreviewPanel';
-import { useAppStore } from '../../../store/useAppStore';
+import { useAppStore, selectSessionDirty } from '../../../store/useAppStore';
+import { SAMPLE_CONFIGS } from '../../../engine/sampleData';
 import type { EventMetadata, ProcessingResult } from '../../../engine/types';
 
 const initial = useAppStore.getState();
@@ -40,6 +41,20 @@ describe('PreviewPanel', () => {
       expect(tab).toHaveAttribute('aria-controls', panels[i]!.id);
       expect(panels[i]).toHaveAttribute('aria-labelledby', tab.id);
     });
+  });
+
+  // Loaded through loadInputs, so the example is the clean baseline: an
+  // unedited example is not work the command palette should warn about.
+  it('loads an example from the empty state as a clean session', () => {
+    render(<PreviewPanel />);
+    fireEvent.click(screen.getByRole('button', { name: /Apache Access Log/ }));
+    const state = useAppStore.getState();
+    expect(state.rawData).toBe(SAMPLE_CONFIGS[0]!.rawData);
+    expect(state.metadata).toEqual(SAMPLE_CONFIGS[0]!.metadata);
+    expect(selectSessionDirty(state)).toBe(false);
+
+    act(() => state.setPropsConf(`${state.propsConf}\n# edited`));
+    expect(selectSessionDirty(useAppStore.getState())).toBe(true);
   });
 
   it('ignores warnings when there is no result', () => {
