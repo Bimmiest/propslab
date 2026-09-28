@@ -76,10 +76,11 @@ export const DEFAULT_MATCH_LIMIT = 100000;
 export const DEFAULT_DEPTH_LIMIT = 1000;
 
 function parseLimit(value: string | undefined, fallback: number): number {
-  if (value === undefined) return fallback;
-  const n = Number(value.trim());
-  // Negative or non-numeric is unset in Splunk; directiveLint reports it.
-  if (!Number.isInteger(n) || n < 0) return fallback;
+  const text = value?.trim();
+  // Blank resets to the default, as directiveLint says; Number('') would be 0,
+  // i.e. no limit. Negative or non-numeric is unset too, and linted.
+  if (!text || !/^\d+$/.test(text)) return fallback;
+  const n = Number(text);
   // 0 is "no limit" in the spec.
   return n === 0 ? 0xffffffff : n;
 }

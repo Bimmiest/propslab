@@ -197,6 +197,14 @@ describe('MATCH_LIMIT and DEPTH_LIMIT', () => {
     expect(extractionLimits('-1', 'lots')).toEqual({ matchLimit: DEFAULT_MATCH_LIMIT, depthLimit: DEFAULT_DEPTH_LIMIT });
   });
 
+  it('treats an empty or blank value as unset, not as 0', () => {
+    expect(extractionLimits('', '  ')).toEqual({ matchLimit: DEFAULT_MATCH_LIMIT, depthLimit: DEFAULT_DEPTH_LIMIT });
+    expect(extractionLimits('1.5', '1e3')).toEqual({ matchLimit: DEFAULT_MATCH_LIMIT, depthLimit: DEFAULT_DEPTH_LIMIT });
+    const re = safeRegex('^(a+)+$', '', extractionLimits(''))!;
+    expect(re.exec(runaway)).toBeNull();
+    expect(re.lastError).toMatch(/match limit exceeded/);
+  });
+
   it('counts a match that hits the limit as no match, and says why', () => {
     const re = safeRegex('^(a+)+$', '', extractionLimits())!;
     expect(re.exec(runaway)).toBeNull();
