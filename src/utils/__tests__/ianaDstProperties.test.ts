@@ -134,7 +134,11 @@ describe('IANA wall clocks across DST transitions', () => {
       }),
       { seed: SEED, numRuns: 400 },
     );
-  });
+    // Most of the time is the oracle, not the parser: each new zone-year costs
+    // `transitions` a day-by-day Intl scan, several hundred of them per run.
+    // About 1 s alone and 2-3 s in a full coverage run, so the 5 s default
+    // was within reach of a busy machine.
+  }, 20_000);
 
   it('generates gaps and overlaps on both sides of UTC, in both hemispheres', () => {
     // Guards the generator: a property that never reached a gap would pass
