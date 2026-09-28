@@ -51,12 +51,11 @@ Coverage says a line ran; it does not say a test would notice the line being wro
 ```bash
 npm run test:mutation                  # full run; about 75 minutes on 4 cores
 npm run test:mutation -- --mutate src/engine/processors/kvMode.ts   # one file, a few minutes
-npm run test:mutation -- --incremental # reuse reports/stryker-incremental.json, retest only what changed
 ```
 
 Open `reports/mutation/mutation.html` for the survivors, line by line. The engine scores 79.6%, and `thresholds.break` in [`stryker.config.mjs`](stryker.config.mjs) holds it at 78% — a floor and a ratchet, like coverage.
 
-- **It is not in `ci.yml`.** A full run is too slow for every PR, so [`mutation.yml`](.github/workflows/mutation.yml) runs it weekly and on demand from scratch, and incrementally — against main's last report — on PRs and pushes that touch `src/engine/`. Incremental mode only notices changes to mutated and test files, which is why the weekly run starts cold.
+- **It is not in `ci.yml`.** A full run is too slow for every PR. [`mutation.yml`](.github/workflows/mutation.yml) runs the whole engine weekly and on demand, and on a PR mutates only the engine source files the PR changes, holding those to the same floor. A PR that touches a weakly tested file adds the tests that bring it up.
 - **Kill a survivor with a test that asserts behaviour**, not one written to move the number. Some survivors are *equivalent* — the mutant cannot change any result (a cache miss that recomputes the same value, a `??` whose left side is never nullish). Leave those.
 - **Module-level constants are skipped** (`ignoreStatic`): they cost a full suite each, and there are about 900. Pass `--ignoreStatic false` when you change one.
 - **`vitest.stryker.config.ts` carries a compatibility shim** for `@stryker-mutator/vitest-runner` 10 on vitest 5, without which every mutant inside a `describe()` is reported as surviving. When you bump either package, check that a run still kills mutants; the comment in that file says what to look for.
