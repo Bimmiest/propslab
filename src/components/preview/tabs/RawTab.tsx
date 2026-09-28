@@ -46,12 +46,31 @@ function getMetadataChanges(event: SplunkEvent, original: EventMetadata | undefi
   return changes;
 }
 
+/**
+ * React keys for the page's rows: the event's source lines, which survive a
+ * page change or a filter where a positional key would not. A
+ * CLONE_SOURCETYPE copy keeps its original's lines and sits right after it,
+ * so it adds the clone step it came from; anything still colliding (two
+ * clones to the same sourcetype) takes an occurrence count.
+ */
+function rowKeys(items: EnrichedEvent[]): string[] {
+  const seen = new Map<string, number>();
+  return items.map(({ event }) => {
+    const lines = `${event.lineNumbers.start}-${event.lineNumbers.end}`;
+    const base = event.clonedFrom === undefined ? lines : `${lines}:${event.clonedFrom}>${event.metadata.sourcetype}`;
+    const n = seen.get(base) ?? 0;
+    seen.set(base, n + 1);
+    return n === 0 ? base : `${base}#${n}`;
+  });
+}
+
 export function RawTab({ items, currentPage, eventsPerPage, search }: RawTabProps) {
   // The run's own input, as in PreviewPanel: the live fields may have been
   // edited since, which would badge every event as changed. Undefined only
   // with no result at all (the tab is not mounted then), when there is
   // nothing to compare against.
   const originalMetadata = useAppStore((s) => s.processingResult?.inputMetadata);
+  const keys = useMemo(() => rowKeys(items), [items]);
 
   return (
     <div className="p-3 space-y-2">
@@ -59,12 +78,12 @@ export function RawTab({ items, currentPage, eventsPerPage, search }: RawTabProp
         const globalIdx = (currentPage - 1) * eventsPerPage + idx + 1;
         return (
           <EventRow
-            // Keyed by the event's source lines, not its slot on the page.
+            // Keyed by event, not its slot on the page (see rowKeys).
             // EventRow holds expand/selection state locally, so a positional key
             // let React reuse the instance across a page change or a filter that
             // altered membership — showing one event's expanded body, and its
             // text selection, on a different event.
-            key={`${item.event.lineNumbers.start}-${item.event.lineNumbers.end}`}
+            key={keys[idx]}
             item={item}
             globalIdx={globalIdx}
             originalMetadata={originalMetadata}
@@ -91,7 +110,12 @@ function EventRow({ item, globalIdx, originalMetadata, search }: { item: Enriche
 
   // React-controlled token selection (Raw view only; search uses the dimming
   // highlighter). The picked substring drives the scaffold-from-selection menu.
-  const [selection, setSelection] = useState<RawSelection | null>(null);
+  // Held with the _raw it was made in: a re-run that rewrites the same
+  // event's text keeps the row, and offsets into the old text would pick out
+  // a different token in the new one.
+  const [picked, setPicked] = useState<{ raw: string; sel: RawSelection } | null>(null);
+  const selection = picked?.raw === event._raw ? picked.sel : null;
+  const setSelection = (sel: RawSelection | null) => setPicked(sel ? { raw: event._raw, sel } : null);
   const searching = search.trim().length > 0;
   const hasTokenSelection = !searching && selection !== null;
   const selectedText = hasTokenSelection ? event._raw.slice(selection.start, selection.end) : '';
