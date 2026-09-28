@@ -15,6 +15,33 @@ Implements [#202](https://github.com/Bimmiest/propslab/issues/202).
 | `explain_precedence` | layered `parseConf` + `resolveStanzasForEvent` + `mergeDirectives` | btool-style provenance: which layer won each attribute (`overrides` / `overriddenBy` / `layers`), and the effective directive set for a sourcetype |
 | `lookup_directive` | `directiveRegistry` | Curated directive documentation, including the simulation-support level, so an agent cites the registry instead of recalling spec |
 
+Every tool declares an `outputSchema` and returns its result twice: as
+`structuredContent` matching that schema, for clients that read it, and as
+the same JSON pretty-printed in a text block, for those that do not. The
+schemas, in `src/outputSchemas.ts`:
+
+| Tool | `structuredContent` |
+|---|---|
+| `simulate` | `{ eventCount, returnedEvents, truncationNote?, events[], processingSteps[], diagnostics[], diagnosticCount? }`; each event is `{ _raw, _time (ISO-8601 or null), metadata, fields, indexedFields, lineNumbers, processingTrace[] }` |
+| `validate` | `{ diagnostics[] }` |
+| `explain_precedence` | `{ parseErrors[], stanzas[], resolution? }`; `resolution` (props.conf with a `sourcetype`) is `{ metadata, effectiveMetadata, assignedSourcetype?, matchedStanzas[], effectiveDirectives[] }` |
+| `lookup_directive` | Without `key`: `{ "props.conf"?: [...], "transforms.conf"?: [...] }`, one summary per directive. With `key`: `{ matches[], classBased? }` |
+
+Objects the engine or registry defines — diagnostics, trace steps, directive
+entries — are open schemas (further properties allowed), so a new engine
+field does not fail validation; the envelopes are closed. An error result
+(`isError: true`: `timeout`, `input_too_large`, `unknown_directive`, …)
+carries its JSON in the text block only, with no `structuredContent`: the
+output schema describes successes, and the SDK client validates
+`structuredContent` whenever it is present. `simulate`'s size cap (below)
+bounds both copies — the structured one is the same object, and its compact
+JSON is never longer than the pretty-printed text the cap measures.
+
+All four tools are annotated `readOnlyHint: true`, `destructiveHint: false`,
+`idempotentHint: true`, `openWorldHint: false`: they read only their input
+and the static registry, reach nothing outside the process, and answer the
+same input the same way, so a client need not ask before running one.
+
 `simulate`, `validate` and `explain_precedence` accept conf input as either
 one flat string or an ordered list of layers, lowest precedence first — an
 agent pointed at a real app directory hands over `default/` + `local/` and

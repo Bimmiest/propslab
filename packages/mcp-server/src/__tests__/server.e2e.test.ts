@@ -3,6 +3,8 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import { AjvJsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/ajv';
+import type { JsonSchemaType } from '@modelcontextprotocol/sdk/validation';
 import { createServer } from '../server';
 import { DEFAULT_MAX_CONCURRENT_WORKERS } from '../runInWorker';
 
@@ -19,7 +21,11 @@ import { DEFAULT_MAX_CONCURRENT_WORKERS } from '../runInWorker';
 const WORKER_PATH = fileURLToPath(new URL('../../dist/simulateWorker.js', import.meta.url));
 const PACKAGE_JSON = fileURLToPath(new URL('../../package.json', import.meta.url));
 
-type TextResult = { content: { type: string; text: string }[]; isError?: boolean };
+type TextResult = {
+  content: { type: string; text: string }[];
+  structuredContent?: Record<string, unknown>;
+  isError?: boolean;
+};
 const payload = (r: unknown) => JSON.parse((r as TextResult).content[0].text);
 
 let client: Client;
@@ -55,6 +61,79 @@ describe('MCP server end to end', () => {
       'simulate',
       'validate',
     ]);
+  });
+
+  it('advertises an object outputSchema and read-only annotations for every tool', async () => {
+    const { tools } = await client.listTools();
+    for (const tool of tools) {
+      expect(tool.outputSchema, tool.name).toMatchObject({ type: 'object' });
+      expect(tool.annotations, tool.name).toEqual({
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      });
+    }
+  });
+
+  it('returns structuredContent that matches the advertised outputSchema', async () => {
+    const { tools } = await client.listTools();
+    const validator = new AjvJsonSchemaValidator();
+    const props = [
+      '[default]',
+      'TRUNCATE = 5000',
+      '[access_log]',
+      'SHOULD_LINEMERGE = false',
+      'TIME_PREFIX = \\[',
+      'TIME_FORMAT = %d/%b/%Y:%H:%M:%S %z',
+      'EXTRACT-status = HTTP/1.1" (?<status>\\d{3})',
+      'FIELDALIAS-code = status AS code',
+      'BOGUS_KEY = 1',
+    ].join('\n');
+    const layered = [
+      { layer: 'default', text: props },
+      { layer: 'local', text: '[access_log]\nTRUNCATE = 100\n' },
+    ];
+    const calls: { name: string; arguments: Record<string, unknown> }[] = [
+      {
+        name: 'simulate',
+        arguments: {
+          raw: '10.0.0.1 - - [02/Aug/2026:10:15:00 +0000] "GET /a HTTP/1.1" 200 123\n',
+          sourcetype: 'access_log',
+          props_conf: props,
+          include_snapshots: true,
+        },
+      },
+      { name: 'validate', arguments: { props_conf: props } },
+      {
+        name: 'explain_precedence',
+        arguments: { conf: layered, sourcetype: 'access_log' },
+      },
+      { name: 'lookup_directive', arguments: { key: 'EXTRACT-status' } },
+      { name: 'lookup_directive', arguments: {} },
+    ];
+    for (const call of calls) {
+      const result = (await client.callTool(call)) as TextResult;
+      expect(result.isError, call.name).toBeFalsy();
+      // The same payload as the text, so text-only clients lose nothing.
+      expect(result.structuredContent, call.name).toEqual(payload(result));
+      const schema = tools.find((t) => t.name === call.name)?.outputSchema;
+      const check = validator.getValidator(schema as JsonSchemaType)(result.structuredContent);
+      expect(check.errorMessage, call.name).toBeUndefined();
+      expect(check.valid, call.name).toBe(true);
+    }
+  }, 20_000);
+
+  it('leaves structuredContent off an error result', async () => {
+    // Its payload is an error object, which the output schema does not
+    // describe; the error stays in the text.
+    const result = (await client.callTool({
+      name: 'lookup_directive',
+      arguments: { key: 'line_breaker' },
+    })) as TextResult;
+    expect(result.isError).toBe(true);
+    expect(result).not.toHaveProperty('structuredContent');
+    expect(payload(result).error).toBe('unknown_directive');
   });
 
   it('fills schema defaults for everything a caller leaves out', async () => {
