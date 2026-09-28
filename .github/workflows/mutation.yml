@@ -61,13 +61,25 @@ jobs:
         env:
           BASE_REF: ${{ github.base_ref }}
         run: |
-          files=$(git diff --name-only --diff-filter=AM "origin/$BASE_REF...HEAD" -- 'src/engine/**/*.ts' \
+          # Two pathspecs: git's `**/` needs at least one directory, so
+          # `src/engine/**/*.ts` alone skips src/engine/pipeline.ts and its
+          # neighbours.
+          files=$(git diff --name-only --diff-filter=AM "origin/$BASE_REF...HEAD" -- 'src/engine/*.ts' 'src/engine/**/*.ts' \
             | grep -vE '(/__tests__/|\.test\.ts$|^src/engine/types\.ts$|^src/engine/scaffold/types\.ts$|^src/engine/[^/]*Worker\.ts$|^src/engine/cim/cimModelsData\.ts$|^src/engine/registry/|^src/engine/directiveSupport\.ts$)' \
             | paste -sd, - || true)
+          # A PR that only touches the mutation setup (Stryker or vitest config,
+          # this workflow) still proves it works: one small, well-tested file.
+          if [ -z "$files" ]; then
+            config=$(git diff --name-only "origin/$BASE_REF...HEAD" -- stryker.config.mjs vitest.config.ts vitest.stryker.config.ts .github/workflows/mutation.yml)
+            if [ -n "$config" ]; then
+              files=src/engine/utils/fieldRef.ts
+              echo "Mutation setup changed; smoke run on \`$files\`." >> "$GITHUB_STEP_SUMMARY"
+            fi
+          fi
           echo "files=$files" >> "$GITHUB_OUTPUT"
           if [ -z "$files" ]; then
             echo "No mutable engine source changed; the weekly full run covers the rest." >> "$GITHUB_STEP_SUMMARY"
-          else
+          elif [ -z "${config:-}" ]; then
             echo "Mutating: \`$files\`" >> "$GITHUB_STEP_SUMMARY"
           fi
 
