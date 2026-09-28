@@ -1,5 +1,5 @@
 import { useRef, useEffect, useCallback } from 'react';
-import * as monaco from 'monaco-editor/editor/editor.api';
+import * as monaco from 'monaco-editor/editor';
 import type { editor } from 'monaco-editor';
 import { useAppStore } from '../../store/useAppStore';
 import { MonacoEditor } from './MonacoEditor';
