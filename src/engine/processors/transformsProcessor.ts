@@ -2,7 +2,7 @@ import type { SplunkEvent, ConfDirective, DirectiveNoOp, ParsedConf, ProcessingS
 import type { NoOpReason } from '../noOpExplainer';
 import { applyRegexTransform } from '../transforms/regexTransform';
 import { applyDestKey } from '../transforms/destKeyRouter';
-import { applyIngestEval } from '../transforms/ingestEval';
+import { applyIngestEval, newIngestEvalReported, type IngestEvalReported } from '../transforms/ingestEval';
 import { evaluateStopCondition } from '../transforms/stopProcessing';
 import { byClassName } from '../utils/asciiCompare';
 import { appendTraceStep, metadataChanges } from '../utils/traceStep';
@@ -10,6 +10,7 @@ import { SIMULATED_DEST_KEYS, VALID_UNSIMULATED_DEST_KEYS, normaliseDestKey } fr
 import { atDirective, atStanza } from '../parser/provenance';
 import { effectiveDirective, parseSplunkBool } from '../utils/directiveValues';
 import { validateRegex } from '../../utils/splunkRegex';
+import { epochOutOfRangeMessage } from '../utils/epochTime';
 
 // A DEST_KEY=_raw transform that shrinks the event by at least this fraction is
 // treated as accidental data loss (FORMAT did not reproduce the rest of the line).
@@ -51,26 +52,51 @@ function orderedTransformLists(directives: ConfDirective[], phase: Phase): ConfD
   return phase === 'index-time' ? [...byType('TRANSFORMS'), ...byType('RULESET')] : byType('REPORT');
 }
 
-/** One applyTransforms call: its settings, and the once-per-stanza warning ledgers. */
+/**
+ * The once-per-stanza warning ledgers. The index-time stage and the
+ * CLONE_SOURCETYPE pass share one, so a clone, which is its own
+ * applyTransforms call, does not repeat what the originals reported.
+ */
+export interface TransformsWarned {
+  /** The DEST_KEY=_raw data-loss warning. */
+  rawLoss: Set<string>;
+  /** Index-time transforms that extract fields with no WRITE_META/DEST_KEY. */
+  noWriteMeta: Set<string>;
+  /** A REGEX that does not compile. */
+  invalidRegex: Set<string>;
+  /** Routing via an unknown/unsimulated DEST_KEY. */
+  unknownDestKey: Set<string>;
+  /** DEST_KEY = _time given a value no Date can hold. */
+  timeOutOfRange: Set<string>;
+  /** DEST_KEY reached through a search-time REPORT-, where Splunk ignores it. */
+  searchTimeDestKey: Set<string>;
+  searchOnlyAttrs: Set<string>;
+  searchTimeNoFormat: Set<string>;
+  /** INGEST_EVAL errors and warnings, which it would otherwise repeat per event. */
+  ingestEval: IngestEvalReported;
+}
+
+export function newTransformsWarned(): TransformsWarned {
+  return {
+    rawLoss: new Set(),
+    noWriteMeta: new Set(),
+    invalidRegex: new Set(),
+    unknownDestKey: new Set(),
+    timeOutOfRange: new Set(),
+    searchTimeDestKey: new Set(),
+    searchOnlyAttrs: new Set(),
+    searchTimeNoFormat: new Set(),
+    ingestEval: newIngestEvalReported(),
+  };
+}
+
+/** One applyTransforms call: its settings, and the warning ledgers it reports against. */
 interface TransformsRun {
   phase: Phase;
   diagnostics: ValidationDiagnostic[] | undefined;
   now: number;
   stanzaMap: Map<string, TransformStanza>;
-  warned: {
-    /** The DEST_KEY=_raw data-loss warning. */
-    rawLoss: Set<string>;
-    /** Index-time transforms that extract fields with no WRITE_META/DEST_KEY. */
-    noWriteMeta: Set<string>;
-    /** A REGEX that does not compile. */
-    invalidRegex: Set<string>;
-    /** Routing via an unknown/unsimulated DEST_KEY. */
-    unknownDestKey: Set<string>;
-    /** DEST_KEY reached through a search-time REPORT-, where Splunk ignores it. */
-    searchTimeDestKey: Set<string>;
-    searchOnlyAttrs: Set<string>;
-    searchTimeNoFormat: Set<string>;
-  };
+  warned: TransformsWarned;
 }
 
 /** One event on its way through the transform lists. */
@@ -137,9 +163,9 @@ function runEvalStanza(
 ): boolean {
   if (run.phase !== 'index-time') return false;
   if (ingestEvalDirs.length > 0) {
-    state.event = applyIngestEval([state.event], ingestEvalDirs, run.diagnostics, run.now)[0] ?? state.event;
+    state.event = applyIngestEval([state.event], ingestEvalDirs, run.diagnostics, run.now, run.warned.ingestEval)[0] ?? state.event;
   }
-  const stop = evaluateStopCondition(state.event, transformStanza.directives, run.diagnostics, run.now);
+  const stop = evaluateStopCondition(state.event, transformStanza.directives, run.diagnostics, run.now, run.warned.ingestEval.messages);
   if (!stop) return false;
   const { listLabel } = site;
   const description = !stop.stop
@@ -243,7 +269,16 @@ function applyMatch(
   // the event — a later transform in the list can still overwrite the queue
   // (last-wins). nullQueue events are flagged (and shown as dropped) only
   // after the whole list runs; they are never removed mid-list.
-  const routed = applyDestKey(state.event, effective);
+  const routed = applyDestKey(state.event, effective, (value) => {
+    if (!diagnostics || warned.timeOutOfRange.has(stanzaName)) return;
+    warned.timeOutOfRange.add(stanzaName);
+    diagnostics.push({
+      level: 'warning',
+      message: epochOutOfRangeMessage(`DEST_KEY = _time in transform "${stanzaName}"`, value),
+      file: 'transforms.conf',
+      ...positionOfKeyOrStanza(transformStanza, 'DEST_KEY'),
+    });
+  });
   if (result.destKey === '_raw' && diagnostics) {
     warnRawLoss(beforeRaw, routed._raw, stanzaName, transformStanza, diagnostics, warned.rawLoss);
   }
@@ -331,6 +366,8 @@ export function applyTransforms(
   diagnostics?: ValidationDiagnostic[],
   /** Epoch ms that INGEST_EVAL's now()/time() read. See `PipelineOptions.now`. */
   now: number = Date.now(),
+  /** What this pipeline run has already warned about; see TransformsWarned. */
+  warned: TransformsWarned = newTransformsWarned(),
 ): SplunkEvent[] {
   const transformDirectives = orderedTransformLists(directives, phase);
   if (transformDirectives.length === 0) return events;
@@ -340,15 +377,7 @@ export function applyTransforms(
     diagnostics,
     now,
     stanzaMap: new Map(transformsConf.stanzas.map((s) => [s.name, s])),
-    warned: {
-      rawLoss: new Set(),
-      noWriteMeta: new Set(),
-      invalidRegex: new Set(),
-      unknownDestKey: new Set(),
-      searchTimeDestKey: new Set(),
-      searchOnlyAttrs: new Set(),
-      searchTimeNoFormat: new Set(),
-    },
+    warned,
   };
 
   return events.flatMap((event) => {

@@ -84,8 +84,9 @@ src/
 │   ├── types.ts               # SplunkEvent, ProcessingResult, ConfDirective
 │   ├── pipeline.ts            # runPipeline() — sole entry point
 │   ├── pipelineWorker.ts      # Web Worker wrapper
-│   ├── directiveRegistry.ts   # Directive entries — drives completion,
+│   ├── directiveRegistry.ts   # Directive lookup — drives completion,
 │   │                          #   hover, linting AND the dictionary
+│   ├── registry/              # The directive entries, props and transforms
 │   ├── stanzaRegistry.ts      # The four stanza header kinds + precedence
 │   ├── pipelineStages.ts      # The 11 stages, and key → stage lookup
 │   ├── parser/
@@ -95,7 +96,9 @@ src/
 │   ├── processors/            # One file per processing stage
 │   ├── transforms/            # regexTransform, destKeyRouter, ingestEval
 │   ├── cim/                   # cimModels.ts + cimModelsData.ts (CIM 8.5.0)
+│   ├── scaffold/              # Starter props.conf stanza from sample data
 │   └── utils/
+│       ├── epochTime.ts       # _time range guard for INGEST_EVAL / DEST_KEY
 │       └── flattenJson.ts     # With prototype-pollution guard
 │
 ├── monaco/                    # Monaco language support
@@ -103,36 +106,48 @@ src/
 │   ├── splunkConfHover.ts
 │   ├── splunkConfFolding.ts
 │   ├── splunkConfDiagnostics.ts
+│   ├── splunkConfCodeActions.ts
+│   ├── timeFormatPreview.ts   # TIME_FORMAT hover preview
+│   ├── timePrefixMatcher.ts   #   and its off-thread TIME_PREFIX match
+│   ├── markdown.ts            # Escape user text in hover Markdown
 │   └── dictionaryCommand.ts   # "Open in dictionary" command id + URI
 │
 ├── store/useAppStore.ts       # Zustand store (flat; subscribe per slice)
 ├── hooks/                     # useProcessingPipeline, useDebounce, useTheme, usePagination
 ├── utils/                     # splunkRegex (the PCRE2 adapter), regexEngineLoader,
-│                              #   strftime, diffEngine, fieldHighlight
+│                              #   strftime, diffEngine, fieldHighlight, countLines
 │
 └── components/
     ├── layout/                # AppShell, ActivityRail, SimulatorView,
-    │                          #   MobileShell, Header, StatusBar
+    │                          #   MobileShell, Header, StatusBar, lazyViews,
+    │                          #   PipelineController (runs the pipeline in a leaf)
     ├── dictionary/            # DictionaryView + list, detail, badges, entries
     ├── raw/                   # RawPanel (Monaco plaintext)
     ├── metadata/              # MetadataPanel
-    ├── editor/                # SplunkEditor + props/transforms editors, editorRegistry
+    ├── editor/                # MonacoEditor, SplunkEditor + props/transforms editors,
+    │                          #   EditorValidationList, editorRegistry
     ├── preview/
     │   ├── PreviewPanel.tsx   # Output container
     │   ├── PreviewFilterBar.tsx
     │   └── tabs/              # Raw, Timestamp, Highlighted, Diff, Regex,
-    │       └── shared/        #   CimModels, Fields, Transforms, Metadata
+    │       └── shared/        #   CimModels, Fields, Transforms, EffectiveConfig
     ├── settings/              # SettingsPanel (gear in header)
     ├── onboarding/            # FirstRunBanner
     ├── help/                  # HelpPanel (pipeline reference slide-out)
-    └── ui/                    # Tabs, Badge, Tooltip, CommandPalette, etc.
+    ├── architecture/          # ArchitecturePanel
+    ├── scaffold/              # ScaffoldModal
+    └── ui/                    # Tabs, Badge, Tooltip, CommandPalette, ErrorBoundary,
+                               #   RootErrorBoundary, retryableLazy, etc.
 
 packages/
 └── mcp-server/                # MCP server over the engine
+    └── src/responseBudget.ts  #   Caps each tool response in bytes on the wire
 
-e2e/                           # Playwright smoke tests (production build, Chromium)
+e2e/                           # Playwright tests (production build, Chromium)
 ├── fixtures.ts                # Console/CSP error collection + readiness helpers
-└── smoke.spec.ts
+├── smoke.spec.ts
+├── a11y.spec.ts               # axe-core over every main view, both themes
+└── perf.spec.ts               # 20k-event pipeline and tab-switch budgets
 ```
 
 ## Output tabs
@@ -219,7 +234,7 @@ A small Playwright suite in `e2e/` runs Chromium against a **production build** 
 
 It exists for the things vitest structurally cannot reach, each of which has failed silently here before:
 
-- **The Content-Security-Policy.** It lives in `index.html` and only means anything in a browser. `img-src` was missing for the entire life of the policy, so Chromium refused every one of Monaco's `data:` squiggle SVGs and the lint underlines never drew — visible only as a console error nobody was watching. The suite asserts zero CSP violations and zero console errors on boot.
+- **The Content-Security-Policy.** It lives in `index.html` as a `<meta>` tag and only means anything in a browser. A `<meta>` policy covers the document alone, so `public/staticwebapp.config.json` also sends it as a response header — the only way it reaches the three workers — along with `frame-ancestors`, `Cross-Origin-Opener-Policy` and a `Permissions-Policy`; a unit test (`src/__tests__/deployHeaders.test.ts`) fails if the header drops any directive the meta tag has. `img-src` was missing for the entire life of the policy, so Chromium refused every one of Monaco's `data:` squiggle SVGs and the lint underlines never drew — visible only as a console error nobody was watching. The suite asserts zero CSP violations and zero console errors on boot.
 - **Worker bundling.** The whole simulation runs in a Web Worker created via `new Worker(new URL(…), { type: 'module' })`. Whether Vite emits a loadable chunk for that is a build-time question with a runtime answer.
 - **The regex engine.** PCRE2 is a WebAssembly asset the page and each worker load from the one same-origin URL the build fixed. The suite checks that it loads under the CSP (`'wasm-unsafe-eval'`), that every load is of that one asset, that it answers in all three workers, and that fetch, compile and instantiate stay inside a 2 s budget (about 80 ms measured).
 - **The Monaco chunk split.** `MonacoEditor.tsx` imports the slim `monaco-editor/editor` entry and `vite.config.ts` hand-rolls a `codeSplitting` group around it. A bad split type-checks, builds, and then fails to mount an editor. Each hand-picked editor contribution (suggest, code actions, folding, find, hover) has a test, since a missing one fails silently too.
@@ -232,7 +247,7 @@ One note if you extend it: the app runs the pipeline once on mount with an empty
 
 `ci.yml` runs on every PR, on pushes to main, weekly, and on demand, as three independent jobs: `ci` (lint → build (`tsc -b && vite build`) → per-chunk gzip budgets (`scripts/check-bundle-size.mjs`) → tests with coverage → e2e smoke), `mcp-server` (the MCP server's typecheck, bundle and tests), and `audit` (`npm audit` over both lockfiles — high-severity advisories in production dependencies fail it, dev-only ones are reported).
 
-The Azure SWA deploy (`azure-static-web-apps.yml`) builds and deploys only; it has no test job of its own because it does not run until CI has passed. It triggers on `workflow_run` when a CI run finishes, and proceeds only if that run succeeded and was for a push to main. It then deploys the **newest commit on main with a green push CI** — not necessarily the commit that triggered it, since CI runs for two quick pushes can finish in either order — building it with the `.nvmrc` Node and `npm ci --ignore-scripts`, and uploading `dist/` with the app build skipped. Build and deploy are separate jobs: `build` resolves and checks the commit, installs and builds it, and uploads `dist/` as an artifact without ever seeing the deployment token; `deploy` runs in the `production` environment, checks nothing out, and only hands that artifact to the Azure action. A manual `workflow_dispatch` on `main` is the redeploy and rollback path, and it is not gated on CI: with the `sha` input empty it redeploys the newest green commit on main, and with `sha` set it deploys that commit — refusing any commit that is not an ancestor of `main`, so only something that was once merged can be put back. Dispatching from any other branch or tag fails. The `production` environment admits `main` only, and holds the token as an environment secret; those settings, not the checks in the workflow file, are what keep a branch or tag from deploying at all, since a dispatch runs the workflow file from the dispatched ref.
+The Azure SWA deploy (`azure-static-web-apps.yml`) builds and deploys only; it has no test job of its own because it does not run until CI has passed. It triggers on `workflow_run` when a CI run finishes, and proceeds only if that run succeeded and was for a push to main. It then deploys the **newest commit on main with a green push CI** — not necessarily the commit that triggered it, since CI runs for two quick pushes can finish in either order — building it with the `.nvmrc` Node and `npm ci --ignore-scripts`, and uploading `dist/` with the app build skipped. Build and deploy are separate jobs: `build` resolves and checks the commit, installs and builds it, and uploads `dist/` as an artifact without ever seeing the deployment token; `deploy` runs in the `production` environment, checks nothing out, and only hands that artifact to the Azure action. A manual `workflow_dispatch` on `main` is the redeploy and rollback path, and it is not gated on CI: with the `sha` input empty it redeploys the newest green commit on main, and with `sha` set it deploys that commit — refusing any commit that is not an ancestor of `main`, so only something that was once merged can be put back. Dispatching from any other branch or tag fails. Those checks live in the workflow file, which a dispatch runs from the dispatched ref, so what actually keeps a branch or tag from deploying has to be the `production` environment's settings — and naming the environment does nothing until a repo admin configures it: move `AZURE_STATIC_WEB_APPS_API_TOKEN` from the repository secrets to the environment's secrets (deleting the repository-level copy), and under the environment's deployment branches and tags choose "Selected branches and tags" and allow `main` only, with no tag patterns. The comment above the `deploy` job has the details; until both are done, any workflow on any branch can read the token.
 
 A rollback only sticks while the automatic path is paused. Unpaused, the next green push CI on main — or a re-run of the bad commit's CI — redeploys the newest green commit over it, and a dispatch still queued behind a running deploy can be silently cancelled by the next automatic run, because a concurrency group keeps only the newest pending run. The repository variable `DEPLOY_PAUSED` is the switch: while it is `true`, automatic runs neither deploy nor join the deploy queue, and dispatches are unaffected. A dispatch made after setting it is guaranteed not to be cancelled or overwritten by an automatic deploy for as long as it stays set; one made without it gets no such guarantee. To roll back:
 
@@ -307,7 +322,7 @@ See [CHANGELOG.md](CHANGELOG.md) for fix history
 
 ## Tech stack
 
-React 19, Vite 8, TypeScript 5.9, Tailwind CSS 4 (CSS-first config), Monaco Editor 0.55 (mounted directly by `MonacoEditor.tsx`), Zustand 5, react-resizable-panels 4.12, `diff` 9, `cmdk` (command palette), Radix UI primitives (`react-tooltip`, `react-dialog`, `react-context-menu`), PCRE2 10.48 compiled to WebAssembly ([`pcre2-wasm-utf16`](https://github.com/Bimmiest/pcre2-wasm-utf16)).
+React 19, Vite 8, TypeScript 5.9, Tailwind CSS 4 (CSS-first config), Monaco Editor 0.57 (mounted directly by `MonacoEditor.tsx`), Zustand 5, react-resizable-panels 4.13, `diff` 9, `cmdk` (command palette), Radix UI primitives (`react-tooltip`, `react-dialog`, `react-context-menu`), PCRE2 10.48 compiled to WebAssembly ([`pcre2-wasm-utf16`](https://github.com/Bimmiest/pcre2-wasm-utf16)).
 
 ## Contributing
 

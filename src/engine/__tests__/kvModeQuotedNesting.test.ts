@@ -48,3 +48,17 @@ describe('KV_MODE auto — quoted passes do not mine inside each other (#123)', 
     expect(r.fields).not.toHaveProperty('x');
   });
 });
+
+describe('KV_MODE auto — long events (#427)', () => {
+  it('blanks quoted spans in linear time', () => {
+    // 32k quoted pairs, each hiding a bare pair, about 490 KB. Rebuilding the
+    // blanked copy per pair took 7.5 s here.
+    const raw = Array.from({ length: 32_000 }, (_, i) => `k${i}="v x${i}=${i}"`).join(' ') + ' tail=end';
+    const started = performance.now();
+    const r = applyKvMode([ev(raw)], kv('auto'))[0]!;
+    expect(performance.now() - started).toBeLessThan(1000);
+    expect(r.fields.k31999).toBe('v x31999=31999');
+    expect(r.fields.tail).toBe('end');
+    expect(r.fields).not.toHaveProperty('x5');
+  });
+});

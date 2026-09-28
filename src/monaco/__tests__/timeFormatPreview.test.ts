@@ -57,6 +57,19 @@ describe('unsupportedSpecifiers', () => {
     expect(unsupportedSpecifiers('%H:%M:%S.%6N')).toEqual([]);
   });
 
+  it('accepts the colon offsets and the %Q widths the parser reads (#429)', () => {
+    expect(unsupportedSpecifiers('%F %T %:z %::z')).toEqual([]);
+    expect(unsupportedSpecifiers('%3Q %6Q %9Q %Q %N %f %k %l')).toEqual([]);
+  });
+
+  it('flags specifiers the parser does not read, which strftime leaves literal (#429)', () => {
+    expect(unsupportedSpecifiers('%c %w %0N')).toEqual([
+      { specifier: '%c', index: 0 },
+      { specifier: '%w', index: 3 },
+      { specifier: '%0N', index: 6 },
+    ]);
+  });
+
   it('flags a specifier from another language, with its offset', () => {
     // %i is MySQL's minutes; strftime has no such specifier, and treating the
     // literal `i` as text is how this survives into production.

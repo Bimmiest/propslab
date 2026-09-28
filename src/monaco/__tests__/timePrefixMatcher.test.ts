@@ -192,6 +192,7 @@ describe('TIME_FORMAT hover — TIME_PREFIX in a worker (#334)', () => {
     const pending = hover(token);
     await flush();
     const busy = worker();
+    busy.ready();
     cancel();
     expect(await pending).toBeNull();
 
@@ -201,30 +202,24 @@ describe('TIME_FORMAT hover — TIME_PREFIX in a worker (#334)', () => {
   });
 
   describe('a worker slow to load (#403)', () => {
-    it('does not blame the prefix: replays it once the replacement has loaded', async () => {
+    it('does not blame the prefix for the load: its run is timed alone', async () => {
       vi.useFakeTimers();
       const pending = hover();
       await flush();
       const slow = worker();
-      // The whole budget goes on loading (the PCRE2 wasm fetch and compile).
-      vi.advanceTimersByTime(TIME_PREFIX_TIMEOUT_MS);
-      expect(slow.terminated).toBe(true);
-      const fresh = worker();
-      expect(fresh).not.toBe(slow);
-      expect(fresh.posted).toEqual([]);
-
-      // Loading again takes longer than a run budget; the run is timed alone.
-      vi.advanceTimersByTime(TIME_PREFIX_TIMEOUT_MS * 2);
-      fresh.ready();
-      expect(fresh.posted.map((r) => r.config.timePrefix)).toEqual(['ts=']);
+      // Loading (the PCRE2 wasm fetch and compile) takes several run budgets.
+      vi.advanceTimersByTime(TIME_PREFIX_TIMEOUT_MS * 3);
+      expect(slow.terminated).toBe(false);
+      slow.ready();
       vi.advanceTimersByTime(TIME_PREFIX_TIMEOUT_MS / 2);
-      fresh.answer();
+      slow.answer();
+      expect(FakeWorker.instances).toHaveLength(1);
       const markdown = text(await pending);
       expect(markdown).toContain('matched `2024-01-15`');
       expect(markdown).not.toContain('timed out');
     });
 
-    it('replays the requests queued behind it too, in order', async () => {
+    it('runs the requests queued behind it too, in order, once it loads', async () => {
       vi.useFakeTimers();
       const first = matchTimePrefix('ts=', SAMPLE);
       const second = matchTimePrefix('id=', SAMPLE);
@@ -237,11 +232,10 @@ describe('TIME_FORMAT hover — TIME_PREFIX in a worker (#334)', () => {
       await expect(second).resolves.toEqual({ status: 'matched', end: 3 });
     });
 
-    it('omits the sample line, not a timeout, when the replacement never loads', async () => {
+    it('omits the sample line, not a timeout, when the worker never loads', async () => {
       vi.useFakeTimers();
       const pending = hover();
       await flush();
-      vi.advanceTimersByTime(TIME_PREFIX_TIMEOUT_MS);
       vi.advanceTimersByTime(TIME_PREFIX_TIMEOUT_MS * LOAD_WAIT_FACTOR);
       const markdown = text(await pending);
       expect(markdown).toContain('**Now:**');

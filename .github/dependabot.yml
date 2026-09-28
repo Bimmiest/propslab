@@ -24,10 +24,11 @@ updates:
         # "minor" here does not mean what it means for every other entry, and
         # grouping it hides a breaking change among routine ones. 0.55→0.56
         # changed the package's `exports` map and broke the
-        # `monaco-editor/esm/vs/editor/editor.api` specifier `main.tsx` imports
-        # (that import is deliberate: it keeps the TS/JSON/CSS/HTML language
-        # services out of the bundle, which is what lets the CSP drop
-        # 'unsafe-eval'). It arrives on its own from now on.
+        # `monaco-editor/esm/vs/editor/editor.api` specifier the app imported
+        # then; MonacoEditor.tsx now imports the slim `monaco-editor/editor`
+        # entry (deliberately: it keeps the TS/JSON/CSS/HTML language services
+        # out of the bundle, which is what lets the CSP drop 'unsafe-eval'). It
+        # arrives on its own from now on.
         exclude-patterns:
           - monaco-editor
       development-dependencies:
@@ -79,7 +80,7 @@ updates:
         update-types: ["version-update:semver-major"]
       # `marked` is a devDependency only so the hover tests can render Markdown
       # the way the editor will. Monaco bundles its own copy and pins it exactly
-      # (monaco-editor@0.55.1 ships 14.0.0), so the useful version is whichever
+      # (monaco-editor@0.57.0 ships 14.0.0), so the useful version is whichever
       # Monaco ships, not the newest. Move it in the same change that moves
       # monaco-editor, to the version that release pins.
       - dependency-name: "marked"
@@ -97,7 +98,7 @@ updates:
       time: "06:00"
     groups:
       # One group rather than the production/development split above: this
-      # package has six direct dependencies, and splitting six across two PRs
+      # package has seven direct dependencies, and splitting seven across two PRs
       # buys nothing but a second review.
       mcp-server-dependencies:
         patterns: ["*"]

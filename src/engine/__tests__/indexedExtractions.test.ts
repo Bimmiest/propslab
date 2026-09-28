@@ -476,6 +476,43 @@ describe('applyIndexedExtractions — TIMESTAMP_FIELDS (#184)', () => {
     );
     expect(events[0]!._time).toBeNull();
   });
+
+  // #416: the probe falls back to the clock rather than returning null.
+  it('keeps the prior _time and adds no trace when the fields do not parse', () => {
+    const prior = new Date('2020-05-01T00:00:00Z');
+    const [e] = applyIndexedExtractions(
+      [event('ts,user'), { ...event('not-a-time,alice'), _time: prior }],
+      [dir('csv'), dirOf('TIMESTAMP_FIELDS', 'ts'), dirOf('TIME_FORMAT', '%Y-%m-%d'), dirOf('TZ', 'UTC')],
+      undefined,
+      new Date('2020-05-02T00:00:00Z'),
+    );
+    expect(e!._time).toBe(prior);
+    expect(e!.processingTrace.some((s) => s.description.includes('parsed from'))).toBe(false);
+  });
+
+  it('measures MAX_DAYS_AGO from PipelineOptions.now', () => {
+    const { result } = runPipeline(
+      'ts,user\n2019-03-04 05:06:07,alice\n',
+      { index: 'main', host: 'h', source: 's', sourcetype: 'st' },
+      '[st]\nINDEXED_EXTRACTIONS = csv\nTIMESTAMP_FIELDS = ts\nTIME_FORMAT = %Y-%m-%d %H:%M:%S\nTZ = UTC\n',
+      '',
+      { perEventPipeline: false, captureOffsets: false, now: Date.parse('2019-03-05T00:00:00Z') },
+    );
+    const e = result.events[0]!;
+    expect(e._time?.toISOString()).toBe('2019-03-04T05:06:07.000Z');
+    expect(e.processingTrace.some((s) => s.description.startsWith('_time parsed from ts'))).toBe(true);
+  });
+
+  it('reports an out-of-bounds stamp once, not once per row', () => {
+    const diagnostics: ValidationDiagnostic[] = [];
+    applyIndexedExtractions(
+      [event('ts'), event('2010-01-01'), event('2010-01-02')],
+      [dir('csv'), dirOf('TIMESTAMP_FIELDS', 'ts'), dirOf('TIME_FORMAT', '%Y-%m-%d'), dirOf('TZ', 'UTC')],
+      diagnostics,
+      new Date('2020-01-01T00:00:00Z'),
+    );
+    expect(diagnostics.filter((d) => d.message.includes('so it was not used'))).toHaveLength(1);
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -7,6 +7,7 @@ import type { EnrichedEvent } from '../PreviewPanel';
 import { fieldColorAt } from './shared/fieldColors';
 import { useAppStore } from '../../../store/useAppStore';
 import { useApplyDirective } from './shared/useApplyDirective';
+import { tint } from '../../../utils/tint';
 
 // ─── Regex Reference Data ────────────────────────────────────────────────────
 
@@ -288,8 +289,11 @@ function useFlashFlag(): [boolean, () => void] {
 
 export function RegexTab(props: RegexTabProps) {
   const patternId = useId();
-  const [pattern, setPattern] = useState('');
-  const [className, setClassName] = useState('custom');
+  // In the store, so they survive the tab unmounting on a sub-tab switch.
+  const pattern = useAppStore((s) => s.regexPattern);
+  const setPattern = useAppStore((s) => s.setRegexPattern);
+  const className = useAppStore((s) => s.regexClassName);
+  const setClassName = useAppStore((s) => s.setRegexClassName);
   const copied = useFlashFlag();
   const added = useFlashFlag();
 
@@ -359,7 +363,7 @@ export function RegexTab(props: RegexTabProps) {
         />
       )}
 
-      <RegexReference onInsert={(p) => setPattern((prev) => prev + p)} onReplace={(p) => setPattern(p)} />
+      <RegexReference onInsert={(p) => setPattern(pattern + p)} onReplace={setPattern} />
 
       {/* Legend */}
       {pattern && showGroups && <GroupLegend namedGroups={namedGroups} groupColorMap={groupColorMap} />}
@@ -389,7 +393,7 @@ function GroupChips({ namedGroups, groupColorMap }: { namedGroups: string[]; gro
             <span
               key={name}
               className="inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded"
-              style={{ backgroundColor: color + '20', color, border: `1px solid ${color}40` }}
+              style={{ backgroundColor: tint(color, 13), color, border: `1px solid ${tint(color, 25)}` }}
             >
               <span className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
               {name}
@@ -413,7 +417,7 @@ function GroupLegend({ namedGroups, groupColorMap }: { namedGroups: string[]; gr
           const color = groupColorMap.get(name) ?? '';
           return (
             <span key={name} className="flex items-center gap-1.5">
-              <span className="w-3 h-2 rounded-sm" style={{ backgroundColor: color + '40', borderBottom: `2px solid ${color}` }} />
+              <span className="w-3 h-2 rounded-sm" style={{ backgroundColor: tint(color, 25), borderBottom: `2px solid ${color}` }} />
               <span className="text-[var(--color-text-muted)]">{name}</span>
             </span>
           );
@@ -822,8 +826,13 @@ function groupSpans(
 
   for (const [name, range] of Object.entries(groupIndices)) {
     if (!range) continue;
+    // A group inside a lookaround can capture text outside the match; only the
+    // part within it is drawn here, or it would be drawn again as post text.
+    const start = Math.max(range[0], fullMatchStart);
+    const end = Math.min(range[1], fullMatchEnd);
+    if (end < start || (end === start && range[1] > range[0])) continue;
     const color = groupColorMap.get(name) ?? 'var(--color-text-primary)';
-    groupHighlights.push({ start: range[0], end: range[1], name, color });
+    groupHighlights.push({ start, end, name, color });
   }
 
   groupHighlights.sort((a, b) => a.start - b.start);
@@ -843,7 +852,7 @@ function groupSpans(
     result.push(
       <span
         key={`grp-${gh.name}`}
-        style={{ backgroundColor: gh.color + '30', borderBottom: `2px solid ${gh.color}`, color: gh.color }}
+        style={{ backgroundColor: tint(gh.color, 19), borderBottom: `2px solid ${gh.color}`, color: gh.color }}
         className="rounded-sm px-0.5"
         title={`${gh.name}: ${raw.substring(gh.start, gh.end)}`}
       >

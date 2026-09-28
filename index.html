@@ -17,14 +17,18 @@
       both write inline styles. img-src needs data: because Monaco draws its
       error/warning squiggles as inline data: SVGs; with only default-src to
       fall back on, the browser blocked them and the underlines silently did
-      not render. frame-ancestors cannot be set from a <meta> tag; it needs a
-      response header from the host, which public/staticwebapp.config.json now
-      sends. That file carries frame-ancestors ALONE rather than a copy of this
-      policy: two full policies in two places drift, only this one is what the
-      e2e suite asserts against, and a browser enforces the intersection of both
-      — so the drift would surface as a resource blocked for no visible reason.
+      not render. worker-src has no blob: because every worker is a same-origin
+      file: MonacoEnvironment.getWorker hands Monaco its worker, so Monaco's
+      blob: bootstrap is never reached.
+
+      A <meta> policy covers this document only; a worker takes its policy from
+      its own response headers. public/staticwebapp.config.json therefore sends
+      this policy as a header too, plus frame-ancestors, which a <meta> tag
+      cannot set. This copy stays for `vite preview` and local runs, and
+      src/__tests__/deployHeaders.test.ts fails if the header drops a directive
+      this one has (a browser enforces the intersection of both).
     -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; font-src 'self' data:;" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; font-src 'self' data:; form-action 'none';" />
     <title>Propslab</title>
   </head>
   <body class="h-full">

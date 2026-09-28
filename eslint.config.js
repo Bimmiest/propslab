@@ -85,6 +85,16 @@ export default defineConfig([
     },
   },
   {
+    // The MCP server's stdout is its JSON-RPC channel, and the engine runs
+    // inside that server (in its workers, whose output would land there too):
+    // a stray console.log corrupts the protocol stream. Diagnostics go to
+    // stderr, which is what console.error and console.warn write.
+    files: ['src/engine/**/*.ts', 'packages/mcp-server/src/**/*.ts'],
+    rules: {
+      'no-console': ['error', { allow: ['error', 'warn'] }],
+    },
+  },
+  {
     // The maintenance scripts, one of which runs weekly in roster.yml. No
     // type-aware rules: they are plain JS outside every tsconfig, which is what
     // projectService needs to see a file. ESM either way: the root

@@ -83,8 +83,22 @@ export const simulateOutputShape = {
     .describe('Total diagnostics; present only when `diagnostics` was cut to fit.'),
 };
 
+const cutCount = (list: string) =>
+  z
+    .number()
+    .int()
+    .optional()
+    .describe(`Total ${list}; present only when \`${list}\` was cut to fit the size cap.`);
+
+const capNote = z
+  .string()
+  .optional()
+  .describe('Present when a list was cut to fit the size cap; says which.');
+
 export const validateOutputShape = {
   diagnostics: z.array(diagnostic),
+  diagnosticCount: cutCount('diagnostics'),
+  truncationNote: capNote,
 };
 
 const overridden = z.object({ layer: z.string(), line: z.number().int(), value: z.string() });
@@ -105,11 +119,15 @@ const explainStanza = z.object({
   layer: z.string().optional(),
   layers: z.array(z.object({ layer: z.string(), lineRange })).optional(),
   directives: z.array(z.object(explainDirectiveShape)),
+  directiveCount: cutCount('directives'),
 });
 
 export const explainOutputShape = {
   parseErrors: z.array(diagnostic),
   stanzas: z.array(explainStanza),
+  parseErrorCount: cutCount('parseErrors'),
+  stanzaCount: cutCount('stanzas'),
+  truncationNote: capNote,
   resolution: z
     .object({
       metadata,
@@ -119,6 +137,8 @@ export const explainOutputShape = {
         z.object({ name: z.string(), type: stanzaType, layer: z.string().optional() }),
       ),
       effectiveDirectives: z.array(z.object({ ...explainDirectiveShape, stanza: z.string() })),
+      matchedStanzaCount: cutCount('matchedStanzas'),
+      effectiveDirectiveCount: cutCount('effectiveDirectives'),
     })
     .optional()
     .describe('props.conf with a sourcetype only: matched stanzas and the merged directive set.'),

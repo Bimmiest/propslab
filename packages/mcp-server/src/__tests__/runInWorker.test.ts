@@ -14,6 +14,7 @@ import {
 import type { WorkerRequest } from '../protocol';
 import { handleSimulate } from '../tools';
 import { stripHeapSizeFlags, stripHeapSizeFlagsFromNodeOptions } from '../heapFlags';
+import { REGEXP_FALLBACK_FLAGS } from '../v8Flags';
 
 /**
  * The sandbox's non-timeout bounds — heap limit, concurrency cap — and the
@@ -25,6 +26,7 @@ const fixture = (name: string) =>
   fileURLToPath(new URL(`./fixtures/${name}`, import.meta.url));
 const OOM_WORKER = fixture('oomWorker.cjs');
 const SLEEP_WORKER = fixture('sleepWorker.cjs');
+const LOG_WORKER = fixture('logWorker.cjs');
 const LAUNCHER = fileURLToPath(new URL('../../dist/index.js', import.meta.url));
 
 // The fixtures read only what they need out of workerData, so the request is
@@ -321,6 +323,26 @@ describe('cancellation', () => {
   });
 });
 
+describe('worker stdout', () => {
+  it("goes to the server's stderr, never to stdout, which is the protocol channel", async () => {
+    const written = (spy: { mock: { calls: unknown[][] } }) =>
+      spy.mock.calls.map((c) => String(c[0])).join('');
+    const stdout = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    try {
+      await expect(
+        runInWorker(sleep(0), 10_000, { workerPath: LOG_WORKER, limiter: new Semaphore(1) }),
+      ).resolves.toBe('done');
+      await vi.waitFor(() => expect(written(stderr)).toContain('more stray output'));
+      expect(written(stderr)).toContain('stray worker output');
+      expect(written(stdout)).not.toContain('stray');
+    } finally {
+      stdout.mockRestore();
+      stderr.mockRestore();
+    }
+  });
+});
+
 describe('heap-size flag stripping', () => {
   it('drops heap-size flags from execArgv in every spelling node accepts', () => {
     expect(
@@ -348,11 +370,11 @@ describe('heap-size flag stripping', () => {
 // The launcher re-execs node, so a client holds the pid of a shim, not of the
 // server. pgrep finds the server behind it; Linux-only, which is what CI runs.
 describe.skipIf(process.platform !== 'linux')('launcher', () => {
-  const startLauncher = (extraEnv: Record<string, string> = {}) =>
+  const startLauncher = (extraEnv: Record<string, string> = {}, nodeArgs: string[] = []) =>
     new Promise<{ launcher: ReturnType<typeof spawn>; serverPid: number }>((resolve, reject) => {
       const env = { ...process.env, ...extraEnv };
       delete env.PROPSLAB_MCP_NO_REEXEC;
-      const launcher = spawn(process.execPath, [LAUNCHER], {
+      const launcher = spawn(process.execPath, [...nodeArgs, LAUNCHER], {
         stdio: ['pipe', 'pipe', 'pipe'],
         env,
       });
@@ -423,5 +445,44 @@ describe.skipIf(process.platform !== 'linux')('launcher', () => {
       launcher.kill('SIGTERM');
       await exitOf(launcher);
     }
+  }, 20_000);
+
+  it('strips heap-size flags even when the regex flags are already on the command line', async () => {
+    // Before, the launcher skipped its re-exec whenever the regex flags were
+    // present, so the heap flags stayed in effect.
+    const { launcher, serverPid } = await startLauncher(
+      { NODE_OPTIONS: '--max-old-space-size=8192' },
+      [REGEXP_FALLBACK_FLAGS[0], '--max-semi-space-size=64'],
+    );
+    try {
+      const environ = readFileSync(`/proc/${serverPid}/environ`, 'utf8').split('\0');
+      const nodeOptions = environ.find((e) => e.startsWith('NODE_OPTIONS='));
+      expect(nodeOptions ?? '').not.toMatch(/max-old-space-size/);
+      const cmdline = readFileSync(`/proc/${serverPid}/cmdline`, 'utf8').split('\0');
+      expect(cmdline).not.toContain('--max-semi-space-size=64');
+      // Not passed twice.
+      expect(cmdline.filter((a) => a === REGEXP_FALLBACK_FLAGS[0])).toHaveLength(1);
+    } finally {
+      launcher.kill('SIGTERM');
+      await exitOf(launcher);
+    }
+  }, 20_000);
+
+  it('warns when PROPSLAB_MCP_NO_REEXEC=1 keeps heap-size flags', async () => {
+    const server = spawn(process.execPath, [LAUNCHER], {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: {
+        ...process.env,
+        PROPSLAB_MCP_NO_REEXEC: '1',
+        NODE_OPTIONS: '--max-old-space-size=8192',
+      },
+    });
+    let stderr = '';
+    server.stderr.on('data', (chunk: Buffer) => (stderr += chunk.toString()));
+    const exited = exitOf(server);
+    await vi.waitFor(() => expect(stderr).toContain('listening on stdio'), { timeout: 15_000 });
+    server.stdin.end();
+    await exited;
+    expect(stderr).toMatch(/heap-size flags .*override the sandbox heap limit/);
   }, 20_000);
 });

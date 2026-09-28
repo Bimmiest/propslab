@@ -63,8 +63,9 @@ export function lintInertTransformSettings(
     const reference = phase === 'index-time' ? 'TRANSFORMS-' : 'REPORT-';
 
     for (const dir of stanza.directives) {
+      // hasOwn: a key like `constructor` must not find the inherited member.
+      if (!Object.hasOwn(inert, dir.key)) continue;
       const reason = inert[dir.key];
-      if (!reason) continue;
       diagnostics.push({
         level: 'warning',
         message:

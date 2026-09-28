@@ -42,63 +42,80 @@ interface DirectiveMeta {
   regex: string;
   /** Symbolic capture name used during timestamp assembly. */
   capture: string;
+  /**
+   * The directive rendered for a Date, in local time: what `regex` reads back.
+   * Kept beside the regex so parsing and formatting cannot drift apart (#429).
+   */
+  format: (date: Date) => string;
 }
+
+const pad = (n: number, w = 2) => String(n).padStart(w, '0');
+const spacePad = (n: number) => String(n).padStart(2, ' ');
+const hour12 = (date: Date) => (date.getHours() % 12 === 0 ? 12 : date.getHours() % 12);
+
+/**
+ * The first `width` digits of the fractional second. A Date holds milliseconds,
+ * so the digits past the third are always zero.
+ */
+const fraction = (width: number) => (date: Date) =>
+  pad(date.getMilliseconds(), 3).padEnd(width, '0').slice(0, width);
 
 function buildDirectiveMap(): Record<string, DirectiveMeta> {
   return {
-    '%Y': { regex: '(\\d{4})', capture: 'year4' },
-    '%y': { regex: '(\\d{2})', capture: 'year2' },
+    '%Y': { regex: '(\\d{4})', capture: 'year4', format: (d) => String(d.getFullYear()) },
+    '%y': { regex: '(\\d{2})', capture: 'year2', format: (d) => pad(d.getFullYear() % 100) },
     // POSIX/glibc strptime (which Splunk uses) accepts 1-2 digits for these
     // numeric fields, so unpadded values like `1/5/2024 3:04:05` still parse.
-    '%m': { regex: '(\\d{1,2})', capture: 'month' },
-    '%d': { regex: '(\\d{1,2})', capture: 'day' },
-    '%e': { regex: '(\\s?\\d{1,2})', capture: 'day' },
-    '%H': { regex: '(\\d{1,2})', capture: 'hour24' },
-    '%I': { regex: '(\\d{1,2})', capture: 'hour12' },
-    '%M': { regex: '(\\d{1,2})', capture: 'minute' },
-    '%S': { regex: '(\\d{1,2})', capture: 'second' },
-    '%p': { regex: '([AaPp][Mm])', capture: 'ampm' },
+    '%m': { regex: '(\\d{1,2})', capture: 'month', format: (d) => pad(d.getMonth() + 1) },
+    '%d': { regex: '(\\d{1,2})', capture: 'day', format: (d) => pad(d.getDate()) },
+    '%e': { regex: '(\\s?\\d{1,2})', capture: 'day', format: (d) => spacePad(d.getDate()) },
+    '%H': { regex: '(\\d{1,2})', capture: 'hour24', format: (d) => pad(d.getHours()) },
+    '%I': { regex: '(\\d{1,2})', capture: 'hour12', format: (d) => pad(hour12(d)) },
+    '%M': { regex: '(\\d{1,2})', capture: 'minute', format: (d) => pad(d.getMinutes()) },
+    '%S': { regex: '(\\d{1,2})', capture: 'second', format: (d) => pad(d.getSeconds()) },
+    '%p': { regex: '([AaPp][Mm])', capture: 'ampm', format: (d) => (d.getHours() < 12 ? 'AM' : 'PM') },
     // POSIX strptime treats %b/%B (and %a/%A) as synonyms: each accepts the
     // full or the abbreviated name, so `%b` reads `September` and `%B` reads
     // `Sep`. Full names are listed first so the longer spelling is consumed.
-    '%b': { regex: MONTH_NAME_REGEX, capture: 'monthName' },
-    '%B': { regex: MONTH_NAME_REGEX, capture: 'monthName' },
-    '%a': { regex: WEEKDAY_NAME_REGEX, capture: 'weekdayName' },
-    '%A': { regex: WEEKDAY_NAME_REGEX, capture: 'weekdayName' },
+    // The name lookups are asserted: getMonth() is 0-11 and getDay() 0-6 for
+    // any valid Date, and formatStrftime rejects an invalid one up front.
+    '%b': { regex: MONTH_NAME_REGEX, capture: 'monthName', format: (d) => MONTH_NAMES_ABBR[d.getMonth()]! },
+    '%B': { regex: MONTH_NAME_REGEX, capture: 'monthName', format: (d) => MONTH_NAMES_FULL[d.getMonth()]! },
+    '%a': { regex: WEEKDAY_NAME_REGEX, capture: 'weekdayName', format: (d) => WEEKDAY_NAMES_ABBR[d.getDay()]! },
+    '%A': { regex: WEEKDAY_NAME_REGEX, capture: 'weekdayName', format: (d) => WEEKDAY_NAMES_FULL[d.getDay()]! },
     // A trailing `:MM` belongs to a GMT-relative name (`GMT+05:30`); a colon
     // alone does not, so `PST: msg` still reads PST.
-    '%Z': { regex: '([A-Za-z][A-Za-z0-9_/+-]*(?::\\d{2})?)', capture: 'tzName' },
+    '%Z': { regex: '([A-Za-z][A-Za-z0-9_/+-]*(?::\\d{2})?)', capture: 'tzName', format: timeZoneAbbreviation },
     // ISO-8601 'Z' (Zulu/UTC), ±HH:MM / ±HHMM, and ±HH-only offsets.
-    '%z': { regex: '(Z|[+-]\\d{2}:?\\d{2}|[+-]\\d{2})', capture: 'tzOffset' },
+    '%z': { regex: '(Z|[+-]\\d{2}:?\\d{2}|[+-]\\d{2})', capture: 'tzOffset', format: (d) => formatUtcOffset(d, '') },
     // Splunk "enhanced strptime" offsets with explicit colons.
-    '%:z': { regex: '(Z|[+-]\\d{2}:\\d{2})', capture: 'tzOffset' },
-    '%::z': { regex: '(Z|[+-]\\d{2}:\\d{2}:\\d{2})', capture: 'tzOffset' },
-    '%s': { regex: '(\\d{10,13})', capture: 'epoch' },
-    '%3N': { regex: '(\\d{3})', capture: 'milliseconds' },
-    '%6N': { regex: '(\\d{6})', capture: 'microseconds' },
-    '%9N': { regex: '(\\d{9})', capture: 'nanoseconds' },
+    '%:z': { regex: '(Z|[+-]\\d{2}:\\d{2})', capture: 'tzOffset', format: (d) => formatUtcOffset(d, ':') },
+    // getTimezoneOffset() is in whole minutes, so the seconds are always zero.
+    '%::z': { regex: '(Z|[+-]\\d{2}:\\d{2}:\\d{2})', capture: 'tzOffset', format: (d) => `${formatUtcOffset(d, ':')}:00` },
+    '%s': { regex: '(\\d{10,13})', capture: 'epoch', format: (d) => String(Math.floor(d.getTime() / 1000)) },
+    '%3N': { regex: '(\\d{3})', capture: 'milliseconds', format: fraction(3) },
+    '%6N': { regex: '(\\d{6})', capture: 'microseconds', format: fraction(6) },
+    '%9N': { regex: '(\\d{9})', capture: 'nanoseconds', format: fraction(9) },
     // The width is Splunk's digit count, so the other widths read the same
     // way: automatic recognition needs them for fractions such as .NET's
     // seven-digit ticks, whose zone would otherwise be lost.
     ...Object.fromEntries(
-      [1, 2, 4, 5, 7, 8].map((w) => [`%${w}N`, { regex: `(\\d{${w}})`, capture: 'subseconds' }]),
+      [1, 2, 4, 5, 7, 8].map((w) => [`%${w}N`, { regex: `(\\d{${w}})`, capture: 'subseconds', format: fraction(w) }]),
     ),
     // Bare %N is Splunk shorthand for %9N (nanoseconds).
-    '%N': { regex: '(\\d{9})', capture: 'nanoseconds' },
+    '%N': { regex: '(\\d{9})', capture: 'nanoseconds', format: fraction(9) },
     // %Q family: subsecond digits, bare %Q == %3Q (milliseconds).
-    '%Q': { regex: '(\\d{3})', capture: 'milliseconds' },
-    '%3Q': { regex: '(\\d{3})', capture: 'milliseconds' },
-    '%6Q': { regex: '(\\d{6})', capture: 'microseconds' },
-    '%9Q': { regex: '(\\d{9})', capture: 'nanoseconds' },
+    '%Q': { regex: '(\\d{3})', capture: 'milliseconds', format: fraction(3) },
+    '%3Q': { regex: '(\\d{3})', capture: 'milliseconds', format: fraction(3) },
+    '%6Q': { regex: '(\\d{6})', capture: 'microseconds', format: fraction(6) },
+    '%9Q': { regex: '(\\d{9})', capture: 'nanoseconds', format: fraction(9) },
     // Additional specifiers
-    '%f': { regex: '(\\d{1,6})', capture: 'microsecondsFull' },
-    '%j': { regex: '(\\d{3})', capture: 'dayOfYear' },
-    '%k': { regex: '(\\s?\\d{1,2})', capture: 'hour24' },  // space-padded 24h, same capture as %H
-    '%l': { regex: '(\\s?\\d{1,2})', capture: 'hour12' },  // space-padded 12h, same capture as %I
-    // %% is a literal percent -- expanded before the token loop runs.
-    // Composite directives -- expanded before the token loop runs.
-    '%T': { regex: '', capture: '' }, // placeholder, expanded to %H:%M:%S
-    '%F': { regex: '', capture: '' }, // placeholder, expanded to %Y-%m-%d
+    '%f': { regex: '(\\d{1,6})', capture: 'microsecondsFull', format: fraction(6) },
+    '%j': { regex: '(\\d{3})', capture: 'dayOfYear', format: (d) => pad(dayOfYear(d), 3) },
+    // Space-padded 24h and 12h, sharing %H's and %I's captures.
+    '%k': { regex: '(\\s?\\d{1,2})', capture: 'hour24', format: (d) => spacePad(d.getHours()) },
+    '%l': { regex: '(\\s?\\d{1,2})', capture: 'hour12', format: (d) => spacePad(hour12(d)) },
+    // %% and the composites %T and %F are handled before the table is consulted.
   };
 }
 
@@ -157,16 +174,46 @@ interface TokenisedFormat {
  * `parseTimestamp` calls `tokenise` on every invocation, and auto-recognition
  * calls `parseTimestamp` once per candidate format per event — so a 2000-event
  * run re-walked and re-compiled the same dozen formats thousands of times.
- * Formats come from config, so the key space is small and bounded by the conf.
+ * Bounded LRU: every partial TIME_FORMAT typed in the editor, and every format
+ * a long-running MCP client sends, would otherwise stay cached for good.
  */
+const TOKENISE_CACHE_LIMIT = 256;
 const tokeniseCache = new Map<string, TokenisedFormat>();
 
 function tokenise(format: string): TokenisedFormat {
   const cached = tokeniseCache.get(format);
-  if (cached) return cached;
+  if (cached) {
+    // Re-inserted so the Map's order is least-recently-used first.
+    tokeniseCache.delete(format);
+    tokeniseCache.set(format, cached);
+    return cached;
+  }
   const result = tokeniseUncached(format);
+  if (tokeniseCache.size >= TOKENISE_CACHE_LIMIT) {
+    const oldest = tokeniseCache.keys().next();
+    if (!oldest.done) tokeniseCache.delete(oldest.value);
+  }
   tokeniseCache.set(format, result);
   return result;
+}
+
+/** How many tokenised formats the cache holds; for the cache-bound test. */
+export function cachedFormatCount(): number {
+  return tokeniseCache.size;
+}
+
+/**
+ * The table directive starting at `format[i]`, trying the longest first so
+ * `%::z` wins over `%:z` and `%3N`/`%3Q` over a bare `%`. Parsing, formatting
+ * and the linter all walk a format with this, so they agree on its tokens.
+ */
+function directiveAt(format: string, i: number): { spec: string; meta: DirectiveMeta } | null {
+  for (const length of [4, 3, 2]) {
+    const spec = format.slice(i, i + length);
+    const meta = DIRECTIVE_MAP[spec];
+    if (meta) return { spec, meta };
+  }
+  return null;
 }
 
 function tokeniseUncached(format: string): TokenisedFormat {
@@ -177,40 +224,17 @@ function tokeniseUncached(format: string): TokenisedFormat {
 
   while (i < expanded.length) {
     if (expanded[i] === '%') {
-      // Try the longest directives first so `%::z` wins over `%:z`, and
-      // `%3N`/`%3Q` win over a bare `%` literal. Longest → shortest.
-      const fourChar = expanded.slice(i, i + 4);
-      const fourMeta = DIRECTIVE_MAP[fourChar];
-      if (fourMeta) {
-        regexStr += fourMeta.regex;
-        captures.push(fourMeta.capture);
-        i += 4;
+      const directive = directiveAt(expanded, i);
+      if (directive) {
+        regexStr += directive.meta.regex;
+        captures.push(directive.meta.capture);
+        i += directive.spec.length;
         continue;
       }
-
-      const threeChar = expanded.slice(i, i + 3);
-      const threeMeta = DIRECTIVE_MAP[threeChar];
-      if (threeMeta) {
-        regexStr += threeMeta.regex;
-        captures.push(threeMeta.capture);
-        i += 3;
-        continue;
-      }
-
-      // Single-character directive (%Y, %m, etc.)
-      const twoChar = expanded.slice(i, i + 2);
 
       // %% = literal percent sign (no capture group)
-      if (twoChar === '%%') {
+      if (expanded.slice(i, i + 2) === '%%') {
         regexStr += '%';
-        i += 2;
-        continue;
-      }
-
-      const meta = DIRECTIVE_MAP[twoChar];
-      if (meta) {
-        regexStr += meta.regex;
-        captures.push(meta.capture);
         i += 2;
         continue;
       }
@@ -829,79 +853,71 @@ function assembleTimestamp(
 // needs the same rendering, and two implementations of strftime would be two
 // chances to disagree about what %3N means.
 // ---------------------------------------------------------------------------
-const STRFTIME_MONTHS_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-const STRFTIME_MONTHS_FULL = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-const STRFTIME_DAYS_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const STRFTIME_DAYS_FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-
 /**
  * Format a Date with a Splunk strftime string. Uses the browser's local timezone
  * (a documented browser-tool divergence — real Splunk uses the configured/indexer
- * TZ). Covers the common token set rather than the full strptime grammar.
+ * TZ). Renders every specifier the parser reads, from the same table; anything
+ * else is left as literal text, which unsupportedSpecifiers flags.
  */
 export function formatStrftime(date: Date, format: string): string {
   // An epoch outside the Date range yields an Invalid Date, whose accessors all
   // return NaN — %F would render "NaN-NaN-NaN", and the %b/%B/%a/%A name lookups
-  // below would index their table with NaN and fall back to echoing the literal
-  // specifier. Neither reaches the caller today only because building the token
-  // table throws first: %Z calls Intl.formatToParts, which rejects an invalid
-  // date with a bare "Invalid time value". Reject it deliberately instead, so the
-  // error names the function that caused it — and so every accessor past this
-  // point is known to be in its documented range.
+  // would index their table with NaN. Reject it deliberately, so the error names
+  // the function that caused it — and so every accessor past this point is
+  // known to be in its documented range.
   if (Number.isNaN(date.getTime())) {
     throw new Error('strftime(): timestamp is out of range');
   }
 
-  const pad = (n: number, w = 2) => String(n).padStart(w, '0');
-  const h24 = date.getHours();
-  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
-  const startOfYear = new Date(date.getFullYear(), 0, 0);
-  const dayOfYear = Math.floor((date.getTime() - startOfYear.getTime()) / 86_400_000);
-  // The four name-table lookups below are asserted: getMonth() is 0-11 and
-  // getDay() is 0-6 for any valid Date, and the invalid case returned above.
-  const tokens: Record<string, string> = {
-    '%Y': String(date.getFullYear()),
-    '%y': pad(date.getFullYear() % 100),
-    '%m': pad(date.getMonth() + 1),
-    '%d': pad(date.getDate()),
-    '%e': String(date.getDate()).padStart(2, ' '),
-    '%H': pad(h24),
-    '%I': pad(h12),
-    '%M': pad(date.getMinutes()),
-    '%S': pad(date.getSeconds()),
-    '%p': h24 < 12 ? 'AM' : 'PM',
-    '%b': STRFTIME_MONTHS_ABBR[date.getMonth()]!,
-    '%B': STRFTIME_MONTHS_FULL[date.getMonth()]!,
-    '%a': STRFTIME_DAYS_ABBR[date.getDay()]!,
-    '%A': STRFTIME_DAYS_FULL[date.getDay()]!,
-    '%j': pad(dayOfYear, 3),
-    '%s': String(Math.floor(date.getTime() / 1000)),
-    '%3N': pad(date.getMilliseconds(), 3),
-    '%6N': pad(date.getMilliseconds(), 3) + '000',
-    '%T': `${pad(h24)}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`,
-    '%F': `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`,
-    // Splunk emits the indexer's zone; in the browser that is the viewer's, which
-    // is the same divergence the rest of the timestamp simulation already carries.
-    // Leaving the specifier as literal `%z` text was worse: it looked like output.
-    '%z': formatUtcOffset(date),
-    '%Z': timeZoneAbbreviation(date),
-    '%%': '%',
-  };
-  return format.replace(/%(?:3N|6N|[YymdeHIMSpbBaAjsTFzZ%])/g, (m) => tokens[m] ?? m);
+  const expanded = expandComposites(format);
+  let out = '';
+  let i = 0;
+  while (i < expanded.length) {
+    if (expanded[i] === '%') {
+      const directive = directiveAt(expanded, i);
+      if (directive) {
+        out += directive.meta.format(date);
+        i += directive.spec.length;
+        continue;
+      }
+      if (expanded.slice(i, i + 2) === '%%') {
+        out += '%';
+        i += 2;
+        continue;
+      }
+    }
+    out += expanded.charAt(i);
+    i += 1;
+  }
+  return out;
 }
 
-/** `%z` — the local UTC offset as `+hhmm` / `-hhmm`. */
-function formatUtcOffset(date: Date): string {
+/**
+ * `%j` — the local day of the year, 1-366. Counted between calendar dates
+ * rather than local midnights, whose difference is not a whole number of days
+ * when a DST change falls between them (#429).
+ */
+function dayOfYear(date: Date): number {
+  const year = date.getFullYear();
+  const days = utcMs(year, date.getMonth(), date.getDate(), 0, 0, 0) - utcMs(year, 0, 1, 0, 0, 0);
+  return days / 86_400_000 + 1;
+}
+
+/**
+ * `%z` — the local UTC offset as `+hhmm` / `-hhmm`, or with `separator`
+ * between the hours and minutes for `%:z`.
+ */
+function formatUtcOffset(date: Date, separator: string): string {
   const offsetMinutes = -date.getTimezoneOffset();
   const sign = offsetMinutes < 0 ? '-' : '+';
   const abs = Math.abs(offsetMinutes);
-  return `${sign}${String(Math.floor(abs / 60)).padStart(2, '0')}${String(abs % 60).padStart(2, '0')}`;
+  return `${sign}${pad(Math.floor(abs / 60))}${separator}${pad(abs % 60)}`;
 }
 
 /** `%Z` — the local zone's short name, falling back to the numeric offset. */
 function timeZoneAbbreviation(date: Date): string {
   const parts = new Intl.DateTimeFormat('en-US', { timeZoneName: 'short' }).formatToParts(date);
-  return parts.find((p) => p.type === 'timeZoneName')?.value ?? formatUtcOffset(date);
+  return parts.find((p) => p.type === 'timeZoneName')?.value ?? formatUtcOffset(date, '');
 }
 
 /**
@@ -910,14 +926,8 @@ function timeZoneAbbreviation(date: Date): string {
  * the other would make the editor confidently flag a working format.
  */
 export function supportedSpecifiers(): Set<string> {
-  const supported = new Set(Object.keys(buildDirectiveMap()));
   // Expanded before lookup rather than carried in the table, plus the escape.
-  supported.add('%T');
-  supported.add('%F');
-  supported.add('%%');
-  // Sub-second widths are matched by a width-aware rule, not a table entry.
-  for (const width of ['3', '6', '9']) supported.add(`%${width}N`);
-  return supported;
+  return new Set([...Object.keys(DIRECTIVE_MAP), '%T', '%F', '%%']);
 }
 
 /**
@@ -927,29 +937,34 @@ export function supportedSpecifiers(): Set<string> {
  * matching the literal `i` is how it survives to production.
  */
 export function unsupportedSpecifiers(format: string): { specifier: string; index: number }[] {
-  const supported = supportedSpecifiers();
   const found: { specifier: string; index: number }[] = [];
 
-  for (let i = 0; i < format.length; i++) {
-    if (format[i] !== '%') continue;
+  let i = 0;
+  while (i < format.length) {
+    if (format[i] !== '%') {
+      i += 1;
+      continue;
+    }
 
-    // Width-prefixed sub-second form, e.g. %3N.
-    const widthed = /^%(\d)N/.exec(format.slice(i, i + 4));
-    if (widthed) {
-      if (!supported.has(`%${widthed[1]}N`)) {
-        found.push({ specifier: widthed[0], index: i });
-      }
-      i += 2;
+    const directive = directiveAt(format, i);
+    if (directive) {
+      i += directive.spec.length;
       continue;
     }
 
     const two = format.slice(i, i + 2);
-    if (two.length < 2) {
-      found.push({ specifier: '%', index: i });
+    if (two === '%%' || two === '%T' || two === '%F') {
+      i += 2;
       continue;
     }
-    if (!supported.has(two)) found.push({ specifier: two, index: i });
-    i += 1;
+    if (two.length < 2) {
+      found.push({ specifier: '%', index: i });
+      break;
+    }
+    // An unknown width, e.g. %0N, is reported whole rather than as `%0`.
+    const specifier = /^%\dN/.exec(format.slice(i, i + 3))?.[0] ?? two;
+    found.push({ specifier, index: i });
+    i += specifier.length;
   }
 
   return found;

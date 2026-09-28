@@ -1,14 +1,18 @@
-import { useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { Overlay } from '../ui/Overlay';
 import { useAppStore } from '../../store/useAppStore';
 import { Icon } from '../ui/Icon';
 import { PIPELINE_STAGES, PHASE_LABELS, type PipelineStage } from '../../engine/pipelineStages';
+import { tint } from '../../utils/tint';
 
 export function HelpPanel() {
   const helpOpen = useAppStore((s) => s.helpOpen);
   const toggleHelp = useAppStore((s) => s.toggleHelp);
   const openDictionaryAt = useAppStore((s) => s.openDictionaryAt);
-  const [expandedStep, setExpandedStep] = useState<number | null>(null);
+  // In the store rather than local state so the dictionary's "Runs at" links
+  // can open the drawer at a given stage (openHelpAt).
+  const expandedStep = useAppStore((s) => s.helpStage);
+  const setExpandedStep = useAppStore((s) => s.setHelpStage);
 
   // This drawer answers "what runs when"; the dictionary answers "what does
   // this directive do". Selecting a directive chip hands over to the other and
@@ -23,20 +27,18 @@ export function HelpPanel() {
   const searchStages = PIPELINE_STAGES.filter((s) => s.phase === 'search-time');
 
   return (
-    // Force-mounted: the panel slides in and out, so it has to stay in the tree
-    // while closed. Overlay marks a closed force-mounted panel inert, which is
-    // what keeps its off-screen buttons out of the tab order.
+    // The slide is `drawer-slide`'s keyframes on Radix's data-state (index.css):
+    // an exit animation is what Presence waits for before unmounting, where a
+    // transition would be cut off by the unmount.
     <Overlay
       open={helpOpen}
       onClose={toggleHelp}
       label="Pipeline reference"
-      forceMount
       containerClassName=""
-      className="fixed top-0 right-0 bottom-0 z-50 flex flex-col w-[420px] max-w-full shadow-2xl transition-transform duration-250 ease-in-out"
+      className="drawer-slide fixed top-0 right-0 bottom-0 z-50 flex flex-col w-[420px] max-w-full shadow-2xl"
       style={{
         backgroundColor: 'var(--color-bg-primary)',
         borderLeft: '1px solid var(--color-border)',
-        transform: helpOpen ? 'translateX(0)' : 'translateX(100%)',
       }}
     >
       <div className="contents">
@@ -159,23 +161,31 @@ function StageCard({
   onToggle: () => void;
   onOpenDirective: (key: string) => void;
 }) {
+  const ref = useRef<HTMLDivElement>(null);
+  // A stage opened from the dictionary may sit below the fold.
+  useEffect(() => {
+    if (isExpanded) ref.current?.scrollIntoView?.({ block: 'nearest' });
+  }, [isExpanded]);
+
   return (
     <div
+      ref={ref}
       className="rounded-lg border overflow-hidden transition-colors"
       style={{
-        borderColor: isExpanded ? phaseColor + '60' : 'var(--color-border-subtle)',
+        borderColor: isExpanded ? tint(phaseColor, 38) : 'var(--color-border-subtle)',
         backgroundColor: 'var(--color-bg-elevated)',
       }}
     >
       <button
         type="button"
         onClick={onToggle}
+        aria-expanded={isExpanded}
         className="w-full flex items-center gap-3 px-3 py-2.5 text-left cursor-pointer bg-transparent border-none transition-colors hover:bg-[var(--color-bg-secondary)]"
       >
         {/* Step badge */}
         <div
           className="shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold"
-          style={{ backgroundColor: phaseColor + '20', color: phaseColor }}
+          style={{ backgroundColor: tint(phaseColor, 13), color: phaseColor }}
         >
           {stage.step}
         </div>
@@ -184,7 +194,7 @@ function StageCard({
           <span className="text-xs font-semibold text-[var(--color-text-primary)]">{stage.name}</span>
           <span
             className="ml-2 text-[10px] px-1.5 py-0.5 rounded font-medium"
-            style={{ backgroundColor: phaseColor + '15', color: phaseColor }}
+            style={{ backgroundColor: tint(phaseColor, 8), color: phaseColor }}
           >
             {PHASE_LABELS[stage.phase]}
           </span>

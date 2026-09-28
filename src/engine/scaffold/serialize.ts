@@ -31,10 +31,16 @@ export function appendStanza(existing: string, stanza: string): string {
   return trimmed ? `${trimmed}\n\n${stanza}\n` : `${stanza}\n`;
 }
 
+/** Index of the last line in [from, to) that `re` matches, or -1. */
+function lastIndexMatching(lines: string[], re: RegExp, from: number, to: number): number {
+  for (let i = to - 1; i >= from; i--) if (re.test(lines[i] ?? '')) return i;
+  return -1;
+}
+
 /**
  * Insert or replace a `KEY = value` directive inside the named stanza of props.conf
- * text. If the stanza exists, an existing line for KEY is replaced in place;
- * otherwise the directive is appended to the END of the stanza block (after the last
+ * text. If the stanza exists, the last line for KEY in its last block is replaced in
+ * place; otherwise the directive is appended to the END of that block (after the last
  * directive, before any trailing blank line or the next stanza header). If the
  * stanza is absent, a new stanza is appended to the file.
  */
@@ -42,7 +48,9 @@ export function upsertDirectiveInStanza(propsText: string, stanzaName: string, k
   const directiveLine = `${key} = ${value}`;
   const lines = propsText.split('\n');
   const headerRe = new RegExp(`^\\s*\\[${escapeRegex(stanzaName)}\\]\\s*$`);
-  const headerIdx = lines.findIndex((l) => headerRe.test(l));
+  // A stanza may be split over several blocks, and a key over several lines;
+  // the last definition wins, so that is the one to edit.
+  const headerIdx = lastIndexMatching(lines, headerRe, 0, lines.length);
 
   if (headerIdx === -1) {
     return appendStanza(propsText, `[${stanzaName}]\n${directiveLine}`);
@@ -53,9 +61,9 @@ export function upsertDirectiveInStanza(propsText: string, stanzaName: string, k
   while (end < lines.length && !/^\s*\[.+\]\s*$/.test(lines[end] ?? '')) end++;
 
   const keyRe = new RegExp(`^\\s*${escapeRegex(key)}\\s*=`);
-  const within = lines.slice(headerIdx + 1, end).findIndex((l) => keyRe.test(l));
-  if (within !== -1) {
-    lines[headerIdx + 1 + within] = directiveLine;
+  const keyIdx = lastIndexMatching(lines, keyRe, headerIdx + 1, end);
+  if (keyIdx !== -1) {
+    lines[keyIdx] = directiveLine;
   } else {
     // Append after the last non-blank line of the stanza, so it lands at the bottom
     // of the block rather than detached after a blank-line gap.

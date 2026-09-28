@@ -11,18 +11,8 @@
 import { useMemo, useState } from 'react';
 import type { DirectiveNoOp, SplunkEvent } from '../../../../engine/types';
 import { groupNoOps, type GroupedNoOp } from '../../../../engine/groupNoOps';
-import { getEditor } from '../../../editor/editorRegistry';
+import { revealInEditor } from '../../../editor/revealInEditor';
 import { Icon } from '../../../ui/Icon';
-
-function jumpTo(file: DirectiveNoOp['file'], line: number): void {
-  const ed = getEditor(file);
-  if (!ed) return;
-  ed.focus();
-  requestAnimationFrame(() => {
-    ed.setPosition({ lineNumber: line, column: 1 });
-    ed.revealLineInCenter(line);
-  });
-}
 
 function NoOpRow({ group, totalEvents }: { group: GroupedNoOp; totalEvents: number }) {
   const [expanded, setExpanded] = useState(false);
@@ -44,7 +34,7 @@ function NoOpRow({ group, totalEvents }: { group: GroupedNoOp; totalEvents: numb
           <div className="flex items-center gap-2 mt-0.5 flex-wrap">
             <button
               type="button"
-              onClick={() => jumpTo(group.file, group.line)}
+              onClick={() => revealInEditor(group.file, group.line)}
               className="text-xs font-mono text-[var(--color-accent)] cursor-pointer hover:underline bg-transparent border-none p-0"
             >
               {group.file}:{group.line}

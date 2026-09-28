@@ -5,6 +5,7 @@ import { CopyButton } from '../editor/CopyButton';
 import { Icon } from '../ui/Icon';
 import { Chip, DirectiveBadges } from './DictionaryBadges';
 import type { DictionaryEntry } from './entries';
+import { tint } from '../../utils/tint';
 
 type DirectiveEntryInfo = Extract<DictionaryEntry, { kind: 'directive' }>['info'];
 type StanzaEntryInfo = Extract<DictionaryEntry, { kind: 'stanza' }>['stanza'];
@@ -160,12 +161,7 @@ function Callout({
 }
 
 export function DictionaryDetail({ entry }: { entry: DictionaryEntry }) {
-  const toggleHelp = useAppStore((s) => s.toggleHelp);
-  const helpOpen = useAppStore((s) => s.helpOpen);
-
-  const openPipelineReference = () => {
-    if (!helpOpen) toggleHelp();
-  };
+  const openHelpAt = useAppStore((s) => s.openHelpAt);
 
   if (entry.kind === 'stanza') return <StanzaDetail stanza={entry.stanza} />;
 
@@ -224,7 +220,7 @@ export function DictionaryDetail({ entry }: { entry: DictionaryEntry }) {
             )}
 
             {stages.length > 0 && (
-              <StageLinks stages={stages} onOpen={openPipelineReference} />
+              <StageLinks stages={stages} onOpen={openHelpAt} />
             )}
           </>
         }
@@ -233,7 +229,7 @@ export function DictionaryDetail({ entry }: { entry: DictionaryEntry }) {
   );
 }
 
-function StageLinks({ stages, onOpen }: { stages: ReturnType<typeof getStagesForDirective>; onOpen: () => void }) {
+function StageLinks({ stages, onOpen }: { stages: ReturnType<typeof getStagesForDirective>; onOpen: (step: number) => void }) {
   return (
     <Card label="Runs at">
       <div className="flex flex-col gap-1.5">
@@ -241,7 +237,7 @@ function StageLinks({ stages, onOpen }: { stages: ReturnType<typeof getStagesFor
           <button
             key={stage.step}
             type="button"
-            onClick={onOpen}
+            onClick={() => onOpen(stage.step)}
             title="Open the pipeline reference at this stage"
             className="group flex items-center gap-2 rounded-md px-2 py-1.5 -mx-1 text-left cursor-pointer
               border-none bg-transparent transition-colors hover:bg-[var(--color-bg-tertiary)]
@@ -250,11 +246,12 @@ function StageLinks({ stages, onOpen }: { stages: ReturnType<typeof getStagesFor
             <span
               className="shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold"
               style={{
-                backgroundColor: `color-mix(in srgb, ${
+                backgroundColor: tint(
                   stage.phase === 'index-time'
                     ? 'var(--color-warning)'
-                    : 'var(--color-accent)'
-                } 18%, transparent)`,
+                    : 'var(--color-accent)',
+                  18,
+                ),
                 color:
                   stage.phase === 'index-time'
                     ? 'var(--color-warning)'

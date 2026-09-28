@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Panel, Group, Separator } from 'react-resizable-panels';
 import { RawPanel } from '../raw/RawPanel';
 import { PropsConfEditor } from '../editor/PropsConfEditor';
@@ -30,9 +31,10 @@ function ResizeHandle({ direction = 'vertical' }: { direction?: 'horizontal' | '
  *
  * Split out of AppShell when the activity rail arrived, so the shell only has
  * to choose between whole views. This subtree stays mounted while the
- * dictionary is on screen — see AppShell for why.
+ * dictionary is on screen — see AppShell for why. Memoised: it takes no
+ * props, so nothing the shell re-renders for need reach the editors.
  */
-export function SimulatorView() {
+export const SimulatorView = memo(function SimulatorView() {
   const propsCollapsed = useAppStore((s) => !!s.collapsedPanels['props.conf']);
   const transformsCollapsed = useAppStore((s) => !!s.collapsedPanels['transforms.conf']);
 
@@ -113,4 +115,4 @@ export function SimulatorView() {
       </Panel>
     </Group>
   );
-}
+});

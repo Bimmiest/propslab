@@ -1,5 +1,6 @@
 import type React from 'react';
 import type { DirectiveInfo } from '../../engine/directiveRegistry';
+import { tint } from '../../utils/tint';
 
 type Tone = 'index' | 'search' | 'neutral' | 'danger';
 
@@ -30,11 +31,11 @@ export function Chip({
   return (
     <span
       className={`inline-flex shrink-0 items-center rounded px-1.5 py-0.5 text-[10px] font-medium leading-tight whitespace-nowrap ${mono ? 'font-mono' : ''}`}
-      // color-mix, not a concatenated `${color}20` alpha suffix: these tones are
+      // tint(), not a concatenated `${color}20` alpha suffix: these tones are
       // `var(--color-…)` references, and appending hex digits to a var() call
       // produces a declaration the browser drops — which is why these pills
       // rendered as bare coloured text with no fill.
-      style={{ backgroundColor: `color-mix(in srgb, ${color} 10%, transparent)`, color }}
+      style={{ backgroundColor: tint(color, 10), color }}
     >
       {children}
     </span>

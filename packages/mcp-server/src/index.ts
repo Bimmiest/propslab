@@ -6,10 +6,14 @@
  * engine). Worker threads inherit process-wide V8 flags, so the sandbox
  * worker is covered by the same re-exec.
  *
+ * It re-execs whenever heap-size flags need stripping (heapFlags.ts), even if
+ * the regex flags are already on the command line: only a fresh process sheds
+ * a heap flag already in effect.
+ *
  * `PROPSLAB_MCP_NO_REEXEC=1` opts out; `v8Flags.ts`'s setFlagsFromString
  * fallback still applies, best-effort — but heap-size flags are then not
- * stripped (heapFlags.ts), so an inherited `--max-old-space-size` overrides the
- * sandbox's per-worker heap limit.
+ * stripped, so an inherited `--max-old-space-size` overrides the sandbox's
+ * per-worker heap limit, and the launcher says so on stderr.
  *
  * Because the client holds the pid of this shim rather than of the server,
  * the shim forwards termination signals to the child and exits the way the
@@ -21,26 +25,38 @@ import { stripHeapSizeFlags, stripHeapSizeFlagsFromNodeOptions } from './heapFla
 import { flagsAlreadySet, REGEXP_FALLBACK_FLAGS } from './v8Flags';
 
 async function main(): Promise<void> {
-  if (!flagsAlreadySet() && process.env.PROPSLAB_MCP_NO_REEXEC !== '1') {
-    // Heap-size flags would override the sandbox's per-worker heap limit;
-    // see heapFlags.ts.
-    const execArgv = stripHeapSizeFlags(process.execArgv);
-    const env = { ...process.env };
-    if (env.NODE_OPTIONS !== undefined) {
-      env.NODE_OPTIONS = stripHeapSizeFlagsFromNodeOptions(env.NODE_OPTIONS);
-    }
-    if (
-      execArgv.length !== process.execArgv.length ||
-      env.NODE_OPTIONS !== process.env.NODE_OPTIONS
-    ) {
+  // Heap-size flags would override the sandbox's per-worker heap limit;
+  // see heapFlags.ts.
+  const execArgv = stripHeapSizeFlags(process.execArgv);
+  const env = { ...process.env };
+  if (env.NODE_OPTIONS !== undefined) {
+    env.NODE_OPTIONS = stripHeapSizeFlagsFromNodeOptions(env.NODE_OPTIONS);
+  }
+  const heapFlagsSet =
+    execArgv.length !== process.execArgv.length || env.NODE_OPTIONS !== process.env.NODE_OPTIONS;
+
+  if (process.env.PROPSLAB_MCP_NO_REEXEC === '1') {
+    if (heapFlagsSet) {
       // stderr: stdout belongs to the protocol.
+      console.error(
+        'propslab MCP server: V8 heap-size flags are set and PROPSLAB_MCP_NO_REEXEC=1 keeps ' +
+          'them, so they override the sandbox heap limit',
+      );
+    }
+  } else if (!flagsAlreadySet() || heapFlagsSet) {
+    if (heapFlagsSet) {
       console.error(
         'propslab MCP server: ignoring V8 heap-size flags so the sandbox heap limit applies',
       );
     }
     const child = spawn(
       process.execPath,
-      [...REGEXP_FALLBACK_FLAGS, ...execArgv, __filename, ...process.argv.slice(2)],
+      [
+        ...(flagsAlreadySet() ? [] : REGEXP_FALLBACK_FLAGS),
+        ...execArgv,
+        __filename,
+        ...process.argv.slice(2),
+      ],
       { stdio: 'inherit', env },
     );
     // This process is only a shim: whatever the MCP client does to it has to

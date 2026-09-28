@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { useAppStore } from '../../../../store/useAppStore';
 import { RawTab } from '../RawTab';
@@ -119,5 +119,46 @@ describe('RawTab — metadata baseline is the run (#335)', () => {
     useAppStore.setState({ metadata: { index: 'other', host: 'x', source: 'y', sourcetype: 'z' }, processingResult: null });
     const { container } = render(<RawTab items={pageOne} currentPage={1} eventsPerPage={1} search="" />);
     expect(container.textContent).not.toContain('Metadata modified');
+  });
+});
+
+// A CLONE_SOURCETYPE copy keeps its original's lineNumbers and sits right
+// after it, so a key made of lines alone was shared by the two.
+describe('RawTab — a clone and its original are separate rows (#422)', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  function cloneOf(item: EnrichedEvent, sourcetype: string): EnrichedEvent {
+    const event = { ...item.event, metadata: { ...item.event.metadata, sourcetype }, clonedFrom: item.event.metadata.sourcetype };
+    return { ...item, event };
+  }
+
+  it('renders both without a duplicate-key warning', () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const original = makeItem('user=alice', 1);
+    const items = [original, cloneOf(original, 'copy'), cloneOf(original, 'copy')];
+    const { container } = render(<RawTab items={items} currentPage={1} eventsPerPage={10} search="" />);
+    expect(screen.getAllByText(/^Event #\d+$/)).toHaveLength(3);
+    expect(container.textContent?.match(/Cloned from st/g)).toHaveLength(2);
+    const sameKey = errors.mock.calls.filter((args: unknown[]) => args.some((a) => String(a).includes('same key')));
+    expect(sameKey).toEqual([]);
+  });
+
+  it('keeps expanded state on the row it was set on', () => {
+    const original = makeItem('user=alice', 1);
+    const clone = cloneOf(original, 'copy');
+    const { rerender } = render(<RawTab items={[original, clone]} currentPage={1} eventsPerPage={10} search="" />);
+    fireEvent.click(screen.getAllByRole('button', { name: /Metadata/i })[1]!);
+    // Reordered, the expanded state moves with the clone, not the slot.
+    rerender(<RawTab items={[clone, original]} currentPage={1} eventsPerPage={10} search="" />);
+    const toggles = screen.getAllByRole('button', { name: /Metadata/i });
+    expect(toggles.map((b) => b.getAttribute('aria-expanded'))).toEqual(['true', 'false']);
+  });
+
+  it('clears the token selection when the same event\'s _raw changes', () => {
+    const { rerender } = render(<RawTab items={[makeItem('user=alice', 1)]} currentPage={1} eventsPerPage={10} search="" />);
+    fireEvent.keyDown(screen.getByRole('textbox'), { key: 'ArrowRight' });
+    expect(document.body.textContent).toContain('Selected: user');
+    rerender(<RawTab items={[makeItem('name=bob', 1)]} currentPage={1} eventsPerPage={10} search="" />);
+    expect(document.body.textContent).not.toContain('Selected:');
   });
 });

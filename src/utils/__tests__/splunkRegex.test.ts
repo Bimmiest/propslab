@@ -1,10 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import {
+  cachedProbeCount,
   cachedRegexCount,
   extractionLimits,
   initRegexEngine,
   initRegexEngineSync,
   regexEngineModule,
+  safeProbeRegex,
   safeRegex,
   SplunkRegex,
   validateRegex,
@@ -195,6 +197,14 @@ describe('MATCH_LIMIT and DEPTH_LIMIT', () => {
     expect(extractionLimits('-1', 'lots')).toEqual({ matchLimit: DEFAULT_MATCH_LIMIT, depthLimit: DEFAULT_DEPTH_LIMIT });
   });
 
+  it('treats an empty or blank value as unset, not as 0', () => {
+    expect(extractionLimits('', '  ')).toEqual({ matchLimit: DEFAULT_MATCH_LIMIT, depthLimit: DEFAULT_DEPTH_LIMIT });
+    expect(extractionLimits('1.5', '1e3')).toEqual({ matchLimit: DEFAULT_MATCH_LIMIT, depthLimit: DEFAULT_DEPTH_LIMIT });
+    const re = safeRegex('^(a+)+$', '', extractionLimits(''))!;
+    expect(re.exec(runaway)).toBeNull();
+    expect(re.lastError).toMatch(/match limit exceeded/);
+  });
+
   it('counts a match that hits the limit as no match, and says why', () => {
     const re = safeRegex('^(a+)+$', '', extractionLimits())!;
     expect(re.exec(runaway)).toBeNull();
@@ -234,6 +244,14 @@ describe('compiled-pattern cache', () => {
     for (let i = 0; i < 400; i++) new SplunkRegex(`evict${i}`);
     expect(cachedRegexCount()).toBeLessThanOrEqual(256);
     expect(first.exec('first7')?.[1]).toBe('7');
+  });
+
+  it('keeps diagnostic probes out of the shared cache (#415)', () => {
+    const before = cachedRegexCount();
+    for (let i = 0; i < 400; i++) expect(safeProbeRegex(`probe${i}`)?.test(`probe${i}`)).toBe(true);
+    expect(cachedRegexCount()).toBe(before);
+    expect(cachedProbeCount()).toBeLessThanOrEqual(256);
+    expect(safeProbeRegex('(unbalanced')).toBeNull();
   });
 });
 

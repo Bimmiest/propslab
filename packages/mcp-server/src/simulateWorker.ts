@@ -30,12 +30,14 @@ import type {
   WorkerResponse,
 } from './protocol';
 import { lintRegexDirectives } from './regexLint';
+import { boundExplain, boundValidate } from './responseBudget';
 import { serializeSimulation } from './serialize';
 
 /**
  * Serialized here rather than on the server's thread: the raw ProcessingResult
  * grows with the event count, and posting it whole would put all of it on the
- * main thread, which has no heap limit, before anything was trimmed.
+ * main thread, which has no heap limit, before anything was trimmed. Validate
+ * and explain are cut to the same response budget here for the same reason.
  */
 function handleSimulate(request: SimulateRequest): SimulateResponse {
   const { result, diagnostics } = runPipeline(
@@ -63,7 +65,7 @@ function handleValidate(request: ValidateRequest): ValidateResponse {
   const diagnostics = [...propsConf.errors, ...transformsConf.errors];
   lintConfigs(propsConf, transformsConf, diagnostics);
   diagnostics.push(...lintRegexDirectives(propsConf, transformsConf));
-  return { diagnostics };
+  return boundValidate(diagnostics);
 }
 
 function toExplainDirective(d: ConfDirective): ExplainDirective {
@@ -99,9 +101,13 @@ function handleExplain(request: ExplainRequest): ExplainResponse {
     const resolved = resolveStanzasForEvent(parsed.stanzas, request.metadata);
     const merged = mergeDirectives(resolved.stanzas);
     // mergeDirectives returns the winning ConfDirective objects themselves, so
-    // the stanza each winner came from is recoverable by identity.
-    const stanzaOf = (directive: ConfDirective): string =>
-      resolved.stanzas.find((s) => s.directives.includes(directive))?.name ?? 'default';
+    // the stanza each winner came from is recoverable by identity — through a
+    // map, as a scan per winner is quadratic in a stanza of 200k directives.
+    const owner = new Map<ConfDirective, string>();
+    for (const s of resolved.stanzas) {
+      for (const d of s.directives) if (!owner.has(d)) owner.set(d, s.name);
+    }
+    const stanzaOf = (directive: ConfDirective): string => owner.get(directive) ?? 'default';
     response.resolution = {
       metadata: request.metadata,
       effectiveMetadata: resolved.metadata,
@@ -115,7 +121,7 @@ function handleExplain(request: ExplainRequest): ExplainResponse {
     };
   }
 
-  return response;
+  return boundExplain(response);
 }
 
 function handle(request: WorkerRequest) {

@@ -4,7 +4,8 @@ import type {
   SplunkEvent,
   ValidationDiagnostic,
 } from '../../../../src/engine/types';
-import { MAX_RESPONSE_CHARS, serializeSimulation } from '../serialize';
+import { serializeSimulation } from '../serialize';
+import { MAX_PAYLOAD_BYTES, responseBytes } from '../responseBudget';
 
 // Everything in a simulate response that grows with the sample is bounded.
 
@@ -39,7 +40,14 @@ function result(events: SplunkEvent[]): ProcessingResult {
   };
 }
 
-const size = (v: unknown) => JSON.stringify(v, null, 2).length;
+// Bytes of both copies on the wire (responseBudget.ts), checked against a
+// literal serialization of them.
+const size = (v: unknown) => {
+  const bytes = responseBytes(v);
+  const text = JSON.stringify(v);
+  expect(bytes).toBe(Buffer.byteLength(JSON.stringify(text)) + Buffer.byteLength(text));
+  return bytes;
+};
 
 describe('serializeSimulation', () => {
   it('bounds processingSteps to the returned events', () => {
@@ -58,7 +66,7 @@ describe('serializeSimulation', () => {
     // far past the cap with snapshots, well inside it without.
     const events = Array.from({ length: 500 }, (_, i) => event(i, 20_000, 2));
     const out = serializeSimulation(result(events), [], { maxEvents: 500, includeSnapshots: true });
-    expect(size(out)).toBeLessThanOrEqual(MAX_RESPONSE_CHARS);
+    expect(size(out)).toBeLessThanOrEqual(MAX_PAYLOAD_BYTES);
     expect(out.returnedEvents).toBeGreaterThan(0);
     expect(out.returnedEvents).toBeLessThan(500);
     expect(out.events).toHaveLength(out.returnedEvents);
@@ -72,14 +80,14 @@ describe('serializeSimulation', () => {
   });
 
   it('returns no event at all rather than one over the cap', () => {
-    const out = serializeSimulation(result([event(0, MAX_RESPONSE_CHARS, 0)]), [], {
+    const out = serializeSimulation(result([event(0, MAX_PAYLOAD_BYTES, 0)]), [], {
       maxEvents: 20,
       includeSnapshots: false,
     });
     expect(out.returnedEvents).toBe(0);
     expect(out.eventCount).toBe(1);
     expect(out.truncationNote).toMatch(/capped at/);
-    expect(size(out)).toBeLessThanOrEqual(MAX_RESPONSE_CHARS);
+    expect(size(out)).toBeLessThanOrEqual(MAX_PAYLOAD_BYTES);
   });
 
   it('caps diagnostics too, keeping the total count', () => {
@@ -93,12 +101,41 @@ describe('serializeSimulation', () => {
       maxEvents: 20,
       includeSnapshots: false,
     });
-    expect(size(out)).toBeLessThanOrEqual(MAX_RESPONSE_CHARS);
+    expect(size(out)).toBeLessThanOrEqual(MAX_PAYLOAD_BYTES);
     expect(out.diagnostics.length).toBeLessThan(50_000);
     expect(out.diagnosticCount).toBe(50_000);
     expect(out.truncationNote).toMatch(/diagnostics/);
     // Diagnostics take at most half the budget; the event still fits.
     expect(out.returnedEvents).toBe(1);
+  });
+
+  it('counts bytes, not characters: non-ASCII and quote-heavy events stay under the cap (#414)', () => {
+    // 940k characters of CJK held under a character cap came out as an
+    // 11 MB line: three bytes each, in both copies.
+    for (const unit of ['日本語', '"\\', '😀']) {
+      const e = event(0, 0, 1);
+      e._raw = unit.repeat(Math.ceil(940_000 / unit.length));
+      e.processingTrace[0].inputSnapshot = e._raw;
+      e.processingTrace[0].outputSnapshot = e._raw;
+      const events = [e, e, e];
+      for (const includeSnapshots of [false, true]) {
+        const out = serializeSimulation(result(events), [], { maxEvents: 20, includeSnapshots });
+        expect(size(out)).toBeLessThanOrEqual(MAX_PAYLOAD_BYTES);
+        expect(out.returnedEvents).toBeLessThan(3);
+      }
+    }
+  });
+
+  it('returns null for an Invalid Date instead of throwing (#417)', () => {
+    const e = { ...event(0, 1, 0), _time: new Date(1e20) };
+    const out = serializeSimulation(result([e]), [], { maxEvents: 20, includeSnapshots: false });
+    expect(out.events[0]._time).toBeNull();
+  });
+
+  it("keeps the simulator's _queue routing slot out of indexedFields", () => {
+    const e = { ...event(0, 1, 0), _meta: { _queue: 'myQueue', env: 'prod', tag: ['a', 'b'] } };
+    const out = serializeSimulation(result([e]), [], { maxEvents: 20, includeSnapshots: false });
+    expect(out.events[0].indexedFields).toEqual({ env: 'prod', tag: ['a', 'b'] });
   });
 
   it('adds nothing when nothing was cut', () => {

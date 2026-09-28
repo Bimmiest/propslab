@@ -387,7 +387,9 @@ export function isUndocumentedAttribute(key: string): boolean {
 
 /** The classification for a directive key, or undefined if it is unclassified. */
 export function getDirectiveSupport(key: string): SupportEntry | undefined {
-  return DIRECTIVE_SUPPORT[key];
+  // Keys are user input, so `constructor` or `toString` must not find the
+  // inherited Object.prototype member.
+  return Object.hasOwn(DIRECTIVE_SUPPORT, key) ? DIRECTIVE_SUPPORT[key] : undefined;
 }
 
 /**
@@ -400,5 +402,5 @@ export function getDirectiveSupport(key: string): SupportEntry | undefined {
  */
 export function isSimulated(key: string): boolean {
   if (UNDOCUMENTED_ATTRIBUTES.has(key)) return false;
-  return (DIRECTIVE_SUPPORT[key]?.support ?? 'simulated') === 'simulated';
+  return (getDirectiveSupport(key)?.support ?? 'simulated') === 'simulated';
 }

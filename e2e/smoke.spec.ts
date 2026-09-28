@@ -38,6 +38,9 @@ test.describe('boot', () => {
     expect(policy).toContain("base-uri 'self'");
     expect(policy).toContain("object-src 'none'");
     expect(policy).toContain('img-src');
+    expect(policy).toContain("form-action 'none'");
+    // Every worker is a same-origin file; see the comment above the tag.
+    expect(policy).not.toContain('blob:');
   });
 });
 

@@ -151,7 +151,8 @@ function lintDestKeyFormat(
   formatDir: ConfDirective,
   diagnostics: ValidationDiagnostic[],
 ): void {
-  const requiredPrefix = DEST_KEY_REQUIRED_PREFIX[destKey];
+  // hasOwn: DEST_KEY is user input, and `toString` must not hit the prototype.
+  const requiredPrefix = Object.hasOwn(DEST_KEY_REQUIRED_PREFIX, destKey) ? DEST_KEY_REQUIRED_PREFIX[destKey] : undefined;
   if (requiredPrefix && !formatDir.value.includes(requiredPrefix)) {
     diagnostics.push({
       level: 'warning',

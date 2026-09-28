@@ -10,7 +10,8 @@ import {
   validateInputShape,
 } from '../tools';
 import { z } from 'zod';
-import { MAX_RESPONSE_CHARS } from '../serialize';
+import { explainOutputShape, validateOutputShape } from '../outputSchemas';
+import { MAX_RESPONSE_BYTES } from '../responseBudget';
 import { collectRegexSuspects } from '../suspects';
 
 /**
@@ -21,6 +22,10 @@ import { collectRegexSuspects } from '../suspects';
 const WORKER_PATH = fileURLToPath(new URL('../../dist/simulateWorker.js', import.meta.url));
 
 const payload = (r: { content: { text: string }[] }) => JSON.parse(r.content[0].text);
+
+/** Bytes of the JSON-RPC line the server would write for this result, as the SDK frames it. */
+const lineBytes = (result: object) =>
+  Buffer.byteLength(`${JSON.stringify({ result, jsonrpc: '2.0', id: 2 ** 31 })}\n`);
 
 const ACCESS_PROPS = [
   '[access_log]',
@@ -91,23 +96,35 @@ describe('simulate', () => {
   }, 20_000);
 
   it('holds the response under the size cap when max_events would exceed it (#351)', async () => {
-    // 300 events of 2,500 characters, each with a SEDCMD step carrying
-    // before/after snapshots of it: several megabytes if returned whole.
-    const raw = `${'b'.repeat(2_500)}\n`.repeat(300);
-    const props = ['[access_log]', 'SHOULD_LINEMERGE = false', 'SEDCMD-x = s/b/c/g'].join('\n');
+    // 300 events of 3,000 CJK characters (under TRUNCATE's 10,000 bytes),
+    // each with a SEDCMD step carrying before/after snapshots of it: 900k
+    // characters in, but some 16 MB on the wire if returned whole — three
+    // bytes a character, in both copies (#414).
+    const raw = `${'日'.repeat(3_000)}\n`.repeat(300);
+    const props = ['[access_log]', 'SHOULD_LINEMERGE = false', 'SEDCMD-x = s/日/本/g'].join('\n');
     const result = await handleSimulate(
       simulateArgs({ raw, props_conf: props, max_events: 500, include_snapshots: true }),
       WORKER_PATH,
     );
-    expect(result.content[0].text.length).toBeLessThanOrEqual(MAX_RESPONSE_CHARS);
-    // The structured copy is the same payload, so the cap bounds it as well.
-    expect(JSON.stringify(result.structuredContent).length).toBeLessThanOrEqual(MAX_RESPONSE_CHARS);
+    expect(lineBytes(result)).toBeLessThanOrEqual(MAX_RESPONSE_BYTES);
     const out = payload(result);
     expect(out.eventCount).toBe(300);
     expect(out.returnedEvents).toBeGreaterThan(0);
     expect(out.returnedEvents).toBeLessThan(300);
     expect(out.truncationNote).toMatch(/capped at/);
   }, 20_000);
+
+  it('keeps the extracted _time when INGEST_EVAL sets one out of range (#417)', async () => {
+    const props = `${ACCESS_PROPS}\nTRANSFORMS-t = t`;
+    const result = await handleSimulate(
+      simulateArgs({ props_conf: props, transforms_conf: '[t]\nINGEST_EVAL = _time=pow(10,20)' }),
+      WORKER_PATH,
+    );
+    expect(result.isError).toBeFalsy();
+    const out = payload(result);
+    expect(out.events[0]._time).toBe('2026-08-02T10:15:00.000Z');
+    expect(out.diagnostics.some((d: { message: string }) => /out of range/.test(d.message))).toBe(true);
+  });
 
   it('strips trace snapshots unless include_snapshots is set', async () => {
     const lean = payload(await handleSimulate(simulateArgs(), WORKER_PATH));
@@ -400,4 +417,87 @@ describe('collectRegexSuspects', () => {
     // Flagged suspects sort first.
     expect(suspects[0].key).toBe('EXTRACT-x');
   });
+});
+
+describe('response size cap (#414)', () => {
+  // Every tool's worst case, in bytes of the line the server writes. Each of
+  // these came out between 11 MB and 250 MB before; conf text is filled to
+  // just under MAX_TOTAL_CONF_CHARS.
+  const fill = (line: (i: number) => string, prefix = '') => {
+    const lines = [prefix];
+    let chars = prefix.length;
+    for (let i = 0; ; i++) {
+      const l = line(i);
+      if (chars + l.length + 1 > MAX_TOTAL_CONF_CHARS) break;
+      lines.push(l);
+      chars += l.length + 1;
+    }
+    return lines.join('\n');
+  };
+
+  it('explain_precedence: stanzas and directives are cut, with counts', async () => {
+    for (const conf of [fill((i) => `k${i}=v`), fill((i) => `[s${i}]\nk=${'値'.repeat(20)}`)]) {
+      const result = await handleExplainPrecedence(
+        {
+          file: 'props.conf',
+          conf,
+          sourcetype: 'st',
+          index: 'main',
+          host: 'h',
+          source: 's',
+          timeout_ms: 30_000,
+        },
+        WORKER_PATH,
+      );
+      expect(result.isError).toBeFalsy();
+      expect(lineBytes(result)).toBeLessThanOrEqual(MAX_RESPONSE_BYTES);
+      const out = payload(result);
+      expect(out.truncationNote).toMatch(/capped at/);
+      expect(out.stanzaCount ?? out.stanzas.at(-1).directiveCount).toBeGreaterThan(0);
+      expect(z.object(explainOutputShape).safeParse(result.structuredContent).success).toBe(true);
+    }
+  }, 120_000);
+
+  it('validate: diagnostics are cut, with a count', async () => {
+    for (const props of [fill((i) => `EXTRACT-${i}=(`), fill((i) => `EXTRACT-${i}=(日本語`)]) {
+      const result = await handleValidate(
+        { props_conf: props, transforms_conf: '', timeout_ms: 30_000 },
+        WORKER_PATH,
+      );
+      expect(result.isError).toBeFalsy();
+      expect(lineBytes(result)).toBeLessThanOrEqual(MAX_RESPONSE_BYTES);
+      const out = payload(result);
+      expect(out.diagnostics.length).toBeGreaterThan(0);
+      expect(out.diagnosticCount).toBeGreaterThan(out.diagnostics.length);
+      expect(out.truncationNote).toMatch(/diagnostics/);
+      expect(z.object(validateOutputShape).safeParse(result.structuredContent).success).toBe(true);
+    }
+  }, 120_000);
+
+  it('timeout: regex_directives is cut, flagged patterns first', async () => {
+    const evil = [
+      '[evil]',
+      'SHOULD_LINEMERGE = false',
+      'MATCH_LIMIT = 0',
+      'DEPTH_LIMIT = 0',
+      'EXTRACT-boom = ^(?<boom>(a+)+)(?=b)$',
+      '[other]',
+    ].join('\n');
+    const props = fill((i) => `EXTRACT-${i} = "${'日'.repeat(40)}`, evil);
+    const result = await handleSimulate(
+      simulateArgs({
+        raw: `${'a'.repeat(200)}\n`,
+        sourcetype: 'evil',
+        props_conf: props,
+        timeout_ms: 1_000,
+      }),
+      WORKER_PATH,
+    );
+    expect(lineBytes(result)).toBeLessThanOrEqual(MAX_RESPONSE_BYTES);
+    const out = payload(result);
+    expect(out.error).toBe('timeout');
+    expect(out.regex_directive_count).toBeGreaterThan(out.regex_directives.length);
+    expect(out.truncation_note).toMatch(/regex directives/);
+    expect(out.regex_directives[0].key).toBe('EXTRACT-boom');
+  }, 60_000);
 });

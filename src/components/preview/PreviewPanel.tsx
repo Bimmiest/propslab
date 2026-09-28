@@ -1,6 +1,8 @@
-import { useId, useState, useMemo } from 'react';
+import { createContext, memo, useContext, useId, useState, useMemo, type ReactNode } from 'react';
 
-const normalise = (s: string) => s.replace(/\r\n/g, '\n').replace(/\s+$/, '');
+// trimEnd, not /\s+$/: the regex backtracks quadratically over a long inner
+// run of whitespace, and this runs on the main thread for every event.
+const normalise = (s: string) => s.replace(/\r\n/g, '\n').trimEnd();
 import type React from 'react';
 import { useAppStore } from '../../store/useAppStore';
 import { Tabs } from '../ui/Tabs';
@@ -52,16 +54,36 @@ const PREVIEW_SUB_TABS: { id: PreviewSubTabId; label: string }[] = [
   { id: 'regex', label: 'Regex' },
 ];
 
-export function PreviewPanel() {
+const PipelineInputsContext = createContext<PipelineInputs | null>(null);
+
+/**
+ * Holds the last run's inputs for the tabs below. Held here rather than in the
+ * Effective config tab, which unmounts when another output tab is selected: in
+ * manual-apply mode the inputs of the last run have to survive the edits made
+ * while it is hidden.
+ *
+ * A component of its own because usePipelineInputs subscribes to props.conf:
+ * called in PreviewPanel, every keystroke re-rendered the whole output. Here
+ * only this provider re-renders; `children` is the same element each time, so
+ * React skips it until the settled inputs themselves change.
+ */
+function PipelineInputsProvider({ children }: { children: ReactNode }) {
+  const pipelineInputs = usePipelineInputs();
+  return <PipelineInputsContext.Provider value={pipelineInputs}>{children}</PipelineInputsContext.Provider>;
+}
+
+function usePipelineInputsContext(): PipelineInputs {
+  const inputs = useContext(PipelineInputsContext);
+  if (!inputs) throw new Error('usePipelineInputsContext outside PipelineInputsProvider');
+  return inputs;
+}
+
+export const PreviewPanel = memo(function PreviewPanel() {
   const activeTab = useAppStore((s) => s.activeOutputTab);
   const setActiveTab = useAppStore((s) => s.setActiveOutputTab);
   const result = useAppStore((s) => s.processingResult);
   const isProcessing = useAppStore((s) => s.isProcessing);
   const tabsId = useId();
-  // Held here rather than in the Effective config tab, which unmounts when
-  // another output tab is selected: in manual-apply mode the inputs of the last
-  // run have to survive the edits made while it is hidden.
-  const pipelineInputs = usePipelineInputs();
   const diagnostics = useAppStore((s) => s.validationDiagnostics);
   // A run that produced no result at all — watchdog timeout, repeated worker
   // crash, an engine throw — clears `processingResult` and says why in an error
@@ -103,12 +125,13 @@ export function PreviewPanel() {
         aria-labelledby={tabId(tabsId, activeTab)}
         aria-busy={isProcessing}
       >
-        <TabContent
-          tab={activeTab}
-          hasData={!!result && result.events.length > 0}
-          failure={failure}
-          pipelineInputs={pipelineInputs}
-        />
+        <PipelineInputsProvider>
+          <TabContent
+            tab={activeTab}
+            hasData={!!result && result.events.length > 0}
+            failure={failure}
+          />
+        </PipelineInputsProvider>
         {isProcessing && (
           <div
             className="absolute inset-0 flex items-center justify-center pointer-events-none"
@@ -121,14 +144,16 @@ export function PreviewPanel() {
       </div>
     </div>
   );
-}
+});
 
-function TabContent({ tab, hasData, failure, pipelineInputs }: {
+// Memoised so the processing overlay toggling on and off around every run does
+// not re-render the tab beneath it.
+const TabContent = memo(function TabContent({ tab, hasData, failure }: {
   tab: OutputTabId;
   hasData: boolean;
   failure: string | null;
-  pipelineInputs: PipelineInputs;
 }) {
+  const pipelineInputs = usePipelineInputsContext();
   if (tab === 'architecture') return <ArchitecturePanel embedded />;
   // Resolves the last run's props.conf and metadata, so it has an answer
   // before any data has been processed — the same reason Architecture sits
@@ -150,7 +175,7 @@ function TabContent({ tab, hasData, failure, pipelineInputs }: {
     case 'transforms': return <TransformsTab />;
     default: return null;
   }
-}
+});
 
 const SAMPLE_ICONS: Record<string, React.ComponentProps<typeof Icon>['name']> = {
   'Apache Access Log': 'terminal',
@@ -175,18 +200,13 @@ function FailureState({ message }: { message: string }) {
 }
 
 function EmptyState() {
-  const setRawData = useAppStore((s) => s.setRawData);
-  const setPropsConf = useAppStore((s) => s.setPropsConf);
-  const setTransformsConf = useAppStore((s) => s.setTransformsConf);
-  const setMetadata = useAppStore((s) => s.setMetadata);
+  const loadInputs = useAppStore((s) => s.loadInputs);
 
+  // loadInputs, not the four setters: it also makes the example the clean
+  // baseline, so an unedited example does not count as work to lose.
   const loadExample = (idx: number) => {
     const sample = SAMPLE_CONFIGS[idx];
-    if (!sample) return;
-    setRawData(sample.rawData);
-    setPropsConf(sample.propsConf);
-    setTransformsConf(sample.transformsConf);
-    setMetadata(sample.metadata);
+    if (sample) loadInputs(sample);
   };
 
   return (
@@ -276,6 +296,14 @@ interface PreviewFilters {
   selectedChangeState: Set<string>;
 }
 
+/** `selected` without the entries `options` lacks; the same set when none are missing. */
+function pruneSelection(selected: Set<string>, options: string[]): Set<string> {
+  if (selected.size === 0) return selected;
+  const available = new Set(options);
+  const kept = [...selected].filter((s) => available.has(s));
+  return kept.length === selected.size ? selected : new Set(kept);
+}
+
 function matchesFilters(item: EnrichedEvent, filters: PreviewFilters): boolean {
   const { search, selectedFields, selectedStatus, selectedChangeState } = filters;
   if (search && !item.event._raw.toLowerCase().includes(search.toLowerCase())) return false;
@@ -339,11 +367,18 @@ function PreviewSubTab({ pipelineInputs }: { pipelineInputs: PipelineInputs }) {
     return Array.from(fieldSet).sort();
   }, [enrichedEvents]);
 
+  // A field a later run no longer extracts has no checkbox to untick, yet
+  // would keep filtering (to "0 / N" if it was the only one), so it is dropped
+  // from the selection. Set during render, React's pattern for state derived
+  // from props; the pruned set is stable, so this settles in one pass.
+  const liveSelectedFields = useMemo(() => pruneSelection(selectedFields, allFields), [selectedFields, allFields]);
+  if (liveSelectedFields !== selectedFields) setSelectedFields(liveSelectedFields);
+
   // Apply filters
   const filteredEvents = useMemo(() => {
-    const filters = { search: debouncedSearch, selectedFields, selectedStatus, selectedChangeState };
+    const filters = { search: debouncedSearch, selectedFields: liveSelectedFields, selectedStatus, selectedChangeState };
     return enrichedEvents.filter((item) => matchesFilters(item, filters));
-  }, [enrichedEvents, debouncedSearch, selectedFields, selectedStatus, selectedChangeState]);
+  }, [enrichedEvents, debouncedSearch, liveSelectedFields, selectedStatus, selectedChangeState]);
 
   const { paginatedItems, currentPage, totalPages, eventsPerPage, totalItems, setCurrentPage, setEventsPerPage } =
     usePagination(filteredEvents);
@@ -368,7 +403,7 @@ function PreviewSubTab({ pipelineInputs }: { pipelineInputs: PipelineInputs }) {
         search={search}
         onSearchChange={(v) => { setSearch(v); setCurrentPage(1); }}
         allFields={allFields}
-        selectedFields={selectedFields}
+        selectedFields={liveSelectedFields}
         onFieldsChange={(f) => { setSelectedFields(f); setCurrentPage(1); }}
         selectedStatus={selectedStatus}
         onStatusChange={(s) => { setSelectedStatus(s); setCurrentPage(1); }}

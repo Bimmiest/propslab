@@ -3,6 +3,7 @@ import { DirectiveNoOpList } from './shared/DirectiveNoOpList';
 import { useAppStore } from '../../../store/useAppStore';
 import { Icon } from '../../ui/Icon';
 import { Tooltip } from '../../ui/Tooltip';
+import { tint } from '../../../utils/tint';
 
 interface StepSummary {
   processor: string;
@@ -149,7 +150,7 @@ function StepSection({ title, steps, phaseColor }: { title: string; steps: StepS
             key={idx}
             className="flex items-start gap-3 px-3 py-2.5 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-bg-elevated)] hover:border-[var(--color-border)] transition-colors"
           >
-            <div className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold" style={{ backgroundColor: phaseColor + '20', color: phaseColor }}>
+            <div className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold" style={{ backgroundColor: tint(phaseColor, 13), color: phaseColor }}>
               {idx + 1}
             </div>
             <div className="flex-1 min-w-0">

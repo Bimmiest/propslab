@@ -1,4 +1,5 @@
 import type React from 'react';
+import { tint } from '../../utils/tint';
 
 interface BadgeProps {
   variant: 'error' | 'warning' | 'info' | 'success';
@@ -14,7 +15,7 @@ export function Badge({ variant, children }: BadgeProps) {
       style={{
         // Tinted from the text's own token at the 10% every other status chip
         // uses, so the pair keeps 4.5:1 in both themes.
-        backgroundColor: `color-mix(in srgb, ${color} 10%, transparent)`,
+        backgroundColor: tint(color, 10),
         color,
       }}
     >

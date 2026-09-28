@@ -7,6 +7,7 @@ import { ClearButton } from '../editor/ClearButton';
 import { MonacoEditor } from '../editor/LazyEditors';
 import { registerEditor, unregisterEditor } from '../editor/editorRegistry';
 import { EditorValidationList } from '../editor/EditorValidationList';
+import { countLines } from '../../utils/countLines';
 
 // Module-level so the identity is stable: MonacoEditor treats a new `options`
 // object as a change and re-runs updateOptions.
@@ -62,10 +63,9 @@ export function RawPanel() {
     };
   }, []);
 
-  const lineCount = useMemo(() => {
-    if (!rawData) return 0;
-    return rawData.split('\n').length;
-  }, [rawData]);
+  const lineCount = useMemo(() => countLines(rawData), [rawData]);
+  // A test, not trim(), which copies the whole buffer to answer a yes/no.
+  const hasText = /\S/.test(rawData);
 
   return (
     <div className="flex flex-col h-full">
@@ -74,7 +74,7 @@ export function RawPanel() {
         <span className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">Raw Log</span>
         <button
           onClick={toggleScaffold}
-          disabled={!rawData.trim()}
+          disabled={!hasText}
           title="Scaffold a starter props.conf from this sample"
           className="ml-auto flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium cursor-pointer border-none text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-tertiary)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >

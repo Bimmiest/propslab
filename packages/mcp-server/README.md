@@ -17,14 +17,14 @@ Implements [#202](https://github.com/Bimmiest/propslab/issues/202).
 
 Every tool declares an `outputSchema` and returns its result twice: as
 `structuredContent` matching that schema, for clients that read it, and as
-the same JSON pretty-printed in a text block, for those that do not. The
+the same JSON, compact, in a text block, for those that do not. The
 schemas, in `src/outputSchemas.ts`:
 
 | Tool | `structuredContent` |
 |---|---|
 | `simulate` | `{ eventCount, returnedEvents, truncationNote?, events[], processingSteps[], diagnostics[], diagnosticCount? }`; each event is `{ _raw, _time (ISO-8601 or null), metadata, fields, indexedFields, lineNumbers, processingTrace[] }` |
-| `validate` | `{ diagnostics[] }` |
-| `explain_precedence` | `{ parseErrors[], stanzas[], resolution? }`; `resolution` (props.conf with a `sourcetype`) is `{ metadata, effectiveMetadata, assignedSourcetype?, matchedStanzas[], effectiveDirectives[] }` |
+| `validate` | `{ diagnostics[], diagnosticCount?, truncationNote? }` |
+| `explain_precedence` | `{ parseErrors[], stanzas[], parseErrorCount?, stanzaCount?, truncationNote?, resolution? }`; each stanza may carry `directiveCount`; `resolution` (props.conf with a `sourcetype`) is `{ metadata, effectiveMetadata, assignedSourcetype?, matchedStanzas[], effectiveDirectives[], matchedStanzaCount?, effectiveDirectiveCount? }` |
 | `lookup_directive` | Without `key`: `{ "props.conf"?: [...], "transforms.conf"?: [...] }`, one summary per directive. With `key`: `{ matches[], classBased? }` |
 
 Objects the engine or registry defines — diagnostics, trace steps, directive
@@ -33,9 +33,8 @@ field does not fail validation; the envelopes are closed. An error result
 (`isError: true`: `timeout`, `input_too_large`, `unknown_directive`, …)
 carries its JSON in the text block only, with no `structuredContent`: the
 output schema describes successes, and the SDK client validates
-`structuredContent` whenever it is present. `simulate`'s size cap (below)
-bounds both copies — the structured one is the same object, and its compact
-JSON is never longer than the pretty-printed text the cap measures.
+`structuredContent` whenever it is present. The response size cap (below)
+counts both copies.
 
 All four tools are annotated `readOnlyHint: true`, `destructiveHint: false`,
 `idempotentHint: true`, `openWorldHint: false`: they read only their input
@@ -49,7 +48,13 @@ gets btool-style provenance back.
 
 ## Setup
 
+The server bundles the engine from the app's `src/`, and the engine imports
+its regex engine, `pcre2-wasm-utf16`, from the repository root's
+`node_modules` — so install the root first, then this package:
+
 ```bash
+# from the repository root
+npm install
 cd packages/mcp-server
 npm install
 npm run build
@@ -129,15 +134,35 @@ reviewed. `docs/engine.md`'s closing section is the spec this implements:
   Process-wide V8 heap flags override worker limits, so the launcher strips
   `--max-old-space-size` / `--max-semi-space-size` / `--max-heap-size` from
   its own arguments and from `NODE_OPTIONS` before re-exec'ing, and says so
-  on stderr. With `PROPSLAB_MCP_NO_REEXEC=1` nothing is stripped.
-- **Each `simulate` response is bounded** (#351). The worker shapes the
-  response itself and posts only that, so the full result — which grows
-  with the event count — never reaches the server's own thread, where no
-  heap limit applies. `max_events` bounds `events` and `processingSteps`
-  alike (the latter covers the returned events only), and the whole
-  response is capped at 2M characters (`MAX_RESPONSE_CHARS`): events that
-  would not fit are left out, diagnostics may take at most half of it, and
-  `truncationNote` says which cut applied.
+  on stderr. It re-execs to do so even when the regex flags above are
+  already on its command line. With `PROPSLAB_MCP_NO_REEXEC=1` nothing is
+  stripped, and the launcher warns on stderr that the flags are in effect.
+- **Every response is bounded** (#351, #414), at 8 MiB
+  (`MAX_RESPONSE_BYTES`, `src/responseBudget.ts`) counted as UTF-8 bytes of
+  the whole JSON-RPC line the server writes: both copies of the payload,
+  the text copy's second round of escaping, and the envelope. A cap in
+  characters of one copy let a response run to five times its nominal size
+  on non-ASCII or quote-heavy output; 8 MiB stays below the 10 MiB at which
+  the SDK's client drops a line. The worker shapes each response itself and
+  posts only that, so a full result never reaches the server's own thread,
+  where no heap limit applies. What does not fit is cut, with the list's
+  total in a `…Count` field and a `truncationNote` saying which cut applied:
+  - `simulate`: `max_events` bounds `events` and `processingSteps` alike
+    (the latter covers the returned events only); events that would not fit
+    are left out, and diagnostics may take at most half the budget.
+  - `validate`: `diagnostics` (`diagnosticCount`).
+  - `explain_precedence`: parse errors take at most a quarter of the budget,
+    the resolution's `matchedStanzas` and `effectiveDirectives` at most a
+    quarter and a half of what is left, and stanzas the rest; the last
+    stanza may be cut part-way, with its `directiveCount`.
+  - a `timeout` error: `regex_directives`, flagged patterns first
+    (`regex_directive_count`, `truncation_note`).
+
+  Should anything still come out over the cap, it is replaced by a
+  `{"error": "response_too_large"}` error rather than written. And a failed
+  write to stdout — the client gone, or the pipe refusing more — is logged
+  to stderr and the server exits (0 for `EPIPE`, 1 otherwise) instead of
+  dying on an unhandled `error` event.
 - **At most `min(4, os.availableParallelism())` workers run at once**; further
   calls queue first come, first served. The `timeout_ms` budget starts when a
   call's worker starts, not when it is queued: a timeout is reported as "your

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { applyIngestEval } from '../transforms/ingestEval';
 import { runPipeline } from '../pipeline';
-import type { SplunkEvent, ConfDirective, EventMetadata } from '../types';
+import type { SplunkEvent, ConfDirective, EventMetadata, ValidationDiagnostic } from '../types';
 
 function event(raw: string): SplunkEvent {
   return {
@@ -239,5 +239,79 @@ describe('applyIngestEval — the trace says what was rewritten (#346)', () => {
     const out = applyIngestEval([event('x')], ingestDir('_raw=_raw'))[0]!;
     expect(out.rawMutations).toBeUndefined();
     expect(step(out).inputSnapshot).toBeUndefined();
+  });
+});
+
+describe('INGEST_EVAL _time out of the Date range (#417)', () => {
+  const meta: EventMetadata = { index: 'main', host: 'h', source: '/a.log', sourcetype: 'st' };
+  const props = '[st]\nSHOULD_LINEMERGE = false\nTRANSFORMS-t = t\n';
+  const raw = '2026-01-02 03:04:05 a\n2026-01-02 03:04:06 b';
+
+  // A microsecond epoch where seconds belong, and numbers past any date.
+  it.each(['100000000000000', 'pow(10,20)', '-100000000000000'])(
+    'keeps the previous _time for _time=%s, and warns once',
+    (expr) => {
+      const transforms = `[t]\nINGEST_EVAL = _time=${expr}\n`;
+      const { result, diagnostics } = runPipeline(raw, meta, props, transforms);
+      expect(result.events).toHaveLength(2);
+      for (const ev of result.events) {
+        expect(ev._time?.toISOString()).toMatch(/^2026-01-02T/);
+      }
+      const warnings = diagnostics.filter((d) => d.message.includes('out of range'));
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toMatchObject({
+        level: 'warning',
+        file: 'transforms.conf',
+        directiveKey: 'INGEST_EVAL',
+      });
+      expect(warnings[0]!.message).toMatch(
+        /^INGEST_EVAL _time: timestamp \S+ is out of range; the event keeps its previous _time$/,
+      );
+    },
+  );
+
+  it('accepts the edges of the range and refuses just past them', () => {
+    const [lo] = applyIngestEval([event('x')], ingestDir('_time=-8640000000000'));
+    const [hi] = applyIngestEval([event('x')], ingestDir('_time=8640000000000'));
+    expect(lo!._time!.getTime()).toBe(-8.64e15);
+    expect(hi!._time!.getTime()).toBe(8.64e15);
+    const diagnostics: ValidationDiagnostic[] = [];
+    const [past] = applyIngestEval([event('x')], ingestDir('_time=8640000000001'), diagnostics);
+    expect(past!._time).toBeNull();
+    expect(diagnostics).toHaveLength(1);
+  });
+});
+
+describe('runPipeline — INGEST_EVAL reports each problem once per run (#418)', () => {
+  // The transforms pass runs INGEST_EVAL one event at a time, so what it has
+  // reported must outlive a single call.
+  const meta: EventMetadata = { index: 'main', host: 'h', source: 's', sourcetype: 'st' };
+  const props = '[st]\nSHOULD_LINEMERGE = false\nTRANSFORMS-e = ev\n';
+  const transforms =
+    '[ev]\nINGEST_EVAL = h=md5(_raw), b=(1==1), r=if(match(_raw, "("), 1, 0), _time=8640000000001\n';
+  const raw = ['one', 'two', 'three', 'four', 'five'].join('\n');
+
+  it.each([false, true])('perEventPipeline=%s: five events, one of each diagnostic', (perEventPipeline) => {
+    const { result, diagnostics } = runPipeline(raw, meta, props, transforms, { perEventPipeline });
+    expect(result.events).toHaveLength(5);
+    const count = (pred: (d: ValidationDiagnostic) => boolean) => diagnostics.filter(pred).length;
+    expect(count((d) => d.message.startsWith('md5() is not fully simulated'))).toBe(1);
+    expect(count((d) => d.level === 'error' && d.message.startsWith('INGEST_EVAL b:'))).toBe(1);
+    expect(count((d) => d.message.startsWith('INGEST_EVAL r:'))).toBe(1);
+    expect(count((d) => d.message.includes('INGEST_EVAL _time'))).toBe(1);
+  });
+});
+
+describe('runPipeline — CLONE_SOURCETYPE does not repeat INGEST_EVAL problems per clone (#452)', () => {
+  // Each clone is its own applyTransforms call, so the warning ledgers have to
+  // belong to the pipeline run, not the call.
+  const meta: EventMetadata = { index: 'main', host: 'h', source: 's', sourcetype: 'st' };
+  const props = '[st]\nSHOULD_LINEMERGE = false\nTRANSFORMS-c = copy, ev\n\n[cloned]\nTRANSFORMS-e = ev\n';
+  const transforms = '[copy]\nREGEX = .\nCLONE_SOURCETYPE = cloned\n\n[ev]\nINGEST_EVAL = b=(1==1)\n';
+
+  it.each([false, true])('perEventPipeline=%s: three events and three clones, one error', (perEventPipeline) => {
+    const { result, diagnostics } = runPipeline('one\ntwo\nthree', meta, props, transforms, { perEventPipeline });
+    expect(result.events.filter((e) => e.clonedFrom !== undefined)).toHaveLength(3);
+    expect(diagnostics.filter((d) => d.message.startsWith('INGEST_EVAL b:'))).toHaveLength(1);
   });
 });

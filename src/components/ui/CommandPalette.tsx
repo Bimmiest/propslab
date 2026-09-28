@@ -1,12 +1,13 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useState } from 'react';
 import type React from 'react';
 import { Command } from 'cmdk';
-import { useAppStore } from '../../store/useAppStore';
+import { useAppStore, selectSessionDirty, EMPTY_INPUTS, type SessionInputs } from '../../store/useAppStore';
 import { SAMPLE_CONFIGS } from '../../engine/sampleData';
 import { getAllDirectives } from '../../engine/directiveRegistry';
 import type { OutputTabId } from '../../engine/types';
 import { Icon } from './Icon';
 import { Overlay } from './Overlay';
+import { ConfirmDialog } from './ConfirmDialog';
 
 // Static registry, so the lookup list is built once rather than per keystroke.
 // Deduplicated because a few keys (MATCH_LIMIT, DEPTH_LIMIT) are registered once
@@ -26,23 +27,20 @@ const OUTPUT_TABS: { id: OutputTabId; label: string }[] = [
 /** Runs a command's action, then closes the palette. */
 type RunCommand = (fn: () => void) => void;
 
-/** Replaces all four inputs at once: a sample, or empty ones. */
-function useLoadInputs() {
-  const setRawData = useAppStore((s) => s.setRawData);
-  const setPropsConf = useAppStore((s) => s.setPropsConf);
-  const setTransformsConf = useAppStore((s) => s.setTransformsConf);
-  const setMetadata = useAppStore((s) => s.setMetadata);
-  return (inputs: Pick<(typeof SAMPLE_CONFIGS)[number], 'rawData' | 'propsConf' | 'transformsConf' | 'metadata'>) => {
-    setRawData(inputs.rawData);
-    setPropsConf(inputs.propsConf);
-    setTransformsConf(inputs.transformsConf);
-    setMetadata(inputs.metadata);
-  };
+/** Replaces all four inputs at once (a sample, or empty ones), asking first if that loses work. */
+type ReplaceInputs = (inputs: SessionInputs, confirmLabel: string, what: string) => void;
+
+interface PendingReplace {
+  inputs: SessionInputs;
+  confirmLabel: string;
+  what: string;
 }
 
 export function CommandPalette() {
   const open = useAppStore((s) => s.commandPaletteOpen);
   const toggleCommandPalette = useAppStore((s) => s.toggleCommandPalette);
+  const loadInputs = useAppStore((s) => s.loadInputs);
+  const [pending, setPending] = useState<PendingReplace | null>(null);
 
   const close = useCallback(() => {
     if (open) toggleCommandPalette();
@@ -76,39 +74,72 @@ export function CommandPalette() {
     [close],
   );
 
-  if (!open) return null;
+  // Read at selection time, not subscribed: the palette has no reason to
+  // re-render on every keystroke in an editor.
+  const replaceInputs = useCallback<ReplaceInputs>(
+    (inputs, confirmLabel, what) => {
+      if (selectSessionDirty(useAppStore.getState())) {
+        close();
+        setPending({ inputs, confirmLabel, what });
+      } else {
+        run(() => loadInputs(inputs));
+      }
+    },
+    [close, run, loadInputs],
+  );
+
+  const confirm = pending && (
+    <ConfirmDialog
+      open
+      title="Replace your current work?"
+      confirmLabel={pending.confirmLabel}
+      onConfirm={() => {
+        loadInputs(pending.inputs);
+        setPending(null);
+      }}
+      onCancel={() => setPending(null)}
+    >
+      {pending.what} replaces the raw data, props.conf, transforms.conf and metadata you have now. Your
+      changes are not saved anywhere else.
+    </ConfirmDialog>
+  );
+
+  if (!open) return confirm || null;
 
   return (
-    <Overlay
-      open
-      onClose={close}
-      label="Command palette"
-      className="w-full max-w-lg rounded-xl overflow-hidden shadow-2xl"
-      style={{
-        backgroundColor: 'var(--color-bg-elevated)',
-        border: '1px solid var(--color-border)',
-      }}
-    >
-      <Command label="Command palette">
-        <PaletteInput />
+    <>
+      {confirm}
+      <Overlay
+        open
+        onClose={close}
+        label="Command palette"
+        className="w-full max-w-lg rounded-xl overflow-hidden shadow-2xl"
+        style={{
+          backgroundColor: 'var(--color-bg-elevated)',
+          border: '1px solid var(--color-border)',
+        }}
+      >
+        <Command label="Command palette">
+          <PaletteInput />
 
-        <Command.List
-          className="max-h-80 overflow-y-auto py-1"
-        >
-          <Command.Empty
-            className="py-6 text-center text-sm"
-            style={{ color: 'var(--color-text-muted)' }}
+          <Command.List
+            className="max-h-80 overflow-y-auto py-1"
           >
-            No results found.
-          </Command.Empty>
+            <Command.Empty
+              className="py-6 text-center text-sm"
+              style={{ color: 'var(--color-text-muted)' }}
+            >
+              No results found.
+            </Command.Empty>
 
-          <ExampleCommands run={run} />
-          <NavigateCommands run={run} />
-          <LookupCommands run={run} />
-          <ActionCommands run={run} />
-        </Command.List>
-      </Command>
-    </Overlay>
+            <ExampleCommands replaceInputs={replaceInputs} />
+            <NavigateCommands run={run} />
+            <LookupCommands run={run} />
+            <ActionCommands run={run} replaceInputs={replaceInputs} />
+          </Command.List>
+        </Command>
+      </Overlay>
+    </>
   );
 }
 
@@ -138,8 +169,7 @@ function PaletteInput() {
   );
 }
 
-function ExampleCommands({ run }: { run: RunCommand }) {
-  const loadInputs = useLoadInputs();
+function ExampleCommands({ replaceInputs }: { replaceInputs: ReplaceInputs }) {
   return (
     <CommandGroup heading="Examples">
       {SAMPLE_CONFIGS.map((sample) => (
@@ -148,7 +178,7 @@ function ExampleCommands({ run }: { run: RunCommand }) {
           label={`Load: ${sample.name}`}
           hint={sample.description}
           icon="terminal"
-          onSelect={() => run(() => loadInputs(sample))}
+          onSelect={() => replaceInputs(sample, 'Load example', `Loading “${sample.name}”`)}
         />
       ))}
     </CommandGroup>
@@ -206,11 +236,10 @@ function LookupCommands({ run }: { run: RunCommand }) {
   );
 }
 
-function ActionCommands({ run }: { run: RunCommand }) {
+function ActionCommands({ run, replaceInputs }: { run: RunCommand; replaceInputs: ReplaceInputs }) {
   const toggleTheme = useAppStore((s) => s.toggleTheme);
   const toggleHelp = useAppStore((s) => s.toggleHelp);
   const toggleScaffold = useAppStore((s) => s.toggleScaffold);
-  const loadInputs = useLoadInputs();
   return (
     <CommandGroup heading="Actions">
       <CommandItem
@@ -232,16 +261,7 @@ function ActionCommands({ run }: { run: RunCommand }) {
       <CommandItem
         label="Clear all editors"
         icon="x"
-        onSelect={() =>
-          run(() =>
-            loadInputs({
-              rawData: '',
-              propsConf: '',
-              transformsConf: '',
-              metadata: { index: 'main', host: '', source: '', sourcetype: '' },
-            }),
-          )
-        }
+        onSelect={() => replaceInputs(EMPTY_INPUTS, 'Clear all', 'Clearing the editors')}
       />
     </CommandGroup>
   );

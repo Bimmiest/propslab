@@ -85,8 +85,18 @@ export function extractXmlIndexed(
   const opts = xmlOptions(find, mode);
   const processor = `INDEXED_EXTRACTIONS(${mode})`;
 
-  return events.map((event) => {
-    const candidates = walkEvent(event._raw, mode, opts.cutoffBytes);
+  // Caught per event so one pathological event costs only its own fields:
+  // letting it escape made the pipeline fall back to the whole batch unmodified.
+  const failures: { line: number; error: string }[] = [];
+
+  const result = events.map((event) => {
+    let candidates: Candidate[] | null;
+    try {
+      candidates = walkEvent(event._raw, mode, opts.cutoffBytes);
+    } catch (err) {
+      failures.push({ line: event.lineNumbers.start, error: err instanceof Error ? err.message : String(err) });
+      return event;
+    }
     if (candidates === null) return event;
 
     // Filters, in the order the spec layers them: INCLUDE decides what is
@@ -127,6 +137,18 @@ export function extractXmlIndexed(
       ],
     };
   });
+
+  const failed = failures[0];
+  if (failed !== undefined) {
+    const n = failures.length;
+    diagnostics?.push({
+      level: 'error',
+      file: 'raw',
+      line: failed.line,
+      message: `INDEXED_EXTRACTIONS = ${mode}: extraction failed on ${n} event${n === 1 ? '' : 's'}, which ${n === 1 ? 'keeps' : 'keep'} no XML fields (${failed.error}).`,
+    });
+  }
+  return result;
 }
 
 function xmlOptions(find: (key: string) => ConfDirective | undefined, mode: XmlIndexedMode): XmlOptions {
@@ -224,56 +246,66 @@ function walkEvent(raw: string, mode: XmlIndexedMode, cutoffBytes: number): Cand
 
   const limit = normalisedCutoff(raw, cutoffBytes) + shift;
   const out: Candidate[] = [];
-  for (const el of roots) walk(el, mode, [], out);
+  for (const el of roots) walk(el, mode, out);
   return out.filter((c) => c.end <= limit);
 }
 
-function walk(el: XmlElement, mode: XmlIndexedMode, parentPath: string[], out: Candidate[]): void {
-  const tag = el.localName;
-  const path = [...parentPath, tag];
-  const children = xmlChildElements(el);
-  const nameAttr = el.attributes.find((a) => a.name === 'Name');
+// Iterative pre-order walk: the reader accepts any depth, so recursion here
+// overflowed the stack on deeply nested input (#428). Paths are carried as
+// joined strings rather than copied arrays, which made depth quadratic. Only a
+// leaf has a value, so output order matches the recursive walk it replaced.
+function walk(root: XmlElement, mode: XmlIndexedMode, out: Candidate[]): void {
+  const stack: { el: XmlElement; path: string }[] = [{ el: root, path: root.localName }];
+  for (let top = stack.pop(); top !== undefined; top = stack.pop()) {
+    const { el, path } = top;
+    const tag = el.localName;
+    const children = xmlChildElements(el);
+    const nameAttr = el.attributes.find((a) => a.name === 'Name');
 
-  // A leaf's own text. Only a leaf has one: a parent's text is whitespace
-  // between its children, or mixed content no mode names a field for.
-  let value = '';
-  let encoded = false;
-  if (children.length === 0) {
-    let text = '';
-    for (const child of el.children) {
-      if (child.kind !== 'text') continue;
-      text += child.value;
-      if (child.encoded) encoded = true;
+    // A leaf's own text. Only a leaf has one: a parent's text is whitespace
+    // between its children, or mixed content no mode names a field for.
+    let value = '';
+    let encoded = false;
+    if (children.length === 0) {
+      let text = '';
+      for (const child of el.children) {
+        if (child.kind !== 'text') continue;
+        text += child.value;
+        if (child.encoded) encoded = true;
+      }
+      value = text.trim();
     }
-    value = text.trim();
+
+    // In xmlkv-winevt a Name attribute on a leaf with a value *is* that value's
+    // field name, so it is consumed rather than also reported as `<tag>_Name`.
+    // On an empty element (`<Provider Name='…'/>`) it names nothing and stays
+    // Provider_Name. KV_MODE = xml reports both forms, and `xml` keeps that.
+    const nameConsumed = mode === 'xmlkv-winevt' && value !== '' && Boolean(nameAttr?.value);
+
+    for (const attr of el.attributes) {
+      if (!attr.value) continue;
+      if (attr === nameAttr && nameConsumed) continue;
+      const useTagName = attr.name === 'Name' && mode !== 'xmlkv';
+      out.push({
+        name: useTagName ? `${tag}_Name` : attr.name,
+        value: attr.value,
+        encoded: attr.encoded === true,
+        end: el.startTagEnd,
+      });
+    }
+
+    for (let i = children.length - 1; i >= 0; i--) {
+      const child = children[i]!;
+      stack.push({ el: child, path: `${path}.${child.localName}` });
+    }
+    if (!value) continue;
+
+    // `||`, not `??`: an empty Name attribute names nothing, and the leaf falls
+    // back to its path or tag rather than becoming a field called "".
+    let name: string;
+    if (mode === 'xml') name = nameAttr?.value || path;
+    else if (mode === 'xmlkv-winevt') name = nameAttr?.value || tag;
+    else name = tag;
+    out.push({ name, value, encoded, end: el.end });
   }
-
-  // In xmlkv-winevt a Name attribute on a leaf with a value *is* that value's
-  // field name, so it is consumed rather than also reported as `<tag>_Name`.
-  // On an empty element (`<Provider Name='…'/>`) it names nothing and stays
-  // Provider_Name. KV_MODE = xml reports both forms, and `xml` keeps that.
-  const nameConsumed = mode === 'xmlkv-winevt' && value !== '' && Boolean(nameAttr?.value);
-
-  for (const attr of el.attributes) {
-    if (!attr.value) continue;
-    if (attr === nameAttr && nameConsumed) continue;
-    const useTagName = attr.name === 'Name' && mode !== 'xmlkv';
-    out.push({
-      name: useTagName ? `${tag}_Name` : attr.name,
-      value: attr.value,
-      encoded: attr.encoded === true,
-      end: el.startTagEnd,
-    });
-  }
-
-  for (const child of children) walk(child, mode, path, out);
-  if (!value) return;
-
-  // `||`, not `??`: an empty Name attribute names nothing, and the leaf falls
-  // back to its path or tag rather than becoming a field called "".
-  let name: string;
-  if (mode === 'xml') name = nameAttr?.value || path.join('.');
-  else if (mode === 'xmlkv-winevt') name = nameAttr?.value || tag;
-  else name = tag;
-  out.push({ name, value, encoded, end: el.end });
 }

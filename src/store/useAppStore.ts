@@ -4,6 +4,24 @@ import type { EventMetadata, OutputTabId, ProcessingResult, ValidationDiagnostic
 /** Top-level workspace the activity rail switches between. */
 export type ActiveView = 'simulator' | 'dictionary';
 
+/** The simulator panels the mobile layout switches between. */
+export type MobileView = 'raw' | 'props' | 'transforms' | 'output';
+
+/** The four inputs an example, or "Clear all", replaces together. */
+export interface SessionInputs {
+  rawData: string;
+  propsConf: string;
+  transformsConf: string;
+  metadata: EventMetadata;
+}
+
+export const EMPTY_INPUTS: SessionInputs = {
+  rawData: '',
+  propsConf: '',
+  transformsConf: '',
+  metadata: { index: 'main', host: '', source: '', sourcetype: '' },
+};
+
 interface AppState {
   rawData: string;
   setRawData: (data: string) => void;
@@ -27,6 +45,11 @@ interface AppState {
   transformsConf: string;
   setTransformsConf: (text: string) => void;
 
+  /** What the inputs were last loaded as: empty at start, or an example. */
+  loadedInputs: SessionInputs;
+  /** Replace all four inputs at once and make that the new clean baseline. */
+  loadInputs: (inputs: SessionInputs) => void;
+
   processingResult: ProcessingResult | null;
   setProcessingResult: (result: ProcessingResult | null) => void;
 
@@ -41,6 +64,22 @@ interface AppState {
 
   activeView: ActiveView;
   setActiveView: (view: ActiveView) => void;
+
+  /**
+   * The simulator panel the mobile layout shows, one at a time. In the store
+   * rather than MobileShell so a jump to an editor line can switch to it.
+   */
+  mobileView: MobileView;
+  setMobileView: (view: MobileView) => void;
+
+  /**
+   * The Regex tab's pattern and EXTRACT class name. Held here because the tab
+   * unmounts on every sub-tab or output-tab switch, which cleared both.
+   */
+  regexPattern: string;
+  setRegexPattern: (pattern: string) => void;
+  regexClassName: string;
+  setRegexClassName: (name: string) => void;
 
   /**
    * Directive key the dictionary should show, set when something outside the
@@ -64,6 +103,11 @@ interface AppState {
 
   helpOpen: boolean;
   toggleHelp: () => void;
+  /** The pipeline reference's expanded stage, by step number. */
+  helpStage: number | null;
+  setHelpStage: (step: number | null) => void;
+  /** Open the pipeline reference with one stage expanded. */
+  openHelpAt: (step: number) => void;
 
   commandPaletteOpen: boolean;
   toggleCommandPalette: () => void;
@@ -146,12 +190,7 @@ export const useAppStore = create<AppState>((set) => ({
   pipelineOnMainThread: false,
   setPipelineOnMainThread: (v) => set({ pipelineOnMainThread: v }),
 
-  metadata: {
-    index: 'main',
-    host: '',
-    source: '',
-    sourcetype: '',
-  },
+  metadata: { ...EMPTY_INPUTS.metadata },
   setMetadataField: (field, value) =>
     set((state) => ({
       metadata: { ...state.metadata, [field]: value },
@@ -163,6 +202,17 @@ export const useAppStore = create<AppState>((set) => ({
 
   transformsConf: '',
   setTransformsConf: (text) => set({ transformsConf: text }),
+
+  loadedInputs: EMPTY_INPUTS,
+  loadInputs: (inputs) =>
+    set({
+      rawData: inputs.rawData,
+      propsConf: inputs.propsConf,
+      transformsConf: inputs.transformsConf,
+      metadata: { ...inputs.metadata },
+      loadedInputs: inputs,
+      currentPage: 1,
+    }),
 
   processingResult: null,
   setProcessingResult: (result) => set({ processingResult: result }),
@@ -186,6 +236,14 @@ export const useAppStore = create<AppState>((set) => ({
   activeView: 'simulator',
   setActiveView: (view) => set({ activeView: view }),
 
+  mobileView: 'raw',
+  setMobileView: (view) => set({ mobileView: view }),
+
+  regexPattern: '',
+  setRegexPattern: (pattern) => set({ regexPattern: pattern }),
+  regexClassName: 'custom',
+  setRegexClassName: (name) => set({ regexClassName: name }),
+
   dictionarySelection: null,
   openDictionaryAt: (key) => set({ dictionarySelection: key, activeView: 'dictionary' }),
   setDictionarySelection: (key) => set({ dictionarySelection: key }),
@@ -207,6 +265,9 @@ export const useAppStore = create<AppState>((set) => ({
 
   helpOpen: false,
   toggleHelp: () => set((state) => ({ helpOpen: !state.helpOpen })),
+  helpStage: null,
+  setHelpStage: (step) => set({ helpStage: step }),
+  openHelpAt: (step) => set({ helpOpen: true, helpStage: step }),
 
   commandPaletteOpen: false,
   toggleCommandPalette: () => set((state) => ({ commandPaletteOpen: !state.commandPaletteOpen })),
@@ -249,3 +310,22 @@ export const useAppStore = create<AppState>((set) => ({
   scaffoldOpen: false,
   toggleScaffold: () => set((state) => ({ scaffoldOpen: !state.scaffoldOpen })),
 }));
+
+/**
+ * Whether the session holds work that replacing the inputs would lose: an
+ * editor or metadata field differs from what was last loaded. Anything that
+ * overwrites all the inputs (loading an example, clearing, a future
+ * beforeunload warning) asks this rather than keeping its own notion of dirty.
+ */
+export function selectSessionDirty(s: AppState): boolean {
+  const base = s.loadedInputs;
+  return (
+    s.rawData !== base.rawData ||
+    s.propsConf !== base.propsConf ||
+    s.transformsConf !== base.transformsConf ||
+    s.metadata.index !== base.metadata.index ||
+    s.metadata.host !== base.metadata.host ||
+    s.metadata.source !== base.metadata.source ||
+    s.metadata.sourcetype !== base.metadata.sourcetype
+  );
+}

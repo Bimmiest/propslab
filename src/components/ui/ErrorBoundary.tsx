@@ -1,9 +1,18 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { noteBoundaryReset } from './retryableLazy';
 
 interface Props {
   children: ReactNode;
-  fallback?: ReactNode;
+  /** A node, or a render function given the error and a reset callback. */
+  fallback?: ReactNode | ((error: Error, reset: () => void) => ReactNode);
   panelName?: string;
+  /**
+   * `inline` is a one-line alert for boundaries around chrome (the header,
+   * overlays), where the full-height panel fallback would push the app aside.
+   */
+  variant?: 'panel' | 'inline';
+  /** Offers a Close button that clears the error and calls this, e.g. to shut a broken overlay. */
+  onDismiss?: () => void;
 }
 
 interface State {
@@ -26,13 +35,54 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   handleReset = () => {
+    // Before the re-render, so a lazy chunk that failed below retries its import.
+    noteBoundaryReset();
     this.setState({ hasError: false, error: null });
+  };
+
+  handleDismiss = () => {
+    // Batched with the reset, so the closed overlay never re-renders; reopening
+    // it later still retries a chunk that failed.
+    this.props.onDismiss?.();
+    this.handleReset();
   };
 
   render() {
     if (this.state.hasError) {
-      if (this.props.fallback) {
-        return this.props.fallback;
+      const { fallback } = this.props;
+      if (typeof fallback === 'function') {
+        return fallback(this.state.error ?? new Error('An unexpected error occurred.'), this.handleReset);
+      }
+      if (fallback) {
+        return fallback;
+      }
+
+      if (this.props.variant === 'inline') {
+        return (
+          <div
+            role="alert"
+            className="flex items-center gap-3 px-3 py-1.5 text-xs border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)] text-[var(--color-text-primary)]"
+          >
+            <span className="flex-1 min-w-0 truncate">
+              {this.props.panelName ? `${this.props.panelName} Error` : 'Something went wrong'}
+              {this.state.error?.message ? `: ${this.state.error.message}` : ''}
+            </span>
+            <button
+              onClick={this.handleReset}
+              className="px-2 py-0.5 font-medium rounded bg-[var(--color-accent)] text-[var(--color-text-on-accent)] hover:opacity-90"
+            >
+              Try Again
+            </button>
+            {this.props.onDismiss && (
+              <button
+                onClick={this.handleDismiss}
+                className="px-2 py-0.5 rounded text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-tertiary)]"
+              >
+                Close
+              </button>
+            )}
+          </div>
+        );
       }
 
       return (

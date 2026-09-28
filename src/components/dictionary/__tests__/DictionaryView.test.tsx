@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import * as RadixTooltip from '@radix-ui/react-tooltip';
 import { DictionaryView } from '../DictionaryView';
+import { HelpPanel } from '../../help/HelpPanel';
 import { useAppStore } from '../../../store/useAppStore';
 
 function renderDictionary() {
@@ -114,6 +115,16 @@ describe('DictionaryView', () => {
     const active = listbox.getAttribute('aria-activedescendant');
     expect(active).toBeTruthy();
     expect(document.getElementById(active!)).toHaveAttribute('data-entry-id', 'TRUNCATE');
+  });
+
+  it('drops aria-activedescendant when the selected entry is filtered out of the list', () => {
+    // The detail pane keeps a filtered-out entry; the listbox must not point
+    // assistive tech at an option it no longer renders.
+    useAppStore.setState({ dictionarySelection: 'TIME_FORMAT' });
+    renderDictionary();
+    fireEvent.click(screen.getByRole('button', { name: 'transforms' }));
+    const active = screen.getByRole('listbox').getAttribute('aria-activedescendant');
+    expect(active).toBeNull();
   });
 
   it('documents stanza headers alongside directives', () => {
@@ -235,5 +246,26 @@ describe('DictionaryDetail adapts to how much an entry has to say', () => {
     expect(screen.getByText('Specification')).toBeInTheDocument();
     expect(screen.getByText('Valid values')).toBeInTheDocument();
     expect(screen.getByText('Runs at')).toBeInTheDocument();
+  });
+});
+
+describe('DictionaryDetail — Runs at', () => {
+  beforeEach(() => {
+    useAppStore.setState(initial, true);
+  });
+
+  it('opens the pipeline reference with that stage expanded', () => {
+    useAppStore.setState({ dictionarySelection: 'TIME_PREFIX' });
+    render(
+      <RadixTooltip.Provider>
+        <DictionaryView />
+        <HelpPanel />
+      </RadixTooltip.Provider>,
+    );
+    fireEvent.click(screen.getAllByTitle('Open the pipeline reference at this stage')[0]!);
+
+    const panel = screen.getByRole('dialog', { name: 'Pipeline reference' });
+    // The stage's description only renders inside an expanded card.
+    expect(within(panel).getByText(/TIME_PREFIX anchors the search position/)).toBeInTheDocument();
   });
 });

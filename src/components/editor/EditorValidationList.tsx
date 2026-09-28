@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useAppStore } from '../../store/useAppStore';
 import type { ValidationDiagnostic, DiagnosticTarget } from '../../engine/types';
 import { Icon } from '../ui/Icon';
-import { getEditor } from './editorRegistry';
+import { revealInEditor } from './revealInEditor';
 
 interface EditorValidationListProps {
   file: DiagnosticTarget;
@@ -34,6 +34,7 @@ export function EditorValidationList({ file }: EditorValidationListProps) {
     <div className="border-t border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
       <button
         onClick={() => setExpanded(!expanded)}
+        aria-expanded={expanded}
         className="w-full flex items-center justify-between px-3 py-1 hover:bg-[var(--color-bg-tertiary)] transition-colors cursor-pointer"
       >
         <div className="flex items-center gap-2">
@@ -62,13 +63,7 @@ export function EditorValidationList({ file }: EditorValidationListProps) {
         <div className="max-h-32 overflow-auto divide-y divide-[var(--color-border)]">
           {filtered.map((diag, idx) => (
             <DiagnosticRow key={idx} diagnostic={diag} onNavigate={diag.line !== undefined ? () => {
-              const ed = getEditor(file);
-              if (!ed || diag.line === undefined) return;
-              ed.focus();
-              requestAnimationFrame(() => {
-                ed.setPosition({ lineNumber: diag.line!, column: 1 });
-                ed.revealLineInCenter(diag.line!);
-              });
+              if (diag.line !== undefined) revealInEditor(file, diag.line);
             } : undefined} />
           ))}
         </div>

@@ -45,6 +45,9 @@ jobs:
         with:
           # The PR diff needs the merge base with main.
           fetch-depth: 0
+          # That diff reads refs this full-history checkout already fetched;
+          # nothing talks to the remote afterwards, so the token is not kept.
+          persist-credentials: false
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:

@@ -8,8 +8,8 @@
 // values, and every combination of max_events and include_snapshots. The
 // properties:
 //  - no handler throws: every outcome is a tool result, errors included;
-//  - a simulate response stays under MAX_RESPONSE_CHARS, however large the
-//    events, traces and diagnostics behind it;
+//  - a simulate response stays under the response budget (responseBudget.ts),
+//    in bytes, however large the events, traces and diagnostics behind it;
 //  - validate reports every regex-bearing directive whose pattern fails
 //    validateRegex;
 //  - every success carries structuredContent that equals the text payload
@@ -28,7 +28,8 @@ import fc from 'fast-check';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import { handleExplainPrecedence, handleSimulate, handleValidate } from '../tools';
-import { MAX_RESPONSE_CHARS, serializeSimulation } from '../serialize';
+import { serializeSimulation } from '../serialize';
+import { MAX_PAYLOAD_BYTES, MAX_RESPONSE_BYTES, responseBytes } from '../responseBudget';
 import { explainOutputShape, simulateOutputShape, validateOutputShape } from '../outputSchemas';
 import { lintRegexDirectives } from '../regexLint';
 import { regexEngineModule } from '../regexEngine';
@@ -192,7 +193,7 @@ describe('validate — the regex lint reports every pattern validateRegex reject
   });
 });
 
-describe('serializeSimulation — the response stays under MAX_RESPONSE_CHARS', () => {
+describe('serializeSimulation — the response stays under MAX_PAYLOAD_BYTES', () => {
   const raw = (n: number) => 'r'.repeat(n);
   const event = (rawLength: number, steps: number): SplunkEvent => {
     const r = raw(rawLength);
@@ -233,13 +234,15 @@ describe('serializeSimulation — the response stays under MAX_RESPONSE_CHARS', 
             file: 'props.conf',
           }));
           const out = serializeSimulation(result, diagnostics, { maxEvents, includeSnapshots });
-          expect(JSON.stringify(out, null, 2).length).toBeLessThanOrEqual(MAX_RESPONSE_CHARS);
+          expect(responseBytes(out)).toBeLessThanOrEqual(MAX_PAYLOAD_BYTES);
           expect(out.returnedEvents).toBeLessThanOrEqual(Math.min(maxEvents, eventCount));
         },
       ),
       { numRuns: 60 },
     );
-  });
+    // Each run serializes up to 8 MB twice over; alongside the worker-heavy
+    // suites that is past the default timeout.
+  }, 30_000);
 });
 
 // ── Through the handlers (one worker per call) ──────────
@@ -272,7 +275,9 @@ describe('tool handlers — random input never throws out of the handler', () =>
             },
             WORKER_PATH,
           );
-          expect(text(result).length).toBeLessThanOrEqual(MAX_RESPONSE_CHARS);
+          expect(
+            Buffer.byteLength(JSON.stringify({ result, jsonrpc: '2.0', id: 1 })),
+          ).toBeLessThanOrEqual(MAX_RESPONSE_BYTES);
           const out = JSON.parse(text(result));
           // An error result is structured; the engine itself must not fail.
           if (result.isError) {
@@ -281,9 +286,6 @@ describe('tool handlers — random input never throws out of the handler', () =>
           } else {
             expect(out.returnedEvents).toBeLessThanOrEqual(maxEvents);
             expectStructured(result, simulateOutputShape);
-            expect(JSON.stringify(result.structuredContent).length).toBeLessThanOrEqual(
-              MAX_RESPONSE_CHARS,
-            );
           }
         },
       ),

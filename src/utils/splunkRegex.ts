@@ -41,12 +41,14 @@ export async function initRegexEngine(
 ): Promise<void> {
   await init(source);
   cache.clear();
+  probeCache.clear();
 }
 
 /** {@link initRegexEngine}, synchronously: for workers and Node. */
 export function initRegexEngineSync(source: CompiledModule | ModuleBytes): void {
   initSync(source);
   cache.clear();
+  probeCache.clear();
 }
 
 export const isRegexEngineReady: () => boolean = isReady;
@@ -74,10 +76,11 @@ export const DEFAULT_MATCH_LIMIT = 100000;
 export const DEFAULT_DEPTH_LIMIT = 1000;
 
 function parseLimit(value: string | undefined, fallback: number): number {
-  if (value === undefined) return fallback;
-  const n = Number(value.trim());
-  // Negative or non-numeric is unset in Splunk; directiveLint reports it.
-  if (!Number.isInteger(n) || n < 0) return fallback;
+  const text = value?.trim();
+  // Blank resets to the default, as directiveLint says; Number('') would be 0,
+  // i.e. no limit. Negative or non-numeric is unset too, and linted.
+  if (!text || !/^\d+$/.test(text)) return fallback;
+  const n = Number(text);
   // 0 is "no limit" in the spec.
   return n === 0 ? 0xffffffff : n;
 }
@@ -103,36 +106,74 @@ export function extractionLimits(matchLimit?: string, depthLimit?: string): Rege
 // it was evicted, so eviction never leaves a caller holding freed memory.
 // ---------------------------------------------------------------------------
 
-const CACHE_LIMIT = 256;
 /**
  * Emptied, not freed, on every init: the old patterns' code lives in the
  * replaced instance's memory, which went with it.
  */
-const cache = new Map<string, Pcre2Regex>();
+class RegexCache {
+  readonly #entries = new Map<string, Pcre2Regex>();
+  readonly #limit: number;
+  compiles = 0;
 
-function compiled(key: string, source: string, flags: string, limits: RegexLimits): Pcre2Regex {
-  const hit = cache.get(key);
-  if (hit && !hit.freed) {
-    // Re-inserted so the Map's order is least-recently-used first.
-    cache.delete(key);
-    cache.set(key, hit);
-    return hit;
+  constructor(limit: number) {
+    this.#limit = limit;
   }
-  const regex = new Pcre2Regex(source, flags, limits);
-  if (cache.size >= CACHE_LIMIT) {
-    const oldest = cache.keys().next();
-    if (!oldest.done) {
-      cache.get(oldest.value)?.free();
-      cache.delete(oldest.value);
+
+  get size(): number {
+    return this.#entries.size;
+  }
+
+  clear(): void {
+    this.#entries.clear();
+  }
+
+  compiled(key: string, source: string, flags: string, limits: RegexLimits): Pcre2Regex {
+    const hit = this.#entries.get(key);
+    if (hit && !hit.freed) {
+      // Re-inserted so the Map's order is least-recently-used first.
+      this.#entries.delete(key);
+      this.#entries.set(key, hit);
+      return hit;
     }
+    const regex = new Pcre2Regex(source, flags, limits);
+    this.compiles++;
+    if (this.#entries.size >= this.#limit) {
+      const oldest = this.#entries.keys().next();
+      if (!oldest.done) {
+        this.#entries.get(oldest.value)?.free();
+        this.#entries.delete(oldest.value);
+      }
+    }
+    this.#entries.set(key, regex);
+    return regex;
   }
-  cache.set(key, regex);
-  return regex;
 }
+
+const cache = new RegexCache(256);
+/**
+ * Diagnostic probes (the no-op explainer's truncated patterns) get their own
+ * cache: through the shared one, a few hundred of them evicted the patterns the
+ * pipeline was running, and every event then recompiled its whole config.
+ */
+const probeCache = new RegexCache(256);
 
 /** How many compiled patterns wasm memory holds; for the cache-bound test. */
 export function cachedRegexCount(): number {
   return cache.size;
+}
+
+/**
+ * How many times either cache has compiled a pattern. A cost test counts
+ * compiles rather than timing a run, which coverage instrumentation and a
+ * loaded CI runner make meaningless.
+ */
+export function regexCompileCount(): number {
+  return cache.compiles + probeCache.compiles;
+}
+
+/** How many compiled probes the separate probe cache holds; for tests. */
+export function cachedProbeCount(): number {
+  return probeCache.size;
 }
 
 /**
@@ -153,20 +194,22 @@ export class SplunkRegex {
 
   readonly #key: string;
   readonly #limits: RegexLimits;
+  readonly #cache: RegexCache;
 
   /** Throws when PCRE2 rejects the pattern; see {@link safeRegex}. */
-  constructor(source: string, flags = '', limits: RegexLimits = {}) {
+  constructor(source: string, flags = '', limits: RegexLimits = {}, probe = false) {
     this.source = source;
     this.flags = flags;
     this.#limits = limits;
+    this.#cache = probe ? probeCache : cache;
     this.#key = `${flags}\u0000${limits.matchLimit ?? ''}\u0000${limits.depthLimit ?? ''}\u0000${source}`;
-    const regex = compiled(this.#key, source, flags, limits);
+    const regex = this.#cache.compiled(this.#key, source, flags, limits);
     this.captureCount = regex.captureCount;
     this.names = regex.names;
   }
 
   #regex(): Pcre2Regex {
-    return compiled(this.#key, this.source, this.flags, this.#limits);
+    return this.#cache.compiled(this.#key, this.source, this.flags, this.#limits);
   }
 
   #limitHit(e: unknown): void {
@@ -228,8 +271,20 @@ export class SplunkRegex {
  * letters (`i`, `m`, `s`, `x`); inline settings like `(?i)` work too.
  */
 export function safeRegex(pattern: string, flags = '', limits: RegexLimits = {}): SplunkRegex | null {
+  return compileOrNull(pattern, flags, limits, false);
+}
+
+/**
+ * {@link safeRegex} for a throwaway diagnostic pattern: compiled into a cache
+ * of its own, so probing never evicts a pattern the pipeline is running.
+ */
+export function safeProbeRegex(pattern: string, limits: RegexLimits = {}): SplunkRegex | null {
+  return compileOrNull(pattern, '', limits, true);
+}
+
+function compileOrNull(pattern: string, flags: string, limits: RegexLimits, probe: boolean): SplunkRegex | null {
   try {
-    return new SplunkRegex(pattern, flags, limits);
+    return new SplunkRegex(pattern, flags, limits, probe);
   } catch (e) {
     if (e instanceof RegexSyntaxError) return null;
     throw e;

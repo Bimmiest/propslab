@@ -4,7 +4,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { PreviewPanel } from '../PreviewPanel';
-import { useAppStore } from '../../../store/useAppStore';
+import { useAppStore, selectSessionDirty } from '../../../store/useAppStore';
+import { SAMPLE_CONFIGS } from '../../../engine/sampleData';
 import type { EventMetadata, ProcessingResult } from '../../../engine/types';
 
 const initial = useAppStore.getState();
@@ -40,6 +41,20 @@ describe('PreviewPanel', () => {
       expect(tab).toHaveAttribute('aria-controls', panels[i]!.id);
       expect(panels[i]).toHaveAttribute('aria-labelledby', tab.id);
     });
+  });
+
+  // Loaded through loadInputs, so the example is the clean baseline: an
+  // unedited example is not work the command palette should warn about.
+  it('loads an example from the empty state as a clean session', () => {
+    render(<PreviewPanel />);
+    fireEvent.click(screen.getByRole('button', { name: /Apache Access Log/ }));
+    const state = useAppStore.getState();
+    expect(state.rawData).toBe(SAMPLE_CONFIGS[0]!.rawData);
+    expect(state.metadata).toEqual(SAMPLE_CONFIGS[0]!.metadata);
+    expect(selectSessionDirty(state)).toBe(false);
+
+    act(() => state.setPropsConf(`${state.propsConf}\n# edited`));
+    expect(selectSessionDirty(useAppStore.getState())).toBe(true);
   });
 
   it('ignores warnings when there is no result', () => {
@@ -174,5 +189,115 @@ describe('PreviewPanel — Effective config shows the last run in manual-apply m
 
     act(() => useAppStore.getState().triggerManualRun());
     expect(screen.getByText('= 123')).toBeInTheDocument();
+  });
+});
+
+// The change check strips trailing whitespace on the main thread for every
+// event, and /\s+$/ backtracks quadratically over a long run of whitespace
+// that is not at the end.
+describe('PreviewPanel — the change check is linear in whitespace (#427)', () => {
+  const meta: EventMetadata = { index: 'main', host: 'h', source: 's', sourcetype: 'st' };
+  function resultOf(raw: string, originalRaw: string): ProcessingResult {
+    return {
+      events: [{
+        _raw: raw,
+        _time: null,
+        _meta: {},
+        fields: {},
+        metadata: meta,
+        lineNumbers: { start: 1, end: 1 },
+        processingTrace: [],
+      }],
+      originalRaw,
+      eventCount: 1,
+      processingSteps: [],
+      inputMetadata: meta,
+    };
+  }
+
+  function unmodifiedCount(): string | null {
+    fireEvent.click(screen.getByRole('button', { name: /Changes/ }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Unmodified' }));
+    return screen.getByText(/^\d+ \/ \d+$/).textContent;
+  }
+
+  beforeEach(() => {
+    useAppStore.setState({ ...initial, activeOutputTab: 'preview' }, true);
+  });
+
+  it('ignores CRLF and trailing whitespace when deciding an event changed', () => {
+    useAppStore.setState({ processingResult: resultOf('GET /a 200 \t', 'GET /a 200\r') });
+    render(<PreviewPanel />);
+    expect(unmodifiedCount()).toBe('1 / 1');
+  });
+
+  it('checks an event with a long inner run of whitespace quickly', () => {
+    // 80k spaces took several seconds with the regex strip.
+    const raw = `a${' '.repeat(80_000)}b`;
+    useAppStore.setState({ processingResult: resultOf(raw, raw) });
+    const start = performance.now();
+    render(<PreviewPanel />);
+    expect(performance.now() - start).toBeLessThan(1500);
+    expect(unmodifiedCount()).toBe('1 / 1');
+  });
+});
+
+// A selected field that a later run no longer extracts has no checkbox left to
+// untick, so it must stop filtering rather than leave "0 / N" behind (#432).
+describe('PreviewPanel — the field filter follows the current fields (#432)', () => {
+  const meta: EventMetadata = { index: 'main', host: 'h', source: 's', sourcetype: 'st' };
+  function resultWith(fields: Record<string, string[]>): ProcessingResult {
+    return {
+      events: [{
+        _raw: 'user=alice',
+        _time: null,
+        _meta: {},
+        fields,
+        metadata: meta,
+        lineNumbers: { start: 1, end: 1 },
+        processingTrace: [],
+      }],
+      originalRaw: 'user=alice',
+      eventCount: 1,
+      processingSteps: [],
+      inputMetadata: meta,
+    };
+  }
+
+  beforeEach(() => {
+    useAppStore.setState({ ...initial, activeOutputTab: 'preview', processingResult: resultWith({ user: ['alice'] }) }, true);
+  });
+
+  it('drops a selected field that disappears', () => {
+    const { container } = render(<PreviewPanel />);
+    fireEvent.click(screen.getByRole('button', { name: /Fields/ }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'user' }));
+    expect(screen.getByText('1 / 1')).toBeInTheDocument();
+
+    act(() => useAppStore.setState({ processingResult: resultWith({ other: ['x'] }) }));
+    expect(screen.queryByText(/^\d+ \/ \d+$/)).not.toBeInTheDocument();
+    expect(container.textContent).toContain('user=alice');
+
+    // Nor does it come back with the field.
+    act(() => useAppStore.setState({ processingResult: resultWith({ user: ['alice'] }) }));
+    expect(screen.queryByText(/^\d+ \/ \d+$/)).not.toBeInTheDocument();
+  });
+
+  // The Regex tab unmounts on every sub-tab switch, which used to clear what
+  // was typed into it (#440).
+  it('keeps the Regex tab pattern and class name across tab switches', () => {
+    render(<PreviewPanel />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Regex' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Regular expression pattern' }), { target: { value: 'user=(?<user>\\w+)' } });
+    fireEvent.change(screen.getByRole('textbox', { name: 'EXTRACT class name' }), { target: { value: 'users' } });
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Raw' }));
+    expect(screen.queryByRole('textbox', { name: 'Regular expression pattern' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: 'Fields' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Preview' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Regex' }));
+
+    expect(screen.getByRole('textbox', { name: 'Regular expression pattern' })).toHaveValue('user=(?<user>\\w+)');
+    expect(screen.getByRole('textbox', { name: 'EXTRACT class name' })).toHaveValue('users');
   });
 });

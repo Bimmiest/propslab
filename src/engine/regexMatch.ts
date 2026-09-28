@@ -1,4 +1,5 @@
 import { extractionLimits, safeRegex, type SplunkRegex } from '../utils/splunkRegex';
+import { setField } from './utils/fieldBag';
 
 /**
  * Serializable result of matching a pattern against one input. Replaces passing a
@@ -21,14 +22,16 @@ function matchOne(regex: SplunkRegex, raw: string): RegexMatchInfo | null {
   const m = regex.exec(raw);
   if (!m) return null;
   const info: RegexMatchInfo = { index: m.index, match: m[0], groups: {}, groupSpans: {} };
+  // setField, because a group may be named __proto__, which a bare assignment
+  // would send to the prototype setter and lose.
   if (m.groups) {
     for (const [name, value] of Object.entries(m.groups)) {
-      if (value !== undefined) info.groups[name] = value;
+      if (value !== undefined) setField(info.groups, name, value);
     }
   }
   if (m.indices.groups) {
     for (const [name, span] of Object.entries(m.indices.groups)) {
-      if (span) info.groupSpans[name] = span;
+      if (span) setField(info.groupSpans, name, span);
     }
   }
   return info;

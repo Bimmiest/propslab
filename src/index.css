@@ -105,6 +105,23 @@ body {
   100% { transform: translateX(300%); }
 }
 
+/* Slide-out drawer (pipeline reference). Keyframes on Radix's data-state, not
+   a transition: Presence keeps a closing dialog mounted only while an exit
+   animation runs. */
+@keyframes drawer-in {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
+@keyframes drawer-out {
+  from { transform: translateX(0); }
+  to   { transform: translateX(100%); }
+}
+.drawer-slide[data-state='open']   { animation: drawer-in 250ms ease-in-out; }
+.drawer-slide[data-state='closed'] { animation: drawer-out 250ms ease-in-out; }
+@media (prefers-reduced-motion: reduce) {
+  .drawer-slide[data-state] { animation: none; }
+}
+
 /* Resizable panel handle styles */
 [data-panel-resize-handle-id] {
   background-color: var(--color-border);

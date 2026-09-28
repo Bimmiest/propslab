@@ -9,6 +9,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { runPipeline } from '../pipeline';
+import { regexCompileCount } from '../../utils/splunkRegex';
 import type { EventMetadata, DirectiveNoOp } from '../types';
 
 const metadata: EventMetadata = {
@@ -118,4 +119,40 @@ describe('#84 — no-op explanations reach the caller', () => {
     expect(event.noOps).toHaveLength(1);
     expect(event.processingTrace.some((s) => s.processor.startsWith('EXTRACT'))).toBe(false);
   });
+});
+
+describe('#415 — explaining no-ops stays cheap at volume', () => {
+  it('runs 500 events past 16 mostly non-matching EXTRACTs without recompiling', () => {
+    // Each explanation probes one truncated pattern per atom. Through the
+    // pipeline's own 256-entry cache those probes evicted the EXTRACTs
+    // themselves, and this took about 17 s.
+    const ids = ['106023', '302013', '302014', '305011', '106100', '313001', '710003', '419002'];
+    const raw = Array.from(
+      { length: 500 },
+      (_, i) =>
+        `Jan 15 10:00:${String(i % 60).padStart(2, '0')} fw01 %ASA-6-${ids[i % ids.length]}: ` +
+        `Deny tcp src outside:10.0.${i % 256}.${i % 200}/${1024 + i} dst inside:192.168.1.${i % 250}/443 ` +
+        `by access-group "outside_in" [0x0, 0x0]`,
+    ).join('\n');
+    const extracts = Array.from(
+      { length: 16 },
+      (_, n) =>
+        `EXTRACT-asa${n} = %ASA-\\d-${900000 + n}: (?<action${n}>\\w+) (?<proto${n}>\\w+) src ` +
+        `(?<szone${n}>\\w+):(?<src${n}>[\\d.]+)/(?<sport${n}>\\d+) dst (?<dzone${n}>\\w+):(?<dst${n}>[\\d.]+)/(?<dport${n}>\\d+)`,
+    ).join('\n');
+    const props = `[my_app]\nSHOULD_LINEMERGE = false\nLINE_BREAKER = ([\\r\\n]+)\n${extracts}\n`;
+
+    const before = regexCompileCount();
+    const { result } = runPipeline(raw, metadata, props, '', { perEventPipeline: false, captureOffsets: false });
+    const compiles = regexCompileCount() - before;
+
+    expect(result.events).toHaveLength(500);
+    expect(result.events[0]?.noOps).toHaveLength(16);
+    // Compiles, not wall time: under coverage on a loaded runner a 1 s run
+    // took 10 s. Thrashing recompiled the config for every event: about 200,000
+    // compiles for these 500 events; a working cache compiles each pattern and probe
+    // about once.
+    expect(compiles).toBeLessThan(2000);
+    // The pipeline itself takes seconds under coverage instrumentation.
+  }, 30_000);
 });

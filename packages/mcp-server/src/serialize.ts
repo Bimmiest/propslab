@@ -6,8 +6,9 @@
  *
  * Runs inside the worker. Everything in the result that grows with the
  * event count is cut to the returned events here, and the whole response is
- * held under `MAX_RESPONSE_CHARS`, so what crosses to the server's thread —
- * which has no heap limit — is bounded whatever the sample was.
+ * held under `MAX_PAYLOAD_BYTES` (responseBudget.ts), so what crosses to the
+ * server's thread — which has no heap limit — is bounded whatever the sample
+ * was.
  */
 import type {
   ProcessingResult,
@@ -15,19 +16,19 @@ import type {
   SplunkEvent,
   ValidationDiagnostic,
 } from '../../../src/engine/types';
+import { indexedFields } from '../../../src/engine/utils/metadataFields';
+import {
+  elementBytes,
+  fitting,
+  MAX_PAYLOAD_BYTES,
+  MAX_RESPONSE_BYTES,
+  responseBytes,
+} from './responseBudget';
 
 export interface SerializeOptions {
   maxEvents: number;
   includeSnapshots: boolean;
 }
-
-/**
- * Largest simulate response, in characters of the pretty-printed JSON the
- * tool returns. Room for a single event of the full 1MB sample with its trace;
- * past that an agent cannot read the response anyway, and four concurrent
- * calls stay a few tens of megabytes on the server's thread.
- */
-export const MAX_RESPONSE_CHARS = 2_000_000;
 
 /** Diagnostics may take at most this share of the budget; events get the rest. */
 const DIAGNOSTICS_SHARE = 0.5;
@@ -40,10 +41,12 @@ function serializeStep(step: ProcessingStep, includeSnapshots: boolean) {
 function serializeEvent(event: SplunkEvent, includeSnapshots: boolean) {
   return {
     _raw: event._raw,
-    _time: event._time ? event._time.toISOString() : null,
+    // The engine never sets an Invalid Date (epochTime.ts), but toISOString()
+    // throws on one, which would fail the whole call over one field.
+    _time: event._time && !Number.isNaN(event._time.getTime()) ? event._time.toISOString() : null,
     metadata: event.metadata,
     fields: event.fields,
-    indexedFields: event._meta,
+    indexedFields: indexedFields(event._meta),
     lineNumbers: event.lineNumbers,
     processingTrace: event.processingTrace.map((s) => serializeStep(s, includeSnapshots)),
   };
@@ -63,32 +66,6 @@ export interface SerializedSimulation {
   diagnosticCount?: number;
 }
 
-/** What `json()` in tools.ts will emit for `value`, measured the same way. */
-const jsonChars = (value: unknown) => JSON.stringify(value, null, 2).length;
-
-/**
- * Characters one array element adds to the response: its own pretty-printed
- * text, re-indented to depth 2 (four more spaces per line), plus `,\n`.
- */
-function elementChars(value: unknown): number {
-  const text = JSON.stringify(value, null, 2);
-  let lines = 1;
-  for (let i = text.indexOf('\n'); i !== -1; i = text.indexOf('\n', i + 1)) lines++;
-  return text.length + 4 * lines + 2;
-}
-
-/** How many leading items fit in `budget`, given each one's cost. */
-function fitting<T>(items: T[], cost: (item: T) => number, budget: number): number {
-  let used = 0;
-  let count = 0;
-  for (const item of items) {
-    used += cost(item);
-    if (used > budget) break;
-    count++;
-  }
-  return count;
-}
-
 export function serializeSimulation(
   result: ProcessingResult,
   diagnostics: ValidationDiagnostic[],
@@ -102,7 +79,7 @@ export function serializeSimulation(
 
   const keptDiagnostics = diagnostics.slice(
     0,
-    fitting(diagnostics, elementChars, MAX_RESPONSE_CHARS * DIAGNOSTICS_SHARE),
+    fitting(diagnostics, elementBytes, MAX_PAYLOAD_BYTES * DIAGNOSTICS_SHARE),
   );
 
   const build = (events: SerializedEvent[]): SerializedSimulation => {
@@ -111,7 +88,7 @@ export function serializeSimulation(
       notes.push(
         events.length < candidates.length
           ? `Only the first ${events.length} of ${result.eventCount} events are returned: the ` +
-              `response is capped at ${MAX_RESPONSE_CHARS} characters. Use include_snapshots=false, ` +
+              `response is capped at ${MAX_RESPONSE_BYTES} bytes. Use include_snapshots=false, ` +
               'a lower max_events or a smaller sample to see more of each event.'
           : `Only the first ${events.length} of ${result.eventCount} events are returned; ` +
               'raise max_events or use a smaller sample to see the rest.',
@@ -140,14 +117,14 @@ export function serializeSimulation(
   // Each event is paid for twice: once itself, once for its steps repeated in
   // processingSteps. The budget left after everything else is measured with
   // the longest truncation note in place, so adding it cannot tip the total.
-  const budget = MAX_RESPONSE_CHARS - jsonChars(build([]));
+  const budget = MAX_PAYLOAD_BYTES - responseBytes(build([]));
   const cost = (e: SerializedEvent) =>
-    elementChars(e) + e.processingTrace.reduce((n, s) => n + elementChars(s), 0);
+    elementBytes(e) + e.processingTrace.reduce((n, s) => n + elementBytes(s), 0);
   let count = fitting(candidates, cost, budget);
   let response = build(candidates.slice(0, count));
-  // The per-element arithmetic is exact for JSON.stringify's layout; this is
-  // the backstop should that ever drift.
-  while (count > 0 && jsonChars(response) > MAX_RESPONSE_CHARS) {
+  // The per-element arithmetic is exact for compact JSON; this is the
+  // backstop should that ever drift.
+  while (count > 0 && responseBytes(response) > MAX_PAYLOAD_BYTES) {
     count--;
     response = build(candidates.slice(0, count));
   }

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { parseTimestamp, parseTzAlias, strftimeToRegex } from '../strftime';
+import fc from 'fast-check';
+import { cachedFormatCount, formatStrftime, parseTimestamp, parseTzAlias, strftimeToRegex, supportedSpecifiers } from '../strftime';
 
 /** Helper: ISO string of a parsed timestamp, or null. */
 function iso(text: string, format: string, tz?: string): string | null {
@@ -332,5 +333,92 @@ describe('strftime — month and weekday names accept either length (#356)', () 
   it('reads a full weekday name with %a and an abbreviation with %A', () => {
     expect(iso('Thursday 2024-09-05 10:00:00', '%a %Y-%m-%d %H:%M:%S')).toBe('2024-09-05T10:00:00.000Z');
     expect(iso('Thu 2024-09-05 10:00:00', '%A %Y-%m-%d %H:%M:%S')).toBe('2024-09-05T10:00:00.000Z');
+  });
+});
+
+describe('formatStrftime — every parsed specifier renders (#429)', () => {
+  // Built from local parts, so it renders as these fields on any machine (#407).
+  const at = new Date(2024, 6, 1, 7, 5, 9, 42);
+
+  it('renders the subsecond family at its Splunk width', () => {
+    expect(formatStrftime(at, '%1N %2N %3N %6N %9N %N')).toBe('0 04 042 042000 042000000 042000000');
+    expect(formatStrftime(at, '%Q %3Q %6Q %9Q %f')).toBe('042 042 042000 042000000 042000');
+  });
+
+  it('space-pads %k and %l', () => {
+    expect(formatStrftime(at, '[%k] [%l]')).toBe('[ 7] [ 7]');
+    expect(formatStrftime(new Date(2024, 6, 1, 19), '[%k] [%l]')).toBe('[19] [ 7]');
+  });
+
+  it('renders %:z and %::z as %z with colons', () => {
+    const [, sign, hh, mm] = /^([+-])(\d{2})(\d{2})$/.exec(formatStrftime(at, '%z'))!;
+    expect(formatStrftime(at, '%:z')).toBe(`${sign}${hh}:${mm}`);
+    expect(formatStrftime(at, '%::z')).toBe(`${sign}${hh}:${mm}:00`);
+  });
+
+  it('leaves a specifier the parser does not read as literal text', () => {
+    expect(formatStrftime(at, '%c %w %U %V %%T')).toBe('%c %w %U %V %T');
+  });
+
+  // It divided the span between local midnights by 24 hours, which comes up an
+  // hour short of a whole day after spring-forward: 2024-07-01 00:30 in
+  // Europe/London read as day 182. Run under TZ=Europe/London to see it fail.
+  it('counts %j in calendar days, not across a DST change', () => {
+    for (let day = 1; day <= 366; day++) {
+      const d = new Date(2024, 0, day, 0, 30);
+      expect(formatStrftime(d, '%j')).toBe(String(day).padStart(3, '0'));
+    }
+  });
+});
+
+describe('formatStrftime then parseTimestamp agree for every specifier (#429)', () => {
+  // Each specifier sits in a format that pins the instant, so its value is
+  // load-bearing (or, for %a/%A, at least has to be read back). Rendered and
+  // read in the host's real zone, which %z/%Z carry across.
+  const T = '%H:%M:%S %z';
+  const cases = [
+    `%Y-%m-%d ${T}`, `%y-%m-%d ${T}`, `%Y-%m-%e ${T}`, `%Y %j ${T}`,
+    `%Y %b %d ${T}`, `%Y %B %d ${T}`, `%a %A %F ${T}`,
+    '%Y-%m-%d %I:%M:%S %p %z', '%Y-%m-%d %l:%M:%S %p %z', '%Y-%m-%d %k:%M:%S %z',
+    '%F %T %Z', '%F %T %:z', '%F %T %::z', '%s', '%s.%3N', '100%% %F %T %z',
+    ...['%1N', '%2N', '%3N', '%4N', '%5N', '%6N', '%7N', '%8N', '%9N', '%N', '%Q', '%3Q', '%6Q', '%9Q', '%f']
+      .map((s) => `%F %T.${s} %z`),
+  ];
+
+  it('covers every supported specifier', () => {
+    for (const spec of supportedSpecifiers()) {
+      expect(cases.some((c) => c.includes(spec)), spec).toBe(true);
+    }
+  });
+
+  it('reads back the instant each format rendered', () => {
+    // %s reads 10-13 digits, so from 2001-09-09; %y pivots at 69, so up to 2068.
+    const instant = fc.integer({ min: Date.UTC(2002, 0, 1), max: Date.UTC(2067, 11, 31) });
+    fc.assert(
+      fc.property(instant, fc.constantFrom(...cases), (ms, format) => {
+        const text = formatStrftime(new Date(ms), format);
+        const width = /%(\d)N/.exec(format)?.[1];
+        const precision = width ? 10 ** Math.max(0, 3 - Number(width)) : /%\d?[NQf]/.test(format) ? 1 : 1000;
+        expect(parseTimestamp(text, format)?.getTime(), `${format} → ${text}`)
+          .toBe(Math.floor(ms / precision) * precision);
+      }),
+      { seed: 429, numRuns: 2000 },
+    );
+  });
+});
+
+describe('tokenise cache (#436)', () => {
+  it('stays bounded, keeps recently used formats, and re-tokenises an evicted one', () => {
+    const cold = strftimeToRegex('%Y-%m-%d cold');
+    const hot = strftimeToRegex('%Y-%m-%d hot');
+    // Each keystroke of a TIME_FORMAT being typed is a new format.
+    for (let i = 0; i < 1000; i++) {
+      strftimeToRegex(`%Y-%m-%d ${i}`);
+      strftimeToRegex('%Y-%m-%d hot');
+    }
+    expect(cachedFormatCount()).toBeLessThanOrEqual(256);
+    expect(strftimeToRegex('%Y-%m-%d hot')).toBe(hot);
+    expect(strftimeToRegex('%Y-%m-%d cold')).not.toBe(cold);
+    expect(iso('2024-01-15 cold', '%Y-%m-%d cold')).toBe('2024-01-15T00:00:00.000Z');
   });
 });

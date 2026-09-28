@@ -1,5 +1,6 @@
 import { useTheme } from './hooks/useTheme';
 import { AppShell } from './components/layout/AppShell';
+import { RootErrorBoundary } from './components/ui/RootErrorBoundary';
 
 function App() {
   useTheme();
@@ -12,7 +13,9 @@ function App() {
       >
         Skip to main content
       </a>
-      <AppShell />
+      <RootErrorBoundary>
+        <AppShell />
+      </RootErrorBoundary>
     </>
   );
 }

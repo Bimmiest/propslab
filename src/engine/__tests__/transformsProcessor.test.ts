@@ -353,6 +353,27 @@ describe('applyTransforms — SOURCE_KEY reads pipeline metadata (#53)', () => {
     const out = applyTransforms([ev], transformsDir('t'), conf, 'index-time')[0]!;
     expect(out.fields.tier_copy).toBe('gold');
   });
+
+  // #437: the simulator keeps queue routing in _meta._queue; that is not text
+  // Splunk puts in _meta, so SOURCE_KEY = _meta must not see it.
+  it('does not expose the internal queue slot when reading _meta', () => {
+    const ev = { ...event('x'), _meta: { tier: 'gold', _queue: 'indexQueue' } };
+    const conf = transformsConf('t', {
+      SOURCE_KEY: '_meta',
+      REGEX: '^(.*)$',
+      FORMAT: 'meta_copy::$1',
+      WRITE_META: 'true',
+    });
+    const out = applyTransforms([ev], transformsDir('t'), conf, 'index-time')[0]!;
+    expect(out.fields.meta_copy).toBe('tier::gold');
+  });
+
+  it('still reads the queue through SOURCE_KEY = queue after a reroute', () => {
+    const conf = transformsConf('t', { SOURCE_KEY: 'queue', REGEX: '(\\w+)', FORMAT: 'q::$1', WRITE_META: 'true' });
+    const ev = { ...event('x'), _meta: { _queue: 'nullQueue' } };
+    const out = applyTransforms([ev], transformsDir('t'), conf, 'index-time')[0]!;
+    expect(out.fields.q).toBe('nullQueue');
+  });
 });
 
 describe('applyTransforms — search-time-only attributes reached index-time', () => {

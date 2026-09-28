@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { timePrefixFromSelection } from '../../../../engine/scaffold/fromSelection';
 import { DirectiveDialog } from './DirectiveDialog';
+import { useLiveCapture, isSettledCapture, type Capture } from './useLiveCapture';
 
 /**
  * In-app dialog for "Set as TIME_PREFIX from selection" (replaces a window.alert
@@ -41,13 +42,18 @@ export function TimePrefixDialog({
   const contextHint = before.slice(-32);
 
   const trimmed = value.trim();
+  // The same gate as ExtractNameDialog: TIME_PREFIX is a user regex too, and
+  // one that does not compile, or backtracks past the watchdog, must not reach
+  // props.conf, where it would run against every event.
+  const capture = useLiveCapture(raw, trimmed);
+  const valid = isSettledCapture(capture);
 
   return (
     <DirectiveDialog
       title="Set TIME_PREFIX from selection"
       applyLabel="Set TIME_PREFIX"
-      applyDisabled={trimmed.length === 0}
-      onApply={() => { if (trimmed) { onApply(trimmed); onClose(); } }}
+      applyDisabled={!valid}
+      onApply={() => { if (valid) { onApply(trimmed); onClose(); } }}
       onClose={onClose}
     >
       <div>
@@ -65,6 +71,8 @@ export function TimePrefixDialog({
           className="mt-1 w-full px-2.5 py-1.5 rounded-md text-sm font-mono outline-none bg-[var(--color-bg-secondary)] text-[var(--color-text-primary)] border border-[var(--color-border)] focus:border-[var(--color-accent)]"
         />
       </div>
+
+      <PrefixMatchNote capture={capture} />
 
       {contextHint && (
         <div className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
@@ -87,5 +95,27 @@ export function TimePrefixDialog({
         </pre>
       </div>
     </DirectiveDialog>
+  );
+}
+
+function PrefixMatchNote({ capture }: { capture: Capture }) {
+  if (capture.state === 'empty') return null;
+  const note = (color: string, text: ReactNode) => (
+    <div className="text-xs font-medium" style={{ color }}>{text}</div>
+  );
+  if (capture.state === 'invalid') return note('var(--color-error)', capture.reason ?? "Invalid regex — won't compile");
+  if (capture.state === 'timeout') {
+    return note(
+      'var(--color-error)',
+      'Pattern took too long to run — it likely backtracks catastrophically. Simplify it before setting it.',
+    );
+  }
+  if (capture.state === 'pending') return note('var(--color-text-muted)', 'Matching…');
+  if (capture.state === 'nomatch') {
+    return note('var(--color-warning)', 'No match in this event — the timestamp would not be found here');
+  }
+  return note(
+    'var(--color-success)',
+    <>Matches <span className="font-mono" style={{ color: 'var(--color-text-primary)' }}>{capture.full}</span></>,
   );
 }

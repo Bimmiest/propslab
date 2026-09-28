@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { applyDestKey } from '../transforms/destKeyRouter';
+import { runPipeline } from '../pipeline';
 import type { SplunkEvent } from '../types';
 import type { TransformResult } from '../transforms/regexTransform';
 
@@ -151,5 +152,50 @@ describe('applyDestKey — unsimulated routing keys are not written as fields (#
   it('still treats a genuinely unknown key as a field name', () => {
     const out = applyDestKey(baseEvent(), result('my_custom_field', 'v'));
     expect(out.fields.my_custom_field).toBe('v');
+  });
+});
+
+describe('applyDestKey — _time out of the Date range (#417)', () => {
+  const at = new Date('2026-01-02T03:04:05Z');
+
+  it.each(['100000000000000', '1e20', '-1e300', '1e400'])('keeps the previous _time for %s', (value) => {
+    const seen: string[] = [];
+    const out = applyDestKey({ ...baseEvent(), _time: at }, result('_time', value), (v) => seen.push(v));
+    expect(out._time).toBe(at);
+    expect(seen).toEqual([value]);
+  });
+
+  it('sets an in-range epoch and reports nothing', () => {
+    const seen: string[] = [];
+    const out = applyDestKey(baseEvent(), result('_time', '1767323045'), (v) => seen.push(v));
+    expect(out._time?.toISOString()).toBe('2026-01-02T03:04:05.000Z');
+    expect(seen).toEqual([]);
+  });
+
+  it('ignores a non-numeric value silently, as before', () => {
+    const seen: string[] = [];
+    const out = applyDestKey({ ...baseEvent(), _time: at }, result('_time', 'soon'), (v) => seen.push(v));
+    expect(out._time).toBe(at);
+    expect(seen).toEqual([]);
+  });
+
+  it('warns once per transform through the pipeline, keeping the extracted _time', () => {
+    const meta = { index: 'main', host: 'h', source: '/a.log', sourcetype: 'st' };
+    const props = '[st]\nSHOULD_LINEMERGE = false\nTRANSFORMS-t = t\n';
+    const transforms = '[t]\nREGEX = (\\d+)$\nFORMAT = $1\nDEST_KEY = _time\n';
+    const { result: out, diagnostics } = runPipeline(
+      '2026-01-02 03:04:05 100000000000000\n2026-01-02 03:04:06 100000000000001',
+      meta,
+      props,
+      transforms,
+    );
+    for (const ev of out.events) expect(ev._time?.toISOString()).toMatch(/^2026-01-02T/);
+    const warnings = diagnostics.filter((d) => d.message.includes('out of range'));
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatchObject({ level: 'warning', file: 'transforms.conf', line: 4 });
+    expect(warnings[0]!.message).toBe(
+      'DEST_KEY = _time in transform "t": timestamp 100000000000000 is out of range; ' +
+        'the event keeps its previous _time',
+    );
   });
 });

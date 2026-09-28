@@ -21,6 +21,8 @@ export function ProgressBar({ value, label, variant = 'default' }: ProgressBarPr
         className="w-full h-0.5 overflow-hidden"
         style={{ backgroundColor: 'var(--color-border)' }}
         role="progressbar"
+        // A progressbar needs a name; the indeterminate bar shows no text.
+        aria-label={label ?? 'Loading'}
         aria-valuetext="loading"
       >
         <div

@@ -98,4 +98,18 @@ describe('upsertDirectiveInStanza', () => {
     const out = upsertDirectiveInStanza('[web]\nKV_MODE = none\n\n[db]\nKV_MODE = json', 'web', 'TIME_PREFIX', '\\[');
     expect(out).toBe('[web]\nKV_MODE = none\nTIME_PREFIX = \\[\n\n[db]\nKV_MODE = json');
   });
+
+  it('edits the definition that wins: the last line in the last block (#431)', () => {
+    const text = '[web]\nTIME_PREFIX = a\nTIME_PREFIX = b\n\n[db]\nKV_MODE = json\n\n[web]\nTIME_PREFIX = c\nTIME_PREFIX = d';
+    expect(upsertDirectiveInStanza(text, 'web', 'TIME_PREFIX', 'e')).toBe(
+      '[web]\nTIME_PREFIX = a\nTIME_PREFIX = b\n\n[db]\nKV_MODE = json\n\n[web]\nTIME_PREFIX = c\nTIME_PREFIX = e',
+    );
+  });
+
+  it('appends to the last block of a split stanza when the key is not in it (#431)', () => {
+    const text = '[web]\nTIME_PREFIX = a\n\n[db]\nKV_MODE = json\n\n[web]\nKV_MODE = none\n';
+    expect(upsertDirectiveInStanza(text, 'web', 'TIME_PREFIX', 'b')).toBe(
+      '[web]\nTIME_PREFIX = a\n\n[db]\nKV_MODE = json\n\n[web]\nKV_MODE = none\nTIME_PREFIX = b\n',
+    );
+  });
 });

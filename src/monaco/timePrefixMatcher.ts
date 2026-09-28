@@ -20,10 +20,9 @@
 // Several hovers can be in flight at once, and the worker runs them in order,
 // so only the oldest is running when a worker hangs or crashes. That one is
 // reported; the rest never ran and are replayed on the fresh worker rather
-// than blamed. A watchdog that fires before the worker has even loaded (a slow
-// PCRE2 wasm fetch or compile) blames nothing: every request is replayed once
-// the replacement is ready, and a replacement that never loads makes the
-// preview omit its sample line (#403).
+// than blamed. A slow load (the PCRE2 wasm fetch or compile) blames nothing:
+// no watchdog runs until the worker has loaded, and one that never loads
+// makes the preview omit its sample line (#403, #420).
 // ---------------------------------------------------------------------------
 
 import { createManagedWorker } from '../hooks/workerLifecycle';

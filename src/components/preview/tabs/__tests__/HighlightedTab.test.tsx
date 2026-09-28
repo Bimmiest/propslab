@@ -103,6 +103,17 @@ describe('HighlightedTab', () => {
     expect(screen.getByText(/events match 1 pinned field/i)).toBeInTheDocument();
   });
 
+  // Fills go through tint(): a field colour can fall back to a var(), and an
+  // appended alpha byte on a var() is dropped by the browser (#432).
+  it('tints a pinned field row with color-mix, not an appended alpha byte', () => {
+    const { container } = render(
+      <HighlightedTab items={items} allEvents={items} currentPage={1} eventsPerPage={10} />,
+    );
+    fireEvent.click(within(container).getAllByText('username')[0]!);
+    const row = within(container).getAllByText('username')[0]!.closest<HTMLElement>('[aria-pressed="true"]')!;
+    expect(row.getAttribute('style')).toMatch(/background-color: color-mix\(in srgb, rgb\([^)]+\) 13%, transparent\)/);
+  });
+
   // UI-2: the "Event #" badge uses the event's true global position, not page-local index.
   it('numbers events by their global position across pages', () => {
     // Page 2 of 2-per-page: the single item is the 3rd event overall.
@@ -137,6 +148,8 @@ describe('HighlightedTab', () => {
 
     expect(screen.getAllByText(/Event #/)).toHaveLength(100);
     expect(screen.getByText(/Showing the first 100 of 150 events/i)).toBeInTheDocument();
+    // The summary counts every match, not just the rendered window (#432).
+    expect(screen.getByText(/150\/150 events match 1 pinned field/)).toBeInTheDocument();
   });
 
   it('does not cap or announce a truncation when the pin matches few events', () => {

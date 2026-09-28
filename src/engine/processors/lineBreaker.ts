@@ -130,7 +130,7 @@ function warnUncompilableBreakPattern(
 const DEFAULT_LINE_BREAKER = '([\\r\\n]+)';
 
 /** A LINE_BREAKER segment and where it starts in the raw input. */
-interface Segment {
+export interface Segment {
   text: string;
   offset: number;
 }
@@ -189,7 +189,7 @@ function resolveLineBreaker(
  * `(?<=\})(\n)` sees the `}` that ended the previous event — and the tail of
  * the input is not copied once per event, which would be quadratic.
  */
-function splitSegments(
+export function splitSegments(
   rawData: string,
   pattern: string,
   directives: ConfDirective[],

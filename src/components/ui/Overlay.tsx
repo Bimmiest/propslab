@@ -26,14 +26,10 @@ export interface OverlayProps {
   style?: React.CSSProperties;
   /** Classes for the full-screen layer holding the content (layout only). */
   containerClassName?: string;
-  /**
-   * Keep the content mounted while closed, for an overlay that animates itself
-   * in and out rather than appearing instantly (the pipeline reference panel
-   * slides). Radix still applies inertness and the focus trap only while `open`.
-   */
-  forceMount?: boolean;
   /** Fires on the content element; used for Enter-to-submit in a form dialog. */
   onKeyDown?: (event: React.KeyboardEvent) => void;
+  /** `alertdialog` for a confirmation that interrupts the user's flow. */
+  role?: 'dialog' | 'alertdialog';
 }
 
 export function Overlay({
@@ -44,44 +40,34 @@ export function Overlay({
   className,
   style,
   containerClassName = 'fixed inset-0 z-50 flex items-start justify-center pt-[20vh]',
-  forceMount,
   onKeyDown,
+  role,
 }: OverlayProps) {
   return (
     <Dialog.Root
       open={open}
-      // Modality is scoped to the open state, which matters only for a
-      // force-mounted overlay: left permanently modal, Radix keeps the rest of
-      // the app `aria-hidden` while the overlay sits closed in the tree, and
-      // every role-based query against the app finds nothing. That is invisible
-      // in a unit test of the overlay itself and took out the whole e2e suite.
-      modal={open}
       onOpenChange={(next) => {
         if (!next) onClose();
       }}
     >
-      <Dialog.Portal {...(forceMount ? { forceMount: true } : {})}>
+      {/*
+        Never force-mounted, not even for the sliding pipeline reference: closed
+        content left in the tree keeps a Radix DismissableLayer alive, and its
+        capture-phase Escape handler then swallows Escape for the whole app. An
+        overlay that animates does so with `data-state` keyframes, which Radix's
+        Presence waits out before unmounting.
+      */}
+      <Dialog.Portal>
         <Dialog.Overlay
-          {...(forceMount ? { forceMount: true } : {})}
           className="fixed inset-0 z-40"
-          style={{
-            backgroundColor: 'rgba(0,0,0,0.5)',
-            // A force-mounted overlay stays in the tree while closed, so it has
-            // to stop painting and stop swallowing clicks on its own.
-            ...(forceMount && !open ? { opacity: 0, pointerEvents: 'none' } : {}),
-          }}
+          style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
         />
         <div className={containerClassName}>
           <Dialog.Content
-            {...(forceMount ? { forceMount: true } : {})}
             className={className}
             style={style}
             onKeyDown={onKeyDown}
-            // A force-mounted overlay stays in the tree while closed, so it has
-            // to drop itself out of the accessibility tree and the tab order —
-            // otherwise a closed slide-out panel is still exposed as a dialog
-            // with focusable buttons sitting off-screen.
-            {...(forceMount && !open ? { 'aria-hidden': true, inert: true } : {})}
+            {...(role ? { role } : {})}
             // These overlays carry no separate descriptive text, and Radix
             // requires either a description or an explicit opt-out. Opting out
             // is the accurate answer rather than inventing a sentence for a

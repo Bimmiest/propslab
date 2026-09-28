@@ -21,7 +21,14 @@ import {
   WorkerTimeoutError,
   type RunInWorkerOptions,
 } from './runInWorker';
-import { MAX_RESPONSE_CHARS } from './serialize';
+import {
+  CAP_NOTE,
+  cutNote,
+  cutToFit,
+  jsonResponseBytes,
+  MAX_PAYLOAD_BYTES,
+  MAX_RESPONSE_BYTES,
+} from './responseBudget';
 import {
   explainOutputShape,
   lookupOutputShape,
@@ -171,7 +178,7 @@ export const simulateInputShape = {
     .default(20)
     .describe(
       'Most events to return; processingSteps covers the returned events only. The whole ' +
-        `response is also capped at ${MAX_RESPONSE_CHARS} characters, and returns fewer ` +
+        `response is also capped at ${MAX_RESPONSE_BYTES} bytes, and returns fewer ` +
         'events when they would not fit — truncationNote says when either cut applies.',
     ),
   timeout_ms: timeoutSchema,
@@ -232,20 +239,71 @@ interface ToolText {
 
 /**
  * A success carries the payload twice: as `structuredContent` for clients
- * that read the output schema, and as pretty-printed text for those that do
- * not. Both come from the one object, and its compact JSON is never longer
- * than the pretty text, so the simulate cap (`MAX_RESPONSE_CHARS`, measured
- * on the text) bounds the structured copy too.
+ * that read the output schema, and as compact JSON text for those that do
+ * not. Both come from the one object, and the response budget
+ * (responseBudget.ts) counts both, in bytes; the worker cuts each payload to
+ * it. What still comes out over it — which the worker's cuts should make
+ * impossible — is refused here rather than written.
  *
  * An error omits `structuredContent`: its payload does not match the output
  * schema, and the SDK client validates `structuredContent` whenever present,
  * error or not. The error JSON stays in the text.
  */
 function json(payload: object, isError = false): ToolText {
+  const text = JSON.stringify(payload);
+  const bytes = jsonResponseBytes(text);
+  if (bytes > MAX_PAYLOAD_BYTES) {
+    return json(
+      {
+        error: 'response_too_large',
+        response_bytes: bytes,
+        max_response_bytes: MAX_RESPONSE_BYTES,
+        message: `The response would be ${bytes} bytes. ${CAP_NOTE}`,
+        guidance: 'Send a smaller sample or conf, or ask for less (max_events, include_snapshots).',
+      },
+      true,
+    );
+  }
   return {
-    content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }],
+    content: [{ type: 'text', text }],
     ...(isError ? { isError: true } : { structuredContent: payload as Record<string, unknown> }),
   };
+}
+
+/**
+ * The timeout error, with the regex-suspect list cut to the response budget:
+ * one suspect per regex directive, so a conf of many large patterns lists
+ * megabytes of them. Flagged patterns sort first and survive the cut.
+ */
+function timeoutFailure(
+  err: WorkerTimeoutError,
+  propsConf: ConfInput,
+  transformsConf: ConfInput,
+): ToolText {
+  const suspects = collectRegexSuspects(propsConf, transformsConf);
+  const total = suspects.length;
+  return json(
+    cutToFit(suspects, (kept) => ({
+      error: 'timeout',
+      budget_ms: err.budgetMs,
+      message:
+        `The run exceeded its ${err.budgetMs}ms wall-clock budget and was hard-terminated. ` +
+        'The usual cause is a regex backtracking heavily on every event, or one whose stanza ' +
+        'disables PCRE\'s limits with MATCH_LIMIT = 0.',
+      regex_directives: suspects.slice(0, kept),
+      ...(kept < total
+        ? {
+            regex_directive_count: total,
+            truncation_note: `${cutNote('regex directives', kept, total)} ${CAP_NOTE}`,
+          }
+        : {}),
+      guidance:
+        'Repair the flagged pattern(s) — start with redos_risk=true, but the heuristic is ' +
+        'structural and cannot see forms like (a|aa)+, so an unflagged pattern may still be ' +
+        'the cause. Do not simply retry with a larger timeout.',
+    })),
+    true,
+  );
 }
 
 /**
@@ -261,22 +319,7 @@ function workerFailure(
   transformsConf: ConfInput,
 ): ToolText {
   if (err instanceof WorkerTimeoutError) {
-    return json(
-      {
-        error: 'timeout',
-        budget_ms: err.budgetMs,
-        message:
-          `The run exceeded its ${err.budgetMs}ms wall-clock budget and was hard-terminated. ` +
-          'The usual cause is a regex backtracking heavily on every event, or one whose stanza ' +
-          'disables PCRE\'s limits with MATCH_LIMIT = 0.',
-        regex_directives: collectRegexSuspects(propsConf, transformsConf),
-        guidance:
-          'Repair the flagged pattern(s) — start with redos_risk=true, but the heuristic is ' +
-          'structural and cannot see forms like (a|aa)+, so an unflagged pattern may still be ' +
-          'the cause. Do not simply retry with a larger timeout.',
-      },
-      true,
-    );
+    return timeoutFailure(err, propsConf, transformsConf);
   }
   if (err instanceof WorkerOutOfMemoryError) {
     // No regex-suspect list here: memory is exhausted by volume — how much
@@ -373,12 +416,12 @@ export async function handleValidate(args: ValidateArgs, worker?: string | RunIn
   const tooLarge = confTooLarge(args.props_conf, args.transforms_conf);
   if (tooLarge) return tooLarge;
   try {
-    const { diagnostics } = await runInWorker<ValidateResponse>(
+    const response = await runInWorker<ValidateResponse>(
       { op: 'validate', propsConf: args.props_conf, transformsConf: args.transforms_conf },
       args.timeout_ms,
       worker,
     );
-    return json({ diagnostics });
+    return json(response);
   } catch (err) {
     return workerFailure(err, args.props_conf, args.transforms_conf);
   }

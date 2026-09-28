@@ -207,6 +207,9 @@ export function DictionaryList({
 }) {
   const listRef = useRef<HTMLDivElement>(null);
   const groups = groupEntries(entries);
+  // The detail pane may show an entry the filters hide; the listbox must still
+  // only point at an option it actually renders.
+  const activeRendered = selectedId !== null && entries.some((entry) => entry.id === selectedId);
 
   const handleKeyDown = (e: KeyboardEvent) => {
     const current = entries.findIndex((entry) => entry.id === selectedId);
@@ -243,7 +246,7 @@ export function DictionaryList({
       tabIndex={0}
       // The options are not individually focusable — focus stays on the listbox
       // and moves the selection, which is what lets one Tab stop cover 80 rows.
-      aria-activedescendant={selectedId ? optionDomId(selectedId) : undefined}
+      aria-activedescendant={activeRendered ? optionDomId(selectedId) : undefined}
       onKeyDown={handleKeyDown}
       // `@container` so the rows can respond to the PANEL's width rather than
       // the viewport's — the list is resizable, so a viewport breakpoint would

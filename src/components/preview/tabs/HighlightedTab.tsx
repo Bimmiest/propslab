@@ -1,7 +1,9 @@
-import { useCallback, useMemo, useState } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 import { getField, hasField } from '../../../engine/utils/fieldBag';
 import type { EnrichedEvent } from '../PreviewPanel';
-import { fieldColorAt, isFieldActive, isAnyFocused, useFieldFocus } from './shared/useFieldFocus';
+import {
+  FieldFocusContext, fieldColorAt, useActiveFields, useFieldFocus, useFieldFocusState, type FieldFocusStore,
+} from './shared/useFieldFocus';
 import { useAppStore } from '../../../store/useAppStore';
 import { FieldEventCard } from './shared/FieldEventCard';
 import { FieldSidebar } from './shared/FieldSidebar';
@@ -11,6 +13,7 @@ import { buildFieldTree } from './shared/fieldTreeUtils';
 import type { FieldNode } from './shared/fieldTreeUtils';
 import { DirectiveNoOpList } from './shared/DirectiveNoOpList';
 import { pressable } from '../../ui/pressable';
+import { tint } from '../../../utils/tint';
 
 const AUTO_PROCESSORS = ['KV_MODE', 'INDEXED_EXTRACTIONS'];
 const MANUAL_PROCESSORS = ['EXTRACT', 'REPORT', 'TRANSFORMS', 'RULESET', 'SEDCMD'];
@@ -256,13 +259,10 @@ function useFieldColoring(allEvents: EnrichedEvent[], fieldFilter: FieldFilter) 
   return { categories, containerFields, fieldColorMap, highlightColorMap };
 }
 
-type FieldFocusState = ReturnType<typeof useFieldFocus>;
-
 export function HighlightedTab({ items, allEvents, currentPage, eventsPerPage }: HighlightedTabProps) {
   const [fieldFilter, setFieldFilter] = useState<FieldFilter>('all');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const focus = useFieldFocus();
-  const { pinnedFields, togglePin } = focus;
+  const { store: focusStore, pinnedFields, togglePin, setHoveredField } = useFieldFocus();
 
   const { categories, containerFields, fieldColorMap, highlightColorMap } = useFieldColoring(allEvents, fieldFilter);
 
@@ -303,19 +303,21 @@ export function HighlightedTab({ items, allEvents, currentPage, eventsPerPage }:
       effectiveCollapsed={effectiveCollapsed}
       setCollapsedGroups={setCollapsedGroups}
       toggleGroup={toggleGroup}
-      focus={focus}
+      focusStore={focusStore}
+      pinnedFields={pinnedFields}
       onCollapse={() => setSidebarCollapsed(true)}
     />
   );
 
   return (
+    <FieldFocusContext.Provider value={focusStore}>
     <div className="flex flex-col h-full">
       <FilterBar
         categories={categories}
         fieldFilter={fieldFilter}
         setFieldFilter={setFieldFilter}
         pinned={pinnedFields.size > 0 ? {
-          matching: filteredItems.length,
+          matching: pinMatches.length,
           total: allEvents.length,
           count: pinnedFields.size,
           clear: () => { for (const f of pinnedFields) togglePin(f); },
@@ -348,12 +350,15 @@ export function HighlightedTab({ items, allEvents, currentPage, eventsPerPage }:
               highlightColorMap={highlightColorMap}
               fieldColorMap={fieldColorMap}
               categories={categories}
-              focus={focus}
+              pinnedFields={pinnedFields}
+              togglePin={togglePin}
+              setHoveredField={setHoveredField}
             />
           ))}
         </FieldSplitLayout>
       </div>
     </div>
+    </FieldFocusContext.Provider>
   );
 }
 
@@ -441,7 +446,7 @@ function FilterBar({ categories, fieldFilter, setFieldFilter, pinned, sidebarCol
 }
 
 function HighlightedSidebar({
-  fieldCount, tree, allGroupNames, effectiveCollapsed, setCollapsedGroups, toggleGroup, focus, onCollapse,
+  fieldCount, tree, allGroupNames, effectiveCollapsed, setCollapsedGroups, toggleGroup, focusStore, pinnedFields, onCollapse,
 }: {
   fieldCount: number;
   tree: FieldNode[];
@@ -449,14 +454,18 @@ function HighlightedSidebar({
   effectiveCollapsed: Set<string>;
   setCollapsedGroups: (groups: Set<string>) => void;
   toggleGroup: (name: string) => void;
-  focus: FieldFocusState;
+  focusStore: FieldFocusStore;
+  pinnedFields: Set<string>;
   onCollapse: () => void;
 }) {
+  // The sidebar lists every field, so it takes the whole active set, and
+  // subscribes here so a hover re-renders it without the cards beside it.
+  const activeFields = useActiveFields(focusStore);
   const allCollapsed = allGroupNames.every((g) => effectiveCollapsed.has(g));
   return (
     <FieldSidebar
       fieldCount={fieldCount}
-      activeFields={focus.activeFields}
+      activeFields={activeFields}
       onCollapse={onCollapse}
       renderControls={() =>
         allGroupNames.length > 0 ? (
@@ -475,10 +484,10 @@ function HighlightedSidebar({
             node={node}
             collapsed={effectiveCollapsed}
             toggleGroup={toggleGroup}
-            activeFields={focus.activeFields}
-            pinnedFields={focus.pinnedFields}
-            onHover={focus.setHoveredField}
-            onClick={focus.togglePin}
+            activeFields={activeFields}
+            pinnedFields={pinnedFields}
+            onHover={focusStore.setHoveredField}
+            onClick={focusStore.togglePin}
             search={search}
           />
         ))
@@ -504,20 +513,37 @@ function PinnedOverflowNote({ total }: { total: number }) {
   );
 }
 
-function HighlightedEventCard({ item, globalIdx, badges, highlightColorMap, fieldColorMap, categories, focus }: {
+interface FocusHandlers {
+  pinnedFields: Set<string>;
+  togglePin: (field: string) => void;
+  setHoveredField: (field: string | null) => void;
+}
+
+/**
+ * Memoised, and given no hover state: hover reaches the spans through
+ * FieldFocusContext, so a card re-renders only when its event, the colours or
+ * the pins change.
+ */
+const HighlightedEventCard = memo(function HighlightedEventCard({
+  item, globalIdx, badges, highlightColorMap, fieldColorMap, categories, pinnedFields, togglePin, setHoveredField,
+}: {
   item: EnrichedEvent;
   globalIdx: number;
   badges: EventBadges;
   highlightColorMap: Map<string, string>;
   fieldColorMap: Map<string, string>;
   categories: FieldCategories;
-  focus: FieldFocusState;
-}) {
+} & FocusHandlers) {
   const { eventCalcFields, autoCount, manualCount, calcCount } = badges;
   const { manualFields, calcFields } = categories;
-  const fieldValues = new Map<string, string | string[]>(
-    Object.entries(item.event.fields).filter(([k]) => highlightColorMap.has(k))
+  // A new Map would defeat HighlightedRaw's segmentation memo on every render.
+  const fieldValues = useMemo(
+    () => new Map<string, string | string[]>(
+      Object.entries(item.event.fields).filter(([k]) => highlightColorMap.has(k)),
+    ),
+    [item.event.fields, highlightColorMap],
   );
+  const focus = { pinnedFields, togglePin, setHoveredField };
 
   return (
     <FieldEventCard
@@ -525,15 +551,14 @@ function HighlightedEventCard({ item, globalIdx, badges, highlightColorMap, fiel
       globalIdx={globalIdx}
       fieldColorMap={highlightColorMap}
       fieldValues={fieldValues}
-      activeFields={focus.activeFields}
       fieldSourceKeys={item.event.fieldSourceKeys}
       fieldOffsets={item.event.fieldOffsets}
       titleFor={(field, value) => {
         const tag = manualFields.has(field) ? 'manual' : calcFields.has(field) ? 'calc' : 'auto';
         return `${field} (${tag}): ${value}`;
       }}
-      onFieldHover={focus.setHoveredField}
-      onFieldClick={focus.togglePin}
+      onFieldHover={setHoveredField}
+      onFieldClick={togglePin}
       badges={
         <>
           {autoCount > 0 && (
@@ -586,7 +611,7 @@ function HighlightedEventCard({ item, globalIdx, badges, highlightColorMap, fiel
       )}
     </FieldEventCard>
   );
-}
+});
 
 /**
  * A calculated field, as `name=value` in the summary strip or as its EVAL
@@ -595,12 +620,13 @@ function HighlightedEventCard({ item, globalIdx, badges, highlightColorMap, fiel
 function CalcFieldChip({ cf, color, focus, showExpression = false }: {
   cf: CalcField;
   color: string;
-  focus: FieldFocusState;
+  focus: FocusHandlers;
   showExpression?: boolean;
 }) {
-  const { activeFields, pinnedFields, setHoveredField, togglePin } = focus;
-  const focused = isAnyFocused(activeFields);
-  const active = isFieldActive(cf.name, activeFields);
+  const { pinnedFields, setHoveredField, togglePin } = focus;
+  const focusState = useFieldFocusState(cf.name);
+  const focused = focusState !== 'none';
+  const active = focusState !== 'dim';
   const pinned = pinnedFields.has(cf.name);
   const display = Array.isArray(cf.value) ? cf.value.join(', ') : cf.value;
   return (
@@ -630,7 +656,7 @@ function CalcFieldChip({ cf, color, focus, showExpression = false }: {
             className="px-1 py-0.5 rounded-sm max-w-48 truncate"
             style={{
               color,
-              backgroundColor: active && focused ? color + '20' : 'transparent',
+              backgroundColor: active && focused ? tint(color, 13) : 'transparent',
               outline: pinned ? `2px solid ${color}` : 'none',
               outlineOffset: '1px',
               transition: 'background-color 0.15s, color 0.15s',

@@ -1,4 +1,5 @@
 import type { Confidence, ScaffoldSuggestion } from '../types';
+import { escapeRegex } from '../../../utils/splunkRegex';
 
 /**
  * Detect the line/event format and propose the matching props.conf directives
@@ -20,7 +21,16 @@ export function detectLineFormat(rawData: string, lines: string[]): ScaffoldSugg
 
   // XML — declaration or a leading element.
   if (/<\?xml/i.test(rawData) || /^\s*<[a-zA-Z!]/.test(rawData)) {
-    return [{ key: 'KV_MODE', value: 'xml', confidence: 'high', evidence: 'Input looks like XML', enabledByDefault: true }];
+    const kvMode: ScaffoldSuggestion = { key: 'KV_MODE', value: 'xml', confidence: 'high', evidence: 'Input looks like XML', enabledByDefault: true };
+    // Without an explicit breaker the default line merge (BREAK_ONLY_BEFORE_DATE)
+    // splits a multi-line document at any line holding a date.
+    const breaker = xmlDocumentBreaker(rawData);
+    if (!breaker) return [kvMode];
+    return [
+      { key: 'LINE_BREAKER', value: breaker.regex, confidence: 'medium', evidence: breaker.evidence, enabledByDefault: true },
+      { key: 'SHOULD_LINEMERGE', value: 'false', confidence: 'medium', evidence: 'Events are delimited by the LINE_BREAKER, not merged', enabledByDefault: true },
+      kvMode,
+    ];
   }
 
   // JSON, one object per line.
@@ -34,21 +44,25 @@ export function detectLineFormat(rawData: string, lines: string[]): ScaffoldSugg
     ];
   }
 
-  // Multiple newline-separated multi-line JSON objects (`}` … `{` across lines).
-  // Each object spans several lines, so the per-line JSON check above misses them.
+  // Multi-line JSON objects, one or several (`}` … `{` across lines). Each object
+  // spans several lines, so the per-line JSON check above misses them. Even a
+  // single object needs the breaker: under the default line merge
+  // (BREAK_ONLY_BEFORE_DATE) it would split at any line holding a date.
   const trimmed = rawData.trim();
-  if (trimmed.startsWith('{') && /\}\s*[\r\n]+\s*\{/.test(rawData)) {
+  const several = /\}\s*[\r\n]+\s*\{/.test(rawData);
+  if (trimmed.startsWith('{') && (several || (nonBlank.length > 1 && tryParse(trimmed)))) {
     return [
-      { key: 'LINE_BREAKER', value: '([\\r\\n]+)(?=\\{)', confidence: 'medium', evidence: 'Multiple newline-separated JSON objects — break before each one', enabledByDefault: true },
+      {
+        key: 'LINE_BREAKER',
+        value: '([\\r\\n]+)(?=\\{)',
+        confidence: 'medium',
+        evidence: several
+          ? 'Multiple newline-separated JSON objects — break before each one'
+          : 'Multi-line JSON object — break only before a top-level `{`, so the object stays whole',
+        enabledByDefault: true,
+      },
       { key: 'SHOULD_LINEMERGE', value: 'false', confidence: 'medium', evidence: 'Events are delimited by the LINE_BREAKER, not merged', enabledByDefault: true },
       { key: 'KV_MODE', value: 'json', confidence: 'medium', evidence: 'JSON payload', enabledByDefault: true },
-    ];
-  }
-
-  // A single multi-line JSON object — one event, so no LINE_BREAKER is needed.
-  if (nonBlank.length > 1 && trimmed.startsWith('{') && tryParse(trimmed)) {
-    return [
-      { key: 'KV_MODE', value: 'json', confidence: 'medium', evidence: 'Single multi-line JSON object — search-time extraction', enabledByDefault: true },
     ];
   }
 
@@ -68,6 +82,51 @@ export function detectLineFormat(rawData: string, lines: string[]): ScaffoldSugg
   }
 
   return [];
+}
+
+/**
+ * A LINE_BREAKER that breaks only before each top-level XML document, or null
+ * when the sample's top level cannot be read. When every document opens with an
+ * XML declaration the break is before it, so the declaration stays with its
+ * root; otherwise it is before the root element names seen at depth 0. Like the
+ * JSON breaker, it assumes each document starts at column 0.
+ */
+function xmlDocumentBreaker(rawData: string): { regex: string; evidence: string } | null {
+  const roots = new Set<string>();
+  let rootCount = 0;
+  let depth = 0;
+  // `[^'"<>]` rather than `[^'">]` so an unclosed tag stops at the next `<`
+  // instead of rescanning the rest of the sample.
+  const tagRe = /<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>|<[?!][^>]*>|<(\/?)([A-Za-z_][\w.:-]*)(?:"[^"]*"|'[^']*'|[^'"<>])*?(\/?)>/g;
+  for (const m of rawData.matchAll(tagRe)) {
+    const name = m[2];
+    if (name === undefined) continue;
+    if (m[1]) {
+      if (--depth < 0) return null;
+      continue;
+    }
+    if (depth === 0) {
+      roots.add(name);
+      rootCount++;
+    }
+    if (!m[3]) depth++;
+  }
+  if (rootCount === 0) return null;
+
+  const declarations = rawData.match(/(?:^|[\r\n])\s*<\?xml\s/gi)?.length ?? 0;
+  if (declarations === rootCount) {
+    return { regex: '([\\r\\n]+)(?=<\\?xml\\s)', evidence: 'Each XML document opens with a declaration — break only before each one' };
+  }
+  // Some documents carry a declaration and some do not: breaking before the
+  // root would strand a declaration as an event of its own.
+  if (declarations > 0) return null;
+
+  const names = [...roots].map(escapeRegex).join('|');
+  const alternation = roots.size === 1 ? names : `(?:${names})`;
+  return {
+    regex: `([\\r\\n]+)(?=<${alternation}[\\s/>])`,
+    evidence: `Top-level XML element${roots.size === 1 ? '' : 's'} ${[...roots].map((n) => `<${n}>`).join(', ')} — break only before each one`,
+  };
 }
 
 function isJsonLine(line: string): boolean {

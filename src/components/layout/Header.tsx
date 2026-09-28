@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { useAppStore } from '../../store/useAppStore';
+import { useAppStore, EMPTY_INPUTS } from '../../store/useAppStore';
 import { ThemeToggle } from '../ui/ThemeToggle';
 import { ProgressBar } from '../ui/ProgressBar';
 import { Icon, type IconName } from '../ui/Icon';
@@ -38,22 +38,16 @@ export function Header() {
   const diagnostics = useAppStore((s) => s.validationDiagnostics);
   const isProcessing = useAppStore((s) => s.isProcessing);
   const result = useAppStore((s) => s.processingResult);
-  const setRawData = useAppStore((s) => s.setRawData);
-  const setPropsConf = useAppStore((s) => s.setPropsConf);
-  const setTransformsConf = useAppStore((s) => s.setTransformsConf);
-  const setMetadata = useAppStore((s) => s.setMetadata);
+  const loadInputs = useAppStore((s) => s.loadInputs);
   const toggleHelp = useAppStore((s) => s.toggleHelp);
   const helpOpen = useAppStore((s) => s.helpOpen);
   const toggleCommandPalette = useAppStore((s) => s.toggleCommandPalette);
   const toggleSettings = useAppStore((s) => s.toggleSettings);
   const settingsOpen = useAppStore((s) => s.settingsOpen);
 
-  const resetAll = () => {
-    setRawData('');
-    setPropsConf('');
-    setTransformsConf('');
-    setMetadata({ index: 'main', host: '', source: '', sourcetype: '' });
-  };
+  // Its own click-twice confirmation already guards this; loading the empty
+  // inputs also makes them the clean baseline selectSessionDirty compares to.
+  const resetAll = () => loadInputs(EMPTY_INPUTS);
 
   // Coerce to boolean INSIDE the selector so Zustand compares the boolean, not the
   // raw text — otherwise the selector returns a changing string and the header
@@ -103,7 +97,7 @@ export function Header() {
           <ThemeToggle />
         </div>
       </div>
-      {isProcessing && <ProgressBar />}
+      {isProcessing && <ProgressBar label="Processing" />}
       {/* Screen-reader live region */}
       <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">
         {errorCount > 0

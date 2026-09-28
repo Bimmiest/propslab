@@ -39,4 +39,14 @@ describe('matchInputs', () => {
     expect(r!.groups).toEqual({ b: 'y' });
     expect(r!.groupSpans.a).toBeUndefined();
   });
+
+  it('keeps a group named __proto__ (#430)', () => {
+    const [r] = matchInputs('(?<__proto__>\\w+)=(?<v>\\d+)', ['x=1'])!;
+    expect(Object.keys(r!.groups)).toEqual(['__proto__', 'v']);
+    expect(Object.getOwnPropertyDescriptor(r!.groups, '__proto__')?.value).toBe('x');
+    expect(Object.getOwnPropertyDescriptor(r!.groupSpans, '__proto__')?.value).toEqual([0, 1]);
+    // Still a plain object, so it survives postMessage and Object.entries as before.
+    expect(Object.getPrototypeOf(r!.groups)).toBe(Object.prototype);
+    expect(Object.entries(structuredClone(r!.groups))).toEqual([['__proto__', 'x'], ['v', '1']]);
+  });
 });

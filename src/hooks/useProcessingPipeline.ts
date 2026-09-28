@@ -19,8 +19,8 @@ const MAX_WORKER_RETRIES = 1;
 // crash-vs-load classification and the load-failure cap — is
 // `createManagedWorker`. This hook's policy on top of it:
 //
-// - Timeout: terminal error, and the input is not retried — unless the worker
-//   had not loaded, when it is posted again once the replacement has.
+// - Timeout: terminal error, and the input is not retried. The watchdog only
+//   runs once the worker has loaded, so a slow load is a load failure, below.
 // - Crash (the worker had loaded): replay once on the replacement, then a
 //   terminal error. A crashed input is never run inline: on the tab's own
 //   thread it would have no watchdog.
@@ -40,6 +40,17 @@ type LatestState =
   | 'poisoned'
   /** Timed out before its worker had loaded, so no code ever ran it. */
   | 'unrun';
+
+interface LatestRequest {
+  request: PipelineWorkerRequest;
+  state: LatestState;
+  /**
+   * It crashed a worker. Sticky, unlike `state` and the retry count, so no
+   * later turn of its replay (a timeout, a load failure) can clear the way to
+   * running it inline (#421).
+   */
+  crashed: boolean;
+}
 
 /** The inputs a run was made with, to tell whether the editors have moved on since. */
 interface RunInputs {
@@ -70,7 +81,7 @@ interface PipelineRefs {
   requestStartRef: RefObject<number>;
   /** Not reset per request — see the note in sendRequest. */
   retryCountRef: RefObject<number>;
-  latestRef: RefObject<{ request: PipelineWorkerRequest; state: LatestState } | null>;
+  latestRef: RefObject<LatestRequest | null>;
 }
 
 type AppState = ReturnType<typeof useAppStore.getState>;
@@ -104,6 +115,20 @@ function giveUp(p: WorkerPolicy, message: string): void {
   report(p, message);
 }
 
+const NO_REPLACEMENT_AFTER_CRASH = 'Worker crashed while processing this input, and no replacement worker could be started to retry it. Processing was stopped — try reducing the input size or simplifying your patterns.';
+
+/**
+ * Finish the latest request on the tab's own thread, where no worker can be
+ * had — unless it crashed one: then it stops for good instead (#326, #421).
+ */
+function finishInline(p: WorkerPolicy, request: PipelineWorkerRequest): void {
+  if (p.latestRef.current?.crashed) {
+    giveUp(p, NO_REPLACEMENT_AFTER_CRASH);
+    return;
+  }
+  p.runInline(request);
+}
+
 function onResponse(p: WorkerPolicy, { id, result, error }: PipelineWorkerResponse): void {
   if (id !== p.requestIdRef.current) return;
   p.setIsProcessing(false);
@@ -130,15 +155,13 @@ function onResponse(p: WorkerPolicy, { id, result, error }: PipelineWorkerRespon
 
 function onTimeout(p: WorkerPolicy, request: PipelineWorkerRequest, loaded: boolean): void {
   if (request.id !== p.requestIdRef.current) return;
-  p.retryCountRef.current = 0;
   if (!loaded) {
-    // The worker never started, so the input never ran and says nothing
-    // about its patterns. Run it once the replacement has loaded, so a slow
-    // first load does not leave the preview on a timeout until the next
-    // edit. If the replacement fails to load, onLoadFailure gets
-    // it; with no worker at all it never ran, so inline is safe.
-    if (p.latestRef.current) p.latestRef.current.state = 'unrun';
-    if (!p.managed.postWhenReady(request)) p.runInline(request);
+    // The worker never started, so this run says nothing about the input's
+    // patterns: run it once the replacement has loaded. Nor does it undo an
+    // earlier crash, so the retry count stands, and a replay is not 'unrun'.
+    const latest = p.latestRef.current;
+    if (latest && !latest.crashed) latest.state = 'unrun';
+    if (!p.managed.postWhenReady(request)) finishInline(p, request);
     return;
   }
   giveUp(p, `Pipeline timed out after ${WORKER_TIMEOUT_MS / 1000} s — a regex may be backtracking heavily on every event. Try simplifying your EXTRACT or TRANSFORMS pattern, or lowering its MATCH_LIMIT.`);
@@ -153,6 +176,7 @@ function onCrash(p: WorkerPolicy, inFlight: PipelineWorkerRequest[], message: st
     report(p, `Worker error: ${message || 'unknown error'}`);
     return;
   }
+  if (p.latestRef.current?.request.id === pending.id) p.latestRef.current.crashed = true;
   // Restart once and replay — covers a transient worker crash. The
   // lifecycle arms a fresh watchdog for the replay, so a retry that also
   // hangs cannot leave isProcessing stuck.
@@ -181,7 +205,7 @@ function onLoadFailure(p: WorkerPolicy, inFlight: PipelineWorkerRequest[], cappe
     // next edit.
     const latest = p.latestRef.current;
     if (capped && latest?.state === 'unrun' && latest.request.id === p.requestIdRef.current) {
-      p.runInline(latest.request);
+      finishInline(p, latest.request);
     }
     return;
   }
@@ -195,10 +219,10 @@ function onLoadFailure(p: WorkerPolicy, inFlight: PipelineWorkerRequest[], cappe
   // replacement merely failing to load does not make it safe to run on
   // the tab's own thread.
   if (p.retryCountRef.current > 0) {
-    giveUp(p, 'Worker crashed while processing this input, and no replacement worker could be started to retry it. Processing was stopped — try reducing the input size or simplifying your patterns.');
+    giveUp(p, NO_REPLACEMENT_AFTER_CRASH);
     return;
   }
-  p.runInline(pending);
+  finishInline(p, pending);
 }
 
 /**
@@ -290,7 +314,7 @@ export function useProcessingPipeline() {
 
   const workerRef = useRef<ManagedWorker<PipelineWorkerRequest> | null>(null);
   const requestIdRef = useRef(0);
-  const latestRef = useRef<{ request: PipelineWorkerRequest; state: LatestState } | null>(null);
+  const latestRef = useRef<LatestRequest | null>(null);
   const requestStartRef = useRef<number>(0);
   // Not reset per request — see the note in sendRequest.
   const retryCountRef = useRef(0);
@@ -342,7 +366,7 @@ export function useProcessingPipeline() {
     // for the old one's run time.
     const managed = workerRef.current;
     managed?.forget();
-    latestRef.current = { request, state: 'running' };
+    latestRef.current = { request, state: 'running', crashed: false };
 
     // The retry budget is NOT reset here. Resetting per request meant a worker
     // that had just crashed got a fresh budget from the next keystroke, so the

@@ -1,4 +1,5 @@
-import { lazy, Suspense, type ComponentProps } from 'react';
+import { Suspense, type ComponentProps } from 'react';
+import { retryableLazy } from '../ui/retryableLazy';
 import type { MonacoEditor as MonacoEditorComponent } from './MonacoEditor';
 import type { SplunkEditor as SplunkEditorComponent } from './SplunkEditor';
 
@@ -13,8 +14,8 @@ import type { SplunkEditor as SplunkEditorComponent } from './SplunkEditor';
  */
 const loadEditors = () => import('./editorRuntime');
 
-const LazyMonaco = lazy(() => loadEditors().then((m) => ({ default: m.MonacoEditor })));
-const LazySplunk = lazy(() => loadEditors().then((m) => ({ default: m.SplunkEditor })));
+const LazyMonaco = retryableLazy(() => loadEditors().then((m) => ({ default: m.MonacoEditor })));
+const LazySplunk = retryableLazy(() => loadEditors().then((m) => ({ default: m.SplunkEditor })));
 
 /** Holds the editor's box while its chunk loads, so the layout does not jump. */
 function EditorPlaceholder({ label }: { label: string }) {

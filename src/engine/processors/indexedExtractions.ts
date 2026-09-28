@@ -11,6 +11,8 @@ export function applyIndexedExtractions(
   events: SplunkEvent[],
   directives: ConfDirective[],
   diagnostics?: ValidationDiagnostic[],
+  /** Index time for TIMESTAMP_FIELDS parsing; `runPipeline` passes `PipelineOptions.now`. */
+  now: Date = new Date(),
 ): SplunkEvent[] {
   const extractionDir = effectiveDirective(directives, 'INDEXED_EXTRACTIONS');
   if (!extractionDir) return events;
@@ -21,11 +23,11 @@ export function applyIndexedExtractions(
     case 'json':
       return extractJsonFields(events, directives);
     case 'csv':
-      return extractDelimited(events, directives, ',', 'csv', diagnostics);
+      return extractDelimited(events, directives, ',', 'csv', diagnostics, now);
     case 'tsv':
-      return extractDelimited(events, directives, '\t', 'tsv', diagnostics);
+      return extractDelimited(events, directives, '\t', 'tsv', diagnostics, now);
     case 'psv':
-      return extractDelimited(events, directives, '|', 'psv', diagnostics);
+      return extractDelimited(events, directives, '|', 'psv', diagnostics, now);
     case 'w3c':
       return extractW3c(events);
     case 'xml':
@@ -264,6 +266,8 @@ function applyTimestampFields(
   event: SplunkEvent,
   timestampFields: string[] | null,
   directives: ConfDirective[],
+  now: Date,
+  diagnostics?: (d: ValidationDiagnostic) => void,
 ): SplunkEvent {
   if (!timestampFields) return event;
 
@@ -280,8 +284,15 @@ function applyTimestampFields(
   const probeDirectives = directives.filter(
     (d) => d.key !== 'TIME_PREFIX' && d.key !== 'MAX_TIMESTAMP_LOOKAHEAD',
   );
-  const parsed = extractTimestamps([probe], probeDirectives)[0]?._time ?? null;
-  if (!parsed) return event;
+  const probeDiagnostics: ValidationDiagnostic[] = [];
+  const [result] = extractTimestamps([probe], probeDirectives, probeDiagnostics, now);
+  if (diagnostics) probeDiagnostics.forEach(diagnostics);
+  // extractTimestamps always places an event, falling back to the clock. Only
+  // a stamp read out of the composed value replaces the _time the timestamp
+  // stage already gave the event.
+  const source = result?.processingTrace.find((s) => s.timeSource !== undefined)?.timeSource;
+  const parsed = result?._time ?? null;
+  if (!parsed || (source !== 'TIME_FORMAT' && source !== 'auto-recognition')) return event;
 
   return {
     ...event,
@@ -304,11 +315,22 @@ function extractDelimited(
   directives: ConfDirective[],
   defaultDelimiter: string,
   mode: string,
-  diagnostics?: ValidationDiagnostic[],
+  diagnostics: ValidationDiagnostic[] | undefined,
+  now: Date,
 ): SplunkEvent[] {
   if (events.length === 0) return events;
 
   const opts = delimitedOptions(directives, defaultDelimiter, diagnostics);
+  // TIMESTAMP_FIELDS probes each event on its own, so a config-level warning
+  // (every stamp out of bounds, an unknown TZ) would repeat once per row. Keep
+  // the first of each, ignoring the stamp itself.
+  const reportedProbe = new Set<string>();
+  const probeDiagnostics = diagnostics && ((d: ValidationDiagnostic) => {
+    const key = d.message.replace(/\d{4}-\d{2}-\d{2}T[\d:.]+Z/g, '');
+    if (reportedProbe.has(key)) return;
+    reportedProbe.add(key);
+    diagnostics.push(d);
+  });
 
   // PREAMBLE_REGEX: a leading run of matching lines is not data. Only the
   // leading run — the attribute exists for banners before the header, and
@@ -389,7 +411,7 @@ function extractDelimited(
       ],
     };
 
-    return applyTimestampFields(extracted, opts.timestampFields, directives);
+    return applyTimestampFields(extracted, opts.timestampFields, directives, now, probeDiagnostics);
   });
 }
 

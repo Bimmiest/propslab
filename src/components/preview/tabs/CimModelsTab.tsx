@@ -70,6 +70,7 @@ function CimModelCard({ result }: { result: ReturnType<typeof validateCimComplia
     >
       <button
         onClick={() => setExpanded(!expanded)}
+        aria-expanded={expanded}
         className="w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-[var(--color-bg-tertiary)] transition-colors cursor-pointer"
       >
         <div className="flex-1">
