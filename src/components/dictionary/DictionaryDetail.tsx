@@ -6,6 +6,9 @@ import { Icon } from '../ui/Icon';
 import { Chip, DirectiveBadges } from './DictionaryBadges';
 import type { DictionaryEntry } from './entries';
 
+type DirectiveEntryInfo = Extract<DictionaryEntry, { kind: 'directive' }>['info'];
+type StanzaEntryInfo = Extract<DictionaryEntry, { kind: 'stanza' }>['stanza'];
+
 /**
  * Page frame. Capped and centred so prose does not run to a 2000px measure on a
  * wide monitor, and so the two columns below keep a stable relationship to each
@@ -164,59 +167,7 @@ export function DictionaryDetail({ entry }: { entry: DictionaryEntry }) {
     if (!helpOpen) toggleHelp();
   };
 
-  if (entry.kind === 'stanza') {
-    const { stanza } = entry;
-    return (
-      <Page>
-        <PageHeader
-          eyebrow="Stanza header"
-          title={stanza.label}
-          badges={
-            <>
-              <Chip>stanza header</Chip>
-              <Chip mono>props.conf</Chip>
-            </>
-          }
-        />
-        <Columns
-          main={
-            <>
-              <Lede>{stanza.description}</Lede>
-              {/* `[default]` takes no pattern, so its example is the heading
-                  again. A code card that restates the title is ceremony. */}
-              {stanza.example !== stanza.label && (
-                <CodeCard label="Example" code={stanza.example} />
-              )}
-              {stanza.patternSyntax.length > 0 && (
-                <Card label="Pattern syntax">
-                  <ul className="flex flex-col gap-1.5">
-                    {stanza.patternSyntax.map((line) => (
-                      <li key={line} className="flex gap-2 text-[12px] text-[var(--color-text-secondary)]">
-                        <span aria-hidden="true" className="text-[var(--color-text-muted)]">
-                          •
-                        </span>
-                        {/* The registry writes these with backtick spans; render
-                            the literal text rather than pulling in a Markdown
-                            parser for three bullet points. */}
-                        <span>{line.replace(/`/g, '')}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </Card>
-              )}
-            </>
-          }
-          aside={
-            <Card label="Precedence">
-              <p className="text-[12px] leading-relaxed text-[var(--color-text-secondary)]">
-                {stanza.precedence}
-              </p>
-            </Card>
-          }
-        />
-      </Page>
-    );
-  }
+  if (entry.kind === 'stanza') return <StanzaDetail stanza={entry.stanza} />;
 
   const { info } = entry;
   const stages = getStagesForDirective(info.key);
@@ -232,35 +183,7 @@ export function DictionaryDetail({ entry }: { entry: DictionaryEntry }) {
       <Columns
         main={
           <>
-            {info.deprecated && (
-              <Callout tone="danger" icon="warning">
-                This directive is deprecated and may be removed in a future Splunk release.
-              </Callout>
-            )}
-
-            {/* Above the description, because it changes how the description
-                should be read: everything below is what Splunk does, and this
-                says whether the preview will do it too (#153). */}
-            {info.support === 'ignored' && (
-              <Callout tone="danger" icon="warning">
-                <strong>Not simulated.</strong> {info.supportNote} The preview ignores this
-                directive, so its output is what Splunk would produce without it
-                {info.supportIssue ? ` (tracked as #${info.supportIssue})` : ''}.
-              </Callout>
-            )}
-
-            {info.support === 'documented' && (
-              <Callout tone="info" icon="info">
-                <strong>Outside the simulation.</strong> {info.supportNote} It is documented here
-                because it is valid Splunk config, but nothing in the preview depends on it.
-              </Callout>
-            )}
-
-            {info.support === 'simulated' && info.supportNote && (
-              <Callout tone="info" icon="info">
-                <strong>Partly simulated.</strong> {info.supportNote}
-              </Callout>
-            )}
+            <SupportCallouts info={info} />
 
             <Lede>{info.description}</Lede>
 
@@ -301,50 +224,7 @@ export function DictionaryDetail({ entry }: { entry: DictionaryEntry }) {
             )}
 
             {stages.length > 0 && (
-              <Card label="Runs at">
-                <div className="flex flex-col gap-1.5">
-                  {stages.map((stage) => (
-                    <button
-                      key={stage.step}
-                      type="button"
-                      onClick={openPipelineReference}
-                      title="Open the pipeline reference at this stage"
-                      className="group flex items-center gap-2 rounded-md px-2 py-1.5 -mx-1 text-left cursor-pointer
-                        border-none bg-transparent transition-colors hover:bg-[var(--color-bg-tertiary)]
-                        outline-none focus-visible:ring-2"
-                    >
-                      <span
-                        className="shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold"
-                        style={{
-                          backgroundColor: `color-mix(in srgb, ${
-                            stage.phase === 'index-time'
-                              ? 'var(--color-warning)'
-                              : 'var(--color-accent)'
-                          } 18%, transparent)`,
-                          color:
-                            stage.phase === 'index-time'
-                              ? 'var(--color-warning)'
-                              : 'var(--color-accent)',
-                        }}
-                      >
-                        {stage.step}
-                      </span>
-                      <span className="flex-1 min-w-0 flex flex-col">
-                        <span className="text-[12px] font-medium text-[var(--color-text-primary)] truncate">
-                          {stage.name}
-                        </span>
-                        <span className="text-[10px] text-[var(--color-text-muted)]">
-                          {PHASE_LABELS[stage.phase]}
-                        </span>
-                      </span>
-                      <Icon
-                        name="arrow-right"
-                        className="shrink-0 w-3.5 h-3.5 text-[var(--color-text-muted)] opacity-0 group-hover:opacity-100 transition-opacity"
-                      />
-                    </button>
-                  ))}
-                </div>
-              </Card>
+              <StageLinks stages={stages} onOpen={openPipelineReference} />
             )}
           </>
         }
@@ -352,3 +232,142 @@ export function DictionaryDetail({ entry }: { entry: DictionaryEntry }) {
     </Page>
   );
 }
+
+function StageLinks({ stages, onOpen }: { stages: ReturnType<typeof getStagesForDirective>; onOpen: () => void }) {
+  return (
+    <Card label="Runs at">
+      <div className="flex flex-col gap-1.5">
+        {stages.map((stage) => (
+          <button
+            key={stage.step}
+            type="button"
+            onClick={onOpen}
+            title="Open the pipeline reference at this stage"
+            className="group flex items-center gap-2 rounded-md px-2 py-1.5 -mx-1 text-left cursor-pointer
+              border-none bg-transparent transition-colors hover:bg-[var(--color-bg-tertiary)]
+              outline-none focus-visible:ring-2"
+          >
+            <span
+              className="shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold"
+              style={{
+                backgroundColor: `color-mix(in srgb, ${
+                  stage.phase === 'index-time'
+                    ? 'var(--color-warning)'
+                    : 'var(--color-accent)'
+                } 18%, transparent)`,
+                color:
+                  stage.phase === 'index-time'
+                    ? 'var(--color-warning)'
+                    : 'var(--color-accent)',
+              }}
+            >
+              {stage.step}
+            </span>
+            <span className="flex-1 min-w-0 flex flex-col">
+              <span className="text-[12px] font-medium text-[var(--color-text-primary)] truncate">
+                {stage.name}
+              </span>
+              <span className="text-[10px] text-[var(--color-text-muted)]">
+                {PHASE_LABELS[stage.phase]}
+              </span>
+            </span>
+            <Icon
+              name="arrow-right"
+              className="shrink-0 w-3.5 h-3.5 text-[var(--color-text-muted)] opacity-0 group-hover:opacity-100 transition-opacity"
+            />
+          </button>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function SupportCallouts({ info }: { info: DirectiveEntryInfo }) {
+  return (
+    <>
+      {info.deprecated && (
+        <Callout tone="danger" icon="warning">
+          This directive is deprecated and may be removed in a future Splunk release.
+        </Callout>
+      )}
+
+      {/* Above the description, because it changes how the description
+          should be read: everything below is what Splunk does, and this
+          says whether the preview will do it too (#153). */}
+      {info.support === 'ignored' && (
+        <Callout tone="danger" icon="warning">
+          <strong>Not simulated.</strong> {info.supportNote} The preview ignores this
+          directive, so its output is what Splunk would produce without it
+          {info.supportIssue ? ` (tracked as #${info.supportIssue})` : ''}.
+        </Callout>
+      )}
+
+      {info.support === 'documented' && (
+        <Callout tone="info" icon="info">
+          <strong>Outside the simulation.</strong> {info.supportNote} It is documented here
+          because it is valid Splunk config, but nothing in the preview depends on it.
+        </Callout>
+      )}
+
+      {info.support === 'simulated' && info.supportNote && (
+        <Callout tone="info" icon="info">
+          <strong>Partly simulated.</strong> {info.supportNote}
+        </Callout>
+      )}
+    </>
+  );
+}
+
+function StanzaDetail({ stanza }: { stanza: StanzaEntryInfo }) {
+  return (
+    <Page>
+      <PageHeader
+        eyebrow="Stanza header"
+        title={stanza.label}
+        badges={
+          <>
+            <Chip>stanza header</Chip>
+            <Chip mono>props.conf</Chip>
+          </>
+        }
+      />
+      <Columns
+        main={
+          <>
+            <Lede>{stanza.description}</Lede>
+            {/* `[default]` takes no pattern, so its example is the heading
+                again. A code card that restates the title is ceremony. */}
+            {stanza.example !== stanza.label && (
+              <CodeCard label="Example" code={stanza.example} />
+            )}
+            {stanza.patternSyntax.length > 0 && (
+              <Card label="Pattern syntax">
+                <ul className="flex flex-col gap-1.5">
+                  {stanza.patternSyntax.map((line) => (
+                    <li key={line} className="flex gap-2 text-[12px] text-[var(--color-text-secondary)]">
+                      <span aria-hidden="true" className="text-[var(--color-text-muted)]">
+                        •
+                      </span>
+                      {/* The registry writes these with backtick spans; render
+                          the literal text rather than pulling in a Markdown
+                          parser for three bullet points. */}
+                      <span>{line.replace(/`/g, '')}</span>
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            )}
+          </>
+        }
+        aside={
+          <Card label="Precedence">
+            <p className="text-[12px] leading-relaxed text-[var(--color-text-secondary)]">
+              {stanza.precedence}
+            </p>
+          </Card>
+        }
+      />
+    </Page>
+  );
+}
+

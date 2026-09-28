@@ -248,6 +248,58 @@ function EmptyState() {
   );
 }
 
+/** Enrich events with original raw + change/drop status. */
+function enrichEvents(
+  events: SplunkEvent[],
+  originalRaw: string,
+  originalMetadata: EventMetadata | undefined,
+): EnrichedEvent[] {
+  const origLines = originalRaw.split('\n');
+  return events.map((event): EnrichedEvent => {
+    const startIdx = Math.max(0, event.lineNumbers.start - 1);
+    const endIdx = event.lineNumbers.end;
+    const origSlice = origLines.slice(startIdx, endIdx).join('\n');
+    return {
+      event,
+      originalRaw: origSlice,
+      hasChanges: normalise(origSlice) !== normalise(event._raw),
+      hasMetadataChanges: originalMetadata !== undefined && hasMetadataDiff(event.metadata, originalMetadata),
+      isDropped: event._meta._queue === 'nullQueue',
+    };
+  });
+}
+
+interface PreviewFilters {
+  search: string;
+  selectedFields: Set<string>;
+  selectedStatus: Set<string>;
+  selectedChangeState: Set<string>;
+}
+
+function matchesFilters(item: EnrichedEvent, filters: PreviewFilters): boolean {
+  const { search, selectedFields, selectedStatus, selectedChangeState } = filters;
+  if (search && !item.event._raw.toLowerCase().includes(search.toLowerCase())) return false;
+  if (selectedFields.size > 0) {
+    const eventFieldKeys = Object.keys(item.event.fields);
+    if (!eventFieldKeys.some((k) => selectedFields.has(k))) return false;
+  }
+  if (selectedStatus.size > 0) {
+    if (selectedStatus.has('Dropped') && !selectedStatus.has('Accepted') && !item.isDropped) return false;
+    if (selectedStatus.has('Accepted') && !selectedStatus.has('Dropped') && item.isDropped) return false;
+  }
+  if (selectedChangeState.size > 0) {
+    const wantRaw = selectedChangeState.has('Raw Modified');
+    const wantMeta = selectedChangeState.has('Metadata Modified');
+    const wantUnmodified = selectedChangeState.has('Unmodified');
+    const matchesRaw = item.hasChanges;
+    const matchesMeta = item.hasMetadataChanges;
+    const matchesUnmodified = !item.hasChanges && !item.hasMetadataChanges;
+    const matches = (wantRaw && matchesRaw) || (wantMeta && matchesMeta) || (wantUnmodified && matchesUnmodified);
+    if (!matches) return false;
+  }
+  return true;
+}
+
 function PreviewSubTab({ pipelineInputs }: { pipelineInputs: PipelineInputs }) {
   const result = useAppStore((s) => s.processingResult);
   const events = useMemo(() => result?.events ?? [], [result]);
@@ -271,21 +323,10 @@ function PreviewSubTab({ pipelineInputs }: { pipelineInputs: PipelineInputs }) {
   const originalMetadata = result?.inputMetadata;
 
   // Enrich events with original raw + change/drop status
-  const enrichedEvents = useMemo(() => {
-    const origLines = originalRaw.split('\n');
-    return events.map((event): EnrichedEvent => {
-      const startIdx = Math.max(0, event.lineNumbers.start - 1);
-      const endIdx = event.lineNumbers.end;
-      const origSlice = origLines.slice(startIdx, endIdx).join('\n');
-      return {
-        event,
-        originalRaw: origSlice,
-        hasChanges: normalise(origSlice) !== normalise(event._raw),
-        hasMetadataChanges: originalMetadata !== undefined && hasMetadataDiff(event.metadata, originalMetadata),
-        isDropped: event._meta._queue === 'nullQueue',
-      };
-    });
-  }, [events, originalRaw, originalMetadata]);
+  const enrichedEvents = useMemo(
+    () => enrichEvents(events, originalRaw, originalMetadata),
+    [events, originalRaw, originalMetadata],
+  );
 
   // Collect all field names across events
   const allFields = useMemo(() => {
@@ -300,31 +341,8 @@ function PreviewSubTab({ pipelineInputs }: { pipelineInputs: PipelineInputs }) {
 
   // Apply filters
   const filteredEvents = useMemo(() => {
-    return enrichedEvents.filter((item) => {
-      if (debouncedSearch) {
-        const lower = debouncedSearch.toLowerCase();
-        if (!item.event._raw.toLowerCase().includes(lower)) return false;
-      }
-      if (selectedFields.size > 0) {
-        const eventFieldKeys = Object.keys(item.event.fields);
-        if (!eventFieldKeys.some((k) => selectedFields.has(k))) return false;
-      }
-      if (selectedStatus.size > 0) {
-        if (selectedStatus.has('Dropped') && !selectedStatus.has('Accepted') && !item.isDropped) return false;
-        if (selectedStatus.has('Accepted') && !selectedStatus.has('Dropped') && item.isDropped) return false;
-      }
-      if (selectedChangeState.size > 0) {
-        const wantRaw = selectedChangeState.has('Raw Modified');
-        const wantMeta = selectedChangeState.has('Metadata Modified');
-        const wantUnmodified = selectedChangeState.has('Unmodified');
-        const matchesRaw = item.hasChanges;
-        const matchesMeta = item.hasMetadataChanges;
-        const matchesUnmodified = !item.hasChanges && !item.hasMetadataChanges;
-        const matches = (wantRaw && matchesRaw) || (wantMeta && matchesMeta) || (wantUnmodified && matchesUnmodified);
-        if (!matches) return false;
-      }
-      return true;
-    });
+    const filters = { search: debouncedSearch, selectedFields, selectedStatus, selectedChangeState };
+    return enrichedEvents.filter((item) => matchesFilters(item, filters));
   }, [enrichedEvents, debouncedSearch, selectedFields, selectedStatus, selectedChangeState]);
 
   const { paginatedItems, currentPage, totalPages, eventsPerPage, totalItems, setCurrentPage, setEventsPerPage } =

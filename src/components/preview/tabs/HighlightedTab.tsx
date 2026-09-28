@@ -42,78 +42,211 @@ export interface HighlightedTabProps {
   eventsPerPage: number;
 }
 
-export function HighlightedTab({ items, allEvents, currentPage, eventsPerPage }: HighlightedTabProps) {
-  const [fieldFilter, setFieldFilter] = useState<FieldFilter>('all');
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const { pinnedFields, activeFields, togglePin, setHoveredField } = useFieldFocus();
+/** Which category each extracted field falls in, and the processor that produced it. */
+interface FieldCategories {
+  autoFields: Set<string>;
+  manualFields: Set<string>;
+  calcFields: Set<string>;
+  fieldProcessorMap: Map<string, string>;
+}
 
-  const { autoFields, manualFields, calcFields, fieldProcessorMap } = useMemo(() => {
-    const auto = new Set<string>();
-    const manual = new Set<string>();
-    const calc = new Set<string>();
-    const processorMap = new Map<string, string>();
-    for (const { event } of allEvents) {
-      for (const step of event.processingTrace) {
-        if (!step.fieldsAdded) continue;
-        if (isAutoProcessor(step.processor)) {
-          for (const f of step.fieldsAdded) {
-            auto.add(f);
-            if (!processorMap.has(f)) processorMap.set(f, step.processor);
-          }
-        } else if (isManualProcessor(step.processor)) {
-          for (const f of step.fieldsAdded) {
-            manual.add(f);
-            processorMap.set(f, step.processor);
-          }
-        } else if (step.processor === 'EVAL') {
-          for (const f of step.fieldsAdded) {
-            calc.add(f);
-            processorMap.set(f, 'EVAL');
-          }
+function classifyFields(allEvents: EnrichedEvent[]): FieldCategories {
+  const auto = new Set<string>();
+  const manual = new Set<string>();
+  const calc = new Set<string>();
+  const processorMap = new Map<string, string>();
+  for (const { event } of allEvents) {
+    for (const step of event.processingTrace) {
+      if (!step.fieldsAdded) continue;
+      if (isAutoProcessor(step.processor)) {
+        for (const f of step.fieldsAdded) {
+          auto.add(f);
+          if (!processorMap.has(f)) processorMap.set(f, step.processor);
+        }
+      } else if (isManualProcessor(step.processor)) {
+        for (const f of step.fieldsAdded) {
+          manual.add(f);
+          processorMap.set(f, step.processor);
+        }
+      } else if (step.processor === 'EVAL') {
+        for (const f of step.fieldsAdded) {
+          calc.add(f);
+          processorMap.set(f, 'EVAL');
         }
       }
     }
-    return { autoFields: auto, manualFields: manual, calcFields: calc, fieldProcessorMap: processorMap };
-  }, [allEvents]);
+  }
+  return { autoFields: auto, manualFields: manual, calcFields: calc, fieldProcessorMap: processorMap };
+}
 
-  const containerFields = useMemo(() => {
-    const containers = new Set<string>();
-    for (const { event } of allEvents) {
-      for (const [key, value] of Object.entries(event.fields)) {
-        if (isJsonContainer(value)) containers.add(key);
+function findContainerFields(allEvents: EnrichedEvent[]): Set<string> {
+  const containers = new Set<string>();
+  for (const { event } of allEvents) {
+    for (const [key, value] of Object.entries(event.fields)) {
+      if (isJsonContainer(value)) containers.add(key);
+    }
+  }
+  return containers;
+}
+
+/** A colour for each field the filter shows, in first-seen order. */
+function assignFieldColors(
+  allEvents: EnrichedEvent[],
+  { autoFields, manualFields, calcFields }: FieldCategories,
+  fieldFilter: FieldFilter,
+  theme: 'light' | 'dark',
+): Map<string, string> {
+  const map = new Map<string, string>();
+  let colorIdx = 0;
+  const includeAuto = fieldFilter === 'auto' || fieldFilter === 'all';
+  const includeManual = fieldFilter === 'manual' || fieldFilter === 'all';
+  const includeCalc = fieldFilter === 'calc' || fieldFilter === 'all';
+
+  for (const { event } of allEvents) {
+    for (const key of Object.keys(event.fields)) {
+      // Membership, not single-bucket: a field extracted (manual) and then
+      // overwritten by EVAL (calc) belongs to BOTH categories, so it must show
+      // under each of their filters — and stay consistent with the filter counts.
+      const inSelectedFilter =
+        (includeAuto && autoFields.has(key)) || (includeManual && manualFields.has(key)) || (includeCalc && calcFields.has(key));
+      if (!inSelectedFilter) continue;
+      if (!map.has(key)) {
+        map.set(key, fieldColorAt(colorIdx, theme));
+        colorIdx++;
       }
     }
-    return containers;
-  }, [allEvents]);
+  }
+  return map;
+}
+
+interface EventRow {
+  item: EnrichedEvent;
+  globalIdx: number;
+}
+
+/**
+ * The rows to render. Each carries its TRUE global event index so the "Event #"
+ * badge stays correct whether we're showing a paginated page or a pin-filtered
+ * view. When fields are pinned the filter spans every event (a pin is a global
+ * filter), so we index into allEvents rather than reusing the current page's
+ * offset math.
+ */
+function selectRows(
+  { items, allEvents, currentPage, eventsPerPage }: HighlightedTabProps,
+  pinnedFields: Set<string>,
+): EventRow[] {
+  if (pinnedFields.size === 0) {
+    const offset = (currentPage - 1) * eventsPerPage;
+    return items.map((item, i) => ({ item, globalIdx: offset + i + 1 }));
+  }
+  const out: EventRow[] = [];
+  allEvents.forEach((item, i) => {
+    for (const pinned of pinnedFields) {
+      // `in` walks the prototype chain, so pinning a field named `toString`
+      // would match every event in the dataset.
+      if (hasField(item.event.fields, pinned)) {
+        out.push({ item, globalIdx: i + 1 });
+        break;
+      }
+    }
+  });
+  return out;
+}
+
+function groupNames(tree: FieldNode[]): string[] {
+  const groups: string[] = [];
+  function walk(nodes: FieldNode[]) {
+    for (const n of nodes) { if (n.children.length > 0) { groups.push(n.name); walk(n.children); } }
+  }
+  walk(tree);
+  return groups;
+}
+
+interface CalcField {
+  name: string;
+  expression: string;
+  value: string | string[];
+}
+
+interface EventBadges {
+  eventCalcFields: CalcField[];
+  autoCount: number;
+  manualCount: number;
+  calcCount: number;
+}
+
+/** The per-category counts an event's card is badged with, and its calculated fields. */
+function eventBadges(
+  item: EnrichedEvent,
+  fieldFilter: FieldFilter,
+  highlightColorMap: Map<string, string>,
+  { manualFields, calcFields }: FieldCategories,
+): EventBadges {
+  const eventFields = Object.keys(item.event.fields).filter((f) => highlightColorMap.has(f));
+  // Straight off the EVAL step: the expressions that actually ran for THIS
+  // event, already resolved through stanza matching. This used to be a
+  // case-insensitive regex over the raw props.conf text, which ignored
+  // stanza scoping (an EVAL- under a sourcetype the user is not simulating
+  // still appeared), line continuations, and the case-sensitivity rule the
+  // parser enforces one step earlier.
+  const showCalcStrip = fieldFilter === 'calc' || fieldFilter === 'all';
+  const evalTrace = item.event.processingTrace.find((t) => t.processor === 'EVAL');
+  const eventCalcFields = showCalcStrip
+    ? Object.entries(evalTrace?.evalExpressions ?? {}).flatMap(([name, expression]) => {
+        const value = getField(item.event.fields, name);
+        if (value === undefined || value === 'null' || value === '') return [];
+        return [{ name, expression, value }];
+      })
+    : [];
+  let autoCount = 0;
+  let manualCount = 0;
+  if (fieldFilter === 'auto') {
+    autoCount = eventFields.length;
+  } else if (fieldFilter === 'manual') {
+    manualCount = eventFields.length;
+  } else if (fieldFilter !== 'calc') {
+    for (const f of eventFields) {
+      if (calcFields.has(f)) { /* counted above */ }
+      else if (manualFields.has(f)) manualCount++;
+      else autoCount++;
+    }
+  }
+  return { eventCalcFields, autoCount, manualCount, calcCount: eventCalcFields.length };
+}
+
+/**
+ * Which field-tree groups are collapsed. Until the user toggles one, every
+ * group is collapsed.
+ */
+function useGroupCollapse(allGroupNames: string[]) {
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string> | null>(null);
+  const effectiveCollapsed = collapsedGroups ?? new Set(allGroupNames);
+
+  const toggleGroup = useCallback((name: string) => {
+    setCollapsedGroups((prev) => {
+      const base = prev ?? new Set(allGroupNames);
+      const next = new Set(base);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  }, [allGroupNames]);
+
+  return { effectiveCollapsed, setCollapsedGroups, toggleGroup };
+}
+
+/** The fields' categories, and the colour each one the filter shows is drawn in. */
+function useFieldColoring(allEvents: EnrichedEvent[], fieldFilter: FieldFilter) {
+  const categories = useMemo(() => classifyFields(allEvents), [allEvents]);
+  const containerFields = useMemo(() => findContainerFields(allEvents), [allEvents]);
 
   const theme = useAppStore((s) => s.theme);
-  const fieldColorMap = useMemo(() => {
-    const map = new Map<string, string>();
-    let colorIdx = 0;
-    const includeAuto = fieldFilter === 'auto' || fieldFilter === 'all';
-    const includeManual = fieldFilter === 'manual' || fieldFilter === 'all';
-    const includeCalc = fieldFilter === 'calc' || fieldFilter === 'all';
+  const fieldColorMap = useMemo(
+    () => assignFieldColors(allEvents, categories, fieldFilter, theme),
+    [allEvents, categories, fieldFilter, theme],
+  );
 
-    for (const { event } of allEvents) {
-      for (const key of Object.keys(event.fields)) {
-        const isAuto = autoFields.has(key);
-        const isManual = manualFields.has(key);
-        const isCalc = calcFields.has(key);
-        // Membership, not single-bucket: a field extracted (manual) and then
-        // overwritten by EVAL (calc) belongs to BOTH categories, so it must show
-        // under each of their filters — and stay consistent with the filter counts.
-        const inSelectedFilter =
-          (includeAuto && isAuto) || (includeManual && isManual) || (includeCalc && isCalc);
-        if (!inSelectedFilter) continue;
-        if (!map.has(key)) {
-          map.set(key, fieldColorAt(colorIdx, theme));
-          colorIdx++;
-        }
-      }
-    }
-    return map;
-  }, [allEvents, autoFields, manualFields, calcFields, fieldFilter, theme]);
-
+  // JSON containers are listed in the sidebar but not highlighted in the event.
   const highlightColorMap = useMemo(() => {
     const map = new Map<string, string>();
     for (const [key, color] of fieldColorMap) {
@@ -122,28 +255,23 @@ export function HighlightedTab({ items, allEvents, currentPage, eventsPerPage }:
     return map;
   }, [fieldColorMap, containerFields]);
 
-  // Each rendered row carries its TRUE global event index so the "Event #" badge
-  // stays correct whether we're showing a paginated page or a pin-filtered view.
-  // When fields are pinned the filter spans every event (a pin is a global filter),
-  // so we index into allEvents rather than reusing the current page's offset math.
-  const pinMatches = useMemo<{ item: EnrichedEvent; globalIdx: number }[]>(() => {
-    if (pinnedFields.size === 0) {
-      const offset = (currentPage - 1) * eventsPerPage;
-      return items.map((item, i) => ({ item, globalIdx: offset + i + 1 }));
-    }
-    const out: { item: EnrichedEvent; globalIdx: number }[] = [];
-    allEvents.forEach((item, i) => {
-      for (const pinned of pinnedFields) {
-        // `in` walks the prototype chain, so pinning a field named `toString`
-        // would match every event in the dataset.
-        if (hasField(item.event.fields, pinned)) {
-          out.push({ item, globalIdx: i + 1 });
-          break;
-        }
-      }
-    });
-    return out;
-  }, [items, allEvents, pinnedFields, currentPage, eventsPerPage]);
+  return { categories, containerFields, fieldColorMap, highlightColorMap };
+}
+
+type FieldFocusState = ReturnType<typeof useFieldFocus>;
+
+export function HighlightedTab({ items, allEvents, currentPage, eventsPerPage }: HighlightedTabProps) {
+  const [fieldFilter, setFieldFilter] = useState<FieldFilter>('all');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const focus = useFieldFocus();
+  const { pinnedFields, togglePin } = focus;
+
+  const { categories, containerFields, fieldColorMap, highlightColorMap } = useFieldColoring(allEvents, fieldFilter);
+
+  const pinMatches = useMemo(
+    () => selectRows({ items, allEvents, currentPage, eventsPerPage }, pinnedFields),
+    [items, allEvents, pinnedFields, currentPage, eventsPerPage],
+  );
 
   // A pin spans the whole dataset by design, but rendering every match at once
   // locked the UI for seconds to minutes: pinning a field present in every event
@@ -158,107 +286,90 @@ export function HighlightedTab({ items, allEvents, currentPage, eventsPerPage }:
   );
 
   const tree = useMemo(
-    () => buildFieldTree(fieldColorMap, containerFields, fieldProcessorMap),
-    [fieldColorMap, containerFields, fieldProcessorMap]
+    () => buildFieldTree(fieldColorMap, containerFields, categories.fieldProcessorMap),
+    [fieldColorMap, containerFields, categories.fieldProcessorMap]
   );
+  const allGroupNames = useMemo(() => groupNames(tree), [tree]);
+  const { effectiveCollapsed, setCollapsedGroups, toggleGroup } = useGroupCollapse(allGroupNames);
 
-  const allGroupNames = useMemo(() => {
-    const groups: string[] = [];
-    function walk(nodes: FieldNode[]) {
-      for (const n of nodes) { if (n.children.length > 0) { groups.push(n.name); walk(n.children); } }
-    }
-    walk(tree);
-    return groups;
-  }, [tree]);
-
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string> | null>(null);
-  const effectiveCollapsed = collapsedGroups ?? new Set(allGroupNames);
-
-  const toggleGroup = useCallback((name: string) => {
-    setCollapsedGroups((prev) => {
-      const base = prev ?? new Set(allGroupNames);
-      const next = new Set(base);
-      if (next.has(name)) next.delete(name);
-      else next.add(name);
-      return next;
-    });
-  }, [allGroupNames]);
-
-  const showCalcStrip = fieldFilter === 'calc' || fieldFilter === 'all';
-
-  const eventBadgeCounts = useMemo(() =>
-    filteredItems.map(({ item }) => {
-      const eventFields = Object.keys(item.event.fields).filter((f) => highlightColorMap.has(f));
-      // Straight off the EVAL step: the expressions that actually ran for THIS
-      // event, already resolved through stanza matching. This used to be a
-      // case-insensitive regex over the raw props.conf text, which ignored
-      // stanza scoping (an EVAL- under a sourcetype the user is not simulating
-      // still appeared), line continuations, and the case-sensitivity rule the
-      // parser enforces one step earlier.
-      const evalTrace = item.event.processingTrace.find((t) => t.processor === 'EVAL');
-      const eventCalcFields = showCalcStrip
-        ? Object.entries(evalTrace?.evalExpressions ?? {}).flatMap(([name, expression]) => {
-            const value = getField(item.event.fields, name);
-            if (value === undefined || value === 'null' || value === '') return [];
-            return [{ name, expression, value }];
-          })
-        : [];
-      let autoCount = 0;
-      let manualCount = 0;
-      const calcCount = eventCalcFields.length;
-      if (fieldFilter === 'auto') {
-        autoCount = eventFields.length;
-      } else if (fieldFilter === 'manual') {
-        manualCount = eventFields.length;
-      } else if (fieldFilter !== 'calc') {
-        for (const f of eventFields) {
-          if (calcFields.has(f)) { /* counted above */ }
-          else if (manualFields.has(f)) manualCount++;
-          else autoCount++;
-        }
-      }
-      return { eventCalcFields, autoCount, manualCount, calcCount };
-    }),
-    [filteredItems, fieldFilter, highlightColorMap, showCalcStrip, manualFields, calcFields]
+  const eventBadgeCounts = useMemo(
+    () => filteredItems.map(({ item }) => eventBadges(item, fieldFilter, highlightColorMap, categories)),
+    [filteredItems, fieldFilter, highlightColorMap, categories],
   );
 
   const sidebar = (
-    <FieldSidebar
+    <HighlightedSidebar
       fieldCount={fieldColorMap.size}
-      activeFields={activeFields}
+      tree={tree}
+      allGroupNames={allGroupNames}
+      effectiveCollapsed={effectiveCollapsed}
+      setCollapsedGroups={setCollapsedGroups}
+      toggleGroup={toggleGroup}
+      focus={focus}
       onCollapse={() => setSidebarCollapsed(true)}
-      renderControls={() =>
-        allGroupNames.length > 0 ? (
-          <button
-            className="text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-accent)] transition-colors cursor-pointer bg-transparent border-none p-0"
-            onClick={() => {
-              const allCollapsed = allGroupNames.every((g) => effectiveCollapsed.has(g));
-              setCollapsedGroups(allCollapsed ? new Set() : new Set(allGroupNames));
-            }}
-          >
-            {allGroupNames.every((g) => effectiveCollapsed.has(g)) ? 'Expand all' : 'Collapse all'}
-          </button>
-        ) : null
-      }
-      renderItems={(search) =>
-        tree.map((node) => (
-          <FieldTreeNode
-            key={node.name}
-            node={node}
-            collapsed={effectiveCollapsed}
-            toggleGroup={toggleGroup}
-            activeFields={activeFields}
-            pinnedFields={pinnedFields}
-            onHover={setHoveredField}
-            onClick={togglePin}
-            search={search}
-          />
-        ))
-      }
     />
   );
 
-  // Category membership overlaps by design (see fieldColorMap above), so summing
+  return (
+    <div className="flex flex-col h-full">
+      <FilterBar
+        categories={categories}
+        fieldFilter={fieldFilter}
+        setFieldFilter={setFieldFilter}
+        pinned={pinnedFields.size > 0 ? {
+          matching: filteredItems.length,
+          total: allEvents.length,
+          count: pinnedFields.size,
+          clear: () => { for (const f of pinnedFields) togglePin(f); },
+        } : null}
+        sidebarCollapsed={sidebarCollapsed}
+        toggleSidebar={() => setSidebarCollapsed((v) => !v)}
+      />
+
+      <div className="flex-1 min-h-0 flex">
+        <FieldSplitLayout
+          storageKey="highlighted-split-layout"
+          collapsed={sidebarCollapsed}
+          sidebar={sidebar}
+        >
+          {pinnedOverflow && <PinnedOverflowNote total={pinMatches.length} />}
+          {/*
+            Extraction directives that ran against these events and produced no
+            field (#84) — the case where this tab otherwise shows an event with
+            nothing highlighted and no reason why.
+          */}
+          <div className="mb-2">
+            <DirectiveNoOpList events={filteredItems.map(({ item }) => item.event)} phase="search-time" />
+          </div>
+          {filteredItems.map(({ item, globalIdx }, idx) => (
+            <HighlightedEventCard
+              key={globalIdx}
+              item={item}
+              globalIdx={globalIdx}
+              badges={eventBadgeCounts[idx] ?? { eventCalcFields: [], autoCount: 0, manualCount: 0, calcCount: 0 }}
+              highlightColorMap={highlightColorMap}
+              fieldColorMap={fieldColorMap}
+              categories={categories}
+              focus={focus}
+            />
+          ))}
+        </FieldSplitLayout>
+      </div>
+    </div>
+  );
+}
+
+function FilterBar({ categories, fieldFilter, setFieldFilter, pinned, sidebarCollapsed, toggleSidebar }: {
+  categories: FieldCategories;
+  fieldFilter: FieldFilter;
+  setFieldFilter: (filter: FieldFilter) => void;
+  /** The pinned-field summary, when anything is pinned. */
+  pinned: { matching: number; total: number; count: number; clear: () => void } | null;
+  sidebarCollapsed: boolean;
+  toggleSidebar: () => void;
+}) {
+  const { autoFields, manualFields, calcFields } = categories;
+  // Category membership overlaps by design (see assignFieldColors), so summing
   // the three sizes double-counts a field that is, say, both manual and calc —
   // and the sidebar a few pixels away shows the DISTINCT count. Union, so the
   // two labels agree by construction rather than by coincidence.
@@ -275,216 +386,263 @@ export function HighlightedTab({ items, allEvents, currentPage, eventsPerPage }:
   ];
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Filter bar */}
-      <div className="flex-shrink-0 px-3 py-2 border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-[var(--color-text-muted)]">Show:</span>
-          <div className="inline-flex rounded-md border border-[var(--color-border)] overflow-hidden">
-            {filterButtons.map(({ id, label, count }) => (
-              <button
-                key={id}
-                onClick={() => setFieldFilter(id)}
-                className="px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer"
-                style={{
-                  backgroundColor: fieldFilter === id ? 'var(--color-accent)' : 'transparent',
-                  color: fieldFilter === id ? 'var(--color-text-on-accent)' : 'var(--color-text-muted)',
-                }}
-              >
-                {label}
-                {count > 0 && <span className="ml-1">({count})</span>}
-              </button>
-            ))}
-          </div>
-
-          {pinnedFields.size > 0 && (
-            <span className="text-[10px] text-[var(--color-text-muted)] flex items-center gap-1.5">
-              {filteredItems.length}/{allEvents.length} events match {pinnedFields.size} pinned field{pinnedFields.size > 1 ? 's' : ''}
-              <button
-                type="button"
-                onClick={() => { for (const f of pinnedFields) togglePin(f); }}
-                className="text-[10px] text-[var(--color-accent)] hover:underline bg-transparent border-none p-0 cursor-pointer"
-              >
-                Clear
-              </button>
-            </span>
-          )}
-
-          {/* Fields sidebar toggle — right-aligned */}
-          <button
-            type="button"
-            onClick={() => setSidebarCollapsed((v) => !v)}
-            title={sidebarCollapsed ? 'Show fields sidebar' : 'Hide fields sidebar'}
-            className={[
-              'flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded border transition-colors ml-auto',
-              !sidebarCollapsed
-                ? 'bg-[var(--color-bg-elevated)] border-[var(--color-border)] text-[var(--color-text-primary)] shadow-sm'
-                : 'border-transparent text-[var(--color-text-muted)] hover:bg-[var(--color-bg-tertiary)] hover:text-[var(--color-text-secondary)]',
-            ].join(' ')}
-          >
-            <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <rect x="3" y="3" width="18" height="18" rx="2" />
-              <line x1="15" y1="3" x2="15" y2="21" />
-            </svg>
-            Fields
-          </button>
-        </div>
-      </div>
-
-      <div className="flex-1 min-h-0 flex">
-        <FieldSplitLayout
-          storageKey="highlighted-split-layout"
-          collapsed={sidebarCollapsed}
-          sidebar={sidebar}
-        >
-          {pinnedOverflow && (
-            <div
-              className="px-3 py-2 mb-2 text-xs rounded"
+    <div className="flex-shrink-0 px-3 py-2 border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-[var(--color-text-muted)]">Show:</span>
+        <div className="inline-flex rounded-md border border-[var(--color-border)] overflow-hidden">
+          {filterButtons.map(({ id, label, count }) => (
+            <button
+              key={id}
+              onClick={() => setFieldFilter(id)}
+              className="px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer"
               style={{
-                backgroundColor: 'var(--color-bg-tertiary)',
-                color: 'var(--color-text-secondary)',
-                border: '1px solid var(--color-border-subtle)',
+                backgroundColor: fieldFilter === id ? 'var(--color-accent)' : 'transparent',
+                color: fieldFilter === id ? 'var(--color-text-on-accent)' : 'var(--color-text-muted)',
               }}
             >
-              Showing the first {MAX_PINNED_ROWS.toLocaleString()} of{' '}
-              {pinMatches.length.toLocaleString()} events with a pinned field. Narrow the
-              set with the search box, or unpin to page through every event.
-            </div>
-          )}
-          {/*
-            Extraction directives that ran against these events and produced no
-            field (#84) — the case where this tab otherwise shows an event with
-            nothing highlighted and no reason why.
-          */}
-          <div className="mb-2">
-            <DirectiveNoOpList events={filteredItems.map(({ item }) => item.event)} phase="search-time" />
-          </div>
-          {filteredItems.map(({ item, globalIdx }, idx) => {
-            const { eventCalcFields, autoCount, manualCount, calcCount } =
-              eventBadgeCounts[idx] ?? { eventCalcFields: [], autoCount: 0, manualCount: 0, calcCount: 0 };
+              {label}
+              {count > 0 && <span className="ml-1">({count})</span>}
+            </button>
+          ))}
+        </div>
 
-            const fieldValues = new Map<string, string | string[]>(
-              Object.entries(item.event.fields).filter(([k]) => highlightColorMap.has(k))
-            );
+        {pinned && (
+          <span className="text-[10px] text-[var(--color-text-muted)] flex items-center gap-1.5">
+            {pinned.matching}/{pinned.total} events match {pinned.count} pinned field{pinned.count > 1 ? 's' : ''}
+            <button
+              type="button"
+              onClick={pinned.clear}
+              className="text-[10px] text-[var(--color-accent)] hover:underline bg-transparent border-none p-0 cursor-pointer"
+            >
+              Clear
+            </button>
+          </span>
+        )}
 
-            const focused = isAnyFocused(activeFields);
-
-            return (
-              <FieldEventCard
-                key={globalIdx}
-                event={item.event}
-                globalIdx={globalIdx}
-                fieldColorMap={highlightColorMap}
-                fieldValues={fieldValues}
-                activeFields={activeFields}
-                fieldSourceKeys={item.event.fieldSourceKeys}
-                fieldOffsets={item.event.fieldOffsets}
-                titleFor={(field, value) => {
-                  const tag = manualFields.has(field) ? 'manual' : calcFields.has(field) ? 'calc' : 'auto';
-                  return `${field} (${tag}): ${value}`;
-                }}
-                onFieldHover={setHoveredField}
-                onFieldClick={togglePin}
-                badges={
-                  <>
-                    {autoCount > 0 && (
-                      <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-warning)]/10 text-[var(--color-warning)]">
-                        {autoCount} auto
-                      </span>
-                    )}
-                    {manualCount > 0 && (
-                      <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-accent)]/10 text-[var(--color-accent)]">
-                        {manualCount} manual
-                      </span>
-                    )}
-                    {calcCount > 0 && (
-                      <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-success)]/10 text-[var(--color-success)]">
-                        {calcCount} calc
-                      </span>
-                    )}
-                  </>
-                }
-              >
-                {/* Calculated field summary strip + Eval Expressions (only when calc filter active) */}
-                {eventCalcFields.length > 0 && (
-                  <>
-                    <div className="border-t border-[var(--color-border)] px-3 py-2">
-                      <div className="flex flex-wrap gap-x-4 gap-y-1">
-                        {eventCalcFields.map((cf) => {
-                          const color = fieldColorMap.get(cf.name) ?? 'var(--color-text-muted)';
-                          const display = Array.isArray(cf.value) ? cf.value.join(', ') : cf.value;
-                          const active = isFieldActive(cf.name, activeFields);
-                          const pinned = pinnedFields.has(cf.name);
-                          return (
-                            <span
-                              key={cf.name}
-                              className="inline-flex items-center gap-1.5 text-xs font-mono cursor-pointer select-none"
-                              style={{ opacity: focused && !active ? 0.2 : 1, transition: 'opacity 0.15s' }}
-                              onMouseEnter={() => setHoveredField(cf.name)}
-                              onMouseLeave={() => setHoveredField(null)}
-                              {...pressable(() => togglePin(cf.name), (f) => setHoveredField(f ? cf.name : null))}
-                              aria-pressed={pinned}
-                            >
-                              <span className="text-[var(--color-text-muted)]">{cf.name}=</span>
-                              <span
-                                className="px-1 py-0.5 rounded-sm max-w-48 truncate"
-                                style={{
-                                  color,
-                                  backgroundColor: active && focused ? color + '20' : 'transparent',
-                                  outline: pinned ? `2px solid ${color}` : 'none',
-                                  outlineOffset: '1px',
-                                  transition: 'background-color 0.15s, color 0.15s',
-                                }}
-                                title={display}
-                              >
-                                {display}
-                              </span>
-                            </span>
-                          );
-                        })}
-                      </div>
-                    </div>
-                    <details className="border-t border-[var(--color-border)]">
-                      <summary className="px-3 py-2 text-xs font-medium text-[var(--color-text-muted)] cursor-pointer select-none hover:text-[var(--color-text-secondary)] transition-colors">
-                        Eval Expressions
-                      </summary>
-                      <div className="px-3 py-2 border-t border-[var(--color-border)]">
-                        <div className="flex flex-wrap gap-x-4 gap-y-1">
-                          {eventCalcFields.map((cf) => {
-                            const color = fieldColorMap.get(cf.name) ?? 'var(--color-text-muted)';
-                            const active = isFieldActive(cf.name, activeFields);
-                            const pinned = pinnedFields.has(cf.name);
-                            return (
-                              <span
-                                key={cf.name}
-                                className="inline-flex items-center gap-1.5 text-xs font-mono cursor-pointer select-none"
-                                style={{ opacity: focused && !active ? 0.2 : 1, transition: 'opacity 0.15s' }}
-                                onMouseEnter={() => setHoveredField(cf.name)}
-                                onMouseLeave={() => setHoveredField(null)}
-                                {...pressable(() => togglePin(cf.name), (f) => setHoveredField(f ? cf.name : null))}
-                                aria-pressed={pinned}
-                              >
-                                <span style={{ color }} className="font-medium">{cf.name}</span>
-                                <span className="text-[10px] uppercase tracking-wider text-[var(--color-text-muted)]">expr</span>
-                                <code
-                                  className="text-[var(--color-text-secondary)] bg-[var(--color-bg-tertiary)] px-1.5 py-0.5 rounded"
-                                  style={{ outline: pinned ? `2px solid ${color}` : 'none', outlineOffset: '1px' }}
-                                >
-                                  {cf.expression}
-                                </code>
-                              </span>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </details>
-                  </>
-                )}
-              </FieldEventCard>
-            );
-          })}
-        </FieldSplitLayout>
+        {/* Fields sidebar toggle — right-aligned */}
+        <button
+          type="button"
+          onClick={toggleSidebar}
+          title={sidebarCollapsed ? 'Show fields sidebar' : 'Hide fields sidebar'}
+          className={[
+            'flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded border transition-colors ml-auto',
+            !sidebarCollapsed
+              ? 'bg-[var(--color-bg-elevated)] border-[var(--color-border)] text-[var(--color-text-primary)] shadow-sm'
+              : 'border-transparent text-[var(--color-text-muted)] hover:bg-[var(--color-bg-tertiary)] hover:text-[var(--color-text-secondary)]',
+          ].join(' ')}
+        >
+          <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <rect x="3" y="3" width="18" height="18" rx="2" />
+            <line x1="15" y1="3" x2="15" y2="21" />
+          </svg>
+          Fields
+        </button>
       </div>
     </div>
+  );
+}
+
+function HighlightedSidebar({
+  fieldCount, tree, allGroupNames, effectiveCollapsed, setCollapsedGroups, toggleGroup, focus, onCollapse,
+}: {
+  fieldCount: number;
+  tree: FieldNode[];
+  allGroupNames: string[];
+  effectiveCollapsed: Set<string>;
+  setCollapsedGroups: (groups: Set<string>) => void;
+  toggleGroup: (name: string) => void;
+  focus: FieldFocusState;
+  onCollapse: () => void;
+}) {
+  const allCollapsed = allGroupNames.every((g) => effectiveCollapsed.has(g));
+  return (
+    <FieldSidebar
+      fieldCount={fieldCount}
+      activeFields={focus.activeFields}
+      onCollapse={onCollapse}
+      renderControls={() =>
+        allGroupNames.length > 0 ? (
+          <button
+            className="text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-accent)] transition-colors cursor-pointer bg-transparent border-none p-0"
+            onClick={() => setCollapsedGroups(allCollapsed ? new Set() : new Set(allGroupNames))}
+          >
+            {allCollapsed ? 'Expand all' : 'Collapse all'}
+          </button>
+        ) : null
+      }
+      renderItems={(search) =>
+        tree.map((node) => (
+          <FieldTreeNode
+            key={node.name}
+            node={node}
+            collapsed={effectiveCollapsed}
+            toggleGroup={toggleGroup}
+            activeFields={focus.activeFields}
+            pinnedFields={focus.pinnedFields}
+            onHover={focus.setHoveredField}
+            onClick={focus.togglePin}
+            search={search}
+          />
+        ))
+      }
+    />
+  );
+}
+
+function PinnedOverflowNote({ total }: { total: number }) {
+  return (
+    <div
+      className="px-3 py-2 mb-2 text-xs rounded"
+      style={{
+        backgroundColor: 'var(--color-bg-tertiary)',
+        color: 'var(--color-text-secondary)',
+        border: '1px solid var(--color-border-subtle)',
+      }}
+    >
+      Showing the first {MAX_PINNED_ROWS.toLocaleString()} of{' '}
+      {total.toLocaleString()} events with a pinned field. Narrow the
+      set with the search box, or unpin to page through every event.
+    </div>
+  );
+}
+
+function HighlightedEventCard({ item, globalIdx, badges, highlightColorMap, fieldColorMap, categories, focus }: {
+  item: EnrichedEvent;
+  globalIdx: number;
+  badges: EventBadges;
+  highlightColorMap: Map<string, string>;
+  fieldColorMap: Map<string, string>;
+  categories: FieldCategories;
+  focus: FieldFocusState;
+}) {
+  const { eventCalcFields, autoCount, manualCount, calcCount } = badges;
+  const { manualFields, calcFields } = categories;
+  const fieldValues = new Map<string, string | string[]>(
+    Object.entries(item.event.fields).filter(([k]) => highlightColorMap.has(k))
+  );
+
+  return (
+    <FieldEventCard
+      event={item.event}
+      globalIdx={globalIdx}
+      fieldColorMap={highlightColorMap}
+      fieldValues={fieldValues}
+      activeFields={focus.activeFields}
+      fieldSourceKeys={item.event.fieldSourceKeys}
+      fieldOffsets={item.event.fieldOffsets}
+      titleFor={(field, value) => {
+        const tag = manualFields.has(field) ? 'manual' : calcFields.has(field) ? 'calc' : 'auto';
+        return `${field} (${tag}): ${value}`;
+      }}
+      onFieldHover={focus.setHoveredField}
+      onFieldClick={focus.togglePin}
+      badges={
+        <>
+          {autoCount > 0 && (
+            <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-warning)]/10 text-[var(--color-warning)]">
+              {autoCount} auto
+            </span>
+          )}
+          {manualCount > 0 && (
+            <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-accent)]/10 text-[var(--color-accent)]">
+              {manualCount} manual
+            </span>
+          )}
+          {calcCount > 0 && (
+            <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-success)]/10 text-[var(--color-success)]">
+              {calcCount} calc
+            </span>
+          )}
+        </>
+      }
+    >
+      {/* Calculated field summary strip + Eval Expressions (only when calc filter active) */}
+      {eventCalcFields.length > 0 && (
+        <>
+          <div className="border-t border-[var(--color-border)] px-3 py-2">
+            <div className="flex flex-wrap gap-x-4 gap-y-1">
+              {eventCalcFields.map((cf) => (
+                <CalcFieldChip key={cf.name} cf={cf} color={fieldColorMap.get(cf.name) ?? 'var(--color-text-muted)'} focus={focus} />
+              ))}
+            </div>
+          </div>
+          <details className="border-t border-[var(--color-border)]">
+            <summary className="px-3 py-2 text-xs font-medium text-[var(--color-text-muted)] cursor-pointer select-none hover:text-[var(--color-text-secondary)] transition-colors">
+              Eval Expressions
+            </summary>
+            <div className="px-3 py-2 border-t border-[var(--color-border)]">
+              <div className="flex flex-wrap gap-x-4 gap-y-1">
+                {eventCalcFields.map((cf) => (
+                  <CalcFieldChip
+                    key={cf.name}
+                    cf={cf}
+                    color={fieldColorMap.get(cf.name) ?? 'var(--color-text-muted)'}
+                    focus={focus}
+                    showExpression
+                  />
+                ))}
+              </div>
+            </div>
+          </details>
+        </>
+      )}
+    </FieldEventCard>
+  );
+}
+
+/**
+ * A calculated field, as `name=value` in the summary strip or as its EVAL
+ * expression in the details. Hovering focuses the field; pressing pins it.
+ */
+function CalcFieldChip({ cf, color, focus, showExpression = false }: {
+  cf: CalcField;
+  color: string;
+  focus: FieldFocusState;
+  showExpression?: boolean;
+}) {
+  const { activeFields, pinnedFields, setHoveredField, togglePin } = focus;
+  const focused = isAnyFocused(activeFields);
+  const active = isFieldActive(cf.name, activeFields);
+  const pinned = pinnedFields.has(cf.name);
+  const display = Array.isArray(cf.value) ? cf.value.join(', ') : cf.value;
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 text-xs font-mono cursor-pointer select-none"
+      style={{ opacity: focused && !active ? 0.2 : 1, transition: 'opacity 0.15s' }}
+      onMouseEnter={() => setHoveredField(cf.name)}
+      onMouseLeave={() => setHoveredField(null)}
+      {...pressable(() => togglePin(cf.name), (f) => setHoveredField(f ? cf.name : null))}
+      aria-pressed={pinned}
+    >
+      {showExpression ? (
+        <>
+          <span style={{ color }} className="font-medium">{cf.name}</span>
+          <span className="text-[10px] uppercase tracking-wider text-[var(--color-text-muted)]">expr</span>
+          <code
+            className="text-[var(--color-text-secondary)] bg-[var(--color-bg-tertiary)] px-1.5 py-0.5 rounded"
+            style={{ outline: pinned ? `2px solid ${color}` : 'none', outlineOffset: '1px' }}
+          >
+            {cf.expression}
+          </code>
+        </>
+      ) : (
+        <>
+          <span className="text-[var(--color-text-muted)]">{cf.name}=</span>
+          <span
+            className="px-1 py-0.5 rounded-sm max-w-48 truncate"
+            style={{
+              color,
+              backgroundColor: active && focused ? color + '20' : 'transparent',
+              outline: pinned ? `2px solid ${color}` : 'none',
+              outlineOffset: '1px',
+              transition: 'background-color 0.15s, color 0.15s',
+            }}
+            title={display}
+          >
+            {display}
+          </span>
+        </>
+      )}
+    </span>
   );
 }

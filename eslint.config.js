@@ -111,6 +111,32 @@ export default defineConfig([
     },
   },
   {
+    // Size and branching limits for hand-written code, so a function stays a
+    // sequence of named steps rather than growing back into a 400-line body.
+    // Lines are counted without blanks and comments: the rationale comments kept
+    // beside a rule are not what makes a function hard to follow. Same file set
+    // as the blocks above, so this adds no files to the lint.
+    files: ['**/*.{ts,tsx}', 'packages/mcp-server/**/*.mts', 'scripts/**/*.{js,mjs}'],
+    rules: {
+      'max-lines-per-function': ['error', { max: 100, skipBlankLines: true, skipComments: true }],
+      complexity: ['error', 25],
+    },
+  },
+  {
+    // Tests are exempt: a describe() callback holds a whole suite, so its length
+    // counts cases, and a table of cases is not branching logic.
+    files: [
+      '**/__tests__/**/*.{ts,tsx}',
+      '**/*.test.{ts,tsx}',
+      'e2e/**/*.ts',
+      'packages/*/test/**/*.ts',
+    ],
+    rules: {
+      'max-lines-per-function': 'off',
+      complexity: 'off',
+    },
+  },
+  {
     // End-to-end tests and the Playwright config run in Node, not the browser,
     // and export helpers alongside their fixtures — neither of which the
     // browser-globals / react-refresh defaults above are about.

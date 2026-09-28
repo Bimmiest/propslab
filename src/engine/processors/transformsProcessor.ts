@@ -27,239 +27,339 @@ function positionOfKeyOrStanza(stanza: ParsedConf['stanzas'][number], key: strin
   return directive ? atDirective(directive) : atStanza(stanza);
 }
 
+type Phase = 'index-time' | 'search-time';
+type TransformStanza = ParsedConf['stanzas'][number];
+type TransformResult = ReturnType<typeof applyRegexTransform>;
 
+/**
+ * The transform lists a phase runs, in the order Splunk applies them.
+ *
+ * When multiple TRANSFORMS-<class>/REPORT-<class> entries match, Splunk applies
+ * them in ASCII order of the class name (comma-separated names within one class
+ * stay list-ordered). Ordering is decisive once queue routing is last-wins.
+ *
+ * RULESET-<class> is the other index-time list (#275). It does what
+ * TRANSFORMS- does, and transforms.conf.spec fixes the order between them:
+ * every TRANSFORMS class alphabetically, then every RULESET class
+ * alphabetically, then by position within a ruleset. So the two are sorted
+ * separately and concatenated rather than sorted together — a RULESET-a
+ * still runs after a TRANSFORMS-z.
+ */
+function orderedTransformLists(directives: ConfDirective[], phase: Phase): ConfDirective[] {
+  const byType = (type: string) =>
+    directives.filter((d) => d.directiveType === type).sort(byClassName);
+  return phase === 'index-time' ? [...byType('TRANSFORMS'), ...byType('RULESET')] : byType('REPORT');
+}
+
+/** One applyTransforms call: its settings, and the once-per-stanza warning ledgers. */
+interface TransformsRun {
+  phase: Phase;
+  diagnostics: ValidationDiagnostic[] | undefined;
+  now: number;
+  stanzaMap: Map<string, TransformStanza>;
+  warned: {
+    /** The DEST_KEY=_raw data-loss warning. */
+    rawLoss: Set<string>;
+    /** SEM-7: index-time transforms that extract fields with no WRITE_META/DEST_KEY. */
+    noWriteMeta: Set<string>;
+    /** SEM-16: a REGEX that does not compile. */
+    invalidRegex: Set<string>;
+    /** SEM-11: routing via an unknown/unsimulated DEST_KEY. */
+    unknownDestKey: Set<string>;
+    /** DEST_KEY reached through a search-time REPORT-, where Splunk ignores it. */
+    searchTimeDestKey: Set<string>;
+    searchOnlyAttrs: Set<string>;
+    searchTimeNoFormat: Set<string>;
+  };
+}
+
+/** One event on its way through the transform lists. */
+interface EventState {
+  event: SplunkEvent;
+  /**
+   * CLONE_SOURCETYPE copies show up alongside the original (#87). Collected
+   * rather than emitted inline: the clone is taken from the event as it stood
+   * when the transform matched, and the original carries on through the rest
+   * of the list unchanged.
+   */
+  clones: SplunkEvent[];
+  /** Directives that reached a transform and changed nothing (#84). */
+  noOps: DirectiveNoOp[];
+}
+
+/** Where one transform sits: the list directive, its label, and the stanza's name. */
+interface TransformSite {
+  dir: ConfDirective;
+  /**
+   * The trace names the list a step came from, so a RULESET- rule reads as
+   * one rather than being mislabelled TRANSFORMS-.
+   */
+  listLabel: string;
+  stanzaName: string;
+}
+
+function noteNoOp(run: TransformsRun, state: EventState, site: TransformSite, reason: NoOpReason): void {
+  state.noOps.push({
+    directive: `${site.dir.key} → [${site.stanzaName}]`,
+    file: 'props.conf',
+    line: site.dir.line,
+    phase: run.phase,
+    reason,
+  });
+}
+
+/**
+ * Run an INGEST_EVAL / STOP_PROCESSING_IF stanza. Returns true when the stop
+ * condition held, so the rest of the list is skipped.
+ *
+ * INGEST_EVAL stanzas are part of the index-time TRANSFORMS list: they
+ * execute at THIS position (interleaved with regex transforms), and only
+ * because a TRANSFORMS-<class> references them. A regex transform listed
+ * after the eval therefore sees the evaled event. INGEST_EVAL is
+ * index-time only, so it is ignored on the search-time (REPORT) pass.
+ *
+ * STOP_PROCESSING_IF is the same kind of stanza (#275): like INGEST_EVAL
+ * it overrides the stanza's other index-time settings, and it runs after
+ * the stanza's INGEST_EVAL, so it sees the evaled event. When it holds,
+ * the rules after it in this list are skipped. The spec states that
+ * scope for a ruleset — "skips every rule after it in that ruleset" —
+ * and the same scope is applied to a TRANSFORMS- list, which is the
+ * same construct: a class's comma-separated rules. Later classes still
+ * run; nothing in the spec says a stop reaches across lists.
+ */
+function runEvalStanza(
+  run: TransformsRun,
+  state: EventState,
+  site: TransformSite,
+  transformStanza: TransformStanza,
+  ingestEvalDirs: ConfDirective[],
+  skipped: string[],
+): boolean {
+  if (run.phase !== 'index-time') return false;
+  if (ingestEvalDirs.length > 0) {
+    state.event = applyIngestEval([state.event], ingestEvalDirs, run.diagnostics, run.now)[0] ?? state.event;
+  }
+  const stop = evaluateStopCondition(state.event, transformStanza.directives, run.diagnostics, run.now);
+  if (!stop) return false;
+  const { listLabel } = site;
+  const description = !stop.stop
+    ? `STOP_PROCESSING_IF (${stop.expression}) was false — processing continues`
+    : skipped.length > 0
+      ? `STOP_PROCESSING_IF (${stop.expression}) was true — skipped the rest of ${listLabel}: ${skipped.join(', ')}`
+      : `STOP_PROCESSING_IF (${stop.expression}) was true — no rules follow it in ${listLabel}`;
+  state.event = {
+    ...state.event,
+    processingTrace: [
+      ...state.event.processingTrace,
+      { processor: `${listLabel}:${site.stanzaName}`, phase: run.phase, description },
+    ],
+  };
+  return stop.stop;
+}
+
+/** The once-per-stanza warnings a matched regex transform can raise before routing. */
+function warnMatched(run: TransformsRun, result: TransformResult, stanzaName: string, transformStanza: TransformStanza): void {
+  const { diagnostics, warned } = run;
+  if (!diagnostics) return;
+  if (run.phase === 'index-time') {
+    warnIndexTimeNoWriteMeta(result, stanzaName, transformStanza, diagnostics, warned.noWriteMeta);
+  }
+  // applyRegexTransform already ignored DEST_KEY on the search-time pass
+  // (it is index-time only); say so, rather than silently applying half
+  // the stanza.
+  if (run.phase === 'search-time') {
+    warnSearchTimeDestKey(stanzaName, transformStanza, diagnostics, warned.searchTimeDestKey);
+    warnSearchTimeNoFormat(result, stanzaName, transformStanza, diagnostics, warned.searchTimeNoFormat);
+  }
+}
+
+/** The trace text for a transform that matched. */
+function describeMatch(
+  result: TransformResult,
+  discardedFields: string[],
+  cloneType: string | undefined,
+): string {
+  const extracted = Object.keys(result.fields);
+  if (result.destKey) return `Transform routed to ${result.destKey}`;
+  if (discardedFields.length > 0) {
+    return `Transform matched, but without WRITE_META = true or a DEST_KEY its fields are not stored: ${discardedFields.join(', ')}`;
+  }
+  if (extracted.length > 0) return `Transform extracted fields: ${extracted.join(', ')}`;
+  // A stanza that exists for CLONE_SOURCETYPE, or a REGEX with nothing to
+  // capture, matched and extracted nothing — say what it did instead of
+  // "extracted fields:" over an empty list (#346).
+  return cloneType
+    ? `Transform matched; it extracts no fields, and CLONE_SOURCETYPE = ${cloneType} copies the event`
+    : 'Transform matched; it extracted no fields';
+}
+
+/**
+ * CLONE_SOURCETYPE is index-time only. Splunk emits a copy carrying the new
+ * sourcetype and lets the original continue untouched; the copy re-enters the
+ * pipeline and picks up the new sourcetype's props — its SEDCMD and TRANSFORMS
+ * in cloneSourcetype.ts, its search-time config through the per-event path for
+ * any event whose metadata changed.
+ */
+function cloneEvent(event: SplunkEvent, cloneType: string, processor: string, phase: Phase): SplunkEvent {
+  return {
+    ...event,
+    metadata: { ...event.metadata, sourcetype: cloneType },
+    clonedFrom: event.metadata.sourcetype,
+    processingTrace: [
+      ...event.processingTrace,
+      {
+        processor,
+        phase,
+        description: `CLONE_SOURCETYPE = ${cloneType} — emitted a copy of this event under sourcetype "${cloneType}"`,
+      },
+    ],
+  };
+}
+
+/** Route a matched transform's result onto the event, tracing and cloning as it says. */
+function applyMatch(
+  run: TransformsRun,
+  state: EventState,
+  site: TransformSite,
+  transformStanza: TransformStanza,
+  result: TransformResult,
+): void {
+  const { phase, diagnostics, warned } = run;
+  const { stanzaName } = site;
+  warnMatched(run, result, stanzaName, transformStanza);
+  // An index-time extraction with neither WRITE_META = true nor a
+  // DEST_KEY stores nothing in Splunk (#288). The warning above says so,
+  // and the preview has to agree with it: showing the fields anyway made
+  // the dead config look like a working one, contradicting its own
+  // diagnostic. The field names are still reported, in the warning and
+  // the trace, so the reader can see what was lost.
+  const discardedFields =
+    phase === 'index-time' && !result.destKey && !stanzaWritesMeta(transformStanza)
+      ? Object.keys(result.fields)
+      : [];
+  const effective = discardedFields.length > 0 ? { ...result, fields: {} } : result;
+  const beforeRaw = state.event._raw;
+  // applyDestKey records queue values onto _meta._queue rather than dropping
+  // the event — a later transform in the list can still overwrite the queue
+  // (last-wins). nullQueue events are flagged (and shown as dropped) only
+  // after the whole list runs; they are never removed mid-list.
+  const routed = applyDestKey(state.event, effective);
+  if (result.destKey === '_raw' && diagnostics) {
+    warnRawLoss(beforeRaw, routed._raw, stanzaName, transformStanza, diagnostics, warned.rawLoss);
+  }
+  if (result.destKey && diagnostics) {
+    warnUnknownDestKey(result.destKey, stanzaName, transformStanza, diagnostics, warned.unknownDestKey);
+  }
+  // DEST_KEY = _raw overwrites the whole event with the FORMAT output,
+  // destroying field values by the same mechanism as SEDCMD. The
+  // rewrite is recorded (appendTraceStep) so the same counterfactual
+  // attribution applies, with the before/after text — the path
+  // INGEST_EVAL's `_raw=` now shares (#346). Only DEST_KEY = _raw can
+  // change _raw here, so an unchanged _raw records nothing.
+  const cloneType =
+    phase === 'index-time'
+      ? effectiveDirective(transformStanza.directives, 'CLONE_SOURCETYPE')?.value.trim()
+      : undefined;
+  const metaChanges = metadataChanges(state.event.metadata, routed.metadata);
+  const processor = `${site.listLabel}:${stanzaName}`;
+  const step: ProcessingStep = {
+    processor,
+    phase,
+    description: describeMatch(result, discardedFields, cloneType),
+    fieldsAdded: Object.keys(effective.fields),
+    ...(metaChanges.length > 0 ? { metadataChanges: metaChanges } : {}),
+  };
+  state.event = appendTraceStep(routed, step, beforeRaw);
+  if (cloneType) state.clones.push(cloneEvent(state.event, cloneType, processor, phase));
+}
+
+/** Run one REGEX (or DELIMS) transform stanza against the event. */
+function runRegexStanza(run: TransformsRun, state: EventState, site: TransformSite, transformStanza: TransformStanza): void {
+  const { phase, diagnostics, warned } = run;
+  const { stanzaName } = site;
+  const result = applyRegexTransform(state.event, transformStanza, (pattern) => {
+    if (!diagnostics || warned.invalidRegex.has(stanzaName)) return;
+    warned.invalidRegex.add(stanzaName);
+    diagnostics.push({
+      level: 'warning',
+      message: `Transform "${stanzaName}" was skipped: its REGEX (${pattern}) does not compile (${validateRegex(pattern) ?? 'invalid regex'}).`,
+      file: 'transforms.conf',
+      ...positionOfKeyOrStanza(transformStanza, 'REGEX'),
+    });
+  }, phase);
+
+  // Fires whether or not the transform matched: a DELIMS stanza reached
+  // through TRANSFORMS- extracts nothing at all, so `matched` is false and
+  // a warning gated on it would never reach the one config that needs it.
+  if (phase === 'index-time' && diagnostics) {
+    warnIndexTimeSearchOnlyAttrs(stanzaName, transformStanza, diagnostics, warned.searchOnlyAttrs);
+  }
+
+  if (result.matched) applyMatch(run, state, site, transformStanza, result);
+  else if (result.noOp) noteNoOp(run, state, site, result.noOp);
+}
+
+/** Run one TRANSFORMS-/RULESET-/REPORT- list against the event. */
+function runTransformList(run: TransformsRun, state: EventState, dir: ConfDirective): void {
+  // Value can be comma-separated list of transform stanza names
+  const stanzaNames = dir.value.split(',').map((s) => s.trim()).filter(Boolean);
+  const listLabel = `${dir.directiveType}-${dir.className ?? ''}`;
+
+  for (const [position, stanzaName] of stanzaNames.entries()) {
+    const site: TransformSite = { dir, listLabel, stanzaName };
+    const transformStanza = run.stanzaMap.get(stanzaName);
+    if (!transformStanza) {
+      noteNoOp(run, state, site, { kind: 'transforms-stanza-missing', name: stanzaName });
+      continue;
+    }
+    const ingestEvalDirs = transformStanza.directives.filter((d) => d.key === 'INGEST_EVAL');
+    const hasStopCondition = transformStanza.directives.some((d) => d.key === 'STOP_PROCESSING_IF');
+    if (ingestEvalDirs.length > 0 || hasStopCondition) {
+      const skipped = stanzaNames.slice(position + 1);
+      if (runEvalStanza(run, state, site, transformStanza, ingestEvalDirs, skipped)) break;
+      continue;
+    }
+    runRegexStanza(run, state, site, transformStanza);
+  }
+}
 
 export function applyTransforms(
   events: SplunkEvent[],
   directives: ConfDirective[],
   transformsConf: ParsedConf,
-  phase: 'index-time' | 'search-time',
+  phase: Phase,
   diagnostics?: ValidationDiagnostic[],
   /** Epoch ms that INGEST_EVAL's now()/time() read. See `PipelineOptions.now`. */
   now: number = Date.now(),
 ): SplunkEvent[] {
-  // When multiple TRANSFORMS-<class>/REPORT-<class> entries match, Splunk applies
-  // them in ASCII order of the class name (comma-separated names within one class
-  // stay list-ordered). Ordering is decisive once queue routing is last-wins.
-  //
-  // RULESET-<class> is the other index-time list (#275). It does what
-  // TRANSFORMS- does, and transforms.conf.spec fixes the order between them:
-  // every TRANSFORMS class alphabetically, then every RULESET class
-  // alphabetically, then by position within a ruleset. So the two are sorted
-  // separately and concatenated rather than sorted together — a RULESET-a
-  // still runs after a TRANSFORMS-z.
-  const byType = (type: string) =>
-    directives.filter((d) => d.directiveType === type).sort(byClassName);
-  const transformDirectives =
-    phase === 'index-time' ? [...byType('TRANSFORMS'), ...byType('RULESET')] : byType('REPORT');
-
+  const transformDirectives = orderedTransformLists(directives, phase);
   if (transformDirectives.length === 0) return events;
 
-  const stanzaMap = new Map(transformsConf.stanzas.map((s) => [s.name, s]));
-  // Emit the DEST_KEY=_raw data-loss warning at most once per transform stanza.
-  const warnedRawLoss = new Set<string>();
-  // SEM-7: warn once per stanza about index-time transforms that extract fields
-  // with no WRITE_META/DEST_KEY (which have no effect at index time in Splunk).
-  const warnedNoWriteMeta = new Set<string>();
-  // SEM-16: warn once per stanza whose REGEX does not compile.
-  const warnedInvalidRegex = new Set<string>();
-  // SEM-11: warn once per stanza that routes via an unknown/unsimulated DEST_KEY.
-  const warnedUnknownDestKey = new Set<string>();
-  // Warn once per stanza whose DEST_KEY is reached through a search-time REPORT-,
-  // where Splunk ignores it.
-  const warnedSearchTimeDestKey = new Set<string>();
-  const warnedSearchOnlyAttrs = new Set<string>();
-  const warnedSearchTimeNoFormat = new Set<string>();
+  const run: TransformsRun = {
+    phase,
+    diagnostics,
+    now,
+    stanzaMap: new Map(transformsConf.stanzas.map((s) => [s.name, s])),
+    warned: {
+      rawLoss: new Set(),
+      noWriteMeta: new Set(),
+      invalidRegex: new Set(),
+      unknownDestKey: new Set(),
+      searchTimeDestKey: new Set(),
+      searchOnlyAttrs: new Set(),
+      searchTimeNoFormat: new Set(),
+    },
+  };
 
   return events.flatMap((event) => {
-    let currentEvent: SplunkEvent = event;
-    // CLONE_SOURCETYPE copies show up alongside the original (#87). Collected
-    // rather than emitted inline: the clone is taken from the event as it stood
-    // when the transform matched, and the original carries on through the rest
-    // of the list unchanged.
-    const clones: SplunkEvent[] = [];
-    // Directives that reached a transform and changed nothing (#84).
-    const noOps: DirectiveNoOp[] = [];
-    const noteNoOp = (dir: ConfDirective, stanzaName: string, reason: NoOpReason) => {
-      noOps.push({
-        directive: `${dir.key} → [${stanzaName}]`,
-        file: 'props.conf',
-        line: dir.line,
-        phase,
-        reason,
-      });
-    };
+    const state: EventState = { event, clones: [], noOps: [] };
+    for (const dir of transformDirectives) runTransformList(run, state, dir);
 
-    for (const dir of transformDirectives) {
-      // Value can be comma-separated list of transform stanza names
-      const stanzaNames = dir.value.split(',').map((s) => s.trim()).filter(Boolean);
-      // The trace names the list a step came from, so a RULESET- rule reads as
-      // one rather than being mislabelled TRANSFORMS-.
-      const listLabel = `${dir.directiveType}-${dir.className ?? ''}`;
-
-      for (const [position, stanzaName] of stanzaNames.entries()) {
-        const transformStanza = stanzaMap.get(stanzaName);
-        if (!transformStanza) {
-          noteNoOp(dir, stanzaName, { kind: 'transforms-stanza-missing', name: stanzaName });
-          continue;
-        }
-
-        // INGEST_EVAL stanzas are part of the index-time TRANSFORMS list: they
-        // execute at THIS position (interleaved with regex transforms), and only
-        // because a TRANSFORMS-<class> references them. A regex transform listed
-        // after the eval therefore sees the evaled event. INGEST_EVAL is
-        // index-time only, so it is ignored on the search-time (REPORT) pass.
-        //
-        // STOP_PROCESSING_IF is the same kind of stanza (#275): like INGEST_EVAL
-        // it overrides the stanza's other index-time settings, and it runs after
-        // the stanza's INGEST_EVAL, so it sees the evaled event. When it holds,
-        // the rules after it in this list are skipped. The spec states that
-        // scope for a ruleset — "skips every rule after it in that ruleset" —
-        // and the same scope is applied to a TRANSFORMS- list, which is the
-        // same construct: a class's comma-separated rules. Later classes still
-        // run; nothing in the spec says a stop reaches across lists.
-        const ingestEvalDirs = transformStanza.directives.filter((d) => d.key === 'INGEST_EVAL');
-        const hasStopCondition = transformStanza.directives.some((d) => d.key === 'STOP_PROCESSING_IF');
-        if (ingestEvalDirs.length > 0 || hasStopCondition) {
-          if (phase === 'index-time') {
-            if (ingestEvalDirs.length > 0) {
-              currentEvent = applyIngestEval([currentEvent], ingestEvalDirs, diagnostics, now)[0] ?? currentEvent;
-            }
-            const stop = evaluateStopCondition(currentEvent, transformStanza.directives, diagnostics, now);
-            if (stop) {
-              const skipped = stanzaNames.slice(position + 1);
-              const description = !stop.stop
-                ? `STOP_PROCESSING_IF (${stop.expression}) was false — processing continues`
-                : skipped.length > 0
-                  ? `STOP_PROCESSING_IF (${stop.expression}) was true — skipped the rest of ${listLabel}: ${skipped.join(', ')}`
-                  : `STOP_PROCESSING_IF (${stop.expression}) was true — no rules follow it in ${listLabel}`;
-              currentEvent = {
-                ...currentEvent,
-                processingTrace: [
-                  ...currentEvent.processingTrace,
-                  { processor: `${listLabel}:${stanzaName}`, phase, description },
-                ],
-              };
-              if (stop.stop) break;
-            }
-          }
-          continue;
-        }
-
-        const result = applyRegexTransform(currentEvent, transformStanza, (pattern) => {
-          if (!diagnostics || warnedInvalidRegex.has(stanzaName)) return;
-          warnedInvalidRegex.add(stanzaName);
-          diagnostics.push({
-            level: 'warning',
-            message: `Transform "${stanzaName}" was skipped: its REGEX (${pattern}) does not compile (${validateRegex(pattern) ?? 'invalid regex'}).`,
-            file: 'transforms.conf',
-            ...positionOfKeyOrStanza(transformStanza, 'REGEX'),
-          });
-        }, phase);
-
-        // Fires whether or not the transform matched: a DELIMS stanza reached
-        // through TRANSFORMS- extracts nothing at all, so `matched` is false and
-        // a warning gated on it would never reach the one config that needs it.
-        if (phase === 'index-time' && diagnostics) {
-          warnIndexTimeSearchOnlyAttrs(stanzaName, transformStanza, diagnostics, warnedSearchOnlyAttrs);
-        }
-
-        if (result.matched) {
-          if (phase === 'index-time' && diagnostics) {
-            warnIndexTimeNoWriteMeta(result, stanzaName, transformStanza, diagnostics, warnedNoWriteMeta);
-          }
-          // applyRegexTransform already ignored DEST_KEY on the search-time pass
-          // (it is index-time only); say so, rather than silently applying half
-          // the stanza.
-          if (phase === 'search-time' && diagnostics) {
-            warnSearchTimeDestKey(stanzaName, transformStanza, diagnostics, warnedSearchTimeDestKey);
-            warnSearchTimeNoFormat(result, stanzaName, transformStanza, diagnostics, warnedSearchTimeNoFormat);
-          }
-          // An index-time extraction with neither WRITE_META = true nor a
-          // DEST_KEY stores nothing in Splunk (#288). The warning above says so,
-          // and the preview has to agree with it: showing the fields anyway made
-          // the dead config look like a working one, contradicting its own
-          // diagnostic. The field names are still reported, in the warning and
-          // the trace, so the reader can see what was lost.
-          const discardedFields =
-            phase === 'index-time' && !result.destKey && !stanzaWritesMeta(transformStanza)
-              ? Object.keys(result.fields)
-              : [];
-          const effective = discardedFields.length > 0 ? { ...result, fields: {} } : result;
-          const beforeRaw = currentEvent._raw;
-          // applyDestKey records queue values onto _meta._queue rather than dropping
-          // the event — a later transform in the list can still overwrite the queue
-          // (last-wins). nullQueue events are flagged (and shown as dropped) only
-          // after the whole list runs; they are never removed mid-list.
-          const routed = applyDestKey(currentEvent, effective);
-          if (result.destKey === '_raw' && diagnostics) {
-            warnRawLoss(beforeRaw, routed._raw, stanzaName, transformStanza, diagnostics, warnedRawLoss);
-          }
-          if (result.destKey && diagnostics) {
-            warnUnknownDestKey(result.destKey, stanzaName, transformStanza, diagnostics, warnedUnknownDestKey);
-          }
-          // DEST_KEY = _raw overwrites the whole event with the FORMAT output,
-          // destroying field values by the same mechanism as SEDCMD. The
-          // rewrite is recorded (appendTraceStep) so the same counterfactual
-          // attribution applies, with the before/after text — the path
-          // INGEST_EVAL's `_raw=` now shares (#346). Only DEST_KEY = _raw can
-          // change _raw here, so an unchanged _raw records nothing.
-          const extracted = Object.keys(result.fields);
-          const cloneType =
-            phase === 'index-time'
-              ? effectiveDirective(transformStanza.directives, 'CLONE_SOURCETYPE')?.value.trim()
-              : undefined;
-          const metaChanges = metadataChanges(currentEvent.metadata, routed.metadata);
-          const step: ProcessingStep = {
-            processor: `${listLabel}:${stanzaName}`,
-            phase,
-            description: result.destKey
-              ? `Transform routed to ${result.destKey}`
-              : discardedFields.length > 0
-                ? `Transform matched, but without WRITE_META = true or a DEST_KEY its fields are not stored: ${discardedFields.join(', ')}`
-                : extracted.length > 0
-                  ? `Transform extracted fields: ${extracted.join(', ')}`
-                  // A stanza that exists for CLONE_SOURCETYPE, or a REGEX with
-                  // nothing to capture, matched and extracted nothing — say
-                  // what it did instead of "extracted fields:" over an empty
-                  // list (#346).
-                  : cloneType
-                    ? `Transform matched; it extracts no fields, and CLONE_SOURCETYPE = ${cloneType} copies the event`
-                    : 'Transform matched; it extracted no fields',
-            fieldsAdded: Object.keys(effective.fields),
-            ...(metaChanges.length > 0 ? { metadataChanges: metaChanges } : {}),
-          };
-          currentEvent = appendTraceStep(routed, step, beforeRaw);
-          // CLONE_SOURCETYPE is index-time only. Splunk emits a copy carrying
-          // the new sourcetype and lets the original continue untouched; the
-          // copy re-enters the pipeline and picks up the new sourcetype's props
-          // — its SEDCMD and TRANSFORMS in cloneSourcetype.ts, its search-time
-          // config through the per-event path for any event whose metadata changed.
-          if (cloneType) {
-            clones.push({
-              ...currentEvent,
-              metadata: { ...currentEvent.metadata, sourcetype: cloneType },
-              clonedFrom: currentEvent.metadata.sourcetype,
-              processingTrace: [
-                ...currentEvent.processingTrace,
-                {
-                  processor: `${listLabel}:${stanzaName}`,
-                  phase,
-                  description: `CLONE_SOURCETYPE = ${cloneType} — emitted a copy of this event under sourcetype "${cloneType}"`,
-                },
-              ],
-            });
-          }
-        } else if (result.noOp) {
-          noteNoOp(dir, stanzaName, result.noOp);
-        }
-      }
-    }
-
+    const { noOps, clones } = state;
     const resolved =
       noOps.length > 0
-        ? { ...currentEvent, noOps: [...(currentEvent.noOps ?? []), ...noOps] }
-        : currentEvent;
+        ? { ...state.event, noOps: [...(state.event.noOps ?? []), ...noOps] }
+        : state.event;
     return clones.length > 0 ? [resolved, ...clones] : [resolved];
   });
 }

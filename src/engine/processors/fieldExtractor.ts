@@ -1,5 +1,5 @@
 import type { SplunkEvent, ConfDirective, DirectiveNoOp, ValidationDiagnostic } from '../types';
-import { extractionLimits, safeRegex, validateRegex } from '../../utils/splunkRegex';
+import { extractionLimits, safeRegex, validateRegex, type SplunkRegex } from '../../utils/splunkRegex';
 import { longestPartialMatch, type NoOpReason } from '../noOpExplainer';
 import { effectiveValue } from '../utils/directiveValues';
 import { isInternalField } from '../utils/internalFields';
@@ -35,7 +35,7 @@ export function extractFields(
     effectiveValue(directives, 'DEPTH_LIMIT'),
   );
 
-  const extractions = extractDirectives.map((dir) => {
+  const extractions = extractDirectives.map((dir): Extraction => {
     const { pattern, sourceField } = parseExtractValue(dir.value);
     // Inline EXTRACT extracts the FIRST match only (max_match defaults to 1);
     // multivalue extraction requires a transforms.conf REGEX with MV_ADD, which
@@ -55,134 +55,174 @@ export function extractFields(
   });
 
   const reportedStrippedRefs = new Set<string>();
-
   return events.map((event) => {
-    const newFields = { ...event.fields };
-    const newOffsets: Record<string, Array<[number, number]>> = { ...(event.fieldOffsets ?? {}) };
-    let offsetsChanged = false;
-    const traces: SplunkEvent['processingTrace'] = [];
-
-    // Every directive that reaches a `continue` below changed nothing, which is
-    // the case the preview has never explained (#84).
-    const noOps: DirectiveNoOp[] = [];
-    const noteNoOp = (dir: ConfDirective, reason: NoOpReason) => {
-      noOps.push({
-        directive: dir.key,
-        file: 'props.conf',
-        line: dir.line,
-        phase: 'search-time',
-        reason,
-      });
+    const state: ExtractionState = {
+      fields: { ...event.fields },
+      offsets: { ...(event.fieldOffsets ?? {}) },
+      offsetsChanged: false,
+      traces: [],
+      noOps: [],
     };
-
     for (const extraction of extractions) {
-      if (!extraction.regex) {
-        const { pattern } = parseExtractValue(extraction.directive.value);
-        noteNoOp(extraction.directive, {
-          kind: 'regex-invalid',
-          error: validateRegex(pattern) ?? 'invalid regex',
-        });
-        continue;
-      }
-
-      const sourceValue = extraction.sourceField
-        ? getFieldValue(event, extraction.sourceField)
-        : event._raw;
-      // Offsets only authoritative when extracting from _raw — a captured position in a
-      // derived source field cannot be translated back to _raw coordinates reliably.
-      const isPositional = !extraction.sourceField;
-
-      if (!sourceValue) {
-        if (
-          diagnostics &&
-          extraction.sourceField &&
-          extraction.sourceField.startsWith('_') &&
-          !isInternalField(extraction.sourceField) &&
-          !reportedStrippedRefs.has(extraction.sourceField)
-        ) {
-          const stripped = extraction.sourceField.replace(/^_+/, '');
-          if (stripped && hasField(event.fields, stripped)) {
-            reportedStrippedRefs.add(extraction.sourceField);
-            diagnostics.push({
-              level: 'warning',
-              message: `EXTRACT-${extraction.directive.className ?? ''} references source field "${extraction.sourceField}", but index-time extractions strip leading underscores — Splunk will resolve this as "${stripped}".`,
-              file: 'props.conf',
-              ...atDirective(extraction.directive),
-              directiveKey: extraction.directive.key,
-              suggestion: `Replace "in ${extraction.sourceField}" with "in ${stripped}"`,
-            });
-          }
-        }
-        noteNoOp(extraction.directive, {
-          kind: 'source-key-empty',
-          sourceKey: extraction.sourceField ?? '_raw',
-        });
-        continue;
-      }
-
-      // Inline EXTRACT takes the first match only.
-      const m = extraction.regex.exec(sourceValue);
-      if (!m && extraction.regex.lastError !== undefined) {
-        noteNoOp(extraction.directive, { kind: 'regex-limit', error: extraction.regex.lastError });
-        continue;
-      }
-      if (!m || !m.groups) {
-        const { pattern } = parseExtractValue(extraction.directive.value);
-        const partial = longestPartialMatch(pattern, sourceValue);
-        noteNoOp(
-          extraction.directive,
-          partial
-            ? { kind: 'no-match', partialEnd: partial.end, partialPattern: partial.prefix }
-            : { kind: 'no-match' },
-        );
-        continue;
-      }
-      const indices = isPositional && captureOffsets ? m.indices.groups : undefined;
-
-      const added: string[] = [];
-      const alreadySet: string[] = [];
-      for (const [name, value] of Object.entries(m.groups)) {
-        if (value === undefined) continue;
-        // First-wins (simplification — SEM-12): this engine keeps the value from
-        // the first extraction and discards later ones for the same field name.
-        // Real Splunk's behaviour when two search-time extractions yield the same
-        // field is closer to producing a multivalue field; verify against a live
-        // indexer before relying on the collision outcome here.
-        if (hasField(newFields, name)) {
-          alreadySet.push(name);
-          continue;
-        }
-        setField(newFields, name, value);
-        added.push(name);
-        const span = indices?.[name];
-        if (span) {
-          setField(newOffsets, name, [[span[0], span[1]]]);
-          offsetsChanged = true;
-        }
-      }
-
-      if (added.length > 0) {
-        traces.push({
-          processor: `EXTRACT-${extraction.directive.className ?? ''}`,
-          phase: 'search-time',
-          description: `Extracted fields: ${added.join(', ')}`,
-          fieldsAdded: added,
-        });
-      } else if (alreadySet.length > 0) {
-        // It matched and still produced nothing, which looks identical in the
-        // preview to a pattern that never matched at all.
-        noteNoOp(extraction.directive, { kind: 'fields-already-set', fields: alreadySet });
-      }
+      runExtraction(event, extraction, state, { diagnostics, captureOffsets, reportedStrippedRefs });
     }
-
     return {
       ...event,
-      fields: newFields,
-      ...(offsetsChanged ? { fieldOffsets: newOffsets } : {}),
-      processingTrace: [...event.processingTrace, ...traces],
-      ...(noOps.length > 0 ? { noOps: [...(event.noOps ?? []), ...noOps] } : {}),
+      fields: state.fields,
+      ...(state.offsetsChanged ? { fieldOffsets: state.offsets } : {}),
+      processingTrace: [...event.processingTrace, ...state.traces],
+      ...(state.noOps.length > 0 ? { noOps: [...(event.noOps ?? []), ...state.noOps] } : {}),
     };
   });
+}
+
+interface Extraction {
+  directive: ConfDirective;
+  regex: SplunkRegex | null;
+  sourceField: string | undefined;
+}
+
+/** What one event accumulates as its EXTRACTs run. */
+interface ExtractionState {
+  fields: SplunkEvent['fields'];
+  offsets: Record<string, Array<[number, number]>>;
+  offsetsChanged: boolean;
+  traces: SplunkEvent['processingTrace'];
+  /**
+   * Every directive that stops early in runExtraction changed nothing, which
+   * is the case the preview has never explained (#84).
+   */
+  noOps: DirectiveNoOp[];
+}
+
+interface ExtractionOptions {
+  diagnostics: ValidationDiagnostic[] | undefined;
+  captureOffsets: boolean;
+  /** Source fields already warned about, so each is reported once per run. */
+  reportedStrippedRefs: Set<string>;
+}
+
+function noteNoOp(state: ExtractionState, dir: ConfDirective, reason: NoOpReason): void {
+  state.noOps.push({
+    directive: dir.key,
+    file: 'props.conf',
+    line: dir.line,
+    phase: 'search-time',
+    reason,
+  });
+}
+
+/**
+ * Warn when an EXTRACT reads `in _field` and the event has `field`: index-time
+ * extractions strip leading underscores, so Splunk resolves the name without it.
+ */
+function warnStrippedSourceRef(event: SplunkEvent, extraction: Extraction, options: ExtractionOptions): void {
+  const { diagnostics, reportedStrippedRefs } = options;
+  const { sourceField, directive } = extraction;
+  if (
+    !diagnostics ||
+    !sourceField ||
+    !sourceField.startsWith('_') ||
+    isInternalField(sourceField) ||
+    reportedStrippedRefs.has(sourceField)
+  ) {
+    return;
+  }
+  const stripped = sourceField.replace(/^_+/, '');
+  if (!stripped || !hasField(event.fields, stripped)) return;
+  reportedStrippedRefs.add(sourceField);
+  diagnostics.push({
+    level: 'warning',
+    message: `EXTRACT-${directive.className ?? ''} references source field "${sourceField}", but index-time extractions strip leading underscores — Splunk will resolve this as "${stripped}".`,
+    file: 'props.conf',
+    ...atDirective(directive),
+    directiveKey: directive.key,
+    suggestion: `Replace "in ${sourceField}" with "in ${stripped}"`,
+  });
+}
+
+/** Store a match's named groups, first-wins, and trace or explain the outcome. */
+function storeGroups(
+  directive: ConfDirective,
+  groups: Record<string, string | undefined>,
+  indices: Record<string, [number, number] | undefined> | undefined,
+  state: ExtractionState,
+): void {
+  const added: string[] = [];
+  const alreadySet: string[] = [];
+  for (const [name, value] of Object.entries(groups)) {
+    if (value === undefined) continue;
+    // First-wins (simplification — SEM-12): this engine keeps the value from
+    // the first extraction and discards later ones for the same field name.
+    // Real Splunk's behaviour when two search-time extractions yield the same
+    // field is closer to producing a multivalue field; verify against a live
+    // indexer before relying on the collision outcome here.
+    if (hasField(state.fields, name)) {
+      alreadySet.push(name);
+      continue;
+    }
+    setField(state.fields, name, value);
+    added.push(name);
+    const span = indices?.[name];
+    if (span) {
+      setField(state.offsets, name, [[span[0], span[1]]]);
+      state.offsetsChanged = true;
+    }
+  }
+
+  if (added.length > 0) {
+    state.traces.push({
+      processor: `EXTRACT-${directive.className ?? ''}`,
+      phase: 'search-time',
+      description: `Extracted fields: ${added.join(', ')}`,
+      fieldsAdded: added,
+    });
+  } else if (alreadySet.length > 0) {
+    // It matched and still produced nothing, which looks identical in the
+    // preview to a pattern that never matched at all.
+    noteNoOp(state, directive, { kind: 'fields-already-set', fields: alreadySet });
+  }
+}
+
+/** Run one EXTRACT against one event. */
+function runExtraction(event: SplunkEvent, extraction: Extraction, state: ExtractionState, options: ExtractionOptions): void {
+  const { directive, regex, sourceField } = extraction;
+  if (!regex) {
+    const { pattern } = parseExtractValue(directive.value);
+    noteNoOp(state, directive, { kind: 'regex-invalid', error: validateRegex(pattern) ?? 'invalid regex' });
+    return;
+  }
+
+  const sourceValue = sourceField ? getFieldValue(event, sourceField) : event._raw;
+  if (!sourceValue) {
+    warnStrippedSourceRef(event, extraction, options);
+    noteNoOp(state, directive, { kind: 'source-key-empty', sourceKey: sourceField ?? '_raw' });
+    return;
+  }
+
+  // Inline EXTRACT takes the first match only.
+  const m = regex.exec(sourceValue);
+  if (!m && regex.lastError !== undefined) {
+    noteNoOp(state, directive, { kind: 'regex-limit', error: regex.lastError });
+    return;
+  }
+  if (!m || !m.groups) {
+    const { pattern } = parseExtractValue(directive.value);
+    const partial = longestPartialMatch(pattern, sourceValue);
+    noteNoOp(
+      state,
+      directive,
+      partial
+        ? { kind: 'no-match', partialEnd: partial.end, partialPattern: partial.prefix }
+        : { kind: 'no-match' },
+    );
+    return;
+  }
+  // Offsets only authoritative when extracting from _raw — a captured position in a
+  // derived source field cannot be translated back to _raw coordinates reliably.
+  const isPositional = !sourceField;
+  const indices = isPositional && options.captureOffsets ? m.indices.groups : undefined;
+  storeGroups(directive, m.groups, indices, state);
 }
 
 export function parseExtractValue(value: string): { pattern: string; sourceField?: string } {

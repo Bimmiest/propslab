@@ -245,6 +245,42 @@ describe('applyEvalExpressions — crypto stubs', () => {
     const result = applyEvalExpressions([event()], [evalDir('h', 'sha256("test")')])[0]!;
     expect(result.fields['h']).toBe('[sha256() not simulated]');
   });
+
+  it('sha1() and sha512() return their not-simulated placeholders', () => {
+    const result = applyEvalExpressions([event()], [evalDir('a', 'sha1("t")'), evalDir('b', 'sha512("t")')])[0]!;
+    expect(result.fields['a']).toBe('[sha1() not simulated]');
+    expect(result.fields['b']).toBe('[sha512() not simulated]');
+  });
+});
+
+// Doc-derived (Splunk eval function reference): one case per builtin the
+// other suites do not reach, so each entry in the dispatch table is run.
+describe('applyEvalExpressions — remaining builtins', () => {
+  const run = (expr: string, fields: Record<string, string> = {}) =>
+    applyEvalExpressions([event(fields)], [evalDir('r', expr)])[0]!.fields['r'];
+
+  it('nullif() is null when its arguments are equal, else the first', () => {
+    expect(run('nullif("a", "a")')).toBeUndefined();
+    expect(run('nullif("a", "b")')).toBe('a');
+  });
+
+  it('trim() and urldecode()', () => {
+    expect(run('trim("  x  ")')).toBe('x');
+    expect(run('urldecode("a%20b")')).toBe('a b');
+  });
+
+  it('pow(), log() and pi()', () => {
+    expect(run('pow(2, 10)')).toBe('1024');
+    expect(Number(run('log(100)'))).toBeCloseTo(2);
+    expect(run('pi()')).toBe(String(Math.PI));
+  });
+
+  it('mvappend(), mvdedup(), mvsort() and mvfind()', () => {
+    expect(run('mvappend("a", "b")')).toEqual(['a', 'b']);
+    expect(run('mvdedup(mvappend("a", "a", "b"))')).toEqual(['a', 'b']);
+    expect(run('mvsort(mvappend("b", "a"))')).toEqual(['a', 'b']);
+    expect(run('mvfind(mvappend("x", "ab"), "b")')).toBe('1');
+  });
 });
 
 describe('applyEvalExpressions — string functions', () => {

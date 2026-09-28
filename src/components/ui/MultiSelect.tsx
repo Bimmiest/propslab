@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo, useId, type FocusEvent, type KeyboardEvent } from 'react';
+import { useState, useRef, useEffect, useMemo, useId, type FocusEvent, type KeyboardEvent, type RefObject } from 'react';
 import { Icon } from './Icon';
 
 interface MultiSelectProps {
@@ -114,58 +114,74 @@ export function MultiSelect({ label, options, selected, onChange, searchable }: 
           }}
         >
           {showSearch && (
-            <div className="p-1.5 border-b border-[var(--color-border)] shrink-0">
-              <div className="relative">
-                <Icon name="search" className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-[var(--color-text-muted)] pointer-events-none" />
-                <input
-                  ref={searchRef}
-                  type="text"
-                  aria-label={`Filter ${label} options`}
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Filter…"
-                  className="w-full pl-6 pr-2 py-0.5 text-xs rounded bg-[var(--color-bg-primary)] border border-[var(--color-border)] text-[var(--color-text-primary)] outline-none focus:border-[var(--color-accent)]"
-                />
-              </div>
-            </div>
+            <OptionFilter label={label} query={query} setQuery={setQuery} searchRef={searchRef} />
           )}
           <div className="overflow-auto flex-1">
-            {filteredOptions.length === 0 ? (
-              <div className="px-3 py-2 text-xs text-[var(--color-text-muted)]">No matches</div>
-            ) : (
-              filteredOptions.map((opt) => (
-                <label
-                  key={opt}
-                  className="flex items-center gap-2 px-2.5 py-1.5 text-xs cursor-pointer hover:bg-[var(--color-bg-tertiary)]"
-                  style={{ color: 'var(--color-text-primary)' }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={selected.has(opt)}
-                    onChange={() => toggle(opt)}
-                    className="rounded accent-[var(--color-accent)]"
-                  />
-                  <span className="truncate">{opt}</span>
-                </label>
-              ))
-            )}
+            <OptionList options={filteredOptions} selected={selected} toggle={toggle} />
           </div>
           {activeCount > 0 && (
-            <button
-              type="button"
-              onClick={() => {
-                onChange(new Set());
-                // This button unmounts with the selection it clears; without a
-                // new home, focus would fall to <body>.
-                triggerRef.current?.focus();
-              }}
-              className="w-full px-2.5 py-1.5 text-xs text-left border-t cursor-pointer shrink-0 hover:bg-[var(--color-bg-tertiary)] text-[var(--color-text-muted)] border-[var(--color-border)]"
-            >
-              Clear all
-            </button>
+            <ClearAllButton onClear={() => onChange(new Set())} triggerRef={triggerRef} />
           )}
         </div>
       )}
     </div>
   );
 }
+
+function ClearAllButton({ onClear, triggerRef }: { onClear: () => void; triggerRef: RefObject<HTMLButtonElement | null> }) {
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        onClear();
+        // This button unmounts with the selection it clears; without a
+        // new home, focus would fall to <body>.
+        triggerRef.current?.focus();
+      }}
+      className="w-full px-2.5 py-1.5 text-xs text-left border-t cursor-pointer shrink-0 hover:bg-[var(--color-bg-tertiary)] text-[var(--color-text-muted)] border-[var(--color-border)]"
+    >
+      Clear all
+    </button>
+  );
+}
+
+function OptionList({ options, selected, toggle }: { options: string[]; selected: Set<string>; toggle: (value: string) => void }) {
+  if (options.length === 0) {
+    return <div className="px-3 py-2 text-xs text-[var(--color-text-muted)]">No matches</div>;
+  }
+  return options.map((opt) => (
+    <label
+      key={opt}
+      className="flex items-center gap-2 px-2.5 py-1.5 text-xs cursor-pointer hover:bg-[var(--color-bg-tertiary)]"
+      style={{ color: 'var(--color-text-primary)' }}
+    >
+      <input
+        type="checkbox"
+        checked={selected.has(opt)}
+        onChange={() => toggle(opt)}
+        className="rounded accent-[var(--color-accent)]"
+      />
+      <span className="truncate">{opt}</span>
+    </label>
+  ));
+}
+
+function OptionFilter({ label, query, setQuery, searchRef }: { label: string; query: string; setQuery: (value: string) => void; searchRef: RefObject<HTMLInputElement | null> }) {
+  return (
+    <div className="p-1.5 border-b border-[var(--color-border)] shrink-0">
+      <div className="relative">
+        <Icon name="search" className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-[var(--color-text-muted)] pointer-events-none" />
+        <input
+          ref={searchRef}
+          type="text"
+          aria-label={`Filter ${label} options`}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Filter…"
+          className="w-full pl-6 pr-2 py-0.5 text-xs rounded bg-[var(--color-bg-primary)] border border-[var(--color-border)] text-[var(--color-text-primary)] outline-none focus:border-[var(--color-accent)]"
+        />
+      </div>
+    </div>
+  );
+}
+

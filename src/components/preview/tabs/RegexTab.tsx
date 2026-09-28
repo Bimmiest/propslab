@@ -147,63 +147,35 @@ interface RegexTabProps {
   eventsPerPage: number;
 }
 
-export function RegexTab({ items, allEvents, currentPage, eventsPerPage }: RegexTabProps) {
-  const patternId = useId();
-  const matchBlockId = useId();
-  const classErrorId = useId();
-  const [pattern, setPattern] = useState('');
-  const [className, setClassName] = useState('custom');
-  const [refOpen, setRefOpen] = useState(false);
-  const [refSearch, setRefSearch] = useState('');
-  const [copied, setCopied] = useState(false);
-  const [added, setAdded] = useState(false);
-  const { stanza, isPlaceholderStanza, apply: applyDirective } = useApplyDirective();
+type MatchState = ReturnType<typeof useRegexMatch>;
 
-  // Compile-only validation (safe on the main thread — compiling can't backtrack),
-  // on the same PCRE2 the pipeline runs. Matching happens in the worker below.
-  const validationError = useMemo(() => {
-    if (!pattern) return null;
-    return validateRegex(pattern);
-  }, [pattern]);
+/** One event on the rendered page, with its index in the filtered dataset and its match (if known yet). */
+interface PageEntry {
+  raw: string;
+  datasetIdx: number;
+  info: RegexMatchInfo | null | undefined;
+}
 
-  // From the live pattern, like the directive below: the chips, the legend and
-  // the directive all describe what is typed. The cards that use the colour map
-  // render only once the match results belong to that same pattern (see
-  // `status` below), so a group's colour in a card always agrees with the
-  // legend beside it (#315).
-  const namedGroups = useMemo(() => extractNamedGroups(pattern), [pattern]);
-  const theme = useAppStore((s) => s.theme);
-  const groupColorMap = useMemo(() => buildGroupColorMap(namedGroups, theme), [namedGroups, theme]);
-
-  const extractDirective = useMemo(() => {
-    if (!pattern || validationError) return null;
-    return `EXTRACT-${className} = ${pattern}`;
-  }, [pattern, className, validationError]);
-
-  const filteredRef = useMemo(() => {
-    if (!refSearch) return REGEX_REFERENCE;
-    const lower = refSearch.toLowerCase();
-    return REGEX_REFERENCE.map((cat) => ({
-      ...cat,
-      directives: cat.directives.filter(
-        (d) =>
-          d.pattern.toLowerCase().includes(lower) ||
-          d.description.toLowerCase().includes(lower) ||
-          d.example.toLowerCase().includes(lower),
-      ),
-    })).filter((cat) => cat.directives.length > 0);
-  }, [refSearch]);
-
-  // Run the live matching in a terminatable Web Worker. PCRE's limits bound each
-  // match, but not the total over thousands of events, so the watchdog still
-  // kills a run that takes too long and reports a timeout instead. A pattern
-  // with a known validation error is not sent (we already show that error).
-  // Matched over the WHOLE filtered dataset, not just the visible page. The
-  // header reads "{matched}/{total} events matched" with no scope qualifier, so
-  // page-scoped counts said "8/10" while 500 events were loaded — a pattern that
-  // failed only on page-2 data read as fully working, which is exactly the false
-  // confidence a regex tester exists to prevent. Matching runs in a terminatable
-  // worker, so the whole-dataset cost is bounded.
+/**
+ * Live matching of `pattern` over the whole filtered dataset, and what the tab
+ * can say about it.
+ *
+ * Run in a terminatable Web Worker. PCRE's limits bound each match, but not
+ * the total over thousands of events, so the watchdog still kills a run that
+ * takes too long and reports a timeout instead. A pattern with a known
+ * validation error is not sent (the tab already shows that error).
+ * Matched over the WHOLE filtered dataset, not just the visible page. The
+ * header reads "{matched}/{total} events matched" with no scope qualifier, so
+ * page-scoped counts said "8/10" while 500 events were loaded — a pattern that
+ * failed only on page-2 data read as fully working, which is exactly the false
+ * confidence a regex tester exists to prevent. Matching runs in a terminatable
+ * worker, so the whole-dataset cost is bounded.
+ */
+function useRegexResults(
+  pattern: string,
+  validationError: string | null,
+  { items, allEvents, currentPage, eventsPerPage }: RegexTabProps,
+) {
   const rawInputs = useMemo(() => allEvents.map((item) => item.event._raw), [allEvents]);
   const requestedPattern = validationError ? '' : pattern;
   const match = useRegexMatch(requestedPattern, rawInputs);
@@ -246,9 +218,7 @@ export function RegexTab({ items, allEvents, currentPage, eventsPerPage }: Regex
 
   // The rendered page starts at this offset into `rawInputs`.
   const pageOffset = (currentPage - 1) * eventsPerPage;
-
-  /** The page's events, each with its index in the filtered dataset and its match (if known yet). */
-  const pageEntries = useMemo(() => {
+  const pageEntries = useMemo<PageEntry[]>(() => {
     if (!pattern || validationError || !settled) return [];
     return items.map((item, i) => ({
       raw: item.event._raw,
@@ -256,8 +226,6 @@ export function RegexTab({ items, allEvents, currentPage, eventsPerPage }: Regex
       info: aligned[pageOffset + i],
     }));
   }, [pattern, validationError, settled, items, pageOffset, aligned]);
-  const matchedPageItems = pageEntries.filter((e) => e.info != null);
-  const untestedOnPage = pageEntries.filter((e) => e.info === undefined).length;
 
   // Exact over the events on screen when every one of them has an answer;
   // otherwise the settled run's own count, marked as updating (#347).
@@ -269,69 +237,84 @@ export function RegexTab({ items, allEvents, currentPage, eventsPerPage }: Regex
     return { matched, total: settled ? settled.inputs.length : allEvents.length };
   }, [countExact, aligned, rawInputs, settled, allEvents]);
 
-  // Adding needs a settled 'ok' run of exactly this pattern over exactly these
-  // events — the rule the Create EXTRACT dialog applies (#329). Gated only on
-  // compiling, the button wrote a pattern the tab was showing as too slow to
-  // evaluate (`(a|aa)+b`), so every pipeline run then hit the 5 s watchdog; and
-  // inside the debounce window it wrote a pattern that had not been run at all
-  // (#338). A timeout keeps it disabled: the pipeline would hit the same wall.
-  const matchBlock: string | null = !pattern || validationError
-    ? null
-    : match.pattern !== requestedPattern
-      ? 'Wait for the pattern to finish testing before adding it.'
-      : match.status === 'timeout'
-        ? 'This pattern timed out — it likely backtracks catastrophically. Simplify the pattern before adding it.'
-        : match.status === 'invalid'
-          ? "This pattern won't compile, so it can't be added."
-          : match.status !== 'ok' || match.inputs !== rawInputs
-            ? 'Wait for the pattern to finish testing before adding it.'
-            : null;
-  const matchBlockIsError = matchBlock !== null && match.pattern === requestedPattern
-    && (match.status === 'timeout' || match.status === 'invalid');
-  const classError = classNameError(className);
-  const canAdd = !!pattern && !validationError && matchBlock === null && classError === null;
-  const addDescribedBy = [matchBlock && matchBlockId, classError && classErrorId].filter(Boolean).join(' ') || undefined;
+  return { match, requestedPattern, rawInputs, status, refreshing, pageEntries, countExact, matchStats };
+}
 
-  /**
-   * Write the directive straight into props.conf (#88), closing the loop from
-   * experiment to config. The match statistics beside it are whole-dataset
-   * (#78), so what is being committed to is visible at the moment of the click
-   * rather than inferred from the current page.
-   */
-  const handleAddToProps = () => {
-    if (!canAdd) return;
-    applyDirective(`EXTRACT-${className}`, pattern);
-    setAdded(true);
-  };
+/**
+ * Why the pattern cannot be added yet, or null when it can.
+ *
+ * Adding needs a settled 'ok' run of exactly this pattern over exactly these
+ * events — the rule the Create EXTRACT dialog applies (#329). Gated only on
+ * compiling, the button wrote a pattern the tab was showing as too slow to
+ * evaluate (`(a|aa)+b`), so every pipeline run then hit the 5 s watchdog; and
+ * inside the debounce window it wrote a pattern that had not been run at all
+ * (#338). A timeout keeps it disabled: the pipeline would hit the same wall.
+ */
+function addBlockReason(
+  pattern: string,
+  validationError: string | null,
+  match: MatchState,
+  requestedPattern: string,
+  rawInputs: string[],
+): { reason: string | null; isError: boolean } {
+  if (!pattern || validationError) return { reason: null, isError: false };
+  const current = match.pattern === requestedPattern;
+  const isError = current && (match.status === 'timeout' || match.status === 'invalid');
+  if (current && match.status === 'timeout') {
+    return { reason: 'This pattern timed out — it likely backtracks catastrophically. Simplify the pattern before adding it.', isError };
+  }
+  if (current && match.status === 'invalid') {
+    return { reason: "This pattern won't compile, so it can't be added.", isError };
+  }
+  if (!current || match.status !== 'ok' || match.inputs !== rawInputs) {
+    return { reason: 'Wait for the pattern to finish testing before adding it.', isError };
+  }
+  return { reason: null, isError: false };
+}
 
-  const handleCopy = () => {
-    if (extractDirective) {
-      // Use the shared helper so copying still works in insecure contexts where
-      // navigator.clipboard is unavailable (it falls back to execCommand).
-      // Settled rather than voided: a rejected copy must not flip the label to
-      // "Copied!", and a floating rejection reaches the console (as CopyButton).
-      copyToClipboard(extractDirective).then(
-        () => setCopied(true),
-        () => {},
-      );
-    }
-  };
-
-  // The confirmation labels reset from effects rather than a bare setTimeout in
-  // the click handlers, so the timers are cleared if the tab unmounts first —
-  // switching sub-tab within 1.5 s of a click left them to fire into an
-  // unmounted component (#322).
+/**
+ * A confirmation flag that resets itself 1.5 s after it is raised. The reset
+ * runs from an effect rather than a bare setTimeout in the click handler, so
+ * the timer is cleared if the tab unmounts first — switching sub-tab within
+ * 1.5 s of a click left it to fire into an unmounted component (#322).
+ */
+function useFlashFlag(): [boolean, () => void] {
+  const [flag, setFlag] = useState(false);
   useEffect(() => {
-    if (!copied) return;
-    const t = setTimeout(() => setCopied(false), 1500);
+    if (!flag) return;
+    const t = setTimeout(() => setFlag(false), 1500);
     return () => clearTimeout(t);
-  }, [copied]);
+  }, [flag]);
+  return [flag, () => setFlag(true)];
+}
 
-  useEffect(() => {
-    if (!added) return;
-    const t = setTimeout(() => setAdded(false), 1500);
-    return () => clearTimeout(t);
-  }, [added]);
+export function RegexTab(props: RegexTabProps) {
+  const patternId = useId();
+  const [pattern, setPattern] = useState('');
+  const [className, setClassName] = useState('custom');
+  const copied = useFlashFlag();
+  const added = useFlashFlag();
+
+  // Compile-only validation (safe on the main thread — compiling can't backtrack),
+  // on the same PCRE2 the pipeline runs. Matching happens in the worker below.
+  const validationError = useMemo(() => {
+    if (!pattern) return null;
+    return validateRegex(pattern);
+  }, [pattern]);
+
+  // From the live pattern, like the directive below: the chips, the legend and
+  // the directive all describe what is typed. The cards that use the colour map
+  // render only once the match results belong to that same pattern (see
+  // `status` below), so a group's colour in a card always agrees with the
+  // legend beside it (#315).
+  const namedGroups = useMemo(() => extractNamedGroups(pattern), [pattern]);
+  const theme = useAppStore((s) => s.theme);
+  const groupColorMap = useMemo(() => buildGroupColorMap(namedGroups, theme), [namedGroups, theme]);
+
+  const results = useRegexResults(pattern, validationError, props);
+  const { status, refreshing, countExact, matchStats } = results;
+  const block = addBlockReason(pattern, validationError, results.match, results.requestedPattern, results.rawInputs);
+  const showGroups = namedGroups.length > 0 && !validationError;
 
   return (
     <div className="flex flex-col h-full">
@@ -344,7 +327,7 @@ export function RegexTab({ items, allEvents, currentPage, eventsPerPage }: Regex
           {pattern && !validationError && status === 'ok' && matchStats.total > 0 && (
             <span className="text-[10px] text-[var(--color-text-muted)] ml-auto">
               {matchStats.matched}/{matchStats.total} events matched
-              {refreshing && !countExact && ' \u00b7 updating\u2026'}
+              {refreshing && !countExact && ' · updating…'}
             </span>
           )}
         </div>
@@ -364,215 +347,328 @@ export function RegexTab({ items, allEvents, currentPage, eventsPerPage }: Regex
       </div>
 
       {/* Named capture groups */}
-      {namedGroups.length > 0 && !validationError && (
-        <div className="flex-shrink-0 px-3 py-1.5 border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
-          <div className="flex flex-wrap gap-1.5">
-            {namedGroups.map((name) => {
-              const color = groupColorMap.get(name)!;
-              return (
-                <span
-                  key={name}
-                  className="inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded"
-                  style={{ backgroundColor: color + '20', color, border: `1px solid ${color}40` }}
-                >
-                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
-                  {name}
-                </span>
-              );
-            })}
-          </div>
-        </div>
-      )}
+      {showGroups && <GroupChips namedGroups={namedGroups} groupColorMap={groupColorMap} />}
 
       {/* EXTRACT directive output */}
       {pattern && !validationError && (
-        <div className="flex-shrink-0 px-3 py-2 border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
-          <div className="flex items-center gap-1 mb-1">
-            <span className="text-xs text-[var(--color-text-muted)]">EXTRACT-</span>
-            <input
-              type="text"
-              aria-label="EXTRACT class name"
-              value={className}
-              onChange={(e) => setClassName(e.target.value.replace(/\s/g, '_'))}
-              aria-invalid={classError !== null}
-              aria-describedby={classError ? classErrorId : undefined}
-              className="px-1.5 py-0.5 text-xs font-mono rounded border border-[var(--color-border)] bg-[var(--color-bg-primary)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent)] w-32"
-              placeholder="classname"
-            />
-          </div>
-          {classError && (
-            <div id={classErrorId} className="mb-1 text-[10px] text-[var(--color-error)]">{classError}</div>
-          )}
-          <div className="flex items-center gap-2">
-            <code className="flex-1 text-xs font-mono px-2 py-1.5 rounded bg-[var(--color-bg-tertiary)] text-[var(--color-success)] break-all select-all">
-              {extractDirective}
-            </code>
-            <button
-              onClick={handleCopy}
-              className="flex-shrink-0 px-2 py-1 text-xs rounded border border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[var(--color-bg-tertiary)] transition-colors cursor-pointer"
-              title="Copy to clipboard"
-            >
-              {copied ? 'Copied!' : 'Copy'}
-            </button>
-            <button
-              onClick={handleAddToProps}
-              disabled={!canAdd}
-              aria-describedby={addDescribedBy}
-              className="flex-shrink-0 px-2 py-1 text-xs rounded border border-[var(--color-accent)] text-[var(--color-accent)] hover:bg-[var(--color-bg-tertiary)] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-              title={matchBlock ?? classError ?? `Upsert into [${stanza}] in props.conf`}
-            >
-              {added ? 'Added!' : 'Add to props.conf'}
-            </button>
-          </div>
-          {matchBlock && (
-            <p
-              id={matchBlockId}
-              className={`mt-1 text-[10px] ${matchBlockIsError ? 'text-[var(--color-error)]' : 'text-[var(--color-text-muted)]'}`}
-            >
-              {matchBlock}
-            </p>
-          )}
-          {/*
-            Say what the button is about to do to the metadata. Writing
-            [my:sourcetype] and silently repointing the event's sourcetype at it
-            is the right behaviour (#72) but a surprising one to discover after
-            the fact.
-          */}
-          {isPlaceholderStanza && (
-            <p className="mt-1 text-[10px] text-[var(--color-text-muted)]">
-              This event has no sourcetype. Adding writes <code>[{stanza}]</code> and sets the
-              event&apos;s sourcetype to match, so the stanza applies.
-            </p>
-          )}
-        </div>
+        <ExtractDirectivePanel
+          pattern={pattern}
+          className={className}
+          setClassName={setClassName}
+          block={block}
+          copied={copied}
+          added={added}
+        />
       )}
 
-      {/* Regex Reference (collapsible) */}
-      <div className="flex-shrink-0 border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
-        <button
-          onClick={() => setRefOpen(!refOpen)}
-          aria-expanded={refOpen}
-          className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-[var(--color-bg-tertiary)] transition-colors cursor-pointer text-left"
-        >
-          <svg
-            className="w-3 h-3 transition-transform flex-shrink-0"
-            style={{ color: 'var(--color-text-muted)', transform: refOpen ? 'rotate(90deg)' : 'rotate(0deg)' }}
-            fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-          </svg>
-          <span className="text-xs font-medium text-[var(--color-text-muted)]">Regex Reference</span>
-        </button>
-        {refOpen && (
-          <div className="px-3 pb-2">
-            <div className="relative mb-2">
-              <svg
-                className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 pointer-events-none"
-                style={{ color: 'var(--color-text-muted)' }}
-                fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-              <input
-                type="text"
-                aria-label="Search patterns"
-                placeholder="Search patterns..."
-                value={refSearch}
-                onChange={(e) => setRefSearch(e.target.value)}
-                className="w-full max-w-xs pl-6 pr-2 py-1 text-xs rounded border border-[var(--color-border)] bg-[var(--color-bg-primary)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent)]"
-              />
-            </div>
-            <div className="max-h-56 overflow-auto">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="text-left text-[10px] text-[var(--color-text-muted)] uppercase tracking-wider">
-                    <th className="pb-1 pr-3 font-medium">Pattern</th>
-                    <th className="pb-1 pr-3 font-medium">Description</th>
-                    <th className="pb-1 font-medium">Example</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredRef.map((cat) => (
-                    <RegexCategoryRows key={cat.name} category={cat} onInsert={(p) => setPattern((prev) => prev + p)} onReplace={(p) => setPattern(p)} />
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-      </div>
+      <RegexReference onInsert={(p) => setPattern((prev) => prev + p)} onReplace={(p) => setPattern(p)} />
 
       {/* Legend */}
-      {pattern && !validationError && namedGroups.length > 0 && (
-        <div className="flex-shrink-0 px-3 py-1.5 border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
-          <div className="flex items-center gap-4 text-[10px] flex-wrap">
-            <span className="flex items-center gap-1.5">
-              <span className="w-3 h-2 rounded-sm" style={{ backgroundColor: '#22c55e40', borderBottom: '2px solid #22c55e' }} />
-              <span className="text-[var(--color-text-muted)]">Full match</span>
-            </span>
-            {namedGroups.map((name) => {
-              const color = groupColorMap.get(name)!;
-              return (
-                <span key={name} className="flex items-center gap-1.5">
-                  <span className="w-3 h-2 rounded-sm" style={{ backgroundColor: color + '40', borderBottom: `2px solid ${color}` }} />
-                  <span className="text-[var(--color-text-muted)]">{name}</span>
-                </span>
-              );
-            })}
-          </div>
-        </div>
-      )}
+      {pattern && showGroups && <GroupLegend namedGroups={namedGroups} groupColorMap={groupColorMap} />}
 
       {/* Event cards */}
       <div className="flex-1 overflow-auto p-3 space-y-3" aria-busy={refreshing}>
-        {validationError ? (
-          <div className="flex items-center justify-center py-12 text-[var(--color-error)] text-sm">
-            Fix the regex error above to see matches
-          </div>
-        ) : !pattern ? (
-          <div className="flex items-center justify-center py-12 text-[var(--color-text-muted)] text-sm">
-            Enter a pattern above to test matches against your events
-          </div>
-        ) : status === 'timeout' ? (
-          <div className="flex flex-col items-center justify-center gap-1 py-12 text-[var(--color-error)] text-sm text-center px-4">
-            <span className="font-medium">This pattern is too slow to evaluate and was stopped.</span>
-            <span className="text-[var(--color-text-muted)] text-xs">
-              It backtracks heavily across many events. Simplify it — e.g. avoid nested or overlapping quantifiers.
-            </span>
-          </div>
-        ) : status === 'pending' ? (
-          <div className="flex items-center justify-center py-12 text-[var(--color-text-muted)] text-sm">
-            Testing pattern…
-          </div>
-        ) : matchedPageItems.length === 0 ? (
-          <div className="flex items-center justify-center py-12 text-[var(--color-text-muted)] text-sm">
-            {untestedOnPage > 0
-              ? 'Testing pattern…'
-              : matchStats.matched > 0
-                ? `No events matched on this page — ${matchStats.matched} matched elsewhere in the dataset`
-                : 'No events matched'}
-          </div>
-        ) : (
-          <>
-            {matchedPageItems.map(({ raw, datasetIdx, info }) => (
-              <RegexEventCard
-                key={datasetIdx}
-                raw={raw}
-                globalIdx={datasetIdx + 1}
-                hasPattern={!!pattern}
-                matchInfo={info ?? null}
-                groupColorMap={groupColorMap}
-              />
-            ))}
-            {untestedOnPage > 0 && (
-              <p className="text-xs text-[var(--color-text-muted)]">
-                Testing {untestedOnPage} more event{untestedOnPage !== 1 ? 's' : ''} on this page…
-              </p>
-            )}
-          </>
-        )}
+        <RegexResults
+          pattern={pattern}
+          validationError={validationError}
+          status={status}
+          pageEntries={results.pageEntries}
+          matchedElsewhere={matchStats.matched}
+          groupColorMap={groupColorMap}
+        />
       </div>
     </div>
+  );
+}
+
+function GroupChips({ namedGroups, groupColorMap }: { namedGroups: string[]; groupColorMap: Map<string, string> }) {
+  return (
+    <div className="flex-shrink-0 px-3 py-1.5 border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
+      <div className="flex flex-wrap gap-1.5">
+        {namedGroups.map((name) => {
+          const color = groupColorMap.get(name) ?? '';
+          return (
+            <span
+              key={name}
+              className="inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded"
+              style={{ backgroundColor: color + '20', color, border: `1px solid ${color}40` }}
+            >
+              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
+              {name}
+            </span>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function GroupLegend({ namedGroups, groupColorMap }: { namedGroups: string[]; groupColorMap: Map<string, string> }) {
+  return (
+    <div className="flex-shrink-0 px-3 py-1.5 border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
+      <div className="flex items-center gap-4 text-[10px] flex-wrap">
+        <span className="flex items-center gap-1.5">
+          <span className="w-3 h-2 rounded-sm" style={{ backgroundColor: '#22c55e40', borderBottom: '2px solid #22c55e' }} />
+          <span className="text-[var(--color-text-muted)]">Full match</span>
+        </span>
+        {namedGroups.map((name) => {
+          const color = groupColorMap.get(name) ?? '';
+          return (
+            <span key={name} className="flex items-center gap-1.5">
+              <span className="w-3 h-2 rounded-sm" style={{ backgroundColor: color + '40', borderBottom: `2px solid ${color}` }} />
+              <span className="text-[var(--color-text-muted)]">{name}</span>
+            </span>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/** The EXTRACT directive the pattern makes, with copy and add-to-props.conf. */
+function ExtractDirectivePanel({
+  pattern, className, setClassName, block, copied: [copied, flashCopied], added: [added, flashAdded],
+}: {
+  pattern: string;
+  className: string;
+  setClassName: (value: string) => void;
+  block: { reason: string | null; isError: boolean };
+  /** The "Copied!" / "Added!" confirmations, owned by the tab so they outlive this panel. */
+  copied: [boolean, () => void];
+  added: [boolean, () => void];
+}) {
+  const matchBlockId = useId();
+  const classErrorId = useId();
+  const { stanza, isPlaceholderStanza, apply: applyDirective } = useApplyDirective();
+
+  const extractDirective = `EXTRACT-${className} = ${pattern}`;
+  const matchBlock = block.reason;
+  const classError = classNameError(className);
+  const canAdd = matchBlock === null && classError === null;
+  const addDescribedBy = [matchBlock && matchBlockId, classError && classErrorId].filter(Boolean).join(' ') || undefined;
+
+  /**
+   * Write the directive straight into props.conf (#88), closing the loop from
+   * experiment to config. The match statistics beside it are whole-dataset
+   * (#78), so what is being committed to is visible at the moment of the click
+   * rather than inferred from the current page.
+   */
+  const handleAddToProps = () => {
+    if (!canAdd) return;
+    applyDirective(`EXTRACT-${className}`, pattern);
+    flashAdded();
+  };
+
+  // Use the shared helper so copying still works in insecure contexts where
+  // navigator.clipboard is unavailable (it falls back to execCommand).
+  // Settled rather than voided: a rejected copy must not flip the label to
+  // "Copied!", and a floating rejection reaches the console (as CopyButton).
+  const handleCopy = () => {
+    copyToClipboard(extractDirective).then(flashCopied, () => {});
+  };
+
+  return (
+    <div className="flex-shrink-0 px-3 py-2 border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
+      <div className="flex items-center gap-1 mb-1">
+        <span className="text-xs text-[var(--color-text-muted)]">EXTRACT-</span>
+        <input
+          type="text"
+          aria-label="EXTRACT class name"
+          value={className}
+          onChange={(e) => setClassName(e.target.value.replace(/\s/g, '_'))}
+          aria-invalid={classError !== null}
+          aria-describedby={classError ? classErrorId : undefined}
+          className="px-1.5 py-0.5 text-xs font-mono rounded border border-[var(--color-border)] bg-[var(--color-bg-primary)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent)] w-32"
+          placeholder="classname"
+        />
+      </div>
+      {classError && (
+        <div id={classErrorId} className="mb-1 text-[10px] text-[var(--color-error)]">{classError}</div>
+      )}
+      <div className="flex items-center gap-2">
+        <code className="flex-1 text-xs font-mono px-2 py-1.5 rounded bg-[var(--color-bg-tertiary)] text-[var(--color-success)] break-all select-all">
+          {extractDirective}
+        </code>
+        <button
+          onClick={handleCopy}
+          className="flex-shrink-0 px-2 py-1 text-xs rounded border border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[var(--color-bg-tertiary)] transition-colors cursor-pointer"
+          title="Copy to clipboard"
+        >
+          {copied ? 'Copied!' : 'Copy'}
+        </button>
+        <button
+          onClick={handleAddToProps}
+          disabled={!canAdd}
+          aria-describedby={addDescribedBy}
+          className="flex-shrink-0 px-2 py-1 text-xs rounded border border-[var(--color-accent)] text-[var(--color-accent)] hover:bg-[var(--color-bg-tertiary)] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+          title={matchBlock ?? classError ?? `Upsert into [${stanza}] in props.conf`}
+        >
+          {added ? 'Added!' : 'Add to props.conf'}
+        </button>
+      </div>
+      {matchBlock && (
+        <p
+          id={matchBlockId}
+          className={`mt-1 text-[10px] ${block.isError ? 'text-[var(--color-error)]' : 'text-[var(--color-text-muted)]'}`}
+        >
+          {matchBlock}
+        </p>
+      )}
+      {/*
+        Say what the button is about to do to the metadata. Writing
+        [my:sourcetype] and silently repointing the event's sourcetype at it
+        is the right behaviour (#72) but a surprising one to discover after
+        the fact.
+      */}
+      {isPlaceholderStanza && (
+        <p className="mt-1 text-[10px] text-[var(--color-text-muted)]">
+          This event has no sourcetype. Adding writes <code>[{stanza}]</code> and sets the
+          event&apos;s sourcetype to match, so the stanza applies.
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** Regex Reference (collapsible). */
+function RegexReference({ onInsert, onReplace }: { onInsert: (pattern: string) => void; onReplace: (pattern: string) => void }) {
+  const [refOpen, setRefOpen] = useState(false);
+  const [refSearch, setRefSearch] = useState('');
+
+  const filteredRef = useMemo(() => {
+    if (!refSearch) return REGEX_REFERENCE;
+    const lower = refSearch.toLowerCase();
+    return REGEX_REFERENCE.map((cat) => ({
+      ...cat,
+      directives: cat.directives.filter(
+        (d) =>
+          d.pattern.toLowerCase().includes(lower) ||
+          d.description.toLowerCase().includes(lower) ||
+          d.example.toLowerCase().includes(lower),
+      ),
+    })).filter((cat) => cat.directives.length > 0);
+  }, [refSearch]);
+
+  return (
+    <div className="flex-shrink-0 border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
+      <button
+        onClick={() => setRefOpen(!refOpen)}
+        aria-expanded={refOpen}
+        className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-[var(--color-bg-tertiary)] transition-colors cursor-pointer text-left"
+      >
+        <svg
+          className="w-3 h-3 transition-transform flex-shrink-0"
+          style={{ color: 'var(--color-text-muted)', transform: refOpen ? 'rotate(90deg)' : 'rotate(0deg)' }}
+          fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+        </svg>
+        <span className="text-xs font-medium text-[var(--color-text-muted)]">Regex Reference</span>
+      </button>
+      {refOpen && (
+        <div className="px-3 pb-2">
+          <div className="relative mb-2">
+            <svg
+              className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 pointer-events-none"
+              style={{ color: 'var(--color-text-muted)' }}
+              fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input
+              type="text"
+              aria-label="Search patterns"
+              placeholder="Search patterns..."
+              value={refSearch}
+              onChange={(e) => setRefSearch(e.target.value)}
+              className="w-full max-w-xs pl-6 pr-2 py-1 text-xs rounded border border-[var(--color-border)] bg-[var(--color-bg-primary)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent)]"
+            />
+          </div>
+          <div className="max-h-56 overflow-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-left text-[10px] text-[var(--color-text-muted)] uppercase tracking-wider">
+                  <th className="pb-1 pr-3 font-medium">Pattern</th>
+                  <th className="pb-1 pr-3 font-medium">Description</th>
+                  <th className="pb-1 font-medium">Example</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredRef.map((cat) => (
+                  <RegexCategoryRows key={cat.name} category={cat} onInsert={onInsert} onReplace={onReplace} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CenteredNote({ tone = 'muted', children }: { tone?: 'muted' | 'error'; children: React.ReactNode }) {
+  return (
+    <div className={`flex items-center justify-center py-12 text-sm ${tone === 'error' ? 'text-[var(--color-error)]' : 'text-[var(--color-text-muted)]'}`}>
+      {children}
+    </div>
+  );
+}
+
+/** The event cards, or why there are none to show. */
+function RegexResults({ pattern, validationError, status, pageEntries, matchedElsewhere, groupColorMap }: {
+  pattern: string;
+  validationError: string | null;
+  status: string;
+  pageEntries: PageEntry[];
+  /** Events matched across the whole dataset. */
+  matchedElsewhere: number;
+  groupColorMap: Map<string, string>;
+}) {
+  if (validationError) return <CenteredNote tone="error">Fix the regex error above to see matches</CenteredNote>;
+  if (!pattern) return <CenteredNote>Enter a pattern above to test matches against your events</CenteredNote>;
+  if (status === 'timeout') {
+    return (
+      <div className="flex flex-col items-center justify-center gap-1 py-12 text-[var(--color-error)] text-sm text-center px-4">
+        <span className="font-medium">This pattern is too slow to evaluate and was stopped.</span>
+        <span className="text-[var(--color-text-muted)] text-xs">
+          It backtracks heavily across many events. Simplify it — e.g. avoid nested or overlapping quantifiers.
+        </span>
+      </div>
+    );
+  }
+  if (status === 'pending') return <CenteredNote>Testing pattern…</CenteredNote>;
+
+  const matchedPageItems = pageEntries.filter((e) => e.info != null);
+  const untestedOnPage = pageEntries.filter((e) => e.info === undefined).length;
+  if (matchedPageItems.length === 0) {
+    return (
+      <CenteredNote>
+        {untestedOnPage > 0
+          ? 'Testing pattern…'
+          : matchedElsewhere > 0
+            ? `No events matched on this page — ${matchedElsewhere} matched elsewhere in the dataset`
+            : 'No events matched'}
+      </CenteredNote>
+    );
+  }
+  return (
+    <>
+      {matchedPageItems.map(({ raw, datasetIdx, info }) => (
+        <RegexEventCard
+          key={datasetIdx}
+          raw={raw}
+          globalIdx={datasetIdx + 1}
+          hasPattern={!!pattern}
+          matchInfo={info ?? null}
+          groupColorMap={groupColorMap}
+        />
+      ))}
+      {untestedOnPage > 0 && (
+        <p className="text-xs text-[var(--color-text-muted)]">
+          Testing {untestedOnPage} more event{untestedOnPage !== 1 ? 's' : ''} on this page…
+        </p>
+      )}
+    </>
   );
 }
 
@@ -709,6 +805,110 @@ function RegexEventCard({
 
 // ─── Highlighted Raw ─────────────────────────────────────────────────────────
 
+const MATCH_TEXT_STYLE = { backgroundColor: '#22c55e20', borderBottom: '2px solid #22c55e' };
+
+/**
+ * The full match's spans: each named group in its colour, and the match text
+ * between groups underlined in green.
+ */
+function groupSpans(
+  raw: string,
+  matchInfo: RegexMatchInfo,
+  groupIndices: NonNullable<RegexMatchInfo['groupSpans']>,
+  groupColorMap: Map<string, string>,
+): React.ReactNode[] {
+  const fullMatchStart = matchInfo.index;
+  const fullMatchEnd = matchInfo.index + matchInfo.match.length;
+  const result: React.ReactNode[] = [];
+  const groupHighlights: { start: number; end: number; name: string; color: string }[] = [];
+
+  for (const [name, range] of Object.entries(groupIndices)) {
+    if (!range) continue;
+    const color = groupColorMap.get(name) ?? 'var(--color-text-primary)';
+    groupHighlights.push({ start: range[0], end: range[1], name, color });
+  }
+
+  groupHighlights.sort((a, b) => a.start - b.start);
+
+  let cursor = fullMatchStart;
+  for (const gh of groupHighlights) {
+    if (gh.start < cursor) continue;
+    // Non-group text within the match
+    if (gh.start > cursor) {
+      result.push(
+        <span key={`mid-${cursor}`} style={MATCH_TEXT_STYLE} className="rounded-sm">
+          {raw.substring(cursor, gh.start)}
+        </span>,
+      );
+    }
+    // Group text
+    result.push(
+      <span
+        key={`grp-${gh.name}`}
+        style={{ backgroundColor: gh.color + '30', borderBottom: `2px solid ${gh.color}`, color: gh.color }}
+        className="rounded-sm px-0.5"
+        title={`${gh.name}: ${raw.substring(gh.start, gh.end)}`}
+      >
+        {raw.substring(gh.start, gh.end)}
+      </span>,
+    );
+    cursor = gh.end;
+  }
+  // Remaining match text after last group
+  if (cursor < fullMatchEnd) {
+    result.push(
+      <span key={`mid-${cursor}`} style={MATCH_TEXT_STYLE} className="rounded-sm">
+        {raw.substring(cursor, fullMatchEnd)}
+      </span>,
+    );
+  }
+  return result;
+}
+
+/** `raw` as spans: the text around the match muted, the match highlighted. */
+function matchSegments(raw: string, matchInfo: RegexMatchInfo, groupColorMap: Map<string, string>): React.ReactNode[] {
+  const fullMatchStart = matchInfo.index;
+  const fullMatchEnd = matchInfo.index + matchInfo.match.length;
+  const result: React.ReactNode[] = [];
+
+  // Text before match
+  if (fullMatchStart > 0) {
+    result.push(
+      <span key="pre" className="text-[var(--color-text-muted)]">
+        {raw.substring(0, fullMatchStart)}
+      </span>,
+    );
+  }
+
+  // Build sub-highlights for named groups using their captured spans.
+  const groupIndices = matchInfo.groupSpans;
+  if (groupIndices && Object.keys(groupIndices).length > 0) {
+    result.push(...groupSpans(raw, matchInfo, groupIndices, groupColorMap));
+  } else {
+    // No named groups or no indices -- highlight full match in green
+    result.push(
+      <span
+        key="match"
+        style={{ backgroundColor: '#22c55e35', borderBottom: '2px solid #22c55e' }}
+        className="rounded-sm px-0.5"
+      >
+        {raw.substring(fullMatchStart, fullMatchEnd)}
+      </span>,
+    );
+  }
+
+  // Text after match
+  if (fullMatchEnd < raw.length) {
+    result.push(
+      <span key="post" className="text-[var(--color-text-muted)]">
+        {raw.substring(fullMatchEnd)}
+      </span>,
+    );
+  }
+
+  return result;
+}
+
 function RegexHighlightedRaw({
   raw,
   matchInfo,
@@ -718,100 +918,10 @@ function RegexHighlightedRaw({
   matchInfo: RegexMatchInfo | null;
   groupColorMap: Map<string, string>;
 }) {
-  const segments = useMemo(() => {
-    if (!matchInfo) return null;
-
-    const fullMatchStart = matchInfo.index;
-    const fullMatchEnd = matchInfo.index + matchInfo.match.length;
-    const result: React.ReactNode[] = [];
-
-    // Text before match
-    if (fullMatchStart > 0) {
-      result.push(
-        <span key="pre" className="text-[var(--color-text-muted)]">
-          {raw.substring(0, fullMatchStart)}
-        </span>,
-      );
-    }
-
-    // Build sub-highlights for named groups using their captured spans.
-    const groupIndices = matchInfo.groupSpans;
-
-    if (groupIndices && Object.keys(groupIndices).length > 0) {
-      const groupHighlights: { start: number; end: number; name: string; color: string }[] = [];
-
-      for (const [name, range] of Object.entries(groupIndices)) {
-        if (!range) continue;
-        const color = groupColorMap.get(name) ?? 'var(--color-text-primary)';
-        groupHighlights.push({ start: range[0], end: range[1], name, color });
-      }
-
-      groupHighlights.sort((a, b) => a.start - b.start);
-
-      let cursor = fullMatchStart;
-      for (const gh of groupHighlights) {
-        if (gh.start < cursor) continue;
-        // Non-group text within the match
-        if (gh.start > cursor) {
-          result.push(
-            <span
-              key={`mid-${cursor}`}
-              style={{ backgroundColor: '#22c55e20', borderBottom: '2px solid #22c55e' }}
-              className="rounded-sm"
-            >
-              {raw.substring(cursor, gh.start)}
-            </span>,
-          );
-        }
-        // Group text
-        result.push(
-          <span
-            key={`grp-${gh.name}`}
-            style={{ backgroundColor: gh.color + '30', borderBottom: `2px solid ${gh.color}`, color: gh.color }}
-            className="rounded-sm px-0.5"
-            title={`${gh.name}: ${raw.substring(gh.start, gh.end)}`}
-          >
-            {raw.substring(gh.start, gh.end)}
-          </span>,
-        );
-        cursor = gh.end;
-      }
-      // Remaining match text after last group
-      if (cursor < fullMatchEnd) {
-        result.push(
-          <span
-            key={`mid-${cursor}`}
-            style={{ backgroundColor: '#22c55e20', borderBottom: '2px solid #22c55e' }}
-            className="rounded-sm"
-          >
-            {raw.substring(cursor, fullMatchEnd)}
-          </span>,
-        );
-      }
-    } else {
-      // No named groups or no indices -- highlight full match in green
-      result.push(
-        <span
-          key="match"
-          style={{ backgroundColor: '#22c55e35', borderBottom: '2px solid #22c55e' }}
-          className="rounded-sm px-0.5"
-        >
-          {raw.substring(fullMatchStart, fullMatchEnd)}
-        </span>,
-      );
-    }
-
-    // Text after match
-    if (fullMatchEnd < raw.length) {
-      result.push(
-        <span key="post" className="text-[var(--color-text-muted)]">
-          {raw.substring(fullMatchEnd)}
-        </span>,
-      );
-    }
-
-    return result;
-  }, [raw, matchInfo, groupColorMap]);
+  const segments = useMemo(
+    () => (matchInfo ? matchSegments(raw, matchInfo, groupColorMap) : null),
+    [raw, matchInfo, groupColorMap],
+  );
 
   if (!segments) {
     return <span className="text-[var(--color-text-secondary)]">{raw}</span>;

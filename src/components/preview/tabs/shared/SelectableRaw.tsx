@@ -3,6 +3,7 @@ import type {
   ClipboardEvent as ReactClipboardEvent,
   KeyboardEvent as ReactKeyboardEvent,
   MouseEvent as ReactMouseEvent,
+  RefObject,
 } from 'react';
 import { tokenizeRaw, type RawSegment } from './tokenizeRaw';
 
@@ -45,6 +46,109 @@ function offsetFromPoint(container: HTMLElement, x: number, y: number): number |
   }
   if (!node || !container.contains(node)) return null;
   return charOffset(container, node, off);
+}
+
+/** The selection covering every token that [lo, hi) touches, or null if it touches none. */
+function snapToTokens(segments: RawSegment[], lo: number, hi: number): RawSelection | null {
+  let start = lo;
+  let end = hi;
+  let touched = false;
+  for (const s of segments) {
+    if (s.selectable && s.start < hi && s.end > lo) {
+      start = Math.min(start, s.start);
+      end = Math.max(end, s.end);
+      touched = true;
+    }
+  }
+  return touched ? { start, end } : null;
+}
+
+/** A click (no drag) at `anchor`: select, toggle off, or shift-extend to the token under it. */
+function clickSelection(
+  segments: RawSegment[],
+  sel: RawSelection | null,
+  anchor: number,
+  shiftKey: boolean,
+): RawSelection | null {
+  const seg = segments.find((s) => s.selectable && anchor >= s.start && anchor < s.end);
+  if (!seg) return null;
+  if (shiftKey && sel) return { start: Math.min(sel.start, seg.start), end: Math.max(sel.end, seg.end) };
+  if (sel && sel.start === seg.start && sel.end === seg.end) return null;
+  return { start: seg.start, end: seg.end };
+}
+
+const NAV_KEYS = new Set(['ArrowRight', 'End', 'ArrowLeft', 'Home']);
+
+/** The token a navigation key moves the selection to. */
+function keyTarget(key: string, tokens: RawSegment[], selection: RawSelection | null): RawSegment | undefined {
+  const forward = key === 'ArrowRight' || key === 'End';
+  if (key === 'Home') return tokens[0];
+  if (key === 'End') return tokens[tokens.length - 1];
+  if (!selection) return forward ? tokens[0] : tokens[tokens.length - 1];
+  if (forward) return tokens.find((t) => t.start >= selection.end) ?? tokens[tokens.length - 1];
+  return [...tokens].reverse().find((t) => t.end <= selection.start) ?? tokens[0];
+}
+
+/** What a drag in progress reads: the props of the latest render. */
+interface LatestSelectionProps {
+  selection: RawSelection | null;
+  segments: RawSegment[];
+  onChange: (sel: RawSelection | null) => void;
+}
+
+/**
+ * The mouse half of token selection: a click selects, toggles or shift-extends
+ * the token under it, and a drag selects every token it crosses, live.
+ */
+function useTokenDrag(
+  containerRef: RefObject<HTMLSpanElement | null>,
+  latest: RefObject<LatestSelectionProps>,
+): (e: ReactMouseEvent<HTMLSpanElement>) => void {
+  // Removes the in-flight drag's listeners. Held so an unmount mid-drag (a
+  // page change, a filter, the event disappearing) can detach them; otherwise
+  // they stayed on window and called onChange on an unmounted row.
+  const endDragRef = useRef<(() => void) | null>(null);
+  useEffect(() => () => endDragRef.current?.(), []);
+
+  return (e: ReactMouseEvent<HTMLSpanElement>) => {
+    if (e.button !== 0) return; // ignore right/middle — right-click opens the menu
+    const container = containerRef.current;
+    if (!container) return;
+    const anchor = offsetFromPoint(container, e.clientX, e.clientY);
+    if (anchor == null) return;
+    e.preventDefault(); // no native caret/selection
+    // preventDefault also cancels the focus a mousedown would give, which would
+    // leave a mouse-made selection unreachable to the keys above.
+    container.focus({ preventScroll: true });
+
+    endDragRef.current?.();
+    let moved = false;
+    const move = (ev: MouseEvent) => {
+      const cur = offsetFromPoint(container, ev.clientX, ev.clientY);
+      if (cur == null) return;
+      const lo = Math.min(anchor, cur);
+      const hi = Math.max(anchor, cur);
+      if (hi > lo) {
+        moved = true;
+        latest.current.onChange(snapToTokens(latest.current.segments, lo, hi));
+      }
+    };
+    const up = (ev: MouseEvent) => {
+      endDrag();
+      if (moved) return; // a drag was already applied live in `move`
+      // No drag → treat as a click: select / toggle / extend the token under it.
+      const { selection: sel, segments: segs, onChange: emit } = latest.current;
+      emit(clickSelection(segs, sel, anchor, ev.shiftKey));
+    };
+    const endDrag = () => {
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', up);
+      endDragRef.current = null;
+    };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
+    endDragRef.current = endDrag;
+  };
 }
 
 /**
@@ -90,73 +194,7 @@ export function SelectableRaw({
     latest.current = { selection, segments, onChange };
   });
 
-  // Removes the in-flight drag's listeners. Held so an unmount mid-drag (a
-  // page change, a filter, the event disappearing) can detach them; otherwise
-  // they stayed on window and called onChange on an unmounted row.
-  const endDragRef = useRef<(() => void) | null>(null);
-  useEffect(() => () => endDragRef.current?.(), []);
-
-  const snapToTokens = (lo: number, hi: number): RawSelection | null => {
-    let start = lo;
-    let end = hi;
-    let touched = false;
-    for (const s of latest.current.segments) {
-      if (s.selectable && s.start < hi && s.end > lo) {
-        start = Math.min(start, s.start);
-        end = Math.max(end, s.end);
-        touched = true;
-      }
-    }
-    return touched ? { start, end } : null;
-  };
-
-  const onMouseDown = (e: ReactMouseEvent<HTMLSpanElement>) => {
-    if (e.button !== 0) return; // ignore right/middle — right-click opens the menu
-    const container = containerRef.current;
-    if (!container) return;
-    const anchor = offsetFromPoint(container, e.clientX, e.clientY);
-    if (anchor == null) return;
-    e.preventDefault(); // no native caret/selection
-    // preventDefault also cancels the focus a mousedown would give, which would
-    // leave a mouse-made selection unreachable to the keys above.
-    container.focus({ preventScroll: true });
-
-    endDragRef.current?.();
-    let moved = false;
-    const move = (ev: MouseEvent) => {
-      const cur = offsetFromPoint(container, ev.clientX, ev.clientY);
-      if (cur == null) return;
-      const lo = Math.min(anchor, cur);
-      const hi = Math.max(anchor, cur);
-      if (hi > lo) {
-        moved = true;
-        latest.current.onChange(snapToTokens(lo, hi));
-      }
-    };
-    const up = (ev: MouseEvent) => {
-      endDrag();
-      if (moved) return; // a drag was already applied live in `move`
-      // No drag → treat as a click: select / toggle / extend the token under it.
-      const { selection: sel, segments: segs, onChange: emit } = latest.current;
-      const seg = segs.find((s) => s.selectable && anchor >= s.start && anchor < s.end);
-      if (!seg) { emit(null); return; }
-      if (ev.shiftKey && sel) {
-        emit({ start: Math.min(sel.start, seg.start), end: Math.max(sel.end, seg.end) });
-      } else if (sel && sel.start === seg.start && sel.end === seg.end) {
-        emit(null);
-      } else {
-        emit({ start: seg.start, end: seg.end });
-      }
-    };
-    const endDrag = () => {
-      window.removeEventListener('mousemove', move);
-      window.removeEventListener('mouseup', up);
-      endDragRef.current = null;
-    };
-    window.addEventListener('mousemove', move);
-    window.addEventListener('mouseup', up);
-    endDragRef.current = endDrag;
-  };
+  const onMouseDown = useTokenDrag(containerRef, latest);
 
   const onKeyDown = (e: ReactKeyboardEvent<HTMLSpanElement>) => {
     if (tokens.length === 0) return;
@@ -164,17 +202,9 @@ export function SelectableRaw({
       if (selection) { e.preventDefault(); onChange(null); }
       return;
     }
-    const forward = e.key === 'ArrowRight' || e.key === 'End';
-    const backward = e.key === 'ArrowLeft' || e.key === 'Home';
-    if (!forward && !backward) return;
+    if (!NAV_KEYS.has(e.key)) return;
     e.preventDefault();
-
-    let target: RawSegment | undefined;
-    if (e.key === 'Home') target = tokens[0];
-    else if (e.key === 'End') target = tokens[tokens.length - 1];
-    else if (!selection) target = forward ? tokens[0] : tokens[tokens.length - 1];
-    else if (forward) target = tokens.find((t) => t.start >= selection.end) ?? tokens[tokens.length - 1];
-    else target = [...tokens].reverse().find((t) => t.end <= selection.start) ?? tokens[0];
+    const target = keyTarget(e.key, tokens, selection);
     if (!target) return;
 
     if (e.shiftKey && selection) {
@@ -209,21 +239,7 @@ export function SelectableRaw({
         onKeyDown={onKeyDown}
         onCopy={onCopy}
       >
-        {segments.map((seg) => {
-          const selected = selection != null && seg.start >= selection.start && seg.end <= selection.end;
-          if (!seg.selectable) {
-            return <span key={seg.start} style={selected ? SELECTED_STYLE : undefined}>{seg.text}</span>;
-          }
-          return (
-            <span
-              key={seg.start}
-              className={`cursor-pointer rounded-sm ${selected ? '' : 'hover:bg-[var(--color-bg-tertiary)]'}`}
-              style={selected ? SELECTED_STYLE : undefined}
-            >
-              {seg.text}
-            </span>
-          );
-        })}
+        <RawSegments segments={segments} selection={selection} />
       </span>
       {/* The highlight is a background colour, which a screen reader cannot
           see; this says what the arrow keys just selected. */}
@@ -235,6 +251,28 @@ export function SelectableRaw({
       <span className="sr-only" aria-live="polite">
         {selectedText ? `Selected: ${selectedText}` : ''}
       </span>
+    </>
+  );
+}
+
+function RawSegments({ segments, selection }: { segments: RawSegment[]; selection: RawSelection | null }) {
+  return (
+    <>
+  {segments.map((seg) => {
+    const selected = selection != null && seg.start >= selection.start && seg.end <= selection.end;
+    if (!seg.selectable) {
+      return <span key={seg.start} style={selected ? SELECTED_STYLE : undefined}>{seg.text}</span>;
+    }
+    return (
+      <span
+        key={seg.start}
+        className={`cursor-pointer rounded-sm ${selected ? '' : 'hover:bg-[var(--color-bg-tertiary)]'}`}
+        style={selected ? SELECTED_STYLE : undefined}
+      >
+        {seg.text}
+      </span>
+    );
+  })}
     </>
   );
 }

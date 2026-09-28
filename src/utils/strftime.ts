@@ -597,23 +597,15 @@ const DATE_CAPTURES: ReadonlySet<string> = new Set(['month', 'monthName', 'day',
 const YEARLESS_FUTURE_TOLERANCE_MS = 2 * 86_400_000;
 
 /**
- * The body of {@link parseTimestampDetailed}, with the year a yearless format
- * takes passed in.
+ * The components a format captured from `text`, by capture name, or null
+ * when the format does not match.
  */
-function assembleTimestamp(
-  text: string,
-  format: string,
-  options: ParseTimestampOptions,
-  yearForYearless: number,
-): ParsedTimestamp | null {
-  const { tz, onUnresolvedTz, tzAlias, dateForDateless } = options;
+function captureBag(text: string, format: string): Record<string, string> | null {
   const { regex, captures } = tokenise(format);
   const match = text.match(regex);
   if (!match) {
     return null;
   }
-
-  // Build a bag of parsed components.
   const bag: Record<string, string> = {};
   for (const [i, captureName] of captures.entries()) {
     const value = match[i + 1];
@@ -621,123 +613,106 @@ function assembleTimestamp(
       bag[captureName] = value.trim();
     }
   }
+  return bag;
+}
 
-  // Subsecond digits captured by %3N/%6N/%9N, the %Q family, or %f, converted
-  // to whole milliseconds. Shared by the epoch and calendar paths.
-  const subMilliseconds = computeSubMilliseconds(bag);
+function isLeap(year: number): boolean {
+  return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+}
 
-  // -----------------------------------------------------------------------
-  // Handle epoch seconds / milliseconds directly
-  // -----------------------------------------------------------------------
-  if (bag.epoch) {
-    const epochNum = parseInt(bag.epoch, 10);
-    // If the value is 13 digits it is already milliseconds; a captured
-    // subsecond field would be below ms resolution, so leave it as-is.
-    // Seconds since epoch: fold in any subseconds from e.g. `%s%3N`/`%s%3Q`.
-    const ms = bag.epoch.length >= 13 ? epochNum : epochNum * 1000 + subMilliseconds;
-    // An epoch is an absolute instant, so its wall clock is UTC by definition.
-    return { date: new Date(ms), wallAsUtcMs: ms, offsetMinutes: 0, hasDate: true };
-  }
+function monthLengths(year: number): number[] {
+  return [31, isLeap(year) ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+}
 
-  // A weekday alone (%a) does not name a date, so it does not count.
-  const hasDate = [bag.year4, bag.year2, bag.month, bag.monthName, bag.day, bag.dayOfYear]
-    .some((v) => v !== undefined);
-  const suppliedDate = hasDate ? undefined : dateForDateless;
-
-  // -----------------------------------------------------------------------
-  // Assemble date components
-  // -----------------------------------------------------------------------
-  let year: number;
-  if (suppliedDate) {
-    year = suppliedDate.year;
-  } else if (bag.year4) {
-    year = parseInt(bag.year4, 10);
-  } else if (bag.year2) {
+function resolveYear(bag: Record<string, string>, supplied: CalendarDate | undefined, yearForYearless: number): number {
+  if (supplied) return supplied.year;
+  if (bag.year4) return parseInt(bag.year4, 10);
+  if (bag.year2) {
     const y2 = parseInt(bag.year2, 10);
     // POSIX %y pivot: 69-99 → 1969-1999, 00-68 → 2000-2068.
-    year = y2 >= 69 ? 1900 + y2 : 2000 + y2;
-  } else {
-    // No year in the format: the caller decides which (see parseTimestampDetailed).
-    year = yearForYearless;
+    return y2 >= 69 ? 1900 + y2 : 2000 + y2;
   }
+  // No year in the format: the caller decides which (see parseTimestampDetailed).
+  return yearForYearless;
+}
 
-  let month: number; // 0-indexed
-  if (suppliedDate) {
-    month = suppliedDate.month;
-  } else if (bag.month) {
-    month = parseInt(bag.month, 10) - 1;
-  } else if (bag.monthName) {
+/** The 0-indexed month. */
+function resolveMonth(bag: Record<string, string>, supplied: CalendarDate | undefined): number {
+  if (supplied) return supplied.month;
+  if (bag.month) return parseInt(bag.month, 10) - 1;
+  if (bag.monthName) {
     // Full or abbreviated: every full name starts with its abbreviation.
     const abbr = bag.monthName.slice(0, 3).toLowerCase();
-    month = MONTH_NAMES_ABBR.findIndex((m) => m.toLowerCase() === abbr);
-    if (month === -1) month = 0;
-  } else {
-    month = 0;
+    const month = MONTH_NAMES_ABBR.findIndex((m) => m.toLowerCase() === abbr);
+    return month === -1 ? 0 : month;
   }
+  return 0;
+}
 
+/** The month (0-indexed) and day of the month. */
+function resolveMonthDay(
+  bag: Record<string, string>,
+  year: number,
+  supplied: CalendarDate | undefined,
+): { month: number; day: number } {
   // %j: day-of-year (001-366) — convert to month+day when no month/day present
-  let day: number;
   if (bag.dayOfYear && !bag.day && !bag.month) {
-    const isLeap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
-    const months = [31, isLeap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-    const maxDoy = isLeap ? 366 : 365;
+    const maxDoy = isLeap(year) ? 366 : 365;
     const doy = Math.max(1, Math.min(parseInt(bag.dayOfYear, 10), maxDoy));
     let rem = doy;
     let m = 0;
-    for (const monthLength of months) {
+    for (const monthLength of monthLengths(year)) {
       if (rem <= monthLength) break;
       rem -= monthLength;
       m++;
     }
-    month = m;
-    day = rem;
-  } else {
-    day = suppliedDate ? suppliedDate.day : bag.day ? parseInt(bag.day, 10) : 1;
+    return { month: m, day: rem };
   }
+  return {
+    month: resolveMonth(bag, supplied),
+    day: supplied ? supplied.day : bag.day ? parseInt(bag.day, 10) : 1,
+  };
+}
 
-  let hour: number;
-  if (bag.hour24) {
-    hour = parseInt(bag.hour24, 10);
-  } else if (bag.hour12) {
-    hour = parseInt(bag.hour12, 10);
-    const isPM = bag.ampm && /pm/i.test(bag.ampm);
-    const isAM = bag.ampm && /am/i.test(bag.ampm);
-    if (isPM && hour !== 12) {
-      hour += 12;
-    } else if (isAM && hour === 12) {
-      hour = 0;
-    }
-  } else {
-    hour = 0;
-  }
+function resolveHour(bag: Record<string, string>): number {
+  if (bag.hour24) return parseInt(bag.hour24, 10);
+  if (!bag.hour12) return 0;
+  const hour = parseInt(bag.hour12, 10);
+  const isPM = bag.ampm && /pm/i.test(bag.ampm);
+  const isAM = bag.ampm && /am/i.test(bag.ampm);
+  if (isPM && hour !== 12) return hour + 12;
+  if (isAM && hour === 12) return 0;
+  return hour;
+}
 
-  const minute = bag.minute ? parseInt(bag.minute, 10) : 0;
-  const second = bag.second ? parseInt(bag.second, 10) : 0;
-
-  // Reject out-of-range components rather than letting Date.UTC silently roll
-  // over (e.g. %m=13 → the next January, %d=32 → the next month, %H=25 → the
-  // next day). Splunk treats an out-of-range field as a parse failure.
-  const isLeapYear = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
-  const daysInMonth = [31, isLeapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-  if (
+/**
+ * Reject out-of-range components rather than letting Date.UTC silently roll
+ * over (e.g. %m=13 → the next January, %d=32 → the next month, %H=25 → the
+ * next day). Splunk treats an out-of-range field as a parse failure.
+ */
+function componentsInRange(year: number, month: number, day: number, hour: number, minute: number, second: number): boolean {
+  return !(
     month < 0 || month > 11 ||
-    day < 1 || day > (daysInMonth[month] ?? 0) ||
+    day < 1 || day > (monthLengths(year)[month] ?? 0) ||
     hour < 0 || hour > 23 ||
     minute < 0 || minute > 59 ||
     second < 0 || second > 60 // allow a leap second
-  ) {
-    return null;
-  }
+  );
+}
 
-  const milliseconds = subMilliseconds;
-
-  // -----------------------------------------------------------------------
-  // Resolve timezone offset
-  // -----------------------------------------------------------------------
-  // The components read as though they were UTC. Every branch below is a
-  // question about how far the real instant is from this one.
-  const wallAsUtcMs = utcMs(year, month, day, hour, minute, second, milliseconds);
-
+/**
+ * Place a wall-clock reading in its zone.
+ *
+ * The components read as though they were UTC; `wallAsUtcMs` is that reading.
+ * Every branch below is a question about how far the real instant is from it.
+ */
+function resolveZone(
+  bag: Record<string, string>,
+  wallAsUtcMs: number,
+  hasDate: boolean,
+  options: ParseTimestampOptions,
+): ParsedTimestamp {
+  const { tz, onUnresolvedTz, tzAlias } = options;
   // A zone written in the event (%Z) beats the stanza's TZ, and an explicit
   // numeric offset (%z) beats both — it needs no resolution at all.
   //
@@ -785,6 +760,53 @@ function assembleTimestamp(
 
   // No timezone info at all -- assume UTC.
   return { date: new Date(wallAsUtcMs), wallAsUtcMs, offsetMinutes: null, hasDate };
+}
+
+/**
+ * The body of {@link parseTimestampDetailed}, with the year a yearless format
+ * takes passed in.
+ */
+function assembleTimestamp(
+  text: string,
+  format: string,
+  options: ParseTimestampOptions,
+  yearForYearless: number,
+): ParsedTimestamp | null {
+  const bag = captureBag(text, format);
+  if (!bag) {
+    return null;
+  }
+
+  // Subsecond digits captured by %3N/%6N/%9N, the %Q family, or %f, converted
+  // to whole milliseconds. Shared by the epoch and calendar paths.
+  const subMilliseconds = computeSubMilliseconds(bag);
+
+  if (bag.epoch) {
+    const epochNum = parseInt(bag.epoch, 10);
+    // If the value is 13 digits it is already milliseconds; a captured
+    // subsecond field would be below ms resolution, so leave it as-is.
+    // Seconds since epoch: fold in any subseconds from e.g. `%s%3N`/`%s%3Q`.
+    const ms = bag.epoch.length >= 13 ? epochNum : epochNum * 1000 + subMilliseconds;
+    // An epoch is an absolute instant, so its wall clock is UTC by definition.
+    return { date: new Date(ms), wallAsUtcMs: ms, offsetMinutes: 0, hasDate: true };
+  }
+
+  // A weekday alone (%a) does not name a date, so it does not count.
+  const hasDate = [bag.year4, bag.year2, bag.month, bag.monthName, bag.day, bag.dayOfYear]
+    .some((v) => v !== undefined);
+  const suppliedDate = hasDate ? undefined : options.dateForDateless;
+
+  const year = resolveYear(bag, suppliedDate, yearForYearless);
+  const { month, day } = resolveMonthDay(bag, year, suppliedDate);
+  const hour = resolveHour(bag);
+  const minute = bag.minute ? parseInt(bag.minute, 10) : 0;
+  const second = bag.second ? parseInt(bag.second, 10) : 0;
+  if (!componentsInRange(year, month, day, hour, minute, second)) {
+    return null;
+  }
+
+  const wallAsUtcMs = utcMs(year, month, day, hour, minute, second, subMilliseconds);
+  return resolveZone(bag, wallAsUtcMs, hasDate, options);
 }
 
 // ---------------------------------------------------------------------------
