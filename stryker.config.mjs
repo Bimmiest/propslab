@@ -16,6 +16,9 @@ export default {
   // prose that no behavioural test should be asserting.
   mutate: [
     'src/engine/**/*.ts',
+    // The date parser and the regex adapter the engine runs on.
+    'src/utils/strftime.ts',
+    'src/utils/splunkRegex.ts',
     '!src/engine/**/__tests__/**',
     '!src/engine/**/*.test.ts',
     '!src/engine/types.ts',

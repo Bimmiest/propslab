@@ -46,7 +46,7 @@ A few things worth knowing:
 
 ## Mutation testing
 
-Coverage says a line ran; it does not say a test would notice the line being wrong. [Stryker](https://stryker-mutator.io/) answers that by making small edits to `src/engine/**` — flipping a `<`, emptying a string, deleting a call — and rerunning the tests that reach each one. A mutant no test fails on has *survived*, and marks behaviour nothing asserts.
+Coverage says a line ran; it does not say a test would notice the line being wrong. [Stryker](https://stryker-mutator.io/) answers that by making small edits to `src/engine/**` and the two utils it runs on (`strftime.ts`, `splunkRegex.ts`) — flipping a `<`, emptying a string, deleting a call — and rerunning the tests that reach each one. A mutant no test fails on has *survived*, and marks behaviour nothing asserts.
 
 ```bash
 npm run test:mutation                  # full run; about 75 minutes on 4 cores

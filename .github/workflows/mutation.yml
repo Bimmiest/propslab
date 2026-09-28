@@ -18,6 +18,8 @@ on:
     branches: [main]
     paths:
       - 'src/engine/**'
+      - 'src/utils/strftime.ts'
+      - 'src/utils/splunkRegex.ts'
       - 'stryker.config.mjs'
       - 'vitest.config.ts'
       - 'vitest.stryker.config.ts'
@@ -52,7 +54,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # The same exclusions as `mutate` in stryker.config.mjs: tests, type-only
+      # The same scope and exclusions as `mutate` in stryker.config.mjs: tests, type-only
       # modules, worker entry points and data tables are never mutated. Deleted
       # files have nothing to mutate, so only added and modified ones count.
       - name: Find changed engine files
@@ -64,7 +66,7 @@ jobs:
           # Two pathspecs: git's `**/` needs at least one directory, so
           # `src/engine/**/*.ts` alone skips src/engine/pipeline.ts and its
           # neighbours.
-          files=$(git diff --name-only --diff-filter=AM "origin/$BASE_REF...HEAD" -- 'src/engine/*.ts' 'src/engine/**/*.ts' \
+          files=$(git diff --name-only --diff-filter=AM "origin/$BASE_REF...HEAD" -- 'src/engine/*.ts' 'src/engine/**/*.ts' src/utils/strftime.ts src/utils/splunkRegex.ts \
             | grep -vE '(/__tests__/|\.test\.ts$|^src/engine/types\.ts$|^src/engine/scaffold/types\.ts$|^src/engine/[^/]*Worker\.ts$|^src/engine/cim/cimModelsData\.ts$|^src/engine/registry/|^src/engine/directiveSupport\.ts$)' \
             | paste -sd, - || true)
           # A PR that only touches the mutation setup (Stryker or vitest config,
