@@ -86,9 +86,9 @@ describe('applyKvMode — json', () => {
 
   it('does NOT scavenge bare leaf fields from a nested object when the outer JSON is malformed', () => {
     // The whole event fails JSON.parse (`<ID>` is not a valid token), but the nested
-    // `alert` object is locally well-formed. The old behaviour flattened that inner
-    // object without its path prefix, inventing bare `action`/`category` fields that
-    // Splunk never produces. It must now extract nothing and report the parse error.
+    // `alert` object is locally well-formed. Flattening that inner object without
+    // its path prefix would invent bare `action`/`category` fields that Splunk
+    // never produces, so it extracts nothing and reports the parse error.
     const malformed =
       '{"firewall_name":"fw","event":{"app_proto":"ntp",' +
       '"alert":{"action":"blocked","signature_id":3,"rev":0,"signature":"s","category":"","severity":3},' +
@@ -198,7 +198,7 @@ describe('applyKvMode — auto (AUTO_KV_JSON)', () => {
     expect(r.fields['count']).toBe('3');
   });
 
-  // #22: a key=value substring inside a quoted value must NOT become a field.
+  // A key=value substring inside a quoted value must NOT become a field.
   it('does not extract phantom fields from inside a quoted value', () => {
     const r = applyKvMode([event('msg="error code=42 occurred"')], [dir('auto')])[0]!;
     expect(r.fields['msg']).toBe('error code=42 occurred');
@@ -275,10 +275,9 @@ describe('applyKvMode — multi (multikv)', () => {
   });
 });
 
-// Filed as #64 on the reading that auto-KV accumulates, which is the more
-// common intuition and what postfix/Cisco-style logs suggest. The Splunk 10.4.0
-// capture `kvmode-auto-repeated-key` says otherwise: the first occurrence wins
-// and the rest are discarded (#169). Ground truth beats the reading.
+// Capture-derived: `kvmode-auto-repeated-key` (Splunk 10.4.0) shows the first
+// occurrence of a repeated key wins and the rest are discarded — not the
+// accumulation postfix/Cisco-style logs might suggest.
 describe('applyKvMode — a repeated key keeps its first value (#169, was #64)', () => {
   it('keeps the first of a repeated bare key', () => {
     const out = applyKvMode([event('user=alice user=bob')], [dir('auto')])[0]!;
@@ -339,9 +338,8 @@ describe('applyKvMode — purely numeric field names are rejected (#166)', () =>
   });
 
   it('strips the leading digits from a name that merely starts with them', () => {
-    // Corrected by the autokv-key-edge-names capture (2fa=on is indexed as
-    // `fa`): auto-KV applies the same leading-digit strip as transforms key
-    // cleaning. This test previously asserted the digits survived.
+    // Capture-derived: autokv-key-edge-names (2fa=on is indexed as `fa`):
+    // auto-KV applies the same leading-digit strip as transforms key cleaning.
     const out = applyKvMode([event('1st=first 2nd=second')], [dir('auto')])[0]!;
     expect(out.fields['st']).toBe('first');
     expect(out.fields['nd']).toBe('second');

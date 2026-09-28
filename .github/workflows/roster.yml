@@ -3,10 +3,9 @@ name: Roster
 # The `ignored` roster makes a promise the code cannot keep on its own: every
 # entry names an issue where the missing work is tracked, so a reader who hits a
 # limitation can follow the link and find out what is happening about it.
-# `directiveSupport.test.ts` asserts the number is *there*. Nothing asserted it
-# still pointed at an open issue, and that is how the roster went stale —
-# `TZ_ALIAS` named #159 for months after #159 closed, so the link led to a fixed
-# bug and a preview that still ignored the config (#227).
+# `directiveSupport.test.ts` asserts the number is *there*; this checks it
+# still points at an open issue, since a closed one leads the reader to a
+# fixed bug beside a preview that still ignores their config.
 #
 # This cannot live in `npm test`. That suite is deliberately hermetic — no
 # filesystem, no network, runs wherever the engine runs — and asking GitHub

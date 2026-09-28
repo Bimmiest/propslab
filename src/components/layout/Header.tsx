@@ -2,9 +2,37 @@ import { useMemo } from 'react';
 import { useAppStore } from '../../store/useAppStore';
 import { ThemeToggle } from '../ui/ThemeToggle';
 import { ProgressBar } from '../ui/ProgressBar';
-import { Icon } from '../ui/Icon';
+import { Icon, type IconName } from '../ui/Icon';
 import { ClearButton } from '../editor/ClearButton';
 import { Tooltip } from '../ui/Tooltip';
+
+/** A header button that opens a side panel, highlighted while the panel is open. */
+function PanelToggle({ tooltip, label, icon, open, onClick }: {
+  tooltip: string;
+  label: string;
+  icon: IconName;
+  open: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <Tooltip content={tooltip} side="bottom">
+      <button
+        onClick={onClick}
+        aria-label={label}
+        aria-expanded={open}
+        className={[
+          'flex items-center justify-center w-8 h-8 rounded-md border-none outline-none',
+          'focus-visible:ring-2 transition-colors cursor-pointer',
+          open
+            ? 'bg-[var(--color-accent)] text-[var(--color-text-on-accent)]'
+            : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-tertiary)] hover:text-[var(--color-text-primary)]',
+        ].join(' ')}
+      >
+        <Icon name={icon} className="w-[18px] h-[18px]" />
+      </button>
+    </Tooltip>
+  );
+}
 
 export function Header() {
   const diagnostics = useAppStore((s) => s.validationDiagnostics);
@@ -70,38 +98,8 @@ export function Header() {
           {hasAnyContent && (
             <ClearButton onClear={resetAll} label="Clear All" />
           )}
-          <Tooltip content="Settings" side="bottom">
-            <button
-              onClick={toggleSettings}
-              aria-label="Open settings"
-              aria-expanded={settingsOpen}
-              className={[
-                'flex items-center justify-center w-8 h-8 rounded-md border-none outline-none',
-                'focus-visible:ring-2 transition-colors cursor-pointer',
-                settingsOpen
-                  ? 'bg-[var(--color-accent)] text-[var(--color-text-on-accent)]'
-                  : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-tertiary)] hover:text-[var(--color-text-primary)]',
-              ].join(' ')}
-            >
-              <Icon name="settings" className="w-[18px] h-[18px]" />
-            </button>
-          </Tooltip>
-          <Tooltip content="Pipeline reference" side="bottom">
-            <button
-              onClick={toggleHelp}
-              aria-label="Open pipeline reference"
-              aria-expanded={helpOpen}
-              className={[
-                'flex items-center justify-center w-8 h-8 rounded-md border-none outline-none',
-                'focus-visible:ring-2 transition-colors cursor-pointer',
-                helpOpen
-                  ? 'bg-[var(--color-accent)] text-[var(--color-text-on-accent)]'
-                  : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-tertiary)] hover:text-[var(--color-text-primary)]',
-              ].join(' ')}
-            >
-              <Icon name="info" className="w-[18px] h-[18px]" />
-            </button>
-          </Tooltip>
+          <PanelToggle tooltip="Settings" label="Open settings" icon="settings" open={settingsOpen} onClick={toggleSettings} />
+          <PanelToggle tooltip="Pipeline reference" label="Open pipeline reference" icon="info" open={helpOpen} onClick={toggleHelp} />
           <ThemeToggle />
         </div>
       </div>

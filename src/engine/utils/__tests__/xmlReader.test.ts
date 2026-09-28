@@ -1,9 +1,9 @@
 // ---------------------------------------------------------------------------
 // xmlReader.test.ts
-// The engine's own XML reader, which replaced DOMParser for KV_MODE = xml
-// (#280). Doc-derived: the accept/reject cases follow the XML 1.0 (Fifth
-// Edition) and Namespaces in XML 1.0 specs, cross-checked against what the
-// previous DOMParser path accepted. Strictness is the point -- extractXml tells
+// The engine's own XML reader, for KV_MODE = xml. Doc-derived: the
+// accept/reject cases follow the XML 1.0 (Fifth Edition) and Namespaces in XML
+// 1.0 specs, cross-checked against what DOMParser accepts. Strictness is the
+// point -- extractXml tells
 // a fragment from a document, and XML from plain text, by whether this rejects.
 // ---------------------------------------------------------------------------
 
@@ -121,7 +121,7 @@ describe('parseXmlDocument — rejects', () => {
   });
 });
 
-// What INDEXED_EXTRACTIONS = xml* needs beyond the tree (#271): where each
+// What INDEXED_EXTRACTIONS = xml* needs beyond the tree: where each
 // element's markup ends, for extraction_cutoff, and whether a value was
 // written with references, for XML_IE_SKIP_XML_ENCODED_VALS.
 describe('parseXmlDocument — source positions and encoding', () => {

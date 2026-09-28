@@ -34,8 +34,8 @@ import { serializeSimulation } from './serialize';
 
 /**
  * Serialized here rather than on the server's thread: the raw ProcessingResult
- * grows with the event count, and posting it whole put all of it on the main
- * thread, which has no heap limit, before anything was trimmed (#351).
+ * grows with the event count, and posting it whole would put all of it on the
+ * main thread, which has no heap limit, before anything was trimmed.
  */
 function handleSimulate(request: SimulateRequest): SimulateResponse {
   const { result, diagnostics } = runPipeline(
@@ -53,10 +53,9 @@ function handleSimulate(request: SimulateRequest): SimulateResponse {
 
 /**
  * The same parse and config lint `runPipeline` runs first, plus a compile of
- * every stanza's regexes. No pipeline run: validate used to push a dummy
- * event through one, which reported a bad regex only in stanzas that event
- * happened to match, and let diagnostics about the dummy event itself out
- * through `[default]` and `[host::…]` stanzas (#360).
+ * every stanza's regexes. No pipeline run: a dummy event would report a bad
+ * regex only in stanzas it happened to match, and diagnostics about the dummy
+ * event itself would leak out through `[default]` and `[host::…]` stanzas.
  */
 function handleValidate(request: ValidateRequest): ValidateResponse {
   const propsConf = parseConf(request.propsConf, 'props.conf');

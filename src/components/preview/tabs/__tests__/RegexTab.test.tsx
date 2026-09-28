@@ -92,7 +92,7 @@ describe('RegexTab — one-click Add to props.conf (#88)', () => {
     fireEvent.change(input, { target: { value: pattern } });
   }
 
-  /** The Add button once the typed pattern has been matched and it is enabled (#338). */
+  /** The Add button once the typed pattern has been matched and it is enabled. */
   async function addButton(container: HTMLElement) {
     const button = within(container).getByRole('button', { name: 'Add to props.conf' });
     await waitFor(() => expect(button).toBeEnabled());
@@ -116,7 +116,7 @@ describe('RegexTab — one-click Add to props.conf (#88)', () => {
 
   it('points the metadata at the placeholder stanza when there is no sourcetype', async () => {
     // Writing [my:sourcetype] alone produces config that can never match the
-    // event it was scaffolded from (#72).
+    // event it was scaffolded from.
     setup('');
     const { container } = render(<RegexTab {...defaultProps} />);
     typePattern(container, 'user=(?<user>\\w+)');
@@ -164,7 +164,7 @@ describe('RegexTab — results follow the typed pattern (#315)', () => {
     // Inside the debounce window the old results must not be shown as the
     // new pattern's, and the "Add to props.conf" button, which writes the
     // typed pattern, must not commit it before its own results are shown:
-    // it stays disabled until they are (#338).
+    // it stays disabled until they are.
     fireEvent.change(input, { target: { value: 'this_text_does_not_appear' } });
     expect(within(container).queryByText(/Event #/)).not.toBeInTheDocument();
     expect(within(container).queryByText(/events matched/)).not.toBeInTheDocument();
@@ -213,8 +213,8 @@ describe('RegexTab — reference keyboard access (#320)', () => {
   });
 });
 
-// #335: the reference rows were themselves role="button", which dropped their
-// row and cell semantics, and their aria-label hid the description cell.
+// The reference rows keep their row and cell semantics: a role="button" row
+// drops them, and its aria-label would hide the description cell.
 describe('RegexTab — reference table semantics (#335)', () => {
   it('keeps rows as rows and describes each button by its description cell', () => {
     render(<RegexTab {...defaultProps} />);
@@ -278,7 +278,7 @@ class FakeWorker {
   constructor() { FakeWorker.instances.push(this); }
   postMessage(message: RegexMatchRequest) { this.posted.push(message); }
   terminate() {}
-  /** The module has loaded: a timeout after this is the pattern's, not the load's (#364). */
+  /** The module has loaded: a timeout after this is the pattern's, not the load's. */
   ready() { this.onmessage?.({ data: { type: 'ready' } } as unknown as MessageEvent<RegexMatchResponse>); }
   respond() {
     const req = this.posted[this.posted.length - 1]!;
@@ -287,11 +287,11 @@ class FakeWorker {
 }
 const worker = () => FakeWorker.instances[FakeWorker.instances.length - 1]!;
 
-// #329: pending was keyed on the pattern alone. When `allEvents` changed — a
-// pipeline re-run, a search keystroke — the first commit indexed the previous
-// events' results into the new events by position, then the whole list flipped
-// to "Testing pattern…" until the re-run answered. Driven through a fake worker
-// so the re-run can be held in flight.
+// Results are tied to the inputs they were matched over as well as the pattern:
+// when `allEvents` changes — a pipeline re-run, a search keystroke — the
+// previous events' results must not be indexed into the new events by
+// position, nor the list flip to "Testing pattern…". Driven through a fake
+// worker so the re-run can be held in flight.
 describe('RegexTab — results follow the events they were matched over (#329)', () => {
   beforeEach(() => {
     useAppStore.setState(initialState, true);
@@ -322,7 +322,7 @@ describe('RegexTab — results follow the events they were matched over (#329)',
 
     // Not flashed to pending, and not the old results laid over the new events
     // (which would badge "no ip here" as Event #1, matched). The two events the
-    // settled run already saw keep their answers at their new positions (#347);
+    // settled run already saw keep their answers at their new positions;
     // the two it never saw wait for the re-run, as does the count.
     expect(within(container).queryByText('Testing pattern…')).not.toBeInTheDocument();
     expect(cardTitles(container)).toEqual(['Event #3', 'Event #4']);
@@ -338,10 +338,9 @@ describe('RegexTab — results follow the events they were matched over (#329)',
     expect(container.textContent).not.toContain('more event');
   });
 
-  // #347: while the re-run was in flight the tab rendered the previous inputs'
-  // page slice. A search change resets the shared pagination to page 1 at once,
-  // so events the new filter excludes showed beside page controls for the new
-  // filter, numbered by their position in the old dataset.
+  // A search change resets the shared pagination to page 1 at once, so while
+  // the re-run is in flight the cards must follow the new filter's events, not
+  // the previous inputs' page slice numbered by the old dataset.
   it('pages and numbers the events on screen while a narrowed filter is re-matched (#347)', () => {
     const all = [
       makeItem('GET /a 10.0.0.1'),
@@ -394,11 +393,10 @@ describe('RegexTab — results follow the events they were matched over (#329)',
   });
 });
 
-// #338: "Add to props.conf" was gated only on the pattern compiling. It wrote a
-// pattern the tab was showing as too slow to evaluate, so every pipeline run
-// hit the watchdog, and inside the debounce window it wrote one that had not
-// run at all; a bad class name wrote a key the parser reads differently. The
-// button now follows the Create EXTRACT dialog's rule (#329).
+// "Add to props.conf" follows the Create EXTRACT dialog's rule: compiling is
+// not enough. A pattern shown as too slow to evaluate, one inside the debounce
+// window that has not run at all, and a class name the parser would read
+// differently are all refused.
 describe('RegexTab — Add to props.conf waits for a settled match (#338)', () => {
   beforeEach(() => {
     useAppStore.setState(initialState, true);

@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
 // timeFormatPreview.test.ts
-// The TIME_FORMAT live preview (#90).
+// The TIME_FORMAT live preview.
 //
 // The sample-line assertions are the ones with teeth: a preview that answers a
 // different question from the pipeline is worse than none, because it tells you
@@ -22,7 +22,7 @@ import { probeTimestamps } from '../../engine/timestampMatch';
 import { unsupportedSpecifiers } from '../../utils/strftime';
 
 /**
- * Stands in for the worker (#334) by running what the worker runs — the
+ * Stands in for the worker by running what the worker runs — the
  * Timestamp prober with no TIME_FORMAT — so these tests still pin the preview
  * to the engine's reading of TIME_PREFIX. The worker plumbing itself is
  * covered in timePrefixMatcher.test.ts.
@@ -136,8 +136,7 @@ describe('buildTimeFormatPreview', () => {
   });
 
   it('survives a TIME_PREFIX that is not a valid regex, and says why', async () => {
-    // Previously reported as a plain 'no-match', which blamed the format for
-    // what was a broken prefix (#297).
+    // Not a plain 'no-match', which would blame the format for a broken prefix.
     const preview = await buildTimeFormatPreview('%Y-%m-%d', {
       now: NOW,
       sampleLine: '2024-01-15',
@@ -151,8 +150,8 @@ describe('buildTimeFormatPreview', () => {
   });
 
   it('runs a backtracking-prone TIME_PREFIX rather than refusing it (#368)', async () => {
-    // `(a+)+$` used to be refused by a structural ReDoS check. It is valid PCRE
-    // and Splunk runs it, so the preview does too — in the worker, where PCRE's
+    // `(a+)+$` is valid PCRE and Splunk runs it, so the preview does too — in
+    // the worker, where PCRE's
     // match limit and the watchdog bound it.
     const preview = await buildTimeFormatPreview('%Y-%m-%d', {
       now: NOW,

@@ -80,7 +80,7 @@ class Parser {
     }
     try {
       // XOR shares OR's precedence level in the SPL eval operator table, and
-      // like OR it is left-associative (#312).
+      // like OR it is left-associative.
       let left = this.parseAnd();
       for (let tok = this.peek(); tok?.type === 'op' && ['OR', '||', 'XOR'].includes(tok.value); tok = this.peek()) {
         this.consume();
@@ -104,9 +104,9 @@ class Parser {
   }
 
   private parseNot(): Node {
-    // NOT applies to a NOT expression, not only to a comparison: `NOT NOT x`
-    // used to hand the second NOT to parseComparison, which cannot start with
-    // an operator, and threw (#312). Counted in a loop rather than by recursion
+    // NOT applies to a NOT expression, not only to a comparison, so `NOT NOT x`
+    // parses; parseComparison cannot start with an operator. Counted in a loop
+    // rather than by recursion
     // so a long run of NOTs cannot exhaust the stack past the depth guard.
     let nots = 0;
     while (this.peek()?.type === 'op' && (this.peek()?.value === 'NOT' || this.peek()?.value === '!')) {
@@ -128,7 +128,7 @@ class Parser {
       return this.parseInList(left, false);
     }
     // The lexer reads the word after an infix NOT as the IN operator whatever
-    // its casing (#337), so this matches an operator token, never a field that
+    // its casing, so this matches an operator token, never a field that
     // happens to be named `IN`.
     const next = this.tokens[this.pos + 1];
     if (tok?.type === 'op' && tok.value === 'NOT' && next?.type === 'op' && next.value === 'IN') {
@@ -138,7 +138,7 @@ class Parser {
     }
 
     // `a LIKE b` is the like() function written as a comparison operator, in
-    // the same precedence tier as `=`/`!=` (#312). It becomes a call so the
+    // the same precedence tier as `=`/`!=`. It becomes a call so the
     // operator and the function cannot drift apart: same wildcard translation,
     // same collapsing of runs of `%`, same regex-failure diagnostic.
     if (tok?.type === 'op' && tok.value === 'LIKE') {
@@ -239,7 +239,7 @@ class Parser {
       const name = this.consume().value;
 
       // Check for function call. `like(...)` and `in(...)` arrive here too: the
-      // lexer only reads those words as operators after a value (#332).
+      // lexer only reads those words as operators after a value.
       if (this.peek()?.type === 'paren' && this.peek()?.value === '(') {
         const call = this.parseCall(name);
         // in(<value>, <list>...) is the IN operator written as a function; it

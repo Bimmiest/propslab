@@ -1,11 +1,10 @@
 // ---------------------------------------------------------------------------
 // directiveValues.test.ts
-// The shared directive lookup and conf-boolean reading (#301).
+// The shared directive lookup and conf-boolean reading.
 //
 // The helper tests pin the semantics. The per-directive tests below them pin
-// the places where moving to the shared reading CHANGED behaviour: each one
-// used to accept only some of Splunk's boolean spellings (or none but the exact
-// word, untrimmed), or pointed a diagnostic at a shadowed definition. The
+// that each directive accepts every one of Splunk's boolean spellings,
+// trimmed, and points its diagnostic at the effective definition. The
 // spellings are Splunk's conf booleans as splunk.util.normalizeBoolean reads
 // them — doc-derived; no capture exercises an alternative spelling.
 // ---------------------------------------------------------------------------

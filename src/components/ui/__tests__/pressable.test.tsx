@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 // ---------------------------------------------------------------------------
 // pressable.test.tsx
-// The pin toggles and field-tree rows were click-only (#300). `pressable`
-// gives them what a <button> has for free: a tab stop, a role, and Enter/Space.
+// `pressable` gives the pin toggles and field-tree rows what a <button> has
+// for free: a tab stop, a role, and Enter/Space.
 // ---------------------------------------------------------------------------
 
 import { describe, it, expect, vi } from 'vitest';

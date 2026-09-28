@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
 // rulesetStopProcessing.test.ts
-// RULESET-<class>, STOP_PROCESSING_IF and ROUTE_EVENTS_OLDER_THAN (#275).
+// RULESET-<class>, STOP_PROCESSING_IF and ROUTE_EVENTS_OLDER_THAN.
 //
 // Doc-derived throughout: no fixture captures any of the three, and none can
 // be added (see fixtures/README.md). The sources are props.conf.spec (RULESET,

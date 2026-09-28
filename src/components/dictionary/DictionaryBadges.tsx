@@ -81,7 +81,7 @@ export function FileBadge({
 }
 
 /**
- * Whether the preview honours the directive (#153). Only shown when it does
+ * Whether the preview honours the directive. Only shown when it does
  * not: a badge on all 76 entries would be noise, and "simulated" is what a
  * reader of a simulator's reference already assumes.
  */

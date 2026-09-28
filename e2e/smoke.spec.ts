@@ -17,9 +17,8 @@ test.describe('boot', () => {
     await loadExample(page, APACHE);
 
     // Asserted separately from `all` so the failure message names the cause.
-    // This is the regression guard for the missing `img-src`: Monaco draws its
-    // error/warning underlines as inline `data:` SVGs, and with only
-    // `default-src 'self'` to fall back on the browser refused every one.
+    // The CSP needs `img-src`: Monaco draws its error/warning underlines as
+    // inline `data:` SVGs, which `default-src 'self'` alone refuses.
     expect(complaints.csp, 'blocked by Content-Security-Policy').toEqual([]);
     expect(complaints.all, 'browser errors during load').toEqual([]);
   });
@@ -62,8 +61,8 @@ test.describe('monaco', () => {
 
   test('re-lints after a programmatic write, not only after typing', async ({ page }) => {
     // Clear writes the model through MonacoEditor's controlled-value path, which
-    // withholds onChange; lint used to hang off onChange, so the old file's
-    // markers outlived the text they described (#295).
+    // withholds onChange; the old file's markers must not outlive the text they
+    // described.
     await openApp(page);
     const propsEditor = page.locator('.monaco-editor').nth(1);
     await propsEditor.click();
@@ -81,7 +80,7 @@ test.describe('monaco', () => {
 });
 
 /**
- * Each editor contribution MonacoEditor.tsx imports by hand (#375). Dropping
+ * Each editor contribution MonacoEditor.tsx imports by hand. Dropping
  * one type-checks, builds and mounts fine, and silently removes its feature;
  * hover is covered by the dictionary and TIME_FORMAT tests below.
  */
@@ -233,8 +232,8 @@ test.describe('accessibility affordances', () => {
   });
 
   test('Ctrl+K opens the palette while an editor has focus', async ({ page }) => {
-    // #363: Monaco takes Ctrl+K as a chord prefix, so the window-level
-    // shortcut never fired from inside an editor.
+    // Monaco takes Ctrl+K as a chord prefix, so the shortcut has to be caught
+    // before it reaches an editor.
     await openApp(page);
     const propsEditor = page.getByRole('textbox', { name: 'props.conf' });
     await page.locator('.monaco-editor').nth(1).click();
@@ -256,7 +255,7 @@ test.describe('accessibility affordances', () => {
   });
 
   test('a raw-event selection can be made and acted on from the keyboard', async ({ page, complaints }) => {
-    // #300: token selection was mouse-only. Shift+F10 is delivered as a
+    // Token selection from the keyboard. Shift+F10 is delivered as a
     // `contextmenu` event on the focused element, which is what opens the menu.
     await openApp(page);
     await loadExample(page, APACHE);
@@ -276,8 +275,8 @@ test.describe('accessibility affordances', () => {
   });
 
   test('controls that opted out of the outline still show keyboard focus', async ({ page }) => {
-    // #300: `outline-none` without a ring left some buttons with no focus
-    // indicator at all. The settings panel's close button was one.
+    // Every focusable control shows a focus indicator, including those that
+    // set `outline-none` without a ring, such as the settings panel's close button.
     await openApp(page);
     // Opened from the keyboard so the focus Radix moves into the dialog counts
     // as keyboard focus, which is what :focus-visible keys on.
@@ -355,14 +354,14 @@ test.describe('dictionary', () => {
 });
 
 /**
- * The two on-demand workers (#348). Neither is built until its tab opens or a
+ * The two on-demand workers. Neither is built until its tab opens or a
  * TIME_FORMAT is hovered, so the boot tests above never load their chunks.
  *
  * The tabs' visible output cannot prove a worker ran: past two load failures
- * they match on the main thread instead (#309) and render the same thing,
+ * they match on the main thread instead and render the same thing,
  * and a worker script that 404s logs nothing to the console. So each test
  * also asserts that the worker itself replied (`recordWorkerReplies`). The
- * hover has no fallback at all since #334 — without its worker the preview
+ * hover has no fallback at all — without its worker the preview
  * silently drops the sample line — so there the UI is proof on its own.
  *
  * All three use the Apache example: its props.conf sets `TIME_PREFIX = \[`
@@ -453,7 +452,7 @@ test.describe('match workers', () => {
 });
 
 /**
- * Every user pattern runs on PCRE2 compiled to WebAssembly (#368). The page
+ * Every user pattern runs on PCRE2 compiled to WebAssembly. The page
  * and each worker load it from the one hashed asset URL the build fixed —
  * never from a message — and compiling it takes milliseconds.
  */

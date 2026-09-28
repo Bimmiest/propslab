@@ -8,7 +8,7 @@ import * as monaco from 'monaco-editor/esm/vs/editor/editor.api';
 // The editor CONTRIBUTIONS, which editor.api does not pull in. Named one by
 // one rather than via editor.all, which also registers sticky scroll, rename,
 // code lens, parameter hints, semantic tokens and ~40 more contributions this
-// app never enables (#375). Dropping one silently disables its feature, so
+// app never enables. Dropping one silently disables its feature, so
 // each line names what depends on it; the e2e suite covers hover, suggest,
 // code actions, folding and find.
 import 'monaco-editor/esm/vs/editor/browser/coreCommands.js';

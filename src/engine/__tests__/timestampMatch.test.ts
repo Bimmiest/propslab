@@ -59,8 +59,8 @@ describe('probeTimestamp — matching', () => {
 describe('probeTimestamp — the prefix span the overlay renders', () => {
   // The overlay draws the lookahead window whenever TIME_PREFIX matched, even
   // when TIME_FORMAT then did not — that is what distinguishes "the prefix is
-  // wrong" from "the format is wrong". It used to re-run the regex on the render
-  // thread to recover this; now it comes back on the probe (#117).
+  // wrong" from "the format is wrong". It comes back on the probe, so the
+  // render thread never re-runs the regex.
   it('carries the prefix span when the prefix matched but the format did not', () => {
     const raw = 'ts=not-a-timestamp at all';
     const probe = probeTimestamp(
@@ -122,10 +122,9 @@ describe('probeTimestamps — batch', () => {
 /**
  * The Timestamp tab's prober and the pipeline's extractor must agree on where
  * a timestamp is and what it says: the tab highlights with one and badges
- * `_time` from the other. They used to carry separate copies of the
- * TIME_PREFIX → TIME_FORMAT search, and the prober's scanned the lookahead
- * window unanchored and parsed without TZ_ALIAS or `now` (#313). Each case runs
- * both over the same input and compares them, rather than pinning either one.
+ * `_time` from the other: the same anchored TIME_PREFIX → TIME_FORMAT search,
+ * parsed with the same TZ_ALIAS and `now`. Each case runs both over the same
+ * input and compares them, rather than pinning either one.
  */
 describe('probeTimestamp agrees with extractTimestamps (#313)', () => {
   const NOW = new Date('2026-08-04T00:00:00.000Z');
@@ -213,9 +212,8 @@ describe('probeTimestamp agrees with extractTimestamps (#313)', () => {
   it('reads an empty TIME_PREFIX as unset, and both sides agree (#328)', () => {
     // Doc-derived: props.conf.spec gives no meaning to an empty TIME_PREFIX, and
     // an empty setting is an unset one — as this engine already reads an empty
-    // TIME_FORMAT, TZ or ROUTE_EVENTS_OLDER_THAN. The extractor used to compile
-    // '' and anchor TIME_FORMAT at offset 0, so a mid-line date was missed; the
-    // prober called the same '' "no prefix" and found it.
+    // TIME_FORMAT, TZ or ROUTE_EVENTS_OLDER_THAN, so the extractor and the
+    // prober both treat '' as "no prefix".
     for (const prefix of ['', '   ']) {
       const { extracted, source, probe } = both('level=info at 2026-08-03 10:00:00', {
         TIME_PREFIX: prefix,
@@ -254,9 +252,8 @@ describe('probeTimestamp agrees with extractTimestamps (#313)', () => {
 
 /**
  * The tab probes the text the extractor read, which is not the final `_raw`:
- * SEDCMD, DEST_KEY = _raw and INGEST_EVAL all run after timestamping. Probing
- * the final `_raw` reported "TIME_PREFIX did not match" on an event whose
- * `_time` the pipeline had read from that very prefix (#328). These run the
+ * SEDCMD, DEST_KEY = _raw and INGEST_EVAL all run after timestamping, and the
+ * final `_raw` may no longer hold the prefix `_time` was read from. These run the
  * whole pipeline, so the ordering is the pipeline's and not the test's.
  */
 describe('probing what the extractor read, after _raw is rewritten (#328)', () => {
@@ -286,7 +283,7 @@ describe('probing what the extractor read, after _raw is rewritten (#328)', () =
     expect(ev.processingTrace.find((s) => s.processor === 'timestampExtractor')?.timeSource).toBe('TIME_FORMAT');
     expect(ev.timestampText).toBe('host=web01 2026-01-15 10:00:00 login');
 
-    // The final _raw is what the tab used to probe — and it disagreed.
+    // The final _raw would disagree.
     expect(probeTimestamp(ev._raw, TIME_CONFIG).prefix).toBeNull();
 
     const probe = probeTimestamp(ev.timestampText!, TIME_CONFIG);

@@ -61,9 +61,7 @@ describe('applyDestKey — MetaData:Source prefix enforcement', () => {
 });
 
 // Doc-derived (transforms.conf.spec): FORMAT for `_MetaData:Index` is the bare
-// index name. The router used to require `index::` and silently skip the update
-// without it — the reverse of the spec, which requires the prefix only for
-// Host/Source/Sourcetype (#281).
+// index name; the prefix is required only for Host/Source/Sourcetype.
 describe('applyDestKey — MetaData:Index takes the bare index name', () => {
   it('routes to the bare FORMAT value', () => {
     const event = applyDestKey(baseEvent(), result('_MetaData:Index', 'security'));
@@ -103,7 +101,7 @@ describe('applyDestKey — _raw replacement', () => {
   });
 });
 
-// #29: an empty FORMAT expansion (destValue === '') must still route, rather
+// An empty FORMAT expansion (destValue === '') must still route, rather
 // than being treated as "no routing" by a falsy check.
 describe('applyDestKey — empty destValue still routes', () => {
   it('sets a target field to an empty string', () => {

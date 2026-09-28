@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
 // evalCoercion.test.ts
-// One string → number reading for eval, and the boolean-assignment error (#358).
+// One string → number reading for eval, and the boolean-assignment error.
 //
 // Doc-derived, not captured: Splunk's eval reads numbers in decimal (tonumber()
 // takes an explicit base for anything else), substr() takes a start and a

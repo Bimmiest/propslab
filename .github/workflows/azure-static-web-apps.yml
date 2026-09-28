@@ -1,11 +1,10 @@
 name: Azure Static Web Apps CI/CD
 
-# Deploy on CI's verdict, not alongside it. This used to trigger on `push` to
-# main, the same event ci.yml runs on, so the two ran in parallel and nothing
-# connected them: a commit that failed lint, the unit suite or the e2e smoke
-# tests was already live by the time CI said so. `workflow_run` starts this
-# only once a CI run has *finished*, and the job-level `if` below lets it
-# through only when that run passed.
+# Deploy on CI's verdict, not alongside it: triggered on `push` beside CI, a
+# commit that failed lint, the unit suite or the e2e smoke tests would be live
+# before CI said so. `workflow_run` starts this only once a CI run has
+# *finished*, and the job-level `if` below lets it through only when that run
+# passed.
 #
 # `workflow_run` always executes this file as it stands on the default branch,
 # never the copy at the commit being deployed. That is what we want here: a
@@ -21,20 +20,18 @@ on:
     branches: [main]
   # Manual redeploys, and the rollback path. Not gated on CI, by design — a
   # rollback is usually needed precisely when main is in a state nobody wants
-  # to wait on — but no longer "any ref" (#314, #333). Dispatch it on `main`
+  # to wait on — but not from any ref. Dispatch it on `main`
   # and name the commit to put back in `sha`; leave `sha` empty to redeploy
   # the newest commit on main with a green push CI, the same one the
   # workflow_run path would pick. The "Refuse commits not on main" step
   # requires the commit to be one main has already contained, which keeps
   # rollback to anything that was ever reviewed and merged and nothing else.
   #
-  # Rollback used to mean dispatching on an older ref, a release tag, and the
-  # `production` environment allowed `v*` tags for that. But a dispatch runs
-  # the copy of this file *on the dispatched ref* (#333): anyone who can push
-  # a tag could push `v-anything` on an unmerged commit whose copy of this
-  # file has no ancestor check, dispatch on it, and reach the token. So the
-  # ref a dispatch runs from is now always main — whose copy of this file is
-  # the reviewed one — and the target commit is data, validated by that copy.
+  # A dispatch runs the copy of this file *on the dispatched ref*: were tags
+  # allowed, anyone who can push one could put it on an unmerged commit whose
+  # copy of this file has no ancestor check, dispatch on it, and reach the
+  # token. So the ref a dispatch runs from is always main — whose copy of this
+  # file is the reviewed one — and the target commit is data, validated by that copy.
   # The environment admitting `main` and nothing else is what makes that
   # binding; the ref check in the build job only makes the failure readable.
   workflow_dispatch:
@@ -61,26 +58,25 @@ on:
 # with a green push CI at the moment it starts, not the commit that happened to
 # trigger it. Whichever run survives, it ships the newest green bundle.
 #
-# Only runs that can deploy join the queue (#361). The group is evaluated
-# before the build job's `if`, so a workflow_run that job is bound to skip —
-# CI on a pull request (a fork's branch can be called `main`), CI's weekly
-# schedule, a manual CI dispatch, a failed CI run — used to join it anyway,
-# where it could displace a pending real deploy and then deploy nothing. Such
-# a run now gets a group keyed on its own run id, so it contends with no one.
+# Only runs that can deploy join the queue. The group is evaluated before the
+# build job's `if`, so a workflow_run that job is bound to skip — CI on a pull
+# request (a fork's branch can be called `main`), CI's weekly schedule, a
+# manual CI dispatch, a failed CI run — would otherwise join it, displace a
+# pending real deploy and then deploy nothing. Such a run gets a group keyed
+# on its own run id, so it contends with no one.
 #
-# The group stays at workflow level rather than moving onto a job when build
-# and deploy split (#333), so it still holds a whole run, build and deploy
-# together. Per-job groups would let a newer run build and resolve while an
+# The group is at workflow level rather than on a job, so it holds a whole
+# run, build and deploy together. Per-job groups would let a newer run build and resolve while an
 # older run's deploy was still waiting, and the two uploads could again land
 # in either order.
 #
-# Rollback, and why it needs the DEPLOY_PAUSED switch (#345). The queue above
-# worked against a rollback in two ways. A dispatch waiting behind a running
-# deploy is the group's pending run, so the next CI completion on main queued
-# a workflow_run behind it and silently cancelled it — newest pending wins,
-# whatever the trigger. And a rollback that did run lasted only until the next
-# green push CI on main, because the automatic path redeploys the newest green
-# commit; re-running the bad commit's CI was enough to put it back.
+# Rollback, and why it needs the DEPLOY_PAUSED switch. On its own the queue
+# above works against a rollback in two ways. A dispatch waiting behind a
+# running deploy is the group's pending run, so the next CI completion on main
+# queues a workflow_run behind it and silently cancels it — newest pending
+# wins, whatever the trigger. And a rollback that does run lasts only until
+# the next green push CI on main, because the automatic path redeploys the
+# newest green commit.
 #
 # Splitting the triggers into separate groups would not help: the two paths
 # would then race each other's uploads, and a shared job-level group on
@@ -101,7 +97,7 @@ on:
 # or is still pending and is displaced by the dispatch; one that has not
 # started its build job by then skips, since the `if` reads the variable
 # again. It guarantees nothing for a dispatch made while the variable is
-# unset — that is the old behaviour, and the rollback will not stick.
+# unset: the rollback will not stick.
 #
 # Rollback procedure (also in the README and CONTRIBUTING):
 #   1. Settings → Secrets and variables → Actions → Variables: set
@@ -127,10 +123,8 @@ jobs:
   # only, so checks aren't run twice. It runs after CI, never beside it — see
   # the `on:` block above.
   #
-  # Build and deploy are separate jobs (#333). The job that holds the
-  # deployment token used to check out the target commit and run its
-  # `npm ci` and `npm run build` — the repo's own code and every dependency's,
-  # in the same job as the secret. Now everything that executes repo code
+  # Build and deploy are separate jobs, so no job that runs repo or dependency
+  # code holds the deployment token. Everything that executes repo code
   # happens in `build`, which has no environment and so cannot see the token,
   # and `deploy` only downloads the built `dist/` and hands it to the Azure
   # action. It never checks out the repository at all.
@@ -139,7 +133,7 @@ jobs:
     # server and audit — has to be green. `event` is the event CI itself ran
     # on; only a push to main is a candidate for production. DEPLOY_PAUSED
     # stops the automatic path only — a dispatch is how you roll back while
-    # paused (#345; see the concurrency note). It is read again here, not just
+    # paused (see the concurrency note). It is read again here, not just
     # in the group expression, so a run queued before the switch was set and
     # still waiting skips when it finally starts.
     if: >-
@@ -159,7 +153,7 @@ jobs:
     steps:
       # A dispatch runs this file as it stands on the dispatched ref, so a
       # branch or tag can supply a copy without this step — this is not the
-      # control (#333). The `production` environment's main-only deployment
+      # control. The `production` environment's main-only deployment
       # branch rule is, and it refuses such a run's deploy job regardless.
       # This makes the ordinary mistake, dispatching from the wrong ref in the
       # form, fail in the first second with a message that says what to do
@@ -186,15 +180,14 @@ jobs:
       # dispatch without it resolves exactly as workflow_run does. The input
       # reaches the shell through `env`, never interpolated into the script,
       # and must look like a commit hash before anything else touches it; the
-      # next steps hold it to commits main has contained (#314, #333).
+      # next steps hold it to commits main has contained.
       #
-      # The check is bash's `[[ =~ ]]`, which matches the whole string (#345).
-      # It used to be `printf | grep -E`, and grep is line-oriented: a
-      # multi-line input passed as long as one line looked like a hash, its
-      # other lines were then written to $GITHUB_OUTPUT as extra outputs, and
-      # the error message echoed the raw input, where a line starting `::`
-      # would be read as a workflow command. So the input is never echoed —
-      # the messages here are fixed text — and every value that reaches
+      # The check is bash's `[[ =~ ]]`, which matches the whole string. A
+      # line-oriented check (grep) would pass a multi-line input as long as one
+      # line looked like a hash, and write its other lines to $GITHUB_OUTPUT as
+      # extra outputs. The input is never echoed either — a line starting `::`
+      # would be read as a workflow command — so the messages here are fixed
+      # text, and every value that reaches
       # $GITHUB_OUTPUT, including the SHA `gh` returns, passes the same check
       # first. The API only ever returns a full hash, so that one is held to
       # exactly 40 hex characters; anything else is a failed lookup.
@@ -224,7 +217,7 @@ jobs:
 
       # main, not the target: the ancestry check below needs main's history,
       # and the target is checked out from it only once it has passed.
-      # persist-credentials: false (#333) — nothing after this step talks to
+      # persist-credentials: false — nothing after this step talks to
       # the remote, and the build runs dependency code that has no business
       # finding a token in .git/config.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -241,21 +234,21 @@ jobs:
 
       # Rollback stays possible, but only to a commit that was once main: a
       # merged, reviewed state, not whatever a branch or tag happens to point
-      # at (#314). It runs before `npm ci`, so a refused commit never gets as
+      # at. It runs before `npm ci`, so a refused commit never gets as
       # far as executing its own build config, let alone reaching the deploy.
-      # It lives in the build job rather than beside the token (#333): it
+      # It lives in the build job rather than beside the token: it
       # needs git history, and `deploy` deliberately has none.
       #
       # Checked for the workflow_run path too, where it should never fire: the
       # resolved commit came from a push to main. The one case it catches there
-      # is a force-push that rewrote main after CI passed — and a commit main no
-      # longer contains should not ship either.
+      # is a force-push that rewrote main after CI passed — and a commit main
+      # does not contain should not ship either.
       #
       # `rev-parse` also turns an abbreviated `sha` input into the full hash,
       # which is what the deploy job logs and what the output carries.
       #
       # Its output is held to a full 40-character hash before it is written,
-      # for the same reason as above (#345): nothing reaches $GITHUB_OUTPUT
+      # for the same reason as above: nothing reaches $GITHUB_OUTPUT
       # unchecked. `$SHA` itself is safe to echo — the previous step validated
       # it.
       - name: Refuse commits not on main
@@ -280,23 +273,20 @@ jobs:
           echo "Deploying $full"
           echo "sha=$full" >> "$GITHUB_OUTPUT"
 
-      # The build used to happen inside the Static Web Apps container, where
-      # Oryx picked its own Node. That left the one artifact users actually load
-      # as the only thing outside the .nvmrc / engines / CI alignment — CI could
-      # be green on the pinned version while the deployed bundle came off
-      # whatever Oryx chose. Building here and uploading with skip_app_build
-      # means what ships came off the toolchain that passed CI. `.nvmrc` is
-      # read from the target commit, checked out by the step above.
+      # Built here, not inside the Static Web Apps container, where Oryx picks
+      # its own Node: uploading with skip_app_build means what ships came off
+      # the toolchain that passed CI. `.nvmrc` is read from the target commit,
+      # checked out by the step above.
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version-file: .nvmrc
           cache: npm
 
       - name: Install dependencies
-        # --ignore-scripts (#314): install scripts are the one place a
+        # --ignore-scripts: install scripts are the one place a
         # compromised or typo-squatted dependency runs code without anyone
-        # importing it. Since #333 this job no longer holds the deployment
-        # token, but it does produce the bundle that ships, so the flag stays.
+        # importing it. This job does not hold the deployment token, but it
+        # produces the bundle that ships.
         # The app does not need them — the only package in the
         # lockfile with an install script is fsevents (macOS-only, optional,
         # never installed here), and vite 8's native pieces (rolldown,
@@ -328,7 +318,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     name: Deploy
-    # The job that holds the deployment token runs in an environment (#314), so
+    # The job that holds the deployment token runs in an environment, so
     # the rules around *who and what may deploy* live in repo settings, where
     # no branch can edit them — unlike the checks in this file, which a
     # dispatched ref supplies itself. Naming the environment does nothing on
@@ -339,7 +329,7 @@ jobs:
     #     copy. Until then any workflow on any branch can still read it.
     #   - Under the environment's deployment branches and tags, choose
     #     "Selected branches and tags" and allow the branch `main` and nothing
-    #     else — no tag patterns (#333). `workflow_run` runs report the
+    #     else — no tag patterns. `workflow_run` runs report the
     #     default branch as their ref, so the gated path is unaffected, and a
     #     rollback is a dispatch on main with the `sha` input. A dispatch from
     #     any other branch or tag is refused before this job's first step.
@@ -374,7 +364,7 @@ jobs:
         id: builddeploy
         # Third-party and holding the deployment token, on a ref the upstream
         # can move. Worth pinning to a commit SHA — but the SHA pins less than
-        # every other pin in this repo, and that is a residual risk (#345).
+        # every other pin in this repo, and that is a residual risk.
         #
         # What the SHA fixes is the action's wrapper: action.yml, a two-line
         # entrypoint.sh (`cd /bin/staticsites/ && ./StaticSitesClient
@@ -400,12 +390,12 @@ jobs:
         # The trap: upstream publishes `v1` as BOTH a tag and a branch, and they
         # are years apart. The tag is frozen at 2021-03-03; the branch is where
         # the action is actually maintained. Resolving `v1` to a SHA picks up the
-        # tag, so this was pinned to a 2021 build of a service that has moved on
-        # — `skip_api_build` was rejected as an unknown input. Pinned to the
-        # branch head instead.
+        # tag: a 2021 build of a service that has moved on, which rejects
+        # `skip_api_build` as an unknown input. Pinned to the branch head
+        # instead.
         #
         # Dependabot cannot see that distinction: it resolves `v1` to the tag
-        # and proposes moving this pin back to 2021, which it did in #219. It is
+        # and proposes moving this pin back to 2021. It is
         # excluded in dependabot.yml for that reason, so unlike every other
         # action here this SHA does not rot forward on its own — raising it
         # means reading the v1 branch and editing this line by hand.

@@ -11,9 +11,7 @@ import {
 } from '../splunkRegex';
 
 // Patterns run on PCRE2 itself, so these pin PCRE semantics rather than a
-// translation. Several replace tests of the old PCRE-to-JS translator whose
-// behavioural half still holds; the other half — what JS source a pattern
-// became — no longer exists.
+// translation.
 
 const matches = (pattern: string, s: string) => {
   const re = safeRegex(pattern);

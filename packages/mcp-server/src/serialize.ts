@@ -4,7 +4,7 @@
  * before/after `_raw` snapshots dwarf everything else in the payload and the
  * agent can already see `_raw` on the event.
  *
- * Runs inside the worker (#351). Everything in the result that grows with the
+ * Runs inside the worker. Everything in the result that grows with the
  * event count is cut to the returned events here, and the whole response is
  * held under `MAX_RESPONSE_CHARS`, so what crosses to the server's thread —
  * which has no heap limit — is bounded whatever the sample was.

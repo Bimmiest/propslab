@@ -16,8 +16,8 @@ function run(value: string, raw: string) {
   return { raw: event._raw, diagnostics };
 }
 
-// #121: `\0` was mapped to `$0`, which JS does not recognise as a substitution,
-// so the marker itself was written into the event text.
+// `\0` is the whole match; `$0` is not a JS substitution, so mapping to it
+// would write the marker itself into the event text.
 describe('SEDCMD replacement — whole-match references (#121)', () => {
   it('\\0 expands to the whole match', () => {
     expect(run('s/b/[\\0]/', 'abc').raw).toBe('a[b]c');
@@ -40,7 +40,7 @@ describe('SEDCMD replacement — whole-match references (#121)', () => {
   });
 });
 
-// #122: a pattern safeRegex refuses left no trace at all.
+// A pattern safeRegex refuses is reported.
 describe('SEDCMD — an uncompilable pattern warns rather than vanishing (#122)', () => {
   it('runs a backtracking-prone pattern rather than refusing it (#368)', () => {
     const { raw, diagnostics } = run('s/(a+)+$/Z/', 'aaaa');
@@ -58,7 +58,7 @@ describe('SEDCMD — an uncompilable pattern warns rather than vanishing (#122)'
   });
 });
 
-// #126: `startsWith` read ordinary values as sed commands.
+// Ordinary values that merely start like a sed command are not read as one.
 describe('SEDCMD — command detection requires a real delimiter (#126)', () => {
   it('does not report "yes" as y/// transliteration', () => {
     const { diagnostics } = run('yes', 'abc');

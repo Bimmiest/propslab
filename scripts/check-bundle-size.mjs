@@ -1,11 +1,9 @@
 // ---------------------------------------------------------------------------
 // check-bundle-size.mjs
 //
-// Fails when a built chunk's gzip size exceeds its budget (#375).
-//
-// Monaco's chunk sat at 913 KB gzip for months because nothing measured it:
-// Vite prints sizes on every build, and a warning printed on every build is
-// read by no one. Budgets are ~10–15% over the sizes measured when they were
+// Fails when a built chunk's gzip size exceeds its budget. Vite prints sizes on
+// every build, and a warning printed on every build is read by no one.
+// Budgets are ~10–15% over the sizes measured when they were
 // set, so ordinary growth fits and a new dependency or a lost code split does
 // not. When a budget trips for a good reason, raise it here in the same change
 // and say why in the commit.
@@ -39,7 +37,7 @@ const BUDGETS_KB = {
   // Workers: off the startup path, but each is a whole download of its own.
   'pipelineWorker.js': 70, // 61.4
   'editor.worker.js': 97, // 85.9
-  // PCRE2, the regex engine every user pattern runs on (#368). Fetched once
+  // PCRE2, the regex engine every user pattern runs on. Fetched once
   // by the page at startup and handed to the workers as a compiled module.
   'pcre2.wasm': 95, // 83.5
 };
@@ -62,8 +60,8 @@ const rows = files.map((file) => {
   return { key, kb, budget, over: kb > budget };
 });
 
-// A budget whose chunk no longer exists is stale: renamed or merged away, and
-// no longer guarding anything.
+// A budget whose chunk does not exist is stale: renamed or merged away, and
+// guarding nothing.
 const missing = Object.keys(BUDGETS_KB).filter((key) => !rows.some((r) => r.key === key));
 
 for (const r of rows.sort((a, b) => b.kb - a.kb)) {

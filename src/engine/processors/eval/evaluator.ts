@@ -21,24 +21,68 @@ function getField(event: SplunkEvent, name: string): EvalValue {
   return val;
 }
 
+type NodeOf<K extends Node['kind']> = Extract<Node, { kind: K }>;
+
+/**
+ * Splunk propagates null through the dot operator: concatenating against a
+ * field that does not exist yields no value at all, so the EVAL writes no
+ * field. Coercing the missing side to "" instead produced a present-but-
+ * empty field, which inverts the standard `if(isnull(x), …)` guard --
+ * exactly the case a config author wrote the guard for.
+ */
+function evalConcat(node: NodeOf<'concat'>, ctx: EvalCtx): EvalValue {
+  const left = evalNode(node.left, ctx);
+  if (left === null || left === undefined) return null;
+  const right = evalNode(node.right, ctx);
+  if (right === null || right === undefined) return null;
+  return toStr(left) + toStr(right);
+}
+
+/**
+ * Short-circuit: Splunk does not evaluate the right operand once the left
+ * settles the result. XOR has no short circuit: its answer always depends
+ * on both sides.
+ *
+ * Three-valued logic, as SPL documents it for NULL operands:
+ * NULL AND false is false, NULL AND true is NULL, NULL OR true is true,
+ * NULL OR false is NULL, and NULL XOR anything is NULL. Only a definite
+ * false (AND) or true (OR) on the left settles the answer early.
+ */
+function evalLogical(node: NodeOf<'logical'>, ctx: EvalCtx): EvalValue {
+  const left = toTri(evalNode(node.left, ctx));
+  if (node.op === 'XOR') {
+    const right = toTri(evalNode(node.right, ctx));
+    return left === null || right === null ? null : left !== right;
+  }
+  if (node.op === 'OR') {
+    if (left === true) return true;
+    const right = toTri(evalNode(node.right, ctx));
+    return right === true ? true : left === null || right === null ? null : false;
+  }
+  if (left === false) return false;
+  const right = toTri(evalNode(node.right, ctx));
+  return right === false ? false : left === null || right === null ? null : true;
+}
+
+function evalIn(node: NodeOf<'in'>, ctx: EvalCtx): EvalValue {
+  const left = evalNode(node.value, ctx);
+  // A NULL value is in no list and out of none: the answer is NULL, so
+  // neither `missing IN ("")` nor `missing NOT IN ("a")` holds. A
+  // NULL list item simply never matches (its comparison is NULL).
+  if (left === null || left === undefined) return null;
+  // `some` stops at the first match — no need to evaluate the rest of the list.
+  const match = node.list.some((n) => compare(left, evalNode(n, ctx), '=') === true);
+  return node.negate ? !match : match;
+}
+
 export function evalNode(node: Node, ctx: EvalCtx): EvalValue {
   switch (node.kind) {
     case 'lit':
       return node.value;
     case 'field':
       return getField(ctx.event, node.name);
-    case 'concat': {
-      // Splunk propagates null through the dot operator: concatenating against a
-      // field that does not exist yields no value at all, so the EVAL writes no
-      // field. Coercing the missing side to "" instead produced a present-but-
-      // empty field, which inverts the standard `if(isnull(x), …)` guard --
-      // exactly the case a config author wrote the guard for.
-      const left = evalNode(node.left, ctx);
-      if (left === null || left === undefined) return null;
-      const right = evalNode(node.right, ctx);
-      if (right === null || right === undefined) return null;
-      return toStr(left) + toStr(right);
-    }
+    case 'concat':
+      return evalConcat(node, ctx);
     case 'arith': {
       const l = evalNode(node.left, ctx);
       const r = evalNode(node.right, ctx);
@@ -52,44 +96,15 @@ export function evalNode(node: Node, ctx: EvalCtx): EvalValue {
       return n === null ? null : -n;
     }
     case 'not': {
-      // Three-valued: NOT NULL is NULL (#343). Collapsing NULL to false here
-      // made `NOT (missing == "a")` true while `missing != "a"` is NULL.
+      // Three-valued: NOT NULL is NULL, so `NOT (missing == "a")` agrees with
+      // `missing != "a"`, which is NULL.
       const v = toTri(evalNode(node.operand, ctx));
       return v === null ? null : !v;
     }
-    case 'logical': {
-      // Short-circuit: Splunk does not evaluate the right operand once the left
-      // settles the result. XOR has no short circuit: its answer always depends
-      // on both sides (#312).
-      //
-      // Three-valued logic, as SPL documents it for NULL operands (#343):
-      // NULL AND false is false, NULL AND true is NULL, NULL OR true is true,
-      // NULL OR false is NULL, and NULL XOR anything is NULL. Only a definite
-      // false (AND) or true (OR) on the left settles the answer early.
-      const left = toTri(evalNode(node.left, ctx));
-      if (node.op === 'XOR') {
-        const right = toTri(evalNode(node.right, ctx));
-        return left === null || right === null ? null : left !== right;
-      }
-      if (node.op === 'OR') {
-        if (left === true) return true;
-        const right = toTri(evalNode(node.right, ctx));
-        return right === true ? true : left === null || right === null ? null : false;
-      }
-      if (left === false) return false;
-      const right = toTri(evalNode(node.right, ctx));
-      return right === false ? false : left === null || right === null ? null : true;
-    }
-    case 'in': {
-      const left = evalNode(node.value, ctx);
-      // A NULL value is in no list and out of none: the answer is NULL, so
-      // neither `missing IN ("")` nor `missing NOT IN ("a")` holds (#343). A
-      // NULL list item simply never matches (its comparison is NULL).
-      if (left === null || left === undefined) return null;
-      // `some` stops at the first match — no need to evaluate the rest of the list.
-      const match = node.list.some((n) => compare(left, evalNode(n, ctx), '=') === true);
-      return node.negate ? !match : match;
-    }
+    case 'logical':
+      return evalLogical(node, ctx);
+    case 'in':
+      return evalIn(node, ctx);
     case 'call':
       return evalCall(node.name, node.args, ctx);
   }

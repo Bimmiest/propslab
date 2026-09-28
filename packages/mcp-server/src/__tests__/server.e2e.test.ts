@@ -7,13 +7,12 @@ import { createServer } from '../server';
 import { DEFAULT_MAX_CONCURRENT_WORKERS } from '../runInWorker';
 
 /**
- * End to end through the SDK (#319): a real Client talking to the server from
+ * End to end through the SDK: a real Client talking to the server from
  * `createServer` over an in-memory transport pair. tools.test.ts calls the
  * handlers directly with every argument spelled out, which skips the two
  * things only the protocol path does — the SDK applying the zod input schemas
  * (and with them every `.default()`), and `registerTools` handing each call's
- * `extra.signal` to the sandbox. Both have been easy to break without any
- * handler-level test noticing.
+ * `extra.signal` to the sandbox. No handler-level test sees either.
  *
  * As in tools.test.ts, the worker is the built bundle (`pretest` builds it).
  */

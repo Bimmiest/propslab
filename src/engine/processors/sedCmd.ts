@@ -296,7 +296,7 @@ export function applySedCommands(
     const mutations: RawMutation[] = [];
     // A SEDCMD that leaves _raw byte-for-byte identical is the classic silent
     // no-op: the masking rule ships, the data is not masked, and the preview
-    // looks exactly like a working one (#84).
+    // looks exactly like a working one.
     const noOps: DirectiveNoOp[] = [];
 
     for (const cmd of commands) {

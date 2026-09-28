@@ -91,7 +91,7 @@ describe('applyEvalExpressions — arithmetic', () => {
 });
 
 // Predicates are read through if() here: a field cannot be assigned a boolean
-// result (#358).
+// result.
 describe('applyEvalExpressions — numeric predicates', () => {
   it('isnum() is false for non-numeric strings', () => {
     const r = applyEvalExpressions([event({ a: 'abc' })], [evalDir('n', 'if(isnum(a), "true", "false")')])[0]!;
@@ -218,7 +218,7 @@ describe('applyEvalExpressions — function fidelity', () => {
 
 describe('applyEvalExpressions — replace()', () => {
   it('runs a backtracking-prone pattern rather than refusing it (#368)', () => {
-    // (a+)+ was refused by the old ReDoS heuristic; PCRE's limits bound it now.
+    // (a+)+ is accepted: PCRE's limits bound it.
     const result = applyEvalExpressions(
       [event({}, 'aaaaaab')],
       [evalDir('safe', 'replace(_raw, "(a+)+", "x")')]
@@ -244,6 +244,42 @@ describe('applyEvalExpressions — crypto stubs', () => {
   it('sha256() returns not-simulated placeholder', () => {
     const result = applyEvalExpressions([event()], [evalDir('h', 'sha256("test")')])[0]!;
     expect(result.fields['h']).toBe('[sha256() not simulated]');
+  });
+
+  it('sha1() and sha512() return their not-simulated placeholders', () => {
+    const result = applyEvalExpressions([event()], [evalDir('a', 'sha1("t")'), evalDir('b', 'sha512("t")')])[0]!;
+    expect(result.fields['a']).toBe('[sha1() not simulated]');
+    expect(result.fields['b']).toBe('[sha512() not simulated]');
+  });
+});
+
+// Doc-derived (Splunk eval function reference): one case per builtin the
+// other suites do not reach, so each entry in the dispatch table is run.
+describe('applyEvalExpressions — remaining builtins', () => {
+  const run = (expr: string, fields: Record<string, string> = {}) =>
+    applyEvalExpressions([event(fields)], [evalDir('r', expr)])[0]!.fields['r'];
+
+  it('nullif() is null when its arguments are equal, else the first', () => {
+    expect(run('nullif("a", "a")')).toBeUndefined();
+    expect(run('nullif("a", "b")')).toBe('a');
+  });
+
+  it('trim() and urldecode()', () => {
+    expect(run('trim("  x  ")')).toBe('x');
+    expect(run('urldecode("a%20b")')).toBe('a b');
+  });
+
+  it('pow(), log() and pi()', () => {
+    expect(run('pow(2, 10)')).toBe('1024');
+    expect(Number(run('log(100)'))).toBeCloseTo(2);
+    expect(run('pi()')).toBe(String(Math.PI));
+  });
+
+  it('mvappend(), mvdedup(), mvsort() and mvfind()', () => {
+    expect(run('mvappend("a", "b")')).toEqual(['a', 'b']);
+    expect(run('mvdedup(mvappend("a", "a", "b"))')).toEqual(['a', 'b']);
+    expect(run('mvsort(mvappend("b", "a"))')).toEqual(['a', 'b']);
+    expect(run('mvfind(mvappend("x", "ab"), "b")')).toBe('1');
   });
 });
 
@@ -368,8 +404,7 @@ describe('applyEvalExpressions — lazy evaluation (SEM-8)', () => {
     const diagnostics: import('../types').ValidationDiagnostic[] = [];
     const r = applyEvalExpressions(
       [event({ a: 'present' })],
-      // Probed with a stub that warns when evaluated. This used cidrmatch()
-      // until #291 simulated it, after which the assertion held vacuously.
+      // Probed with a stub that warns when evaluated.
       [evalDir('r', 'coalesce(a, searchmatch("x"))')],
       diagnostics,
     )[0]!;
@@ -455,7 +490,7 @@ describe('applyEvalExpressions — parser correctness (#9)', () => {
   });
 });
 
-// #10: non-numeric values coerced to 0 diverged from Splunk NULL semantics.
+// Non-numeric values are NULL, as in Splunk, not coerced to 0.
 describe('applyEvalExpressions — numeric NULL semantics (#10)', () => {
   it('does not treat a non-numeric string as 0 in comparison', () => {
     const r = applyEvalExpressions([event({ a: 'abc' })], [evalDir('n', 'if(a == 0, "eq", "ne")')])[0]!;
@@ -632,9 +667,9 @@ describe('#168 — null propagates through concatenation', () => {
 });
 
 describe('#211 — null propagates into function arguments', () => {
-  // #168 fixed the operators; the functions kept coercing an absent field to ""
-  // first, so `EVAL-ulen = len(user)` wrote 0 on every event without a `user`.
-  // 0 is the damaging case precisely because it looks like a real answer.
+  // Functions do not coerce an absent field to "" either: `EVAL-ulen =
+  // len(user)` writes nothing on an event without a `user`. 0 would be the
+  // damaging answer precisely because it looks like a real one.
   it('writes no field for len() of a missing field', () => {
     expect(evalWith('len(user)', {})).toBeUndefined();
   });
@@ -677,8 +712,8 @@ describe('#211 — null propagates into function arguments', () => {
     // they must keep returning a value the surrounding if()/case() can branch on.
     expect(evalWith('if(isnull(user), "missing", "present")', {})).toBe('missing');
     expect(evalWith('typeof(user)', {})).toBe('Invalid');
-    // match() and like() were listed here too. Since #343 they yield NULL for a
-    // NULL subject, as the comparison operators do; NULL is falsy in if(), so
+    // match() and like() are not listed: they yield NULL for a NULL subject,
+    // as the comparison operators do; NULL is falsy in if(), so
     // the guard below still takes its else branch.
     expect(evalWith('if(match(user, "^a"), "yes", "no")', {})).toBe('no');
     expect(evalWith('if(like(user, "a%"), "yes", "no")', {})).toBe('no');

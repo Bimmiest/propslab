@@ -15,7 +15,7 @@ interface TimestampTabProps {
   /**
    * The inputs of the last pipeline run, from PreviewPanel. This tab unmounts
    * whenever another sub-tab is shown, which is when edits happen, so an
-   * instance of the hook here would start from unrun edits (#347). The
+   * instance of the hook here would start from unrun edits. The
    * fallback serves a tab rendered on its own.
    */
   inputs?: PipelineInputs;
@@ -166,20 +166,20 @@ const STRPTIME_REFERENCE: StrptimeCategory[] = [
 // from a stanza that never matched this event's sourcetype/host/source.
 // `resolveStanzasForEvent`, as the pipeline resolves them, so a `sourcetype =`
 // assigned in a [source::] or [host::] stanza picks the time settings of the
-// stanza it names rather than those of the sourcetype it replaced (#328).
+// stanza it names rather than those of the sourcetype it replaced.
 function parseTimeConfig(propsConf: string, metadata: EventMetadata): TimeConfig {
   const { stanzas } = resolveStanzasForEvent(parseConf(propsConf, 'props.conf').stanzas, metadata);
   const directives = mergeDirectives(stanzas);
   const get = (key: string) => directives.find((d) => d.key === key)?.value.trim();
   return {
-    // An empty TIME_PREFIX is unset, as the extractor reads it (#328).
+    // An empty TIME_PREFIX is unset, as the extractor reads it.
     timePrefix: get('TIME_PREFIX') || null,
     timeFormat: get('TIME_FORMAT') ?? null,
     // Shared with the engine so 0 / -1 (no limit) draw the window it scans.
     maxLookahead: resolveLookahead(get('MAX_TIMESTAMP_LOOKAHEAD')),
     tz: get('TZ') ?? null,
     // Handed to the prober so a %Z the alias table remaps parses to the same
-    // instant the pipeline gives it (#313). `now` is left to the clock, which is
+    // instant the pipeline gives it. `now` is left to the clock, which is
     // what the app's pipeline runs use too.
     tzAlias: get('TZ_ALIAS') ?? null,
   };
@@ -215,17 +215,15 @@ function extractDirectives(format: string): { directive: string; description: st
 export function TimestampTab({ items, currentPage, eventsPerPage, inputs }: TimestampTabProps) {
   const ownInputs = usePipelineInputs();
   const { propsConf, metadata } = inputs ?? ownInputs;
-  const [refOpen, setRefOpen] = useState(false);
-  const [refSearch, setRefSearch] = useState('');
 
   const config = useMemo(() => parseTimeConfig(propsConf, metadata), [propsConf, metadata]);
 
-  // Probing runs in a terminatable worker (#117): TIME_PREFIX is a user regex,
-  // and executing it during render had nothing to interrupt it. Memoised so the
+  // Probing runs in a terminatable worker: TIME_PREFIX is a user regex, and
+  // executed during render nothing could interrupt it. Memoised so the
   // hook re-probes when the events or the config change, not on every render.
   // The text probed is the text the extractor read, not the final `_raw`: a
   // SEDCMD or an index-time transform runs after timestamping and may have
-  // rewritten the very prefix the tab would then fail to find (#328).
+  // rewritten the very prefix the tab would then fail to find.
   const raws = useMemo(() => items.map((item) => timestampTextOf(item.event)), [items]);
   const { status, probes, error } = useTimestampMatch(raws, config);
 
@@ -234,112 +232,11 @@ export function TimestampTab({ items, currentPage, eventsPerPage, inputs }: Time
     [config.timeFormat]
   );
 
-  const filteredRef = useMemo(() => {
-    if (!refSearch) return STRPTIME_REFERENCE;
-    const lower = refSearch.toLowerCase();
-    return STRPTIME_REFERENCE.map((cat) => ({
-      ...cat,
-      directives: cat.directives.filter(
-        (d) => d.directive.toLowerCase().includes(lower) || d.description.toLowerCase().includes(lower) || d.example.toLowerCase().includes(lower)
-      ),
-    })).filter((cat) => cat.directives.length > 0);
-  }, [refSearch]);
-
   return (
     <div className="flex flex-col h-full">
-      {/* Config summary */}
-      <div className="flex-shrink-0 px-3 py-2 border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
-          <ConfigValue label="TIME_PREFIX" value={config.timePrefix} color={PREFIX_COLOR} />
-          <ConfigValue label="TIME_FORMAT" value={config.timeFormat} color={FORMAT_COLOR} />
-          <ConfigValue label="MAX_TIMESTAMP_LOOKAHEAD" value={Number.isFinite(config.maxLookahead) ? config.maxLookahead.toString() : 'no limit'} color={LOOKAHEAD_COLOR} />
-          {config.tz && <ConfigValue label="TZ" value={config.tz} />}
-        </div>
-        {directives.length > 0 && (
-          <div className="flex flex-wrap gap-2 mt-1.5">
-            {directives.map((d, i) => (
-              <span key={i} className="inline-flex items-center gap-1 text-[10px] text-[var(--color-text-muted)]">
-                <code className="px-1 py-0.5 rounded bg-[var(--color-bg-tertiary)] text-[var(--color-success)] font-mono">{d.directive}</code>
-                {d.description}
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* STRPTIME Reference */}
-      <div className="flex-shrink-0 border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
-        <button
-          onClick={() => setRefOpen(!refOpen)}
-          aria-expanded={refOpen}
-          aria-controls="strptime-reference"
-          className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-[var(--color-bg-tertiary)] transition-colors cursor-pointer text-left"
-        >
-          <svg
-            className="w-3 h-3 transition-transform flex-shrink-0"
-            style={{ color: 'var(--color-text-muted)', transform: refOpen ? 'rotate(90deg)' : 'rotate(0deg)' }}
-            fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-          </svg>
-          <span className="text-xs font-medium text-[var(--color-text-muted)]">STRPTIME Reference</span>
-        </button>
-        {refOpen && (
-          <div id="strptime-reference" className="px-3 pb-2">
-            <div className="relative mb-2">
-              <svg
-                className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 pointer-events-none"
-                style={{ color: 'var(--color-text-muted)' }}
-                fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-              <input
-                type="text"
-                aria-label="Search strptime directives"
-                placeholder="Search directives..."
-                value={refSearch}
-                onChange={(e) => setRefSearch(e.target.value)}
-                className="w-full max-w-xs pl-6 pr-2 py-1 text-xs rounded border border-[var(--color-border)] bg-[var(--color-bg-primary)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent)]"
-              />
-            </div>
-            <div className="max-h-56 overflow-auto">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="text-left text-[10px] text-[var(--color-text-muted)] uppercase tracking-wider">
-                    <th className="pb-1 pr-3 font-medium w-16">Directive</th>
-                    <th className="pb-1 pr-3 font-medium">Description</th>
-                    <th className="pb-1 font-medium w-32">Example</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredRef.map((cat) => (
-                    <StrptimeCategoryRows key={cat.name} category={cat} activeDirectives={directives.map((d) => d.directive)} />
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Legend */}
-      <div className="flex-shrink-0 px-3 py-1.5 border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
-        <div className="flex items-center gap-4 text-[10px]">
-          <span className="flex items-center gap-1.5">
-            <span className="w-3 h-2 rounded-sm" style={{ backgroundColor: tint(PREFIX_COLOR, 25), borderBottom: `2px solid ${PREFIX_COLOR}` }} />
-            <span className="text-[var(--color-text-muted)]">TIME_PREFIX match</span>
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="w-3 h-2 rounded-sm" style={{ backgroundColor: tint(FORMAT_COLOR, 25), borderBottom: `2px solid ${FORMAT_COLOR}` }} />
-            <span className="text-[var(--color-text-muted)]">TIME_FORMAT match</span>
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="text-[11px] font-bold leading-none" style={{ color: LOOKAHEAD_COLOR }}>]</span>
-            <span className="text-[var(--color-text-muted)]">Lookahead boundary</span>
-          </span>
-        </div>
-      </div>
+      <ConfigSummary config={config} directives={directives} />
+      <StrptimeReference activeDirectives={directives.map((d) => d.directive)} />
+      <TimestampLegend />
 
       {/* Events */}
       {/* Focusable so the list scrolls from the keyboard: the cards hold no
@@ -350,8 +247,8 @@ export function TimestampTab({ items, currentPage, eventsPerPage, inputs }: Time
             No TIME_FORMAT configured in props.conf
           </div>
         ) : status === 'timeout' ? (
-          // The refusal path the old synchronous version could never reach: it
-          // had no way to notice, so the tab simply stopped responding.
+          // The worker's watchdog stopped the probe: say so, rather than
+          // leaving the tab unresponsive.
           <div className="flex flex-col items-center justify-center gap-1 py-12 text-center">
             <span className="text-sm font-medium text-[var(--color-error)]">
               Timestamp matching timed out
@@ -363,9 +260,9 @@ export function TimestampTab({ items, currentPage, eventsPerPage, inputs }: Time
             </span>
           </div>
         ) : status === 'error' ? (
-          // A throw inside the prober, reported as itself. It used to kill the
-          // worker and come out as the timeout message above, which sent people
-          // looking for a backtracking TIME_PREFIX that was not there (#322).
+          // A throw inside the prober, reported as itself rather than as the
+          // timeout above, which would send people looking for a backtracking
+          // TIME_PREFIX that is not there.
           <div className="flex flex-col items-center justify-center gap-1 py-12 text-center">
             <span className="text-sm font-medium text-[var(--color-error)]">
               Timestamp matching failed
@@ -395,6 +292,128 @@ export function TimestampTab({ items, currentPage, eventsPerPage, inputs }: Time
   );
 }
 
+/** Config summary: the timestamp settings in force, and what the format's directives mean. */
+function ConfigSummary({ config, directives }: {
+  config: ReturnType<typeof parseTimeConfig>;
+  directives: { directive: string; description: string }[];
+}) {
+  return (
+    <div className="flex-shrink-0 px-3 py-2 border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+        <ConfigValue label="TIME_PREFIX" value={config.timePrefix} color={PREFIX_COLOR} />
+        <ConfigValue label="TIME_FORMAT" value={config.timeFormat} color={FORMAT_COLOR} />
+        <ConfigValue label="MAX_TIMESTAMP_LOOKAHEAD" value={Number.isFinite(config.maxLookahead) ? config.maxLookahead.toString() : 'no limit'} color={LOOKAHEAD_COLOR} />
+        {config.tz && <ConfigValue label="TZ" value={config.tz} />}
+      </div>
+      {directives.length > 0 && (
+        <div className="flex flex-wrap gap-2 mt-1.5">
+          {directives.map((d, i) => (
+            <span key={i} className="inline-flex items-center gap-1 text-[10px] text-[var(--color-text-muted)]">
+              <code className="px-1 py-0.5 rounded bg-[var(--color-bg-tertiary)] text-[var(--color-success)] font-mono">{d.directive}</code>
+              {d.description}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** The collapsible, searchable strptime reference table. */
+function StrptimeReference({ activeDirectives }: { activeDirectives: string[] }) {
+  const [refOpen, setRefOpen] = useState(false);
+  const [refSearch, setRefSearch] = useState('');
+
+  const filteredRef = useMemo(() => {
+    if (!refSearch) return STRPTIME_REFERENCE;
+    const lower = refSearch.toLowerCase();
+    return STRPTIME_REFERENCE.map((cat) => ({
+      ...cat,
+      directives: cat.directives.filter(
+        (d) => d.directive.toLowerCase().includes(lower) || d.description.toLowerCase().includes(lower) || d.example.toLowerCase().includes(lower)
+      ),
+    })).filter((cat) => cat.directives.length > 0);
+  }, [refSearch]);
+
+  return (
+    <div className="flex-shrink-0 border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
+      <button
+        onClick={() => setRefOpen(!refOpen)}
+        aria-expanded={refOpen}
+        aria-controls="strptime-reference"
+        className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-[var(--color-bg-tertiary)] transition-colors cursor-pointer text-left"
+      >
+        <svg
+          className="w-3 h-3 transition-transform flex-shrink-0"
+          style={{ color: 'var(--color-text-muted)', transform: refOpen ? 'rotate(90deg)' : 'rotate(0deg)' }}
+          fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+        </svg>
+        <span className="text-xs font-medium text-[var(--color-text-muted)]">STRPTIME Reference</span>
+      </button>
+      {refOpen && (
+        <div id="strptime-reference" className="px-3 pb-2">
+          <div className="relative mb-2">
+            <svg
+              className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 pointer-events-none"
+              style={{ color: 'var(--color-text-muted)' }}
+              fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input
+              type="text"
+              aria-label="Search strptime directives"
+              placeholder="Search directives..."
+              value={refSearch}
+              onChange={(e) => setRefSearch(e.target.value)}
+              className="w-full max-w-xs pl-6 pr-2 py-1 text-xs rounded border border-[var(--color-border)] bg-[var(--color-bg-primary)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent)]"
+            />
+          </div>
+          <div className="max-h-56 overflow-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-left text-[10px] text-[var(--color-text-muted)] uppercase tracking-wider">
+                  <th className="pb-1 pr-3 font-medium w-16">Directive</th>
+                  <th className="pb-1 pr-3 font-medium">Description</th>
+                  <th className="pb-1 font-medium w-32">Example</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredRef.map((cat) => (
+                  <StrptimeCategoryRows key={cat.name} category={cat} activeDirectives={activeDirectives} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TimestampLegend() {
+  return (
+    <div className="flex-shrink-0 px-3 py-1.5 border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
+      <div className="flex items-center gap-4 text-[10px]">
+        <span className="flex items-center gap-1.5">
+          <span className="w-3 h-2 rounded-sm" style={{ backgroundColor: tint(PREFIX_COLOR, 25), borderBottom: `2px solid ${PREFIX_COLOR}` }} />
+          <span className="text-[var(--color-text-muted)]">TIME_PREFIX match</span>
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-3 h-2 rounded-sm" style={{ backgroundColor: tint(FORMAT_COLOR, 25), borderBottom: `2px solid ${FORMAT_COLOR}` }} />
+          <span className="text-[var(--color-text-muted)]">TIME_FORMAT match</span>
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="text-[11px] font-bold leading-none" style={{ color: LOOKAHEAD_COLOR }}>]</span>
+          <span className="text-[var(--color-text-muted)]">Lookahead boundary</span>
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function ConfigValue({ label, value, color }: { label: string; value: string | null; color?: string }) {
   return (
     <span className="text-[var(--color-text-muted)]">
@@ -413,13 +432,13 @@ function ConfigValue({ label, value, color }: { label: string; value: string | n
 /**
  * The text timestamp extraction read for this event — `_raw` before SEDCMD,
  * DEST_KEY = _raw and INGEST_EVAL rewrote it — or `_raw` itself when the
- * extractor recorded none (#328).
+ * extractor recorded none.
  */
 function timestampTextOf(event: SplunkEvent): string {
   return event.timestampText ?? event._raw;
 }
 
-/** How the pipeline actually resolved this event's `_time` (#85). */
+/** How the pipeline actually resolved this event's `_time`. */
 function resolvedTimeSource(event: SplunkEvent): TimeSource | undefined {
   return event.processingTrace
     .filter((step) => step.processor === 'timestampExtractor')
@@ -521,8 +540,8 @@ function TimestampOverlay({ raw, probe, config }: { raw: string; probe: Timestam
   if (!result) {
     // No match — show the full lookahead window if the prefix matched, otherwise
     // plain text. The prefix span comes back on the probe rather than being
-    // re-derived here: re-running the user's TIME_PREFIX during render is the
-    // whole bug (#117), and this branch is exactly where it used to happen.
+    // re-derived here: the user's TIME_PREFIX must never run during render,
+    // where no watchdog can stop it.
     const prefix = probe?.prefix;
     {
       if (prefix) {

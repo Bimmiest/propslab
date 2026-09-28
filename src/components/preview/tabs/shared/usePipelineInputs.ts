@@ -1,8 +1,8 @@
 // ---------------------------------------------------------------------------
 // usePipelineInputs.ts
 // The props.conf and metadata the pipeline last ran with, for the views that
-// describe a run rather than the editor: the Timestamp tab (#316) and the
-// Effective config tab (#347).
+// describe a run rather than the editor: the Timestamp tab and the Effective
+// config tab.
 // ---------------------------------------------------------------------------
 
 import { useMemo, useState } from 'react';
@@ -20,14 +20,12 @@ export interface PipelineInputs {
  * The props.conf and metadata the events on screen were produced from, as near
  * as the caller can tell.
  *
- * The Timestamp tab used to read the live editor state, so its highlights ran
- * ahead of the `_time` badges beside them: in manual-apply mode they showed a
- * config that had not been run, and in auto mode every keystroke re-probed
- * before the pipeline had caught up (#316). The Effective config tab did the
- * same while its footer said it resolved config the way the preview does
- * (#347). Here the inputs follow the pipeline instead — debounced like its
- * auto-run, or frozen at the last "Run pipeline" click in manual-apply mode,
- * which is the moment the pipeline reads them too.
+ * The live editor state would run ahead of the events beside it: in
+ * manual-apply mode it is config that has not been run, and in auto mode every
+ * keystroke would re-probe before the pipeline had caught up. Here the inputs
+ * follow the pipeline instead — debounced like its auto-run, or frozen at the
+ * last "Run pipeline" click in manual-apply mode, which is the moment the
+ * pipeline reads them too.
  *
  * The store does not record what a run used, so a component that mounts while
  * manual-apply changes are pending starts from the editor state. Call it from

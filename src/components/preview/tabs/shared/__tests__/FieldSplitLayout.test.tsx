@@ -5,8 +5,8 @@ import { FieldSplitLayout } from '../FieldSplitLayout';
 
 const KEY = 'test-split-layout';
 
-// #35.3: JSON.parse succeeds for plenty of values that are not a Layout, and
-// each was handed straight to the panel group.
+// JSON.parse succeeds for plenty of values that are not a Layout, so the
+// stored value is validated before it reaches the panel group.
 describe('FieldSplitLayout — persisted layout is shape-checked (#35.3)', () => {
   beforeEach(() => localStorage.clear());
 

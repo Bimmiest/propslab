@@ -125,9 +125,8 @@ describe('EffectiveConfigTab (#86)', () => {
   });
 });
 
-// #347: the tab read the live editor state, so in manual-apply mode it listed
-// config that had not been run, under a footer saying it resolved config the
-// way the preview does.
+// The tab lists the config the last run used, not the live editor state, which
+// in manual-apply mode has not been run.
 describe('EffectiveConfigTab — follows what the pipeline ran with (#347)', () => {
   beforeEach(() => {
     setConf(CONTESTED);

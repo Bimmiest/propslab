@@ -23,19 +23,26 @@ const OUTPUT_TABS: { id: OutputTabId; label: string }[] = [
   { id: 'architecture', label: 'Architecture' },
 ];
 
-export function CommandPalette() {
-  const open = useAppStore((s) => s.commandPaletteOpen);
-  const toggleCommandPalette = useAppStore((s) => s.toggleCommandPalette);
-  const toggleTheme = useAppStore((s) => s.toggleTheme);
-  const setActiveOutputTab = useAppStore((s) => s.setActiveOutputTab);
+/** Runs a command's action, then closes the palette. */
+type RunCommand = (fn: () => void) => void;
+
+/** Replaces all four inputs at once: a sample, or empty ones. */
+function useLoadInputs() {
   const setRawData = useAppStore((s) => s.setRawData);
   const setPropsConf = useAppStore((s) => s.setPropsConf);
   const setTransformsConf = useAppStore((s) => s.setTransformsConf);
   const setMetadata = useAppStore((s) => s.setMetadata);
-  const toggleHelp = useAppStore((s) => s.toggleHelp);
-  const toggleScaffold = useAppStore((s) => s.toggleScaffold);
-  const setActiveView = useAppStore((s) => s.setActiveView);
-  const openDictionaryAt = useAppStore((s) => s.openDictionaryAt);
+  return (inputs: Pick<(typeof SAMPLE_CONFIGS)[number], 'rawData' | 'propsConf' | 'transformsConf' | 'metadata'>) => {
+    setRawData(inputs.rawData);
+    setPropsConf(inputs.propsConf);
+    setTransformsConf(inputs.transformsConf);
+    setMetadata(inputs.metadata);
+  };
+}
+
+export function CommandPalette() {
+  const open = useAppStore((s) => s.commandPaletteOpen);
+  const toggleCommandPalette = useAppStore((s) => s.toggleCommandPalette);
 
   const close = useCallback(() => {
     if (open) toggleCommandPalette();
@@ -61,8 +68,8 @@ export function CommandPalette() {
     return () => window.removeEventListener('keydown', onKeyDown, { capture: true });
   }, [toggleCommandPalette]);
 
-  const run = useCallback(
-    (fn: () => void) => {
+  const run = useCallback<RunCommand>(
+    (fn) => {
       fn();
       close();
     },
@@ -83,27 +90,7 @@ export function CommandPalette() {
       }}
     >
       <Command label="Command palette">
-        <div
-          className="flex items-center gap-2 px-3 border-b"
-          style={{ borderColor: 'var(--color-border)' }}
-        >
-          <Icon name="search" className="w-4 h-4 shrink-0 text-[var(--color-text-muted)]" />
-          <Command.Input
-            placeholder="Type a command…"
-            className="flex-1 h-11 bg-transparent text-sm outline-none placeholder:text-[var(--color-text-muted)]"
-            style={{ color: 'var(--color-text-primary)' }}
-            autoFocus
-          />
-          <kbd
-            className="px-1.5 py-0.5 text-[10px] rounded font-mono"
-            style={{
-              backgroundColor: 'var(--color-bg-tertiary)',
-              color: 'var(--color-text-muted)',
-            }}
-          >
-            ESC
-          </kbd>
-        </div>
+        <PaletteInput />
 
         <Command.List
           className="max-h-80 overflow-y-auto py-1"
@@ -115,98 +102,148 @@ export function CommandPalette() {
             No results found.
           </Command.Empty>
 
-          <CommandGroup heading="Examples">
-            {SAMPLE_CONFIGS.map((sample) => (
-              <CommandItem
-                key={sample.name}
-                label={`Load: ${sample.name}`}
-                hint={sample.description}
-                icon="terminal"
-                onSelect={() =>
-                  run(() => {
-                    setRawData(sample.rawData);
-                    setPropsConf(sample.propsConf);
-                    setTransformsConf(sample.transformsConf);
-                    setMetadata(sample.metadata);
-                  })
-                }
-              />
-            ))}
-          </CommandGroup>
-
-          <CommandGroup heading="Navigate">
-            <CommandItem
-              label="Go to: Simulator"
-              icon="sliders"
-              onSelect={() => run(() => setActiveView('simulator'))}
-            />
-            <CommandItem
-              label="Go to: Dictionary"
-              hint="Browse every directive"
-              icon="book"
-              onSelect={() => run(() => setActiveView('dictionary'))}
-            />
-            {OUTPUT_TABS.map((tab) => (
-              <CommandItem
-                key={tab.id}
-                label={`Go to: ${tab.label}`}
-                icon="arrow-right"
-                // The output tabs live in the simulator, so switch back to it —
-                // otherwise this silently changes a tab the user cannot see.
-                onSelect={() =>
-                  run(() => {
-                    setActiveView('simulator');
-                    setActiveOutputTab(tab.id);
-                  })
-                }
-              />
-            ))}
-          </CommandGroup>
-
-          <CommandGroup heading="Look up">
-            {DIRECTIVE_KEYS.map((key) => (
-              <CommandItem
-                key={key}
-                label={`Dictionary: ${key}`}
-                icon="book"
-                onSelect={() => run(() => openDictionaryAt(key))}
-              />
-            ))}
-          </CommandGroup>
-
-          <CommandGroup heading="Actions">
-            <CommandItem
-              label="Scaffold config from sample data"
-              hint="Suggest props.conf"
-              icon="sparkles"
-              onSelect={() => run(toggleScaffold)}
-            />
-            <CommandItem
-              label="Toggle theme"
-              icon="sun"
-              onSelect={() => run(toggleTheme)}
-            />
-            <CommandItem
-              label="Open pipeline reference"
-              icon="info"
-              onSelect={() => run(toggleHelp)}
-            />
-            <CommandItem
-              label="Clear all editors"
-              icon="x"
-              onSelect={() =>
-                run(() => {
-                  setRawData('');
-                  setPropsConf('');
-                  setTransformsConf('');
-                  setMetadata({ index: 'main', host: '', source: '', sourcetype: '' });
-                })
-              }
-            />
-          </CommandGroup>
+          <ExampleCommands run={run} />
+          <NavigateCommands run={run} />
+          <LookupCommands run={run} />
+          <ActionCommands run={run} />
         </Command.List>
       </Command>
     </Overlay>
+  );
+}
+
+function PaletteInput() {
+  return (
+    <div
+      className="flex items-center gap-2 px-3 border-b"
+      style={{ borderColor: 'var(--color-border)' }}
+    >
+      <Icon name="search" className="w-4 h-4 shrink-0 text-[var(--color-text-muted)]" />
+      <Command.Input
+        placeholder="Type a command…"
+        className="flex-1 h-11 bg-transparent text-sm outline-none placeholder:text-[var(--color-text-muted)]"
+        style={{ color: 'var(--color-text-primary)' }}
+        autoFocus
+      />
+      <kbd
+        className="px-1.5 py-0.5 text-[10px] rounded font-mono"
+        style={{
+          backgroundColor: 'var(--color-bg-tertiary)',
+          color: 'var(--color-text-muted)',
+        }}
+      >
+        ESC
+      </kbd>
+    </div>
+  );
+}
+
+function ExampleCommands({ run }: { run: RunCommand }) {
+  const loadInputs = useLoadInputs();
+  return (
+    <CommandGroup heading="Examples">
+      {SAMPLE_CONFIGS.map((sample) => (
+        <CommandItem
+          key={sample.name}
+          label={`Load: ${sample.name}`}
+          hint={sample.description}
+          icon="terminal"
+          onSelect={() => run(() => loadInputs(sample))}
+        />
+      ))}
+    </CommandGroup>
+  );
+}
+
+function NavigateCommands({ run }: { run: RunCommand }) {
+  const setActiveOutputTab = useAppStore((s) => s.setActiveOutputTab);
+  const setActiveView = useAppStore((s) => s.setActiveView);
+  return (
+    <CommandGroup heading="Navigate">
+      <CommandItem
+        label="Go to: Simulator"
+        icon="sliders"
+        onSelect={() => run(() => setActiveView('simulator'))}
+      />
+      <CommandItem
+        label="Go to: Dictionary"
+        hint="Browse every directive"
+        icon="book"
+        onSelect={() => run(() => setActiveView('dictionary'))}
+      />
+      {OUTPUT_TABS.map((tab) => (
+        <CommandItem
+          key={tab.id}
+          label={`Go to: ${tab.label}`}
+          icon="arrow-right"
+          // The output tabs live in the simulator, so switch back to it —
+          // otherwise this silently changes a tab the user cannot see.
+          onSelect={() =>
+            run(() => {
+              setActiveView('simulator');
+              setActiveOutputTab(tab.id);
+            })
+          }
+        />
+      ))}
+    </CommandGroup>
+  );
+}
+
+function LookupCommands({ run }: { run: RunCommand }) {
+  const openDictionaryAt = useAppStore((s) => s.openDictionaryAt);
+  return (
+    <CommandGroup heading="Look up">
+      {DIRECTIVE_KEYS.map((key) => (
+        <CommandItem
+          key={key}
+          label={`Dictionary: ${key}`}
+          icon="book"
+          onSelect={() => run(() => openDictionaryAt(key))}
+        />
+      ))}
+    </CommandGroup>
+  );
+}
+
+function ActionCommands({ run }: { run: RunCommand }) {
+  const toggleTheme = useAppStore((s) => s.toggleTheme);
+  const toggleHelp = useAppStore((s) => s.toggleHelp);
+  const toggleScaffold = useAppStore((s) => s.toggleScaffold);
+  const loadInputs = useLoadInputs();
+  return (
+    <CommandGroup heading="Actions">
+      <CommandItem
+        label="Scaffold config from sample data"
+        hint="Suggest props.conf"
+        icon="sparkles"
+        onSelect={() => run(toggleScaffold)}
+      />
+      <CommandItem
+        label="Toggle theme"
+        icon="sun"
+        onSelect={() => run(toggleTheme)}
+      />
+      <CommandItem
+        label="Open pipeline reference"
+        icon="info"
+        onSelect={() => run(toggleHelp)}
+      />
+      <CommandItem
+        label="Clear all editors"
+        icon="x"
+        onSelect={() =>
+          run(() =>
+            loadInputs({
+              rawData: '',
+              propsConf: '',
+              transformsConf: '',
+              metadata: { index: 'main', host: '', source: '', sourcetype: '' },
+            }),
+          )
+        }
+      />
+    </CommandGroup>
   );
 }
 

@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
 // DirectiveNoOpList.tsx
-// "Why did this directive not fire?" (#84)
+// "Why did this directive not fire?"
 //
 // Grouped by directive rather than listed per event: a config mistake is
 // usually wrong for every event, and one row per event per directive would bury

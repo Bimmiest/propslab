@@ -22,8 +22,15 @@ const DEST_KEY_LABELS: Record<keyof EventMetadata, string> = {
   sourcetype: '_MetaData:Sourcetype',
 };
 
-function getMetadataChanges(event: SplunkEvent, original: EventMetadata | undefined) {
-  const changes: { field: keyof EventMetadata; from: string; to: string; transform: string | null }[] = [];
+interface MetadataChange {
+  field: keyof EventMetadata;
+  from: string;
+  to: string;
+  transform: string | null;
+}
+
+function getMetadataChanges(event: SplunkEvent, original: EventMetadata | undefined): MetadataChange[] {
+  const changes: MetadataChange[] = [];
   if (!original) return changes;
   for (const key of Object.keys(DEST_KEY_LABELS) as (keyof EventMetadata)[]) {
     if (event.metadata[key] !== original[key] && event.metadata[key] !== '') {
@@ -41,10 +48,9 @@ function getMetadataChanges(event: SplunkEvent, original: EventMetadata | undefi
 
 export function RawTab({ items, currentPage, eventsPerPage, search }: RawTabProps) {
   // The run's own input, as in PreviewPanel: the live fields may have been
-  // edited since, which would badge every event as changed (#316). Every
-  // result carries it, so the fallback to the live fields this used to have was
-  // dead code (#335). Undefined only with no result at all (the tab is not
-  // mounted then), when there is nothing to compare against.
+  // edited since, which would badge every event as changed. Undefined only
+  // with no result at all (the tab is not mounted then), when there is
+  // nothing to compare against.
   const originalMetadata = useAppStore((s) => s.processingResult?.inputMetadata);
 
   return (
@@ -81,12 +87,6 @@ function EventRow({ item, globalIdx, originalMetadata, search }: { item: Enriche
 
   const hasMetadataChanges = metadataChanges.length > 0;
 
-  const lineCount = event._raw.split('\n').length;
-  const charCount = event._raw.length;
-
-  const truncateTrace = event.processingTrace.find((t) => t.processor === 'truncator');
-  const truncatedByDefault = truncateTrace?.description.includes('TRUNCATE default') ?? false;
-
   const [metaExpanded, setMetaExpanded] = useState(false);
 
   // React-controlled token selection (Raw view only; search uses the dimming
@@ -113,61 +113,7 @@ function EventRow({ item, globalIdx, originalMetadata, search }: { item: Enriche
     <div
       className={`border rounded ${isDropped ? 'border-red-500/40 opacity-60' : 'border-[var(--color-border)]'} bg-[var(--color-bg-secondary)]`}
     >
-      <div className="flex items-center justify-between px-3 py-1.5 border-b border-[var(--color-border)] bg-[var(--color-bg-tertiary)]">
-        <div className="flex items-center gap-3">
-          <span className="text-xs font-medium text-[var(--color-text-muted)]">
-            Event #{globalIdx}
-          </span>
-          {event._time && (
-            <span className="text-xs text-[var(--color-accent)] font-mono">
-              {event._time.toISOString()}
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-[var(--color-text-muted)] font-mono">
-            {lineCount} line{lineCount !== 1 ? 's' : ''} &middot; {charCount.toLocaleString()} char{charCount !== 1 ? 's' : ''}
-          </span>
-          <span className="text-xs text-[var(--color-text-muted)]">
-            Lines {event.lineNumbers.start}–{event.lineNumbers.end}
-          </span>
-          {truncateTrace && (
-            <span
-              className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-warning)]/10 text-[var(--color-warning)] font-medium"
-              title={truncateTrace.description}
-            >
-              Truncated{truncatedByDefault ? ' (default)' : ''}
-            </span>
-          )}
-          {/*
-            A CLONE_SOURCETYPE copy is byte-identical to its original, so
-            without saying where it came from a duplicated event reads as a
-            line-breaking bug rather than the routing rule working (#87).
-          */}
-          {event.clonedFrom !== undefined && (
-            <span
-              className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-info)]/10 text-[var(--color-info)] font-medium"
-              title={`Emitted by CLONE_SOURCETYPE from an event with sourcetype "${event.clonedFrom}"`}
-            >
-              Cloned from {event.clonedFrom}
-            </span>
-          )}
-          {hasMetadataChanges && (
-            <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-warning)]/10 text-[var(--color-warning)] font-medium">
-              Metadata modified
-            </span>
-          )}
-          {isDropped ? (
-            <span className="text-xs px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 font-medium">
-              Dropped
-            </span>
-          ) : event._meta._queue ? (
-            <span className="text-xs px-1.5 py-0.5 rounded bg-green-500/20 text-green-400 font-medium">
-              Routed ({event._meta._queue})
-            </span>
-          ) : null}
-        </div>
-      </div>
+      <EventRowHeader event={event} globalIdx={globalIdx} isDropped={isDropped} hasMetadataChanges={hasMetadataChanges} />
 
       <pre
         ref={preRef}
@@ -186,17 +132,7 @@ function EventRow({ item, globalIdx, originalMetadata, search }: { item: Enriche
           className="w-full flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-medium border-t border-[var(--color-border)] hover:bg-[var(--color-bg-tertiary)] transition-colors"
           style={{ color: 'var(--color-accent)' }}
         >
-          {expanded ? (
-            <>
-              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" /></svg>
-              Show less
-            </>
-          ) : (
-            <>
-              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
-              Show full event
-            </>
-          )}
+          <ExpandLabel expanded={expanded} />
         </button>
       )}
 
@@ -218,44 +154,7 @@ function EventRow({ item, globalIdx, originalMetadata, search }: { item: Enriche
       </button>
 
       {metaExpanded && (
-        <>
-          <div className="px-3 py-1.5 border-t border-[var(--color-border)] bg-[var(--color-bg-tertiary)]">
-            <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs font-mono">
-              <MetadataField label="index" value={event.metadata.index} original={originalMetadata?.index} />
-              <MetadataField label="host" value={event.metadata.host} original={originalMetadata?.host} />
-              <MetadataField label="source" value={event.metadata.source} original={originalMetadata?.source} />
-              <MetadataField label="sourcetype" value={event.metadata.sourcetype} original={originalMetadata?.sourcetype} />
-            </div>
-          </div>
-
-          {hasMetadataChanges && (
-            <div className="px-3 py-1.5 border-t border-[var(--color-border)] bg-[var(--color-warning)]/5">
-              <div className="space-y-1">
-                {metadataChanges.map((change) => (
-                  <div key={change.field} className="flex items-center gap-2 text-xs">
-                    <span className="font-mono font-medium text-[var(--color-warning)]">
-                      {DEST_KEY_LABELS[change.field]}
-                    </span>
-                    <span className="font-mono text-[var(--color-text-muted)] line-through">
-                      {change.from}
-                    </span>
-                    <svg className="w-3 h-3 text-[var(--color-text-muted)] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                    </svg>
-                    <span className="font-mono font-semibold text-[var(--color-warning)]">
-                      {change.to}
-                    </span>
-                    {change.transform && (
-                      <span className="text-[var(--color-text-muted)]">
-                        via <span className="font-mono text-[var(--color-accent)]">[{change.transform}]</span>
-                      </span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </>
+        <MetadataDetails event={event} originalMetadata={originalMetadata} metadataChanges={metadataChanges} />
       )}
     </div>
     </EventContextMenu>
@@ -335,3 +234,127 @@ function MetadataField({ label, value, original }: { label: string; value: strin
     </span>
   );
 }
+
+function MetadataDetails({ event, originalMetadata, metadataChanges }: { event: SplunkEvent; originalMetadata: EventMetadata | undefined; metadataChanges: MetadataChange[] }) {
+  return (
+    <>
+      <div className="px-3 py-1.5 border-t border-[var(--color-border)] bg-[var(--color-bg-tertiary)]">
+        <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs font-mono">
+          <MetadataField label="index" value={event.metadata.index} original={originalMetadata?.index} />
+          <MetadataField label="host" value={event.metadata.host} original={originalMetadata?.host} />
+          <MetadataField label="source" value={event.metadata.source} original={originalMetadata?.source} />
+          <MetadataField label="sourcetype" value={event.metadata.sourcetype} original={originalMetadata?.sourcetype} />
+        </div>
+      </div>
+
+      {metadataChanges.length > 0 && (
+        <div className="px-3 py-1.5 border-t border-[var(--color-border)] bg-[var(--color-warning)]/5">
+          <div className="space-y-1">
+            {metadataChanges.map((change) => (
+              <div key={change.field} className="flex items-center gap-2 text-xs">
+                <span className="font-mono font-medium text-[var(--color-warning)]">
+                  {DEST_KEY_LABELS[change.field]}
+                </span>
+                <span className="font-mono text-[var(--color-text-muted)] line-through">
+                  {change.from}
+                </span>
+                <svg className="w-3 h-3 text-[var(--color-text-muted)] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                </svg>
+                <span className="font-mono font-semibold text-[var(--color-warning)]">
+                  {change.to}
+                </span>
+                {change.transform && (
+                  <span className="text-[var(--color-text-muted)]">
+                    via <span className="font-mono text-[var(--color-accent)]">[{change.transform}]</span>
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+function ExpandLabel({ expanded }: { expanded: boolean }) {
+  return expanded ? (
+    <>
+      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" /></svg>
+      Show less
+    </>
+  ) : (
+    <>
+      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+      Show full event
+    </>
+  );
+}
+
+function EventRowHeader({ event, globalIdx, isDropped, hasMetadataChanges }: { event: SplunkEvent; globalIdx: number; isDropped: boolean; hasMetadataChanges: boolean }) {
+  const lineCount = event._raw.split('\n').length;
+  const charCount = event._raw.length;
+
+  const truncateTrace = event.processingTrace.find((t) => t.processor === 'truncator');
+  const truncatedByDefault = truncateTrace?.description.includes('TRUNCATE default') ?? false;
+
+  return (
+    <div className="flex items-center justify-between px-3 py-1.5 border-b border-[var(--color-border)] bg-[var(--color-bg-tertiary)]">
+      <div className="flex items-center gap-3">
+        <span className="text-xs font-medium text-[var(--color-text-muted)]">
+          Event #{globalIdx}
+        </span>
+        {event._time && (
+          <span className="text-xs text-[var(--color-accent)] font-mono">
+            {event._time.toISOString()}
+          </span>
+        )}
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-[var(--color-text-muted)] font-mono">
+          {lineCount} line{lineCount !== 1 ? 's' : ''} &middot; {charCount.toLocaleString()} char{charCount !== 1 ? 's' : ''}
+        </span>
+        <span className="text-xs text-[var(--color-text-muted)]">
+          Lines {event.lineNumbers.start}–{event.lineNumbers.end}
+        </span>
+        {truncateTrace && (
+          <span
+            className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-warning)]/10 text-[var(--color-warning)] font-medium"
+            title={truncateTrace.description}
+          >
+            Truncated{truncatedByDefault ? ' (default)' : ''}
+          </span>
+        )}
+        {/*
+          A CLONE_SOURCETYPE copy is byte-identical to its original, so
+          without saying where it came from a duplicated event reads as a
+          line-breaking bug rather than the routing rule working.
+        */}
+        {event.clonedFrom !== undefined && (
+          <span
+            className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-info)]/10 text-[var(--color-info)] font-medium"
+            title={`Emitted by CLONE_SOURCETYPE from an event with sourcetype "${event.clonedFrom}"`}
+          >
+            Cloned from {event.clonedFrom}
+          </span>
+        )}
+        {hasMetadataChanges && (
+          <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-warning)]/10 text-[var(--color-warning)] font-medium">
+            Metadata modified
+          </span>
+        )}
+        {isDropped ? (
+          <span className="text-xs px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 font-medium">
+            Dropped
+          </span>
+        ) : event._meta._queue ? (
+          <span className="text-xs px-1.5 py-0.5 rounded bg-green-500/20 text-green-400 font-medium">
+            Routed ({event._meta._queue})
+          </span>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+

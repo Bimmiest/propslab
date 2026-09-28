@@ -31,7 +31,7 @@ describe('applyIngestEval', () => {
     expect(e.fields.b).toBe('2');
   });
 
-  // #59.2: two INGEST_EVAL lines in a stanza — Splunk applies only the last.
+  // Two INGEST_EVAL lines in a stanza — Splunk applies only the last.
   it('applies only the last INGEST_EVAL when the key is repeated (last-wins)', () => {
     const dirs: ConfDirective[] = [
       { key: 'INGEST_EVAL', value: 'tag="first"', line: 1, directiveType: 'INGEST_EVAL' },
@@ -52,7 +52,7 @@ describe('applyIngestEval', () => {
     expect(e.fields.n).toBe('yes');
   });
 
-  // #25: a value ending in an escaped backslash (\\) closes the quote — the
+  // A value ending in an escaped backslash (\\) closes the quote — the
   // following top-level comma must still split, not be swallowed.
   it('closes a literal ending in an escaped backslash and splits the next assignment', () => {
     // a = the Windows path `c:\` (written `c:\\` in the config), then b=2.
@@ -89,10 +89,7 @@ describe('applyIngestEval — queue assignment routes the event (#58)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// #327: INGEST_EVAL only special-cased _time, _raw and queue, so
-// `INGEST_EVAL = index="security"` wrote an indexed field called `index` and
-// left the event in its original index; and `x := expr` was split at the `=`,
-// writing a field literally named `x:`.
+// INGEST_EVAL assignments to metadata, and the `:=` operator.
 //
 // Doc-derived (transforms.conf.spec, INGEST_EVAL): assignments may use `=` or
 // `:=`, several may be comma-separated, and assigning to index, host, source or
@@ -102,8 +99,8 @@ describe('applyIngestEval — queue assignment routes the event (#58)', () => {
 //
 // Uncertain, and deliberately not asserted: the spec describes `=` on an
 // indexed field that already exists as ADDING a value (making it multivalue)
-// rather than replacing it. The simulator still replaces on `=`, as it did
-// before #327; no fidelity fixture covers INGEST_EVAL to settle it.
+// rather than replacing it. The simulator replaces on `=`; no fidelity fixture
+// covers INGEST_EVAL to settle it.
 // ---------------------------------------------------------------------------
 
 describe('applyIngestEval — metadata keys rewrite the event metadata (#327)', () => {

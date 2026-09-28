@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
 // noOpExplainer.ts
-// Why a directive did nothing to this event (#84).
+// Why a directive did nothing to this event.
 //
 // The dominant failure mode when authoring props/transforms is a directive that
 // silently does nothing: the preview renders an unchanged event and there is
@@ -42,7 +42,7 @@ export type NoOpReason =
   /**
    * An EVAL expression computed null, which deletes the field rather than
    * setting it — so a directive meant to create a field leaves nothing behind.
-   * Null propagation (#211) makes this the commonest silent EVAL no-op.
+   * Null propagation makes this the commonest silent EVAL no-op.
    */
   | { kind: 'eval-null'; expression: string };
 

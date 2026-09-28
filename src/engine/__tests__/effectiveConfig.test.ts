@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
 // effectiveConfig.test.ts
-// The stanza axis of provenance (#86).
+// The stanza axis of provenance.
 //
 // The assertions that matter are the ones about what LOST: a panel that only
 // showed winners would be a prettier view of what the preview already renders.

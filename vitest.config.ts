@@ -25,8 +25,8 @@ export default defineConfig({
       // `include` covers every source file, not only the imported ones, so a
       // file with NO test counts as 0% rather than being absent. An untested
       // file is exactly what a floor exists to notice, and omitting it is how
-      // coverage numbers flatter a codebase. (vitest 4 does this by default for
-      // whatever `include` matches; the v3 `all` flag no longer exists.)
+      // coverage numbers flatter a codebase. (vitest does this by default for
+      // whatever `include` matches.)
       include: ['src/**/*.{ts,tsx}'],
       exclude: [
         'src/**/*.test.{ts,tsx}',

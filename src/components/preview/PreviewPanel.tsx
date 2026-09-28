@@ -41,7 +41,7 @@ function hasMetadataDiff(eventMeta: EventMetadata, originalMeta: EventMetadata):
   );
 }
 
-/** How long the preview search waits for typing to pause before filtering (#335). */
+/** How long the preview search waits for typing to pause before filtering. */
 const SEARCH_DEBOUNCE_MS = 200;
 
 const PREVIEW_SUB_TABS: { id: PreviewSubTabId; label: string }[] = [
@@ -60,15 +60,15 @@ export function PreviewPanel() {
   const tabsId = useId();
   // Held here rather than in the Effective config tab, which unmounts when
   // another output tab is selected: in manual-apply mode the inputs of the last
-  // run have to survive the edits made while it is hidden (#347).
+  // run have to survive the edits made while it is hidden.
   const pipelineInputs = usePipelineInputs();
   const diagnostics = useAppStore((s) => s.validationDiagnostics);
   // A run that produced no result at all — watchdog timeout, repeated worker
   // crash, an engine throw — clears `processingResult` and says why in an error
-  // diagnostic. Without reading that here the panel fell through to the
-  // first-run "No data yet" invitation, which told a user whose input had just
-  // hung the pipeline to go and paste some input (#294). A successful run always
-  // sets a result, so a null result beside an error can only mean a failure.
+  // diagnostic. It is read here so such a run shows the failure, not the
+  // first-run "No data yet" invitation to paste some input. A successful run
+  // always sets a result, so a null result beside an error can only mean a
+  // failure.
   const failure = result === null
     ? diagnostics.find((d) => d.level === 'error')?.message ?? null
     : null;
@@ -248,6 +248,58 @@ function EmptyState() {
   );
 }
 
+/** Enrich events with original raw + change/drop status. */
+function enrichEvents(
+  events: SplunkEvent[],
+  originalRaw: string,
+  originalMetadata: EventMetadata | undefined,
+): EnrichedEvent[] {
+  const origLines = originalRaw.split('\n');
+  return events.map((event): EnrichedEvent => {
+    const startIdx = Math.max(0, event.lineNumbers.start - 1);
+    const endIdx = event.lineNumbers.end;
+    const origSlice = origLines.slice(startIdx, endIdx).join('\n');
+    return {
+      event,
+      originalRaw: origSlice,
+      hasChanges: normalise(origSlice) !== normalise(event._raw),
+      hasMetadataChanges: originalMetadata !== undefined && hasMetadataDiff(event.metadata, originalMetadata),
+      isDropped: event._meta._queue === 'nullQueue',
+    };
+  });
+}
+
+interface PreviewFilters {
+  search: string;
+  selectedFields: Set<string>;
+  selectedStatus: Set<string>;
+  selectedChangeState: Set<string>;
+}
+
+function matchesFilters(item: EnrichedEvent, filters: PreviewFilters): boolean {
+  const { search, selectedFields, selectedStatus, selectedChangeState } = filters;
+  if (search && !item.event._raw.toLowerCase().includes(search.toLowerCase())) return false;
+  if (selectedFields.size > 0) {
+    const eventFieldKeys = Object.keys(item.event.fields);
+    if (!eventFieldKeys.some((k) => selectedFields.has(k))) return false;
+  }
+  if (selectedStatus.size > 0) {
+    if (selectedStatus.has('Dropped') && !selectedStatus.has('Accepted') && !item.isDropped) return false;
+    if (selectedStatus.has('Accepted') && !selectedStatus.has('Dropped') && item.isDropped) return false;
+  }
+  if (selectedChangeState.size > 0) {
+    const wantRaw = selectedChangeState.has('Raw Modified');
+    const wantMeta = selectedChangeState.has('Metadata Modified');
+    const wantUnmodified = selectedChangeState.has('Unmodified');
+    const matchesRaw = item.hasChanges;
+    const matchesMeta = item.hasMetadataChanges;
+    const matchesUnmodified = !item.hasChanges && !item.hasMetadataChanges;
+    const matches = (wantRaw && matchesRaw) || (wantMeta && matchesMeta) || (wantUnmodified && matchesUnmodified);
+    if (!matches) return false;
+  }
+  return true;
+}
+
 function PreviewSubTab({ pipelineInputs }: { pipelineInputs: PipelineInputs }) {
   const result = useAppStore((s) => s.processingResult);
   const events = useMemo(() => result?.events ?? [], [result]);
@@ -257,35 +309,24 @@ function PreviewSubTab({ pipelineInputs }: { pipelineInputs: PipelineInputs }) {
   const subTabsId = useId();
   const [search, setSearch] = useState('');
   // The input stays bound to `search`, so typing is immediate; everything the
-  // filter drives reads this settled copy. Each keystroke used to rebuild
+  // filter drives reads this settled copy, so a keystroke does not rebuild
   // `filteredEvents`, which re-scans every event, re-runs the Extractions tab's
-  // JSON scan and re-posts the whole dataset to the Regex tab's matcher (#335).
+  // JSON scan and re-posts the whole dataset to the Regex tab's matcher.
   const debouncedSearch = useDebounce(search, SEARCH_DEBOUNCE_MS);
   const [selectedFields, setSelectedFields] = useState<Set<string>>(new Set());
   const [selectedStatus, setSelectedStatus] = useState<Set<string>>(new Set());
   const [selectedChangeState, setSelectedChangeState] = useState<Set<string>>(new Set());
 
   // The metadata of the run that produced these events, not the live fields:
-  // comparing with the fields flagged every event as modified while the user
-  // typed, and rebuilt the event lists on each keystroke (#316).
+  // compared with the live fields, every event would read as modified while the
+  // user typed, and the event lists would rebuild on each keystroke.
   const originalMetadata = result?.inputMetadata;
 
   // Enrich events with original raw + change/drop status
-  const enrichedEvents = useMemo(() => {
-    const origLines = originalRaw.split('\n');
-    return events.map((event): EnrichedEvent => {
-      const startIdx = Math.max(0, event.lineNumbers.start - 1);
-      const endIdx = event.lineNumbers.end;
-      const origSlice = origLines.slice(startIdx, endIdx).join('\n');
-      return {
-        event,
-        originalRaw: origSlice,
-        hasChanges: normalise(origSlice) !== normalise(event._raw),
-        hasMetadataChanges: originalMetadata !== undefined && hasMetadataDiff(event.metadata, originalMetadata),
-        isDropped: event._meta._queue === 'nullQueue',
-      };
-    });
-  }, [events, originalRaw, originalMetadata]);
+  const enrichedEvents = useMemo(
+    () => enrichEvents(events, originalRaw, originalMetadata),
+    [events, originalRaw, originalMetadata],
+  );
 
   // Collect all field names across events
   const allFields = useMemo(() => {
@@ -300,31 +341,8 @@ function PreviewSubTab({ pipelineInputs }: { pipelineInputs: PipelineInputs }) {
 
   // Apply filters
   const filteredEvents = useMemo(() => {
-    return enrichedEvents.filter((item) => {
-      if (debouncedSearch) {
-        const lower = debouncedSearch.toLowerCase();
-        if (!item.event._raw.toLowerCase().includes(lower)) return false;
-      }
-      if (selectedFields.size > 0) {
-        const eventFieldKeys = Object.keys(item.event.fields);
-        if (!eventFieldKeys.some((k) => selectedFields.has(k))) return false;
-      }
-      if (selectedStatus.size > 0) {
-        if (selectedStatus.has('Dropped') && !selectedStatus.has('Accepted') && !item.isDropped) return false;
-        if (selectedStatus.has('Accepted') && !selectedStatus.has('Dropped') && item.isDropped) return false;
-      }
-      if (selectedChangeState.size > 0) {
-        const wantRaw = selectedChangeState.has('Raw Modified');
-        const wantMeta = selectedChangeState.has('Metadata Modified');
-        const wantUnmodified = selectedChangeState.has('Unmodified');
-        const matchesRaw = item.hasChanges;
-        const matchesMeta = item.hasMetadataChanges;
-        const matchesUnmodified = !item.hasChanges && !item.hasMetadataChanges;
-        const matches = (wantRaw && matchesRaw) || (wantMeta && matchesMeta) || (wantUnmodified && matchesUnmodified);
-        if (!matches) return false;
-      }
-      return true;
-    });
+    const filters = { search: debouncedSearch, selectedFields, selectedStatus, selectedChangeState };
+    return enrichedEvents.filter((item) => matchesFilters(item, filters));
   }, [enrichedEvents, debouncedSearch, selectedFields, selectedStatus, selectedChangeState]);
 
   const { paginatedItems, currentPage, totalPages, eventsPerPage, totalItems, setCurrentPage, setEventsPerPage } =

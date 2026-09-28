@@ -34,14 +34,14 @@ describe('applySedCommands', () => {
     expect(e._raw).toBe('user-42');
   });
 
-  // BUG-2: a literal `$` in the replacement is a substitution pattern in JS and
-  // used to mangle the output (e.g. $5 became part of capture-ref handling).
+  // A literal `$` in the replacement is a substitution pattern in JS, so it is
+  // escaped (e.g. $5 must not become part of capture-ref handling).
   it('treats a literal $ in the replacement as literal', () => {
     const e = applySedCommands([event('price')], [sedDir('x', 's/price/$5.00/')])[0]!;
     expect(e._raw).toBe('$5.00');
   });
 
-  // #21: an escaped delimiter in the replacement drops the backslash (GNU sed:
+  // An escaped delimiter in the replacement drops the backslash (GNU sed:
   // `echo abc | sed 's/b/x\/y/'` → `ax/yc`), rather than leaving a stray `\`.
   it('unescapes an escaped delimiter in the replacement', () => {
     const e = applySedCommands([event('abc')], [sedDir('x', 's/b/x\\/y/')])[0]!;
@@ -66,8 +66,7 @@ describe('applySedCommands', () => {
     expect(e._raw).toBe('Z');
   });
 
-  // Was "warns that y/// is not simulated" (SEM-14). The Splunk 10.4.0 capture
-  // `sedcmd-transliterate` pinned the real behaviour, so it is implemented (#160).
+  // Capture-derived: the Splunk 10.4.0 capture `sedcmd-transliterate`.
   it('applies y/// transliteration to every occurrence', () => {
     const diags: ValidationDiagnostic[] = [];
     const e = applySedCommands([event('abcdef abc')], [sedDir('x', 'y/abc/ABC/')], diags)[0]!;

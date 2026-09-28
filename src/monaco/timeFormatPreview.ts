@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
 // timeFormatPreview.ts
-// Make a TIME_FORMAT explain itself in the editor (#90).
+// Make a TIME_FORMAT explain itself in the editor.
 //
 // Timestamp configuration is the most error-prone part of props.conf, and its
 // failure is silent: a typo'd specifier yields "no _time" with nothing said
@@ -16,12 +16,13 @@ import { matchTimePrefix, TIME_PREFIX_TIMEOUT_MS } from './timePrefixMatcher';
 import type { CancellationLike, PrefixMatcher } from './timePrefixMatcher';
 
 /**
- * The most of the sample line the preview will search (#297).
+ * The most of the sample line the preview will search.
  *
- * TIME_PREFIX itself runs in a terminatable worker (#334), so this cap is not
- * what bounds a runaway pattern. It bounds what is copied to the worker and
- * what the generated TIME_FORMAT regex scans on the main thread. The engine cannot share this bound (it searches
- * the whole event), and a prefix that only matches beyond 4 KB into the first
+ * TIME_PREFIX itself runs in a terminatable worker, so this cap is not what
+ * bounds a runaway pattern. It bounds what is copied to the worker and what
+ * the generated TIME_FORMAT regex scans on the main thread. The engine cannot
+ * share this bound (it searches the whole event), and a prefix that only
+ * matches beyond 4 KB into the first
  * line is not a case this preview needs to get right.
  */
 export const MAX_PREVIEW_SAMPLE_LENGTH = 4096;
@@ -36,7 +37,7 @@ export interface TimeFormatPreview {
     | { status: 'unparseable'; text: string }
     /** TIME_PREFIX was not run: it does not compile. */
     | { status: 'prefix-refused'; reason: string }
-    /** TIME_PREFIX ran past the watchdog and its worker was terminated (#334). */
+    /** TIME_PREFIX ran past the watchdog and its worker was terminated. */
     | { status: 'prefix-timed-out'; timeoutMs: number }
     /** TIME_PREFIX ran and threw. */
     | { status: 'prefix-error'; reason: string }
@@ -75,7 +76,7 @@ async function attemptSample(
   if (timePrefix) {
     // Compiled here by the engine's own PCRE2, so a pattern the engine would
     // refuse is reported with its reason and never sent anywhere. Compiling
-    // does not execute it; the match itself happens only in the worker (#334),
+    // does not execute it; the match itself happens only in the worker,
     // on the same engine, so it previews the way it extracts.
     const refusal = validateRegex(timePrefix);
     if (refusal !== null) return { status: 'prefix-refused', reason: refusal };
@@ -107,7 +108,7 @@ async function attemptSample(
   }
 
   // With a prefix the format must sit immediately after it, matching the
-  // engine's anchoring rule (#66).
+  // engine's anchoring rule.
   const active = timePrefix
     ? new RegExp(`^\\s*(?:${formatRegex.source})`, formatRegex.flags)
     : formatRegex;
@@ -144,7 +145,7 @@ export function describeTimeFormat(format: string, now: Date = new Date()): Time
 
 /**
  * The full preview, including the sample line. Asynchronous because a
- * TIME_PREFIX is matched in a worker (#334). Resolves to null when
+ * TIME_PREFIX is matched in a worker. Resolves to null when
  * `options.token` is cancelled before that returns. When no worker is
  * available the sample is omitted (`sample: null`) rather than matched on
  * this thread.
@@ -175,7 +176,7 @@ export async function buildTimeFormatPreview(
  *
  * `rendered` carries the format's literal text and `sample.text` is event data,
  * both user-authored, so each goes through `inlineCode` rather than a bare pair
- * of backticks a stray backtick could close (#296).
+ * of backticks a stray backtick could close.
  */
 export function renderTimeFormatPreview(preview: TimeFormatPreview): string {
   const parts: string[] = [];

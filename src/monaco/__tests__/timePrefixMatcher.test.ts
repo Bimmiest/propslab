@@ -2,12 +2,12 @@
 // ---------------------------------------------------------------------------
 // timePrefixMatcher.test.ts
 // The TIME_FORMAT hover matches TIME_PREFIX in a worker, never on the main
-// thread (#334). The worker is faked so a response can be held back, withheld
-// past the watchdog, or replaced by a load failure.
+// thread. The worker is faked so a response can be held back, withheld past
+// the watchdog, or replaced by a load failure.
 //
 // An error before the worker's ready signal is a load failure, after it a
-// crash (#339). A script that threw at top level used to count as a crash:
-// uncapped, so every hover built a new worker and blamed its prefix.
+// crash, so a script that throws at top level is capped rather than building
+// a new worker on every hover and blaming its prefix.
 // ---------------------------------------------------------------------------
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -35,7 +35,7 @@ class FakeWorker {
   constructor() {
     FakeWorker.instances.push(this);
   }
-  /** The module finished evaluating: what every worker entry posts first (#339). */
+  /** The module finished evaluating: what every worker entry posts first. */
   ready() {
     if (this.loaded) return;
     this.loaded = true;
@@ -135,7 +135,7 @@ describe('TIME_FORMAT hover — TIME_PREFIX in a worker (#334)', () => {
     expect(worker().posted[0]!.raws).toEqual([SAMPLE]);
     worker().answer();
 
-    // The text the pre-#334 hover produced for this config, verbatim.
+    // The text the hover produces for this config when matched in-thread, verbatim.
     const markdown = text(await pending);
     expect(markdown).toContain('**Sample:** matched `2024-01-15` → `2024-01-15T00:00:00.000Z`');
     expect(markdown).toMatch(/^\*\*Now:\*\* `\d{4}-\d{2}-\d{2}`\n\n\*\*Sample:\*\*/);
@@ -259,8 +259,8 @@ describe('TIME_FORMAT hover — TIME_PREFIX in a worker (#334)', () => {
     });
 
     it('blames only the running entry for a crash, and replays the ones queued behind it', async () => {
-      // A crash used to report every queued entry as an error, while a hang
-      // replayed them.
+      // A crash replays the queued entries, as a hang does, rather than
+      // reporting each as an error.
       const first = matchTimePrefix('(a|aa)+b', 'a'.repeat(4000));
       const second = matchTimePrefix('ts=', SAMPLE);
       const crashed = worker();

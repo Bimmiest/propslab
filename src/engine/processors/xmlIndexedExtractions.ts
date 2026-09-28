@@ -1,6 +1,6 @@
 /**
  * Index-time XML extraction: `INDEXED_EXTRACTIONS = xml`, `xmlkv` and
- * `xmlkv-winevt`, with the XML_IE_* filters and `extraction_cutoff` (#271).
+ * `xmlkv-winevt`, with the XML_IE_* filters and `extraction_cutoff`.
  *
  * props.conf.spec says what the attributes do but not how the three modes
  * name their fields, so the naming here is borrowed rather than documented:
@@ -152,9 +152,9 @@ function xmlOptions(find: (key: string) => ConfDirective | undefined, mode: XmlI
  * A comma-separated list whose entries accept `*` as a wildcard, compiled to
  * whole-string matchers. Entries may be double-quoted.
  *
- * Matched as globs rather than compiled to `.*` regexes (#344): the lists are
- * tested against values taken from the event (XML_IE_EXCLUDE_VALS), and a
- * backtracking regex made a handful of stars take seconds on a long value.
+ * Matched as globs rather than compiled to `.*` regexes: the lists are
+ * tested against values taken from the event (XML_IE_EXCLUDE_VALS), where a
+ * backtracking regex with a handful of stars takes seconds on a long value.
  */
 function wildcardList(raw: string): WildcardMatcher[] {
   const out: WildcardMatcher[] = [];

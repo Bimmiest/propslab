@@ -1,22 +1,21 @@
 // @vitest-environment jsdom
 // ---------------------------------------------------------------------------
 // useWorkerRequest.test.tsx
-// The lifecycle both live-matching hooks now share (#151).
+// The lifecycle both live-matching hooks share.
 //
-// Staleness and teardown are the parts worth pinning: both were reimplemented
-// per hook, and both fail silently — a stale response renders results for a
-// pattern the user has already changed, and a leaked worker only shows up as
-// drift under a profiler.
+// Staleness and teardown are the parts worth pinning, because both fail
+// silently — a stale response renders results for a pattern the user has
+// already changed, and a leaked worker only shows up as drift under a profiler.
 //
-// Restart bounds too (#309): a worker whose script never loads fails through
-// an `error` event rather than a throw, and used to be recreated forever.
-// Only load failures count toward that bound (#326): counting crashes too sent
-// the hook inline for good after two crashing patterns, losing the watchdog.
+// Restart bounds too: a worker whose script never loads fails through an
+// `error` event rather than a throw, and must not be recreated forever. Only
+// load failures count toward that bound: counting crashes would send the hook
+// inline for good after two crashing patterns, losing the watchdog.
 //
-// A load failure is any error before the worker's ready signal (#339), so the
-// fake loads before it responds or crashes, and `throwOnLoad` is a module that
-// throws while evaluating — which, on the first worker, used to be reported as
-// the first request timing out.
+// A load failure is any error before the worker's ready signal, so the fake
+// loads before it responds or crashes, and `throwOnLoad` is a module that
+// throws while evaluating — which, on the first worker, must not be reported
+// as the first request timing out.
 // ---------------------------------------------------------------------------
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -43,7 +42,7 @@ class FakeWorker {
   terminate() {
     this.terminated = true;
   }
-  /** The module finished evaluating: what every worker entry posts first (#339). */
+  /** The module finished evaluating: what every worker entry posts first. */
   ready() {
     if (this.loaded) return;
     this.loaded = true;
@@ -53,7 +52,7 @@ class FakeWorker {
   failToLoad() {
     this.onerror?.(new Event('error') as ErrorEvent);
   }
-  /** A module that throws while evaluating: an ErrorEvent with a message, before ready (#339). */
+  /** A module that throws while evaluating: an ErrorEvent with a message, before ready. */
   throwOnLoad() {
     this.onerror?.({ message: 'SyntaxError' } as ErrorEvent);
   }
@@ -141,8 +140,8 @@ describe('useWorkerRequest', () => {
   });
 
   it('does not let a response to the request before an idle one overwrite idle', () => {
-    // #294: the idle branch returned before bumping the id, so request 1 was
-    // still "current" and its late answer replaced idle with stale data.
+    // Going idle bumps the id, so request 1's late answer is stale and does not
+    // replace idle.
     const { result } = setup();
     act(() => result.current.run({ value: 'a' }));
     act(() => result.current.run({ value: '' }));
@@ -154,7 +153,7 @@ describe('useWorkerRequest', () => {
   });
 
   it('reaps a request superseded by an idle one without reporting it', () => {
-    // The worker is still busy with the superseded request (#364), so a hang
+    // The worker is still busy with the superseded request, so a hang
     // must still free it for the next one, but nobody is waiting on it.
     const { result } = setup();
     const first = latest();
@@ -340,7 +339,7 @@ describe('useWorkerRequest', () => {
     // The cap counts only workers that never loaded; one that loaded and later
     // crashes resets it, so a long session is never pushed inline. A worker
     // that dies with nothing in flight is replaced when next needed rather
-    // than at once (#339), so each crash costs one construction, not two.
+    // than at once, so each crash costs one construction, not two.
     const { result } = setup();
     for (let i = 1; i <= 4; i++) {
       act(() => result.current.run({ value: 'a' }));
@@ -352,10 +351,9 @@ describe('useWorkerRequest', () => {
     expect(FakeWorker.instances).toHaveLength(4);
   });
   it('keeps using workers however many requests in a row crash them (#326)', () => {
-    // #309 counted each replacement's crash as a start failure — it had not
-    // answered yet — so the second crash of a replacement hit the cap, no
-    // worker was built, and every later pattern ran inline on the tab's thread
-    // with no watchdog.
+    // A replacement's crash is not a start failure even though it had not
+    // answered yet, so repeated crashes never hit the cap and send later
+    // patterns inline on the tab's thread, with no watchdog.
     const { result } = setup();
     act(() => result.current.run({ value: 'a' }));
     act(() => latest().respond(1, 'A'));
@@ -379,7 +377,7 @@ describe('useWorkerRequest', () => {
   });
 
   it('never runs a request inline after two workers in a row crashed on it (#326)', () => {
-    // Two crashing requests from a fresh start used to be enough on their own.
+    // Two crashing requests from a fresh start are not enough on their own.
     const { result } = setup();
     for (let i = 1; i <= 3; i++) {
       act(() => result.current.run({ value: 'boom' }));
@@ -403,8 +401,8 @@ describe('useWorkerRequest', () => {
 
   describe('a worker whose script throws at top level (#339)', () => {
     it('is a load failure for the first request: resent, then run inline at the cap', () => {
-      // The request is posted before the script has run. The top-level throw
-      // used to be charged to it, and the first pattern reported a timeout.
+      // The request is posted before the script has run, so the top-level throw
+      // is not charged to it as a timeout.
       const { result } = setup();
       act(() => result.current.run({ value: 'a' }));
 

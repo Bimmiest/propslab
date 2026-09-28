@@ -39,8 +39,8 @@ describe('isFieldVisible (#15)', () => {
   });
 });
 
-// The old one-shot initialisation meant a parent appearing after a props.conf
-// edit rendered expanded, so "collapse all on load" quietly stopped holding.
+// A parent appearing after a props.conf edit starts collapsed too: "collapse
+// all on load" holds for every parent, not only the first render's.
 describe('reconcileCollapsed (#15)', () => {
   it('collapses every parent on the first pass', () => {
     const result = reconcileCollapsed(['event', 'event.user'], new Set(), new Set());

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // The Timestamp tab draws highlights beside `_time` badges from the last
-// pipeline run, so its config has to be the one that run used (#316), and its
-// reference disclosure has to announce its state (#320).
+// pipeline run, so its config has to be the one that run used, and its
+// reference disclosure has to announce its state.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { TimestampTab } from '../TimestampTab';

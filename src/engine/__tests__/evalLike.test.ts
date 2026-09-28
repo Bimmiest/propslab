@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
 // evalLike.test.ts
-// like() built `.*.*` from `%%`, the ReDoS guard refused it, and like() then
-// answered false for every event without a word (#303).
+// like()'s wildcard translation: a run of `%` is one `.*`, so `%%` matches
+// like `%` does.
 //
 // Doc-derived: like(TEXT, PATTERN) is true when TEXT matches PATTERN, with `%`
 // for any run of characters and `_` for exactly one. No fidelity fixture covers

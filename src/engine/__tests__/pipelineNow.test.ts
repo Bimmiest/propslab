@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
 // pipelineNow.test.ts
 // `PipelineOptions.now` stands in for the wall clock everywhere the simulation
-// reads the current time (#293). Each case asserts one consumer, so a stage
+// reads the current time. Each case asserts one consumer, so a stage
 // that quietly goes back to `Date.now()` fails here by name rather than as a
 // fidelity fixture going red years from now.
 //

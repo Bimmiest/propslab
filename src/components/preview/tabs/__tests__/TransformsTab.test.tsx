@@ -74,8 +74,8 @@ describe('TransformsTab', () => {
     expect([...details.querySelectorAll('li')].map((li) => li.textContent)).toEqual(['b', 'a']);
   });
 
-  // #366: every detail row of every step was in the DOM, and the dedup was
-  // quadratic; 20k events took over a second to switch to.
+  // Detail rows render only while open, and the dedup is linear, so 20k events
+  // switch in well under a second.
   it('renders no detail rows until opened, then a page at a time', () => {
     useAppStore.setState({ processingResult: resultOf(manyEvents(20_000)) });
     // Asserted by what reaches the DOM rather than by wall-clock time, which

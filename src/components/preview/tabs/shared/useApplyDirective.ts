@@ -3,7 +3,7 @@
 // Write a generated directive into the event's sourcetype stanza.
 //
 // Shared by the event context menu's scaffolds and the Regex tab's one-click
-// "Add to props.conf" (#88). The sourcetype fallback below is subtle enough
+// "Add to props.conf". The sourcetype fallback below is subtle enough
 // that two copies of it would eventually become one copy and one bug.
 // ---------------------------------------------------------------------------
 
@@ -31,8 +31,8 @@ export function useApplyDirective(): ApplyDirective {
     /**
      * When the event has no sourcetype we fall back to a placeholder stanza name
      * — but `matchStanzas` requires `metadata.sourcetype` to equal the stanza
-     * name, so writing `[my:sourcetype]` alone produced config that could never
-     * match the event it was scaffolded from (#72). Point the metadata at the
+     * name, so writing `[my:sourcetype]` alone would produce config that could
+     * never match the event it was scaffolded from. Point the metadata at the
      * stanza too, the way ScaffoldModal already does.
      */
     apply: (key: string, value: string) => {

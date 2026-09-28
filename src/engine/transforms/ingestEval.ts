@@ -61,9 +61,8 @@ function isMetadataKey(name: string): name is 'index' | 'host' | 'source' | 'sou
 /**
  * Split one `field=expr` or `field:=expr` assignment at its operator.
  *
- * `:=` is INGEST_EVAL's replace-assignment operator (transforms.conf.spec). It
- * used to be split at the `=` like any other assignment, which left the `:` on
- * the name and wrote a field literally called `x:` (#327). Both operators are
+ * `:=` is INGEST_EVAL's replace-assignment operator (transforms.conf.spec), so
+ * the `:` belongs to the operator, not the field name. Both operators are
  * handled identically after this point: the simulator already replaces an
  * existing field's value on `=`, which is exactly what the spec says `:=` does.
  * The spec's multivalue-append reading of `=` on an existing field is not
@@ -162,9 +161,9 @@ export function applyIngestEval(
             // fields: assigning one rewrites it exactly as DEST_KEY =
             // MetaData:<Key> does, so the event lands in the new index and — in
             // per-event mode — is re-matched against the new sourcetype's
-            // stanzas (#327). Writing them into `fields` instead left the
-            // routing untouched while the preview showed a field that claimed
-            // otherwise. The value is bare: unlike FORMAT for DEST_KEY there is
+            // stanzas. Written into `fields` instead, the routing would be
+            // untouched while the preview showed a field claiming otherwise.
+            // The value is bare: unlike FORMAT for DEST_KEY there is
             // no `host::` prefix to strip. A null result has nothing to route
             // to, and the event keeps the metadata it has, as it does when a
             // DEST_KEY FORMAT lacks its prefix.
@@ -196,7 +195,7 @@ export function applyIngestEval(
 
     // The step says what it rewrote: `_raw` through the same mutation record
     // DEST_KEY = _raw leaves, so field attribution reaches it, and metadata as
-    // old → new, which the bare expression count hid (#346). The description
+    // old → new. The description
     // names each key as its DEST_KEY, as a DEST_KEY = MetaData:* step does.
     const changes = metadataChanges(event.metadata, currentEvent.metadata);
     const description =

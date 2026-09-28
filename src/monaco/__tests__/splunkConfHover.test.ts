@@ -27,9 +27,8 @@ function hoverText(line: string): string {
   return result?.contents?.map((c) => c.value).join('\n') ?? '';
 }
 
-// #31.1: hover matched `/^\[(.+)\]$/` against the RAW line, so `[foo] ` (with a
-// trailing space) got no hover at all — stricter than confParser's STANZA_RE,
-// which tolerates surrounding whitespace.
+// A stanza header with a trailing space (`[foo] `) gets a hover, as confParser's
+// STANZA_RE tolerates surrounding whitespace.
 describe('splunkConfHover — stanza headers with surrounding whitespace (#31.1)', () => {
   it('hovers a stanza header with a trailing space', () => {
     expect(hoverText('[my:sourcetype] ')).not.toBe('');
@@ -44,10 +43,10 @@ describe('splunkConfHover — stanza headers with surrounding whitespace (#31.1)
   });
 });
 
-// #296: the directive hover is trusted (so its "Open in dictionary" command link
-// works) and its heading is the key AS TYPED. A key such as
-// `EXTRACT-x](command:foo)[` closed nothing and opened a link of its own, which
-// trusted Markdown would run as a command.
+// The directive hover is trusted (so its "Open in dictionary" command link
+// works) and its heading is the key AS TYPED, so a key such as
+// `EXTRACT-x](command:foo)[` must be escaped, or trusted Markdown would run the
+// link it opens as a command.
 describe('splunkConfHover — document text cannot inject Markdown (#296)', () => {
   function hover(line: string, fileType: 'props.conf' | 'transforms.conf' = 'props.conf') {
     const result = createHoverProvider(fileType).provideHover(

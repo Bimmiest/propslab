@@ -16,9 +16,8 @@ function warningsFor(expr: string): ValidationDiagnostic[] {
   return diagnostics;
 }
 
-// #127: sigfig() and exact() returned their argument unrounded with no warning —
-// the only two unsimulated builtins that failed silently, and the two whose
-// output most resembles a correct answer.
+// sigfig() and exact() return their argument unrounded, so they warn like every
+// other unsimulated builtin: their output most resembles a correct answer.
 describe('eval — every unsimulated builtin warns (#127)', () => {
   it.each(['sigfig', 'exact'])('%s() warns', (fn) => {
     const diagnostics = warningsFor(`${fn}(n)`);
@@ -35,7 +34,7 @@ describe('eval — every unsimulated builtin warns (#127)', () => {
 
   it('a fully simulated function does not warn', () => {
     expect(warningsFor('round(n, 2)')).toHaveLength(0);
-    // Simulated since #291, so it left the stub list.
+    // Simulated, so not on the stub list.
     expect(warningsFor('if(cidrmatch("10.0.0.0/8", "10.1.2.3"), 1, 0)')).toHaveLength(0);
   });
 

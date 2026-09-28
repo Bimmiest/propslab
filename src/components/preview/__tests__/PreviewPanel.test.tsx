@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-// A run that failed outright used to fall through to the first-run "No data
-// yet" invitation (#294); it has to say that the run failed, and why.
+// A run that failed outright has to say that it failed, and why, rather than
+// show the first-run "No data yet" invitation.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { PreviewPanel } from '../PreviewPanel';
@@ -30,8 +30,8 @@ describe('PreviewPanel', () => {
   });
 
   it('wires the active tab and its panel to each other by per-instance ids', () => {
-    // #300: ids were the global `tab-${id}`; two tablists (or two mounts of
-    // one) could collide and point aria-controls at the wrong panel.
+    // Ids are per-tablist, so two tablists (or two mounts of one) cannot
+    // collide and point aria-controls at the wrong panel.
     render(<><PreviewPanel /><PreviewPanel /></>);
     const tabs = screen.getAllByRole('tab', { name: 'Preview' });
     const panels = screen.getAllByRole('tabpanel');
@@ -99,9 +99,9 @@ describe('PreviewPanel — metadata changes are relative to the run (#316)', () 
   });
 });
 
-// #335: each keystroke in the preview search rebuilt `filteredEvents`, which
-// re-scanned every event and re-posted the whole dataset to the Regex tab's
-// matcher. The filter now follows a debounced copy; the input does not wait.
+// The filter follows a debounced copy of the preview search, so a keystroke
+// does not rebuild `filteredEvents` (a scan of every event and a re-post of the
+// dataset to the Regex tab's matcher); the input does not wait.
 describe('PreviewPanel — search is debounced (#335)', () => {
   function resultOf(raws: string[]): ProcessingResult {
     const meta: EventMetadata = { index: 'main', host: 'h', source: 's', sourcetype: 'st' };
@@ -148,7 +148,7 @@ describe('PreviewPanel — search is debounced (#335)', () => {
   });
 });
 
-// #347: the Effective config tab unmounts while another output tab is shown,
+// The Effective config tab unmounts while another output tab is shown,
 // which is when props.conf gets edited, so the inputs of the last run are held
 // by the panel rather than the tab.
 describe('PreviewPanel — Effective config shows the last run in manual-apply mode (#347)', () => {

@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
 // timestampExtraFields.test.ts
-// ADD_EXTRA_TIME_FIELDS and DETERMINE_TIMESTAMP_DATE_WITH_SYSTEM_TIME (#273).
+// ADD_EXTRA_TIME_FIELDS and DETERMINE_TIMESTAMP_DATE_WITH_SYSTEM_TIME.
 //
 // Doc-derived throughout. The modes and the dateless-date rules are read from
 // props.conf.spec 10.4.3 (as summarised in the registry descriptions); the
@@ -193,8 +193,7 @@ describe('DETERMINE_TIMESTAMP_DATE_WITH_SYSTEM_TIME (#273)', () => {
     ]);
   });
 
-  // `on` is the one Splunk true spelling this reader missed before the shared
-  // parser (#301); the rest it already accepted.
+  // `on` is one of Splunk's true spellings, read through the shared parser.
   it.each(['on', 'yes', '1'])('reads %j as true, like every other boolean', (v) => {
     const out = run(RAWS, [TIME_ONLY, dir('DETERMINE_TIMESTAMP_DATE_WITH_SYSTEM_TIME', v)]);
     expect(out[1]?._time?.toISOString()).toBe('2026-08-04T01:00:00.000Z');

@@ -7,7 +7,7 @@
  *
  * Message protocol:
  *   in  → TimestampMatchRequest
- *   out → WORKER_READY once, when the worker has loaded its regex engine (#339); then TimestampMatchResponse
+ *   out → WORKER_READY once, when the worker has loaded its regex engine; then TimestampMatchResponse
  */
 
 import { probeTimestamps } from './timestampMatch';
@@ -25,9 +25,9 @@ export interface TimestampMatchResponse {
   /** Per-input probes, aligned to `raws`. Empty when `error` is set. */
   probes: TimestampProbe[];
   /**
-   * Why probing threw, when it did. Without a catch here the throw became an
-   * uncaught worker error, which the caller reports exactly as it reports its
-   * watchdog firing: the tab said "timed out" and the message was lost (#322).
+   * Why probing threw, when it did. Caught here because an uncaught worker
+   * error reads to the caller exactly like its watchdog firing, and the
+   * message would be lost behind "timed out".
    */
   error?: string;
 }

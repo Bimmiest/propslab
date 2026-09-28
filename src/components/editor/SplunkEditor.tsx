@@ -57,7 +57,7 @@ const OPTIONS_BY_FILE: Record<'props.conf' | 'transforms.conf', editor.IStandalo
 };
 
 export function SplunkEditor({ value, onChange, fileType = 'props.conf', language, onEditorReady }: SplunkEditorProps) {
-  // Each conf file maps to its own language so it only offers its own directives (UI-4).
+  // Each conf file maps to its own language so it only offers its own directives.
   const resolvedLanguage = language ?? (fileType === 'transforms.conf' ? TRANSFORMS_LANGUAGE_ID : PROPS_LANGUAGE_ID);
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const theme = useAppStore((s) => s.theme);
@@ -82,14 +82,13 @@ export function SplunkEditor({ value, onChange, fileType = 'props.conf', languag
   // monaco.editor.setTheme); a separate updateOptions({ theme }) effect was
   // redundant — updateOptions doesn't even carry the global theme.
 
-  // Lint on every content change, whoever made it. This used to be scheduled
-  // from the `onChange` handler, but MonacoEditor deliberately withholds
-  // `onChange` for its own writes of `value` (so they are not echoed back to
-  // the store as user edits) — which meant Clear, loading an example and the
-  // scaffold all replaced the text and left the old file's markers on it
-  // (#295). Listening on the editor directly sees both kinds of edit through
-  // one debounce, so a keystroke is not scheduled twice, and it cannot feed
-  // back: setting markers is not a content change.
+  // Lint on every content change, whoever made it. Not from `onChange`:
+  // MonacoEditor deliberately withholds `onChange` for its own writes of
+  // `value` (so they are not echoed back to the store as user edits), so Clear,
+  // loading an example and the scaffold would leave the old file's markers on
+  // the new text. Listening on the editor directly sees both kinds of edit
+  // through one debounce, so a keystroke is not scheduled twice, and it cannot
+  // feed back: setting markers is not a content change.
   //
   // Runs after MonacoEditor's construction effect (a child's effects fire
   // before its parent's), so the instance is already here. It also owns the

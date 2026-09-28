@@ -2,7 +2,7 @@ import type { Page } from '@playwright/test';
 import { test, expect, openApp, loadExample } from './fixtures';
 
 /**
- * Performance budget for a large input (#376): 20k events pasted into the raw
+ * Performance budget for a large input: 20k events pasted into the raw
  * log, the way a user brings one in. Budgets are several times what a local
  * run measures (noted beside each), so they catch a regression of kind — an
  * accidental O(n²), a render over every event instead of a page — rather than

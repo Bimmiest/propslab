@@ -140,6 +140,62 @@ function optionDomId(entryId: string): string {
   return `dict-option-${entryId.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
 }
 
+function DictionaryOption({
+  entry,
+  isSelected,
+  onSelect,
+}: {
+  entry: DictionaryEntry;
+  isSelected: boolean;
+  onSelect: (id: string) => void;
+}) {
+  return (
+    <div
+      role="option"
+      id={optionDomId(entry.id)}
+      data-entry-id={entry.id}
+      aria-selected={isSelected}
+      onClick={() => onSelect(entry.id)}
+      className={[
+        'flex items-center gap-1.5 px-3 py-1.5 cursor-pointer transition-colors',
+        isSelected
+          ? 'bg-[var(--color-accent)]/15'
+          : 'hover:bg-[var(--color-bg-tertiary)]',
+      ].join(' ')}
+      style={
+        isSelected
+          ? { boxShadow: 'inset 2px 0 0 var(--color-accent)' }
+          : undefined
+      }
+    >
+      <span
+        className="flex-1 min-w-0 truncate text-[11px] font-mono"
+        style={{
+          color: isSelected ? 'var(--color-accent)' : 'var(--color-text-primary)',
+        }}
+      >
+        {entry.title}
+      </span>
+      {/* Dropped once the panel is too narrow to hold a key beside
+          them — a truncated key is worse than an absent badge, and
+          the detail pane repeats both anyway. */}
+      <span className="hidden @[260px]:flex items-center gap-1.5">
+        {entry.kind === 'directive' ? (
+          <>
+            <FileBadge appliesTo={entry.info.appliesTo} short />
+            <PhaseBadge phase={entry.info.phase} />
+          </>
+        ) : (
+          <>
+            <FileBadge appliesTo="props.conf" short />
+            <Chip>stanza</Chip>
+          </>
+        )}
+      </span>
+    </div>
+  );
+}
+
 export function DictionaryList({
   entries,
   selectedId,
@@ -202,55 +258,9 @@ export function DictionaryList({
           >
             {group}
           </p>
-          {items.map((entry) => {
-            const isSelected = entry.id === selectedId;
-            return (
-              <div
-                key={entry.id}
-                role="option"
-                id={optionDomId(entry.id)}
-                data-entry-id={entry.id}
-                aria-selected={isSelected}
-                onClick={() => onSelect(entry.id)}
-                className={[
-                  'flex items-center gap-1.5 px-3 py-1.5 cursor-pointer transition-colors',
-                  isSelected
-                    ? 'bg-[var(--color-accent)]/15'
-                    : 'hover:bg-[var(--color-bg-tertiary)]',
-                ].join(' ')}
-                style={
-                  isSelected
-                    ? { boxShadow: 'inset 2px 0 0 var(--color-accent)' }
-                    : undefined
-                }
-              >
-                <span
-                  className="flex-1 min-w-0 truncate text-[11px] font-mono"
-                  style={{
-                    color: isSelected ? 'var(--color-accent)' : 'var(--color-text-primary)',
-                  }}
-                >
-                  {entry.title}
-                </span>
-                {/* Dropped once the panel is too narrow to hold a key beside
-                    them — a truncated key is worse than an absent badge, and
-                    the detail pane repeats both anyway. */}
-                <span className="hidden @[260px]:flex items-center gap-1.5">
-                  {entry.kind === 'directive' ? (
-                    <>
-                      <FileBadge appliesTo={entry.info.appliesTo} short />
-                      <PhaseBadge phase={entry.info.phase} />
-                    </>
-                  ) : (
-                    <>
-                      <FileBadge appliesTo="props.conf" short />
-                      <Chip>stanza</Chip>
-                    </>
-                  )}
-                </span>
-              </div>
-            );
-          })}
+          {items.map((entry) => (
+            <DictionaryOption key={entry.id} entry={entry} isSelected={entry.id === selectedId} onSelect={onSelect} />
+          ))}
         </div>
       ))}
     </div>

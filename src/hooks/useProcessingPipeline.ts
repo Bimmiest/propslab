@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useMemo } from 'react';
+import { useCallback, useEffect, useRef, useMemo, type RefObject } from 'react';
 import { useAppStore } from '../store/useAppStore';
 import { useDebounce } from './useDebounce';
 import { PIPELINE_DEBOUNCE_MS, createManagedWorker, type ManagedWorker } from './workerLifecycle';
@@ -17,25 +17,18 @@ const MAX_WORKER_RETRIES = 1;
 
 // The worker's own lifecycle — construction, the ready signal, the watchdog,
 // crash-vs-load classification and the load-failure cap — is
-// `createManagedWorker` (#339). This hook's policy on top of it:
+// `createManagedWorker`. This hook's policy on top of it:
 //
 // - Timeout: terminal error, and the input is not retried — unless the worker
-//   had not loaded, when it is posted again once the replacement has (#364).
+//   had not loaded, when it is posted again once the replacement has.
 // - Crash (the worker had loaded): replay once on the replacement, then a
-//   terminal error. A crashed input is never run inline (#326): #309 counted
-//   crashes toward the load cap, so an input that crashed a few workers was
-//   eventually run on the tab's own thread, with no watchdog.
+//   terminal error. A crashed input is never run inline: on the tab's own
+//   thread it would have no watchdog.
 // - Load failure (it had not): resend, uncharged — no code saw the request.
 //   Past MAX_WORKER_LOAD_FAILURES no worker is built and requests run inline,
-//   which is what the inline fallback is for (#309). `new Worker` does not
-//   throw when its chunk cannot be fetched, and onerror used to rebuild such a
-//   worker forever.
-//
-// Until #339 a load failure was guessed from whether the worker had answered,
-// and the first worker never had: its request is posted in the same commit it
-// is built. A script that threw at top level had the mount request reported
-// as having "crashed repeatedly", the preview stayed empty until an edit, and
-// the current input was never re-run inline once the cap was reached.
+//   which is what the inline fallback is for. `new Worker` does not throw when
+//   its chunk cannot be fetched, so the cap is what stops such a worker being
+//   rebuilt forever.
 
 /** Where the latest request got to, for deciding what the load-failure cap may re-run. */
 type LatestState =
@@ -43,12 +36,12 @@ type LatestState =
   | 'running'
   /** Answered, or run inline. */
   | 'done'
-  /** Hung or crashed a worker that had loaded: never to be run inline (#326). */
+  /** Hung or crashed a worker that had loaded: never to be run inline. */
   | 'poisoned'
   /** Timed out before its worker had loaded, so no code ever ran it. */
   | 'unrun';
 
-/** The inputs a run was made with, to tell whether the editors have moved on since (#335). */
+/** The inputs a run was made with, to tell whether the editors have moved on since. */
 interface RunInputs {
   rawData: string;
   metadata: EventMetadata;
@@ -69,6 +62,214 @@ function sameRunInputs(a: RunInputs, b: RunInputs): boolean {
     a.metadata.source === b.metadata.source &&
     a.metadata.sourcetype === b.metadata.sourcetype
   );
+}
+
+/** The hook's request bookkeeping, shared with the worker callbacks below. */
+interface PipelineRefs {
+  requestIdRef: RefObject<number>;
+  requestStartRef: RefObject<number>;
+  /** Not reset per request — see the note in sendRequest. */
+  retryCountRef: RefObject<number>;
+  latestRef: RefObject<{ request: PipelineWorkerRequest; state: LatestState } | null>;
+}
+
+type AppState = ReturnType<typeof useAppStore.getState>;
+
+/** Where the worker callbacks deliver results, and how they run a request inline. */
+interface PipelineSinks extends Pick<
+  AppState,
+  'setIsProcessing' | 'setLastProcessingMs' | 'setProcessingResult' | 'setValidationDiagnostics'
+> {
+  runInline: (request: PipelineWorkerRequest) => void;
+}
+
+/** The worker callbacks' shared state: refs, sinks, and the worker they belong to. */
+interface WorkerPolicy extends PipelineRefs, PipelineSinks {
+  managed: ManagedWorker<PipelineWorkerRequest>;
+}
+
+function report(p: WorkerPolicy, message: string): void {
+  p.setIsProcessing(false);
+  p.setProcessingResult(null);
+  p.setValidationDiagnostics([{ level: 'error', message, file: 'props.conf' }]);
+}
+
+/**
+ * Stop on the latest request for good: it hung or crashed a worker, so it
+ * is neither replayed again nor ever run inline.
+ */
+function giveUp(p: WorkerPolicy, message: string): void {
+  p.retryCountRef.current = 0;
+  if (p.latestRef.current) p.latestRef.current.state = 'poisoned';
+  report(p, message);
+}
+
+function onResponse(p: WorkerPolicy, { id, result, error }: PipelineWorkerResponse): void {
+  if (id !== p.requestIdRef.current) return;
+  p.setIsProcessing(false);
+  p.setLastProcessingMs(performance.now() - p.requestStartRef.current);
+  // This request completed cleanly — it is not poison, so clear the retry
+  // budget.
+  p.retryCountRef.current = 0;
+  if (p.latestRef.current) p.latestRef.current.state = 'done';
+
+  if (error || !result) {
+    p.setProcessingResult(null);
+    p.setValidationDiagnostics([{
+      level: 'error',
+      message: `Pipeline error: ${error ?? 'Unknown error'}`,
+      file: 'props.conf',
+    }]);
+    return;
+  }
+
+  p.setProcessingResult(result.result);
+  p.setValidationDiagnostics(result.diagnostics);
+}
+
+function onTimeout(p: WorkerPolicy, request: PipelineWorkerRequest, loaded: boolean): void {
+  if (request.id !== p.requestIdRef.current) return;
+  p.retryCountRef.current = 0;
+  if (!loaded) {
+    // The worker never started, so the input never ran and says nothing
+    // about its patterns. Run it once the replacement has loaded, so a slow
+    // first load does not leave the preview on a timeout until the next
+    // edit. If the replacement fails to load, onLoadFailure gets
+    // it; with no worker at all it never ran, so inline is safe.
+    if (p.latestRef.current) p.latestRef.current.state = 'unrun';
+    if (!p.managed.postWhenReady(request)) p.runInline(request);
+    return;
+  }
+  giveUp(p, `Pipeline timed out after ${WORKER_TIMEOUT_MS / 1000} s — a regex may be backtracking heavily on every event. Try simplifying your EXTRACT or TRANSFORMS pattern, or lowering its MATCH_LIMIT.`);
+}
+
+function onCrash(p: WorkerPolicy, inFlight: PipelineWorkerRequest[], message: string): void {
+  const pending = inFlight.find((r) => r.id === p.requestIdRef.current);
+  if (!pending) {
+    // Nothing of ours was running, so there is no input to blame — but
+    // the preview's worker died, and saying nothing would leave a
+    // result on screen that nothing can refresh until the next edit.
+    report(p, `Worker error: ${message || 'unknown error'}`);
+    return;
+  }
+  // Restart once and replay — covers a transient worker crash. The
+  // lifecycle arms a fresh watchdog for the replay, so a retry that also
+  // hangs cannot leave isProcessing stuck.
+  if (p.retryCountRef.current < MAX_WORKER_RETRIES && p.managed.post(pending)) {
+    p.retryCountRef.current += 1;
+    p.setIsProcessing(true);
+    return;
+  }
+  // Out of retries, or no replacement could be built: either way the
+  // input crashed a worker, and it is never finished inline, where it could
+  // take the tab's own thread down. Later requests still reach
+  // `sendRequest`, which runs them inline if no worker can be had.
+  giveUp(
+    p,
+    `Worker crashed ${p.retryCountRef.current > 0 ? 'repeatedly ' : ''}while processing this input: ${message || 'unknown error'}. Processing was stopped — try reducing the input size or simplifying your patterns.`,
+  );
+}
+
+function onLoadFailure(p: WorkerPolicy, inFlight: PipelineWorkerRequest[], capped: boolean): void {
+  const pending = inFlight.find((r) => r.id === p.requestIdRef.current);
+  if (!pending) {
+    // Nothing in flight, so nothing to report — a "Worker error" here would
+    // repaint the diagnostics on every refetch. But once the cap is reached
+    // no worker will come to run the latest input, so if no code has run it
+    // yet, run it here rather than leave the preview on a timeout until the
+    // next edit.
+    const latest = p.latestRef.current;
+    if (capped && latest?.state === 'unrun' && latest.request.id === p.requestIdRef.current) {
+      p.runInline(latest.request);
+    }
+    return;
+  }
+  // Resend without charging the retry budget: no code saw it.
+  if (p.managed.post(pending)) {
+    p.setIsProcessing(true);
+    return;
+  }
+  // Out of workers. A request that has not crashed anything finishes
+  // inline, but one on its replay already crashed a worker, and the
+  // replacement merely failing to load does not make it safe to run on
+  // the tab's own thread.
+  if (p.retryCountRef.current > 0) {
+    giveUp(p, 'Worker crashed while processing this input, and no replacement worker could be started to retry it. Processing was stopped — try reducing the input size or simplifying your patterns.');
+    return;
+  }
+  p.runInline(pending);
+}
+
+/**
+ * Build the pipeline's managed worker with this hook's policy. `sendRequest`
+ * forgets every earlier request, so the one request these callbacks are handed
+ * is always the latest.
+ */
+function createPipelineWorker(refs: PipelineRefs, sinks: PipelineSinks): ManagedWorker<PipelineWorkerRequest> {
+  // The callbacks close over `policy`, which exists before any of them can fire.
+  const managed = createManagedWorker<PipelineWorkerRequest, PipelineWorkerResponse>({
+    create: createWorker,
+    timeoutMs: WORKER_TIMEOUT_MS,
+    onResponse: (response) => onResponse(policy, response),
+    onTimeout: (request, _others, loaded) => onTimeout(policy, request, loaded),
+    onCrash: (inFlight, message) => onCrash(policy, inFlight, message),
+    onLoadFailure: (inFlight, capped) => onLoadFailure(policy, inFlight, capped),
+  });
+  const policy: WorkerPolicy = { ...refs, ...sinks, managed };
+  return managed;
+}
+
+/**
+ * Run a request on the calling thread. The fallback for when a worker cannot
+ * be constructed at all — no `Worker` (tests, SSR), a CSP that forbids worker
+ * scripts, a failed chunk fetch — so the preview still produces output there
+ * rather than sitting on "No data yet" with nothing to say why.
+ * `useWorkerRequest` makes the same trade for the live-matching hooks.
+ * A failed chunk fetch does not actually throw from `new Worker`; it surfaces
+ * later as an `error` event, and reaches this path through the load-failure
+ * cap instead. A request whose worker crashed never does.
+ *
+ * What is given up is the watchdog: a runaway regex here blocks the tab rather
+ * than a worker. That is the cost of producing output at all in an environment
+ * that will not run a worker, and the browsers this ships to always can.
+ *
+ * The engine is imported dynamically so the main bundle does not carry a
+ * second copy of it for a path the browser normally never takes; the worker
+ * chunk already has one.
+ */
+function runPipelineInline(
+  request: PipelineWorkerRequest,
+  refs: PipelineRefs,
+  sinks: Omit<PipelineSinks, 'runInline'>,
+): void {
+  sinks.setIsProcessing(true);
+  import('../engine/pipeline')
+    .then(({ runPipeline }) => {
+      if (request.id !== refs.requestIdRef.current) return; // superseded while loading
+      if (refs.latestRef.current?.request === request) refs.latestRef.current.state = 'done';
+      const output = runPipeline(
+        request.rawData,
+        request.metadata,
+        request.propsConfText,
+        request.transformsConfText,
+        request.options,
+      );
+      sinks.setLastProcessingMs(performance.now() - refs.requestStartRef.current);
+      sinks.setProcessingResult(output.result);
+      sinks.setValidationDiagnostics(output.diagnostics);
+    })
+    .catch((err: unknown) => {
+      if (request.id !== refs.requestIdRef.current) return;
+      sinks.setProcessingResult(null);
+      sinks.setValidationDiagnostics([{
+        level: 'error',
+        message: `Pipeline error: ${err instanceof Error ? err.message : String(err)}`,
+        file: 'props.conf',
+      }]);
+    })
+    .finally(() => {
+      if (request.id === refs.requestIdRef.current) sinks.setIsProcessing(false);
+    });
 }
 
 export function useProcessingPipeline() {
@@ -92,7 +293,7 @@ export function useProcessingPipeline() {
   const retryCountRef = useRef(0);
   // What the last request was made with. In manual-apply mode the pipeline is
   // dirty when the settled inputs differ from these, not merely because the
-  // inputs changed (#335).
+  // inputs changed.
   const lastRunRef = useRef<RunInputs | null>(null);
   // Latest settings, for the manual-run effect (which depends only on the tick).
   const settingsRef = useRef(settings);
@@ -107,53 +308,12 @@ export function useProcessingPipeline() {
     liveInputsRef.current = { rawData, metadata, propsConf, transformsConf };
   }, [rawData, metadata, propsConf, transformsConf]);
 
-  // Run a request on the calling thread. The fallback for when a worker cannot
-  // be constructed at all — no `Worker` (tests, SSR), a CSP that forbids worker
-  // scripts, a failed chunk fetch. Before this, construction was unguarded, so
-  // the throw escaped the mount effect and took the panel down; and had it been
-  // caught, `sendRequest` would have returned early on every keystroke and the
-  // preview would have sat on "No data yet" with nothing to say why (#294).
-  // `useWorkerRequest` makes the same trade for the live-matching hooks.
-  // A failed chunk fetch does not actually throw from `new Worker`; it surfaces
-  // later as an `error` event, and reaches this path through the load-failure
-  // cap instead (#309). A request whose worker crashed never does (#326).
-  //
-  // What is given up is the watchdog: a runaway regex here blocks the tab rather
-  // than a worker. That is the cost of producing output at all in an environment
-  // that will not run a worker, and the browsers this ships to always can.
-  //
-  // The engine is imported dynamically so the main bundle does not carry a
-  // second copy of it for a path the browser normally never takes; the worker
-  // chunk already has one.
   const runInline = useCallback((request: PipelineWorkerRequest) => {
-    setIsProcessing(true);
-    import('../engine/pipeline')
-      .then(({ runPipeline }) => {
-        if (request.id !== requestIdRef.current) return; // superseded while loading
-        if (latestRef.current?.request === request) latestRef.current.state = 'done';
-        const output = runPipeline(
-          request.rawData,
-          request.metadata,
-          request.propsConfText,
-          request.transformsConfText,
-          request.options,
-        );
-        setLastProcessingMs(performance.now() - requestStartRef.current);
-        setProcessingResult(output.result);
-        setValidationDiagnostics(output.diagnostics);
-      })
-      .catch((err: unknown) => {
-        if (request.id !== requestIdRef.current) return;
-        setProcessingResult(null);
-        setValidationDiagnostics([{
-          level: 'error',
-          message: `Pipeline error: ${err instanceof Error ? err.message : String(err)}`,
-          file: 'props.conf',
-        }]);
-      })
-      .finally(() => {
-        if (request.id === requestIdRef.current) setIsProcessing(false);
-      });
+    runPipelineInline(
+      request,
+      { requestIdRef, requestStartRef, retryCountRef, latestRef },
+      { setIsProcessing, setLastProcessingMs, setProcessingResult, setValidationDiagnostics },
+    );
   }, [setIsProcessing, setLastProcessingMs, setProcessingResult, setValidationDiagnostics]);
 
   const sendRequest = useCallback((
@@ -175,7 +335,7 @@ export function useProcessingPipeline() {
 
     // Answers to earlier requests are stale now. The worker is still running
     // them, so they keep their watchdogs, and this request's starts when the
-    // worker reaches it (#364): an edit mid-run must not charge the new input
+    // worker reaches it: an edit mid-run must not charge the new input
     // for the old one's run time.
     const managed = workerRef.current;
     managed?.forget();
@@ -196,123 +356,10 @@ export function useProcessingPipeline() {
 
   // Build the worker once; the lifecycle rebuilds it after a failure.
   useEffect(() => {
-    const report = (message: string) => {
-      setIsProcessing(false);
-      setProcessingResult(null);
-      setValidationDiagnostics([{ level: 'error', message, file: 'props.conf' }]);
-    };
-    // Stop on the latest request for good: it hung or crashed a worker, so it
-    // is neither replayed again nor ever run inline (#326).
-    const giveUp = (message: string) => {
-      retryCountRef.current = 0;
-      if (latestRef.current) latestRef.current.state = 'poisoned';
-      report(message);
-    };
-    const crashedMessage = (detail: string) =>
-      `Worker crashed ${retryCountRef.current > 0 ? 'repeatedly ' : ''}while processing this input: ${detail || 'unknown error'}. Processing was stopped — try reducing the input size or simplifying your patterns.`;
-
-    // `sendRequest` forgets every earlier request, so the one request these
-    // callbacks are handed is always the latest.
-    const managed = createManagedWorker<PipelineWorkerRequest, PipelineWorkerResponse>({
-      create: createWorker,
-      timeoutMs: WORKER_TIMEOUT_MS,
-
-      onResponse({ id, result, error }) {
-        if (id !== requestIdRef.current) return;
-        setIsProcessing(false);
-        setLastProcessingMs(performance.now() - requestStartRef.current);
-        // This request completed cleanly — it is not poison, so clear the retry
-        // budget.
-        retryCountRef.current = 0;
-        if (latestRef.current) latestRef.current.state = 'done';
-
-        if (error || !result) {
-          setProcessingResult(null);
-          setValidationDiagnostics([{
-            level: 'error',
-            message: `Pipeline error: ${error ?? 'Unknown error'}`,
-            file: 'props.conf',
-          }]);
-          return;
-        }
-
-        setProcessingResult(result.result);
-        setValidationDiagnostics(result.diagnostics);
-      },
-
-      onTimeout(request, _others, loaded) {
-        if (request.id !== requestIdRef.current) return;
-        retryCountRef.current = 0;
-        if (!loaded) {
-          // The worker never started, so the input never ran and says nothing
-          // about its patterns. Run it once the replacement has loaded, so a slow
-          // first load does not leave the preview on a timeout until the next
-          // edit (#364). If the replacement fails to load, onLoadFailure gets
-          // it; with no worker at all it never ran, so inline is safe.
-          if (latestRef.current) latestRef.current.state = 'unrun';
-          if (!managed.postWhenReady(request)) runInline(request);
-          return;
-        }
-        giveUp(`Pipeline timed out after ${WORKER_TIMEOUT_MS / 1000} s — a regex may be backtracking heavily on every event. Try simplifying your EXTRACT or TRANSFORMS pattern, or lowering its MATCH_LIMIT.`);
-      },
-
-      onCrash(inFlight, message) {
-        const pending = inFlight.find((r) => r.id === requestIdRef.current);
-        if (!pending) {
-          // Nothing of ours was running, so there is no input to blame — but
-          // the preview's worker died, and saying nothing would leave a
-          // result on screen that nothing can refresh until the next edit.
-          report(`Worker error: ${message || 'unknown error'}`);
-          return;
-        }
-        // Restart once and replay — covers a transient worker crash. The
-        // lifecycle arms a fresh watchdog for the replay, so a retry that also
-        // hangs cannot leave isProcessing stuck.
-        if (retryCountRef.current < MAX_WORKER_RETRIES && managed.post(pending)) {
-          retryCountRef.current += 1;
-          setIsProcessing(true);
-          return;
-        }
-        // Out of retries, or no replacement could be built: either way the
-        // input crashed a worker, and it is never finished inline — it once
-        // was when the constructor threw here, which put the one input known
-        // to take a thread down onto the tab's own (#326). Later requests
-        // still reach `sendRequest`, which runs them inline if no worker can
-        // be had.
-        giveUp(crashedMessage(message));
-      },
-
-      onLoadFailure(inFlight, capped) {
-        const pending = inFlight.find((r) => r.id === requestIdRef.current);
-        if (!pending) {
-          // Nothing in flight, so nothing to report — writing "Worker error"
-          // here is what repainted the diagnostics on every refetch (#309).
-          // But once the cap is reached no worker will come to run the latest
-          // input, so if no code has run it yet, run it here rather than leave
-          // the preview on a timeout until the next edit (#339).
-          const latest = latestRef.current;
-          if (capped && latest?.state === 'unrun' && latest.request.id === requestIdRef.current) {
-            runInline(latest.request);
-          }
-          return;
-        }
-        // Resend without charging the retry budget: no code saw it.
-        if (managed.post(pending)) {
-          setIsProcessing(true);
-          return;
-        }
-        // Out of workers. A request that has not crashed anything finishes
-        // inline, but one on its replay already crashed a worker, and the
-        // replacement merely failing to load does not make it safe to run on
-        // the tab's own thread (#326).
-        if (retryCountRef.current > 0) {
-          giveUp('Worker crashed while processing this input, and no replacement worker could be started to retry it. Processing was stopped — try reducing the input size or simplifying your patterns.');
-          return;
-        }
-        runInline(pending);
-      },
-    });
-
+    const managed = createPipelineWorker(
+      { requestIdRef, requestStartRef, retryCountRef, latestRef },
+      { setIsProcessing, setLastProcessingMs, setProcessingResult, setValidationDiagnostics, runInline },
+    );
     workerRef.current = managed;
     managed.ensure();
 
@@ -332,11 +379,9 @@ export function useProcessingPipeline() {
   // Auto-run effect: fires on debounced input changes when manual apply is OFF.
   //
   // In manual-apply mode it only decides whether there is anything to apply, by
-  // comparing the settled inputs with the ones the last run used. It used to
-  // set the flag on every debounced change, so typing and clicking "Run"
-  // within the debounce window went: the run clears the flag, the debounce
-  // settles on the very inputs that run used, the flag comes back — and the
-  // status bar offered to apply changes that had already been applied (#335).
+  // comparing the settled inputs with the ones the last run used — not on
+  // every debounced change, or typing and clicking "Run" within the debounce
+  // window would re-raise the flag for inputs that run already used.
   useEffect(() => {
     if (settings.manualApply) {
       const last = lastRunRef.current;
@@ -362,7 +407,7 @@ export function useProcessingPipeline() {
     // `triggerManualRun` already cleared the flag, but when the debounce settles
     // in the same commit as the click the effect above ran first, against the
     // previous run's inputs. This run used the live inputs, so nothing is
-    // pending (#335).
+    // pending.
     setPipelineDirty(false);
   }, [manualRunTick, sendRequest, setPipelineDirty]);
 }

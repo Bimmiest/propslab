@@ -112,8 +112,7 @@ describe('applyRegexTransform — default index-time FORMAT (#61.2)', () => {
   });
 
   it('applies the default FORMAT to every match (multivalue) under REPEAT_MATCH', () => {
-    // Previously asserted every match without REPEAT_MATCH. Corrected in #285
-    // (doc-derived): at index time the REGEX runs once unless REPEAT_MATCH is set.
+    // Doc-derived: at index time the REGEX runs once unless REPEAT_MATCH is set.
     const s = stanza('word', { REGEX: '(\\w+)', WRITE_META: 'true', REPEAT_MATCH: 'true' });
     const result = applyRegexTransform(event('hello world'), s);
     expect(result.fields['word']).toEqual(['hello', 'world']);
@@ -194,10 +193,10 @@ describe('applyRegexTransform — REPEAT_MATCH / MV_ADD', () => {
   });
 
   it('MV_ADD without REPEAT_MATCH still sees every match at search time', () => {
-    // Previously asserted '1' (first match only). Corrected in #285: REPEAT_MATCH
-    // is inert at search time — the report-transform-search-time capture
-    // (10.4.0) extracts repeated matches with MV_ADD and no REPEAT_MATCH — so
-    // named groups now scan the same matches the FORMAT path always did.
+    // Capture-derived: REPEAT_MATCH is inert at search time — the
+    // report-transform-search-time capture (10.4.0) extracts repeated matches
+    // with MV_ADD and no REPEAT_MATCH — so named groups scan the same matches
+    // the FORMAT path does.
     const s = stanza('nums', { REGEX: '(?<num>\\d+)', MV_ADD: 'true' });
     const result = searchTime(event('1 2 3'), s);
     expect(result.fields['num']).toEqual(['1', '2', '3']);
@@ -260,7 +259,7 @@ describe('applyRegexTransform — DEST_KEY = _raw replaces the whole event', () 
 });
 
 describe('applyRegexTransform — numbered groups with FORMAT', () => {
-  // #61.3: `$0` is the prior DEST_KEY contents (here _raw = the whole event),
+  // `$0` is the prior DEST_KEY contents (here _raw = the whole event),
   // NOT the regex whole-match. With text around the match the two differ.
   it('substitutes $0 with the prior DEST_KEY (_raw) contents, not the match', () => {
     const s = stanza('wrap', {
@@ -295,8 +294,8 @@ describe('applyRegexTransform — numbered groups with FORMAT', () => {
     expect(result.destValue).toBe('host/user');
   });
 
-  // #26: with a single group, `$10` is group 1 followed by a literal `0`, not
-  // the non-existent group 10 (which used to collapse the whole output to '').
+  // With a single group, `$10` is group 1 followed by a literal `0`, not
+  // the non-existent group 10.
   it('treats a digit after a single-digit group ref as a literal', () => {
     const s = stanza('grab', {
       REGEX: '(AA)',
@@ -435,7 +434,7 @@ describe('applyRegexTransform — DEST_KEY single-value metadata slots', () => {
   });
 
   it('arbitrary field DEST_KEY still accumulates multi-values', () => {
-    // REPEAT_MATCH added in #285: without it the index-time REGEX runs once.
+    // REPEAT_MATCH set: without it the index-time REGEX runs once.
     const s = stanza('extract_words', {
       REGEX: '(\\w+)',
       FORMAT: '$1',
@@ -518,11 +517,9 @@ describe('applyRegexTransform — search-time-only attributes are ignored index-
   });
 
   it('ignores MV_ADD index-time: REPEAT_MATCH accumulates either way', () => {
-    // Previously asserted '1' (first value only). Changed in #303 (doc-derived):
-    // REPEAT_MATCH runs the REGEX once per match and each match writes the
-    // field, which is what the FORMAT path already did (#174 test below). Named
-    // groups disagreeing with it was the bug. MV_ADD stays inert here — the
-    // MV_ADD = false case below produces the same multivalue.
+    // Doc-derived: REPEAT_MATCH runs the REGEX once per match and each match
+    // writes the field, as the FORMAT path does (test below). MV_ADD stays
+    // inert here — the MV_ADD = false case below produces the same multivalue.
     const s = stanza('nums', { REGEX: '(?<num>\\d+)', REPEAT_MATCH: 'true', MV_ADD: 'true' });
     const result = applyRegexTransform(event('1 2 3'), s, undefined, 'index-time');
     expect(result.fields['num']).toEqual(['1', '2', '3']);
@@ -617,7 +614,7 @@ describe('#174 — MV_ADD in the FORMAT-pairs path', () => {
   });
 
   it('still accumulates at index time, where MV_ADD is inert', () => {
-    // REPEAT_MATCH added in #285: at index time the REGEX runs once without it,
+    // REPEAT_MATCH set: at index time the REGEX runs once without it,
     // so there would be nothing to accumulate. The point here is MV_ADD.
     const r = applyRegexTransform(
       event('label=a label=b'),
@@ -631,7 +628,7 @@ describe('#174 — MV_ADD in the FORMAT-pairs path', () => {
 // for index-time field extractions". At index time the REGEX therefore runs
 // once unless it is set. Search time is pinned by the report-repeat-match and
 // report-transform-search-time captures, which show every match extracted
-// regardless (#285).
+// regardless.
 describe('#285 — REPEAT_MATCH gates repeated matching at index time only', () => {
   it('runs a FORMAT-pairs REGEX once at index time without REPEAT_MATCH', () => {
     const r = applyRegexTransform(
@@ -660,7 +657,7 @@ describe('#285 — REPEAT_MATCH gates repeated matching at index time only', () 
 
 // Doc-derived (transforms.conf.spec, CLEAN_KEYS: default true, applies to keys
 // extracted at search time). A _KEY_n group names the field from the data, the
-// same way a FORMAT `$1::$2` does, so it gets the same cleaning (#285).
+// same way a FORMAT `$1::$2` does, so it gets the same cleaning.
 describe('#285 — CLEAN_KEYS applies to _KEY_n names', () => {
   const kv = (extra: Record<string, string> = {}) =>
     stanza('kv', { REGEX: '(?<_KEY_1>[\\w-]+)=(?<_VAL_1>\\w+)', ...extra });
@@ -677,7 +674,7 @@ describe('#285 — CLEAN_KEYS applies to _KEY_n names', () => {
 });
 
 // Doc-derived: MV_ADD with named groups at search time sees the same matches as
-// the FORMAT path does, so the two agree (#285).
+// the FORMAT path does, so the two agree.
 describe('#285 — MV_ADD agrees between named groups and FORMAT', () => {
   it('accumulates named groups and FORMAT pairs alike', () => {
     const named = searchTime(event('n=1 n=2'), stanza('t', { REGEX: 'n=(?<n>\\d+)', MV_ADD: 'true' }));
@@ -691,8 +688,8 @@ describe('#285 — MV_ADD agrees between named groups and FORMAT', () => {
 });
 
 // Doc-derived (transforms.conf.spec, REPEAT_MATCH: the REGEX is run repeatedly,
-// each match writing the field). Index-time named groups and FORMAT pairs used
-// to disagree — first value only against every match (#303).
+// each match writing the field), for index-time named groups and FORMAT pairs
+// alike.
 describe('#303 — index-time REPEAT_MATCH agrees between named groups and FORMAT', () => {
   const indexTime = (s: ConfStanza) => applyRegexTransform(event('n=1 n=2 n=3'), s, undefined, 'index-time');
 

@@ -60,7 +60,7 @@ const PROBE_CHARS: string[] = (() => {
 function findClassEnd(source: string, start: number): number {
   let i = start + 1;
   if (source[i] === '^') i++;
-  if (source[i] === ']') i++; // a leading `]` is a literal (PCRE; translatePcreToJs escapes it, #341)
+  if (source[i] === ']') i++; // a leading `]` is a literal (PCRE; translatePcreToJs escapes it)
   for (; i < source.length; i++) {
     if (source[i] === '\\') { i++; continue; }
     if (source[i] === ']') return i;

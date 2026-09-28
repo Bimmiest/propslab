@@ -11,7 +11,7 @@ import {
 } from '../messageLimit';
 
 /**
- * The per-message bound on stdin (#349): oversized lines are dropped before
+ * The per-message bound on stdin: oversized lines are dropped before
  * the SDK buffers or parses them, the server answers with an error, and the
  * lines after keep working.
  */

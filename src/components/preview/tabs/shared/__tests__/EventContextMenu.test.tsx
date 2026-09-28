@@ -19,10 +19,9 @@ function event(): SplunkEvent {
   };
 }
 
-// #72: with a blank sourcetype the menu falls back to a placeholder stanza name.
-// matchStanzas requires metadata.sourcetype === stanza.name, so writing
-// `[my:sourcetype]` without also setting the metadata produced config that could
-// never match the event it was scaffolded from.
+// With a blank sourcetype the menu falls back to a placeholder stanza name.
+// matchStanzas requires metadata.sourcetype === stanza.name, so the metadata is
+// set too, or the config could never match the event it was scaffolded from.
 describe('EventContextMenu — fallback stanza (#72)', () => {
   beforeEach(() => {
     useAppStore.setState(initial, true);

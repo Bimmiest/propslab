@@ -1,8 +1,8 @@
 /**
  * The worker lifecycle every caller shares, and the timing and failure rules
  * the views that must agree with it read. One copy, so a view that waits "as
- * long as the pipeline does" cannot drift from the pipeline (#335), and so the
- * three callers stop disagreeing about what a dead worker means (#339).
+ * long as the pipeline does" cannot drift from the pipeline, and so the three
+ * callers agree about what a dead worker means.
  *
  * No React here: the TIME_FORMAT hover (`monaco/timePrefixMatcher.ts`) runs
  * outside any component and uses the same lifecycle as the hooks.
@@ -15,10 +15,10 @@ export const PIPELINE_DEBOUNCE_MS = 300;
 
 /**
  * How many workers may fail to *load* in a row before a caller stops building
- * them and falls back (#309). Two, not one: a single start-up death could be a
+ * them and falls back. Two, not one: a single start-up death could be a
  * transient fetch, and costs only one spare construction to find out. Crashes
  * do not count: an input that crashes its worker must never be handed to the
- * tab's own thread (#326).
+ * tab's own thread.
  */
 export const MAX_WORKER_LOAD_FAILURES = 2;
 
@@ -26,37 +26,31 @@ export const MAX_WORKER_LOAD_FAILURES = 2;
 export const LOAD_WAIT_FACTOR = 6;
 
 // ---------------------------------------------------------------------------
-// createManagedWorker (#339)
+// createManagedWorker
 //
 // Construction, the ready signal, the per-request watchdog, crash-vs-load
-// classification, the load-failure cap, and terminate/rebuild. It was written
-// out three times — useProcessingPipeline, useWorkerRequest and the hover's
-// timePrefixMatcher — and the copies disagreed. What each caller does about a
-// failure (resend, replay, run inline, report) is the caller's policy, and it
-// arrives here as callbacks; the lifecycle only says what happened.
+// classification, the load-failure cap, and terminate/rebuild, shared by
+// useProcessingPipeline, useWorkerRequest and the hover's timePrefixMatcher.
+// What each caller does about a failure (resend, replay, run inline, report)
+// is the caller's policy, and it arrives here as callbacks; the lifecycle only
+// says what happened.
 //
 // Classification is by the worker's ready signal (`engine/workerProtocol.ts`),
-// never by whether it had been given work. The earlier rule — "a worker that
-// has not answered and was given nothing died of its own script" — could not
-// cover the first worker: the first request is posted in the same commit the
-// worker is built, before its script has even run, so a module that threw at
-// top level was always charged to that request. The pipeline then reported
-// the mount request as having "crashed repeatedly" and never rendered it; the
-// Regex and Timestamp tabs reported a timeout; and the hover, which had no
-// cap for crashes at all, built a new worker on every hover and blamed the
-// prefix each time. Requests posted before ready are fine: postMessage
-// buffers them until the module has evaluated.
+// never by whether it had been given work: the first request is posted in the
+// same commit the worker is built, before its script has even run, so a
+// module that throws at top level must not be charged to that request.
+// Requests posted before ready are fine: postMessage buffers them until the
+// module has evaluated.
 //
 // `new Worker` does not throw when its chunk cannot be fetched (a 404 after a
 // redeploy, a CSP block); that failure arrives later as an `error` event. It
 // is before ready, so it counts, and past MAX_WORKER_LOAD_FAILURES no further
-// worker is built (#309). A constructor that does throw counts the same way.
+// worker is built. A constructor that does throw counts the same way.
 //
 // A worker runs its requests one at a time, in posting order, so a request's
 // watchdog starts when the worker gets to it: at post when nothing is ahead of
-// it, otherwise when the request ahead is answered (#364). Arming every
-// request at post charged it for its predecessors' run time, so an input edited
-// once mid-run timed out on work that was not its own. The first request's
+// it, otherwise when the request ahead is answered, so no request is charged
+// for its predecessors' run time. The first request's
 // budget still covers the module's load; a caller that needs to know whether
 // its timed-out request could have run at all is told whether the worker had
 // loaded, and can wait for the replacement with `postWhenReady`.
@@ -127,174 +121,199 @@ interface Tracked<TReq> {
   superseded: boolean;
 }
 
-export function createManagedWorker<TReq extends { id: number }, TRes extends { id: number }>(
-  config: ManagedWorkerConfig<TReq, TRes>,
-): ManagedWorker<TReq> {
-  let worker: Worker | null = null;
-  // Whether the current worker has loaded: sent ready, or anything at all.
-  let ready = false;
-  // Consecutive load failures. Reset when a worker loads, so the cap means
-  // "in a row" (#309); crashes never touch it (#326).
-  let loadFailures = 0;
-  // In posting order (Map keeps insertion order), which is the order a worker
-  // runs them in: the oldest is the one it is busy with.
-  const inFlight = new Map<number, Tracked<TReq>>();
-  // Waiting for the current worker's ready signal before they are posted.
-  let deferred: TReq[] = [];
-  // Bounds the wait for that signal: a replacement whose fetch hangs neither
-  // loads nor errors, and nothing else would ever settle what waits on it.
-  // Generous next to the run budget, since a slow load is what put it here.
-  let loadTimer: ReturnType<typeof setTimeout> | null = null;
+class ManagedWorkerImpl<TReq extends { id: number }, TRes extends { id: number }> implements ManagedWorker<TReq> {
+  private readonly config: ManagedWorkerConfig<TReq, TRes>;
+  private worker: Worker | null = null;
+  /** Whether the current worker has loaded: sent ready, or anything at all. */
+  private ready = false;
+  /**
+   * Consecutive load failures. Reset when a worker loads, so the cap means
+   * "in a row"; crashes never touch it.
+   */
+  private loadFailures = 0;
+  /**
+   * In posting order (Map keeps insertion order), which is the order a worker
+   * runs them in: the oldest is the one it is busy with.
+   */
+  private readonly inFlight = new Map<number, Tracked<TReq>>();
+  /** Waiting for the current worker's ready signal before they are posted. */
+  private deferred: TReq[] = [];
+  /**
+   * Bounds the wait for that signal: a replacement whose fetch hangs neither
+   * loads nor errors, and nothing else would ever settle what waits on it.
+   * Generous next to the run budget, since a slow load is what put it here.
+   */
+  private loadTimer: ReturnType<typeof setTimeout> | null = null;
 
-  const capped = () => loadFailures >= MAX_WORKER_LOAD_FAILURES;
+  constructor(config: ManagedWorkerConfig<TReq, TRes>) {
+    this.config = config;
+  }
+
+  private capped(): boolean {
+    return this.loadFailures >= MAX_WORKER_LOAD_FAILURES;
+  }
 
   /**
    * Untrack everything in flight and hand back what the caller still wants,
    * oldest first; superseded requests are dropped.
    */
-  function takeAll(): TReq[] {
+  private takeAll(): TReq[] {
     const requests: TReq[] = [];
-    for (const t of inFlight.values()) {
+    for (const t of this.inFlight.values()) {
       if (t.timer !== null) clearTimeout(t.timer);
       if (!t.superseded) requests.push(t.request);
     }
-    inFlight.clear();
-    requests.push(...deferred);
-    deferred = [];
+    this.inFlight.clear();
+    requests.push(...this.deferred);
+    this.deferred = [];
     return requests;
   }
 
   /** Start the watchdog of the request the worker is running now. */
-  function armHead() {
-    const head = inFlight.values().next().value;
+  private armHead(): void {
+    const head = this.inFlight.values().next().value;
     if (!head || head.timer !== null) return;
-    head.timer = setTimeout(() => expire(head), config.timeoutMs);
+    head.timer = setTimeout(() => this.expire(head), this.config.timeoutMs);
   }
 
-  function clearLoadTimer() {
-    if (loadTimer !== null) clearTimeout(loadTimer);
-    loadTimer = null;
+  private clearLoadTimer(): void {
+    if (this.loadTimer !== null) clearTimeout(this.loadTimer);
+    this.loadTimer = null;
   }
 
-  function discard() {
-    clearLoadTimer();
-    worker?.terminate();
-    worker = null;
-    ready = false;
+  private discard(): void {
+    this.clearLoadTimer();
+    this.worker?.terminate();
+    this.worker = null;
+    this.ready = false;
   }
 
-  function build(): Worker | null {
-    if (worker) return worker;
-    if (typeof Worker === 'undefined' || capped()) return null;
+  private build(): Worker | null {
+    if (this.worker) return this.worker;
+    if (typeof Worker === 'undefined' || this.capped()) return null;
     let w: Worker;
     try {
-      w = config.create();
+      w = this.config.create();
     } catch {
-      loadFailures += 1;
+      this.loadFailures += 1;
       return null;
     }
-    worker = w;
-    ready = false;
-
+    this.worker = w;
+    this.ready = false;
     w.onmessage = (e: MessageEvent<unknown>) => {
-      if (w !== worker) return;
-      // Any message proves the module evaluated, the ready signal first among
-      // them; a response without one would be a worker entry that forgot it.
-      if (!ready) {
-        ready = true;
-        loadFailures = 0;
-        clearLoadTimer();
-        const waiting = deferred;
-        deferred = [];
-        for (const request of waiting) post(request);
-      }
-      if (isWorkerReadyMessage(e.data)) return;
-      const response = e.data as TRes;
-      const tracked = inFlight.get(response.id);
-      if (!tracked) return; // given up on
-      if (tracked.timer !== null) clearTimeout(tracked.timer);
-      inFlight.delete(response.id);
-      // The worker moves on to the next request now, so its budget starts now.
-      armHead();
-      if (!tracked.superseded) config.onResponse(response, tracked.request);
+      if (w === this.worker) this.receive(e.data);
     };
-
     w.onerror = (e: Event) => {
-      if (w !== worker) return;
-      const loaded = ready;
-      const requests = takeAll();
-      discard();
-      if (!loaded) {
-        loadFailures += 1;
-        build();
-        config.onLoadFailure(requests, capped());
-        return;
-      }
-      if (requests.length > 0) build();
-      config.onCrash(requests, (e as Partial<ErrorEvent>).message ?? '');
+      if (w === this.worker) this.fail((e as Partial<ErrorEvent>).message ?? '');
     };
-
     return w;
   }
 
-  function expire(tracked: Tracked<TReq>) {
-    if (inFlight.get(tracked.request.id) !== tracked) return;
-    inFlight.delete(tracked.request.id);
-    const loaded = ready;
-    const others = takeAll();
-    discard();
-    build();
+  /** A message from the current worker. */
+  private receive(data: unknown): void {
+    // Any message proves the module evaluated, the ready signal first among
+    // them; a response without one would be a worker entry that forgot it.
+    if (!this.ready) {
+      this.ready = true;
+      this.loadFailures = 0;
+      this.clearLoadTimer();
+      const waiting = this.deferred;
+      this.deferred = [];
+      for (const request of waiting) this.post(request);
+    }
+    if (isWorkerReadyMessage(data)) return;
+    const response = data as TRes;
+    const tracked = this.inFlight.get(response.id);
+    if (!tracked) return; // given up on
+    if (tracked.timer !== null) clearTimeout(tracked.timer);
+    this.inFlight.delete(response.id);
+    // The worker moves on to the next request now, so its budget starts now.
+    this.armHead();
+    if (!tracked.superseded) this.config.onResponse(response, tracked.request);
+  }
+
+  /** The current worker raised an error: a load failure or a crash. */
+  private fail(message: string): void {
+    const loaded = this.ready;
+    const requests = this.takeAll();
+    this.discard();
+    if (!loaded) {
+      this.loadFailures += 1;
+      this.build();
+      this.config.onLoadFailure(requests, this.capped());
+      return;
+    }
+    if (requests.length > 0) this.build();
+    this.config.onCrash(requests, message);
+  }
+
+  private expire(tracked: Tracked<TReq>): void {
+    if (this.inFlight.get(tracked.request.id) !== tracked) return;
+    this.inFlight.delete(tracked.request.id);
+    const loaded = this.ready;
+    const others = this.takeAll();
+    this.discard();
+    this.build();
     if (!tracked.superseded) {
-      config.onTimeout(tracked.request, others, loaded);
+      this.config.onTimeout(tracked.request, others, loaded);
       return;
     }
     // Nobody is waiting for the request that hung, and the ones behind it
     // never started: run them on the replacement, unblamed.
     const unposted: TReq[] = [];
-    for (const request of others) if (!post(request)) unposted.push(request);
-    if (unposted.length > 0) config.onLoadFailure(unposted, capped());
+    for (const request of others) if (!this.post(request)) unposted.push(request);
+    if (unposted.length > 0) this.config.onLoadFailure(unposted, this.capped());
   }
 
-  function post(request: TReq): boolean {
-    const w = build();
+  // The public members are arrow properties so they stay bound when a caller
+  // passes one on by itself.
+
+  ensure = (): boolean => this.build() !== null;
+
+  post = (request: TReq): boolean => {
+    const w = this.build();
     if (!w) return false;
-    const previous = inFlight.get(request.id);
+    const previous = this.inFlight.get(request.id);
     if (previous) {
       if (previous.timer !== null) clearTimeout(previous.timer);
-      inFlight.delete(request.id);
+      this.inFlight.delete(request.id);
     }
-    inFlight.set(request.id, { request, timer: null, superseded: false });
-    armHead();
+    this.inFlight.set(request.id, { request, timer: null, superseded: false });
+    this.armHead();
     w.postMessage(request);
     return true;
-  }
-
-  return {
-    ensure: () => build() !== null,
-    post,
-    postWhenReady(request) {
-      if (!build()) return false;
-      if (ready) return post(request);
-      deferred.push(request);
-      loadTimer ??= setTimeout(() => {
-        loadTimer = null;
-        if (ready) return;
-        const requests = takeAll();
-        discard();
-        loadFailures += 1;
-        build();
-        config.onLoadFailure(requests, capped());
-      }, config.timeoutMs * LOAD_WAIT_FACTOR);
-      return true;
-    },
-    forget() {
-      for (const t of inFlight.values()) t.superseded = true;
-      deferred = [];
-    },
-    dispose() {
-      takeAll();
-      discard();
-      loadFailures = 0;
-    },
   };
+
+  postWhenReady = (request: TReq): boolean => {
+    if (!this.build()) return false;
+    if (this.ready) return this.post(request);
+    this.deferred.push(request);
+    this.loadTimer ??= setTimeout(() => {
+      this.loadTimer = null;
+      if (this.ready) return;
+      const requests = this.takeAll();
+      this.discard();
+      this.loadFailures += 1;
+      this.build();
+      this.config.onLoadFailure(requests, this.capped());
+    }, this.config.timeoutMs * LOAD_WAIT_FACTOR);
+    return true;
+  };
+
+  forget = (): void => {
+    for (const t of this.inFlight.values()) t.superseded = true;
+    this.deferred = [];
+  };
+
+  dispose = (): void => {
+    this.takeAll();
+    this.discard();
+    this.loadFailures = 0;
+  };
+}
+
+export function createManagedWorker<TReq extends { id: number }, TRes extends { id: number }>(
+  config: ManagedWorkerConfig<TReq, TRes>,
+): ManagedWorker<TReq> {
+  return new ManagedWorkerImpl(config);
 }

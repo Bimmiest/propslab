@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 // ---------------------------------------------------------------------------
 // useRegexMatch.test.tsx
-// Results are tagged with what produced them (#315, #329).
+// Results are tagged with what produced them.
 //
 // The request is posted from an effect, so the commit in which the caller's
 // pattern or inputs change still carries the previous request's results. The
-// pattern tag existed (#315); the inputs tag is what lets the Regex tab index
-// results against the events they were matched over rather than whatever
-// `allEvents` has become (#329).
+// pattern tag and the inputs tag let the Regex tab index results against the
+// pattern and events they were matched over rather than whatever `allEvents`
+// has become.
 // ---------------------------------------------------------------------------
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';

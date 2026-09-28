@@ -1,14 +1,11 @@
 // ---------------------------------------------------------------------------
 // kvModeXml.test.ts
-// `KV_MODE = xml`. This file used to run under jsdom, because extraction called
-// `DOMParser` and Node has none -- which is exactly how nobody noticed that a
-// Web Worker has none either, and the app extracted nothing (#280). It now runs
-// under the engine default of `node`, the environment closest to the worker
-// the pipeline really runs in, and one test pins that no DOM is present.
+// `KV_MODE = xml`. Runs under the engine default of `node`, the environment
+// closest to the worker the pipeline really runs in, and one test pins that no
+// DOM is present: neither a Web Worker nor Node has `DOMParser`.
 //
 // Beyond the dotted-path naming (pinned by the `kvmode-xml` capture), these are
-// doc-derived: they follow the XML 1.0 spec and what the earlier DOMParser-based
-// implementation produced, not a Splunk capture.
+// doc-derived: they follow the XML 1.0 spec, not a Splunk capture.
 // ---------------------------------------------------------------------------
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
@@ -50,8 +47,8 @@ describe('KV_MODE = xml', () => {
   });
 
   it('extracts nothing from text that is not XML', () => {
-    // `punct` is generated for every event by the annotation processor (#185),
-    // and `timestamp=none` for every event with no timestamp in it (#273), so
+    // `punct` is generated for every event by the annotation processor,
+    // and `timestamp=none` for every event with no timestamp in it, so
     // "nothing" means "nothing beyond those".
     const { punct: _punct, timestamp: _timestamp, ...rest } = fieldsOf('plain text, no markup here');
     expect(rest).toEqual({});

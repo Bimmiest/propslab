@@ -1,8 +1,8 @@
 // ---------------------------------------------------------------------------
 // evalSyntax.test.ts
-// The eval lexer dropped characters it did not recognise, so `.5 * 2` lost its
-// point and evaluated to 10; an unterminated `"abc` was accepted; the LIKE and
-// XOR operators did not parse at all; and `NOT NOT x` threw (#312).
+// Eval syntax: leading-dot numbers (`.5 * 2` is 1), unrecognised characters
+// and unterminated strings as errors, the LIKE and XOR operators, and
+// `NOT NOT x`.
 //
 // Doc-derived: the SPL eval operator table (`.` concatenation; comparison
 // operators including LIKE with SQL wildcards `%` and `_`; boolean operators
@@ -63,9 +63,9 @@ describe('eval numbers with a leading decimal point (#312)', () => {
     expect(run('a . b', { a: 'p', b: 'q' }).value).toBe('pq');
   });
 
-  // Found by the property tests (#340): the `.` operator was missing from the
-  // places a value is expected, so a leading-dot number straight after it lexed
-  // as a second concatenation operator and the expression failed to parse.
+  // Found by the property tests: a value is expected after the `.` operator,
+  // so a leading-dot number straight after it is a number, not a second
+  // concatenation operator.
   it('reads .5 and -1 after the concatenation operator as numbers', () => {
     expect(run('"x" . .5').value).toBe('x0.5');
     expect(run('a . .5', { a: 'x' }).value).toBe('x0.5');
@@ -110,8 +110,7 @@ describe('eval LIKE operator (#312)', () => {
   });
 
   it('shares like()\'s handling of a run of %', () => {
-    // like() collapses `%%` so the ReDoS guard accepts it (#303); the operator
-    // must not reintroduce that bug.
+    // like() collapses `%%`; the operator form must do the same.
     expect(run('if(a LIKE "a%%b", 1, 0)', { a: 'axxb' }).value).toBe('1');
   });
 
@@ -158,9 +157,8 @@ describe('eval NOT NOT (#312)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// #332: the in() function did not parse, because the lexer read the word `in`
-// as the IN operator wherever it appeared; and since #312 made LIKE and XOR
-// keywords the same way, a bare field named `like` or `xor` stopped parsing.
+// The word operators are contextual: in() parses as a function, and a bare
+// field named `in`, `like` or `xor` is a field reference.
 //
 // Doc-derived: the SPL eval function reference lists in(<value>, <list>) as a
 // comparison function that is TRUE when any list item matches the value, next
@@ -216,10 +214,8 @@ describe('word operators are identifiers in value position (#332)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// #337: since #332 made the word operators contextual, the `in` after an infix
-// NOT lexed as an identifier that kept its casing, and the parser's NOT IN
-// check compared it against upper-case 'IN'. So `x NOT IN (...)` parsed while
-// `x not in (...)` and `x NOT in (...)` threw "Unexpected token: NOT".
+// The `in` after an infix NOT is the operator in any casing: `x not in (...)`
+// and `x NOT in (...)` parse like `x NOT IN (...)`.
 //
 // Doc-derived: the SPL eval operator table lists IN and NOT, and SPL keywords
 // are case-insensitive (LIKE, XOR and IN are already asserted in every casing

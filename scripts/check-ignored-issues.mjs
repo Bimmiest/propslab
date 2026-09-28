@@ -4,12 +4,9 @@
 // Asserts that every `ignored` directive's tracking issue is still open.
 //
 // `directiveSupport.test.ts` already asserts that an `ignored` entry *has* an
-// issue number. Nothing asserted the issue was still open, and that is exactly
-// how the roster went stale: `TZ_ALIAS` named #159 — which closed when the TZ
-// work landed — for months after that work had landed without it. A reader
-// following the link to understand a limitation found a fixed bug and a preview
-// that still ignored their config, which is the declared-surface mechanism
-// (#153) failing in the one way it exists to prevent.
+// issue number; this checks the issue is still open. A reader following a
+// closed issue's link to understand a limitation finds a fixed bug and a
+// preview that still ignores their config.
 //
 // This lives outside `npm test` on purpose. The suite is deliberately hermetic
 // — it runs wherever the engine runs, with no filesystem or network — and a

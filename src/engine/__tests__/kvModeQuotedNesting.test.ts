@@ -10,9 +10,8 @@ const ev = (raw: string): SplunkEvent => ({
 const kv = (mode: string): ConfDirective[] =>
   [{ key: 'KV_MODE', value: mode, line: 1, directiveType: 'KV_MODE' }];
 
-// #123: the double-quoted pass blanks its spans out of a working copy so the
-// bare pass cannot mine inside a quoted value — but the single-quoted pass was
-// still scanning the untouched original, so it never saw the blanking.
+// Quoted values of either style are consumed whole, so no pass mines a
+// key=value from inside a quoted value of the other style.
 describe('KV_MODE auto — quoted passes do not mine inside each other (#123)', () => {
   it('does not extract a single-quoted pair from inside a double-quoted value', () => {
     const r = applyKvMode([ev(`msg="an x='inner' thing" a=1`)], kv('auto'))[0]!;

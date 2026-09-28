@@ -174,7 +174,7 @@ describe('#159 — IANA zone names resolve against real zone data', () => {
   });
 });
 
-// #227: the zone-spec forms TZ_ALIAS targets are written in, and the table that
+// The zone-spec forms TZ_ALIAS targets are written in, and the table that
 // parses them. Doc-derived from props.conf.spec's own `EST=GMT-5:00` example.
 describe('strftime — GMT-relative zone specs (#227)', () => {
   const FMT = '%Y-%m-%d %H:%M:%S';
@@ -254,7 +254,7 @@ describe('strftime — the year of a yearless timestamp (#356)', () => {
     expect(at('Feb 29 10:00:00', '2025-03-01T00:00:00Z')).toBe('2024-02-29T10:00:00.000Z');
   });
 
-  // Found by timestampProperties.test.ts (#371).
+  // Found by timestampProperties.test.ts.
   it('goes back to the last 29 February rather than forward to this year\'s', () => {
     expect(at('Feb 29 10:00:00', '2024-01-15T00:00:00Z')).toBe('2020-02-29T10:00:00.000Z');
   });

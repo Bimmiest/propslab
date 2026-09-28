@@ -10,12 +10,9 @@
 // Hermetic: reads committed JSON, never contacts Splunk. There is no capture
 // tooling and no further capture is planned; fixtures/README.md says why.
 //
-// Runs under the engine default of `node`. It used to need jsdom, because
-// `KV_MODE = xml` called `DOMParser` and under `node` extracted nothing -- but
-// the app runs the engine in a Web Worker, which has no DOMParser either, so
-// jsdom was hiding a bug the shipped app did have (#280). The engine now reads
-// XML itself, and running this suite without a DOM is what keeps it honest: a
-// browser-only API would surface here as a failed fixture.
+// Runs under the engine default of `node`: the app runs the engine in a Web
+// Worker, which has no DOM, and running this suite without one is what keeps
+// it honest — a browser-only API surfaces here as a failed fixture.
 // ---------------------------------------------------------------------------
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
@@ -70,7 +67,7 @@ const MANIFEST_MODULES = import.meta.glob<{ default: Manifest }>('./fixtures/spl
  * excluded names (host, index, linecount, ...) are ones the engine does not put
  * in `fields` at all, and stripping them too would stop this suite noticing if
  * it started to. Read from the manifest rather than hard-coded so that a
- * capture which did record them is compared on them (#273).
+ * capture which did record them is compared on them.
  */
 function excludedTimeFields(version: string): Set<string> {
   const entry = Object.entries(MANIFEST_MODULES).find(([path]) => path.includes(`/splunk-${version}/`));
@@ -118,7 +115,7 @@ function runCase(fixture: Fixture, injectNow = true): ReturnType<typeof runPipel
   // were judged by Splunk against the day of capture — MAX_DAYS_AGO counts back
   // from it, and a yearless format takes its year — so replaying them against
   // today would let the suite go red by the calendar alone, a divergence that
-  // says nothing about the engine (#293).
+  // says nothing about the engine.
   return runPipeline(fixture.input, metadata, props, fixture.transforms ?? '', {
     perEventPipeline: false,
     captureOffsets: false,
@@ -246,7 +243,7 @@ describe('fidelity corpus', () => {
 
 // The fixtures carry absolute timestamps, and MAX_DAYS_AGO (2000 days by
 // default) is measured back from "now" — so on the real clock this suite would
-// start failing some time around 2031 for no reason but the date (#293). Pin
+// start failing some time around 2031 for no reason but the date. Pin
 // the clock far past that and show the capture still matches, and that it is
 // the injected `now` doing the work rather than the fixture being immune.
 describe('fidelity replay is independent of the wall clock (#293)', () => {

@@ -43,7 +43,7 @@ export { expect };
  *
  * Needed because a worker chunk that fails to load is INVISIBLE from the UI.
  * The Regex and Timestamp tabs fall back to matching on the main thread once
- * two workers in a row have failed to load (#309), and render exactly what
+ * two workers in a row have failed to load, and render exactly what
  * the worker would have — while Chromium logs nothing to the console for a
  * worker script that 404s. The only thing that tells "the worker answered"
  * apart from "the fallback answered" is the reply itself.

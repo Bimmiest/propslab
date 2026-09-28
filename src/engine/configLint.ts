@@ -8,20 +8,14 @@ import { effectiveBool, effectiveDirective } from './utils/directiveValues';
 
 // Config lint: the diagnostics `runPipeline` reports about the conf files
 // themselves, split out of the pipeline so that file reads as the order of
-// processing and nothing else (#301). Nothing here changes an event; each
+// processing and nothing else. Nothing here changes an event; each
 // function only appends to `diagnostics`.
 
-/**
- * Lint that depends on the conf text alone — unsimulated and unknown
- * directives, DEST_KEY/FORMAT pairing, dangling and unreferenced transforms,
- * inert settings and mistyped values.
- */
-export function lintConfigs(
-  propsConf: ParsedConf,
-  transformsConf: ParsedConf,
-  diagnostics: ValidationDiagnostic[],
-): void {
-  // Warn about LOOKUP directives — lookup table execution is not simulated
+type ConfFile = 'props.conf' | 'transforms.conf';
+type TransformPhase = 'index-time' | 'search-time' | 'both';
+
+/** Warn about LOOKUP directives — lookup table execution is not simulated. */
+function lintLookups(propsConf: ParsedConf, diagnostics: ValidationDiagnostic[]): void {
   for (const stanza of propsConf.stanzas) {
     for (const dir of stanza.directives) {
       if (dir.directiveType === 'LOOKUP') {
@@ -35,192 +29,215 @@ export function lintConfigs(
       }
     }
   }
+}
 
-  // Say so when a directive the user has written is not honoured by the preview
-  // (#153). Without this the tool is confidently wrong: the key autocompletes,
-  // hovers with real documentation, passes validation, and then the output is
-  // rendered as though the line were not there. A stated limitation is worth
-  // more than a plausible wrong answer.
-  //
-  // LOOKUP is skipped because it already has a more specific warning above, and
-  // repeating it per attribute would bury the one that names the class.
-  for (const [file, conf] of [
-    ['props.conf', propsConf],
-    ['transforms.conf', transformsConf],
-  ] as const) {
-    for (const stanza of conf.stanzas) {
-      for (const dir of stanza.directives) {
-        // A class-based key is written `EXTRACT-foo`; classification is by base.
-        const baseKey = dir.className ? dir.directiveType : dir.key;
+/**
+ * Say so when a directive the user has written is not honoured by the preview.
+ * Without this the tool is confidently wrong: the key autocompletes,
+ * hovers with real documentation, passes validation, and then the output is
+ * rendered as though the line were not there. A stated limitation is worth
+ * more than a plausible wrong answer.
+ *
+ * LOOKUP is skipped because it already has a more specific warning (lintLookups),
+ * and repeating it per attribute would bury the one that names the class.
+ */
+function lintDirectiveSupport(dir: ConfDirective, file: ConfFile, diagnostics: ValidationDiagnostic[]): void {
+  // A class-based key is written `EXTRACT-foo`; classification is by base.
+  const baseKey = dir.className ? dir.directiveType : dir.key;
 
-        // The support table is flat, so an attribute of the other conf file
-        // finds its row here and would be reported as "recognised but not
-        // simulated" -- or, if simulated, not at all -- while the editor, which
-        // looks it up per file, called it a possible typo (#278). Neither is
-        // what is wrong: Splunk does not read it from this file. Checked before
-        // the LOOKUP skip, because that skip exists for the props.conf warning
-        // above, which never sees a LOOKUP- written in transforms.conf.
-        const belongsIn = wrongFileCanonical(dir.key, file);
-        if (belongsIn !== undefined) {
-          diagnostics.push({
-            level: 'warning',
-            message: WRONG_FILE_MESSAGE(dir.key, file, belongsIn),
-            file,
-            ...atDirective(dir),
-            directiveKey: dir.key,
-          });
-          continue;
-        }
-
-        if (dir.directiveType === 'LOOKUP') continue;
-        const entry = getDirectiveSupport(baseKey);
-
-        // A real attribute the registry has never heard of reaches this loop with
-        // no entry and would leave it silently, which is the one way a valid line
-        // can vanish without being declared. #178 swept the registry against the
-        // 10.4.3 spec files so the set is empty today, but a later Splunk release
-        // adds attributes and this is what stops them passing unnoticed. It gets
-        // the same warning as an `ignored` key, because from where the user is
-        // sitting it is the same event: they wrote a directive and it was ignored.
-        //
-        // Deliberately cites no issue number. The previous text named #178, which
-        // has since closed -- a diagnostic pointing a user at a finished issue is
-        // the rot #227 was about, reaching the product surface this time.
-        if (!entry) {
-          if (!isUndocumentedAttribute(baseKey)) continue;
-          diagnostics.push({
-            level: 'warning',
-            message:
-              `${dir.key} is a valid Splunk attribute that this simulator does not ` +
-              `document or honour, so the preview ignores this line. Please report it ` +
-              `so it can be classified.`,
-            file,
-            ...atDirective(dir),
-            directiveKey: dir.key,
-          });
-          continue;
-        }
-        if (entry.support === 'simulated') continue;
-
-        const tracking = entry.issue ? ` Tracked as #${entry.issue}.` : '';
-        diagnostics.push({
-          // `ignored` is a gap we intend to close, so it is a warning: the
-          // preview is wrong and will change. `documented` is a deliberate,
-          // permanent edge, so it is informational.
-          level: entry.support === 'ignored' ? 'warning' : 'info',
-          message:
-            `${dir.key} is recognised but not simulated — the preview ignores it. ` +
-            `${entry.note ?? ''}${tracking}`.trim(),
-          file,
-          ...atDirective(dir),
-          directiveKey: dir.key,
-        });
-      }
-    }
+  // The support table is flat, so an attribute of the other conf file
+  // finds its row here and would be reported as "recognised but not
+  // simulated" -- or, if simulated, not at all -- while the editor, which
+  // looks it up per file, would call it a possible typo. Neither is
+  // what is wrong: Splunk does not read it from this file. Checked before
+  // the LOOKUP skip, because that skip exists for the props.conf warning
+  // above, which never sees a LOOKUP- written in transforms.conf.
+  const belongsIn = wrongFileCanonical(dir.key, file);
+  if (belongsIn !== undefined) {
+    diagnostics.push({
+      level: 'warning',
+      message: WRONG_FILE_MESSAGE(dir.key, file, belongsIn),
+      file,
+      ...atDirective(dir),
+      directiveKey: dir.key,
+    });
+    return;
   }
 
-  // Validate DEST_KEY=MetaData:* stanzas require the matching prefix in FORMAT.
-  // Index is deliberately absent: transforms.conf.spec has `_MetaData:Index`
-  // take the bare index name, and the prefix rule covers these three only (#281).
-  const DEST_KEY_REQUIRED_PREFIX: Record<string, string> = {
-    'MetaData:Host': 'host::',
-    'MetaData:Source': 'source::',
-    'MetaData:Sourcetype': 'sourcetype::',
-  };
-  // DEST_KEY only accepts a documented set of routing keys; the simulator otherwise
-  // falls back to "treat as a field name", which Splunk does not do. The key sets
-  // are shared with the router so config-time and match-time agree (#75.3).
+  if (dir.directiveType === 'LOOKUP') return;
+  const entry = getDirectiveSupport(baseKey);
+
+  // A real attribute the registry has never heard of reaches this loop with
+  // no entry and would leave it silently, which is the one way a valid line
+  // can vanish without being declared. The registry covers the 10.4.3 spec
+  // files, so the set is empty today, but a later Splunk release adds
+  // attributes and this is what stops them passing unnoticed. It gets
+  // the same warning as an `ignored` key, because from where the user is
+  // sitting it is the same event: they wrote a directive and it was ignored.
+  //
+  // Deliberately cites no issue number: a diagnostic must not point a user
+  // at an issue that may since have closed.
+  if (!entry) {
+    if (!isUndocumentedAttribute(baseKey)) return;
+    diagnostics.push({
+      level: 'warning',
+      message:
+        `${dir.key} is a valid Splunk attribute that this simulator does not ` +
+        `document or honour, so the preview ignores this line. Please report it ` +
+        `so it can be classified.`,
+      file,
+      ...atDirective(dir),
+      directiveKey: dir.key,
+    });
+    return;
+  }
+  if (entry.support === 'simulated') return;
+
+  const tracking = entry.issue ? ` Tracked as #${entry.issue}.` : '';
+  diagnostics.push({
+    // `ignored` is a gap we intend to close, so it is a warning: the
+    // preview is wrong and will change. `documented` is a deliberate,
+    // permanent edge, so it is informational.
+    level: entry.support === 'ignored' ? 'warning' : 'info',
+    message:
+      `${dir.key} is recognised but not simulated — the preview ignores it. ` +
+      `${entry.note ?? ''}${tracking}`.trim(),
+    file,
+    ...atDirective(dir),
+    directiveKey: dir.key,
+  });
+}
+
+/**
+ * Validate DEST_KEY=MetaData:* stanzas require the matching prefix in FORMAT.
+ * Index is deliberately absent: transforms.conf.spec has `_MetaData:Index`
+ * take the bare index name, and the prefix rule covers these three only.
+ */
+const DEST_KEY_REQUIRED_PREFIX: Record<string, string> = {
+  'MetaData:Host': 'host::',
+  'MetaData:Source': 'source::',
+  'MetaData:Sourcetype': 'sourcetype::',
+};
+
+/**
+ * DEST_KEY only accepts a documented set of routing keys; the simulator otherwise
+ * falls back to "treat as a field name", which Splunk does not do. The key sets
+ * are shared with the router so config-time and match-time agree.
+ */
+function lintDestKeyValue(destKeyDir: ConfDirective, destKey: string, diagnostics: ValidationDiagnostic[]): void {
+  if (VALID_UNSIMULATED_DEST_KEYS.has(destKey)) {
+    diagnostics.push({
+      level: 'warning',
+      message: `DEST_KEY = ${destKeyDir.value.trim()} is a valid Splunk routing key but is not simulated — events will not be cloned/routed in the preview.`,
+      file: 'transforms.conf',
+      ...atDirective(destKeyDir),
+      directiveKey: destKeyDir.key,
+    });
+  } else if (!SIMULATED_DEST_KEYS.has(destKey)) {
+    diagnostics.push({
+      level: 'warning',
+      message: `DEST_KEY = ${destKeyDir.value.trim()} is not a recognised Splunk DEST_KEY. Splunk only accepts the documented keys (queue, _raw, _meta, _time, MetaData:Host/Source/Sourcetype/Index, _TCP_ROUTING, _SYSLOG_ROUTING). An unrecognised key has no routing effect.`,
+      file: 'transforms.conf',
+      ...atDirective(destKeyDir),
+      directiveKey: destKeyDir.key,
+    });
+  }
+}
+
+/** Check the FORMAT a MetaData DEST_KEY writes carries (or omits) the right prefix. */
+function lintDestKeyFormat(
+  destKeyDir: ConfDirective,
+  destKey: string,
+  formatDir: ConfDirective,
+  diagnostics: ValidationDiagnostic[],
+): void {
+  const requiredPrefix = DEST_KEY_REQUIRED_PREFIX[destKey];
+  if (requiredPrefix && !formatDir.value.includes(requiredPrefix)) {
+    diagnostics.push({
+      level: 'warning',
+      message: `DEST_KEY = ${destKeyDir.value.trim()} requires FORMAT to include the "${requiredPrefix}" prefix (e.g. FORMAT = ${requiredPrefix}$1). Without it Splunk silently skips the metadata update.`,
+      file: 'transforms.conf',
+      ...atDirective(formatDir),
+      directiveKey: formatDir.key,
+      suggestion: `Change FORMAT = ${formatDir.value.trim()} to FORMAT = ${requiredPrefix}${formatDir.value.trim()}`,
+    });
+  }
+  // The mirror-image mistake: carrying the prefix habit over to the index
+  // key. Splunk does not strip it, so the event is routed to an index
+  // literally named `index::…`, which almost certainly does not exist.
+  const format = formatDir.value.trim();
+  if (destKey === 'MetaData:Index' && format.startsWith('index::')) {
+    diagnostics.push({
+      level: 'warning',
+      message: `DEST_KEY = ${destKeyDir.value.trim()} takes the bare index name, not an "index::" prefix. Splunk does not strip it, so this routes events to an index literally named "${format}".`,
+      file: 'transforms.conf',
+      ...atDirective(formatDir),
+      directiveKey: formatDir.key,
+      suggestion: `Change FORMAT = ${format} to FORMAT = ${format.slice('index::'.length)}`,
+    });
+  }
+}
+
+function lintDestKeys(transformsConf: ParsedConf, diagnostics: ValidationDiagnostic[]): void {
   for (const stanza of transformsConf.stanzas) {
     // Last definition wins, as it does at runtime: with default/ + local/
     // layers the effective FORMAT is the local one, and linting the default's
-    // would warn about a line that no longer applies (or miss the one that does).
+    // would warn about a line that does not apply (or miss the one that does).
     const destKeyDir = effectiveDirective(stanza.directives, 'DEST_KEY');
     const formatDir = effectiveDirective(stanza.directives, 'FORMAT');
     if (!destKeyDir) continue;
-
     // Normalise the _MetaData: alias the same way the router does.
     const destKey = normaliseDestKey(destKeyDir.value);
-
-    if (VALID_UNSIMULATED_DEST_KEYS.has(destKey)) {
-      diagnostics.push({
-        level: 'warning',
-        message: `DEST_KEY = ${destKeyDir.value.trim()} is a valid Splunk routing key but is not simulated — events will not be cloned/routed in the preview.`,
-        file: 'transforms.conf',
-        ...atDirective(destKeyDir),
-        directiveKey: destKeyDir.key,
-      });
-    } else if (!SIMULATED_DEST_KEYS.has(destKey)) {
-      diagnostics.push({
-        level: 'warning',
-        message: `DEST_KEY = ${destKeyDir.value.trim()} is not a recognised Splunk DEST_KEY. Splunk only accepts the documented keys (queue, _raw, _meta, _time, MetaData:Host/Source/Sourcetype/Index, _TCP_ROUTING, _SYSLOG_ROUTING). An unrecognised key has no routing effect.`,
-        file: 'transforms.conf',
-        ...atDirective(destKeyDir),
-        directiveKey: destKeyDir.key,
-      });
-    }
-
-    if (formatDir) {
-      const requiredPrefix = DEST_KEY_REQUIRED_PREFIX[destKey];
-      if (requiredPrefix && !formatDir.value.includes(requiredPrefix)) {
-        diagnostics.push({
-          level: 'warning',
-          message: `DEST_KEY = ${destKeyDir.value.trim()} requires FORMAT to include the "${requiredPrefix}" prefix (e.g. FORMAT = ${requiredPrefix}$1). Without it Splunk silently skips the metadata update.`,
-          file: 'transforms.conf',
-          ...atDirective(formatDir),
-          directiveKey: formatDir.key,
-          suggestion: `Change FORMAT = ${formatDir.value.trim()} to FORMAT = ${requiredPrefix}${formatDir.value.trim()}`,
-        });
-      }
-      // The mirror-image mistake: carrying the prefix habit over to the index
-      // key. Splunk does not strip it, so the event is routed to an index
-      // literally named `index::…`, which almost certainly does not exist.
-      const format = formatDir.value.trim();
-      if (destKey === 'MetaData:Index' && format.startsWith('index::')) {
-        diagnostics.push({
-          level: 'warning',
-          message: `DEST_KEY = ${destKeyDir.value.trim()} takes the bare index name, not an "index::" prefix. Splunk does not strip it, so this routes events to an index literally named "${format}".`,
-          file: 'transforms.conf',
-          ...atDirective(formatDir),
-          directiveKey: formatDir.key,
-          suggestion: `Change FORMAT = ${format} to FORMAT = ${format.slice('index::'.length)}`,
-        });
-      }
-    }
+    lintDestKeyValue(destKeyDir, destKey, diagnostics);
+    if (formatDir) lintDestKeyFormat(destKeyDir, destKey, formatDir, diagnostics);
   }
+}
 
-  // Cross-reference validation: check TRANSFORMS/RULESET/REPORT references exist, and collect
-  // referenced stanza names in one pass (avoids iterating props stanzas twice).
-  const referencedTransforms = new Set<string>();
-  // How props.conf reaches each transforms stanza decides that stanza's phase,
-  // which is what makes the inert-setting lint below possible. A stanza named by
-  // both TRANSFORMS- and REPORT- is 'both', and is left alone.
-  const transformPhase = new Map<string, 'index-time' | 'search-time' | 'both'>();
+/**
+ * Cross-reference validation: check TRANSFORMS/RULESET/REPORT references exist.
+ * Returns the phase each referenced transforms stanza runs in: how props.conf
+ * reaches a stanza decides its phase, which is what makes the inert-setting
+ * lint possible. A stanza named by both TRANSFORMS- and REPORT- is 'both', and
+ * is left alone.
+ */
+function lintTransformReferences(
+  propsConf: ParsedConf,
+  transformsConf: ParsedConf,
+  diagnostics: ValidationDiagnostic[],
+): Map<string, TransformPhase> {
+  const transformPhase = new Map<string, TransformPhase>();
   for (const stanza of propsConf.stanzas) {
     for (const dir of stanza.directives) {
-      // RULESET- is index-time like TRANSFORMS- (#275): a stanza it names is
+      // RULESET- is index-time like TRANSFORMS-: a stanza it names is
       // referenced, must exist, and is linted as index-time.
-      if (dir.directiveType === 'TRANSFORMS' || dir.directiveType === 'RULESET' || dir.directiveType === 'REPORT') {
-        const phase = dir.directiveType === 'REPORT' ? 'search-time' : 'index-time';
-        const stanzaNames = dir.value.split(',').map((s) => s.trim()).filter(Boolean);
-        for (const name of stanzaNames) {
-          referencedTransforms.add(name);
-          const seen = transformPhase.get(name);
-          transformPhase.set(name, seen === undefined || seen === phase ? phase : 'both');
-          if (!transformsConf.stanzas.find((s) => s.name === name)) {
-            diagnostics.push({
-              level: 'error',
-              message: `Referenced transform stanza "${name}" not found in transforms.conf`,
-              file: 'props.conf',
-              ...atDirective(dir),
-              directiveKey: dir.key,
-            });
-          }
+      if (dir.directiveType !== 'TRANSFORMS' && dir.directiveType !== 'RULESET' && dir.directiveType !== 'REPORT') continue;
+      const phase = dir.directiveType === 'REPORT' ? 'search-time' : 'index-time';
+      const stanzaNames = dir.value.split(',').map((s) => s.trim()).filter(Boolean);
+      for (const name of stanzaNames) {
+        const seen = transformPhase.get(name);
+        transformPhase.set(name, seen === undefined || seen === phase ? phase : 'both');
+        if (!transformsConf.stanzas.find((s) => s.name === name)) {
+          diagnostics.push({
+            level: 'error',
+            message: `Referenced transform stanza "${name}" not found in transforms.conf`,
+            file: 'props.conf',
+            ...atDirective(dir),
+            directiveKey: dir.key,
+          });
         }
       }
     }
   }
+  return transformPhase;
+}
+
+function lintUnreferencedTransforms(
+  transformsConf: ParsedConf,
+  referenced: ReadonlyMap<string, unknown>,
+  diagnostics: ValidationDiagnostic[],
+): void {
   for (const stanza of transformsConf.stanzas) {
-    if (stanza.type !== 'default' && !referencedTransforms.has(stanza.name)) {
+    if (stanza.type !== 'default' && !referenced.has(stanza.name)) {
       diagnostics.push({
         level: 'warning',
         message: `Transform stanza "${stanza.name}" is defined but never referenced from props.conf`,
@@ -229,10 +246,34 @@ export function lintConfigs(
       });
     }
   }
+}
+
+/**
+ * Lint that depends on the conf text alone — unsimulated and unknown
+ * directives, DEST_KEY/FORMAT pairing, dangling and unreferenced transforms,
+ * inert settings and mistyped values.
+ */
+export function lintConfigs(
+  propsConf: ParsedConf,
+  transformsConf: ParsedConf,
+  diagnostics: ValidationDiagnostic[],
+): void {
+  lintLookups(propsConf, diagnostics);
+  for (const [file, conf] of [
+    ['props.conf', propsConf],
+    ['transforms.conf', transformsConf],
+  ] as const) {
+    for (const stanza of conf.stanzas) {
+      for (const dir of stanza.directives) lintDirectiveSupport(dir, file, diagnostics);
+    }
+  }
+  lintDestKeys(transformsConf, diagnostics);
+  const transformPhase = lintTransformReferences(propsConf, transformsConf, diagnostics);
+  lintUnreferencedTransforms(transformsConf, transformPhase, diagnostics);
 
   // Two classes of mistake Splunk itself is silent about: a transforms setting
-  // that is inert in the phase its stanza is used in (#177), and a value that is
-  // not the type the directive documents (#179). Both load clean and then do
+  // that is inert in the phase its stanza is used in, and a value that is
+  // not the type the directive documents. Both load clean and then do
   // nothing, so this tool is the only place a user could find out.
   lintInertTransformSettings(transformsConf.stanzas, transformPhase, diagnostics);
   lintDirectiveValues(propsConf.stanzas, 'props.conf', diagnostics);

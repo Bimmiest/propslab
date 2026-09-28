@@ -86,9 +86,7 @@ body {
 
 /* Keyboard focus indicator for anything that does not draw its own.
  *
- * Several controls opted out with `outline-none` and never added the
- * `focus-visible:ring-2` everything else carries, so tabbing onto them showed
- * nothing at all (#300). This is the floor beneath those per-component rings,
+ * This is the floor beneath the per-component `focus-visible:ring-2` rings,
  * not a replacement for them: it sits in the base layer, so an element that
  * says `outline-none` alongside its own ring still wins, and only an element
  * with no indicator of its own falls through to this one. Monaco manages focus

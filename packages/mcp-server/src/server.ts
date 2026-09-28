@@ -9,11 +9,11 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { createStdioTransport } from './messageLimit';
 import { registerTools } from './tools';
 import { regexEngineModule } from './regexEngine';
-// The version the server reports in its MCP `initialize` handshake. It used to
-// be a string literal here that duplicated package.json and had to be bumped by
-// hand alongside it (#319). esbuild inlines the JSON at build time — and, with
-// a named import, only this one field of it — so nothing is read from disk at
-// run time and dist/ still works when copied away from the package.
+// The version the server reports in its MCP `initialize` handshake, read from
+// package.json so there is one copy to bump. esbuild inlines the JSON at build
+// time — and, with a named import, only this one field of it — so nothing is
+// read from disk at run time and dist/ still works when copied away from the
+// package.
 import { version } from '../package.json';
 
 export interface CreateServerOptions {
@@ -37,7 +37,7 @@ export async function start(): Promise<void> {
   // fails the start, not a request.
   regexEngineModule();
   const server = createServer();
-  // Bounds each message before the SDK buffers and parses it (#349).
+  // Bounds each message before the SDK buffers and parses it.
   await server.connect(createStdioTransport());
   // stdout belongs to the protocol; anything human-facing goes to stderr.
   console.error('propslab MCP server listening on stdio');

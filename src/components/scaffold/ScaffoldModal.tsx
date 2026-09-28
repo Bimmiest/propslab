@@ -4,6 +4,8 @@ import { useAppStore } from '../../store/useAppStore';
 import { scaffoldConfig } from '../../engine/scaffold/scaffoldConfig';
 import { renderStanza, appendStanza, stanzaNameError } from '../../engine/scaffold/serialize';
 import type { Confidence, ScaffoldSuggestion } from '../../engine/scaffold/types';
+
+type ScaffoldResult = ReturnType<typeof scaffoldConfig>;
 import { computeDiff } from '../../utils/diffEngine';
 import { escapeRegex } from '../../utils/splunkRegex';
 import { Icon } from '../ui/Icon';
@@ -39,7 +41,6 @@ export function ScaffoldModal() {
   // the appended stanza actually matches the events.
   const [sourcetype, setSourcetype] = useState(() => result.sourcetype);
 
-
   const stanzaName = sourcetype.trim() || 'my:sourcetype';
 
   const chosen: ScaffoldSuggestion[] = result.suggestions.filter((s) => selected[s.key]);
@@ -71,22 +72,7 @@ export function ScaffoldModal() {
     >
       <div className="contents">
         {/* Header */}
-        <div className="flex items-center gap-2 px-4 h-12 shrink-0" style={{ borderBottom: '1px solid var(--color-border)' }}>
-          <Icon name="sparkles" className="w-4 h-4 text-[var(--color-accent)]" />
-          <span className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-            Scaffold props.conf
-          </span>
-          <span className="text-xs ml-1" style={{ color: 'var(--color-text-muted)' }}>
-            suggestions from your sample data — review and apply
-          </span>
-          <button
-            onClick={toggleScaffold}
-            aria-label="Close"
-            className="ml-auto flex items-center justify-center w-7 h-7 rounded-md text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-tertiary)] transition-colors cursor-pointer border-none"
-          >
-            <Icon name="x" className="w-4 h-4" />
-          </button>
-        </div>
+        <ScaffoldHeader onClose={toggleScaffold} />
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -97,32 +83,7 @@ export function ScaffoldModal() {
           ) : (
             <>
               {/* Sourcetype / stanza name (editable; written to metadata on apply) */}
-              <div>
-                <label htmlFor="scaffold-sourcetype" className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-secondary)' }}>
-                  Sourcetype (stanza name)
-                </label>
-                <input
-                  id="scaffold-sourcetype"
-                  type="text"
-                  value={sourcetype}
-                  onChange={(e) => setSourcetype(e.target.value)}
-                  spellCheck={false}
-                  placeholder="my:sourcetype"
-                  className="mt-1 w-full px-2.5 py-1.5 rounded-md text-sm font-mono outline-none focus:border-[var(--color-border-hover)]"
-                  style={{ backgroundColor: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }}
-                />
-                {nameError ? (
-                  <p className="text-xs mt-1 font-medium" style={{ color: 'var(--color-error)' }}>
-                    {nameError}
-                  </p>
-                ) : (
-                  <p className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>
-                    {result.sourcetypeSuggestion
-                      ? `${result.sourcetypeSuggestion.evidence} — applied to the event's sourcetype on save`
-                      : "Applied to the event's sourcetype on save so the new stanza matches your data."}
-                  </p>
-                )}
-              </div>
+              <StanzaNameField sourcetype={sourcetype} setSourcetype={setSourcetype} nameError={nameError} suggestion={result.sourcetypeSuggestion} />
 
               <div className="space-y-1.5">
                 {result.suggestions.map((s) => (
@@ -136,31 +97,11 @@ export function ScaffoldModal() {
               </div>
 
               {stanzaExists && chosen.length > 0 && (
-                <div
-                  className="flex items-start gap-2 px-3 py-2 rounded-md text-xs"
-                  style={{ backgroundColor: 'rgba(245, 158, 11, 0.12)', color: 'var(--color-warning)' }}
-                >
-                  <Icon name="warning" className="w-4 h-4 shrink-0 mt-0.5" />
-                  <span>
-                    A <code className="font-mono">[{stanzaName}]</code> stanza already exists in props.conf — these directives
-                    will be appended as a <strong>second</strong> stanza. Consider merging them into the existing one.
-                  </span>
-                </div>
+                <ExistingStanzaWarning stanzaName={stanzaName} />
               )}
 
               {/* Diff preview */}
-              <div>
-                <div className="text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
-                  props.conf preview — stanza <code className="font-mono">[{stanzaName}]</code>
-                </div>
-                <div className="rounded border text-xs font-mono leading-relaxed overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
-                  {diff.map((segment, si) => {
-                    const lines = segment.value.replace(/\n$/, '').split('\n');
-                    const cls = segment.added ? 'added' : segment.removed ? 'removed' : 'ctx';
-                    return lines.map((line, li) => <DiffLine key={`${si}-${li}`} kind={cls} line={line} />);
-                  })}
-                </div>
-              </div>
+              <ScaffoldDiffPreview stanzaName={stanzaName} diff={diff} />
             </>
           )}
         </div>
@@ -228,3 +169,93 @@ function EmptyState({ text }: { text: string }) {
     </div>
   );
 }
+
+function ScaffoldDiffPreview({ stanzaName, diff }: { stanzaName: string; diff: ReturnType<typeof computeDiff> }) {
+  return (
+    <div>
+      <div className="text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
+        props.conf preview — stanza <code className="font-mono">[{stanzaName}]</code>
+      </div>
+      <div className="rounded border text-xs font-mono leading-relaxed overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
+        {diff.map((segment, si) => {
+          const lines = segment.value.replace(/\n$/, '').split('\n');
+          const cls = segment.added ? 'added' : segment.removed ? 'removed' : 'ctx';
+          return lines.map((line, li) => <DiffLine key={`${si}-${li}`} kind={cls} line={line} />);
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ExistingStanzaWarning({ stanzaName }: { stanzaName: string }) {
+  return (
+    <div
+      className="flex items-start gap-2 px-3 py-2 rounded-md text-xs"
+      style={{ backgroundColor: 'rgba(245, 158, 11, 0.12)', color: 'var(--color-warning)' }}
+    >
+      <Icon name="warning" className="w-4 h-4 shrink-0 mt-0.5" />
+      <span>
+        A <code className="font-mono">[{stanzaName}]</code> stanza already exists in props.conf — these directives
+        will be appended as a <strong>second</strong> stanza. Consider merging them into the existing one.
+      </span>
+    </div>
+  );
+}
+
+function StanzaNameField({ sourcetype, setSourcetype, nameError, suggestion }: {
+  sourcetype: string;
+  setSourcetype: (value: string) => void;
+  nameError: string | null;
+  suggestion: ScaffoldResult['sourcetypeSuggestion'];
+}) {
+  return (
+    <div>
+      <label htmlFor="scaffold-sourcetype" className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-secondary)' }}>
+        Sourcetype (stanza name)
+      </label>
+      <input
+        id="scaffold-sourcetype"
+        type="text"
+        value={sourcetype}
+        onChange={(e) => setSourcetype(e.target.value)}
+        spellCheck={false}
+        placeholder="my:sourcetype"
+        className="mt-1 w-full px-2.5 py-1.5 rounded-md text-sm font-mono outline-none focus:border-[var(--color-border-hover)]"
+        style={{ backgroundColor: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }}
+      />
+      {nameError ? (
+        <p className="text-xs mt-1 font-medium" style={{ color: 'var(--color-error)' }}>
+          {nameError}
+        </p>
+      ) : (
+        <p className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>
+          {suggestion
+            ? `${suggestion.evidence} — applied to the event's sourcetype on save`
+            : "Applied to the event's sourcetype on save so the new stanza matches your data."}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function ScaffoldHeader({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="flex items-center gap-2 px-4 h-12 shrink-0" style={{ borderBottom: '1px solid var(--color-border)' }}>
+      <Icon name="sparkles" className="w-4 h-4 text-[var(--color-accent)]" />
+      <span className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+        Scaffold props.conf
+      </span>
+      <span className="text-xs ml-1" style={{ color: 'var(--color-text-muted)' }}>
+        suggestions from your sample data — review and apply
+      </span>
+      <button
+        onClick={onClose}
+        aria-label="Close"
+        className="ml-auto flex items-center justify-center w-7 h-7 rounded-md text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-tertiary)] transition-colors cursor-pointer border-none"
+      >
+        <Icon name="x" className="w-4 h-4" />
+      </button>
+    </div>
+  );
+}
+

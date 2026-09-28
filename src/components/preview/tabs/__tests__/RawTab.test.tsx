@@ -26,9 +26,9 @@ const pageTwo = [makeItem('second event', 2)];
 // separate elements, so match against the flattened text rather than a node.
 const metadataShown = () => document.body.textContent?.includes('sourcetype') === true;
 
-// #23: EventRow holds expand/selection state locally. Keying rows by their slot
-// on the page let React reuse the instance across a page change, so one event's
-// expanded state appeared on a different event.
+// EventRow holds expand/selection state locally, so rows are keyed by event,
+// not by their slot on the page: one event's expanded state must not appear on
+// another after a page change.
 describe('RawTab — row state does not bleed across pages', () => {
   it('does not carry an expanded row onto the next page', () => {
     const { rerender } = render(
@@ -72,7 +72,7 @@ describe('RawTab — CLONE_SOURCETYPE badge (#87)', () => {
   });
 });
 
-// #335: the disclosure toggles did not say whether they were open.
+// The disclosure toggles say whether they are open.
 describe('RawTab — toggles announce their state (#335)', () => {
   const scrollHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollHeight');
   afterEach(() => {
@@ -99,9 +99,8 @@ describe('RawTab — toggles announce their state (#335)', () => {
   });
 });
 
-// #335: metadata changes are measured against the run's own input only. The
-// fallback to the live fields was unreachable with a result, and with none it
-// badged events against whatever the fields held.
+// Metadata changes are measured against the run's own input only, never the
+// live fields.
 describe('RawTab — metadata baseline is the run (#335)', () => {
   const initial = useAppStore.getState();
   afterEach(() => { useAppStore.setState(initial, true); });

@@ -11,9 +11,9 @@
 //
 // `mergeDirectives` already picks the winners, but it returns bare directives:
 // the stanza each came from, and the stanzas that defined the same key and
-// lost, are dropped on the floor. Those are exactly what `btool ... --debug`
-// prints and what makes a precedence surprise legible, so this resolves the
-// same order and keeps them (#86).
+// lost, are dropped. Those are exactly what `btool ... --debug` prints and
+// what makes a precedence surprise legible, so this resolves the same order
+// and keeps them.
 // ---------------------------------------------------------------------------
 
 import type { ConfDirective, ConfStanza, OverriddenDirective } from '../types';

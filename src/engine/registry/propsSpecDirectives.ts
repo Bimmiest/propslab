@@ -1,17 +1,15 @@
-// The props.conf.spec 10.4.3 completeness sweep (#178): every attribute the
-// spec defines that the hand-written sections in propsDirectives.ts did not.
+// The props.conf.spec 10.4.3 completeness sweep: every attribute the spec
+// defines that the hand-written sections in propsDirectives.ts do not.
 
 import type { DirectiveDefinition } from './types';
 
-/** props.conf.spec attributes added by the #178 sweep. */
+/** props.conf.spec attributes from the completeness sweep. */
 export const PROPS_SPEC_COMPLETENESS: DirectiveDefinition[] = [
   // -------------------------------------------------------------------------
-  // props.conf.spec 10.4.3 completeness (#178)
+  // props.conf.spec 10.4.3 completeness
   //
-  // Everything below was valid in props.conf and unknown to this registry, so
-  // writing one of these produced no completion, no hover, and no warning --
-  // the preview simply behaved as though the line were not there. Twenty-one
-  // of them were not even named in UNDOCUMENTED_ATTRIBUTES.
+  // Registered so each completes, hovers and warns rather than the preview
+  // behaving as though the line were not there.
   //
   // Structural facts (value type, default, enumerated values) are read from
   // props.conf.spec. The descriptions are written here, deliberately: the spec

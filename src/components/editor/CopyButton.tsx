@@ -10,7 +10,7 @@ export function CopyButton({ getText }: CopyButtonProps) {
   const [copied, setCopied] = useState(false);
 
   // Reset from an effect so the timer is cleared on unmount; a bare setTimeout
-  // in the click handler outlived the button (#322). Same shape as ClearButton.
+  // in the click handler would outlive the button. Same shape as ClearButton.
   useEffect(() => {
     if (!copied) return;
     const t = setTimeout(() => setCopied(false), 2000);

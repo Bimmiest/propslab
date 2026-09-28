@@ -21,7 +21,7 @@ export interface FixtureCase {
   id: string;
   /**
    * Registry keys (see `directiveRegistry.ts`) this case is ground truth for.
-   * Drives the coverage report against the `simulated` surface declared in #153.
+   * Drives the coverage report against the declared `simulated` surface.
    */
   directives: string[];
   /**
@@ -950,9 +950,8 @@ export const CORPUS: FixtureCase[] = [
       'outcome. Kept as a guard against an implementation that guesses from the name.',
   },
   // -------------------------------------------------------------------------
-  // Tier 1 engine fixes (#183, #184, #190): the behaviours implemented from
-  // the spec rather than from a capture, pinned here so "matches our reading"
-  // becomes "matches Splunk".
+  // Behaviours first implemented from the spec rather than from a capture,
+  // pinned here so "matches our reading" becomes "matches Splunk".
   // -------------------------------------------------------------------------
   {
     id: 'transforms-lookahead-bound',
@@ -1107,8 +1106,7 @@ export const CORPUS: FixtureCase[] = [
       'uses when concatenating the named fields.',
   },
   // -------------------------------------------------------------------------
-  // Full-capture round two (#209 and the behaviours the Tier 1 round left
-  // unpinned): auto-KV key sanitization, the punct signature, the remaining
+  // Full-capture round two: auto-KV key sanitization, the punct signature, the remaining
   // delimited overrides, the LOOKAHEAD default, the unterminated no-break
   // span, priority, and the previous-event _time fallback.
   // -------------------------------------------------------------------------

@@ -12,11 +12,8 @@ export interface CollapsibleField {
 
 /**
  * Map each field name to its parent, so an ancestor walk is O(depth) rather
- * than O(n) per step.
- *
- * The walk used to call `fieldSummary.find(...)` for every ancestor of every
- * row — O(n²) over the field list, on a path that runs on each render of a
- * table that can hold thousands of rows.
+ * than O(n) per step: the walk runs for every row on each render of a table
+ * that can hold thousands of rows.
  */
 export function buildParentIndex(fields: CollapsibleField[]): Map<string, string | null> {
   const index = new Map<string, string | null>();
@@ -45,12 +42,10 @@ export function isFieldVisible(
 /**
  * Fold newly-appeared parents into the collapsed set.
  *
- * "Collapse all on load" used to be a one-shot initialisation guarded on the
- * state still being null, so any parent that appeared LATER — after a
- * props.conf edit changed which fields extract — rendered expanded, and the
- * intent silently stopped holding. Reconciling on the parent set instead keeps
- * new parents collapsed while preserving whatever the user has since chosen for
- * the ones they have already seen.
+ * "Collapse all on load" has to hold for a parent that appears LATER — after
+ * a props.conf edit changes which fields extract — too, so this reconciles on
+ * the parent set rather than initialising once: new parents start collapsed,
+ * and the ones the user has already seen keep whatever they chose.
  */
 export function reconcileCollapsed(
   allParentNames: readonly string[],

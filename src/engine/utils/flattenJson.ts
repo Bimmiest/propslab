@@ -146,8 +146,8 @@ export function flattenJson(
     const key = options.stripLeadingUnderscore ? rawKey.replace(/^_+/, '') : rawKey;
     if (!key) continue;
     // Keys colliding with Object.prototype members (`constructor`, `__proto__`,
-    // …) are no longer dropped: Splunk's spath/KV_MODE=json extract them, and
-    // the hasOwn-guarded, `__proto__`-safe field writers make that safe.
+    // …) are kept: Splunk's spath/KV_MODE=json extract them, and the
+    // hasOwn-guarded, `__proto__`-safe field writers make that safe.
     const fieldName = prefix ? `${prefix}.${key}` : key;
 
     if (options.sourceKeys && key !== rawKey) {

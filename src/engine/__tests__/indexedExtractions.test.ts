@@ -187,7 +187,7 @@ describe('applyIndexedExtractions — W3C quoting', () => {
     const header = event('#Fields: cs-method cs(User-Agent) sc-status');
     const row = event('GET "Mozilla/5.0 (Windows NT 10.0)" 200');
     const events = applyIndexedExtractions([header, row], [dir('w3c')]);
-    // Header tokens are sanitized to the names Splunk indexes (#68): the IIS
+    // Header tokens are sanitized to the names Splunk indexes: the IIS
     // user-agent column really does surface as `cs_User_Agent_`.
     expect(events[0]!.fields['cs_method']).toBe('GET');
     expect(events[0]!.fields['cs_User_Agent_']).toBe('Mozilla/5.0 (Windows NT 10.0)');
@@ -350,7 +350,7 @@ describe('#164 — INDEXED_EXTRACTIONS turns off line merging by default', () =>
 });
 
 // ---------------------------------------------------------------------------
-// Delimited override attributes (#184). These apply to csv/tsv/psv; W3C keeps
+// Delimited override attributes. These apply to csv/tsv/psv; W3C keeps
 // its own #Fields header mechanism.
 // ---------------------------------------------------------------------------
 
@@ -479,7 +479,7 @@ describe('applyIndexedExtractions — TIMESTAMP_FIELDS (#184)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Header-side delimited overrides (#272). Doc-derived: every assertion below
+// Header-side delimited overrides. Doc-derived: every assertion below
 // is read from the props.conf.spec 10.4.3 text for the attribute, since no
 // capture exercises any of the five.
 // ---------------------------------------------------------------------------

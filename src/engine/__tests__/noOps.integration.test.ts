@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
 // noOps.integration.test.ts
-// The no-op explanations as a caller sees them, through runPipeline (#84).
+// The no-op explanations as a caller sees them, through runPipeline.
 //
 // The unit tests cover the reasoning; these cover the wiring, which is where
 // this feature actually fails — a processor that computes a reason and drops it
@@ -88,7 +88,7 @@ describe('#84 — no-op explanations reach the caller', () => {
   });
 
   it('explains an EVAL that computed null', () => {
-    // len() of an absent field propagates null (#211), so no field is written.
+    // len() of an absent field propagates null, so no field is written.
     const noOps = noOpsFor(RAW, '[my_app]\nEVAL-ulen = len(missing_field)\n');
     expect(noOps[0]?.directive).toBe('EVAL-ulen');
     expect(noOps[0]?.reason).toMatchObject({ kind: 'eval-null', expression: 'len(missing_field)' });

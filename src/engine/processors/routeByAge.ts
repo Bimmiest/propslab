@@ -21,7 +21,7 @@ export function parseAge(value: string): number | null {
 }
 
 /**
- * ROUTE_EVENTS_OLDER_THAN (#275): route events whose extracted timestamp is
+ * ROUTE_EVENTS_OLDER_THAN: route events whose extracted timestamp is
  * older than the given age to nullQueue.
  *
  * Runs straight after timestamp extraction, which is where the spec places it,

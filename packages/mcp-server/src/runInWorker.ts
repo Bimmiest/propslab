@@ -20,13 +20,12 @@
  *   can grow until the whole server process dies — and with it every other
  *   in-flight call. With them, V8 kills only that worker, which surfaces as
  *   `ERR_WORKER_OUT_OF_MEMORY` and is reported as a `WorkerOutOfMemoryError`.
- * - **Concurrency.** A burst of calls used to spawn a worker each, all at once;
- *   each can hold its full heap limit and a core for its full budget. Calls now
- *   pass through a small semaphore and queue beyond it — and the queue is
- *   bounded too (#335). Every queued call holds its whole input (up to a
- *   megabyte of sample plus two million characters of conf) in the server's
- *   own heap, outside any worker's limit, so an unbounded queue only moved
- *   the burst from the workers to the main thread. Past the bound a call is
+ * - **Concurrency.** A worker can hold its full heap limit and a core for its
+ *   full budget, so calls pass through a small semaphore and queue beyond it
+ *   — and the queue is bounded too. Every queued call holds its whole input
+ *   (up to a megabyte of sample plus two million characters of conf) in the
+ *   server's own heap, outside any worker's limit, so an unbounded queue
+ *   would only move a burst from the workers to the main thread. Past the bound a call is
  *   refused at once with `WorkerBusyError`, which the tools report as a
  *   structured `busy` error.
  * - **Cancellation.** A slot is scarce, so a call whose MCP request has been
@@ -61,8 +60,8 @@ export class WorkerTimeoutError extends Error {
 }
 
 /**
- * The concurrency queue was full, so the call was refused without queuing
- * (#335). Its own type so the tool reports "try again shortly" rather than an
+ * The concurrency queue was full, so the call was refused without queuing.
+ * Its own type so the tool reports "try again shortly" rather than an
  * engine failure; nothing about the input is wrong.
  */
 export class WorkerBusyError extends Error {
@@ -117,13 +116,13 @@ export class WorkerCancelledError extends Error {
  * rather than a typical one. The sample dominates: a 1MB sample of
  * one-character lines is 500,000 events, each carrying its own trace. The
  * conf side is bounded too — at most two million characters across every
- * layer of both files (`MAX_TOTAL_CONF_CHARS` in tools.ts, #335), where the
+ * layer of both files (`MAX_TOTAL_CONF_CHARS` in tools.ts), where the
  * per-field limits alone would admit forty million. Measured with both near
  * their maximum — 500,000 events beside 1.9 million characters of conf, with
  * an EXTRACT, SEDCMD, FIELDALIAS and EVAL applying to every event — the run
  * completes at 512MB in about 12s; the sample alone completes even at 256MB.
  * That holds only because the worker trims the result before posting it
- * (serialize.ts, #351): posting it whole failed between 400,000 and 500,000
+ * (serialize.ts): posted whole, it fails between 400,000 and 500,000
  * events. 512MB leaves room for shapes not measured, so hitting it means the
  * run is runaway, not merely big. Young generation is
  * capped too because V8 otherwise sizes it off the machine's memory, not the
@@ -144,7 +143,7 @@ export const DEFAULT_RESOURCE_LIMITS: Readonly<ResourceLimits> = Object.freeze({
  * A counting semaphore: at most `max` holders, the rest wait FIFO. FIFO
  * matters — a stack would let a steady stream of new calls starve the first
  * one queued. At most `maxQueued` may wait; beyond that `acquire` rejects
- * with `WorkerBusyError` rather than queuing (#335). Unbounded unless given.
+ * with `WorkerBusyError` rather than queuing. Unbounded unless given.
  */
 export class Semaphore {
   readonly max: number;
@@ -231,7 +230,7 @@ export class Semaphore {
 export const DEFAULT_MAX_CONCURRENT_WORKERS = Math.max(1, Math.min(4, os.availableParallelism()));
 
 /**
- * Four waiting calls per slot (#335). Enough that an agent fanning out a
+ * Four waiting calls per slot. Enough that an agent fanning out a
  * handful of calls never sees `busy`, few enough that no queued call waits
  * behind more than four budgets (two minutes at the 30s maximum), and that
  * the inputs parked in the server's own heap stay bounded: sixteen calls at

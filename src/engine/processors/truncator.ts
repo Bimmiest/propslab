@@ -5,7 +5,7 @@ import { effectiveDirective } from '../utils/directiveValues';
 
 // The engine type-checks against ES2022 alone (tsconfig.engine.json), so that
 // reaching for a browser-only global fails the build instead of failing in a
-// worker or under Node at run time (#280). The UTF-8 codecs are not ES but are
+// worker or under Node at run time. The UTF-8 codecs are not ES but are
 // safe to use: they are globals in browsers, Web Workers and every supported
 // Node. Declared here, narrowed to what this file calls, rather than by pulling
 // in a whole lib that would also admit DOMParser and friends.
@@ -116,8 +116,7 @@ export function truncateEvents(
     //
     // A "line" is a LINE_BREAKER segment, which is not the same as a
     // '\n'-separated piece: a custom breaker can keep a whole pretty-printed JSON
-    // record in one segment, and Splunk caps that record as one line (#287).
-    // Splitting on '\n' let it through uncut however long it was.
+    // record in one segment, and Splunk caps that record as one line.
     const lines = splitIntoSegments(event);
     let truncatedLines = 0;
     const newLines = lines.map((line) => {

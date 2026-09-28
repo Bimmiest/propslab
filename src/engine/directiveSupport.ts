@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
 // directiveSupport.ts
 // What the simulator actually does with each directive, as opposed to what it
-// knows about it (#153).
+// knows about it.
 //
 // The registry powers autocomplete, hover and linting, so every key in it looks
 // supported. For 44 of the 76 it is not: the directive is offered, explained,
@@ -152,7 +152,7 @@ export const DIRECTIVE_SUPPORT: Record<string, SupportEntry> = {
       'settles it. Naming a space here keeps it.',
   },
   MISSING_VALUE_REGEX: { support: 'simulated' },
-  // The XML values of INDEXED_EXTRACTIONS (#271). The spec gives what each
+  // The XML values of INDEXED_EXTRACTIONS. The spec gives what each
   // attribute does but not how the modes name fields; that naming is borrowed
   // from KV_MODE = xml and the xmlkv command, and the note on
   // INDEXED_EXTRACTIONS says so.
@@ -205,7 +205,7 @@ export const DIRECTIVE_SUPPORT: Record<string, SupportEntry> = {
       'The signature is pinned by the punct-* captures: alphanumerics dropped, space to _, tab ' +
       'to the letter t, newlines removed, capped at 50 characters.',
   },
-  // The stanza-level four (#186). All change which stanza applies rather than
+  // The stanza-level four. All change which stanza applies rather than
   // what one directive does, so getting one wrong moves every downstream result.
   sourcetype: { support: 'simulated' },
   rename: { support: 'simulated' },
@@ -253,7 +253,7 @@ export const DIRECTIVE_SUPPORT: Record<string, SupportEntry> = {
   time_field: { support: 'documented', note: 'Time-bounded lookups are not evaluated.' },
   time_format: { support: 'documented', note: 'Time-bounded lookups are not evaluated.' },
 
-  // ---- props.conf.spec 10.4.3 completeness (#178) ------------------------
+  // ---- props.conf.spec 10.4.3 completeness -------------------------------
   // Added to the registry so they complete, hover and warn rather than
   // passing unnoticed. Most belong to the input and forwarder layers a
   // browser has no access to; the rest are real gaps and name their issue.
@@ -317,7 +317,7 @@ export const DIRECTIVE_SUPPORT: Record<string, SupportEntry> = {
       'no search, and used as documented it skips only work whose fields index time already produced.',
   },
 
-  // ---- transforms.conf.spec 10.4.3 completeness (#178) --------------------
+  // ---- transforms.conf.spec 10.4.3 completeness --------------------------
   // Mostly lookup settings, documented for the reason every lookup attribute
   // is: a lookup needs a table, and a browser with no backend has none. The
   // metrics settings describe the metrics pipeline, not the event pipeline.
@@ -357,19 +357,15 @@ export const DIRECTIVE_SUPPORT: Record<string, SupportEntry> = {
 
 /**
  * Valid props.conf / transforms.conf attributes the registry has never heard
- * of. **Empty as of #178**, and that is the point rather than an accident.
+ * of. Empty while the registry covers every attribute in `props.conf.spec` and
+ * `transforms.conf.spec` for Splunk 10.4.3, as it does.
  *
  * The table above classifies everything the registry knows. It cannot classify
  * what it has never heard of, and `pipeline.ts` reads a missing entry as
- * "honoured" -- so an attribute in neither place produced no warning anywhere
- * and the preview ignored the line in silence. That is the failure #153 exists
- * to prevent, reached by a different route: not a directive we decided not to
- * simulate, but one we never knew to decide about.
- *
- * #178 closed the gap by registering every attribute in `props.conf.spec` and
- * `transforms.conf.spec` for Splunk 10.4.3. This set stays because the next
- * Splunk release will add attributes, and a name parked here is what stops the
- * first person to write one getting silence.
+ * "honoured" -- so an attribute in neither place would produce no warning
+ * anywhere and the preview would ignore the line in silence. This set exists
+ * because the next Splunk release will add attributes, and a name parked here
+ * is what stops the first person to write one getting silence.
  *
  * Names only, deliberately. Value types, defaults and valid values are
  * structural facts belonging to Splunk's `.spec` files; a half-remembered
@@ -383,7 +379,7 @@ export const UNDOCUMENTED_ATTRIBUTES: ReadonlySet<string> = new Set([]);
 /**
  * Whether a key is a real Splunk attribute this repository has not documented.
  * Distinguishes "we don't simulate that" from "that isn't a thing", which are
- * different pieces of advice and were previously both delivered as the second.
+ * different pieces of advice.
  */
 export function isUndocumentedAttribute(key: string): boolean {
   return UNDOCUMENTED_ATTRIBUTES.has(key);

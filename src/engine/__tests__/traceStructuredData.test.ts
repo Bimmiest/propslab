@@ -11,8 +11,8 @@ const ev = (fields: Record<string, string | string[]> = {}): SplunkEvent => ({
 const dir = (key: string, value: string, directiveType: string, className: string): ConfDirective =>
   ({ key, value, line: 1, directiveType, className });
 
-// #128: the Fields tab recovered alias pairs by regex-parsing `description`,
-// a display string. The pairs are carried as data now.
+// Alias pairs are carried as data on the step, not parsed out of `description`,
+// a display string.
 describe('FIELDALIAS — the step carries its alias pairs as data (#128)', () => {
   it('records target/source structurally', () => {
     const r = applyFieldAliases(
@@ -55,8 +55,8 @@ describe('FIELDALIAS — the step carries its alias pairs as data (#128)', () =>
   });
 });
 
-// #129: the Extractions tab recovered EVAL expressions with a case-insensitive
-// regex over raw props.conf, ignoring stanza scoping and continuations.
+// EVAL expressions are carried on the step as they ran — after stanza scoping
+// and continuations — not recovered from raw props.conf.
 describe('EVAL — the step carries the expression behind each field (#129)', () => {
   it('maps each computed field to its expression', () => {
     const r = applyEvalExpressions(

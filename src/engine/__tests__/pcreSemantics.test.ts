@@ -1,8 +1,7 @@
 // ---------------------------------------------------------------------------
 // pcreSemantics.test.ts
-// PCRE semantics reach the pipeline (#368). Doc-derived (pcre2pattern): each
-// case is one where a JavaScript regex gives a different answer, which the
-// engine used to translate, approximate or refuse. The pattern-level cases are
+// PCRE semantics reach the pipeline. Doc-derived (pcre2pattern): each case is
+// one where a JavaScript regex gives a different answer. The pattern-level cases are
 // in utils/__tests__/splunkRegex.test.ts; these pin that the processors use
 // the same engine.
 // ---------------------------------------------------------------------------

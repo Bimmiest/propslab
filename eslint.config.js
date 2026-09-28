@@ -28,9 +28,8 @@ export default defineConfig([
       reactRefresh.configs.vite,
     ],
     languageOptions: {
-      // Matches the `target` in tsconfig.app.json. Left at 2020 this was below
-      // what the compiler emits, so syntax the build accepts could still trip
-      // the parser.
+      // Matches the `target` in tsconfig.app.json, so syntax the build
+      // accepts cannot trip the parser.
       ecmaVersion: 2022,
       globals: globals.browser,
       // Type-aware linting. `projectService` resolves each file through the
@@ -88,26 +87,51 @@ export default defineConfig([
     },
   },
   {
-    // The MCP server is a Node process (#322): stdio, worker_threads,
-    // child_process. It used to inherit the app's browser globals from the
-    // block above, which describe an environment it never runs in.
+    // The MCP server is a Node process: stdio, worker_threads,
+    // child_process. The app's browser globals describe an environment it
+    // never runs in.
     files: ['packages/mcp-server/**/*.{ts,mts}'],
     languageOptions: {
       globals: nodeOnlyGlobals,
     },
   },
   {
-    // The maintenance scripts (#322). Only .ts/.tsx was linted, so these two
-    // Node scripts — one of which runs weekly in roster.yml — were the only
-    // hand-written code nothing checked. No type-aware rules: they are plain
-    // JS outside every tsconfig, which is what projectService needs to see a
-    // file. ESM either way: the root package.json is "type": "module".
+    // The maintenance scripts, one of which runs weekly in roster.yml. No
+    // type-aware rules: they are plain JS outside every tsconfig, which is what
+    // projectService needs to see a file. ESM either way: the root
+    // package.json is "type": "module".
     files: ['scripts/**/*.{js,mjs}'],
     extends: [js.configs.recommended],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',
       globals: globals.node,
+    },
+  },
+  {
+    // Size and branching limits for hand-written code, so a function stays a
+    // sequence of named steps rather than growing back into a 400-line body.
+    // Lines are counted without blanks and comments: the rationale comments kept
+    // beside a rule are not what makes a function hard to follow. Same file set
+    // as the blocks above, so this adds no files to the lint.
+    files: ['**/*.{ts,tsx}', 'packages/mcp-server/**/*.mts', 'scripts/**/*.{js,mjs}'],
+    rules: {
+      'max-lines-per-function': ['error', { max: 100, skipBlankLines: true, skipComments: true }],
+      complexity: ['error', 25],
+    },
+  },
+  {
+    // Tests are exempt: a describe() callback holds a whole suite, so its length
+    // counts cases, and a table of cases is not branching logic.
+    files: [
+      '**/__tests__/**/*.{ts,tsx}',
+      '**/*.test.{ts,tsx}',
+      'e2e/**/*.ts',
+      'packages/*/test/**/*.ts',
+    ],
+    rules: {
+      'max-lines-per-function': 'off',
+      complexity: 'off',
     },
   },
   {

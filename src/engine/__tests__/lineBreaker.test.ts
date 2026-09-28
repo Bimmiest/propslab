@@ -31,8 +31,7 @@ describe('breakLines — MAX_EVENTS line cap (SEM-5)', () => {
     // Date-less lines would all merge into one event by default. MAX_EVENTS
     // bounds the continuation lines merged in, not the event's total line
     // count, so MAX_EVENTS=3 yields four-line events -- pinned by the Splunk
-    // 10.4.0 capture `linebreak-max-events` (#162), which is what corrected the
-    // reading this test previously encoded.
+    // 10.4.0 capture `linebreak-max-events`.
     const raw = Array.from({ length: 12 }, (_, i) => `line${i}`).join('\n');
     const events = breakLines(raw, [dir('MAX_EVENTS', '3')], META);
     expect(events).toHaveLength(3);
@@ -110,7 +109,7 @@ describe('#287 — BREAK_ONLY_BEFORE_DATE finds a date anywhere in the lookahead
   });
 
   // Doc-derived (props.conf.spec, MAX_TIMESTAMP_LOOKAHEAD: "Set to 0 or -1 to
-  // disable the lookahead limit"), read the way timestampExtractor reads it (#331).
+  // disable the lookahead limit"), read the way timestampExtractor reads it.
   it.each(['0', '-1'])('searches the whole line when MAX_TIMESTAMP_LOOKAHEAD = %s', (value) => {
     const raw = '2026-09-22 10:00:00 a\n' + 'x'.repeat(200) + ' 2026-09-22 late';
     expect(raws(raw)).toHaveLength(1);
@@ -140,8 +139,7 @@ describe('#287 — BREAK_ONLY_BEFORE_DATE finds a date anywhere in the lookahead
   });
 
   // Doc-derived: datetime.xml reads a UTC epoch after whitespace or one of
-  // # , " = ( [ | {, not only at the start of a line. This test used to assert
-  // that `id 1768471200 e` stays a continuation line.
+  // # , " = ( [ | {, not only at the start of a line.
   it('accepts a plausible epoch after a delimiter in mid-line', () => {
     expect(raws('1768471200 a\ntime=1768471201 b\n[1768471202] c\nid 1768471203 d')).toHaveLength(4);
   });
@@ -219,9 +217,8 @@ describe('#283 — zero-width LINE_BREAKER captures', () => {
 
   it('lets a lookbehind see text the previous break consumed', () => {
     // A blank-line separator written with a lookbehind: the run of newlines
-    // after the first is the separator. Searching a re-sliced remainder hid
-    // the newline just consumed, so the third one no longer matched and a
-    // newline leaked into the second event.
+    // after the first is the separator. The lookbehind must see the newline
+    // just consumed, or a newline leaks into the second event.
     const events = breakLines('a\n\n\nb', [
       dir('LINE_BREAKER', '(?<=\\n)(\\n)'),
       dir('SHOULD_LINEMERGE', 'false'),
@@ -451,7 +448,7 @@ describe('breakLines — lineNumbers.end measured on the original input (#317)',
 
   // Doc-derived: LINE_BREAKER discards only its first capture group, so a
   // breaker that captures `---` leaves the preceding `\n` in the event. That
-  // newline ends the event's last line; it does not start another (#331).
+  // newline ends the event's last line; it does not start another.
   const dashes = [dir('LINE_BREAKER', '(---)'), dir('SHOULD_LINEMERGE', 'false')];
 
   it('ends a segment that keeps its trailing \\n on that line, not the next (#331)', () => {
@@ -482,7 +479,7 @@ describe('breakLines — lineNumbers.end measured on the original input (#317)',
 
 describe('breakLines — the SHOULD_LINEMERGE default INDEXED_EXTRACTIONS implies (#322)', () => {
   // Doc-derived: structured INDEXED_EXTRACTIONS formats are one record per
-  // line, while the XML modes keep ordinary line merging (#271). breakLines is
+  // line, while the XML modes keep ordinary line merging. breakLines is
   // the only place this default is decided, so it must hold with no pipeline
   // injecting a SHOULD_LINEMERGE for it.
   const raw = 'a,1\nb,2\nc,3';

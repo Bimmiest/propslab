@@ -1,6 +1,6 @@
 /**
  * A per-message size bound on the stdio transport's input, enforced before
- * anything is parsed (#349).
+ * anything is parsed.
  *
  * The SDK's `StdioServerTransport` reads newline-delimited JSON: it buffers
  * stdin until a `\n`, then `JSON.parse`s the whole line and validates it —

@@ -67,7 +67,7 @@ export function createHoverProvider(fileType: 'props.conf' | 'transforms.conf'):
 
       const eqIdx = line.indexOf('=');
 
-      // Hovering over the VALUE of a strftime directive renders it (#90).
+      // Hovering over the VALUE of a strftime directive renders it.
       // Timestamp config fails silently, so making the pattern show its own
       // output is worth more here than restating the directive's docs.
       if (eqIdx > 0 && position.column - 1 > eqIdx) {
@@ -75,7 +75,7 @@ export function createHoverProvider(fileType: 'props.conf' | 'transforms.conf'):
         const info = getDirectiveInfo(key, fileType);
         if (info?.valueType === 'strftime') {
           // Asynchronous because TIME_PREFIX is matched in a terminatable
-          // worker, never here (#334). A cancelled hover resolves to null.
+          // worker, never here. A cancelled hover resolves to null.
           const value = line.substring(eqIdx + 1);
           return buildTimeFormatPreview(value, {
             sampleLine: firstSampleLine(),
@@ -122,7 +122,7 @@ export function createHoverProvider(fileType: 'props.conf' | 'transforms.conf'):
             // content is NOT purely registry text: the heading is the key as
             // typed. formatDirectiveHover escapes it, so the document cannot
             // add a link — and if an escape were ever missed, the most a
-            // forged link could do is open the dictionary (#296).
+            // forged link could do is open the dictionary.
             contents: [{ value: formatDirectiveHover(info, key), isTrusted: DIRECTIVE_HOVER_TRUST }],
             range: {
               startLineNumber: position.lineNumber,

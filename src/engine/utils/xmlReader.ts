@@ -2,11 +2,9 @@
  * A small, strict XML 1.0 reader for `KV_MODE = xml` and the XML values of
  * `INDEXED_EXTRACTIONS`.
  *
- * This exists because the engine used to call `DOMParser`, which is a *window*
- * API: it does not exist in a Web Worker, where the app runs the pipeline, nor
- * under Node, where the MCP server does. The call threw, a try/catch swallowed
- * it, and XML extraction silently produced nothing everywhere except the jsdom
- * test environment -- the one place nobody uses the engine.
+ * The engine's own rather than `DOMParser`, which is a *window* API: it does
+ * not exist in a Web Worker, where the app runs the pipeline, nor under Node,
+ * where the MCP server does.
  *
  * What it reads: elements, attributes, text, CDATA, comments, processing
  * instructions, an XML declaration and a DOCTYPE (skipped), the five predefined

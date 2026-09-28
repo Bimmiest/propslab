@@ -23,7 +23,7 @@ export interface RegexMatchState {
    * The pattern `status` and `results` describe. Matching runs on a debounced
    * copy of the pattern, so for a moment after each keystroke this trails the
    * pattern the caller passed; a caller that shows results beside the live
-   * pattern compares the two and treats a mismatch as pending (#315).
+   * pattern compares the two and treats a mismatch as pending.
    */
   pattern: string;
   /**
@@ -31,7 +31,7 @@ export interface RegexMatchState {
    * caller passed. The request for new inputs is posted from an effect, so for
    * the commit in which the caller's inputs change (a pipeline re-run, a search
    * keystroke) `results` still index the previous array; a caller that indexes
-   * them against its own data compares the two first (#329).
+   * them against its own data compares the two first.
    */
   inputs: string[];
   /**
@@ -39,7 +39,7 @@ export interface RegexMatchState {
    * the pattern and inputs that produced it; null once a request went idle,
    * timed out or was invalid. Lets a caller keep showing settled results against
    * their own inputs while a re-run is in flight instead of flashing to pending
-   * — provided it checks `settled.pattern` is still the one it wants (#329).
+   * — provided it checks `settled.pattern` is still the one it wants.
    */
   settled: Matched | null;
 }
@@ -49,7 +49,7 @@ interface Request {
   inputs: string[];
 }
 
-/** Results tagged with the pattern and inputs that produced them (#315, #329). */
+/** Results tagged with the pattern and inputs that produced them. */
 export interface Matched {
   pattern: string;
   inputs: string[];
@@ -66,7 +66,7 @@ const EMPTY_MATCHED: Matched = { pattern: '', inputs: EMPTY_INPUTS, results: EMP
  * PCRE's limits bound each match but not the total over every input, so a
  * slow pattern only stalls the worker — the watchdog kills it, restarts it, and
  * reports `timeout`, so the Regex tab stays responsive. The
- * lifecycle around that lives in `useWorkerRequest` (#151).
+ * lifecycle around that lives in `useWorkerRequest`.
  *
  * Where `Worker` is unavailable (tests / SSR) it falls back to matching on the
  * calling thread; the browser always has a worker and uses the safe path.

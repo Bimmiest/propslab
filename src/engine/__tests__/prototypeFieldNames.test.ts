@@ -7,9 +7,9 @@ import { applyIndexedExtractions } from '../processors/indexedExtractions';
 import { hasField } from '../utils/fieldBag';
 import type { ConfDirective, SplunkEvent } from '../types';
 
-// #120: a plain object inherits every Object.prototype member, so `fields[name]`
-// reads back a FUNCTION for names like `toString` / `constructor`. fieldBag.ts
-// was written to prevent exactly this; these processors were bypassing it.
+// A plain object inherits every Object.prototype member, so `fields[name]`
+// reads back a FUNCTION for names like `toString` / `constructor`. Every
+// processor goes through fieldBag.ts, which prevents exactly this.
 //
 // Splunk extracts such names verbatim (they are ordinary JSON/KV keys), so the
 // correct behaviour is "treated as any other field", not "rejected".

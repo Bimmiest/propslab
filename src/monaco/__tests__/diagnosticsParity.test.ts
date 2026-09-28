@@ -12,9 +12,9 @@ function fakeModel(text: string): editor.ITextModel {
   } as unknown as editor.ITextModel;
 }
 
-// #124: the linter used `line.indexOf('=') > 0` and suppressed the malformed-line
-// marker for indented lines, while confParser's DIRECTIVE_RE rejects a key that
-// starts with whitespace. The two validators sit side by side in the UI.
+// The linter and confParser agree on what a directive line is: DIRECTIVE_RE
+// rejects a key that starts with whitespace, so an indented line gets the
+// malformed-line marker. The two validators sit side by side in the UI.
 describe('computeDiagnostics — agrees with confParser on what a directive is (#124)', () => {
   it('flags an indented directive, as the engine does', () => {
     const text = '[st]\n  KV_MODE = json\n';
@@ -46,8 +46,8 @@ describe('computeDiagnostics — agrees with confParser on what a directive is (
   });
 });
 
-// #125: the checks ran over the whole document, so directives in unrelated
-// stanzas satisfied each other's conditions.
+// The checks are per stanza, so directives in unrelated stanzas cannot satisfy
+// each other's conditions.
 describe('computeDiagnostics — best-practice checks are stanza-scoped (#125)', () => {
   const linemergeWarning = (markers: { message: string }[]) =>
     markers.filter((m) => /SHOULD_LINEMERGE = false/.test(m.message));
@@ -102,9 +102,9 @@ describe('computeDiagnostics — best-practice checks are stanza-scoped (#125)',
   });
 });
 
-// #89: the linter said "possible typo?" where the engine said "did you mean
-// TIME_FORMAT?". Both are shown in the UI at once, and the vaguer one sends the
-// user to check spelling that is only wrong in its casing.
+// The linter and the engine give the same mis-cased-attribute answer ("did you
+// mean TIME_FORMAT?"): both are shown at once, and a vaguer "possible typo?"
+// would send the user to check spelling that is only wrong in its casing.
 describe('computeDiagnostics — agrees with confParser on mis-cased attributes (#89)', () => {
   it('gives the same message the engine gives', () => {
     const text = '[st]\ntime_format = %s\n';

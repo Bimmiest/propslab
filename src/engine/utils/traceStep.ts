@@ -9,11 +9,9 @@ const METADATA_KEYS: (keyof EventMetadata)[] = ['index', 'host', 'source', 'sour
  *
  * DEST_KEY = _raw and INGEST_EVAL's `_raw=` are the same operation reached two
  * ways, and field attribution (`attributeRawMutations`) only sees a rewrite
- * that left a `rawMutations` entry pointing at its step. INGEST_EVAL used to
- * append its step without one, so a rewrite that deleted a field's text was
- * traced as a bare "Evaluated 1 ingest-time expression(s)" while the
- * equivalent DEST_KEY transform named the field it destroyed (#346). Both now
- * come through here, so neither can drift from the other again.
+ * that left a `rawMutations` entry pointing at its step. Both come through
+ * here, so each names the fields its rewrite destroyed and neither can drift
+ * from the other.
  *
  * `rawBefore` is `_raw` as the step found it. An unchanged `_raw` records
  * nothing: a rewrite to the same text destroyed nothing.

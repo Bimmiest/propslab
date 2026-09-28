@@ -7,7 +7,7 @@
  *
  * Message protocol:
  *   in  → RegexMatchRequest
- *   out → WORKER_READY once, when the worker has loaded its regex engine (#339); then RegexMatchResponse
+ *   out → WORKER_READY once, when the worker has loaded its regex engine; then RegexMatchResponse
  */
 
 import { matchInputs } from './regexMatch';

@@ -45,23 +45,17 @@ updates:
       vitest:
         # The tighter of the two couplings: @vitest/coverage-v8 peer-depends on
         # the exact vitest it ships beside — 4.1.10's peer is `vitest@4.1.10`,
-        # not `^4.1.10` — so even a patch cannot move alone. #260 proposed
-        # vitest 5.0.1 against coverage-v8 4.1.10 and could never have installed.
-        # Nothing was wrong with the version: 5.0.1 passes the suite here once
-        # the two move together.
+        # not `^4.1.10` — so even a patch cannot move alone.
         patterns:
           - vitest
           - "@vitest/*"
         update-types: [major]
       vite:
-        # The same failure, already paid for once. #215 and #217 raised vite 8
-        # and @vitejs/plugin-react 6 separately and neither could go green:
-        # plugin-react 6 requires `vite@^8`, and vite 8 is refused by
-        # plugin-react 5's peer range, so each failed at `npm ci` against the
-        # other's pin. They had to be re-assembled into one commit by hand.
-        # @tailwindcss/vite is deliberately not listed — it is a Tailwind
-        # package that happens to be named for its host, and it tracks
-        # Tailwind's major rather than Vite's.
+        # plugin-react requires a matching vite major (6 needs `vite@^8`, and
+        # plugin-react 5 refuses vite 8), so separate PRs each fail `npm ci`
+        # against the other's pin. @tailwindcss/vite is deliberately not
+        # listed — it is a Tailwind package that happens to be named for its
+        # host, and it tracks Tailwind's major rather than Vite's.
         patterns:
           - vite
           - "@vitejs/plugin-react"
@@ -75,13 +69,10 @@ updates:
       # the code runs on, and `.nvmrc` is what decides that. A types major that
       # arrives ahead of the runtime is worse than a stale one: it describes
       # APIs that do not exist yet, so `tsc` accepts code that fails when it
-      # runs. The two halves of this repo had drifted apart on exactly that —
-      # #243 let 26 into packages/mcp-server while the root stayed on 24 and
-      # #265 proposed moving the root to match — and the answer is that both
-      # follow `.nvmrc`, which says 24.
+      # runs. Both the root and packages/mcp-server follow `.nvmrc`, which says 24.
       #
-      # The cost is the one the Azure exclusion below also carries: this pin no
-      # longer advances on its own. When the Node line moves — 26 becomes
+      # The cost is the one the Azure exclusion below also carries: this pin
+      # does not advance on its own. When the Node line moves — 26 becomes
       # Active LTS in October 2026 — delete this entry and take the types major
       # in the same change that moves `.nvmrc`, not before it.
       - dependency-name: "@types/node"
@@ -122,7 +113,7 @@ updates:
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
 
-  # Actions are pinned to commit SHAs (#138), which is what stops a mutable tag
+  # Actions are pinned to commit SHAs, which is what stops a mutable tag
   # from moving an unreviewed change into a job holding the deploy credentials.
   # A SHA cannot move on its own, so without something raising the pin forward
   # it rots into a permanently stale action; these updates are that something.
@@ -143,9 +134,8 @@ updates:
       # explains why). Dependabot resolves `v1` to the tag, sees a SHA that is
       # not the pinned one, and proposes it as an update — so every run asks to
       # move the deploy BACKWARDS by three and a half years, onto a build that
-      # predates the `skip_api_build` input the workflow passes. #219 was that
-      # PR; the same regression had already been fixed once before it.
+      # predates the `skip_api_build` input the workflow passes.
       #
-      # The cost is that this pin no longer rots forward on its own. Raising it
+      # The cost is that this pin does not move forward on its own. Raising it
       # means reading the v1 branch and updating the SHA by hand.
       - dependency-name: "Azure/static-web-apps-deploy"

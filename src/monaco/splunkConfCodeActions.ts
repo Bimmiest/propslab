@@ -2,8 +2,8 @@
 // splunkConfCodeActions.ts
 // Quick fixes for the markers computeDiagnostics produces.
 //
-// Only one so far: renaming a mis-cased attribute to its canonical spelling
-// (#89). It is the fix worth making one click because the diagnostic already
+// Only one so far: renaming a mis-cased attribute to its canonical spelling.
+// It is the fix worth making one click because the diagnostic already
 // knows the exact answer -- `time_format` can only have meant `TIME_FORMAT` --
 // and because the failure it prevents is invisible: Splunk ignores the line and
 // the default applies, so nothing about the config's behaviour says it is dead.

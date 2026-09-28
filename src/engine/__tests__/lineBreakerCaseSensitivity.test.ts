@@ -7,9 +7,9 @@ const META: EventMetadata = { index: 'main', host: '', source: '', sourcetype: '
 const dir = (key: string, value: string): ConfDirective =>
   ({ key, value, line: 1, directiveType: key });
 
-// #119: `getDirective` compared keys case-insensitively while confParser warned
-// that a mis-cased attribute "is ignored". The simulator honoured the directive
-// it had just declared dead, so the warning made a wrong result look checked.
+// Keys are compared case-sensitively, as confParser's "is ignored" warning for
+// a mis-cased attribute says: the simulator must not honour a directive it has
+// just declared dead.
 describe('lineBreaker — directive keys are case-sensitive (#119)', () => {
   it('ignores a mis-cased line_breaker, matching the parser warning', () => {
     const { result, diagnostics } = runPipeline(
