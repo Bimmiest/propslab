@@ -115,8 +115,10 @@ describe('serializeSimulation', () => {
     for (const unit of ['日本語', '"\\', '😀']) {
       const e = event(0, 0, 1);
       e._raw = unit.repeat(Math.ceil(940_000 / unit.length));
-      e.processingTrace[0].inputSnapshot = e._raw;
-      e.processingTrace[0].outputSnapshot = e._raw;
+      for (const step of e.processingTrace) {
+        step.inputSnapshot = e._raw;
+        step.outputSnapshot = e._raw;
+      }
       const events = [e, e, e];
       for (const includeSnapshots of [false, true]) {
         const out = serializeSimulation(result(events), [], { maxEvents: 20, includeSnapshots });
@@ -129,13 +131,13 @@ describe('serializeSimulation', () => {
   it('returns null for an Invalid Date instead of throwing (#417)', () => {
     const e = { ...event(0, 1, 0), _time: new Date(1e20) };
     const out = serializeSimulation(result([e]), [], { maxEvents: 20, includeSnapshots: false });
-    expect(out.events[0]._time).toBeNull();
+    expect(out.events[0]?._time).toBeNull();
   });
 
   it("keeps the simulator's _queue routing slot out of indexedFields", () => {
     const e = { ...event(0, 1, 0), _meta: { _queue: 'myQueue', env: 'prod', tag: ['a', 'b'] } };
     const out = serializeSimulation(result([e]), [], { maxEvents: 20, includeSnapshots: false });
-    expect(out.events[0].indexedFields).toEqual({ env: 'prod', tag: ['a', 'b'] });
+    expect(out.events[0]?.indexedFields).toEqual({ env: 'prod', tag: ['a', 'b'] });
   });
 
   it('adds nothing when nothing was cut', () => {

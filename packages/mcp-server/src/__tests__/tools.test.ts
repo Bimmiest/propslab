@@ -13,6 +13,7 @@ import { z } from 'zod';
 import { explainOutputShape, validateOutputShape } from '../outputSchemas';
 import { MAX_RESPONSE_BYTES } from '../responseBudget';
 import { collectRegexSuspects } from '../suspects';
+import { resultText } from './resultText';
 
 /**
  * The handlers run engine code in a worker thread, and a worker loads
@@ -21,7 +22,7 @@ import { collectRegexSuspects } from '../suspects';
  */
 const WORKER_PATH = fileURLToPath(new URL('../../dist/simulateWorker.js', import.meta.url));
 
-const payload = (r: { content: { text: string }[] }) => JSON.parse(r.content[0].text);
+const payload = (r: { content: { text: string }[] }) => JSON.parse(resultText(r));
 
 /** Bytes of the JSON-RPC line the server would write for this result, as the SDK frames it. */
 const lineBytes = (result: object) =>
@@ -87,7 +88,7 @@ describe('simulate', () => {
       }),
       WORKER_PATH,
     );
-    expect(result.content[0].text.length).toBeLessThan(10_000);
+    expect(resultText(result).length).toBeLessThan(10_000);
     const out = payload(result);
     expect(out.eventCount).toBe(100_000);
     expect(out.returnedEvents).toBe(1);
@@ -415,7 +416,7 @@ describe('collectRegexSuspects', () => {
     expect(extract?.redos_risk).toBe(true);
     expect(suspects.some((s) => s.key === 'SEDCMD-mask')).toBe(true);
     // Flagged suspects sort first.
-    expect(suspects[0].key).toBe('EXTRACT-x');
+    expect(suspects[0]?.key).toBe('EXTRACT-x');
   });
 });
 

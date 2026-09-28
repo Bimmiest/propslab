@@ -18,17 +18,20 @@ import type { RequestId } from '@modelcontextprotocol/sdk/types.js';
 /** Bytes kept from each end of an oversize line for the id scans. */
 export const ID_SCAN_BYTES = 4096;
 
-const WS = new Set([' ', '\t', '\n', '\r']);
+/** JSON's whitespace. Takes `undefined` so an index past the end reads as not-whitespace. */
+function isWs(c: string | undefined): boolean {
+  return c === ' ' || c === '\t' || c === '\n' || c === '\r';
+}
 const NUMBER_AT = /-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/y;
 const NUMBER_AT_END = /-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$/;
 
 function skipWs(s: string, i: number): number {
-  while (i < s.length && WS.has(s[i])) i++;
+  while (i < s.length && isWs(s[i])) i++;
   return i;
 }
 
 function skipWsBack(s: string, i: number): number {
-  while (i >= 0 && WS.has(s[i])) i--;
+  while (i >= 0 && isWs(s[i])) i--;
   return i;
 }
 
@@ -46,7 +49,7 @@ function valueEnd(s: string, i: number): number {
   if (s[i] === '"') return stringEnd(s, i);
   if (s[i] !== '{' && s[i] !== '[') {
     let j = i;
-    while (j < s.length && !WS.has(s[j]) && s[j] !== ',' && s[j] !== '}' && s[j] !== ']') j++;
+    while (j < s.length && !isWs(s[j]) && s[j] !== ',' && s[j] !== '}' && s[j] !== ']') j++;
     return j < s.length ? j : -1;
   }
   let depth = 0;
@@ -84,7 +87,7 @@ function idValueAt(s: string, i: number): RequestId | undefined {
   NUMBER_AT.lastIndex = i;
   const m = NUMBER_AT.exec(s);
   const next = m ? s[i + m[0].length] : undefined;
-  if (!m || next === undefined || !(WS.has(next) || next === ',' || next === '}')) return undefined;
+  if (!m || next === undefined || !(isWs(next) || next === ',' || next === '}')) return undefined;
   return integerId(m[0]);
 }
 

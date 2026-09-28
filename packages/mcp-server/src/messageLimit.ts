@@ -53,8 +53,12 @@ const INVALID_REQUEST = -32600;
 /** The first `n` bytes of `bufs`, copied so no input chunk is retained. */
 function firstBytes(bufs: Buffer[], n: number): Buffer {
   const out: Buffer[] = [];
-  for (let i = 0, left = n; i < bufs.length && left > 0; left -= out[i].length, i++) {
-    out.push(bufs[i].subarray(0, left));
+  let left = n;
+  for (const buf of bufs) {
+    if (left <= 0) break;
+    const part = buf.subarray(0, left);
+    out.push(part);
+    left -= part.length;
   }
   return Buffer.concat(out);
 }
@@ -62,8 +66,12 @@ function firstBytes(bufs: Buffer[], n: number): Buffer {
 /** The last `n` bytes of `bufs`, copied likewise. */
 function lastBytes(bufs: Buffer[], n: number): Buffer {
   const out: Buffer[] = [];
-  for (let i = bufs.length - 1, left = n; i >= 0 && left > 0; left -= out[0].length, i--) {
-    out.unshift(bufs[i].subarray(Math.max(0, bufs[i].length - left)));
+  let left = n;
+  for (const buf of bufs.toReversed()) {
+    if (left <= 0) break;
+    const part = buf.subarray(Math.max(0, buf.length - left));
+    out.unshift(part);
+    left -= part.length;
   }
   return Buffer.concat(out);
 }
@@ -89,12 +97,16 @@ export class MessageSizeLimiter extends Transform {
   /** A dropped line's first and last bytes, for `findRequestId`. */
   private head: Buffer = Buffer.alloc(0);
   private tail: Buffer = Buffer.alloc(0);
+  private readonly maxBytes: number;
+  private readonly onOversize: (maxBytes: number, id: RequestId | undefined) => void;
 
   constructor(
-    private readonly maxBytes: number,
-    private readonly onOversize: (maxBytes: number, id: RequestId | undefined) => void,
+    maxBytes: number,
+    onOversize: (maxBytes: number, id: RequestId | undefined) => void,
   ) {
     super();
+    this.maxBytes = maxBytes;
+    this.onOversize = onOversize;
   }
 
   override _transform(chunk: Buffer, _encoding: BufferEncoding, callback: TransformCallback): void {

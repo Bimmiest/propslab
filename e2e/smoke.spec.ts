@@ -549,7 +549,9 @@ test.describe('regex engine', () => {
     expect(loadMs).toBeLessThan(LOAD_BUDGET_MS);
     expect(wasmFetches.length, 'the page loads the module').toBeGreaterThan(0);
     expect(new Set(wasmFetches).size, 'every load is of the one same-origin asset').toBe(1);
-    expect(new URL(wasmFetches[0]).origin).toBe(new URL(page.url()).origin);
+    for (const url of new Set(wasmFetches)) {
+      expect(new URL(url).origin).toBe(new URL(page.url()).origin);
+    }
 
     expect(complaints.csp, 'blocked by Content-Security-Policy').toEqual([]);
     expect(complaints.all, 'browser errors').toEqual([]);

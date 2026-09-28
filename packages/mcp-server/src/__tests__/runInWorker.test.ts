@@ -15,6 +15,7 @@ import type { WorkerRequest } from '../protocol';
 import { handleSimulate } from '../tools';
 import { stripHeapSizeFlags, stripHeapSizeFlagsFromNodeOptions } from '../heapFlags';
 import { REGEXP_FALLBACK_FLAGS } from '../v8Flags';
+import { resultText } from './resultText';
 
 /**
  * The sandbox's non-timeout bounds — heap limit, concurrency cap — and the
@@ -81,7 +82,7 @@ describe.skipIf(heapFlagsInEffect)('worker heap limit', () => {
       { workerPath: OOM_WORKER, resourceLimits: TINY_HEAP, limiter: new Semaphore(1) },
     );
     expect(result.isError).toBe(true);
-    const out = JSON.parse(result.content[0].text);
+    const out = JSON.parse(resultText(result));
     expect(out.error).toBe('out_of_memory');
     expect(out.heap_limit_mb).toBe(16);
     expect(out.guidance).toMatch(/smaller raw sample/);
@@ -157,7 +158,7 @@ describe('concurrency cap', () => {
   it('refuses a call once the queue is full, without disturbing the queue', async () => {
     const limiter = new Semaphore(1, 2);
     const release = await limiter.acquire();
-    const queued = [limiter.acquire(), limiter.acquire()];
+    const queued = [limiter.acquire(), limiter.acquire()] as const;
     expect(limiter.queued).toBe(2);
     await expect(limiter.acquire()).rejects.toBeInstanceOf(WorkerBusyError);
     expect(limiter.queued).toBe(2);
@@ -193,7 +194,7 @@ describe('concurrency cap', () => {
         { workerPath: SLEEP_WORKER, limiter },
       );
       expect(result.isError).toBe(true);
-      const out = JSON.parse(result.content[0].text);
+      const out = JSON.parse(resultText(result));
       expect(out.error).toBe('busy');
       expect(out.max_concurrent).toBe(1);
       expect(out.max_queued).toBe(0);
@@ -317,7 +318,7 @@ describe('cancellation', () => {
       { workerPath: NEVER_SPAWN, limiter: new Semaphore(1), signal: AbortSignal.abort() },
     );
     expect(result.isError).toBe(true);
-    const out = JSON.parse(result.content[0].text);
+    const out = JSON.parse(resultText(result));
     expect(out.error).toBe('cancelled');
     expect(out.started).toBe(false);
   });

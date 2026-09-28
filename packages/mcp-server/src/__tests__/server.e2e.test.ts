@@ -8,6 +8,7 @@ import { AjvJsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/ajv
 import type { JsonSchemaType } from '@modelcontextprotocol/sdk/validation';
 import { createServer } from '../server';
 import { DEFAULT_MAX_CONCURRENT_WORKERS } from '../runInWorker';
+import { resultText } from './resultText';
 
 /**
  * End to end through the SDK: a real Client talking to the server from
@@ -27,7 +28,7 @@ type TextResult = {
   structuredContent?: Record<string, unknown>;
   isError?: boolean;
 };
-const payload = (r: unknown) => JSON.parse((r as TextResult).content[0].text);
+const payload = (r: unknown) => JSON.parse(resultText(r as TextResult));
 
 let client: Client;
 let close: () => Promise<void>;
@@ -181,7 +182,7 @@ describe('MCP server end to end', () => {
       arguments: { raw: 'x\n', sourcetype: 'st', timeout_ms: 5 },
     });
     expect(result.isError).toBe(true);
-    expect((result as TextResult).content[0].text).toMatch(/timeout_ms/);
+    expect(resultText(result as TextResult)).toMatch(/timeout_ms/);
   });
 
   it('frees sandbox slots when the client cancels a call', async () => {
