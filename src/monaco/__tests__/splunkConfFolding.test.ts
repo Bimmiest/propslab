@@ -3,7 +3,7 @@ import type { editor, languages } from 'monaco-editor';
 import { createFoldingRangeProvider } from '../splunkConfFolding';
 
 // The real editor API touches `window` on import; only the kind constants are used.
-vi.mock('monaco-editor/esm/vs/editor/editor.api', () => ({
+vi.mock('monaco-editor/editor/editor.api', () => ({
   languages: {
     FoldingRangeKind: { Region: { value: 'region' }, Comment: { value: 'comment' } },
   },

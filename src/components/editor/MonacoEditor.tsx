@@ -4,43 +4,45 @@ import { useEffect, useRef } from 'react';
 // language services (their main-thread modes *and* web workers, the ts.worker
 // alone being ~7 MB). This app registers its own conf languages, so it needs
 // none of them. vite.config.ts chunks on this exact specifier.
-import * as monaco from 'monaco-editor/esm/vs/editor/editor.api';
+import * as monaco from 'monaco-editor/editor/editor.api';
 // The editor CONTRIBUTIONS, which editor.api does not pull in. Named one by
 // one rather than via editor.all, which also registers sticky scroll, rename,
 // code lens, parameter hints, semantic tokens and ~40 more contributions this
 // app never enables. Dropping one silently disables its feature, so
 // each line names what depends on it; the e2e suite covers hover, suggest,
 // code actions, folding and find.
-import 'monaco-editor/esm/vs/editor/browser/coreCommands.js';
-import 'monaco-editor/esm/vs/editor/browser/widget/codeEditor/codeEditorWidget.js';
+import 'monaco-editor/editor/browser/coreCommands.js';
+import 'monaco-editor/editor/browser/widget/codeEditor/codeEditorWidget.js';
 // Directive/TIME_FORMAT hovers, and the marker hover on lint squiggles.
-import 'monaco-editor/esm/vs/editor/contrib/hover/browser/hoverContribution.js';
+import 'monaco-editor/editor/contrib/hover/browser/hoverContribution.js';
 // Directive completion; snippets back its InsertAsSnippet items.
-import 'monaco-editor/esm/vs/editor/contrib/suggest/browser/suggestController.js';
-import 'monaco-editor/esm/vs/editor/contrib/snippet/browser/snippetController2.js';
+import 'monaco-editor/editor/contrib/suggest/browser/suggestController.js';
+import 'monaco-editor/editor/contrib/snippet/browser/snippetController2.js';
 // Quick fixes for miscased keys (splunkConfCodeActions).
-import 'monaco-editor/esm/vs/editor/contrib/codeAction/browser/codeActionContributions.js';
+import 'monaco-editor/editor/contrib/codeAction/browser/codeActionContributions.js';
 // F8 / Shift+F8 between lint markers.
-import 'monaco-editor/esm/vs/editor/contrib/gotoError/browser/gotoError.js';
+import 'monaco-editor/editor/contrib/gotoError/browser/gotoError.js';
 // Stanza folding (splunkConfFolding).
-import 'monaco-editor/esm/vs/editor/contrib/folding/browser/folding.js';
+import 'monaco-editor/editor/contrib/folding/browser/folding.js';
 // Ctrl+F / Ctrl+H.
-import 'monaco-editor/esm/vs/editor/contrib/find/browser/findController.js';
+import 'monaco-editor/editor/contrib/find/browser/findController.js';
 // Plain editing ergonomics users expect from any code editor.
-import 'monaco-editor/esm/vs/editor/contrib/bracketMatching/browser/bracketMatching.js';
-import 'monaco-editor/esm/vs/editor/contrib/clipboard/browser/clipboard.js';
-import 'monaco-editor/esm/vs/editor/contrib/cursorUndo/browser/cursorUndo.js';
-import 'monaco-editor/esm/vs/editor/contrib/linesOperations/browser/linesOperations.js';
-import 'monaco-editor/esm/vs/editor/contrib/multicursor/browser/multicursor.js';
-import 'monaco-editor/esm/vs/editor/contrib/wordHighlighter/browser/wordHighlighter.js';
-import 'monaco-editor/esm/vs/editor/contrib/wordOperations/browser/wordOperations.js';
+import 'monaco-editor/editor/contrib/bracketMatching/browser/bracketMatching.js';
+import 'monaco-editor/editor/contrib/clipboard/browser/clipboard.js';
+import 'monaco-editor/editor/contrib/cursorUndo/browser/cursorUndo.js';
+import 'monaco-editor/editor/contrib/linesOperations/browser/linesOperations.js';
+import 'monaco-editor/editor/contrib/multicursor/browser/multicursor.js';
+import 'monaco-editor/editor/contrib/wordHighlighter/browser/wordHighlighter.js';
+import 'monaco-editor/editor/contrib/wordOperations/browser/wordOperations.js';
 // Screen reader: Ctrl+M toggles Tab between indenting and moving focus.
-import 'monaco-editor/esm/vs/editor/contrib/toggleTabFocusMode/browser/toggleTabFocusMode.js';
-import 'monaco-editor/esm/vs/editor/common/standaloneStrings.js';
-import 'monaco-editor/esm/vs/base/browser/ui/codicons/codicon/codicon.css';
-import 'monaco-editor/esm/vs/base/browser/ui/codicons/codicon/codicon-modifiers.css';
+import 'monaco-editor/editor/contrib/toggleTabFocusMode/browser/toggleTabFocusMode.js';
+import 'monaco-editor/editor/common/standaloneStrings.js';
+// Codicon font and classes (the modifiers stylesheet comes in with suggest
+// and code actions). The package's exports map reaches CSS only through its
+// feature entry points.
+import 'monaco-editor/features/codicon/register';
 import type { editor } from 'monaco-editor';
-import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
+import editorWorker from 'monaco-editor/editor/editor.worker?worker';
 
 // Point Monaco at the locally bundled worker instead of a CDN. Set here, not in
 // main.tsx, so it rides the lazy editor chunk: the `?worker` wrapper matches

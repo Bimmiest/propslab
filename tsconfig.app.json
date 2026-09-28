@@ -15,7 +15,7 @@
        subpaths, so TS resolves the value but not the (existing) declarations.
        Point it at the co-located .d.ts. Vite resolves the real file itself. */
     "paths": {
-      "monaco-editor/esm/vs/editor/editor.api": [
+      "monaco-editor/editor/editor.api": [
         "./node_modules/monaco-editor/esm/vs/editor/editor.api.d.ts"
       ]
     },
