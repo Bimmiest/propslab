@@ -76,6 +76,10 @@ Open `reports/mutation/mutation.html` for the survivors, line by line. The engin
 
 The module lives in its own repository, [`Bimmiest/pcre2-wasm-utf16`](https://github.com/Bimmiest/pcre2-wasm-utf16), and this one depends on a release tag of it (`package.json`). That repository commits `pcre2.wasm`, built from a pinned PCRE2 release with clang 18 and `wasm-ld`, and its CI rebuilds it and fails unless the result is byte-identical, so the binary is known to come from the source. To change it — a PCRE2 upgrade, a bridge change — make the change there, tag a release, and move the tag in `package.json` here.
 
+### The Radix overrides
+
+The exact `@radix-ui/*` pins in `package.json`'s `overrides` dedupe the Radix primitives ([#147](https://github.com/Bimmiest/propslab/issues/147), [#152](https://github.com/Bimmiest/propslab/pull/152)). `cmdk` asks for older ranges of them than `react-dialog`, `react-tooltip` and `react-context-menu` resolve to, and without the overrides npm hoisted cmdk's copies and nested a second copy of each primitive under every current Radix package — both shipped, since they are distinct files (about 12 kB gzip at the time). The pinned versions are the ones `@radix-ui/react-dialog` pins exactly, directly or through its own dependencies. When you bump a Radix package, move the overrides to the versions it pins, and check with `npm ls @radix-ui/react-primitive` that there is still one copy.
+
 ## Adding or changing a simulated directive
 
 This is the part with rules of its own, because the project's whole claim is that its output matches Splunk.

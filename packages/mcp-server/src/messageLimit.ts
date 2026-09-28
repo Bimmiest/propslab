@@ -7,9 +7,9 @@
  * all on the server's main thread, outside every worker's heap limit. The
  * zod bounds in tools.ts and `confTooLarge` only see a message after that, so
  * on their own they bound what reaches a worker, not what the server itself
- * holds. (Recent SDK releases also cap their read buffer, at 10 MB — but by
- * closing the transport, which takes the whole server down with one oversized
- * line; older ones in this package's semver range have no cap at all.)
+ * holds. (The SDK also caps its read buffer, at 10 MB in every release this
+ * package's range admits — but by closing the transport, which takes the whole
+ * server down with one oversized line.)
  *
  * `MessageSizeLimiter` sits between stdin and the transport. It passes a line
  * through once its `\n` arrives, and a line that grows past the limit is

@@ -11,11 +11,11 @@ export function getEditor(file: string): editor.IStandaloneCodeEditor | undefine
 }
 
 /**
- * Remove an editor from the registry on unmount so consumers (ValidationPanel,
- * EditorValidationList) don't later call .focus()/.setPosition() on a disposed
- * instance. Only deletes when the stored instance still matches — guards against a
- * remount (collapse/mobile switch) where the new editor registers before the old
- * one's cleanup runs, which would otherwise evict the live instance.
+ * Remove an editor from the registry on unmount so consumers (EditorValidationList)
+ * don't later call .focus()/.setPosition() on a disposed instance. Only deletes
+ * when the stored instance still matches — guards against a remount
+ * (collapse/mobile switch) where the new editor registers before the old one's
+ * cleanup runs, which would otherwise evict the live instance.
  */
 export function unregisterEditor(file: string, instance: editor.IStandaloneCodeEditor): void {
   if (_editors.get(file) === instance) _editors.delete(file);
