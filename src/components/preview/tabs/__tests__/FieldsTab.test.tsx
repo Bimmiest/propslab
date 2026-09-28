@@ -207,3 +207,38 @@ describe('FieldsTab — column resize teardown (#322)', () => {
     expect(document.body.style.cursor).toBe('');
   });
 });
+
+describe('FieldsTab — windowed for wide events (#454)', () => {
+  // 2,000 flat fields: every row used to be in the DOM.
+  const wide = makeEvent(
+    Object.fromEntries(Array.from({ length: 2000 }, (_, i) => [`f${String(i).padStart(4, '0')}`, String(i)])),
+    [],
+  );
+
+  beforeEach(() => {
+    useAppStore.setState(initial, true);
+    useAppStore.setState({ processingResult: { ...result, events: [wide] } });
+  });
+
+  it('renders a window of rows, and reports the full size and each row\'s position', () => {
+    const { container } = render(<FieldsTab />);
+    const table = within(container).getByRole('table');
+    expect(table).toHaveAttribute('aria-rowcount', '2001');
+    const rows = container.querySelectorAll('tbody tr[aria-rowindex]');
+    expect(rows.length).toBeGreaterThan(10);
+    expect(rows.length).toBeLessThan(200);
+    // Sorted by name for a stable order: the first data row is row 2.
+    fireEvent.click(within(container).getByRole('button', { name: /Field Name/ }));
+    const first = container.querySelector('tbody tr[aria-rowindex]');
+    expect(first).toHaveAttribute('aria-rowindex', '2');
+    expect(first).toHaveTextContent('f0000');
+    expect(within(container).getByText('2000 fields')).toBeInTheDocument();
+  });
+
+  it('still finds a row outside the window through the search box', () => {
+    const { container } = render(<FieldsTab />);
+    fireEvent.change(within(container).getByRole('textbox', { name: 'Search fields' }), { target: { value: 'f1999' } });
+    expect(within(container).getByText('f1999')).toBeInTheDocument();
+    expect(within(container).getByRole('table')).toHaveAttribute('aria-rowcount', '2');
+  });
+});

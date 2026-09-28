@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
-import { test, expect, openApp, loadExample } from './fixtures';
+import { test, expect, openApp, loadExample, pasteInto } from './fixtures';
 
 const APACHE = /Apache Access Log/i;
 
@@ -109,3 +109,75 @@ for (const theme of ['dark', 'light'] as const) {
     });
   });
 }
+
+/**
+ * A nested JSON event wide enough that the Fields table and the Extractions
+ * sidebar are windowed (#454).
+ */
+async function openWideFields(page: Page): Promise<void> {
+  await openApp(page);
+  await loadExample(page, APACHE);
+  await pasteInto(page, 1, '[access_combined]\nSHOULD_LINEMERGE = false\nTRUNCATE = 0\nKV_MODE = json');
+  // Literal dotted keys beside their prefix, so the Fields table nests each
+  // group under a parent row with a toggle: 60 parents, 360 rows.
+  const wide: Record<string, string | number> = {};
+  for (let g = 0; g < 60; g++) {
+    wide[`g${g}`] = 'a';
+    for (let f = 0; f < 5; f++) wide[`g${g}.f${f}`] = g * 5 + f;
+  }
+  await pasteInto(page, 0, JSON.stringify(wide));
+  await expect(page.getByText('1 event', { exact: true })).toBeVisible({ timeout: 30_000 });
+}
+
+test.describe('windowed field lists', () => {
+  test('the Fields table has no axe violations, scrolled or not', async ({ page }) => {
+    await openWideFields(page);
+    await page.getByRole('tab', { name: /^Fields$/ }).click();
+    await page.getByRole('button', { name: 'Expand all' }).click();
+    const table = page.getByRole('table');
+    await expect.poll(async () => Number(await table.getAttribute('aria-rowcount'))).toBeGreaterThan(300);
+    await expectNoViolations(page, 'Fields (windowed)');
+    await table.locator('xpath=..').evaluate((el) => { el.scrollTop = el.scrollHeight / 2; });
+    await expectNoViolations(page, 'Fields (windowed, scrolled)');
+  });
+
+  test('Tab walks the Fields toggles past the first window, in row order', async ({ page }) => {
+    await openWideFields(page);
+    await page.getByRole('tab', { name: /^Fields$/ }).click();
+    await page.getByRole('button', { name: 'Expand all' }).click();
+    await page.getByRole('button', { name: /^Toggle g\d+$/ }).first().focus();
+    // 60 parents of 6 rows each: the last toggle is far outside the first window.
+    const rowIndex = () => page.evaluate(() => Number(document.activeElement?.closest('tr')?.getAttribute('aria-rowindex')));
+    let previous = await rowIndex();
+    for (let i = 1; i < 60; i++) {
+      await page.keyboard.press('Tab');
+      const current = await rowIndex();
+      expect(current, `row focused after ${i} Tabs`).toBeGreaterThan(previous);
+      previous = current;
+    }
+  });
+
+  test('the Extractions sidebar is windowed and walkable by keyboard', async ({ page }) => {
+    test.setTimeout(60_000);
+    await openWideFields(page);
+    await page.getByRole('tab', { name: /^Extractions$/ }).click();
+    const sidebar = page.getByRole('textbox', { name: 'Filter fields' }).locator('xpath=ancestor::div[contains(@class,"flex-col")][1]');
+    await sidebar.getByRole('button', { name: 'Expand all' }).click();
+    const rows = sidebar.locator('[data-window-row]');
+    await expect.poll(() => rows.count()).toBeGreaterThan(10);
+    expect(await rows.count()).toBeLessThan(200);
+    await expectNoViolations(page, 'Extractions sidebar (windowed)');
+
+    // The walk ends on a row that was not rendered when it began.
+    await expect(sidebar.locator('[data-window-index="44"]')).toHaveCount(0);
+    await rows.first().getByRole('button').focus();
+    const focusedIndex = () => page.evaluate(() => Number(document.activeElement?.closest<HTMLElement>('[data-window-index]')?.dataset.windowIndex));
+    let previous = await focusedIndex();
+    for (let i = 1; i < 45; i++) {
+      await page.keyboard.press('Tab');
+      const current = await focusedIndex();
+      expect(current, `sidebar row focused after ${i} Tabs`).toBe(previous + 1);
+      previous = current;
+    }
+  });
+});

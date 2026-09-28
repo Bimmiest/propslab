@@ -4,10 +4,12 @@ import { Icon } from '../../../ui/Icon';
 import type { FieldRow } from './fieldRows';
 
 export function FieldTableRow({
-  field, rowId, eventCount, columnWidths, collapsed, childCount, controls, onToggle,
+  field, rowId, rowIndex, eventCount, columnWidths, collapsed, childCount, controls, onToggle,
 }: {
   field: FieldRow;
   rowId: string | undefined;
+  /** Position among the visible rows; aria-rowindex counts the header as 1. */
+  rowIndex: number;
   eventCount: number;
   columnWidths: Record<string, number>;
   collapsed: boolean;
@@ -18,7 +20,12 @@ export function FieldTableRow({
   return (
     <ContextMenu>
     <ContextMenuTrigger>
-    <tr id={rowId} className="border-b border-[var(--color-border-subtle)] hover:bg-[var(--color-bg-secondary)] transition-colors">
+    <tr
+      id={rowId}
+      aria-rowindex={rowIndex + 2}
+      data-window-row=""
+      data-window-index={rowIndex}
+      className="border-b border-[var(--color-border-subtle)] hover:bg-[var(--color-bg-secondary)] transition-colors">
       <td className="py-1.5 px-3 font-mono font-medium" style={{ width: columnWidths.name }}>
         <div className="flex items-center gap-1.5">
           <FieldNameCell

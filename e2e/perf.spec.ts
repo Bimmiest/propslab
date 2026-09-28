@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { test, expect, openApp, loadExample } from './fixtures';
+import { test, expect, openApp, loadExample, pasteInto } from './fixtures';
 
 /**
  * Performance budget for a large input: 20k events pasted into the raw
@@ -37,22 +37,6 @@ KV_MODE = auto
 EXTRACT-path = u=/p/(?P<page>\\d+)
 EVAL-ok = if(s < 400, "true", "false")
 EVAL-kb = round(b / 1024, 1)`;
-
-/**
- * Replace an editor's text through Monaco's own paste path: a `paste` event on
- * the editor's input carrying the text, as the browser delivers a real Ctrl+V.
- */
-async function pasteInto(page: Page, editor: number, text: string): Promise<void> {
-  await page.locator('.monaco-editor').nth(editor).click();
-  await page.keyboard.press('Control+a');
-  await page.evaluate((data) => {
-    const input = document.activeElement;
-    if (!input) throw new Error('editor has no focused input');
-    const clipboardData = new DataTransfer();
-    clipboardData.setData('text/plain', data);
-    input.dispatchEvent(new ClipboardEvent('paste', { clipboardData, bubbles: true, cancelable: true }));
-  }, text);
-}
 
 /**
  * Click a tab and time it until the main thread settles: the end of the last
@@ -118,4 +102,46 @@ test('a 20k-event paste stays within the pipeline and tab-switch budgets', async
     expect.soft(ms, `${name} tab switch (ms)`).toBeLessThan(TAB_BUDGET_MS);
   }
   expect(complaints.all, 'browser errors under a large input').toEqual([]);
+});
+
+/**
+ * One JSON event 3,000 fields wide. The Fields table and the Extractions
+ * sidebar are windowed (#454); before that each rendered a row per field.
+ */
+const WIDE_FIELDS = 3_000;
+// Measured 1.2–1.45 s. Not the sidebar, which is windowed: the event card
+// highlights all 3,000 fields in one raw string.
+const WIDE_EXTRACTIONS_BUDGET_MS = 3_000;
+
+test('a 3,000-field JSON event renders a window of the Fields table and sidebar', async ({ page, complaints }) => {
+  test.setTimeout(120_000);
+  await openApp(page);
+  await loadExample(page, /Apache Access Log/i);
+  await pasteInto(page, 1, '[access_combined]\nSHOULD_LINEMERGE = false\nTRUNCATE = 0\nKV_MODE = json');
+  const wide = Object.fromEntries(
+    Array.from({ length: WIDE_FIELDS }, (_, i) => [`g${i % 30}_f${i}`, `v${i}`]),
+  );
+  await pasteInto(page, 0, JSON.stringify(wide));
+  await expect(page.getByText('1 event', { exact: true })).toBeVisible({ timeout: 30_000 });
+
+  const fieldsMs = await timeTabSwitch(page, 'Fields');
+  const table = page.getByRole('table');
+  // Every JSON key, plus the few default fields (host, source, …), plus the header.
+  await expect.poll(async () => Number(await table.getAttribute('aria-rowcount'))).toBeGreaterThan(WIDE_FIELDS);
+  expect(await table.locator('tbody tr[aria-rowindex]').count()).toBeLessThan(200);
+
+  // Scrolled to the end, the last row is rendered and numbered as such.
+  await table.locator('xpath=..').evaluate((el) => { el.scrollTop = el.scrollHeight; });
+  const rowCount = Number(await table.getAttribute('aria-rowcount'));
+  await expect(table.locator(`tbody tr[aria-rowindex="${rowCount}"]`)).toBeInViewport();
+
+  await page.getByRole('tab', { name: /^Preview$/ }).click();
+  const extractionsMs = await timeTabSwitch(page, 'Extractions');
+  const sidebar = page.getByRole('textbox', { name: 'Filter fields' }).locator('xpath=ancestor::div[contains(@class,"flex-col")][1]');
+  expect(await sidebar.locator('[data-window-row]').count()).toBeLessThan(200);
+
+  console.log(`perf (${WIDE_FIELDS}-field JSON): ${JSON.stringify({ fieldsMs, extractionsMs })}`);
+  expect.soft(fieldsMs, 'Fields tab switch (ms)').toBeLessThan(TAB_BUDGET_MS);
+  expect.soft(extractionsMs, 'Extractions tab switch (ms)').toBeLessThan(WIDE_EXTRACTIONS_BUDGET_MS);
+  expect(complaints.all, 'browser errors under a wide event').toEqual([]);
 });

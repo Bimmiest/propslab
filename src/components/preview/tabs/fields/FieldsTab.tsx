@@ -5,7 +5,7 @@ import { COLUMNS, type PhaseFilter, type SortDir, type SortKey } from './data';
 import { aggregateFields, buildAliasMap, buildFieldRows, buildRowIds, countChildren } from './fieldRows';
 import { useCollapsedParents } from './useCollapsedParents';
 import { FieldsToolbar } from './FieldsToolbar';
-import { FieldTableRow } from './FieldTableRow';
+import { FieldsTable } from './FieldsTable';
 import { ResizableHeader } from './ResizableHeader';
 
 export function FieldsTab() {
@@ -64,6 +64,11 @@ export function FieldsTab() {
 
   const allCollapsed = allParentNames.every((p) => effectiveCollapsed.has(p));
 
+  const visibleRows = useMemo(
+    () => fieldSummary.filter((field) => isFieldVisible(field, effectiveCollapsed, parentIndex)),
+    [fieldSummary, effectiveCollapsed, parentIndex],
+  );
+
   return (
     <div className="flex flex-col h-full">
       <FieldsToolbar
@@ -77,46 +82,31 @@ export function FieldsTab() {
           onToggle: () => setCollapsedParents(allCollapsed ? new Set() : new Set(allParentNames)),
         } : null}
       />
-      <div className="flex-1 overflow-auto">
-        <table className="w-full text-xs border-collapse" style={{ minWidth: Object.values(columnWidths).reduce((a, b) => a + b, 0) }}>
-          <thead className="sticky top-0 z-10 bg-[var(--color-bg-secondary)]">
-            <tr className="text-left text-[var(--color-text-muted)] border-b border-[var(--color-border-subtle)]">
-              {COLUMNS.map((col) => (
-                <ResizableHeader
-                  key={col.key}
-                  col={col}
-                  width={columnWidths[col.key] ?? 0}
-                  sortKey={sortKey}
-                  sortDir={sortDir}
-                  onSort={handleSort}
-                  onResize={(w) => setColumnWidths((prev) => ({ ...prev, [col.key]: w }))}
-                />
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {fieldSummary
-              .filter((field) => isFieldVisible(field, effectiveCollapsed, parentIndex))
-              .map((field) => {
-                const collapsed = effectiveCollapsed.has(field.name);
-                return (
-                  <FieldTableRow
-                    key={field.name}
-                    field={field}
-                    rowId={rowIds.get(field.name)}
-                    eventCount={events.length}
-                    columnWidths={columnWidths}
-                    collapsed={collapsed}
-                    childCount={field.isParent ? childCounts.get(field.name) ?? 0 : 0}
-                    // Only while expanded: collapsed, the child rows are not rendered.
-                    controls={collapsed ? undefined : childRowIds.get(field.name)?.join(' ')}
-                    onToggle={toggleCollapse}
-                  />
-                );
-              })}
-          </tbody>
-        </table>
-      </div>
+      <FieldsTable
+        rows={visibleRows}
+        rowIds={rowIds}
+        childRowIds={childRowIds}
+        childCounts={childCounts}
+        collapsedParents={effectiveCollapsed}
+        eventCount={events.length}
+        columnWidths={columnWidths}
+        onToggle={toggleCollapse}
+        header={
+          <tr aria-rowindex={1} className="text-left text-[var(--color-text-muted)] border-b border-[var(--color-border-subtle)]">
+            {COLUMNS.map((col) => (
+              <ResizableHeader
+                key={col.key}
+                col={col}
+                width={columnWidths[col.key] ?? 0}
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onSort={handleSort}
+                onResize={(w) => setColumnWidths((prev) => ({ ...prev, [col.key]: w }))}
+              />
+            ))}
+          </tr>
+        }
+      />
     </div>
   );
 }

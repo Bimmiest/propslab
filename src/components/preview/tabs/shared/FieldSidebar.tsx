@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, type RefObject, useRef, useState } from 'react';
 import { isAnyFocused } from './useFieldFocus';
 import { Icon } from '../../../ui/Icon';
 
@@ -6,8 +6,11 @@ interface FieldSidebarProps {
   fieldCount: number;
   activeFields: Set<string> | null;
   onCollapse: () => void;
-  /** Render the item list given current search and focused state */
-  renderItems: (search: string, focused: boolean) => ReactNode;
+  /**
+   * Render the item list given current search and focused state. `scrollRef`
+   * is the list's scrolling container, for windowing.
+   */
+  renderItems: (search: string, focused: boolean, scrollRef: RefObject<HTMLDivElement | null>) => ReactNode;
   /** Optional controls rendered between search and the item list (e.g. expand/collapse all) */
   renderControls?: (search: string) => ReactNode;
 }
@@ -20,6 +23,7 @@ export function FieldSidebar({
   renderControls,
 }: FieldSidebarProps) {
   const [search, setSearch] = useState('');
+  const listRef = useRef<HTMLDivElement>(null);
   const focused = isAnyFocused(activeFields);
   const lowerSearch = search.toLowerCase();
 
@@ -63,8 +67,8 @@ export function FieldSidebar({
       </div>
 
       {/* Item list */}
-      <div className="flex-1 overflow-auto px-1 py-1">
-        {renderItems(lowerSearch, focused)}
+      <div ref={listRef} className="flex-1 overflow-auto px-1 py-1">
+        {renderItems(lowerSearch, focused, listRef)}
       </div>
     </div>
   );

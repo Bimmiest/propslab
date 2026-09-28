@@ -1,4 +1,5 @@
 import type { SplunkEvent } from '../../../../engine/types';
+import type { WindowSegment } from '../../../../hooks/useWindowedRows';
 import type { PhaseFilter, SortDir, SortKey } from './data';
 
 /** One field, summarised across every event that has it. */
@@ -225,4 +226,31 @@ export function countChildren(rows: FieldRow[]): Map<string, number> {
     if (f.parentName !== null) counts.set(f.parentName, (counts.get(f.parentName) ?? 0) + 1);
   }
   return counts;
+}
+
+/**
+ * Ids of the rows a windowed table renders (#454): with only the rows near
+ * the viewport in the DOM, a toggle's `aria-controls` may name only these.
+ */
+export function renderedRowIds(segments: WindowSegment[], rows: FieldRow[], rowIds: Map<string, string>): Set<string> {
+  const ids = new Set<string>();
+  for (const seg of segments) {
+    const name = seg.kind === 'row' ? rows[seg.index]?.name : undefined;
+    const id = name === undefined ? undefined : rowIds.get(name);
+    if (id) ids.add(id);
+  }
+  return ids;
+}
+
+/**
+ * A parent's `aria-controls`: its child rows that are rendered, or nothing
+ * while collapsed (the child rows are not rendered at all then).
+ */
+export function controlledRowIds(
+  childIds: string[] | undefined,
+  collapsed: boolean,
+  rendered: Set<string>,
+): string | undefined {
+  if (collapsed) return undefined;
+  return childIds?.filter((id) => rendered.has(id)).join(' ') || undefined;
 }

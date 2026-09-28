@@ -1,29 +1,51 @@
+import { useMemo, type RefObject } from 'react';
 import { isFieldActive, isAnyFocused } from './useFieldFocus';
-import { type FieldNode, nodeMatchesSearch } from './fieldTreeUtils';
+import { type FieldNode, flattenVisibleTree } from './fieldTreeUtils';
+import { useWindowedRows } from '../../../../hooks/useWindowedRows';
 import { pressable } from '../../../ui/pressable';
 import { copyQuietly } from '../../../../utils/clipboard';
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuLabel } from '../../../ui/ContextMenu';
 import { tint } from '../../../../utils/tint';
 import { Icon } from '../../../ui/Icon';
 
-interface FieldTreeNodeProps {
-  node: FieldNode;
+interface FieldTreeProps {
   collapsed: Set<string>;
   toggleGroup: (name: string) => void;
   activeFields: Set<string> | null;
   pinnedFields: Set<string>;
   onHover: (field: string | null) => void;
   onClick: (field: string) => void;
-  search: string;
 }
 
-export function FieldTreeNode({
-  node, collapsed, toggleGroup, activeFields, pinnedFields, onHover, onClick, search,
-}: FieldTreeNodeProps) {
-  const matchesSelf = !search || node.name.toLowerCase().includes(search);
-  const childMatchesSearch = node.children.some((c) => nodeMatchesSearch(c, search));
-  if (!matchesSelf && !childMatchesSearch) return null;
+/**
+ * The field sidebar's tree, flattened and windowed (#454): a wide JSON event
+ * can put thousands of fields here. `scrollRef` is the sidebar's scrolling
+ * list, which this renders into.
+ */
+export function FieldTreeList({
+  tree, search, scrollRef, ...rowProps
+}: FieldTreeProps & { tree: FieldNode[]; search: string; scrollRef: RefObject<HTMLElement | null> }) {
+  const rows = useMemo(
+    () => flattenVisibleTree(tree, rowProps.collapsed, search),
+    [tree, rowProps.collapsed, search],
+  );
+  const { segments, onFocus } = useWindowedRows(scrollRef, rows.length, { estimate: 24 });
+  return (
+    <div onFocus={onFocus}>
+      {segments.map((seg) => {
+        if (seg.kind === 'spacer') return <div key={seg.key} aria-hidden="true" style={{ height: seg.height }} />;
+        const row = rows[seg.index];
+        return row && (
+          <FieldTreeRow key={row.node.name} node={row.node} indent={row.indent} index={seg.index} {...rowProps} />
+        );
+      })}
+    </div>
+  );
+}
 
+function FieldTreeRow({
+  node, indent, index, collapsed, toggleGroup, activeFields, pinnedFields, onHover, onClick,
+}: FieldTreeProps & { node: FieldNode; indent: number; index: number }) {
   const hasChildren = node.children.length > 0;
   const isCollapsed = collapsed.has(node.name);
   const focused = isAnyFocused(activeFields);
@@ -82,7 +104,7 @@ export function FieldTreeNode({
   );
 
   return (
-    <div style={{ paddingLeft: `${node.depth * 10}px` }}>
+    <div style={{ paddingLeft: `${indent}px` }} data-window-row="" data-window-index={index}>
       {hasChildren ? row : (
         <ContextMenu>
           <ContextMenuTrigger>{row}</ContextMenuTrigger>
@@ -93,20 +115,6 @@ export function FieldTreeNode({
           </ContextMenuContent>
         </ContextMenu>
       )}
-
-      {hasChildren && !isCollapsed && node.children.map((child) => (
-        <FieldTreeNode
-          key={child.name}
-          node={child}
-          collapsed={collapsed}
-          toggleGroup={toggleGroup}
-          activeFields={activeFields}
-          pinnedFields={pinnedFields}
-          onHover={onHover}
-          onClick={onClick}
-          search={search}
-        />
-      ))}
     </div>
   );
 }

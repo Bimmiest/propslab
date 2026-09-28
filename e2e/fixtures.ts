@@ -130,3 +130,19 @@ export async function dwellUntilVisible(page: Page, x: number, y: number, shown:
     await expect(shown).toBeVisible({ timeout: 3_000 });
   }).toPass({ timeout: 20_000 });
 }
+
+/**
+ * Replace an editor's text through Monaco's own paste path: a `paste` event on
+ * the editor's input carrying the text, as the browser delivers a real Ctrl+V.
+ */
+export async function pasteInto(page: Page, editor: number, text: string): Promise<void> {
+  await page.locator('.monaco-editor').nth(editor).click();
+  await page.keyboard.press('Control+a');
+  await page.evaluate((data) => {
+    const input = document.activeElement;
+    if (!input) throw new Error('editor has no focused input');
+    const clipboardData = new DataTransfer();
+    clipboardData.setData('text/plain', data);
+    input.dispatchEvent(new ClipboardEvent('paste', { clipboardData, bubbles: true, cancelable: true }));
+  }, text);
+}

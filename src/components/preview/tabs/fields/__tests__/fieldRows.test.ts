@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
-  aggregateFields, buildAliasMap, buildFieldRows, buildRowIds, countChildren, fieldComparator, findParentFields,
-  immediateParent, nestFields, type AggregatedField,
+  aggregateFields, buildAliasMap, buildFieldRows, buildRowIds, controlledRowIds, countChildren, fieldComparator,
+  findParentFields, immediateParent, nestFields, renderedRowIds, type AggregatedField,
 } from '../fieldRows';
 import type { ProcessingStep, SplunkEvent } from '../../../../../engine/types';
 
@@ -125,5 +125,29 @@ describe('buildRowIds', () => {
     const { rowIds, childRowIds } = buildRowIds(rows, 'p');
     expect([...rowIds]).toEqual([['a', 'p-row-0'], ['a b', 'p-row-1'], ['a b.c', 'p-row-2']]);
     expect(childRowIds).toEqual(new Map([['a b', ['p-row-2']]]));
+  });
+});
+
+describe('the rows a windowed table renders (#454)', () => {
+  const rows = nestFields([field('a'), field('a.x'), field('a.y'), field('b')], fieldComparator('name', 'asc'));
+  const { rowIds, childRowIds } = buildRowIds(rows, 'p');
+
+  it('collects the ids of the rendered rows, skipping spacers and indices past the end', () => {
+    const rendered = renderedRowIds(
+      [{ kind: 'row', index: 0 }, { kind: 'spacer', key: 'before', height: 20 }, { kind: 'row', index: 2 }, { kind: 'row', index: 9 }],
+      rows,
+      rowIds,
+    );
+    expect(rendered).toEqual(new Set(['p-row-0', 'p-row-2']));
+  });
+
+  it('names only the rendered children in aria-controls, and none while collapsed', () => {
+    const children = childRowIds.get('a');
+    expect(children).toEqual(['p-row-1', 'p-row-2']);
+    expect(controlledRowIds(children, false, new Set(['p-row-1', 'p-row-2']))).toBe('p-row-1 p-row-2');
+    expect(controlledRowIds(children, false, new Set(['p-row-2']))).toBe('p-row-2');
+    expect(controlledRowIds(children, false, new Set())).toBeUndefined();
+    expect(controlledRowIds(children, true, new Set(['p-row-1']))).toBeUndefined();
+    expect(controlledRowIds(undefined, false, new Set(['p-row-1']))).toBeUndefined();
   });
 });

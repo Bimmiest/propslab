@@ -8,7 +8,7 @@ import { useAppStore } from '../../../store/useAppStore';
 import { FieldEventCard } from './shared/FieldEventCard';
 import { FieldSidebar } from './shared/FieldSidebar';
 import { FieldSplitLayout } from './shared/FieldSplitLayout';
-import { FieldTreeNode } from './shared/FieldTreeNode';
+import { FieldTreeList } from './shared/FieldTreeNode';
 import { buildFieldTree } from './shared/fieldTreeUtils';
 import type { FieldNode } from './shared/fieldTreeUtils';
 import { DirectiveNoOpList } from './shared/DirectiveNoOpList';
@@ -477,21 +477,19 @@ function HighlightedSidebar({
           </button>
         ) : null
       }
-      renderItems={(search) =>
-        tree.map((node) => (
-          <FieldTreeNode
-            key={node.name}
-            node={node}
-            collapsed={effectiveCollapsed}
-            toggleGroup={toggleGroup}
-            activeFields={activeFields}
-            pinnedFields={pinnedFields}
-            onHover={focusStore.setHoveredField}
-            onClick={focusStore.togglePin}
-            search={search}
-          />
-        ))
-      }
+      renderItems={(search, _focused, scrollRef) => (
+        <FieldTreeList
+          tree={tree}
+          search={search}
+          scrollRef={scrollRef}
+          collapsed={effectiveCollapsed}
+          toggleGroup={toggleGroup}
+          activeFields={activeFields}
+          pinnedFields={pinnedFields}
+          onHover={focusStore.setHoveredField}
+          onClick={focusStore.togglePin}
+        />
+      )}
     />
   );
 }
