@@ -17,7 +17,7 @@ import { TimestampTab } from './tabs/TimestampTab';
 import { RegexTab } from './tabs/regex';
 import { CimModelsTab } from './tabs/CimModelsTab';
 import { EffectiveConfigTab } from './tabs/EffectiveConfigTab';
-import { FieldsTab } from './tabs/FieldsTab';
+import { FieldsTab } from './tabs/fields';
 import { TransformsTab } from './tabs/TransformsTab';
 import { ArchitecturePanel } from '../architecture/ArchitecturePanel';
 import { PreviewFilterBar } from './PreviewFilterBar';

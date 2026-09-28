@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, fireEvent, within } from '@testing-library/react';
-import { FieldsTab } from '../FieldsTab';
+import { FieldsTab } from '../fields';
 import { useAppStore } from '../../../../store/useAppStore';
 import type { ProcessingResult, SplunkEvent, ProcessingStep } from '../../../../engine/types';
 
