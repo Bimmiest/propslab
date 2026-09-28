@@ -169,7 +169,7 @@ function runIndexTime(rawData: string, ctx: RunContext): SplunkEvent[] {
   events = safeProcessor('ROUTE_EVENTS_OLDER_THAN', events, () => routeEventsByAge(events, directives, diagnostics, now), diagnostics);
 
   // Step 5: Indexed extractions
-  events = safeProcessor('INDEXED_EXTRACTIONS', events, () => applyIndexedExtractions(events, directives, diagnostics), diagnostics);
+  events = safeProcessor('INDEXED_EXTRACTIONS', events, () => applyIndexedExtractions(events, directives, diagnostics, new Date(now)), diagnostics);
 
   // Step 6: SEDCMD
   events = safeProcessor('SEDCMD', events, () => applySedCommands(events, directives, diagnostics), diagnostics);
