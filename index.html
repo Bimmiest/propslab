@@ -11,7 +11,7 @@
       (the parts that need eval) are never in the bundle. Verified by loading a
       production build in Chromium with this policy and exercising the editor.
       'wasm-unsafe-eval' permits compiling WebAssembly and nothing else: every
-      user regex runs on PCRE2 compiled to wasm (packages/pcre2-wasm), which
+      user regex runs on PCRE2 compiled to wasm (pcre2-wasm-utf16), which
       this page and each worker load for themselves from the one built asset.
       'unsafe-inline' in style-src stays — Tailwind and Monaco's dynamic theming
       both write inline styles. img-src needs data: because Monaco draws its

@@ -62,17 +62,6 @@ export default defineConfig([
     },
   },
   {
-    // node:test's test() returns a promise the runner itself awaits; the
-    // package's tests call it at top level, as node:test intends.
-    files: ['packages/pcre2-wasm/test/**/*.ts'],
-    languageOptions: {
-      globals: nodeOnlyGlobals,
-    },
-    rules: {
-      '@typescript-eslint/no-floating-promises': 'off',
-    },
-  },
-  {
     // The MCP server's tests assert over JSON.parse'd tool output, which is
     // `any` by construction — every access would need a hand-written type
     // guard that restates the expect() right next to it. The unsafe-* family

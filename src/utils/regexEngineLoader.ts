@@ -10,7 +10,7 @@
  * assume the engine is there. Worker entries use {@link serveWithRegexEngine}.
  */
 
-import wasmUrl from '../../packages/pcre2-wasm/pcre2.wasm?url';
+import wasmUrl from 'pcre2-wasm-utf16/pcre2.wasm?url';
 import { initRegexEngine } from './splunkRegex';
 import { WORKER_READY } from '../engine/workerProtocol';
 
