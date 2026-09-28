@@ -1,0 +1,107 @@
+name: Mutation
+
+# Coverage says a line ran; it does not say a test would notice if the line were
+# wrong. Stryker answers that second question by breaking src/engine/** one small
+# edit at a time and checking that some test fails (#370). A full run takes over
+# an hour, so it lives here rather than in ci.yml, where it would hold every
+# PR — including ones that never touch the engine — hostage to it.
+on:
+  # The full, from-scratch run. Weekly is the cadence the rest of the scheduled
+  # checks keep, and it refreshes the incremental baseline the other triggers
+  # reuse. Later in the morning than ci.yml's so the two do not share a queue.
+  schedule:
+    - cron: '0 8 * * 1'
+  workflow_dispatch:
+  # Engine PRs get an incremental run: only mutants in code (or tests) the diff
+  # touched are re-tested, and the rest are read back from main's last report,
+  # so the score is still a whole-engine score and the floor still applies.
+  # Incremental mode diffs the mutated files and the test files only, so a
+  # change to what the engine imports from src/utils/, or a dependency bump,
+  # would only reuse stale results; those are left to the weekly full run
+  # rather than triggering here.
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/engine/**'
+      - 'stryker.config.mjs'
+      - 'vitest.config.ts'
+      - 'vitest.stryker.config.ts'
+      - '.github/workflows/mutation.yml'
+  # Keeps main's baseline current between weekly runs. Without it the cache a PR
+  # restores drifts behind main, and the PR pays to re-test everything that
+  # landed since Monday.
+  push:
+    branches: [main]
+    paths:
+      - 'src/engine/**'
+      - 'stryker.config.mjs'
+      - 'vitest.config.ts'
+      - 'vitest.stryker.config.ts'
+      - '.github/workflows/mutation.yml'
+
+permissions:
+  contents: read
+
+# Same rule as ci.yml: supersede on PRs, never on main.
+concurrency:
+  group: mutation-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  mutation:
+    runs-on: ubuntu-latest
+    # A cold full run (no cache to start from) is the worst case: 76 minutes
+    # measured on 4 cores, the size of a standard runner. The headroom is for a
+    # slower runner, not for a growing suite: if a full run outgrows it, shard
+    # the `mutate` globs across jobs rather than raising this.
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # The incremental file is keyed per run and restored by prefix, so a
+      # run picks up the newest report any earlier run on main (or this PR)
+      # left behind. Caches written by main are visible to every PR; a PR's own
+      # are visible only to itself, so a PR cannot seed another PR's baseline.
+      # A scheduled or dispatched run skips the restore on purpose: it is the
+      # from-scratch measurement that catches anything incremental reuse missed
+      # (a mutant whose covering test changed shape without its file changing).
+      - name: Restore incremental baseline
+        if: github.event_name == 'pull_request' || github.event_name == 'push'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: reports/stryker-incremental.json
+          key: stryker-incremental-${{ github.run_id }}
+          restore-keys: stryker-incremental-
+
+      - name: Mutation test
+        # thresholds.break in stryker.config.mjs is the floor; Stryker exits
+        # non-zero below it. --incremental with no baseline file is a full run.
+        run: npm run test:mutation -- --incremental
+
+      - name: Save incremental baseline
+        # Saved even when the floor failed: the report is still a correct
+        # record of which mutants survive, and discarding it would make the
+        # fix-up commit pay for a cold run.
+        if: ${{ !cancelled() }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: reports/stryker-incremental.json
+          # Unique per run: cache entries are immutable, so a per-commit key
+          # would make a re-run's save collide with the first attempt's.
+          key: stryker-incremental-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Upload mutation report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: mutation-report
+          path: reports/mutation/
+          retention-days: 14

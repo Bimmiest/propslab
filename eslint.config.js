@@ -18,7 +18,7 @@ const nodeOnlyGlobals = {
 export default defineConfig([
   // All generated: build output (the app's and any package's), and the
   // reports the test suites write.
-  globalIgnores(['**/dist', 'playwright-report', 'test-results', 'coverage']),
+  globalIgnores(['**/dist', 'playwright-report', 'test-results', 'coverage', '.stryker-tmp', 'reports']),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [
