@@ -5,10 +5,11 @@ const DEFAULT_TRUNCATE = 10000;
 /**
  * Suggest raising TRUNCATE only when events are long enough that the 10000-byte
  * default would cut them. Suggesting a *lower* value would risk truncating valid
- * events, so the default is left alone for short data.
+ * events, so the default is left alone for short data. `segments` are the
+ * LINE_BREAKER segments the stanza will produce, which is what TRUNCATE caps.
  */
-export function detectTruncate(lines: string[]): ScaffoldSuggestion[] {
-  const lengths = lines.map((l) => l.length).filter((n) => n > 0).sort((a, b) => a - b);
+export function detectTruncate(segments: string[]): ScaffoldSuggestion[] {
+  const lengths = segments.map((l) => l.length).filter((n) => n > 0).sort((a, b) => a - b);
   if (lengths.length === 0) return [];
 
   const p99 = percentile(lengths, 0.99);

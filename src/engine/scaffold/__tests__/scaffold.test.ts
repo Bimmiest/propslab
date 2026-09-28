@@ -243,3 +243,24 @@ describe('scaffoldConfig end to end — one event per multi-line object', () => 
     expect(result.events.map((e) => e._raw)).toEqual(objects);
   });
 });
+
+// Follow-up to #438: TRUNCATE caps a LINE_BREAKER segment, and the breaker the
+// scaffold proposes keeps a pretty-printed object as one segment, so the
+// suggestion must size against the object, not its longest `\n` line.
+describe('scaffoldConfig end to end — TRUNCATE sized to the whole object', () => {
+  const META = { index: 'main', host: '', source: '', sourcetype: 'app:doc' };
+
+  it('keeps a ~15k-character pretty-printed JSON object whole and untruncated', () => {
+    const items = Array.from({ length: 300 }, (_, i) => `    { "i": ${i}, "note": "item ${i} ${'x'.repeat(10)}" }`);
+    const raw = `{\n  "created": "2024-01-15T10:00:00Z",\n  "items": [\n${items.join(',\n')}\n  ]\n}`;
+    expect(raw.length).toBeGreaterThan(14000);
+    expect(raw.length).toBeLessThan(16000);
+
+    const { sourcetype, suggestions } = scaffoldConfig(raw, META);
+    expect(Number(byKey(suggestions, 'TRUNCATE')?.value)).toBeGreaterThanOrEqual(raw.length);
+    const props = renderStanza(sourcetype, suggestions.filter((s) => s.enabledByDefault));
+    const { result } = runPipeline(raw, { ...META, sourcetype }, props, '');
+    expect(result.events.map((e) => e._raw)).toEqual([raw]);
+    expect(result.events[0]?.fields.meta).toBeUndefined();
+  });
+});
