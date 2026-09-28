@@ -3,45 +3,46 @@ import { useEffect, useRef } from 'react';
 // which eagerly bundles ~80 basic-languages and the TypeScript/JSON/CSS/HTML
 // language services (their main-thread modes *and* web workers, the ts.worker
 // alone being ~7 MB). This app registers its own conf languages, so it needs
-// none of them. vite.config.ts chunks on this exact specifier.
-import * as monaco from 'monaco-editor/editor/editor.api';
-// The editor CONTRIBUTIONS, which editor.api does not pull in. Named one by
-// one rather than via editor.all, which also registers sticky scroll, rename,
-// code lens, parameter hints, semantic tokens and ~40 more contributions this
-// app never enables. Dropping one silently disables its feature, so
-// each line names what depends on it; the e2e suite covers hover, suggest,
-// code actions, folding and find.
-import 'monaco-editor/editor/browser/coreCommands.js';
-import 'monaco-editor/editor/browser/widget/codeEditor/codeEditorWidget.js';
+// none of them. `monaco-editor/editor` is the supported slim entry (0.56+);
+// it already pulls in coreCommands and standaloneStrings.
+import * as monaco from 'monaco-editor/editor';
+// The editor CONTRIBUTIONS, which the API entry does not pull in, via the
+// per-feature entry points. Named one by one rather than via
+// features/register.all, which also registers sticky scroll, rename, code
+// lens, parameter hints, semantic tokens and ~40 more this app never enables.
+// Dropping one silently disables its feature, so each line names what depends
+// on it; the e2e suite covers hover, suggest, code actions, folding and find.
+import 'monaco-editor/features/codeEditor/register';
 // Directive/TIME_FORMAT hovers, and the marker hover on lint squiggles.
-import 'monaco-editor/editor/contrib/hover/browser/hoverContribution.js';
+import 'monaco-editor/features/hover/register';
 // Directive completion; snippets back its InsertAsSnippet items.
+// Deep import: features/suggest/register only brings suggestInlineCompletions,
+// not the SuggestController that drives the completion widget.
 import 'monaco-editor/editor/contrib/suggest/browser/suggestController.js';
-import 'monaco-editor/editor/contrib/snippet/browser/snippetController2.js';
+import 'monaco-editor/features/snippet/register';
 // Quick fixes for miscased keys (splunkConfCodeActions).
-import 'monaco-editor/editor/contrib/codeAction/browser/codeActionContributions.js';
+import 'monaco-editor/features/codeAction/register';
 // F8 / Shift+F8 between lint markers.
-import 'monaco-editor/editor/contrib/gotoError/browser/gotoError.js';
+import 'monaco-editor/features/gotoError/register';
 // Stanza folding (splunkConfFolding).
-import 'monaco-editor/editor/contrib/folding/browser/folding.js';
+import 'monaco-editor/features/folding/register';
 // Ctrl+F / Ctrl+H.
-import 'monaco-editor/editor/contrib/find/browser/findController.js';
+import 'monaco-editor/features/find/register';
 // Plain editing ergonomics users expect from any code editor.
-import 'monaco-editor/editor/contrib/bracketMatching/browser/bracketMatching.js';
-import 'monaco-editor/editor/contrib/clipboard/browser/clipboard.js';
-import 'monaco-editor/editor/contrib/cursorUndo/browser/cursorUndo.js';
-import 'monaco-editor/editor/contrib/linesOperations/browser/linesOperations.js';
-import 'monaco-editor/editor/contrib/multicursor/browser/multicursor.js';
-import 'monaco-editor/editor/contrib/wordHighlighter/browser/wordHighlighter.js';
-import 'monaco-editor/editor/contrib/wordOperations/browser/wordOperations.js';
+import 'monaco-editor/features/bracketMatching/register';
+import 'monaco-editor/features/clipboard/register';
+import 'monaco-editor/features/cursorUndo/register';
+import 'monaco-editor/features/linesOperations/register';
+import 'monaco-editor/features/multicursor/register';
+import 'monaco-editor/features/wordHighlighter/register';
+import 'monaco-editor/features/wordOperations/register';
 // Screen reader: Ctrl+M toggles Tab between indenting and moving focus.
-import 'monaco-editor/editor/contrib/toggleTabFocusMode/browser/toggleTabFocusMode.js';
-import 'monaco-editor/editor/common/standaloneStrings.js';
+import 'monaco-editor/features/toggleTabFocusMode/register';
 // Codicon font and classes (the modifiers stylesheet comes in with suggest
-// and code actions). The package's exports map reaches CSS only through its
-// feature entry points.
+// and code actions).
 import 'monaco-editor/features/codicon/register';
 import type { editor } from 'monaco-editor';
+// Deep import: 0.56+ has no feature entry point for the base editor worker.
 import editorWorker from 'monaco-editor/editor/editor.worker?worker';
 
 // Point Monaco at the locally bundled worker instead of a CDN. Set here, not in

@@ -10,15 +10,6 @@
 
     /* Bundler mode */
     "moduleResolution": "bundler",
-    /* MonacoEditor.tsx imports the slim `editor.api` entry point (TOOL-2). monaco's
-       package `exports` map exposes the .js but no `types` condition for deep
-       subpaths, so TS resolves the value but not the (existing) declarations.
-       Point it at the co-located .d.ts. Vite resolves the real file itself. */
-    "paths": {
-      "monaco-editor/editor/editor.api": [
-        "./node_modules/monaco-editor/esm/vs/editor/editor.api.d.ts"
-      ]
-    },
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",

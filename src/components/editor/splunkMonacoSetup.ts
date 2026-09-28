@@ -1,4 +1,4 @@
-import * as monaco from 'monaco-editor/editor/editor.api';
+import * as monaco from 'monaco-editor/editor';
 import type { languages } from 'monaco-editor';
 import { createCompletionProvider } from '../../monaco/splunkConfCompletion';
 import { createHoverProvider } from '../../monaco/splunkConfHover';
