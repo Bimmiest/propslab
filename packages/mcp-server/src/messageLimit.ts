@@ -15,11 +15,13 @@
  * through once its `\n` arrives, and a line that grows past the limit is
  * dropped: what was held of it is released at once, the rest is skipped up to
  * the next `\n` without being kept, and the server answers with a JSON-RPC
- * error. Lines after it are processed as normal.
+ * error naming the request's id when a bounded scan of the line's ends finds
+ * it (requestId.ts). Lines after it are processed as normal.
  */
 import { Transform, type Readable, type TransformCallback, type Writable } from 'node:stream';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import type { JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js';
+import type { JSONRPCMessage, RequestId } from '@modelcontextprotocol/sdk/types.js';
+import { findRequestId, ID_SCAN_BYTES } from './requestId';
 
 /**
  * Largest single JSON-RPC message the server will parse, in bytes of UTF-8 on
@@ -48,15 +50,35 @@ const NEWLINE = 0x0a;
 /** JSON-RPC "Invalid Request". */
 const INVALID_REQUEST = -32600;
 
+/** The first `n` bytes of `bufs`, copied so no input chunk is retained. */
+function firstBytes(bufs: Buffer[], n: number): Buffer {
+  const out: Buffer[] = [];
+  for (let i = 0, left = n; i < bufs.length && left > 0; left -= out[i].length, i++) {
+    out.push(bufs[i].subarray(0, left));
+  }
+  return Buffer.concat(out);
+}
+
+/** The last `n` bytes of `bufs`, copied likewise. */
+function lastBytes(bufs: Buffer[], n: number): Buffer {
+  const out: Buffer[] = [];
+  for (let i = bufs.length - 1, left = n; i >= 0 && left > 0; left -= out[0].length, i--) {
+    out.unshift(bufs[i].subarray(Math.max(0, bufs[i].length - left)));
+  }
+  return Buffer.concat(out);
+}
+
 /**
  * Transform stream that forwards complete `\n`-terminated lines of at most
  * `maxBytes` and drops longer ones, calling `onOversize` once per dropped line
- * as soon as it crosses the limit.
+ * when its `\n` arrives (or input ends), with the request id if a scan of the
+ * line's first and last `ID_SCAN_BYTES` finds one.
  *
  * Memory is bounded by `maxBytes` plus one input chunk: a line is held only
- * until it is complete or too long, and a dropped line's remainder is counted
- * past, never stored. A trailing line with no `\n` when input ends is
- * discarded — the SDK would never parse it either.
+ * until it is complete or too long, and of a dropped line only those two
+ * windows are kept — the rest is counted past, never stored. A trailing line
+ * with no `\n` when input ends is discarded — the SDK would never parse it
+ * either.
  */
 export class MessageSizeLimiter extends Transform {
   /** The current line so far, while it is within the limit. */
@@ -64,10 +86,13 @@ export class MessageSizeLimiter extends Transform {
   private pendingBytes = 0;
   /** True from the moment the current line crosses the limit until its `\n`. */
   private discarding = false;
+  /** A dropped line's first and last bytes, for `findRequestId`. */
+  private head: Buffer = Buffer.alloc(0);
+  private tail: Buffer = Buffer.alloc(0);
 
   constructor(
     private readonly maxBytes: number,
-    private readonly onOversize: (maxBytes: number) => void,
+    private readonly onOversize: (maxBytes: number, id: RequestId | undefined) => void,
   ) {
     super();
   }
@@ -79,10 +104,12 @@ export class MessageSizeLimiter extends Transform {
       const end = newline === -1 ? chunk.length : newline;
       if (!this.discarding) {
         if (this.pendingBytes + (end - start) > this.maxBytes) {
+          const held = [...this.pending, chunk.subarray(start, end)];
+          this.head = firstBytes(held, ID_SCAN_BYTES);
+          this.tail = lastBytes(held, ID_SCAN_BYTES);
           this.pending = [];
           this.pendingBytes = 0;
           this.discarding = true;
-          this.onOversize(this.maxBytes);
         } else if (newline === -1) {
           this.pending.push(chunk.subarray(start));
           this.pendingBytes += end - start;
@@ -93,9 +120,11 @@ export class MessageSizeLimiter extends Transform {
           this.pending = [];
           this.pendingBytes = 0;
         }
+      } else {
+        this.tail = lastBytes([this.tail, chunk.subarray(start, end)], ID_SCAN_BYTES);
       }
       if (newline === -1) break;
-      this.discarding = false;
+      this.endDiscard();
       start = newline + 1;
     }
     callback();
@@ -104,21 +133,31 @@ export class MessageSizeLimiter extends Transform {
   override _flush(callback: TransformCallback): void {
     this.pending = [];
     this.pendingBytes = 0;
+    this.endDiscard();
     callback();
+  }
+
+  /** Reports the line being dropped, if any, once its end is known. */
+  private endDiscard(): void {
+    if (!this.discarding) return;
+    this.discarding = false;
+    const id = findRequestId(this.head, this.tail);
+    this.head = this.tail = Buffer.alloc(0);
+    this.onOversize(this.maxBytes, id);
   }
 }
 
 /**
- * The response to a dropped message. JSON-RPC 2.0 says a response whose
- * request id could not be determined carries `"id": null`; the SDK's message
- * schema models that as an absent id instead (and rejects `null`), so it is
- * left out — which also lets an SDK-based client parse the error and report
- * it rather than fail on it. Finding the real id would mean parsing the very
- * message being refused for its size.
+ * The response to a dropped message, carrying the request's `id` when the
+ * limiter recovered it, so the client can settle that call at once. Without
+ * one, JSON-RPC 2.0 says `"id": null`; the SDK's message schema models that
+ * as an absent id instead (and rejects `null`), so it is left out — which
+ * still lets an SDK-based client parse the error and report it.
  */
-export function oversizeMessageError(maxBytes: number): JSONRPCMessage {
+export function oversizeMessageError(maxBytes: number, id?: RequestId): JSONRPCMessage {
   return {
     jsonrpc: '2.0',
+    ...(id === undefined ? {} : { id }),
     error: {
       code: INVALID_REQUEST,
       message:
@@ -138,8 +177,8 @@ export function createStdioTransport(
   stdout: Writable = process.stdout,
   maxBytes: number = MAX_MESSAGE_BYTES,
 ): StdioServerTransport {
-  const limiter = new MessageSizeLimiter(maxBytes, (limit) => {
-    transport.send(oversizeMessageError(limit)).catch(() => {});
+  const limiter = new MessageSizeLimiter(maxBytes, (limit, id) => {
+    transport.send(oversizeMessageError(limit, id)).catch(() => {});
   });
   // pipe() forwards data and end, not errors; the transport listens for
   // errors on the stream it reads, which is now the limiter.

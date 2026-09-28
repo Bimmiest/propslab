@@ -164,9 +164,14 @@ reviewed. `docs/engine.md`'s closing section is the spec this implements:
   front of the transport forwards each newline-delimited message only once
   it is complete and within the limit; a longer one is dropped as it
   arrives — its remainder skipped without being kept — and answered with a
-  JSON-RPC `-32600` error (`data.error: "message_too_large"`, no `id`,
-  since finding it would mean parsing the message), after which the
-  messages behind it are processed as normal. 8 MiB carries the largest
+  JSON-RPC `-32600` error (`data.error: "message_too_large"`), after which
+  the messages behind it are processed as normal. The error carries the
+  request's `id` (#402), so the client's call fails at once instead of
+  waiting out its own timeout: the limiter keeps only the first and last
+  4 KiB of a dropped line and scans them — not parses — for a top-level
+  `id` (integer or string), at the head for clients that write it first and
+  at the tail for those that write it last, as the SDK's own client does.
+  Only if neither window shows it conclusively is the `id` left out. 8 MiB carries the largest
   call the schemas accept (3M characters of sample and conf) with JSON
   escaping doubling every character, plus room for non-ASCII. The server's
   own heap is therefore bounded per message by that limit, not only once a
