@@ -297,7 +297,7 @@ function shouldLineMergeFor(directives: ConfDirective[]): boolean {
 
 /** The line-merging rules of a stanza, compiled once per breakLines call. */
 interface MergeRules {
-  /** BREAK_ONLY_BEFORE, anchored to the start of a segment. */
+  /** BREAK_ONLY_BEFORE, searched for anywhere in a segment. */
   breakOnlyBefore: SplunkRegex | null;
   breakOnlyBeforeDate: boolean;
   lineStartsWithDate: (line: string) => boolean;
@@ -314,10 +314,9 @@ function compileBreakPattern(
   key: 'BREAK_ONLY_BEFORE' | 'MUST_BREAK_AFTER' | 'MUST_NOT_BREAK_AFTER',
   directives: ConfDirective[],
   diagnostics: ValidationDiagnostic[] | undefined,
-  toSource: (pattern: string) => string = (pattern) => pattern,
 ): SplunkRegex | null {
   const pattern = getDirective(directives, key);
-  const compiled = pattern ? safeRegex(toSource(pattern)) : null;
+  const compiled = pattern ? safeRegex(pattern) : null;
   // A pattern that will not compile silently drops the option and falls back to
   // date-only breaking, changing every event boundary with no indication why.
   // LINE_BREAKER already warns in the same situation; these must too.
@@ -326,10 +325,11 @@ function compileBreakPattern(
 }
 
 function readMergeRules(directives: ConfDirective[], diagnostics?: ValidationDiagnostic[]): MergeRules {
-  // Splunk matches BREAK_ONLY_BEFORE at the start of each segment (line-anchored).
-  const breakOnlyBefore = compileBreakPattern(
-    'BREAK_ONLY_BEFORE', directives, diagnostics, (pattern) => '^(?:' + pattern + ')',
-  );
+  // Not anchored: a line that matches anywhere starts a new event, and the
+  // event starts at the beginning of that line, not at the match. Checked on
+  // Splunk 10.4.0 (#323): BREAK_ONLY_BEFORE = EVENT broke before
+  // `a EVENT 2 is mid-line` and before `  EVENT 3`.
+  const breakOnlyBefore = compileBreakPattern('BREAK_ONLY_BEFORE', directives, diagnostics);
   // Splunk default: BREAK_ONLY_BEFORE_DATE=true when SHOULD_LINEMERGE=true.
   // Only disabled when explicitly set to a false spelling.
   const breakOnlyBeforeDate = parseSplunkBool(getDirective(directives, 'BREAK_ONLY_BEFORE_DATE'), true);
