@@ -3,14 +3,18 @@ import { test, expect, openApp, loadExample, pasteInto } from './fixtures';
 
 /**
  * Performance budget for a large input: 20k events pasted into the raw
- * log, the way a user brings one in. Budgets are several times what a local
- * run measures (noted beside each), so they catch a regression of kind — an
- * accidental O(n²), a render over every event instead of a page — rather than
- * CI jitter.
+ * log, the way a user brings one in. Budgets are about twice the slowest of
+ * several local runs (noted beside each): loose enough for CI jitter and GC
+ * pauses, tight enough that a regression of kind — an accidental O(n²), a
+ * render over every event instead of a page — fails rather than hides.
  */
 const EVENTS = 20_000;
-const PIPELINE_BUDGET_MS = 20_000; // measured 3.1–4.5 s, paste to status bar
-const TAB_BUDGET_MS = 3_000; // measured 10–790 ms per tab; GC pauses make it noisy
+// Measured 1.7–4.6 s over eight runs, and up to 5.5 s on a loaded machine;
+// paste to status bar.
+const PIPELINE_BUDGET_MS = 12_000;
+// Measured 4–880 ms per tab over eight runs, rarely above 250; the outliers
+// are GC pauses, which land on whichever tab is switching.
+const TAB_BUDGET_MS = 1_500;
 
 /**
  * The pipeline caps input at 1 MB (pipeline.ts), so 20k events need lines
@@ -105,13 +109,118 @@ test('a 20k-event paste stays within the pipeline and tab-switch budgets', async
 });
 
 /**
+ * Many regexes against large events: the shape #415 and #427 regressed on,
+ * which the 20k-event test above cannot see because its events are short and
+ * its config has one EXTRACT. 800 events of ~1.2 kB (near the 1 MB input cap),
+ * each run through 30 EXTRACTs, 4 REPORTs with MV_ADD and 3 index-time
+ * TRANSFORMS, one of them rewriting _raw.
+ */
+const REGEX_EVENTS = 800;
+// Measured 1.7–2.9 s, paste to status bar, and up to 5.1 s on a loaded machine.
+const REGEX_PIPELINE_BUDGET_MS = 10_000;
+
+function largeLines(count: number): string {
+  const levels = ['INFO', 'WARN', 'ERROR', 'DEBUG'];
+  const words = 'alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november'.split(' ');
+  const lines: string[] = [];
+  for (let i = 0; i < count; i++) {
+    const kv = Array.from({ length: 40 }, (_, k) => `k${k}=${(i * 31 + k * 7) % 1000}`).join(' ');
+    const msg = Array.from({ length: 120 }, (_, w) => words[(i + w) % words.length]).join(' ');
+    lines.push(
+      `ts=${1_700_000_000 + i} host=web${i % 20} level=${levels[i % 4]} user=u${i % 50} ` +
+      `src=10.${i % 256}.${(i * 3) % 256}.${(i * 7) % 256} card=4111111111${String(100000 + i).slice(-6)} ` +
+      `path=/api/v${i % 3}/items/${i % 97}/detail.json ${kv} msg="${msg}"`,
+    );
+  }
+  return lines.join('\n');
+}
+
+const REGEX_PROPS = [
+  '[access_combined]',
+  'SHOULD_LINEMERGE = false',
+  'TIME_PREFIX = ^ts=',
+  'TIME_FORMAT = %s',
+  'MAX_TIMESTAMP_LOOKAHEAD = 10',
+  'TRUNCATE = 0',
+  'TRANSFORMS-idx = t_mask, t_host, t_level',
+  ...Array.from({ length: 25 }, (_, k) => `EXTRACT-k${k} = \\bk${k}=(?<f${k}>\\d+)`),
+  'EXTRACT-src = src=(?<src_ip>\\d{1,3}(?:\\.\\d{1,3}){3})',
+  'EXTRACT-path = path=(?<uri_path>/(?:[\\w.-]+/)*[\\w.-]+)',
+  'EXTRACT-msg = msg="(?<message>[^"]*)"',
+  'EXTRACT-last = msg=".*?(?<last_word>\\w+)"$',
+  'EXTRACT-sev = (?i)\\blevel=(?<severity>error|warn(?:ing)?|info|debug)\\b',
+  'REPORT-r = r_pairs, r_words, r_user, r_api',
+].join('\n');
+
+const REGEX_TRANSFORMS = `[t_mask]
+REGEX = ^(.*card=)\\d{12}(\\d{4})(.*)$
+FORMAT = $1XXXXXXXXXXXX$2$3
+DEST_KEY = _raw
+
+[t_host]
+REGEX = host=(\\S+)
+FORMAT = host::$1
+DEST_KEY = MetaData:Host
+
+[t_level]
+REGEX = level=(\\w+)
+FORMAT = lvl::$1
+WRITE_META = true
+
+[r_pairs]
+REGEX = \\b(k\\d+)=(\\d+)
+FORMAT = $1::$2
+MV_ADD = true
+
+[r_words]
+REGEX = \\b(?<word>(?:alpha|echo|kilo)\\w*)
+MV_ADD = true
+
+[r_user]
+REGEX = user=(\\w+)
+FORMAT = account::$1
+
+[r_api]
+REGEX = /api/v(\\d)/items/(\\d+)
+FORMAT = api_version::$1 item_id::$2`;
+
+test('a regex-heavy config over large events stays within its budget', async ({ page, complaints }) => {
+  test.setTimeout(120_000);
+  await openApp(page);
+  await loadExample(page, /Apache Access Log/i);
+  await pasteInto(page, 1, REGEX_PROPS);
+  await pasteInto(page, 2, REGEX_TRANSFORMS);
+
+  const started = Date.now();
+  await pasteInto(page, 0, largeLines(REGEX_EVENTS));
+  await expect(page.getByText(`${REGEX_EVENTS} events`, { exact: true })).toBeVisible({ timeout: REGEX_PIPELINE_BUDGET_MS });
+  const pipelineMs = Date.now() - started;
+
+  const timings: Record<string, number> = {};
+  for (const name of ['Fields', 'Pipeline', 'Preview']) timings[name] = await timeTabSwitch(page, name);
+  // The config did what it says, so the budget is timing real work.
+  await page.getByRole('tab', { name: /^Fields$/ }).click();
+  await page.getByRole('textbox', { name: 'Search fields' }).fill('item_id');
+  await expect(page.getByRole('cell', { name: 'item_id', exact: true })).toBeVisible();
+
+  const report = { pipelineMs, ...timings };
+  console.log(`perf (regex-heavy, ${REGEX_EVENTS} events): ${JSON.stringify(report)}`);
+  test.info().annotations.push({ type: 'perf', description: JSON.stringify(report) });
+  for (const [name, ms] of Object.entries(timings)) {
+    expect.soft(ms, `${name} tab switch (ms)`).toBeLessThan(TAB_BUDGET_MS);
+  }
+  expect(complaints.all, 'browser errors under a regex-heavy config').toEqual([]);
+});
+
+/**
  * One JSON event 3,000 fields wide. The Fields table and the Extractions
  * sidebar are windowed (#454); before that each rendered a row per field.
  */
 const WIDE_FIELDS = 3_000;
-// Measured 1.2–1.45 s. Not the sidebar, which is windowed: the event card
-// highlights all 3,000 fields in one raw string.
-const WIDE_EXTRACTIONS_BUDGET_MS = 3_000;
+// Measured 1.2–1.45 s, and up to 2.7 s on a loaded machine. Not the sidebar,
+// which is windowed: the event card highlights all 3,000 fields in one raw
+// string.
+const WIDE_EXTRACTIONS_BUDGET_MS = 5_000;
 
 test('a 3,000-field JSON event renders a window of the Fields table and sidebar', async ({ page, complaints }) => {
   test.setTimeout(120_000);
