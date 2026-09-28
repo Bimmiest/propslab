@@ -13,7 +13,7 @@ import { SAMPLE_CONFIGS } from '../../engine/sampleData';
 import { RawTab } from './tabs/RawTab';
 import { HighlightedTab } from './tabs/HighlightedTab';
 import { DiffTab } from './tabs/DiffTab';
-import { TimestampTab } from './tabs/TimestampTab';
+import { TimestampTab } from './tabs/timestamp';
 import { RegexTab } from './tabs/regex';
 import { CimModelsTab } from './tabs/CimModelsTab';
 import { EffectiveConfigTab } from './tabs/EffectiveConfigTab';

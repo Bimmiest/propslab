@@ -4,7 +4,7 @@
 // reference disclosure has to announce its state.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
-import { TimestampTab } from '../TimestampTab';
+import { TimestampTab } from '../timestamp';
 import { useAppStore } from '../../../../store/useAppStore';
 import type { EnrichedEvent } from '../../PreviewPanel';
 
