@@ -25,13 +25,14 @@ function isWs(c: string | undefined): boolean {
 const NUMBER_AT = /-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/y;
 const NUMBER_AT_END = /-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$/;
 
+// Both stop at either end of `s`, where `s[i]` is undefined.
 function skipWs(s: string, i: number): number {
-  while (i < s.length && isWs(s[i])) i++;
+  while (isWs(s[i])) i++;
   return i;
 }
 
 function skipWsBack(s: string, i: number): number {
-  while (i >= 0 && isWs(s[i])) i--;
+  while (isWs(s[i])) i--;
   return i;
 }
 
@@ -117,7 +118,7 @@ export function idFromHead(head: string): RequestId | undefined {
 /** True when the `"` at `s[i]` is not escaped. */
 function unescapedQuote(s: string, i: number): boolean {
   let slashes = 0;
-  while (i - 1 - slashes >= 0 && s[i - 1 - slashes] === '\\') slashes++;
+  while (s[i - 1 - slashes] === '\\') slashes++;
   return slashes % 2 === 0;
 }
 

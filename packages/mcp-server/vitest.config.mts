@@ -31,9 +31,9 @@ export default defineConfig({
       // config, raise them when tests raise coverage; never lower them to
       // make a branch green.
       thresholds: {
-        statements: 91,
-        branches: 84,
-        functions: 92,
+        statements: 93,
+        branches: 88,
+        functions: 94,
         lines: 93,
       },
     },

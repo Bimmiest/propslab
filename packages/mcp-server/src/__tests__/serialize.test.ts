@@ -5,7 +5,7 @@ import type {
   ValidationDiagnostic,
 } from '../../../../src/engine/types';
 import { serializeSimulation } from '../serialize';
-import { MAX_PAYLOAD_BYTES, responseBytes } from '../responseBudget';
+import { MAX_PAYLOAD_BYTES, MAX_RESPONSE_BYTES, responseBytes } from '../responseBudget';
 
 // Everything in a simulate response that grows with the sample is bounded.
 
@@ -148,5 +148,58 @@ describe('serializeSimulation', () => {
     expect(out).not.toHaveProperty('truncationNote');
     expect(out).not.toHaveProperty('diagnosticCount');
     expect(out.processingSteps).toHaveLength(1);
+  });
+
+  it('shapes an event: ISO _time, and trace snapshots only when asked for', () => {
+    const e = { ...event(0, 3, 1), _time: new Date(0) };
+    const step = { processor: 'step0', phase: 'index-time', description: 'did something' };
+    const shaped = {
+      _raw: '0:xxx',
+      _time: '1970-01-01T00:00:00.000Z',
+      metadata,
+      fields: {},
+      indexedFields: {},
+      lineNumbers: { start: 1, end: 1 },
+    };
+    const without = serializeSimulation(result([e]), [], { maxEvents: 20, includeSnapshots: false });
+    expect(without.events).toStrictEqual([{ ...shaped, processingTrace: [step] }]);
+    expect(without.processingSteps).toStrictEqual([step]);
+    const withSnapshots = serializeSimulation(result([e]), [], { maxEvents: 20, includeSnapshots: true });
+    const full = { ...step, inputSnapshot: '0:xxx', outputSnapshot: '0:xxx' };
+    expect(withSnapshots.events).toStrictEqual([{ ...shaped, processingTrace: [full] }]);
+  });
+
+  it('says which limit cut the events, and what to change', () => {
+    const events = Array.from({ length: 10 }, (_, i) => event(i, 1, 1));
+    const byMaxEvents = serializeSimulation(result(events), [], { maxEvents: 2, includeSnapshots: false });
+    expect(byMaxEvents.truncationNote).toBe(
+      'Only the first 2 of 10 events are returned; raise max_events or use a smaller sample ' +
+        'to see the rest. processingSteps covers the returned events only.',
+    );
+    const byCap = serializeSimulation(result([event(0, MAX_PAYLOAD_BYTES, 0)]), [], {
+      maxEvents: 20,
+      includeSnapshots: false,
+    });
+    expect(byCap.truncationNote).toBe(
+      `Only the first 0 of 1 events are returned: the response is capped at ${MAX_RESPONSE_BYTES} ` +
+        'bytes. Use include_snapshots=false, a lower max_events or a smaller sample to see more ' +
+        'of each event. processingSteps covers the returned events only.',
+    );
+  });
+
+  it('says how many diagnostics were cut', () => {
+    const diagnostics: ValidationDiagnostic[] = Array.from({ length: 50_000 }, (_, i) => ({
+      level: 'warning',
+      message: `diagnostic ${i} ${'y'.repeat(100)}`,
+      file: 'props.conf',
+    }));
+    const out = serializeSimulation(result([event(0, 10, 1)]), diagnostics, {
+      maxEvents: 20,
+      includeSnapshots: false,
+    });
+    expect(out.truncationNote).toBe(
+      `Only the first ${out.diagnostics.length} of 50000 diagnostics are returned, to keep the ` +
+        'response under its size cap.',
+    );
   });
 });

@@ -52,15 +52,10 @@ const INVALID_REQUEST = -32600;
 
 /** The first `n` bytes of `bufs`, copied so no input chunk is retained. */
 function firstBytes(bufs: Buffer[], n: number): Buffer {
-  const out: Buffer[] = [];
-  let left = n;
-  for (const buf of bufs) {
-    if (left <= 0) break;
-    const part = buf.subarray(0, left);
-    out.push(part);
-    left -= part.length;
-  }
-  return Buffer.concat(out);
+  // concat copies only up to the length it is given (and zero-fills past the
+  // end of the input, which the min rules out).
+  const total = bufs.reduce((sum, b) => sum + b.length, 0);
+  return Buffer.concat(bufs, Math.min(n, total));
 }
 
 /** The last `n` bytes of `bufs`, copied likewise. */

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { spawn } from 'node:child_process';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
@@ -59,6 +59,14 @@ describe('MessageSizeLimiter', () => {
     const exact = await limit(4, ['ab', 'c', 'd\n']);
     expect(exact.passed).toEqual(['abcd\n']);
     expect(exact.oversize).toBe(0);
+  });
+
+  it('counts a line that starts mid-chunk from where it starts', async () => {
+    // "bbbb" follows a newline at offset 2, then four more bytes: eight in
+    // all, within ten.
+    const { passed, oversize } = await limit(10, ['a\nbbbb', 'bbbb\n']);
+    expect(passed).toEqual(['a\n', 'bbbbbbbb\n']);
+    expect(oversize).toBe(0);
   });
 
   it('keeps discarding across chunks until the newline, then resumes mid-chunk', async () => {
@@ -126,7 +134,44 @@ describe('MessageSizeLimiter', () => {
   });
 });
 
+describe('oversizeMessageError', () => {
+  it('names the request when its id is known, and leaves `id` out entirely when not', () => {
+    const error = {
+      code: -32600,
+      message:
+        'Message exceeds 64 bytes and was discarded unparsed; send smaller conf and sample text.',
+      data: { error: 'message_too_large', max_message_bytes: 64 },
+    };
+    expect(oversizeMessageError(64, 'req-1')).toStrictEqual({ jsonrpc: '2.0', id: 'req-1', error });
+    // Absent, not `id: undefined`: the SDK's schema rejects a present null id.
+    expect(oversizeMessageError(64)).toStrictEqual({ jsonrpc: '2.0', error });
+  });
+});
+
 describe('size-limited stdio transport', () => {
+  it("passes a stdin error on to the transport's onerror", async () => {
+    const stdin = new PassThrough();
+    const transport = createStdioTransport(stdin, new PassThrough(), 64);
+    const errors: Error[] = [];
+    transport.onerror = (e) => errors.push(e);
+    await transport.start();
+    const boom = new Error('stdin failed');
+    stdin.emit('error', boom);
+    await new Promise((r) => setImmediate(r));
+    expect(errors).toEqual([boom]);
+    await transport.close();
+  });
+
+  it('closes the transport when stdin ends', async () => {
+    const stdin = new PassThrough();
+    const transport = createStdioTransport(stdin, new PassThrough(), 64);
+    let closed = false;
+    transport.onclose = () => (closed = true);
+    await transport.start();
+    stdin.end();
+    await vi.waitFor(() => expect(closed).toBe(true));
+  });
+
   it('answers an oversize message with an error and processes the next one', async () => {
     const stdin = new PassThrough();
     const stdout = new PassThrough();

@@ -20,6 +20,9 @@ on:
       - 'src/engine/**'
       - 'src/utils/strftime.ts'
       - 'src/utils/splunkRegex.ts'
+      - 'packages/mcp-server/src/requestId.ts'
+      - 'packages/mcp-server/src/messageLimit.ts'
+      - 'packages/mcp-server/src/serialize.ts'
       - 'stryker.config.mjs'
       - 'vitest.config.ts'
       - 'vitest.stryker.config.ts'
@@ -53,9 +56,20 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            packages/mcp-server/package-lock.json
 
       - name: Install dependencies
         run: npm ci
+
+      # The run includes the MCP server's tests for the modules it mutates
+      # there, and Stryker's first pass runs every included test: they import
+      # the package's SDK, and one of them spawns the built server.
+      - name: Install and build the MCP server
+        run: |
+          npm ci --prefix packages/mcp-server
+          npm run build --prefix packages/mcp-server
 
       # The same scope and exclusions as `mutate` in stryker.config.mjs: tests, type-only
       # modules, worker entry points and data tables are never mutated. Deleted
@@ -70,6 +84,7 @@ jobs:
           # `src/engine/**/*.ts` alone skips src/engine/pipeline.ts and its
           # neighbours.
           files=$(git diff --name-only --diff-filter=AM "origin/$BASE_REF...HEAD" -- 'src/engine/*.ts' 'src/engine/**/*.ts' src/utils/strftime.ts src/utils/splunkRegex.ts \
+              packages/mcp-server/src/requestId.ts packages/mcp-server/src/messageLimit.ts packages/mcp-server/src/serialize.ts \
             | grep -vE '(/__tests__/|\.test\.ts$|^src/engine/types\.ts$|^src/engine/scaffold/types\.ts$|^src/engine/[^/]*Worker\.ts$|^src/engine/cim/cimModelsData\.ts$|^src/engine/registry/|^src/engine/directiveSupport\.ts$)' \
             | paste -sd, - || true)
           # A PR that only touches the mutation setup (Stryker or vitest config,

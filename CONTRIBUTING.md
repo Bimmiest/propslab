@@ -50,12 +50,15 @@ A few things worth knowing:
 
 ## Mutation testing
 
-Coverage says a line ran; it does not say a test would notice the line being wrong. [Stryker](https://stryker-mutator.io/) answers that by making small edits to `src/engine/**` and the two utils it runs on (`strftime.ts`, `splunkRegex.ts`) — flipping a `<`, emptying a string, deleting a call — and rerunning the tests that reach each one. A mutant no test fails on has *survived*, and marks behaviour nothing asserts.
+Coverage says a line ran; it does not say a test would notice the line being wrong. [Stryker](https://stryker-mutator.io/) answers that by making small edits to `src/engine/**`, the two utils it runs on (`strftime.ts`, `splunkRegex.ts`), and three pure modules of the MCP server (`requestId.ts`, `messageLimit.ts`, `serialize.ts`) — flipping a `<`, emptying a string, deleting a call — and rerunning the tests that reach each one. A mutant no test fails on has *survived*, and marks behaviour nothing asserts.
 
 ```bash
 npm run test:mutation                  # full run; about 75 minutes on 4 cores
 npm run test:mutation -- --mutate src/engine/processors/kvMode.ts   # one file, a few minutes
+npm run test:mutation -- --mutate packages/mcp-server/src/requestId.ts
 ```
+
+Every run includes those modules' tests, which need the MCP server installed and built (`npm ci --prefix packages/mcp-server && npm run build --prefix packages/mcp-server`): one of them talks to the built server. Those three score 90.9% together.
 
 Open `reports/mutation/mutation.html` for the survivors, line by line. The engine scores 79.6%, and `thresholds.break` in [`stryker.config.mjs`](stryker.config.mjs) holds it at 78% — a floor and a ratchet, like coverage.
 
