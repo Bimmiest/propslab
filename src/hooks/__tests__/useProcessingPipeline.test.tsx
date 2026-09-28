@@ -22,9 +22,25 @@
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { useProcessingPipeline } from '../useProcessingPipeline';
-import { LOAD_WAIT_FACTOR } from '../workerLifecycle';
+import { LOAD_WAIT_FACTOR, type ManagedWorkerConfig } from '../workerLifecycle';
 import { useAppStore } from '../../store/useAppStore';
 import type { PipelineWorkerRequest } from '../../engine/pipelineWorker';
+
+// The real lifecycle, with each config kept so a test can hand the hook's
+// policy a callback the lifecycle's own timing no longer produces.
+const lifecycle = vi.hoisted(() => ({
+  configs: [] as ManagedWorkerConfig<PipelineWorkerRequest, { id: number }>[],
+}));
+vi.mock('../workerLifecycle', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../workerLifecycle')>();
+  return {
+    ...actual,
+    createManagedWorker: (config: ManagedWorkerConfig<PipelineWorkerRequest, { id: number }>) => {
+      lifecycle.configs.push(config);
+      return actual.createManagedWorker(config);
+    },
+  };
+});
 
 const initial = useAppStore.getState();
 
@@ -328,6 +344,60 @@ describe('useProcessingPipeline', () => {
     expect(state.processingResult).toBeNull();
     expect(state.isProcessing).toBe(false);
     expect(state.validationDiagnostics[0]?.message).toMatch(/no replacement worker could be started/);
+  });
+
+  describe('an input that crashed a worker, replayed on one slow to load (#421)', () => {
+    /** Answer a first run, then crash worker 1 on an edit; its replay goes to worker 2. */
+    function crashIntoReplay() {
+      vi.useFakeTimers();
+      vi.stubGlobal('Worker', FakeWorker);
+      seed();
+      renderHook(() => useProcessingPipeline());
+      act(() => FakeWorker.instances[0]!.answer(FakeWorker.instances[0]!.posted[0]!.id));
+      act(() => useAppStore.setState({ rawData: 'crashy' }));
+      act(() => void vi.advanceTimersByTime(300)); // debounce
+      act(() => FakeWorker.instances[0]!.crash('out of memory'));
+      const replay = FakeWorker.instances[1]!.posted[0]!;
+      expect(replay.rawData).toBe('crashy');
+      return { replay, policy: lifecycle.configs[lifecycle.configs.length - 1]! };
+    }
+
+    async function expectNotRunInline() {
+      vi.useRealTimers();
+      await settleInline();
+      const state = useAppStore.getState();
+      expect(state.processingResult).toBeNull();
+      expect(state.isProcessing).toBe(false);
+      expect(state.pipelineOnMainThread).toBe(false);
+      expect(state.validationDiagnostics[0]?.message).toMatch(/no replacement worker could be started/);
+    }
+
+    it('is not run inline when the replacement outlasts a run budget and then fails to load', async () => {
+      const { replay } = crashIntoReplay();
+      // Past the run budget: the load is not the replay's to time.
+      act(() => void vi.advanceTimersByTime(5_000));
+      expect(FakeWorker.instances[1]!.terminated).toBe(false);
+      act(() => FakeWorker.instances[1]!.failToLoad());
+      expect(FakeWorker.instances[2]!.posted).toEqual([replay]);
+      act(() => FakeWorker.instances[2]!.failToLoad());
+      await expectNotRunInline();
+    });
+
+    it('is not run inline after a timeout before load, whatever the retry count', async () => {
+      // A timeout with loaded=false, as the lifecycle reported before #420:
+      // it must neither reset the retry count nor mark the replay unrun.
+      const { replay, policy } = crashIntoReplay();
+      act(() => policy.onTimeout(replay, [], false));
+      act(() => FakeWorker.instances[1]!.failToLoad());
+      act(() => FakeWorker.instances[2]!.failToLoad());
+      expect(FakeWorker.instances).toHaveLength(3);
+      await expectNotRunInline();
+
+      // With the cap spent and the retry count cleared by giving up, only the
+      // sticky crash mark stands between a late timeout and the main thread.
+      act(() => policy.onTimeout(replay, [], false));
+      await expectNotRunInline();
+    });
   });
 
   it('stops rebuilding a worker whose script throws before it is given anything (#326)', () => {
