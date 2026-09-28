@@ -18,6 +18,7 @@ export function AppShell() {
   useProcessingPipeline();
 
   const scaffoldOpen = useAppStore((s) => s.scaffoldOpen);
+  const toggleScaffold = useAppStore((s) => s.toggleScaffold);
   const activeView = useAppStore((s) => s.activeView);
   const isMobile = useMediaQuery('(max-width: 767px)');
 
@@ -34,12 +35,27 @@ export function AppShell() {
 
   return (
     <div className="h-full flex flex-col">
-      <Header />
+      {/* Chrome and overlays get boundaries of their own, so one of them
+          failing (the scaffold chunk gone after a redeploy, say) costs a
+          one-line alert rather than the editors and everything typed in them. */}
+      <ErrorBoundary panelName="Header" variant="inline">
+        <Header />
+      </ErrorBoundary>
       <FirstRunBanner />
-      <HelpPanel />
-      <SettingsPanel />
-      <CommandPalette />
-      {scaffoldOpen && <ScaffoldModal />}
+      <ErrorBoundary panelName="Help" variant="inline">
+        <HelpPanel />
+      </ErrorBoundary>
+      <ErrorBoundary panelName="Settings" variant="inline">
+        <SettingsPanel />
+      </ErrorBoundary>
+      <ErrorBoundary panelName="Command palette" variant="inline">
+        <CommandPalette />
+      </ErrorBoundary>
+      {scaffoldOpen && (
+        <ErrorBoundary panelName="Scaffold" variant="inline" onDismiss={toggleScaffold}>
+          <ScaffoldModal />
+        </ErrorBoundary>
+      )}
       <div className="flex-1 min-h-0 flex">
         {!isMobile && <ActivityRail />}
         <main id="main-content" className="flex-1 min-w-0">

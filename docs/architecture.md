@@ -55,7 +55,7 @@ The whole editor loads lazily: `LazyEditors.tsx` is the only thing the shell imp
 - Clickable spans and divs that cannot be `<button>`s go through `components/ui/pressable.ts`, which adds the tab stop, `role="button"` and Enter/Space. The highlighted spans inside raw event text are the deliberate exception: one tab stop per value would bury the page, and the field sidebar offers the same pin action.
 - Raw-text selection (`SelectableRaw`) has a keyboard path: arrows select tokens, Shift extends, Shift+F10 or the Menu key opens the row's context menu.
 - `eslint-plugin-jsx-a11y` is not wired into lint: its peer range ends at eslint 9. Tracked in #302.
-- Panel-level `ErrorBoundary` with "Try Again" recovery.
+- Panel-level `ErrorBoundary` with "Try Again" recovery; the header and each overlay have their own, and lazy chunks load through `retryableLazy` so "Try Again" refetches a chunk that failed. A root boundary catches the rest and offers "Copy config" (inputs are not persisted) and "Reload".
 
 ### Overlays
 
