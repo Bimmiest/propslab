@@ -4,6 +4,9 @@ import { useAppStore } from '../../store/useAppStore';
 import { Icon } from '../ui/Icon';
 import { PIPELINE_STAGES, PHASE_LABELS, type PipelineStage } from '../../engine/pipelineStages';
 
+/** A translucent tint of a CSS-variable colour; appending hex alpha to `var(...)` is invalid CSS. */
+const tint = (color: string, pct: number) => `color-mix(in srgb, ${color} ${pct}%, transparent)`;
+
 export function HelpPanel() {
   const helpOpen = useAppStore((s) => s.helpOpen);
   const toggleHelp = useAppStore((s) => s.toggleHelp);
@@ -161,7 +164,7 @@ function StageCard({
     <div
       className="rounded-lg border overflow-hidden transition-colors"
       style={{
-        borderColor: isExpanded ? phaseColor + '60' : 'var(--color-border-subtle)',
+        borderColor: isExpanded ? tint(phaseColor, 38) : 'var(--color-border-subtle)',
         backgroundColor: 'var(--color-bg-elevated)',
       }}
     >
@@ -173,7 +176,7 @@ function StageCard({
         {/* Step badge */}
         <div
           className="shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold"
-          style={{ backgroundColor: phaseColor + '20', color: phaseColor }}
+          style={{ backgroundColor: tint(phaseColor, 13), color: phaseColor }}
         >
           {stage.step}
         </div>
@@ -182,7 +185,7 @@ function StageCard({
           <span className="text-xs font-semibold text-[var(--color-text-primary)]">{stage.name}</span>
           <span
             className="ml-2 text-[10px] px-1.5 py-0.5 rounded font-medium"
-            style={{ backgroundColor: phaseColor + '15', color: phaseColor }}
+            style={{ backgroundColor: tint(phaseColor, 8), color: phaseColor }}
           >
             {PHASE_LABELS[stage.phase]}
           </span>

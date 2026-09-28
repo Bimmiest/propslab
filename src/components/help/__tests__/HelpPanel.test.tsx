@@ -43,6 +43,16 @@ describe('HelpPanel', () => {
     expect(useAppStore.getState().helpOpen).toBe(false);
   });
 
+  it('tints stage badges with valid CSS rather than hex alpha glued onto var()', () => {
+    renderWithSearch();
+    act(() => useAppStore.getState().toggleHelp());
+    const [badge] = screen.getAllByText(/^\d+$/) as [HTMLElement];
+    // jsdom drops an invalid declaration, so a surviving value is a valid one.
+    expect(badge.style.backgroundColor).toMatch(/^color-mix\(/);
+    const html = screen.getByRole('dialog').innerHTML;
+    expect(html).not.toMatch(/var\(--[\w-]+\)\d/);
+  });
+
   it('carries the data-state hook the slide animation keys on', () => {
     renderWithSearch();
     act(() => useAppStore.getState().toggleHelp());
