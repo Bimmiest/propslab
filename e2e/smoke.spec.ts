@@ -140,6 +140,57 @@ test.describe('monaco contributions', () => {
   });
 });
 
+test.describe('editor state across remounts', () => {
+  // Collapsing a panel remounts the editors; each file's model is kept, so
+  // what was typed before the collapse can still be undone after it (#453).
+  test('undo still works after props.conf is collapsed and expanded', async ({ page, complaints }) => {
+    await openApp(page);
+    const props = () => page.locator('.monaco-editor').nth(1);
+    await props().click();
+    await page.keyboard.type('[web]\nTRUNCATE = 1');
+    await expect(props().locator('.view-lines')).toContainText('TRUNCATE = 1');
+
+    await page.getByTitle('Collapse props.conf').click();
+    await expect(page.locator('.monaco-editor')).toHaveCount(2);
+    await page.getByTitle('Expand props.conf').click();
+    await expect(page.locator('.monaco-editor')).toHaveCount(3);
+    await expect(props().locator('.view-lines')).toContainText('TRUNCATE = 1');
+
+    await props().locator('.view-lines').click();
+    await expect(async () => {
+      await page.keyboard.press('Control+z');
+      await expect(props().locator('.view-lines')).not.toContainText('TRUNCATE', { timeout: 500 });
+    }).toPass({ timeout: 10_000 });
+    expect(complaints.all).toEqual([]);
+  });
+
+  test('a close or reload asks first only once the session is edited', async ({ page }) => {
+    await openApp(page);
+    let prompts = 0;
+    page.on('dialog', (dialog) => {
+      if (dialog.type() === 'beforeunload') prompts++;
+      void dialog.dismiss();
+    });
+    // Chromium shows the prompt only after a user gesture on the page.
+    await page.locator('.monaco-editor').nth(1).click();
+    await page.close({ runBeforeUnload: true });
+    await expect.poll(() => page.isClosed()).toBe(true);
+    expect(prompts).toBe(0);
+  });
+
+  test('a close with edits in props.conf is held for confirmation', async ({ page }) => {
+    await openApp(page);
+    await page.locator('.monaco-editor').nth(1).click();
+    await page.keyboard.type('[web]');
+    const dialog = page.waitForEvent('dialog');
+    await page.close({ runBeforeUnload: true });
+    const shown = await dialog;
+    expect(shown.type()).toBe('beforeunload');
+    await shown.dismiss();
+    expect(page.isClosed()).toBe(false);
+  });
+});
+
 test.describe('pipeline worker', () => {
   test('round-trips an example and reports the result in the status bar', async ({ page }) => {
     await openApp(page);
