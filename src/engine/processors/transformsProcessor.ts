@@ -1,5 +1,5 @@
 import type { SplunkEvent, ConfDirective, DirectiveNoOp, ParsedConf, ProcessingStep } from '../types';
-import type { NoOpReason } from '../noOpExplainer';
+import { noOpDirectiveKey, type NoOpReason } from '../noOpExplainer';
 import { applyRegexTransform } from '../transforms/regexTransform';
 import { applyDestKey } from '../transforms/destKeyRouter';
 import { applyIngestEval } from '../transforms/ingestEval';
@@ -97,14 +97,13 @@ interface TransformSite {
   stanzaName: string;
 }
 
+/** Where a no-op at `site` is reported: the list directive, naming the stanza. */
+function noOpSite(site: TransformSite) {
+  return { directive: `${site.dir.key} → [${site.stanzaName}]`, file: 'props.conf' as const, line: site.dir.line };
+}
+
 function noteNoOp(run: TransformsRun, state: EventState, site: TransformSite, reason: NoOpReason): void {
-  state.noOps.push({
-    directive: `${site.dir.key} → [${site.stanzaName}]`,
-    file: 'props.conf',
-    line: site.dir.line,
-    phase: run.phase,
-    reason,
-  });
+  state.noOps.push({ ...noOpSite(site), phase: run.phase, reason });
 }
 
 /**
@@ -289,7 +288,7 @@ function runRegexStanza(run: TransformsRun, state: EventState, site: TransformSi
       file: 'transforms.conf',
       ...positionOfKeyOrStanza(transformStanza, 'REGEX'),
     });
-  }, phase);
+  }, phase, () => run.ctx.explanations.take(noOpDirectiveKey(noOpSite(site))));
 
   // Fires whether or not the transform matched: a DELIMS stanza reached
   // through TRANSFORMS- extracts nothing at all, so `matched` is false and

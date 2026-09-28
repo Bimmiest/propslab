@@ -1,6 +1,6 @@
 import type { SplunkEvent, ConfDirective, DirectiveNoOp } from '../types';
 import { extractionLimits, safeRegex, validateRegex, type SplunkRegex } from '../../utils/splunkRegex';
-import { longestPartialMatch, type NoOpReason } from '../noOpExplainer';
+import { explainNoMatch, noOpDirectiveKey, type NoOpReason } from '../noOpExplainer';
 import { effectiveValue } from '../utils/directiveValues';
 import { isInternalField } from '../utils/internalFields';
 import { byClassName } from '../utils/asciiCompare';
@@ -8,7 +8,7 @@ import { unquoteFieldName } from '../utils/fieldRef';
 import { getMetadataField } from '../utils/metadataFields';
 import { getField, hasField, setField } from '../utils/fieldBag';
 import { atDirective } from '../parser/provenance';
-import type { RunContext, DiagnosticSink } from '../runContext';
+import type { RunContext, DiagnosticSink, ExplanationBudget } from '../runContext';
 
 /**
  * Each EXTRACT runs under its stanza's MATCH_LIMIT and DEPTH_LIMIT (Splunk's
@@ -65,7 +65,7 @@ export function extractFields(
       noOps: [],
     };
     for (const extraction of extractions) {
-      runExtraction(event, extraction, state, { diagnostics, captureOffsets, reportedStrippedRefs });
+      runExtraction(event, extraction, state, { diagnostics, captureOffsets, reportedStrippedRefs, explanations: ctx.explanations });
     }
     return {
       ...event,
@@ -101,6 +101,7 @@ interface ExtractionOptions {
   captureOffsets: boolean;
   /** Source fields already warned about, so each is reported once per run. */
   reportedStrippedRefs: Set<string>;
+  explanations: ExplanationBudget;
 }
 
 function noteNoOp(state: ExtractionState, dir: ConfDirective, reason: NoOpReason): void {
@@ -233,14 +234,8 @@ function runExtraction(event: SplunkEvent, extraction: Extraction, state: Extrac
   }
   if (!m || !m.groups) {
     const { pattern } = parseExtractValue(directive.value);
-    const partial = longestPartialMatch(pattern, sourceValue);
-    noteNoOp(
-      state,
-      directive,
-      partial
-        ? { kind: 'no-match', partialEnd: partial.end, partialPattern: partial.prefix }
-        : { kind: 'no-match' },
-    );
+    const explain = options.explanations.take(noOpDirectiveKey({ file: 'props.conf', line: directive.line, directive: directive.key }));
+    noteNoOp(state, directive, explainNoMatch(pattern, sourceValue, explain));
     return;
   }
   // Offsets only authoritative when extracting from _raw — a captured position in a

@@ -49,7 +49,14 @@ export type NoOpReason =
    * setting it — so a directive meant to create a field leaves nothing behind.
    * Null propagation makes this the commonest silent EVAL no-op.
    */
-  | { kind: 'eval-null'; expression: string };
+  | { kind: 'eval-null'; expression: string }
+  /**
+   * The pattern did not match, and this directive had already been analysed
+   * for as many missed events as a run allows (`RunLimits.explanationsPerDirective`).
+   * Not the same as a bare `no-match`, which says the analysis ran and found
+   * no partial agreement.
+   */
+  | { kind: 'not-explained' };
 
 /** One-line rendering, used by the trace and the UI alike. */
 export function describeNoOp(reason: NoOpReason): string {
@@ -76,7 +83,30 @@ export function describeNoOp(reason: NoOpReason): string {
       return `it matched, but ${reason.fields.join(', ')} captured only whitespace, and an empty value creates no field`;
     case 'eval-null':
       return `\`${reason.expression}\` evaluated to null, so no field was written — usually a field referenced in it is absent`;
+    case 'not-explained':
+      return 'Not analysed: explanation limit reached for this directive';
   }
+}
+
+/**
+ * What identifies a directive's no-ops across events: its file, line and name.
+ * The explanation cap counts by it, and groupNoOps collapses by it.
+ */
+export function noOpDirectiveKey(noOp: { file: string; line: number; directive: string }): string {
+  return `${noOp.file}:${noOp.line}:${noOp.directive}`;
+}
+
+/**
+ * The reason for a pattern that compiled, had a source, and did not match:
+ * how far it got, or `not-explained` when `explain` is false because the
+ * directive has used up its explanations for the run.
+ */
+export function explainNoMatch(pattern: string, source: string, explain: boolean): NoOpReason {
+  if (!explain) return { kind: 'not-explained' };
+  const partial = longestPartialMatch(pattern, source);
+  return partial
+    ? { kind: 'no-match', partialEnd: partial.end, partialPattern: partial.prefix }
+    : { kind: 'no-match' };
 }
 
 /**
@@ -216,8 +246,5 @@ export function explainRegexNoOp(
   if (compiled.exec(source)) return null;
   if (compiled.lastError !== undefined) return { kind: 'regex-limit', error: compiled.lastError };
 
-  const partial = longestPartialMatch(pattern, source);
-  return partial
-    ? { kind: 'no-match', partialEnd: partial.end, partialPattern: partial.prefix }
-    : { kind: 'no-match' };
+  return explainNoMatch(pattern, source, true);
 }

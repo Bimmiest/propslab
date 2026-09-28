@@ -20,10 +20,18 @@ export interface DiagnosticSink {
 export interface RunLimits {
   /** Input past this many characters is cut back to the last line break. */
   readonly maxRawChars: number;
+  /**
+   * Missed events a directive's no-match is analysed for (the partial-match
+   * probe), per run. Later misses record `{ kind: 'not-explained' }`: each
+   * analysis costs about log(atoms) regex runs, and events × non-matching
+   * directives grows without bound on a large config.
+   */
+  readonly explanationsPerDirective: number;
 }
 
 export const DEFAULT_LIMITS: RunLimits = Object.freeze({
   maxRawChars: 1_000_000,
+  explanationsPerDirective: 50,
 });
 
 /**
@@ -91,6 +99,27 @@ export function createCollector(sink: ValidationDiagnostic[] = []): DiagnosticsC
   return makeCollector(sink, new Set(), undefined);
 }
 
+/**
+ * How many missed events each directive has had analysed this run. Keyed by
+ * whatever identifies the directive to the reader (file, line, name).
+ */
+export interface ExplanationBudget {
+  /** True while `directive` is under the limit, counting this call. */
+  take(directive: string): boolean;
+}
+
+function createBudget(limit: number): ExplanationBudget {
+  const used = new Map<string, number>();
+  return {
+    take(directive) {
+      const n = used.get(directive) ?? 0;
+      if (n >= limit) return false;
+      used.set(directive, n + 1);
+      return true;
+    },
+  };
+}
+
 export interface RunContext {
   /**
    * The run's clock, in epoch ms, read once so every stage agrees on it. See
@@ -101,6 +130,7 @@ export interface RunContext {
   readonly captureOffsets: boolean;
   readonly diagnostics: DiagnosticsCollector;
   readonly limits: RunLimits;
+  readonly explanations: ExplanationBudget;
 }
 
 export interface RunContextInit {
@@ -118,6 +148,7 @@ export function createRunContext(init: RunContextInit): RunContext {
     captureOffsets: init.captureOffsets ?? true,
     diagnostics: createCollector(init.diagnostics),
     limits,
+    explanations: createBudget(limits.explanationsPerDirective),
   });
 }
 
@@ -128,12 +159,12 @@ export function withDiagnostics(ctx: RunContext, diagnostics: DiagnosticsCollect
 
 /**
  * A context for replaying stages whose output is kept but whose diagnostics
- * are not: it reports nowhere.
+ * and no-op reasons are not: it reports nowhere and explains nothing.
  */
 export function replayContext(ctx: RunContext): RunContext {
   return createRunContext({
     now: ctx.now,
     captureOffsets: false,
-    limits: ctx.limits,
+    limits: { ...ctx.limits, explanationsPerDirective: 0 },
   });
 }

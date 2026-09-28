@@ -81,6 +81,17 @@ describe('createRunContext', () => {
     expect(sink).toEqual([]);
     expect(replay.now).toBe(9);
     expect(replay.captureOffsets).toBe(false);
+    // Its no-op reasons are discarded, so it does not pay for them.
+    expect(replay.explanations.take('any')).toBe(false);
+  });
+
+  it('allows each directive its own explanations, up to the limit', () => {
+    const ctx = createRunContext({ now: 0, limits: { explanationsPerDirective: 2 } });
+    expect([ctx.explanations.take('a'), ctx.explanations.take('a'), ctx.explanations.take('a')]).toEqual([true, true, false]);
+    expect(ctx.explanations.take('b')).toBe(true);
+    // A deduplicating view is the same run, so it shares the count.
+    expect(withDiagnostics(ctx, ctx.diagnostics.deduplicating()).explanations.take('b')).toBe(true);
+    expect(ctx.explanations.take('b')).toBe(false);
   });
 });
 

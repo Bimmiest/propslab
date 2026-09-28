@@ -1,5 +1,5 @@
 import type { SplunkEvent, ConfDirective, DirectiveNoOp, RawMutation, ValidationDiagnostic } from '../types';
-import { longestPartialMatch } from '../noOpExplainer';
+import { explainNoMatch, noOpDirectiveKey } from '../noOpExplainer';
 import { safeRegex, validateRegex, type RegexMatch, type SplunkRegex } from '../../utils/splunkRegex';
 import { byClassName } from '../utils/asciiCompare';
 import { changeWindow } from '../utils/changeWindow';
@@ -329,18 +329,15 @@ export function applySedCommands(
         });
       } else {
         const limitHit = cmd.pattern?.lastError;
-        const partial =
-          limitHit === undefined && cmd.pattern ? longestPartialMatch(cmd.pattern.source, before) : null;
+        const site = { directive: cmd.directive.key, file: 'props.conf' as const, line: cmd.directive.line };
         noOps.push({
-          directive: cmd.directive.key,
-          file: 'props.conf',
-          line: cmd.directive.line,
+          ...site,
           phase: 'index-time',
           reason:
             limitHit !== undefined
               ? { kind: 'regex-limit', error: limitHit }
-              : partial
-                ? { kind: 'no-match', partialEnd: partial.end, partialPattern: partial.prefix }
+              : cmd.pattern
+                ? explainNoMatch(cmd.pattern.source, before, ctx.explanations.take(noOpDirectiveKey(site)))
                 : { kind: 'no-match' },
         });
       }

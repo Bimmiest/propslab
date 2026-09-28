@@ -11,12 +11,16 @@
 import { useMemo, useState } from 'react';
 import type { DirectiveNoOp, SplunkEvent } from '../../../../engine/types';
 import { groupNoOps, type GroupedNoOp } from '../../../../engine/groupNoOps';
+import { describeNoOp } from '../../../../engine/noOpExplainer';
 import { revealInEditor } from '../../../editor/revealInEditor';
 import { Icon } from '../../../ui/Icon';
 
 function NoOpRow({ group, totalEvents }: { group: GroupedNoOp; totalEvents: number }) {
   const [expanded, setExpanded] = useState(false);
-  const primary = group.reasons[0];
+  const notExplained = describeNoOp({ kind: 'not-explained' });
+  // One run always analyses a directive's first misses, so a group with no
+  // real reason only arises from events merged across runs; say what we know.
+  const primary = group.reasons[0]?.text ?? notExplained;
 
   return (
     <div className="border-b border-[var(--color-border-subtle)] last:border-b-0 px-3 py-2">
@@ -30,7 +34,12 @@ function NoOpRow({ group, totalEvents }: { group: GroupedNoOp; totalEvents: numb
               {totalEvents !== 1 ? 's' : ''}
             </span>
           </div>
-          <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">{primary?.text}</p>
+          <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">{primary}</p>
+          {group.notExplained > 0 && group.reasons.length > 0 && (
+            <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
+              {notExplained} ({group.notExplained} more event{group.notExplained !== 1 ? 's' : ''})
+            </p>
+          )}
           <div className="flex items-center gap-2 mt-0.5 flex-wrap">
             <button
               type="button"
