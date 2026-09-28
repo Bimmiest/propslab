@@ -1,10 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import {
+  cachedProbeCount,
   cachedRegexCount,
   extractionLimits,
   initRegexEngine,
   initRegexEngineSync,
   regexEngineModule,
+  safeProbeRegex,
   safeRegex,
   SplunkRegex,
   validateRegex,
@@ -234,6 +236,14 @@ describe('compiled-pattern cache', () => {
     for (let i = 0; i < 400; i++) new SplunkRegex(`evict${i}`);
     expect(cachedRegexCount()).toBeLessThanOrEqual(256);
     expect(first.exec('first7')?.[1]).toBe('7');
+  });
+
+  it('keeps diagnostic probes out of the shared cache (#415)', () => {
+    const before = cachedRegexCount();
+    for (let i = 0; i < 400; i++) expect(safeProbeRegex(`probe${i}`)?.test(`probe${i}`)).toBe(true);
+    expect(cachedRegexCount()).toBe(before);
+    expect(cachedProbeCount()).toBeLessThanOrEqual(256);
+    expect(safeProbeRegex('(unbalanced')).toBeNull();
   });
 });
 

@@ -13,7 +13,7 @@
 // matched this event sends them to rewrite a working pattern.
 // ---------------------------------------------------------------------------
 
-import { extractionLimits, safeRegex, validateRegex, type RegexLimits } from '../utils/splunkRegex';
+import { extractionLimits, safeProbeRegex, safeRegex, validateRegex, type RegexLimits } from '../utils/splunkRegex';
 
 const PROBE_LIMITS = extractionLimits();
 
@@ -144,26 +144,53 @@ function atomBoundaries(pattern: string): number[] {
  *
  * Returns null when even the first atom fails — there is no partial agreement
  * to report, and inventing an offset of 0 would read as a real finding.
+ *
+ * This runs for every event a directive misses, so it binary-searches the cut
+ * points instead of trying each: a prefix of a pattern that matches somewhere
+ * also matches there, so "this prefix matches" holds up to some cut and not
+ * after it. Trying every cut cost one probe per atom per event, which at a few
+ * thousand events was most of the run (#415).
  */
 export function longestPartialMatch(
   pattern: string,
   text: string,
 ): { end: number; prefix: string } | null {
-  const boundaries = atomBoundaries(pattern);
-  // Longest first: the last boundary is the whole pattern, which by the time
-  // this is called is already known not to match.
-  for (let i = boundaries.length - 2; i >= 0; i--) {
-    const cut = boundaries[i];
-    if (cut === undefined || cut === 0) continue;
-    const prefix = pattern.slice(0, cut);
-    // Splunk's extraction limits bound each probe, so explaining a no-op can
-    // never cost more than one extraction attempt per prefix.
-    const compiled = safeRegex(prefix, '', PROBE_LIMITS);
-    if (!compiled) continue;
+  // The last boundary is the whole pattern, which by the time this is called
+  // is already known not to match.
+  const cuts = atomBoundaries(pattern)
+    .slice(0, -1)
+    .filter((cut) => cut > 0);
 
-    const match = compiled.exec(text);
-    // An empty match (a leading `(?i)`, `a*`) agrees with nothing.
-    if (match && match[0] !== '') return { end: match.index + match[0].length, prefix };
+  const probe = (i: number): { end: number; prefix: string; empty: boolean } | null => {
+    const prefix = pattern.slice(0, cuts[i]);
+    // Splunk's extraction limits bound each probe, so explaining a no-op can
+    // never cost more than one extraction attempt per prefix. The probes go to
+    // a cache of their own so they never evict the patterns the pipeline runs.
+    const match = safeProbeRegex(prefix, PROBE_LIMITS)?.exec(text);
+    return match ? { end: match.index + match[0].length, prefix, empty: match[0] === '' } : null;
+  };
+
+  let lo = 0;
+  let hi = cuts.length - 1;
+  let best = -1;
+  let found: ReturnType<typeof probe> = null;
+  while (lo <= hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    const result = probe(mid);
+    if (result) {
+      best = mid;
+      found = result;
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+
+  // An empty match (a leading `(?i)`, `a*`) agrees with nothing, but a shorter
+  // prefix may still agree with something.
+  for (let i = best; i >= 0; i--) {
+    const result = i === best ? found : probe(i);
+    if (result && !result.empty) return { end: result.end, prefix: result.prefix };
   }
   return null;
 }
