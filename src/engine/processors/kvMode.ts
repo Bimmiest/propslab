@@ -27,7 +27,7 @@ export function applyKvMode(
   // silently yield partial/empty extractions with no explanation.
   const parseFailures: { line: number; error: string }[] = [];
 
-  const result = events.map((event) => {
+  const extractEvent = (event: SplunkEvent): SplunkEvent => {
     const newFields = { ...event.fields };
     const added: string[] = [];
     let depthWarning = false;
@@ -78,7 +78,32 @@ export function applyKvMode(
         },
       ],
     };
+  };
+
+  // Events whose extraction threw. Caught per event so one pathological event
+  // costs only its own fields: letting it escape made the pipeline fall back
+  // to the whole batch unmodified.
+  const failures: { line: number; error: string }[] = [];
+
+  const result = events.map((event) => {
+    try {
+      return extractEvent(event);
+    } catch (err) {
+      failures.push({ line: event.lineNumbers.start, error: err instanceof Error ? err.message : String(err) });
+      return event;
+    }
   });
+
+  const failed = failures[0];
+  if (failed !== undefined && diagnostics) {
+    const n = failures.length;
+    diagnostics.push({
+      level: 'error',
+      file: 'raw',
+      line: failed.line,
+      message: `KV_MODE = ${mode}: extraction failed on ${n} event${n === 1 ? '' : 's'}, which ${n === 1 ? 'keeps' : 'keep'} no automatic fields (${failed.error}).`,
+    });
+  }
 
   const first = parseFailures[0];
   if (first !== undefined && diagnostics) {
@@ -242,48 +267,54 @@ function extractXml(raw: string, fields: Record<string, string | string[]>, adde
   // field names are dotted paths and `_root_` must not appear in any of them.
   const roots = wrapped ? xmlChildElements(root) : [root];
   for (const el of roots) {
-    walkXmlElement(el, fields, added, []);
+    walkXmlElement(el, fields, added);
   }
 }
 
+// Iterative pre-order walk: the reader accepts any depth, so recursion here
+// overflowed the stack on deeply nested input (#428). Paths are carried as
+// joined strings rather than copied arrays, which made depth quadratic.
 function walkXmlElement(
-  el: XmlElement,
+  root: XmlElement,
   fields: Record<string, string | string[]>,
   added: string[],
-  parentPath: string[],
 ): void {
-  const tagName = el.localName;
-  // Splunk names an XML field by its dotted path from the document root and
-  // includes the root element itself, so `<event><user>…` extracts `event.user`
-  // rather than `user` -- pinned by the `kvmode-xml` capture from 10.4.0.
-  const path = [...parentPath, tagName];
+  const stack: { el: XmlElement; path: string }[] = [{ el: root, path: root.localName }];
+  for (let top = stack.pop(); top !== undefined; top = stack.pop()) {
+    const { el, path } = top;
+    const tagName = el.localName;
+    // Splunk names an XML field by its dotted path from the document root and
+    // includes the root element itself, so `<event><user>…` extracts `event.user`
+    // rather than `user` -- pinned by the `kvmode-xml` capture from 10.4.0.
 
-  // Extract attributes. These keep their bare names rather than taking the path
-  // prefix the element leaves get: no capture pins attribute naming, and the
-  // WinEventLog convention below is the one behaviour here we do know.
-  for (const attr of el.attributes) {
-    // "Name" attribute on an element uses TagName_Name as field name (Windows EventLog convention).
-    const fieldName = attr.name === 'Name' ? `${tagName}_Name` : attr.name;
-    // Accumulate like the leaf-text path below: within one mode, repeated data
-    // should not be first-wins in one place and multivalue in another.
-    if (attr.value) addMvField(fields, added, fieldName, attr.value);
-  }
-
-  const children = xmlChildElements(el);
-
-  if (children.length === 0) {
-    // Leaf node — extract text content as a field.
-    const value = xmlTextContent(el).trim();
-    // For <Tag Name="fieldName">value</Tag>, use the Name attribute as the field name.
-    const nameAttr = el.attributes.find((a) => a.name === 'Name')?.value;
-    const fieldKey = nameAttr ?? path.join('.');
-    if (value) {
-      addMvField(fields, added, fieldKey, value);
+    // Extract attributes. These keep their bare names rather than taking the path
+    // prefix the element leaves get: no capture pins attribute naming, and the
+    // WinEventLog convention below is the one behaviour here we do know.
+    for (const attr of el.attributes) {
+      // "Name" attribute on an element uses TagName_Name as field name (Windows EventLog convention).
+      const fieldName = attr.name === 'Name' ? `${tagName}_Name` : attr.name;
+      // Accumulate like the leaf-text path below: within one mode, repeated data
+      // should not be first-wins in one place and multivalue in another.
+      if (attr.value) addMvField(fields, added, fieldName, attr.value);
     }
-  } else {
-    // Parent node — recurse into children.
-    for (const child of children) {
-      walkXmlElement(child, fields, added, path);
+
+    const children = xmlChildElements(el);
+
+    if (children.length === 0) {
+      // Leaf node — extract text content as a field.
+      const value = xmlTextContent(el).trim();
+      // For <Tag Name="fieldName">value</Tag>, use the Name attribute as the field name.
+      const nameAttr = el.attributes.find((a) => a.name === 'Name')?.value;
+      const fieldKey = nameAttr ?? path;
+      if (value) {
+        addMvField(fields, added, fieldKey, value);
+      }
+    } else {
+      // Parent node — children pushed in reverse so they pop in document order.
+      for (let i = children.length - 1; i >= 0; i--) {
+        const child = children[i]!;
+        stack.push({ el: child, path: `${path}.${child.localName}` });
+      }
     }
   }
 }
