@@ -84,6 +84,16 @@ test.describe('monaco', () => {
  * one type-checks, builds and mounts fine, and silently removes its feature;
  * hover is covered by the dictionary and TIME_FORMAT tests below.
  */
+test.describe('raw-log editor', () => {
+  test('marks where a long line soft-wraps', async ({ page }) => {
+    await openApp(page);
+    const raw = page.locator('.monaco-editor').first();
+    await raw.click();
+    await page.keyboard.type('x=1 '.repeat(80));
+    await expect(raw.locator('.wwi').first()).toBeAttached();
+  });
+});
+
 test.describe('monaco contributions', () => {
   const typeIntoProps = async (page: Page, text: string) => {
     await openApp(page);
