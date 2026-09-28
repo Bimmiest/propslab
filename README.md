@@ -72,7 +72,7 @@ Below 768px the rail is replaced by `MobileShell`'s labelled tab strip — the r
 
 ## Using the engine directly
 
-`src/engine/**` is pure logic with no React imports and no runtime dependencies, and it runs unchanged in the browser, in a Web Worker, and under Node. `runPipeline` is the entry point. [docs/engine.md](docs/engine.md) covers the API: `PipelineOptions`, layered conf input with override provenance, and the caveats that matter when running user-supplied regexes under Node.
+`src/engine/**` is pure logic with no React imports, and it runs unchanged in the browser, in a Web Worker, and under Node. Its one runtime dependency is the regex engine: every user pattern runs on PCRE2 compiled to WebAssembly ([`packages/pcre2-wasm`](packages/pcre2-wasm)), which is initialised once before the first run. `runPipeline` is the entry point. [docs/engine.md](docs/engine.md) covers the API: `PipelineOptions`, layered conf input with override provenance, the regex engine and its semantics, and the caveats that matter when running user-supplied regexes.
 
 [`packages/mcp-server`](packages/mcp-server) is the Node consumer of that API: an MCP server exposing `simulate`, `validate`, `explain_precedence` and `lookup_directive` tools, so an LLM agent can run a config against real sample data instead of guessing about it. It implements the untrusted-regex discipline engine.md prescribes — every engine run happens in a terminatable worker thread under a wall-clock budget. See its [README](packages/mcp-server/README.md).
 
@@ -107,7 +107,8 @@ src/
 │
 ├── store/useAppStore.ts       # Zustand store (flat; subscribe per slice)
 ├── hooks/                     # useProcessingPipeline, useDebounce, useTheme, usePagination
-├── utils/                     # splunkRegex, strftime, diffEngine, fieldHighlight
+├── utils/                     # splunkRegex (the PCRE2 adapter), regexEngineLoader,
+│                              #   strftime, diffEngine, fieldHighlight
 │
 └── components/
     ├── layout/                # AppShell, ActivityRail, SimulatorView,
@@ -125,6 +126,11 @@ src/
     ├── onboarding/            # FirstRunBanner
     ├── help/                  # HelpPanel (pipeline reference slide-out)
     └── ui/                    # Tabs, Badge, Tooltip, CommandPalette, etc.
+
+packages/
+├── pcre2-wasm/                # PCRE2 10.48 → WebAssembly: pinned, reproducible build,
+│                              #   generic API; no propslab code in it
+└── mcp-server/                # MCP server over the engine
 
 e2e/                           # Playwright smoke tests (production build, Chromium)
 ├── fixtures.ts                # Console/CSP error collection + readiness helpers
@@ -217,6 +223,7 @@ It exists for the things vitest structurally cannot reach, each of which has fai
 
 - **The Content-Security-Policy.** It lives in `index.html` and only means anything in a browser. `img-src` was missing for the entire life of the policy, so Chromium refused every one of Monaco's `data:` squiggle SVGs and the lint underlines never drew — visible only as a console error nobody was watching. The suite asserts zero CSP violations and zero console errors on boot.
 - **Worker bundling.** The whole simulation runs in a Web Worker created via `new Worker(new URL(…), { type: 'module' })`. Whether Vite emits a loadable chunk for that is a build-time question with a runtime answer.
+- **The regex engine.** PCRE2 is a WebAssembly asset the page and each worker load from the one same-origin URL the build fixed. The suite checks that it loads under the CSP (`'wasm-unsafe-eval'`), that every load is of that one asset, that it answers in all three workers, and that fetch, compile and instantiate stay inside a 2 s budget (about 80 ms measured).
 - **The Monaco chunk split.** `MonacoEditor.tsx` imports the slim `editor.api` entry and `vite.config.ts` hand-rolls a `codeSplitting` group around it. A bad split type-checks, builds, and then fails to mount an editor. Each hand-picked editor contribution (suggest, code actions, folding, find, hover) has a test, since a missing one fails silently too.
 - **Accessibility.** `a11y.spec.ts` runs axe-core over every main view — simulator, each output tab, dictionary, command palette, settings, pipeline reference, mobile layout — in both themes, and fails on any WCAG 2.2 AA or best-practice violation. Nothing is excluded, Monaco included: its colours come from our own themes.
 - **Performance.** `perf.spec.ts` pastes 20k events into the raw log and holds the pipeline and every tab switch to a budget several times what a local run measures.
@@ -249,8 +256,8 @@ Every directive the registry knows about carries one of three support levels, de
 
 | Level | Count | Meaning |
 |---|---|---|
-| **simulated** | 75 | The engine implements it and tests assert the behaviour. |
-| **documented** | 74 | Recognised on purpose, outside the simulation for a reason that is not going to change — it belongs to a layer a browser has no access to, or it has no observable effect on output. |
+| **simulated** | 77 | The engine implements it and tests assert the behaviour. |
+| **documented** | 72 | Recognised on purpose, outside the simulation for a reason that is not going to change — it belongs to a layer a browser has no access to, or it has no observable effect on output. |
 | **ignored** | 0 | Should be simulated, is not yet, and names the issue tracking it. Every one of these is a known wrong answer. |
 
 The counts are asserted by a test against the table itself, so they cannot go stale.
@@ -269,7 +276,7 @@ The roster is empty. The last entries were the index-time surface [#178](https:/
 
 ### Deliberately out of scope (`documented`)
 
-Lookups (`LOOKUP` and every `transforms.conf` lookup attribute) need a lookup table, and a browser tool with no backend has nowhere to get one — `LOOKUP-*` directives are parsed and warn, but fields sourced from lookups will not appear. `EVENT_BREAKER`, `EVENT_BREAKER_ENABLE`, `CHARSET`, `NO_BINARY_CHECK` and `LEARN_SOURCETYPE` belong to the forwarder and input layers, upstream of everything simulated here. `SEGMENTATION` changes how the indexer segments terms for search rather than the event or its fields. `MATCH_LIMIT`, `DEPTH_LIMIT` and `CAN_OPTIMIZE` bound how hard a match tries, not what a successful match produces. `LINE_BREAKER_LOOKBEHIND` governs how far Splunk looks back across an internal chunk boundary, and the simulator holds the whole input in memory with no chunk boundaries to look across. `CHECK_FOR_HEADER` is deprecated by Splunk in favour of `INDEXED_EXTRACTIONS`, which is simulated.
+Lookups (`LOOKUP` and every `transforms.conf` lookup attribute) need a lookup table, and a browser tool with no backend has nowhere to get one — `LOOKUP-*` directives are parsed and warn, but fields sourced from lookups will not appear. `EVENT_BREAKER`, `EVENT_BREAKER_ENABLE`, `CHARSET`, `NO_BINARY_CHECK` and `LEARN_SOURCETYPE` belong to the forwarder and input layers, upstream of everything simulated here. `SEGMENTATION` changes how the indexer segments terms for search rather than the event or its fields. `CAN_OPTIMIZE` lets the search optimiser skip a transform, which changes no result. `LINE_BREAKER_LOOKBEHIND` governs how far Splunk looks back across an internal chunk boundary, and the simulator holds the whole input in memory with no chunk boundaries to look across. `CHECK_FOR_HEADER` is deprecated by Splunk in favour of `INDEXED_EXTRACTIONS`, which is simulated.
 
 ### Stubbed eval functions
 
@@ -293,7 +300,7 @@ The directive levels above do not cover eval *functions*, which have their own b
 
 ### Other
 
-- **ReDoS protection is heuristic first, worker-backed second.** `safeRegex()` rejects a best-effort class of catastrophically backtracking patterns before compiling them — nested/grouped quantifiers (`(a+)+`, `(.*)*x`, `(.*,){20}`) and adjacent same-atom quantifiers (`a*a*`, `\d+\d+`) — but it does **not** catch alternation-overlap forms like `(a|aa)+` or `(a+|b)+` (detecting those without rejecting benign alternations such as `(foo|bar)+` needs a real overlap analysis). So no user-supplied regex is matched on the main thread: the main processing pipeline (5 s watchdog), the **Regex tab's live tester** and the **Create-EXTRACT dialog's** live capture (both through the same regex-match worker, 2 s watchdog), the **Timestamp tab** (2 s) and the editor's `TIME_FORMAT` hover preview, whose `TIME_PREFIX` match shares the Timestamp tab's worker (1 s; the hover says "preview timed out" when it fires, and has no inline fallback), all run it inside a Web Worker. A pattern that slips the heuristic hangs that worker — which is terminated and restarted — rather than freezing the UI. The main thread only *compiles* user patterns, to report syntax errors and heuristic refusals, and compiling cannot backtrack. The one regex the hover still matches on the main thread is the `TIME_FORMAT` side: a pattern the app builds from strptime specifiers, not one the user wrote, run over at most 4 KB of the sample line.
+- **Regexes run on PCRE2, bounded by its limits and by worker watchdogs.** Every user pattern runs on PCRE2 compiled to WebAssembly, so the preview matches what Splunk's PCRE matches — `$` before a final newline, `.` matching `\r`, possessive quantifiers, recursion, `\K` — instead of a JavaScript translation of it, and no pattern is refused for looking prone to catastrophic backtracking. `MATCH_LIMIT` and `DEPTH_LIMIT` bound each field-extraction match, as in Splunk (see [docs/engine.md](docs/engine.md#the-regex-engine), including where PCRE2 differs from the PCRE1 those limits were named for). The limits bound each match, not a whole run, so no user-supplied regex is matched on the main thread either: the main processing pipeline (5 s watchdog), the **Regex tab's live tester** and the **Create-EXTRACT dialog's** live capture (both through the same regex-match worker, 2 s watchdog), the **Timestamp tab** (2 s) and the editor's `TIME_FORMAT` hover preview, whose `TIME_PREFIX` match shares the Timestamp tab's worker (1 s; the hover says "preview timed out" when it fires, and has no inline fallback), all run it inside a Web Worker, which is terminated and restarted rather than freezing the UI. The main thread only *compiles* user patterns, to report syntax errors, and compiling cannot backtrack. The one regex the hover still matches on the main thread is the `TIME_FORMAT` side: a pattern the app builds from strptime specifiers, not one the user wrote, run over at most 4 KB of the sample line.
 - **Raw data capped at 1 MB.** The cap is applied inside the pipeline, not at the store: a larger input is accepted, stored and sent to the worker in full, then *truncated* for processing — cut back to the last complete line, so the trailing partial event is dropped rather than mis-broken, with a warning saying so. Nothing rejects the input, and the editor still holds all of it.
 - **Sourcetype stanzas match by strict equality.** This matches real Splunk — sourcetype names are literal, no wildcards — noted here so contributors don't add wildcard support by analogy with `source::` / `host::`.
 - **Monaco find-widget tooltip flicker.** Upstream bug in Monaco's hover service ([microsoft/monaco-editor#5208](https://github.com/microsoft/monaco-editor/issues/5208)); no local fix.
@@ -302,7 +309,7 @@ See [CHANGELOG.md](CHANGELOG.md) for fix history
 
 ## Tech stack
 
-React 19, Vite 8, TypeScript 5.9, Tailwind CSS 4 (CSS-first config), Monaco Editor 0.55 (mounted directly by `MonacoEditor.tsx`), Zustand 5, react-resizable-panels 4.12, `diff` 9, `cmdk` (command palette), Radix UI primitives (`react-tooltip`, `react-dialog`, `react-context-menu`).
+React 19, Vite 8, TypeScript 5.9, Tailwind CSS 4 (CSS-first config), Monaco Editor 0.55 (mounted directly by `MonacoEditor.tsx`), Zustand 5, react-resizable-panels 4.12, `diff` 9, `cmdk` (command palette), Radix UI primitives (`react-tooltip`, `react-dialog`, `react-context-menu`), PCRE2 10.48 compiled to WebAssembly (`packages/pcre2-wasm`).
 
 ## Contributing
 

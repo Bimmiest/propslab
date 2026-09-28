@@ -1,6 +1,7 @@
 import type { SplunkEvent, ConfDirective, DirectiveNoOp, ValidationDiagnostic } from '../types';
-import { safeRegex, convertSplunkToJsRegex, validateRegex } from '../../utils/splunkRegex';
+import { extractionLimits, safeRegex, validateRegex } from '../../utils/splunkRegex';
 import { longestPartialMatch, type NoOpReason } from '../noOpExplainer';
+import { effectiveValue } from '../utils/directiveValues';
 import { isInternalField } from '../utils/internalFields';
 import { byClassName } from '../utils/asciiCompare';
 import { unquoteFieldName } from '../utils/fieldRef';
@@ -9,22 +10,13 @@ import { getField, hasField, setField } from '../utils/fieldBag';
 import { atDirective } from '../parser/provenance';
 
 /**
- * @param captureOffsets Compile with `'d'` so positional extractions record the
- *   capture spans that `fieldOffsets` — and therefore the highlighter — needs.
- *   Defaults to `true`, which is what the browser wants.
+ * Each EXTRACT runs under its stanza's MATCH_LIMIT and DEPTH_LIMIT (Splunk's
+ * defaults when unset). A match that hits one is no match, as in Splunk, and
+ * the no-op says which limit it was.
  *
- *   A caller that renders no highlights should pass `false`, because the flag
- *   is not free off the browser. V8 can abandon backtracking mid-match and
- *   finish on its linear-time engine under
- *   `--enable-experimental-regexp-engine-on-excessive-backtracks`, but that
- *   engine **cannot compile a regex carrying `d`, `i` or `u`**. Compiling every
- *   EXTRACT with `'d'` therefore puts the largest user-controlled regex surface
- *   the engine has outside what the fallback can bound.
- *
- *   This narrows the unbounded surface; it does not remove it. The fallback is
- *   Node-only (a web page cannot set the flag), and a pattern still declines it
- *   if it uses lookahead or a backreference — both ordinary in Splunk regexes.
- *   A caller executing hostile patterns still needs a terminable thread.
+ * @param captureOffsets Record the capture spans of positional extractions in
+ *   `fieldOffsets`, which the highlighter reads. Defaults to `true`; a caller
+ *   that renders no highlights can pass `false` to skip the bookkeeping.
  */
 export function extractFields(
   events: SplunkEvent[],
@@ -38,21 +30,22 @@ export function extractFields(
 
   if (extractDirectives.length === 0) return events;
 
+  const limits = extractionLimits(
+    effectiveValue(directives, 'MATCH_LIMIT'),
+    effectiveValue(directives, 'DEPTH_LIMIT'),
+  );
+
   const extractions = extractDirectives.map((dir) => {
     const { pattern, sourceField } = parseExtractValue(dir.value);
-    const jsPattern = pattern ? convertSplunkToJsRegex(pattern) : null;
-    // 'd' records capture offsets for positional extractions, and is requested
-    // only when the caller will read them (see `captureOffsets`). NOT global:
-    // inline EXTRACT extracts the FIRST match only (max_match defaults to 1);
+    // Inline EXTRACT extracts the FIRST match only (max_match defaults to 1);
     // multivalue extraction requires a transforms.conf REGEX with MV_ADD, which
     // EXTRACT lacks.
-    const regex = jsPattern ? safeRegex(jsPattern, captureOffsets ? 'd' : undefined) : null;
-    // safeRegex returns null for invalid PCRE-isms AND for patterns the ReDoS
-    // heuristic refuses. Either way the extraction is silently skipped, so surface it.
-    if (jsPattern && !regex && diagnostics) {
+    const regex = pattern ? safeRegex(pattern, '', limits) : null;
+    // An extraction that does not compile is skipped, so surface it.
+    if (pattern && !regex && diagnostics) {
       diagnostics.push({
         level: 'warning',
-        message: `EXTRACT-${dir.className ?? ''} was skipped: its pattern could not be compiled safely (invalid regex or rejected as ReDoS-prone). No fields were extracted.`,
+        message: `EXTRACT-${dir.className ?? ''} was skipped: its pattern does not compile (${validateRegex(pattern) ?? 'invalid regex'}). No fields were extracted.`,
         file: 'props.conf',
         ...atDirective(dir),
         directiveKey: dir.key,
@@ -87,7 +80,7 @@ export function extractFields(
         const { pattern } = parseExtractValue(extraction.directive.value);
         noteNoOp(extraction.directive, {
           kind: 'regex-invalid',
-          error: validateRegex(pattern) ?? 'refused by the ReDoS guard — it can backtrack catastrophically',
+          error: validateRegex(pattern) ?? 'invalid regex',
         });
         continue;
       }
@@ -129,6 +122,10 @@ export function extractFields(
 
       // Inline EXTRACT takes the first match only.
       const m = extraction.regex.exec(sourceValue);
+      if (!m && extraction.regex.lastError !== undefined) {
+        noteNoOp(extraction.directive, { kind: 'regex-limit', error: extraction.regex.lastError });
+        continue;
+      }
       if (!m || !m.groups) {
         const { pattern } = parseExtractValue(extraction.directive.value);
         const partial = longestPartialMatch(pattern, sourceValue);
@@ -140,9 +137,7 @@ export function extractFields(
         );
         continue;
       }
-      const indices = isPositional
-        ? (m as RegExpExecArray & { indices?: { groups?: Record<string, [number, number] | undefined> } }).indices?.groups
-        : undefined;
+      const indices = isPositional && captureOffsets ? m.indices.groups : undefined;
 
       const added: string[] = [];
       const alreadySet: string[] = [];

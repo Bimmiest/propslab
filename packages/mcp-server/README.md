@@ -61,19 +61,22 @@ reviewed. `docs/engine.md`'s closing section is the spec this implements:
 - **Every engine run happens in a worker thread with a wall-clock budget**
   (default 5s, `timeout_ms` per call) and hard `worker.terminate()` on
   expiry. This is the mechanism; nothing else is.
-- **`captureOffsets` defaults to `false`** — nothing here renders highlights,
-  and the `d` flag it forces onto every `EXTRACT` disqualifies patterns from
-  V8's linear-time fallback (measured at 8 ms vs 91 s in `docs/engine.md`).
+- **Patterns run on PCRE2 in WebAssembly**, as they do in the app: the
+  server compiles the module once and hands it to each worker with its
+  request, so no request's budget pays for compilation. `MATCH_LIMIT` and
+  `DEPTH_LIMIT` stop a runaway field-extraction match, as in Splunk; the
+  watchdog bounds the run as a whole.
+- **`captureOffsets` defaults to `false`** — nothing here renders highlights.
 - **The launcher re-execs node with
   `--enable-experimental-regexp-engine-on-excessive-backtracks`** (plus a
-  backtrack threshold) before anything compiles a regex, as the documented
-  second layer. Lookaheads and backreferences decline that fallback, which is
-  why the watchdog stays the mechanism. `PROPSLAB_MCP_NO_REEXEC=1` opts out.
+  backtrack threshold) before anything compiles a regex. User patterns no
+  longer run on V8's regex engine, so this now covers only the engine's own
+  JavaScript regexes. `PROPSLAB_MCP_NO_REEXEC=1` opts out.
 - **A timeout comes back structured**: budget, every regex-valued directive
-  in the conf (file / stanza / key / line / layer), and which of them the
-  engine's ReDoS heuristic flags — so the agent can repair the pattern rather
-  than retry blind. The heuristic is structural and documents what it cannot
-  see (e.g. `(a|aa)+`), and the error text says so.
+  in the conf (file / stanza / key / line / layer), and which of them a
+  structural ReDoS heuristic flags — so the agent can repair the pattern rather
+  than retry blind. The heuristic is advisory and cannot see every form
+  (e.g. `(a|aa)+`), and the error text says so.
 - **Each worker has a heap limit** (V8 `resourceLimits`: 512 MB old
   generation, 64 MB young). A run that exceeds it kills only its own worker
   and comes back as `{"error": "out_of_memory", "heap_limit_mb": …}` with

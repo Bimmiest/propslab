@@ -233,10 +233,10 @@ describe('#283 — zero-width LINE_BREAKER captures', () => {
 describe('breakLines — uncompilable break patterns are reported (#75.2)', () => {
   it('warns when BREAK_ONLY_BEFORE cannot be compiled', () => {
     const diags: ValidationDiagnostic[] = [];
-    breakLines('a\nb\nc', [dir('BREAK_ONLY_BEFORE', '(a+)+')], META, diags);
+    breakLines('a\nb\nc', [dir('BREAK_ONLY_BEFORE', '(a+')], META, diags);
     const warning = diags.find((d) => d.message.includes('BREAK_ONLY_BEFORE'));
     expect(warning).toBeDefined();
-    expect(warning!.message).toContain('could not be compiled safely');
+    expect(warning!.message).toContain('does not compile (missing closing parenthesis');
   });
 
   it('warns when MUST_BREAK_AFTER cannot be compiled', () => {

@@ -48,7 +48,8 @@
 import { Worker, type ResourceLimits } from 'node:worker_threads';
 import os from 'node:os';
 import path from 'node:path';
-import type { WorkerRequest, WorkerResponse } from './protocol';
+import type { WorkerData, WorkerRequest, WorkerResponse } from './protocol';
+import { regexEngineModule } from './regexEngine';
 
 export class WorkerTimeoutError extends Error {
   readonly budgetMs: number;
@@ -300,7 +301,10 @@ function spawnAndWait<T>(
   const resourceLimits = options.resourceLimits ?? DEFAULT_RESOURCE_LIMITS;
   const { signal } = options;
 
-  const worker = new Worker(resolvedPath, { workerData: request, resourceLimits });
+  // Compiled (once per process) before the worker exists and before its
+  // budget starts, so no request pays for it.
+  const workerData: WorkerData = { ...request, regexEngine: regexEngineModule() };
+  const worker = new Worker(resolvedPath, { workerData, resourceLimits });
   const exited = new Promise<void>((resolve) => worker.once('exit', () => resolve()));
 
   const result = new Promise<T>((resolve, reject) => {

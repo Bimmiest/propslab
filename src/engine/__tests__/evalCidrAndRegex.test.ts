@@ -129,9 +129,15 @@ describe('eval regex arguments that do not compile (#291)', () => {
     expect(diagnostics[0]?.message).toContain('mvfind()');
   });
 
-  it('names the ReDoS guard when that is what refused the pattern', () => {
-    const { diagnostics } = run('match(s, "(a+)+")');
-    expect(diagnostics[0]?.message).toMatch(/ReDoS/);
+  it('gives PCRE\'s reason for a pattern it rejects', () => {
+    const { diagnostics } = run('match(s, "(?<=a+)b")');
+    expect(diagnostics[0]?.message).toMatch(/lookbehind/);
+  });
+
+  it('does not refuse a pattern for backtracking (#368)', () => {
+    const { out, diagnostics } = run('if(match(s, "(a+)+"), "y", "n")', [event({ s: 'aaa' })]);
+    expect(diagnostics).toEqual([]);
+    expect(out[0]!.fields['r']).toBe('y');
   });
 
   it('warns once per class and pattern, not once per event', () => {

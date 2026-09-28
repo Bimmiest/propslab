@@ -1,4 +1,4 @@
-import { safeRegex } from '../utils/splunkRegex';
+import { safeRegex, type SplunkRegex } from '../utils/splunkRegex';
 import { parseTimestampDetailed, parseTzAlias } from '../utils/strftime';
 import { matchTimeFormat, timeFormatRegex } from './processors/timestampExtractor';
 
@@ -6,16 +6,9 @@ import { matchTimeFormat, timeFormatRegex } from './processors/timestampExtracto
  * Timestamp probing for the Timestamp tab, extracted from the component so it
  * can run in a Web Worker.
  *
- * It has to be off the render thread because TIME_PREFIX is a user-supplied
- * regex executed against `_raw`. `safeRegex`'s ReDoS heuristic is structural and
- * documents what it cannot see — alternation-overlap forms such as `(a|aa)+` —
- * and those remain the caller's problem. On the main thread there was nothing to
- * terminate: `^(a|a)*b$` against a thirty-character line took about 32 seconds in
- * a cold process, growing roughly fourfold per two characters added, with no
- * diagnostic, because the refusal path is what would have produced one.
- *
- * Typing a TIME_PREFIX is an ordinary thing to do, and a pattern does not have
- * to be hostile to be catastrophic — only ambiguous.
+ * TIME_PREFIX is a user-supplied regex executed against `_raw`. PCRE's limits
+ * bound each match, but not the total over many events, so the prober runs off
+ * the render thread under a watchdog like every other user-pattern run.
  */
 
 export interface TimeConfig {
@@ -83,7 +76,7 @@ const EMPTY: TimestampProbe = { match: null, prefix: null };
 interface CompiledTimeConfig {
   config: TimeConfig;
   /** undefined: no TIME_PREFIX, or an empty one. null: one that will not compile. */
-  prefixRegex: RegExp | null | undefined;
+  prefixRegex: SplunkRegex | null | undefined;
   formatRegex: RegExp | null;
   tzAlias: ReadonlyMap<string, string>;
   now: Date | undefined;

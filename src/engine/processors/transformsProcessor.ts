@@ -9,6 +9,7 @@ import { appendTraceStep, metadataChanges } from '../utils/traceStep';
 import { SIMULATED_DEST_KEYS, VALID_UNSIMULATED_DEST_KEYS, normaliseDestKey } from '../transforms/destKeys';
 import { atDirective, atStanza } from '../parser/provenance';
 import { effectiveDirective, parseSplunkBool } from '../utils/directiveValues';
+import { validateRegex } from '../../utils/splunkRegex';
 
 // A DEST_KEY=_raw transform that shrinks the event by at least this fraction is
 // treated as accidental data loss (FORMAT did not reproduce the rest of the line).
@@ -60,7 +61,7 @@ export function applyTransforms(
   // SEM-7: warn once per stanza about index-time transforms that extract fields
   // with no WRITE_META/DEST_KEY (which have no effect at index time in Splunk).
   const warnedNoWriteMeta = new Set<string>();
-  // SEM-16: warn once per stanza whose REGEX could not be compiled (invalid or ReDoS-rejected).
+  // SEM-16: warn once per stanza whose REGEX does not compile.
   const warnedInvalidRegex = new Set<string>();
   // SEM-11: warn once per stanza that routes via an unknown/unsimulated DEST_KEY.
   const warnedUnknownDestKey = new Set<string>();
@@ -150,7 +151,7 @@ export function applyTransforms(
           warnedInvalidRegex.add(stanzaName);
           diagnostics.push({
             level: 'warning',
-            message: `Transform "${stanzaName}" was skipped: its REGEX (${pattern}) could not be compiled safely (invalid regex or rejected as ReDoS-prone).`,
+            message: `Transform "${stanzaName}" was skipped: its REGEX (${pattern}) does not compile (${validateRegex(pattern) ?? 'invalid regex'}).`,
             file: 'transforms.conf',
             ...positionOfKeyOrStanza(transformStanza, 'REGEX'),
           });

@@ -32,8 +32,10 @@ test.describe('boot', () => {
 
     expect(policy).toBeTruthy();
     // 'unsafe-eval' was removed once main.tsx moved to monaco's slim
-    // editor.api entry; nothing may quietly put it back.
-    expect(policy).not.toContain('unsafe-eval');
+    // editor.api entry; nothing may quietly put it back. 'wasm-unsafe-eval'
+    // is the narrower grant PCRE2's WebAssembly needs, and only that.
+    expect(policy).not.toContain("'unsafe-eval'");
+    expect(policy).toContain("'wasm-unsafe-eval'");
     expect(policy).toContain("base-uri 'self'");
     expect(policy).toContain("object-src 'none'");
     expect(policy).toContain('img-src');
@@ -447,5 +449,58 @@ test.describe('match workers', () => {
 
     expect(complaints.csp, 'blocked by Content-Security-Policy').toEqual([]);
     expect(complaints.all, 'browser errors during the TIME_FORMAT hover').toEqual([]);
+  });
+});
+
+/**
+ * Every user pattern runs on PCRE2 compiled to WebAssembly (#368). The page
+ * and each worker load it from the one hashed asset URL the build fixed —
+ * never from a message — and compiling it takes milliseconds.
+ */
+test.describe('regex engine', () => {
+  // Generous next to what Chromium measures (tens of milliseconds, cold), and
+  // well inside the 5 s a worker has to load: the point is to fail loudly if
+  // compilation ever turns into the multi-second, fully optimised kind.
+  const LOAD_BUDGET_MS = 2_000;
+
+  test('loads fast, from the one built asset, and every worker runs on it', async ({ page, complaints }) => {
+    const wasmFetches: string[] = [];
+    page.on('request', (request) => {
+      if (/\.wasm$/.test(new URL(request.url()).pathname)) wasmFetches.push(request.url());
+    });
+    await recordWorkerReplies(page);
+    await openApp(page);
+    await loadExample(page, APACHE);
+
+    // PCRE-only syntax, in all three workers: a possessive group in the Regex
+    // tab, `\K` in an EXTRACT the pipeline runs, and the Timestamp tab's prober.
+    await page.getByRole('tab', { name: /^Regex$/ }).click();
+    await page.getByRole('textbox', { name: 'Regular expression pattern' }).fill('HTTP/1\\.(?P<minor>\\d)++');
+    await expect(page.getByText(/^5\/5 events matched$/)).toBeVisible({ timeout: 15_000 });
+
+    // Before Fields: selecting a tab scrolls the strip, which can take this one out of reach.
+    await page.getByRole('tab', { name: /^Timestamp$/ }).click();
+    await expect.poll(() => workerReplies(page, /\/timestampMatchWorker[^/]*\.js$/)).toBeGreaterThan(0);
+
+    await page.locator('.monaco-editor').nth(1).click();
+    await page.keyboard.press('Control+End');
+    await page.keyboard.type('\nEXTRACT-e2e = HTTP/\\K(?<e2e_ver>[\\d.]++)\n');
+    await page.getByRole('tab', { name: /^Fields$/ }).click();
+    await expect(page.getByText('e2e_ver', { exact: true })).toBeVisible({ timeout: 20_000 });
+
+    await expect.poll(() => workerReplies(page, /\/regexMatchWorker[^/]*\.js$/)).toBeGreaterThan(0);
+    await expect.poll(() => workerReplies(page, /\/pipelineWorker[^/]*\.js$/)).toBeGreaterThan(0);
+
+    const loadMs = await page.evaluate(
+      () => performance.getEntriesByName('propslab:regex-engine')[0]?.duration ?? Number.NaN,
+    );
+    test.info().annotations.push({ type: 'regex engine fetch+compile+instantiate (ms)', description: loadMs.toFixed(1) });
+    expect(loadMs).toBeLessThan(LOAD_BUDGET_MS);
+    expect(wasmFetches.length, 'the page loads the module').toBeGreaterThan(0);
+    expect(new Set(wasmFetches).size, 'every load is of the one same-origin asset').toBe(1);
+    expect(new URL(wasmFetches[0]).origin).toBe(new URL(page.url()).origin);
+
+    expect(complaints.csp, 'blocked by Content-Security-Policy').toEqual([]);
+    expect(complaints.all, 'browser errors').toEqual([]);
   });
 });

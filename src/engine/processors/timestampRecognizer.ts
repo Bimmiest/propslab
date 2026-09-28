@@ -132,15 +132,20 @@ function guarded(format: string): string {
   return `${before}(?:${body})${after}`;
 }
 
+/**
+ * The table's patterns are JavaScript regexes, not PCRE2 ones, on purpose. They
+ * are the engine's own, generated from strftime formats in a few fixed shapes
+ * (like the stanza wildcards), not anything a user wrote, so there is no PCRE
+ * meaning to be faithful to: they model datetime.xml, not a conf regex. They
+ * are also built when this module loads, which in a worker is before the page
+ * has handed it the PCRE2 module, and they run on every line of every event,
+ * where V8's regex engine is the faster of the two.
+ */
 function family(gate: string | null, entries: { format: string; pattern: string }[]): AutoFamily {
   return {
-    // A gate the regex guard refuses only costs speed: the family is then always searched.
-    gate: gate === null ? null : safeRegex(gate),
-    formats: entries.flatMap(({ format, pattern }) => {
-      // Case-insensitive, like strftimeToRegex and datetime.xml.
-      const regex = safeRegex(pattern, 'i');
-      return regex ? [{ format, regex }] : [];
-    }),
+    gate: gate === null ? null : new RegExp(gate),
+    // Case-insensitive, like strftimeToRegex and datetime.xml.
+    formats: entries.map(({ format, pattern }) => ({ format, regex: new RegExp(pattern, 'i') })),
   };
 }
 

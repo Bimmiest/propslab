@@ -1,5 +1,5 @@
 import type { ConfStanza, EventMetadata } from '../types';
-import { safeRegex, escapeRegex } from '../../utils/splunkRegex';
+import { escapeRegex } from '../../utils/splunkRegex';
 import { effectiveDirective, parseSplunkBool } from '../utils/directiveValues';
 import { asciiCompare } from '../utils/asciiCompare';
 
@@ -265,9 +265,14 @@ function matchPattern(value: string, pattern: string, caseInsensitive: boolean):
   const spec = caseInsensitive ? pattern.toLowerCase() : pattern;
   // The group matters: a top-level `a|b` would otherwise anchor only `a` at the
   // start and only `b` at the end.
-  const regex = safeRegex(`^(?:${patternToRegex(spec)})$`);
-  if (regex) return regex.test(subject);
-  return subject === spec;
+  // A wildcard pattern the engine builds itself, not a user's regex, so a JS
+  // regex serves; it cannot fail to compile, but a literal comparison is the
+  // safe answer if it ever did.
+  try {
+    return new RegExp(`^(?:${patternToRegex(spec)})$`).test(subject);
+  } catch {
+    return subject === spec;
+  }
 }
 
 /**

@@ -1,4 +1,4 @@
-import { safeRegex } from '../utils/splunkRegex';
+import { extractionLimits, safeRegex, type SplunkRegex } from '../utils/splunkRegex';
 
 /**
  * Serializable result of matching a pattern against one input. Replaces passing a
@@ -17,8 +17,7 @@ export interface RegexMatchInfo {
   groupSpans: Record<string, [number, number]>;
 }
 
-function matchOne(regex: RegExp, raw: string): RegexMatchInfo | null {
-  regex.lastIndex = 0;
+function matchOne(regex: SplunkRegex, raw: string): RegexMatchInfo | null {
   const m = regex.exec(raw);
   if (!m) return null;
   const info: RegexMatchInfo = { index: m.index, match: m[0], groups: {}, groupSpans: {} };
@@ -27,7 +26,7 @@ function matchOne(regex: RegExp, raw: string): RegexMatchInfo | null {
       if (value !== undefined) info.groups[name] = value;
     }
   }
-  if (m.indices?.groups) {
+  if (m.indices.groups) {
     for (const [name, span] of Object.entries(m.indices.groups)) {
       if (span) info.groupSpans[name] = span;
     }
@@ -36,17 +35,17 @@ function matchOne(regex: RegExp, raw: string): RegexMatchInfo | null {
 }
 
 /**
- * Compile `pattern` (Splunk syntax) and match it — first match only, like an
- * inline EXTRACT — against each input. Returns `null` overall when the pattern is
- * invalid or refused by {@link safeRegex}; otherwise a per-input array where each
- * element is the match info, or `null` if that input didn't match.
+ * Compile `pattern` (Splunk syntax) and match it — first match only, under
+ * Splunk's default MATCH_LIMIT and DEPTH_LIMIT, like an inline EXTRACT —
+ * against each input. Returns `null` overall when the pattern does not
+ * compile; otherwise a per-input array where each element is the match info,
+ * or `null` if that input didn't match.
  *
- * Designed to run inside a Web Worker: a catastrophic pattern that slips the
- * ReDoS heuristic hangs the worker (which the caller's watchdog terminates)
- * rather than freezing the UI thread.
+ * Runs in a Web Worker: the limits bound each match, and the caller's watchdog
+ * bounds the total over many inputs.
  */
 export function matchInputs(pattern: string, inputs: string[]): (RegexMatchInfo | null)[] | null {
-  const regex = safeRegex(pattern, 'd');
+  const regex = safeRegex(pattern, '', extractionLimits());
   if (!regex) return null;
   return inputs.map((raw) => matchOne(regex, raw));
 }

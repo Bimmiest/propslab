@@ -6,12 +6,12 @@
  *
  * Message protocol:
  *   in  → PipelineWorkerRequest
- *   out → WORKER_READY once, when the module has loaded (#339); then PipelineWorkerResponse
+ *   out → WORKER_READY once, when the worker has loaded its regex engine (#339); then PipelineWorkerResponse
  */
 
 import { runPipeline } from './pipeline';
 import type { ConfInput, EventMetadata, PipelineOptions } from './types';
-import { WORKER_READY } from './workerProtocol';
+import { serveWithRegexEngine } from '../utils/regexEngineLoader';
 
 export interface PipelineWorkerRequest {
   id: number;
@@ -40,8 +40,10 @@ export interface PipelineWorkerResponse {
   stack?: string;
 }
 
-self.onmessage = (e: MessageEvent<PipelineWorkerRequest>) => {
-  const { id, rawData, metadata, propsConfText, transformsConfText, options } = e.data;
+// Loads the regex engine from its fixed asset URL, then signals ready and
+// serves requests in order; see serveWithRegexEngine.
+serveWithRegexEngine<PipelineWorkerRequest>(self, (request) => {
+  const { id, rawData, metadata, propsConfText, transformsConfText, options } = request;
   try {
     const output = runPipeline(rawData, metadata, propsConfText, transformsConfText, options);
     const response: PipelineWorkerResponse = { id, result: output };
@@ -55,9 +57,4 @@ self.onmessage = (e: MessageEvent<PipelineWorkerRequest>) => {
     };
     self.postMessage(response);
   }
-};
-
-// Last, so it is only sent once every import above has evaluated and the
-// handler is installed. Anything the worker throws before this point is a
-// failure to load, not something a request did to it (#339).
-self.postMessage(WORKER_READY);
+});

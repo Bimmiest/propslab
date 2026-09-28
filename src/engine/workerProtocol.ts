@@ -1,13 +1,14 @@
 /**
  * The one message every worker entry sends unprompted (#339).
  *
- * Each entry posts `WORKER_READY` as the last statement of its module, so it
- * arrives only once every import has evaluated and `self.onmessage` is in
- * place. The page uses it to tell a worker that never started from one that
- * started and then died: an `error` before `ready` is a load failure — a chunk
- * that 404s, a CSP block, a module that throws while evaluating — and says
- * nothing about the request in flight; an `error` after it is a crash, and the
- * request is the suspect.
+ * Each entry posts `WORKER_READY` once its imports have evaluated,
+ * `self.onmessage` is in place and it has loaded its regex engine (see
+ * `serveWithRegexEngine`). The page uses ready to
+ * tell a worker that never started from one that started and then died: an
+ * `error` before `ready` is a load failure — a chunk that 404s, a CSP block, a
+ * module that throws while evaluating, an engine that will not instantiate —
+ * and says nothing about the request in flight; an `error` after it is a
+ * crash, and the request is the suspect.
  *
  * Before this the page guessed from whether the worker had answered anything,
  * and a fresh worker had never answered by definition: the first request is

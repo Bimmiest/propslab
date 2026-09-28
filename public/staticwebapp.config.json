@@ -6,6 +6,9 @@
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "no-referrer"
   },
+  "mimeTypes": {
+    ".wasm": "application/wasm"
+  },
   "routes": [
     {
       "route": "/assets/*",

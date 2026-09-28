@@ -216,15 +216,14 @@ describe('applyEvalExpressions — function fidelity', () => {
   });
 });
 
-describe('applyEvalExpressions — replace() ReDoS guard', () => {
-  it('returns original string for a ReDoS-risky pattern', () => {
-    // (a+)+ is the classic ReDoS pattern
+describe('applyEvalExpressions — replace()', () => {
+  it('runs a backtracking-prone pattern rather than refusing it (#368)', () => {
+    // (a+)+ was refused by the old ReDoS heuristic; PCRE's limits bound it now.
     const result = applyEvalExpressions(
       [event({}, 'aaaaaab')],
       [evalDir('safe', 'replace(_raw, "(a+)+", "x")')]
     )[0]!;
-    // safeRegex rejects the pattern — original _raw returned unchanged
-    expect(result.fields['safe']).toBe('aaaaaab');
+    expect(result.fields['safe']).toBe('xb');
   });
 
   it('performs valid replace()', () => {

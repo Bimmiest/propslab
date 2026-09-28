@@ -245,7 +245,7 @@ export function useProcessingPipeline() {
         retryCountRef.current = 0;
         if (!loaded) {
           // The worker never started, so the input never ran and says nothing
-          // about ReDoS. Run it once the replacement has loaded, so a slow
+          // about its patterns. Run it once the replacement has loaded, so a slow
           // first load does not leave the preview on a timeout until the next
           // edit (#364). If the replacement fails to load, onLoadFailure gets
           // it; with no worker at all it never ran, so inline is safe.
@@ -253,7 +253,7 @@ export function useProcessingPipeline() {
           if (!managed.postWhenReady(request)) runInline(request);
           return;
         }
-        giveUp(`Pipeline timed out after ${WORKER_TIMEOUT_MS / 1000} s — the input may contain a regex prone to catastrophic backtracking (ReDoS). Try simplifying your EXTRACT or TRANSFORMS pattern.`);
+        giveUp(`Pipeline timed out after ${WORKER_TIMEOUT_MS / 1000} s — a regex may be backtracking heavily on every event. Try simplifying your EXTRACT or TRANSFORMS pattern, or lowering its MATCH_LIMIT.`);
       },
 
       onCrash(inFlight, message) {

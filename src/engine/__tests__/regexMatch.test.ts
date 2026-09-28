@@ -23,8 +23,11 @@ describe('matchInputs', () => {
     expect(r!.groups).toEqual({ num: '7' });
   });
 
-  it('returns null overall for a ReDoS-refused pattern', () => {
-    expect(matchInputs('(a+)+$', ['aaaa'])).toBeNull();
+  it('runs a backtracking-prone pattern, which only a PCRE limit stops (#368)', () => {
+    // Refused outright by the old ReDoS heuristic; valid PCRE that Splunk runs.
+    expect(matchInputs('(a+)+$', ['aaaa'])).toEqual([{ index: 0, match: 'aaaa', groups: {}, groupSpans: {} }]);
+    // Past MATCH_LIMIT's default it is no match, as an EXTRACT would be.
+    expect(matchInputs('(a+)+$', [`${'a'.repeat(30)}!`])).toEqual([null]);
   });
 
   it('returns null overall for an invalid pattern', () => {

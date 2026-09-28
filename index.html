@@ -9,6 +9,9 @@
       rather than the barrel, so the TypeScript/JSON/CSS/HTML language services
       (the parts that need eval) are never in the bundle. Verified by loading a
       production build in Chromium with this policy and exercising the editor.
+      'wasm-unsafe-eval' permits compiling WebAssembly and nothing else: every
+      user regex runs on PCRE2 compiled to wasm (packages/pcre2-wasm), compiled
+      once on this page and handed to the workers.
       'unsafe-inline' in style-src stays — Tailwind and Monaco's dynamic theming
       both write inline styles. img-src needs data: because Monaco draws its
       error/warning squiggles as inline data: SVGs; with only default-src to
@@ -20,7 +23,7 @@
       e2e suite asserts against, and a browser enforces the intersection of both
       — so the drift would surface as a resource blocked for no visible reason.
     -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; worker-src 'self' blob:; font-src 'self' data:;" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; font-src 'self' data:;" />
     <title>Propslab</title>
   </head>
   <body class="h-full">

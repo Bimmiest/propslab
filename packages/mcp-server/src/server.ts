@@ -8,6 +8,7 @@ import './v8Flags';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { createStdioTransport } from './messageLimit';
 import { registerTools } from './tools';
+import { regexEngineModule } from './regexEngine';
 // The version the server reports in its MCP `initialize` handshake. It used to
 // be a string literal here that duplicated package.json and had to be bumped by
 // hand alongside it (#319). esbuild inlines the JSON at build time — and, with
@@ -32,6 +33,9 @@ export function createServer(options: CreateServerOptions = {}): McpServer {
 }
 
 export async function start(): Promise<void> {
+  // Compiled now rather than on the first call: a missing or broken module
+  // fails the start, not a request.
+  regexEngineModule();
   const server = createServer();
   // Bounds each message before the SDK buffers and parses it (#349).
   await server.connect(createStdioTransport());

@@ -27,11 +27,10 @@ export interface TimestampMatchState {
 /**
  * Probe events for their timestamp in a terminatable Web Worker.
  *
- * TIME_PREFIX is a user-supplied regex, and `safeRegex`'s heuristic is explicit
- * that it does not catch alternation-overlap forms. Executed synchronously in a
- * `useMemo` on the render path there was nothing to terminate — a permitted but
- * ambiguous pattern froze the tab for tens of seconds with no diagnostic. Here it
- * only hangs the worker, which the watchdog kills and restarts.
+ * TIME_PREFIX is a user-supplied regex. PCRE's limits bound each match but not
+ * the total over every event, and executed synchronously in a `useMemo` on the
+ * render path there was nothing to terminate. Here a slow pattern only stalls
+ * the worker, which the watchdog kills and restarts.
  *
  * The lifecycle around that — construction, staleness, watchdog, teardown —
  * lives in `useWorkerRequest` (#151).

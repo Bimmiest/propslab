@@ -217,16 +217,17 @@ export const DIRECTIVE_SUPPORT: Record<string, SupportEntry> = {
 
   // ---- Performance / optimiser knobs ------------------------------------
   MATCH_LIMIT: {
-    support: 'documented',
+    support: 'simulated',
     note:
-      'A PCRE backtracking budget with no equivalent in the browser regex engine; it bounds how hard ' +
-      'a match tries, not what a successful match produces.',
+      'Applied to EXTRACT (props.conf) and to REPORT/TRANSFORMS REGEX (transforms.conf) as PCRE2\'s ' +
+      'match limit; a match that reaches it is no match. Counted as the PCRE2 interpreter counts, ' +
+      'which is close to but not exactly PCRE1\'s count.',
   },
   DEPTH_LIMIT: {
-    support: 'documented',
+    support: 'simulated',
     note:
-      'A PCRE recursion budget with no equivalent in the browser regex engine; it bounds how hard a ' +
-      'match tries, not what a successful match produces.',
+      'Applied like MATCH_LIMIT, as PCRE2\'s depth limit. Approximate: PCRE1 counted recursion on the ' +
+      'stack, PCRE2 counts backtracking frames on the heap, so the depth at which a pattern stops differs.',
   },
   CAN_OPTIMIZE: {
     support: 'documented',

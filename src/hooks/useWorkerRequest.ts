@@ -28,7 +28,7 @@ import { createManagedWorker } from './workerLifecycle';
 // - A crash is the request's doing. It is reported as `timeout` and never run
 //   inline (#326) — counting crashes toward the cap once sent the hook inline
 //   for good after two crashing patterns, and every later pattern ran on the
-//   tab's own thread, which is exactly the ReDoS exposure the worker prevents.
+//   tab's own thread, with no watchdog — exactly what the worker prevents.
 //
 // Until #339 a script that threw at top level on the first worker counted as
 // a crash — the first request is posted before the script has run — so the

@@ -54,7 +54,11 @@ A few things worth knowing:
 | Editor behaviour (hover, completion, lint markers) | `src/monaco/` |
 | UI | `src/components/` |
 
-`src/engine/**` has no runtime dependencies and must keep it that way — it is consumed directly as a library (see [docs/engine.md](docs/engine.md)), not only by this app.
+`src/engine/**` has one runtime dependency, the PCRE2 WebAssembly module in [`packages/pcre2-wasm`](packages/pcre2-wasm), and must not gain another — it is consumed directly as a library (see [docs/engine.md](docs/engine.md)), not only by this app. A user-written pattern compiles through `safeRegex` in `src/utils/splunkRegex.ts`, never `new RegExp`: that is what keeps the preview, the editor and the MCP server on Splunk's regex semantics. The engine's own fixed patterns (wildcards, strftime formats) stay JavaScript regexes. Replacement templates (`SEDCMD`, `FORMAT`, eval `replace()`) are expanded by each directive's own code from the match's groups; do not route them through PCRE2's substitution syntax, which Splunk does not use.
+
+### The regex engine's binary
+
+`packages/pcre2-wasm/pcre2.wasm` is committed, built from a pinned PCRE2 release by `packages/pcre2-wasm/build/build.sh` with clang 18 and `wasm-ld` (Debian/Ubuntu: `clang-18 lld-18`), and its SHA-256 is recorded beside it. CI rebuilds it and fails unless the result is byte-identical, so the binary is known to come from the source. To change it — a PCRE2 upgrade, a bridge change — edit the script or the C sources, run `npm run build:wasm --prefix packages/pcre2-wasm`, and commit the module and its checksum together. `npm test --prefix packages/pcre2-wasm` runs the package's own tests (no install needed).
 
 ## Adding or changing a simulated directive
 

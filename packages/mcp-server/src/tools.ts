@@ -249,7 +249,8 @@ function workerFailure(
         budget_ms: err.budgetMs,
         message:
           `The run exceeded its ${err.budgetMs}ms wall-clock budget and was hard-terminated. ` +
-          'The usual cause is catastrophic regex backtracking in a conf directive.',
+          'The usual cause is a regex backtracking heavily on every event, or one whose stanza ' +
+          'disables PCRE\'s limits with MATCH_LIMIT = 0.',
         regex_directives: collectRegexSuspects(propsConf, transformsConf),
         guidance:
           'Repair the flagged pattern(s) — start with redos_risk=true, but the heuristic is ' +
@@ -489,9 +490,8 @@ export function registerTools(server: McpServer, options?: { workerPath?: string
         'Lint props.conf / transforms.conf text alone: parse errors, unknown or mis-cased ' +
         'keys, values of the wrong type, TRANSFORMS-/REPORT- references to missing stanzas, ' +
         'settings that are inert in the phase they are used in, directives the simulator ' +
-        'does not honour, and regexes (in every stanza) that will not compile or that the ' +
-        'simulator refuses as ReDoS-prone. Use it to check a config you have drafted before ' +
-        'simulating it.',
+        'does not honour, and regexes (in every stanza) that PCRE will not compile. Use it to ' +
+        'check a config you have drafted before simulating it.',
       inputSchema: validateInputShape,
     },
     (args, extra) => handleValidate(args, worker(extra)),

@@ -9,7 +9,7 @@ import { isUndocumentedAttribute } from '../engine/directiveSupport';
 import { isSplunkBoolLiteral, parseSplunkBool } from '../engine/utils/directiveValues';
 import { DIRECTIVE_RE, miscasedCanonical, MISCASED_MESSAGE } from '../engine/parser/confParser';
 import { unsupportedSpecifiers } from '../utils/strftime';
-import { translatePcreToJs, validateRegex } from '../utils/splunkRegex';
+import { validateRegex } from '../utils/splunkRegex';
 
 /**
  * One directive as the linter saw it, for the stanza-scoped checks below.
@@ -259,22 +259,6 @@ export function computeDiagnostics(
           endLineNumber: i,
           endColumn: line.length + 1,
         });
-      } else {
-        // The pattern compiles, but its PCRE→JS translation may only
-        // approximate Splunk's meaning (e.g. a mid-pattern `(?i)` hoisted to the
-        // whole pattern where scoped modifier groups are unavailable). A
-        // warning, since the config is fine for a real indexer — it is the
-        // preview that may differ.
-        for (const warning of translatePcreToJs(value).warnings) {
-          markers.push({
-            severity: 4,
-            message: `Regex approximated in preview: ${warning}`,
-            startLineNumber: i,
-            startColumn: eqIdx + 2,
-            endLineNumber: i,
-            endColumn: line.length + 1,
-          });
-        }
       }
     }
 

@@ -7,7 +7,7 @@
  */
 
 import type { ConfDirective, EventMetadata, SplunkEvent, ValidationDiagnostic } from '../types';
-import { safeRegex, translatePcreToJs } from '../../utils/splunkRegex';
+import { safeRegex, validateRegex, type SplunkRegex } from '../../utils/splunkRegex';
 import { atDirective } from '../parser/provenance';
 import { effectiveDirective, parseSplunkBool } from '../utils/directiveValues';
 import { createTimestampFinder, readTimestampLocation } from './timestampRecognizer';
@@ -24,27 +24,10 @@ const XML_EXTRACTIONS = new Set(['xml', 'xmlkv', 'xmlkv-winevt']);
  * (`line_breaker = (X)` warned, then broke the events anyway), which is worse
  * than either behaviour alone: the warning made the wrong output look checked.
  */
-/**
- * How many capturing groups a pattern declares, or 0 if it will not compile.
- *
- * Counted by compiling `pattern|` — an alternation with an empty branch always
- * matches, and the resulting array has one entry per group, which is more
- * reliable than counting unescaped `(` by hand.
- *
- * Counted on the PCRE→JS translation, the same source the split compiles via
- * safeRegex. Compiling the raw PCRE rejected anything JS does not spell the
- * same way — `(?i)([\r\n]+)date` threw, counted 0 groups, and a working
- * LINE_BREAKER was replaced by the default with a warning that it had no
- * capturing group (#311).
- */
+/** How many capturing groups a pattern declares, or 0 if it will not compile. */
 function countCaptureGroups(pattern: string | undefined): number {
   if (pattern === undefined) return 0;
-  try {
-    const { source, flags } = translatePcreToJs(pattern);
-    return new RegExp(`${source}|`, flags).exec('')!.length - 1;
-  } catch {
-    return 0;
-  }
+  return safeRegex(pattern)?.captureCount ?? 0;
 }
 
 /**
@@ -144,14 +127,14 @@ function lineAtOffset(newlines: number[], offset: number): number {
 function warnUncompilableBreakPattern(
   key: 'BREAK_ONLY_BEFORE' | 'MUST_BREAK_AFTER' | 'MUST_NOT_BREAK_AFTER',
   pattern: string | undefined,
-  compiled: RegExp | null,
+  compiled: SplunkRegex | null,
   directives: ConfDirective[],
   diagnostics?: ValidationDiagnostic[],
 ): void {
   if (!diagnostics || pattern === undefined || compiled !== null) return;
   diagnostics.push({
     level: 'warning',
-    message: `${key} pattern (${pattern}) could not be compiled safely (invalid regex or rejected as ReDoS-prone). The option was ignored, so events were broken as if it were not set.`,
+    message: `${key} pattern (${pattern}) does not compile (${validateRegex(pattern) ?? 'invalid regex'}). The option was ignored, so events were broken as if it were not set.`,
     file: 'props.conf',
     ...atDirective(effectiveDirective(directives, key)),
     directiveKey: key,
@@ -217,13 +200,11 @@ export function breakLines(
     //   the captured group within that region is what gets removed.
 
     // To split correctly we iterate matches ourselves, over the WHOLE input
-    // with `lastIndex` rather than over a re-sliced remainder. Re-slicing hid
+    // from an offset rather than over a re-sliced remainder. Re-slicing hid
     // the text already consumed from a lookbehind — `(?<=\})(\n)` could never
     // see the `}` that ended the previous event — and copied the tail of the
     // input once per event, which is quadratic on a large sample (#283).
-    // Use 'd' flag so RegExpExecArray.indices gives exact capture offsets,
-    // avoiding the indexOf() ambiguity when captured text repeats in the match.
-    const lineBreakerRegex = safeRegex(lineBreakerPattern, 'dg');
+    const lineBreakerRegex = safeRegex(lineBreakerPattern);
     if (!lineBreakerRegex) {
       // Invalid regex — treat entire data as one segment. A user-supplied
       // LINE_BREAKER that fails to compile silently disables event breaking, so
@@ -231,7 +212,7 @@ export function breakLines(
       if (diagnostics && getDirective(directives, 'LINE_BREAKER') !== undefined) {
         diagnostics.push({
           level: 'warning',
-          message: `LINE_BREAKER pattern (${lineBreakerPattern}) could not be compiled safely (invalid regex or rejected as ReDoS-prone). Event breaking was skipped — the entire input is treated as one event.`,
+          message: `LINE_BREAKER pattern (${lineBreakerPattern}) does not compile (${validateRegex(lineBreakerPattern) ?? 'invalid regex'}). Event breaking was skipped — the entire input is treated as one event.`,
           file: 'props.conf',
           ...atDirective(effectiveDirective(directives, 'LINE_BREAKER')),
         });
@@ -246,16 +227,31 @@ export function breakLines(
       let searchFrom = 0;
 
       while (searchFrom <= rawData.length) {
-        lineBreakerRegex.lastIndex = searchFrom;
-        const m = lineBreakerRegex.exec(rawData);
-        if (!m) break;
+        const m = lineBreakerRegex.exec(rawData, searchFrom);
+        if (!m) {
+          // A search stopped by a PCRE limit breaks nothing further, as a
+          // failed match would; say so rather than leave one oversized event
+          // unexplained.
+          if (lineBreakerRegex.lastError !== undefined && diagnostics) {
+            diagnostics.push({
+              level: 'warning',
+              message:
+                `LINE_BREAKER pattern (${lineBreakerPattern}) stopped at character ${searchFrom}: ` +
+                `${lineBreakerRegex.lastError}. The rest of the input was not broken.`,
+              file: 'props.conf',
+              ...atDirective(effectiveDirective(directives, 'LINE_BREAKER')),
+              directiveKey: 'LINE_BREAKER',
+            });
+          }
+          break;
+        }
 
         // The captured group is the separator to discard. A match in which the
         // group did not participate (`(a)|b` matching `b`) has no group
         // offsets, so the whole match stands in for it.
-        const groupIndices = m[1] !== undefined ? m.indices?.[1] : undefined;
+        const groupIndices = m.indices[1];
         const captureStart = groupIndices ? groupIndices[0] : m.index;
-        const captureEnd = groupIndices ? groupIndices[1] : m.index + m[0].length;
+        const captureEnd = groupIndices ? groupIndices[1] : m.end;
 
         // A break that would not move the event start forward is no break: an
         // empty capture at the start of the current event (`()(?=b)` just
