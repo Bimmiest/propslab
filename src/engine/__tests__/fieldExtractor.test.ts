@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractFields } from '../processors/fieldExtractor';
+import { extractFields, parseExtractValue } from '../processors/fieldExtractor';
 import type { SplunkEvent, ConfDirective } from '../types';
 
 function event(raw: string, fields: Record<string, string | string[]> = {}): SplunkEvent {
@@ -159,5 +159,33 @@ describe('extractFields — values are trimmed, and an empty one creates no fiel
     const e = extractSrc(raw);
     const [start, end] = e.fieldOffsets!['src']![0]!;
     expect(raw.slice(start, end)).toBe('abc');
+  });
+});
+
+// Checked on Splunk 10.4.0, not doc-derived (#396). The whitespace before
+// `in <field>` separates the two, and exactly one character of it is
+// consumed: the rest stays on the end of the pattern. With these EXTRACTs,
+// src="abc xyz" (one inner space) gave one and two, and src="abc  xyz" (two)
+// gave one, two and three. A tab separates as a space does.
+describe('extractFields — whitespace before `in <field>` (#396)', () => {
+  const dirs = [
+    dir('a_src', 'src="(?<src>[^"]*)"'),
+    dir('b_one', '(?<one>\\w+) in src'),
+    dir('c_two', '(?<two>\\w+)  in src'),
+    dir('d_three', '(?<three>\\w+)   in src'),
+    dir('e_tab', '(?<tab>\\w+)\tin src'),
+  ];
+  const fieldsOf = (raw: string) => extractFields([event(raw)], dirs)[0]!.fields;
+
+  it('consumes one whitespace character and keeps the rest in the pattern', () => {
+    expect(parseExtractValue('(?<two>\\w+)  in src')).toEqual({ pattern: '(?<two>\\w+) ', sourceField: 'src' });
+    expect(parseExtractValue('(?<three>\\w+)   in src')).toEqual({ pattern: '(?<three>\\w+)  ', sourceField: 'src' });
+    expect(parseExtractValue('(?<tab>\\w+)\tin src')).toEqual({ pattern: '(?<tab>\\w+)', sourceField: 'src' });
+  });
+
+  it('matches what Splunk extracted', () => {
+    expect(fieldsOf('src="abc"')).toEqual({ src: 'abc', one: 'abc', tab: 'abc' });
+    expect(fieldsOf('src="abc xyz"')).toEqual({ src: 'abc xyz', one: 'abc', two: 'abc', tab: 'abc' });
+    expect(fieldsOf('src="abc  xyz"')).toEqual({ src: 'abc  xyz', one: 'abc', two: 'abc', three: 'abc', tab: 'abc' });
   });
 });
