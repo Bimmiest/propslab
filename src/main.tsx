@@ -10,7 +10,7 @@ const root = createRoot(document.getElementById('root')!)
 
 // Every user pattern runs on PCRE2 in WebAssembly, and the editor validates
 // patterns as soon as it mounts, so the engine is up before the first render.
-// Workers built afterwards are handed this compiled module (regexEngineLoader).
+// Each worker loads it for itself, from the same asset (regexEngineLoader).
 // A promise chain rather than a top-level await: with one in the entry module,
 // the bundler scatters the entry's own modules into extra startup chunks.
 loadRegexEngine().then(

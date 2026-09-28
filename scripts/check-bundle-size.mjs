@@ -25,20 +25,20 @@ import { gzipSync } from 'node:zlib';
  * reads ~1% under Vite's own figures.
  */
 const BUDGETS_KB = {
-  // 792 kB; 903 kB while MonacoEditor.tsx imported all of editor.all.
+  // 853.8 kB; 903 kB while MonacoEditor.tsx imported all of editor.all.
   'monaco-editor.js': 880,
   'monaco-editor.css': 26, // 23.2 (monaco-editor 0.57's stylesheet is larger than 0.55's 18.8)
-  // 146 kB; 160 kB before the editors, dictionary and scaffold split out.
+  // 143.2 kB; 160 kB before the editors, dictionary and scaffold split out.
   'index.js': 165,
   'index.css': 9.5, // 8.4
   'react-vendor.js': 77, // 67.5
-  'pipeline.js': 33, // 28.6
-  'editorRuntime.js': 11, // 9.5
+  'pipeline.js': 33, // 29.5
+  'editorRuntime.js': 11, // 9.7
   // Workers: off the startup path, but each is a whole download of its own.
-  'pipelineWorker.js': 70, // 61.4
-  'editor.worker.js': 97, // 85.9
-  // PCRE2, the regex engine every user pattern runs on. Fetched once
-  // by the page at startup and handed to the workers as a compiled module.
+  'pipelineWorker.js': 70, // 62.9
+  'editor.worker.js': 97, // 92.8
+  // PCRE2, the regex engine every user pattern runs on. The page and each
+  // worker fetch and compile it for themselves.
   'pcre2.wasm': 95, // 83.5
 };
 const DEFAULT_KB = 25;

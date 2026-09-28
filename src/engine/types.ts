@@ -315,9 +315,9 @@ export interface PipelineOptions {
   perEventPipeline: boolean;
   /**
    * Record capture offsets for positional EXTRACTs, populating `fieldOffsets`.
-   * Defaults to `true`. Set `false` in a consumer that renders no highlights —
-   * it drops the `'d'` flag, which is what makes an EXTRACT eligible for V8's
-   * linear-time regex fallback. See `extractFields` for the limits of that.
+   * Defaults to `true`. Set `false` in a consumer that renders no highlights.
+   * PCRE2 reports capture spans with every match, so this only decides whether
+   * they are kept; it changes neither matching cost nor which engine runs.
    */
   captureOffsets?: boolean;
   /**

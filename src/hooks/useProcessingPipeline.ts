@@ -107,6 +107,7 @@ function giveUp(p: WorkerPolicy, message: string): void {
 function onResponse(p: WorkerPolicy, { id, result, error }: PipelineWorkerResponse): void {
   if (id !== p.requestIdRef.current) return;
   p.setIsProcessing(false);
+  useAppStore.getState().setPipelineOnMainThread(false);
   p.setLastProcessingMs(performance.now() - p.requestStartRef.current);
   // This request completed cleanly — it is not poison, so clear the retry
   // budget.
@@ -243,6 +244,8 @@ function runPipelineInline(
   sinks: Omit<PipelineSinks, 'runInline'>,
 ): void {
   sinks.setIsProcessing(true);
+  // For the status bar: no watchdog covers this run (#403).
+  useAppStore.getState().setPipelineOnMainThread(true);
   import('../engine/pipeline')
     .then(({ runPipeline }) => {
       if (request.id !== refs.requestIdRef.current) return; // superseded while loading

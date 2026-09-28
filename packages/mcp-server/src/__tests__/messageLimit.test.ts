@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { spawn } from 'node:child_process';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { McpError } from '@modelcontextprotocol/sdk/types.js';
 import { PassThrough } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import type { JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js';
@@ -9,6 +12,7 @@ import {
   MessageSizeLimiter,
   oversizeMessageError,
 } from '../messageLimit';
+import { ID_SCAN_BYTES } from '../requestId';
 
 /**
  * The per-message bound on stdin: oversized lines are dropped before
@@ -20,14 +24,18 @@ const LAUNCHER = fileURLToPath(new URL('../../dist/index.js', import.meta.url));
 /** Feeds `chunks` through a limiter; resolves to the lines it let through. */
 async function limit(maxBytes: number, chunks: (string | Buffer)[]) {
   const oversize: number[] = [];
-  const limiter = new MessageSizeLimiter(maxBytes, (n) => oversize.push(n));
+  const ids: unknown[] = [];
+  const limiter = new MessageSizeLimiter(maxBytes, (n, id) => {
+    oversize.push(n);
+    ids.push(id);
+  });
   const out: Buffer[] = [];
   limiter.on('data', (b: Buffer) => out.push(b));
   const done = new Promise((r) => limiter.on('end', r));
   for (const c of chunks) limiter.write(c);
   limiter.end();
   await done;
-  return { passed: out.map((b) => b.toString('utf8')), oversize: oversize.length };
+  return { passed: out.map((b) => b.toString('utf8')), oversize: oversize.length, ids };
 }
 
 describe('MessageSizeLimiter', () => {
@@ -83,6 +91,24 @@ describe('MessageSizeLimiter', () => {
     expect(passed).toEqual(['ok\n']);
   });
 
+  it('reports the id from the head or tail of a dropped line', async () => {
+    const pad = 'x'.repeat(20_000);
+    const { ids } = await limit(100, [
+      `{"id":"first","params":{"raw":"${pad}"}}\n`,
+      // Split mid-line so the tail spans chunks, as the SDK client's lines end.
+      `{"method":"tools/call","params":{"raw":"${pad}`,
+      `"},"jsonrpc":"2.0","id":42}\r\n`,
+      `{"params":{"raw":"${pad}"},"id":{"x":1}}\n`,
+    ]);
+    expect(ids).toEqual(['first', 42, undefined]);
+  });
+
+  it('still reports a dropped line cut off by the end of input', async () => {
+    const { ids, oversize } = await limit(10, ['{"id":9,"pad":"xxxxxxxxxxxxxxx']);
+    expect(oversize).toBe(1);
+    expect(ids).toEqual([9]);
+  });
+
   it('never holds more than the limit plus a chunk while discarding', () => {
     // A 64 MiB line in 64 KiB chunks against a 1 MiB limit: were the limiter
     // accumulating it, the pending buffer list would reach the full size.
@@ -93,6 +119,8 @@ describe('MessageSizeLimiter', () => {
       const { pending } = limiter as unknown as { pending: Buffer[] };
       const held = pending.reduce((n, b) => n + b.length, 0);
       expect(held).toBeLessThanOrEqual(1024 * 1024);
+      const { head, tail } = limiter as unknown as { head: Buffer; tail: Buffer };
+      expect(head.length + tail.length).toBeLessThanOrEqual(2 * ID_SCAN_BYTES);
     }
     limiter.destroy();
   });
@@ -125,7 +153,7 @@ describe('size-limited stdio transport', () => {
       { jsonrpc: '2.0', id: 3, method: 'ping' },
     ]);
     expect(errors).toEqual([]);
-    expect(written.join('')).toBe(`${JSON.stringify(oversizeMessageError(64))}\n`);
+    expect(written.join('')).toBe(`${JSON.stringify(oversizeMessageError(64, 2))}\n`);
     await transport.close();
   });
 
@@ -179,11 +207,43 @@ describe('size-limited stdio transport', () => {
       send({ jsonrpc: '2.0', id: 3, method: 'tools/list' });
       await waitFor(3);
 
-      expect(responses[1]).toEqual(oversizeMessageError(MAX_MESSAGE_BYTES));
+      expect(responses[1]).toEqual(oversizeMessageError(MAX_MESSAGE_BYTES, 2));
       expect(responses[2]).toMatchObject({ id: 3, result: { tools: expect.any(Array) } });
       expect(child.exitCode).toBeNull();
     } finally {
       child.kill();
+    }
+  }, 30_000);
+});
+
+describe('oversize call through the SDK client', () => {
+  it('rejects callTool promptly with the error instead of waiting out a timeout', async () => {
+    // The SDK client writes a request's id after its params (#402), so this
+    // exercises the tail scan end to end.
+    const transport = new StdioClientTransport({
+      command: process.execPath,
+      args: [LAUNCHER],
+      stderr: 'ignore',
+    });
+    const client = new Client({ name: 'propslab-limit-sdk', version: '0.0.0' });
+    await client.connect(transport);
+    try {
+      const startedAt = Date.now();
+      const err: unknown = await client
+        .callTool(
+          { name: 'simulate', arguments: { raw: 'x'.repeat(MAX_MESSAGE_BYTES), sourcetype: 'st' } },
+          undefined,
+          { timeout: 120_000 },
+        )
+        .catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(McpError);
+      expect(err).toMatchObject({ code: -32600, data: { error: 'message_too_large' } });
+      expect(Date.now() - startedAt).toBeLessThan(10_000);
+      // The server is still up and answering.
+      const { tools } = await client.listTools();
+      expect(tools.length).toBeGreaterThan(0);
+    } finally {
+      await client.close();
     }
   }, 30_000);
 });

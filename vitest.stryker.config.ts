@@ -48,7 +48,12 @@ export default defineConfig({
   plugins: [...(base.plugins ?? []), strykerTestNamePattern],
   test: {
     ...base.test,
-    include: ['src/engine/**/*.test.ts'],
+    // The engine's tests, and those of the two utils the engine runs on.
+    include: [
+      'src/engine/**/*.test.ts',
+      'src/utils/__tests__/strftime*.test.ts',
+      'src/utils/__tests__/splunkRegex*.test.ts',
+    ],
     exclude: [
       ...(base.test?.exclude ?? []),
       'src/engine/__tests__/workerReady.test.ts',

@@ -38,6 +38,33 @@ describe('StatusBar', () => {
     expect(screen.getByText('Ready')).toBeInTheDocument();
   });
 
+  it('shows "Worker idle" after a worker run', () => {
+    useAppStore.setState({ processingResult: { events: [], eventCount: 0 } as unknown as ProcessingResult });
+    renderStatusBar();
+    expect(screen.getByText('Worker idle')).toBeInTheDocument();
+    expect(screen.queryByTestId('pipeline-main-thread')).toBeNull();
+  });
+
+  it('says the pipeline runs on the main thread, not "Worker idle", after a worker load failure (#403)', () => {
+    useAppStore.setState({
+      processingResult: { events: [], eventCount: 0 } as unknown as ProcessingResult,
+      pipelineOnMainThread: true,
+    });
+    renderStatusBar();
+    const state = screen.getByTestId('pipeline-main-thread');
+    expect(state).toHaveTextContent('Main thread (no watchdog)');
+    expect(screen.queryByText('Worker idle')).toBeNull();
+    // Focusable, and its explanation is in the accessible text, not only the tooltip.
+    expect(state).toHaveAttribute('tabindex', '0');
+    expect(state).toHaveTextContent(/runaway regex freezes the tab/);
+  });
+
+  it('shows main-thread processing while an inline run is in progress', () => {
+    useAppStore.setState({ isProcessing: true, pipelineOnMainThread: true });
+    renderStatusBar();
+    expect(screen.getByTestId('pipeline-main-thread')).toHaveTextContent('Processing on main thread…');
+  });
+
   it('shows processing state while worker is running', () => {
     useAppStore.setState({ isProcessing: true });
     renderStatusBar();

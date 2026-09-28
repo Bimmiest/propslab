@@ -3,9 +3,9 @@
  *
  * This is the primary defence docs/engine.md requires of a consumer executing
  * conf-derived regexes it did not write: a thread the parent can TERMINATE.
- * The V8 linear-time-fallback flags (see `v8Flags.ts`) are the second layer —
- * they lower how often this watchdog fires, but a lookahead or backreference
- * declines the fallback, so termination is the mechanism, never the flags.
+ * Those regexes run on PCRE2, whose match limits bound each match; this
+ * watchdog bounds the whole run. (The V8 flags in `v8Flags.ts` cover only the
+ * engine's own JavaScript regexes.)
  *
  * A fresh worker per call costs a few tens of milliseconds and buys two
  * properties worth far more here: `terminate()` cannot leave a half-poisoned

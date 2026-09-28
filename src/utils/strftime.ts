@@ -65,7 +65,9 @@ function buildDirectiveMap(): Record<string, DirectiveMeta> {
     '%B': { regex: MONTH_NAME_REGEX, capture: 'monthName' },
     '%a': { regex: WEEKDAY_NAME_REGEX, capture: 'weekdayName' },
     '%A': { regex: WEEKDAY_NAME_REGEX, capture: 'weekdayName' },
-    '%Z': { regex: '([A-Za-z][A-Za-z0-9_/+-]*)', capture: 'tzName' },
+    // A trailing `:MM` belongs to a GMT-relative name (`GMT+05:30`); a colon
+    // alone does not, so `PST: msg` still reads PST.
+    '%Z': { regex: '([A-Za-z][A-Za-z0-9_/+-]*(?::\\d{2})?)', capture: 'tzName' },
     // ISO-8601 'Z' (Zulu/UTC), ±HH:MM / ±HHMM, and ±HH-only offsets.
     '%z': { regex: '(Z|[+-]\\d{2}:?\\d{2}|[+-]\\d{2})', capture: 'tzOffset' },
     // Splunk "enhanced strptime" offsets with explicit colons.
@@ -264,6 +266,9 @@ const TZ_OFFSETS: Record<string, number> = {
   NZST: 720, NZDT: 780,
 };
 
+/** The zone abbreviations `%Z` resolves without TZ_ALIAS, for recognition to look for. */
+export const KNOWN_ZONE_ABBREVIATIONS: readonly string[] = Object.keys(TZ_OFFSETS);
+
 /**
  * Formatters for IANA zone names, cached because constructing one is expensive
  * and a batch of events shares a single `TZ`. A name the runtime rejects caches
@@ -315,7 +320,9 @@ function utcMs(year: number, month: number, day: number, hour: number, minute: n
  * resulting wall clock is from the UTC one.
  */
 function ianaOffsetAt(formatter: Intl.DateTimeFormat, atMs: number): number {
-  const parts = formatter.formatToParts(new Date(atMs));
+  // The wall clock is read to the second, so the instant is compared at one.
+  const wholeSecond = Math.floor(atMs / 1000) * 1000;
+  const parts = formatter.formatToParts(new Date(wholeSecond));
   const num = (type: string) => Number(parts.find((p) => p.type === type)?.value);
 
   let year = num('year');
@@ -327,27 +334,33 @@ function ianaOffsetAt(formatter: Intl.DateTimeFormat, atMs: number): number {
   const hour = num('hour') === 24 ? 0 : num('hour');
 
   const asUtc = utcMs(year, num('month') - 1, num('day'), hour, num('minute'), num('second'));
-  return (asUtc - atMs) / 60_000;
+  return (asUtc - wholeSecond) / 60_000;
 }
 
 /**
  * Turn a wall-clock reading in a named zone into an epoch instant.
  *
  * `wallAsUtcMs` is the timestamp's components assembled as though they were
- * UTC. Two passes: the offset that applied at that numeric instant is a good
- * first guess, and re-reading the offset at the candidate instant corrects it
- * when the guess landed on the wrong side of a DST transition.
+ * UTC. The zone's offsets a day either side bracket any transition near that
+ * wall clock (no offset exceeds 14 hours), and each is a candidate: it holds
+ * when the zone really is at that offset at the instant it gives.
  *
  * A wall clock inside a spring-forward gap does not exist, and one inside a
- * fall-back overlap happens twice; this resolves the former forward and the
- * latter to the first occurrence, which is what most strptime implementations
- * do and what a user comparing against a real indexer will usually see.
+ * fall-back overlap happens twice; this resolves the former forward, by the
+ * offset before the gap (02:30 in New York's gap is 03:30 EDT), and the latter
+ * to the first occurrence, which is what most strptime implementations do and
+ * what a user comparing against a real indexer will usually see. Both depend
+ * only on the offsets, not on which side of UTC the zone is.
  */
 function ianaWallClockToEpoch(formatter: Intl.DateTimeFormat, wallAsUtcMs: number): number {
-  const firstGuess = ianaOffsetAt(formatter, wallAsUtcMs);
-  const candidate = wallAsUtcMs - firstGuess * 60_000;
-  const refined = ianaOffsetAt(formatter, candidate);
-  return refined === firstGuess ? candidate : wallAsUtcMs - refined * 60_000;
+  const before = ianaOffsetAt(formatter, wallAsUtcMs - 86_400_000);
+  const after = ianaOffsetAt(formatter, wallAsUtcMs + 86_400_000);
+  const instantAt = (offset: number) => wallAsUtcMs - Math.round(offset * 60_000);
+  // The larger offset gives the earlier instant, so it is tried first.
+  for (const offset of before >= after ? [before, after] : [after, before]) {
+    if (ianaOffsetAt(formatter, instantAt(offset)) === offset) return instantAt(offset);
+  }
+  return instantAt(before);
 }
 
 /**

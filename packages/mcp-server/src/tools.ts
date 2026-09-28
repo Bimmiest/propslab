@@ -155,9 +155,9 @@ export const simulateInputShape = {
     .boolean()
     .default(false)
     .describe(
-      'Record capture spans for positional EXTRACTs. Off by default: nothing here ' +
-        'renders highlights, and the `d` regex flag it requires disqualifies ' +
-        "patterns from V8's linear-time fallback (docs/engine.md measures 8ms vs 91s).",
+      "Record capture spans for positional EXTRACTs in each event's fieldOffsets. " +
+        'Off by default: nothing here renders highlights. PCRE2 reports the spans ' +
+        'with every match anyway, so this costs output size, not matching time.',
     ),
   include_snapshots: z
     .boolean()

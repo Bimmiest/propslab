@@ -30,8 +30,8 @@ test.describe('boot', () => {
       .getAttribute('content');
 
     expect(policy).toBeTruthy();
-    // 'unsafe-eval' was removed once main.tsx moved to monaco's slim
-    // editor.api entry; nothing may quietly put it back. 'wasm-unsafe-eval'
+    // 'unsafe-eval' was removed once the editor moved to monaco's slim
+    // `monaco-editor/editor` entry; nothing may quietly put it back. 'wasm-unsafe-eval'
     // is the narrower grant PCRE2's WebAssembly needs, and only that.
     expect(policy).not.toContain("'unsafe-eval'");
     expect(policy).toContain("'wasm-unsafe-eval'");
@@ -550,5 +550,29 @@ test.describe('regex engine', () => {
 
     expect(complaints.csp, 'blocked by Content-Security-Policy').toEqual([]);
     expect(complaints.all, 'browser errors').toEqual([]);
+  });
+});
+
+/**
+ * A worker that cannot load the regex engine is a load failure; past the cap
+ * the pipeline runs on the main thread, and the status bar must say so rather
+ * than "Worker idle" (#403). The page's own load is let through, so only the
+ * workers' fetches fail.
+ */
+test.describe('worker load failure', () => {
+  test('the status bar reports the main-thread fallback', async ({ page }) => {
+    let wasmLoads = 0;
+    await page.context().route(/\.wasm$/, (route) =>
+      wasmLoads++ === 0 ? route.continue() : route.fulfill({ status: 404, body: '' }),
+    );
+    await openApp(page);
+    await loadExample(page, APACHE);
+
+    const state = page.getByTestId('pipeline-main-thread');
+    await expect(state).toContainText('Main thread (no watchdog)', { timeout: 30_000 });
+    await expect(page.getByText('Worker idle')).toHaveCount(0);
+    await state.focus();
+    await expect(page.getByRole('tooltip')).toContainText('no watchdog');
+    expect(wasmLoads).toBeGreaterThan(1);
   });
 });

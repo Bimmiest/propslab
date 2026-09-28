@@ -3,9 +3,49 @@ import { useAppStore } from '../../store/useAppStore';
 import { Icon } from '../ui/Icon';
 import { Tooltip } from '../ui/Tooltip';
 
+const MAIN_THREAD_HINT =
+  'No pipeline worker could be loaded, so the pipeline runs on the main thread. ' +
+  'There is no watchdog here: a runaway regex freezes the tab instead of being stopped. ' +
+  'Reload the page to try the worker again.';
+
+/** Where the pipeline runs and whether it is busy. */
+function WorkerState() {
+  const result = useAppStore((s) => s.processingResult);
+  const isProcessing = useAppStore((s) => s.isProcessing);
+  const onMainThread = useAppStore((s) => s.pipelineOnMainThread);
+
+  const color = isProcessing
+    ? 'var(--color-accent)'
+    : onMainThread
+      ? 'var(--color-warning)'
+      : result
+        ? 'var(--color-success)'
+        : 'var(--color-text-muted)';
+  const dot = <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ backgroundColor: color }} />;
+
+  // After a worker load failure the pipeline runs inline (#403): say so
+  // rather than "Worker idle", in words and to a screen reader.
+  if (onMainThread) {
+    return (
+      <Tooltip content={MAIN_THREAD_HINT} side="top">
+        <span className="flex items-center gap-1.5 cursor-help" tabIndex={0} data-testid="pipeline-main-thread">
+          {dot}
+          {isProcessing ? 'Processing on main thread…' : 'Main thread (no watchdog)'}
+          <span className="sr-only">. {MAIN_THREAD_HINT}</span>
+        </span>
+      </Tooltip>
+    );
+  }
+  return (
+    <span className="flex items-center gap-1.5">
+      {dot}
+      {isProcessing ? 'Processing…' : result ? 'Worker idle' : 'Ready'}
+    </span>
+  );
+}
+
 /** Left: worker status + timing + manual-run controls */
 function PipelineStatus() {
-  const result = useAppStore((s) => s.processingResult);
   const isProcessing = useAppStore((s) => s.isProcessing);
   const lastProcessingMs = useAppStore((s) => s.lastProcessingMs);
   const settings = useAppStore((s) => s.settings);
@@ -21,19 +61,7 @@ function PipelineStatus() {
 
   return (
     <div className="flex items-center gap-3">
-      <span className="flex items-center gap-1.5">
-        <span
-          className="inline-block w-1.5 h-1.5 rounded-full"
-          style={{
-            backgroundColor: isProcessing
-              ? 'var(--color-accent)'
-              : result
-                ? 'var(--color-success)'
-                : 'var(--color-text-muted)',
-          }}
-        />
-        {isProcessing ? 'Processing…' : result ? 'Worker idle' : 'Ready'}
-      </span>
+      <WorkerState />
       {timingLabel && !isProcessing && (
         <span>{timingLabel}</span>
       )}

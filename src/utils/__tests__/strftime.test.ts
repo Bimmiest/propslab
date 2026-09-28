@@ -154,6 +154,22 @@ describe('#159 — IANA zone names resolve against real zone data', () => {
     expect(iso('2026-11-01 01:30:00', FMT, 'America/New_York')).toBe('2026-11-01T05:30:00.000Z');
   });
 
+  it('resolves a spring-forward gap forward west of UTC as well as east', () => {
+    // 02:30 does not exist on either day; it reads at the offset before the
+    // gap, landing on 03:30 after it. Resolution used to depend on the zone
+    // being east of UTC, putting New York's 02:30 at 01:30 EST. Convention-
+    // derived (the strptime/Temporal "compatible" reading); no capture covers DST.
+    expect(iso('2026-03-08 02:30:00', FMT, 'America/New_York')).toBe('2026-03-08T07:30:00.000Z');
+    expect(iso('2026-03-29 02:30:00', FMT, 'Europe/Berlin')).toBe('2026-03-29T01:30:00.000Z');
+  });
+
+  it('resolves a fall-back overlap to its first occurrence east of UTC as well as west', () => {
+    // Berlin's 02:30 on 2026-10-25 is 00:30Z in CEST, then 01:30Z in CET.
+    expect(iso('2026-10-25 02:30:00', FMT, 'Europe/Berlin')).toBe('2026-10-25T00:30:00.000Z');
+    // Southern hemisphere: Sydney leaves AEDT on 2026-04-05 at 03:00.
+    expect(iso('2026-04-05 02:30:00', FMT, 'Australia/Sydney')).toBe('2026-04-04T15:30:00.000Z');
+  });
+
   it('still prefers an explicit offset in the event over the stanza zone', () => {
     expect(iso('2026-01-15 10:00:00 +0900', `${FMT} %z`, 'America/New_York')).toBe(
       '2026-01-15T01:00:00.000Z',
@@ -187,6 +203,13 @@ describe('strftime — GMT-relative zone specs (#227)', () => {
     expect(iso('2026-01-15 10:00:00', FMT, 'GMT-5')).toBe('2026-01-15T15:00:00.000Z');
     expect(iso('2026-01-15 10:00:00', FMT, 'GMT-0500')).toBe('2026-01-15T15:00:00.000Z');
     expect(iso('2026-01-15 10:00:00', FMT, 'UTC+1:00')).toBe('2026-01-15T09:00:00.000Z');
+  });
+
+  it('reads a GMT-relative zone with minutes out of the event through %Z', () => {
+    // %Z stopped at the colon, reading `GMT+05` and dropping the half hour.
+    expect(iso('2026-01-15 10:00:00 GMT+05:30', `${FMT} %Z`)).toBe('2026-01-15T04:30:00.000Z');
+    // A colon with no minutes after it is not part of the zone.
+    expect(iso('2026-01-15 10:00:00 PST: started', `${FMT} %Z`)).toBe('2026-01-15T18:00:00.000Z');
   });
 
   it('leaves Etc/GMT-5 to IANA, where the sign is inverted', () => {

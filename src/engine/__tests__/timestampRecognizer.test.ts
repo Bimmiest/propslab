@@ -122,14 +122,50 @@ const CORPUS: Case[] = [
   { line: 'no digits here', format: null },
 ];
 
+/**
+ * Common layouts read to the instant they write, not a truncation of it: the
+ * log4j comma fraction, a 12-hour clock, a zone named after the time, Apache's
+ * stamp without its zone, and date(1)'s zone before the year. Convention-
+ * derived (strftime and datetime.xml readings); no capture covers these.
+ */
+const FIDELITY: Case[] = [
+  { line: '2026-01-15 10:00:00,123 INFO x', format: '%Y-%m-%d %H:%M:%S,%3N', iso: '2026-01-15T10:00:00.123Z' },
+  { line: '2026-01-15T10:00:00,5+01:00 x', format: '%Y-%m-%dT%H:%M:%S,%1N%z', iso: '2026-01-15T09:00:00.500Z' },
+  { line: '01/15/2026 10:00:00 PM x', format: '%m/%d/%Y %I:%M:%S %p', iso: '2026-01-15T22:00:00.000Z' },
+  { line: '01/15/2026 12:30:00 am x', format: '%m/%d/%Y %I:%M:%S %p', iso: '2026-01-15T00:30:00.000Z' },
+  { line: '2026-01-15 10:00:00 PM x', format: '%Y-%m-%d %I:%M:%S %p', iso: '2026-01-15T22:00:00.000Z' },
+  { line: '2026-01-15 10:00:00.250 PM x', format: '%Y-%m-%d %I:%M:%S.%3N %p', iso: '2026-01-15T22:00:00.250Z' },
+  { line: '2026/01/15 10:00:00 PM x', format: '%Y/%m/%d %I:%M:%S %p', iso: '2026-01-15T22:00:00.000Z' },
+  { line: '15 Jan 2026 10:00:00 PM x', format: '%d %b %Y %I:%M:%S %p', iso: '2026-01-15T22:00:00.000Z' },
+  { line: '2026-01-15 10:00:00 PST x', format: '%Y-%m-%d %H:%M:%S %Z', iso: '2026-01-15T18:00:00.000Z' },
+  { line: '2026-01-15T10:00:00.123 CET x', format: '%Y-%m-%dT%H:%M:%S.%3N %Z', iso: '2026-01-15T09:00:00.123Z' },
+  { line: '2026-01-15 10:00:00 GMT+05:30 x', format: '%Y-%m-%d %H:%M:%S %Z', iso: '2026-01-15T04:30:00.000Z' },
+  { line: '2026-01-15 10:00:00 PM EST x', format: '%Y-%m-%d %I:%M:%S %p %Z', iso: '2026-01-16T03:00:00.000Z' },
+  { line: '01/15/2026 10:00:00 PM PST x', format: '%m/%d/%Y %I:%M:%S %p %Z', iso: '2026-01-16T06:00:00.000Z' },
+  { line: '10.0.0.1 [15/Jan/2026:10:00:00 GET /', format: '%d/%b/%Y:%H:%M:%S', iso: '2026-01-15T10:00:00.000Z' },
+  { line: 'Thu Jan 15 10:00:00 UTC 2026 boot', format: '%a %b %e %H:%M:%S %Z %Y', iso: '2026-01-15T10:00:00.000Z' },
+  { line: 'Wed Jan 15 10:00:00 EST 2025 boot', format: '%a %b %e %H:%M:%S %Z %Y', iso: '2025-01-15T15:00:00.000Z' },
+  // A zone name counts only in capitals, as a word: `est` is prose and
+  // `Zookeeper` (above) a word, so the stamp before them is read without one.
+  { line: '2026-01-15 10:00:00 est terminé', format: '%Y-%m-%d %H:%M:%S', iso: '2026-01-15T10:00:00.000Z' },
+  { line: '2026-01-15 10:00:00 ESTABLISHED', format: '%Y-%m-%d %H:%M:%S', iso: '2026-01-15T10:00:00.000Z' },
+  // A stamp whose AM/PM no format can read is not read without it: 13 PM is
+  // no hour, and 13:00 would be a confident wrong answer. The date alone
+  // is still there to read.
+  { line: '2026-01-15 13:00:00 PM x', format: '%Y-%m-%d', iso: '2026-01-15T00:00:00.000Z' },
+];
+
 describe('the timestamp recogniser', () => {
   it('compiles every format in its table', () => {
-    // 30 ISO forms per separator, 17 others, 11 epoch forms: a format whose
+    // 76 ISO forms with a T, 114 with a space, 23 others, 11 epoch forms
+    // (ISO: 19 times -- 9 fraction widths after `.` or `,`, and none -- each
+    // with the zone attached, spaced or named, and plain; a space adds the
+    // 12-hour clock, with and without a zone name). A format whose
     // regex the regex guard refused would drop out of the table silently.
-    expect(AUTO_TIME_FORMATS).toHaveLength(88);
+    expect(AUTO_TIME_FORMATS).toHaveLength(224);
   });
 
-  it.each(CORPUS)('reads $line as $format', ({ line, format, iso }) => {
+  it.each([...CORPUS, ...FIDELITY])('reads $line as $format', ({ line, format, iso }) => {
     const found = recognizeTimestamp(line, { now: NOW });
     expect(found?.format ?? null).toBe(format);
     if (found) expect(found.parsed.date.toISOString()).toBe(iso);
@@ -137,7 +173,7 @@ describe('the timestamp recogniser', () => {
 });
 
 describe('line breaking, extraction and the scaffold agree', () => {
-  it.each(CORPUS)('on $line', ({ line, format, iso }) => {
+  it.each([...CORPUS, ...FIDELITY])('on $line', ({ line, format, iso }) => {
     // Extraction reads the same format and instant.
     const read = extracted(line);
     expect(read && { format: read.format, iso: read.iso }).toEqual(format === null ? null : { format, iso });

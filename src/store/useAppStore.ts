@@ -10,6 +10,12 @@ interface AppState {
 
   isProcessing: boolean;
   setIsProcessing: (v: boolean) => void;
+  /**
+   * The last pipeline run happened on the main thread, with no watchdog,
+   * because no worker could be had (#403). Cleared by the next worker answer.
+   */
+  pipelineOnMainThread: boolean;
+  setPipelineOnMainThread: (v: boolean) => void;
 
   metadata: EventMetadata;
   setMetadataField: (field: keyof EventMetadata, value: string) => void;
@@ -137,6 +143,8 @@ export const useAppStore = create<AppState>((set) => ({
 
   isProcessing: false,
   setIsProcessing: (v) => set({ isProcessing: v }),
+  pipelineOnMainThread: false,
+  setPipelineOnMainThread: (v) => set({ pipelineOnMainThread: v }),
 
   metadata: {
     index: 'main',

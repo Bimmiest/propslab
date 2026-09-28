@@ -60,7 +60,7 @@ const PROBE_CHARS: string[] = (() => {
 function findClassEnd(source: string, start: number): number {
   let i = start + 1;
   if (source[i] === '^') i++;
-  if (source[i] === ']') i++; // a leading `]` is a literal (PCRE; translatePcreToJs escapes it)
+  if (source[i] === ']') i++; // a leading `]` is a literal in PCRE
   for (; i < source.length; i++) {
     if (source[i] === '\\') { i++; continue; }
     if (source[i] === ']') return i;
@@ -189,9 +189,8 @@ function scanAtoms(source: string): RegexAtom[] | null {
 /** The inner source of a group atom, or null for constructs with no body to analyse. */
 function groupBody(groupSource: string): string | null {
   const inner = groupSource.slice(1, -1);
-  // `?ims-x:` is a scoped modifier group, which `translatePcreToJs` emits for a
-  // mid-pattern `(?i)`. It has a body like any other group; treating it as
-  // body-less would let `a(?i)(x+)+` past the check once it became `a(?i:(x+)+)`.
+  // `?ims-x:` is a PCRE scoped modifier group. It has a body like any other
+  // group; treating it as body-less would let `a(?i:(x+)+)` past the check.
   const prefix = /^\?(?::|[a-zA-Z]*(?:-[a-zA-Z]+)?:|<[A-Za-z_]\w*>|'[A-Za-z_]\w*'|P<[A-Za-z_]\w*>|=|!|<=|<!|>)/.exec(inner);
   if (prefix) return inner.slice(prefix[0].length);
   if (inner.startsWith('?')) return null; // inline flags or an unrecognised construct
