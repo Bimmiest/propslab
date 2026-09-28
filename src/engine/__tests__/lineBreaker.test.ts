@@ -153,6 +153,26 @@ describe('breakLines — BREAK_ONLY_BEFORE', () => {
     expect(events[0]!._raw).toContain('continuation');
     expect(events[1]!._raw).toContain('continuation2');
   });
+
+  // Checked on Splunk 10.4.0, not doc-derived (#323). The stanza below, with
+  // this input sent through receivers/simple, produced these four events:
+  // the pattern is searched for anywhere in a line, and the event starts at
+  // the beginning of the matching line, leading whitespace and all.
+  it('breaks before a line that matches anywhere, not only at its start', () => {
+    const raw = 'EVENT 1 starts here\ncontinuation of 1\na EVENT 2 is mid-line\ncontinuation of 2\n  EVENT 3 after two spaces\nEVENT 4 starts here\n';
+    const events = breakLines(raw, [
+      dir('SHOULD_LINEMERGE', 'true'),
+      dir('BREAK_ONLY_BEFORE', 'EVENT'),
+      dir('BREAK_ONLY_BEFORE_DATE', 'false'),
+      dir('DATETIME_CONFIG', 'CURRENT'),
+    ], META);
+    expect(events.map((e) => e._raw)).toEqual([
+      'EVENT 1 starts here\ncontinuation of 1',
+      'a EVENT 2 is mid-line\ncontinuation of 2',
+      '  EVENT 3 after two spaces',
+      'EVENT 4 starts here',
+    ]);
+  });
 });
 
 describe('breakLines — custom LINE_BREAKER', () => {

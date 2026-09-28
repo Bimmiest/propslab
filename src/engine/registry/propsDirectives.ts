@@ -156,9 +156,9 @@ export const PROPS_CORE: DirectiveDefinition[] = [
   {
     key: 'BREAK_ONLY_BEFORE',
     description:
-      'A regex pattern that, when matched at the start of a line, causes Splunk to start a new event. ' +
-      'Requires SHOULD_LINEMERGE = true. Lines that match this pattern begin a new event; ' +
-      'preceding lines are appended to the previous event.',
+      'A regex that starts a new event at any line it matches. Requires SHOULD_LINEMERGE = true. ' +
+      'The pattern is searched for anywhere in the line, and the new event starts at the beginning of that line; ' +
+      'anchor it with ^ to break only on lines that begin with it. Lines that do not match are appended to the previous event.',
     example: 'BREAK_ONLY_BEFORE = ^\\d{4}-\\d{2}-\\d{2}',
     defaultValue: '',
     category: 'Event Breaking',

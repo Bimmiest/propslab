@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractFields } from '../processors/fieldExtractor';
+import { extractFields, parseExtractValue } from '../processors/fieldExtractor';
 import type { SplunkEvent, ConfDirective } from '../types';
 
 function event(raw: string, fields: Record<string, string | string[]> = {}): SplunkEvent {
@@ -115,5 +115,77 @@ describe('extractFields — captureOffsets (#118)', () => {
   it('reports the same offsets PCRE gives, in JS string indices', () => {
     const e = extractFields([event('é😀 user=admin')], dirs)[0]!;
     expect(e.fieldOffsets?.['user']).toEqual([[9, 14]]);
+  });
+});
+
+// Checked on Splunk 10.4.0, not doc-derived (#410). With KV_MODE = none and
+// these three EXTRACTs, the input below gave src=abc and after=abc, and no
+// `reads`: one pass in class-name order, each extraction reading what the
+// earlier ones produced.
+describe('extractFields — `in <field>` reads what earlier EXTRACTs produced', () => {
+  it('sees a field from an EXTRACT whose class sorts first, and only then', () => {
+    const e = extractFields([event('2026-09-28 12:00:00 src="abc"')], [
+      dir('a_reads', '(?<reads>\\w+) in src'),
+      dir('m_src', 'src="(?<src>[^"]*)"'),
+      dir('z_reads_after', '(?<after>\\w+) in src'),
+    ])[0]!;
+    expect(e.fields).toEqual({ src: 'abc', after: 'abc' });
+  });
+});
+
+// Checked on Splunk 10.4.0, not doc-derived (#411). KV_MODE = none and
+// EXTRACT-a_src = src="(?<src>[^"]*)", one event per input line.
+describe('extractFields — values are trimmed, and an empty one creates no field', () => {
+  const extractSrc = (raw: string) => extractFields([event(raw)], [dir('a_src', 'src="(?<src>[^"]*)"')])[0]!;
+
+  it.each([
+    ['src="  abc"', 'abc'],
+    ['src="abc  "', 'abc'],
+    ['src="\tabc\t"', 'abc'],
+    ['src=" a b "', 'a b'],
+    ['src="abc xyz"', 'abc xyz'],
+  ])('%s gives src=%j', (raw, value) => {
+    expect(extractSrc(raw).fields['src']).toBe(value);
+  });
+
+  it.each(['src="   "', 'src=""'])('%s gives no field, and says why', (raw) => {
+    const e = extractSrc(raw);
+    expect(e.fields).toEqual({});
+    expect(e.noOps?.map((n) => n.reason)).toEqual([{ kind: 'values-empty', fields: ['src'] }]);
+  });
+
+  it('highlights the value as stored, without the trimmed whitespace', () => {
+    const raw = 'x src="  abc " y';
+    const e = extractSrc(raw);
+    const [start, end] = e.fieldOffsets!['src']![0]!;
+    expect(raw.slice(start, end)).toBe('abc');
+  });
+});
+
+// Checked on Splunk 10.4.0, not doc-derived (#396). The whitespace before
+// `in <field>` separates the two, and exactly one character of it is
+// consumed: the rest stays on the end of the pattern. With these EXTRACTs,
+// src="abc xyz" (one inner space) gave one and two, and src="abc  xyz" (two)
+// gave one, two and three. A tab separates as a space does.
+describe('extractFields — whitespace before `in <field>` (#396)', () => {
+  const dirs = [
+    dir('a_src', 'src="(?<src>[^"]*)"'),
+    dir('b_one', '(?<one>\\w+) in src'),
+    dir('c_two', '(?<two>\\w+)  in src'),
+    dir('d_three', '(?<three>\\w+)   in src'),
+    dir('e_tab', '(?<tab>\\w+)\tin src'),
+  ];
+  const fieldsOf = (raw: string) => extractFields([event(raw)], dirs)[0]!.fields;
+
+  it('consumes one whitespace character and keeps the rest in the pattern', () => {
+    expect(parseExtractValue('(?<two>\\w+)  in src')).toEqual({ pattern: '(?<two>\\w+) ', sourceField: 'src' });
+    expect(parseExtractValue('(?<three>\\w+)   in src')).toEqual({ pattern: '(?<three>\\w+)  ', sourceField: 'src' });
+    expect(parseExtractValue('(?<tab>\\w+)\tin src')).toEqual({ pattern: '(?<tab>\\w+)', sourceField: 'src' });
+  });
+
+  it('matches what Splunk extracted', () => {
+    expect(fieldsOf('src="abc"')).toEqual({ src: 'abc', one: 'abc', tab: 'abc' });
+    expect(fieldsOf('src="abc xyz"')).toEqual({ src: 'abc xyz', one: 'abc', two: 'abc', tab: 'abc' });
+    expect(fieldsOf('src="abc  xyz"')).toEqual({ src: 'abc  xyz', one: 'abc', two: 'abc', three: 'abc', tab: 'abc' });
   });
 });

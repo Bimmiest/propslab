@@ -116,7 +116,7 @@ function noteNoOp(state: ExtractionState, dir: ConfDirective, reason: NoOpReason
  * Warn when an EXTRACT reads `in _field` and the event has `field`: index-time
  * extractions strip leading underscores, so Splunk resolves the name without it.
  */
-function warnStrippedSourceRef(event: SplunkEvent, extraction: Extraction, options: ExtractionOptions): void {
+function warnStrippedSourceRef(fields: SplunkEvent['fields'], extraction: Extraction, options: ExtractionOptions): void {
   const { diagnostics, reportedStrippedRefs } = options;
   const { sourceField, directive } = extraction;
   if (
@@ -129,7 +129,7 @@ function warnStrippedSourceRef(event: SplunkEvent, extraction: Extraction, optio
     return;
   }
   const stripped = sourceField.replace(/^_+/, '');
-  if (!stripped || !hasField(event.fields, stripped)) return;
+  if (!stripped || !hasField(fields, stripped)) return;
   reportedStrippedRefs.add(sourceField);
   diagnostics.push({
     level: 'warning',
@@ -141,6 +141,17 @@ function warnStrippedSourceRef(event: SplunkEvent, extraction: Extraction, optio
   });
 }
 
+/**
+ * Splunk trims leading and trailing whitespace from an EXTRACT value, and an
+ * empty result creates no field. Checked on Splunk 10.4.0 (#411): `"  abc"`,
+ * `"abc  "` and tab-wrapped `abc` all gave `abc`, `" a b "` gave `a b`, and
+ * `"   "` and `""` gave no field. Spaces and tabs were observed; the rest of
+ * ASCII whitespace is trimmed with them. Whether non-ASCII spaces such as
+ * U+00A0 are trimmed is unchecked, so they are kept.
+ */
+const LEADING_WHITESPACE = /^[ \t\n\v\f\r]+/;
+const TRAILING_WHITESPACE = /[ \t\n\v\f\r]+$/;
+
 /** Store a match's named groups, first-wins, and trace or explain the outcome. */
 function storeGroups(
   directive: ConfDirective,
@@ -150,8 +161,15 @@ function storeGroups(
 ): void {
   const added: string[] = [];
   const alreadySet: string[] = [];
-  for (const [name, value] of Object.entries(groups)) {
-    if (value === undefined) continue;
+  const emptied: string[] = [];
+  for (const [name, captured] of Object.entries(groups)) {
+    if (captured === undefined) continue;
+    const lead = LEADING_WHITESPACE.exec(captured)?.[0].length ?? 0;
+    const value = captured.slice(lead).replace(TRAILING_WHITESPACE, '');
+    if (value === '') {
+      emptied.push(name);
+      continue;
+    }
     // First-wins (a simplification): this engine keeps the value from
     // the first extraction and discards later ones for the same field name.
     // Real Splunk's behaviour when two search-time extractions yield the same
@@ -165,7 +183,9 @@ function storeGroups(
     added.push(name);
     const span = indices?.[name];
     if (span) {
-      setField(state.offsets, name, [[span[0], span[1]]]);
+      // The highlight covers the value as stored, without what was trimmed.
+      const start = span[0] + lead;
+      setField(state.offsets, name, [[start, start + value.length]]);
       state.offsetsChanged = true;
     }
   }
@@ -181,6 +201,8 @@ function storeGroups(
     // It matched and still produced nothing, which looks identical in the
     // preview to a pattern that never matched at all.
     noteNoOp(state, directive, { kind: 'fields-already-set', fields: alreadySet });
+  } else if (emptied.length > 0) {
+    noteNoOp(state, directive, { kind: 'values-empty', fields: emptied });
   }
 }
 
@@ -193,9 +215,11 @@ function runExtraction(event: SplunkEvent, extraction: Extraction, state: Extrac
     return;
   }
 
-  const sourceValue = sourceField ? getFieldValue(event, sourceField) : event._raw;
+  // `in <field>` reads the fields as they stand at this point in the pass, so
+  // an extraction can read what an earlier one (in class-name order) produced.
+  const sourceValue = sourceField ? getFieldValue(event, state.fields, sourceField) : event._raw;
   if (!sourceValue) {
-    warnStrippedSourceRef(event, extraction, options);
+    warnStrippedSourceRef(state.fields, extraction, options);
     noteNoOp(state, directive, { kind: 'source-key-empty', sourceKey: sourceField ?? '_raw' });
     return;
   }
@@ -238,9 +262,17 @@ export function parseExtractValue(value: string): { pattern: string; sourceField
   return { pattern: trimmed };
 }
 
-function getFieldValue(event: SplunkEvent, fieldName: string): string | undefined {
+/**
+ * The value `in <field>` reads: from `fields`, which holds what the event
+ * arrived with plus what earlier EXTRACTs in this pass produced. Checked on
+ * Splunk 10.4.0 (#410): with EXTRACT-m_src producing `src`, EXTRACT-z_… in src
+ * matched and EXTRACT-a_… in src, whose class sorts first, found nothing.
+ * Fields from KV_MODE are not here, because automatic extraction runs after
+ * every EXTRACT (the extract-in-source-field fixture).
+ */
+function getFieldValue(event: SplunkEvent, fields: SplunkEvent['fields'], fieldName: string): string | undefined {
   if (fieldName === '_raw') return event._raw;
-  const val = getField(event.fields, fieldName);
+  const val = getField(fields, fieldName);
   if (Array.isArray(val)) return val[0];
   // `EXTRACT-app = …(?<app>\w+)… in source` is a staple TA idiom: host/source/
   // sourcetype/index are default fields at search time, so extraction can run
