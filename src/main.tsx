@@ -4,6 +4,12 @@ import * as RadixTooltip from '@radix-ui/react-tooltip'
 import './index.css'
 import App from './App.tsx'
 import { loadRegexEngine } from './utils/regexEngineLoader'
+import { applyTheme } from './hooks/useTheme'
+import { useAppStore } from './store/useAppStore'
+
+// Before the engine await, not in useTheme's effect alone: otherwise the page
+// paints light, whatever the saved theme, until the wasm has loaded.
+applyTheme(useAppStore.getState().theme)
 
 // Monaco (and its MonacoEnvironment) loads lazily; see LazyEditors.tsx.
 const root = createRoot(document.getElementById('root')!)
