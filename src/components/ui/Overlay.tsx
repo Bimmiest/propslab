@@ -28,6 +28,8 @@ export interface OverlayProps {
   containerClassName?: string;
   /** Fires on the content element; used for Enter-to-submit in a form dialog. */
   onKeyDown?: (event: React.KeyboardEvent) => void;
+  /** `alertdialog` for a confirmation that interrupts the user's flow. */
+  role?: 'dialog' | 'alertdialog';
 }
 
 export function Overlay({
@@ -39,6 +41,7 @@ export function Overlay({
   style,
   containerClassName = 'fixed inset-0 z-50 flex items-start justify-center pt-[20vh]',
   onKeyDown,
+  role,
 }: OverlayProps) {
   return (
     <Dialog.Root
@@ -64,6 +67,7 @@ export function Overlay({
             className={className}
             style={style}
             onKeyDown={onKeyDown}
+            {...(role ? { role } : {})}
             // These overlays carry no separate descriptive text, and Radix
             // requires either a description or an explicit opt-out. Opting out
             // is the accurate answer rather than inventing a sentence for a

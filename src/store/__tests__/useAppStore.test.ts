@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach } from 'vitest';
-import { useAppStore } from '../useAppStore';
+import { useAppStore, selectSessionDirty } from '../useAppStore';
+import { SAMPLE_CONFIGS } from '../../engine/sampleData';
 
 const SETTINGS_KEY = 'propslab:settings';
 const initial = useAppStore.getState();
@@ -67,6 +68,43 @@ describe('dictionary navigation', () => {
     useAppStore.getState().setActiveView('dictionary');
     const persisted = Object.keys(localStorage).map((k) => localStorage.getItem(k) ?? '');
     expect(persisted.some((v) => v.includes('dictionary'))).toBe(false);
+  });
+});
+
+describe('selectSessionDirty — work that replacing the inputs would lose (#440)', () => {
+  beforeEach(() => {
+    useAppStore.setState(initial, true);
+  });
+  const dirty = () => selectSessionDirty(useAppStore.getState());
+
+  it('is clean on first load, with empty inputs', () => {
+    expect(dirty()).toBe(false);
+  });
+
+  it('turns dirty on any editor or metadata edit', () => {
+    useAppStore.getState().setRawData('x');
+    expect(dirty()).toBe(true);
+    useAppStore.setState(initial, true);
+    useAppStore.getState().setTransformsConf('[t]');
+    expect(dirty()).toBe(true);
+    useAppStore.setState(initial, true);
+    useAppStore.getState().setMetadataField('host', 'web01');
+    expect(dirty()).toBe(true);
+  });
+
+  it('treats a freshly loaded example as clean, and an edit to it as dirty', () => {
+    const sample = SAMPLE_CONFIGS[0]!;
+    useAppStore.getState().loadInputs(sample);
+    expect(useAppStore.getState().propsConf).toBe(sample.propsConf);
+    expect(dirty()).toBe(false);
+    useAppStore.getState().setPropsConf(sample.propsConf + '\nTRUNCATE = 0');
+    expect(dirty()).toBe(true);
+  });
+
+  it('is clean again once the edit is undone by hand', () => {
+    useAppStore.getState().setRawData('x');
+    useAppStore.getState().setRawData('');
+    expect(dirty()).toBe(false);
   });
 });
 
