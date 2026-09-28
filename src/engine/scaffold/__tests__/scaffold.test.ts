@@ -5,6 +5,7 @@ import { detectTruncate } from '../analyzers/truncate';
 import { normalizeSourcetype, detectSourcetypeHygiene } from '../analyzers/sourcetype';
 import { renderStanza, appendStanza } from '../serialize';
 import { scaffoldConfig } from '../scaffoldConfig';
+import { runPipeline } from '../../pipeline';
 import type { ScaffoldSuggestion } from '../types';
 
 const splitLines = (s: string) => s.split(/\r?\n/);
@@ -39,11 +40,37 @@ describe('detectLineFormat', () => {
     expect(byKey(out, 'KV_MODE')?.value).toBe('json');
   });
 
-  it('a single multi-line JSON object gets KV_MODE=json but no LINE_BREAKER', () => {
+  // #438: without a breaker the default line merge splits the object at a date.
+  it('a single multi-line JSON object also gets a breaker that keeps it whole', () => {
     const raw = '{\n  "a": 1,\n  "b": 2\n}';
     const out = detectLineFormat(raw, splitLines(raw));
     expect(byKey(out, 'KV_MODE')?.value).toBe('json');
-    expect(byKey(out, 'LINE_BREAKER')).toBeUndefined();
+    expect(byKey(out, 'LINE_BREAKER')?.value).toBe('([\\r\\n]+)(?=\\{)');
+    expect(byKey(out, 'SHOULD_LINEMERGE')?.value).toBe('false');
+  });
+
+  it('breaks XML before each declaration when every document has one', () => {
+    const raw = '<?xml version="1.0"?>\n<Event>\n  <a>1</a>\n</Event>\n<?xml version="1.0"?>\n<Event>\n  <a>2</a>\n</Event>';
+    expect(byKey(detectLineFormat(raw, splitLines(raw)), 'LINE_BREAKER')?.value).toBe('([\\r\\n]+)(?=<\\?xml\\s)');
+  });
+
+  it('breaks XML before each top-level element name', () => {
+    const raw = '<!-- feed -->\n<Event id="1">\n  <Data a="x/y">1</Data>\n  <Empty/>\n</Event>\n<Alert>\n  <b>2</b>\n</Alert>';
+    const out = detectLineFormat(raw, splitLines(raw));
+    expect(byKey(out, 'LINE_BREAKER')?.value).toBe('([\\r\\n]+)(?=<(?:Event|Alert)[\\s/>])');
+    expect(byKey(out, 'SHOULD_LINEMERGE')?.value).toBe('false');
+    expect(byKey(out, 'KV_MODE')?.value).toBe('xml');
+  });
+
+  it('proposes only KV_MODE for XML whose top level it cannot place', () => {
+    // A declaration on the first document only: breaking before <Event> would
+    // strand the declaration; breaking before <?xml would merge the rest.
+    const partial = '<?xml version="1.0"?>\n<Event>\n</Event>\n<Event>\n</Event>';
+    const unbalanced = '<Event>\n</Event>\n</Event>';
+    for (const raw of [partial, unbalanced]) {
+      const out = detectLineFormat(raw, splitLines(raw));
+      expect(out.map((s) => s.key)).toEqual(['KV_MODE']);
+    }
   });
 
   it('does not mistake a single comma-containing line for CSV', () => {
@@ -185,5 +212,34 @@ describe('scaffoldConfig (integration)', () => {
     const result = scaffoldConfig('{"a":1}', { index: 'main', host: '', source: '', sourcetype: '' });
     expect(result.sourcetype).toBe('my:sourcetype');
     expect(byKey(result.suggestions, 'KV_MODE')?.value).toBe('json');
+  });
+});
+
+// #438: the scaffolded stanza, applied as written, must keep each pretty-printed
+// object whole. Dates inside the objects are what the default line merge
+// (BREAK_ONLY_BEFORE_DATE) would otherwise break on.
+describe('scaffoldConfig end to end — one event per multi-line object', () => {
+  const META = { index: 'main', host: '', source: '', sourcetype: 'app:doc' };
+
+  const json = (n: number) =>
+    `{\n  "id": ${n},\n  "user": "alice",\n  "created": "2024-01-15T10:00:0${n}Z",\n  "detail": {\n    "updated": "2024-01-15 10:05:0${n}"\n  }\n}`;
+  const xml = (n: number, declared: boolean) =>
+    `${declared ? '<?xml version="1.0"?>\n' : ''}<Event>\n  <Id>${n}</Id>\n  <Created>2024-01-15T10:00:0${n}Z</Created>\n  <Updated>2024-01-15 10:05:0${n}</Updated>\n</Event>`;
+
+  const cases: Array<[string, string[]]> = [
+    ['one JSON object', [json(1)]],
+    ['three JSON objects', [json(1), json(2), json(3)]],
+    ['one XML document', [xml(1, false)]],
+    ['three XML documents', [xml(1, false), xml(2, false), xml(3, false)]],
+    ['one declared XML document', [xml(1, true)]],
+    ['three declared XML documents', [xml(1, true), xml(2, true), xml(3, true)]],
+  ];
+
+  it.each(cases)('%s', (_label, objects) => {
+    const raw = objects.join('\n');
+    const { sourcetype, suggestions } = scaffoldConfig(raw, META);
+    const props = renderStanza(sourcetype, suggestions.filter((s) => s.enabledByDefault));
+    const { result } = runPipeline(raw, { ...META, sourcetype }, props, '');
+    expect(result.events.map((e) => e._raw)).toEqual(objects);
   });
 });
