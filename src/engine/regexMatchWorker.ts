@@ -22,15 +22,25 @@ export interface RegexMatchRequest {
 
 export interface RegexMatchResponse {
   id: number;
-  /** Per-input results, or null when the pattern does not compile. */
+  /** Per-input results, or null when the pattern does not compile or matching threw. */
   results: (RegexMatchInfo | null)[] | null;
+  /**
+   * Why matching threw, when it did. Caught here so the request is answered
+   * rather than read as a timeout, and useRegexMatch treats it as it does a
+   * pattern that will not compile: nothing to show, nothing to add.
+   */
+  error?: string;
 }
 
 // Loads the regex engine from its fixed asset URL, then signals ready and
 // serves requests in order; see serveWithRegexEngine.
 serveWithRegexEngine<RegexMatchRequest>(self, (request) => {
   const { id, pattern, inputs } = request;
-  const results = matchInputs(pattern, inputs);
-  const response: RegexMatchResponse = { id, results };
+  let response: RegexMatchResponse;
+  try {
+    response = { id, results: matchInputs(pattern, inputs) };
+  } catch (err) {
+    response = { id, results: null, error: err instanceof Error ? err.message : String(err) };
+  }
   self.postMessage(response);
 });

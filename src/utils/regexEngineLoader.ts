@@ -75,7 +75,17 @@ export function serveWithRegexEngine<Req>(scope: WorkerScope<Req>, handle: (requ
       setTimeout(() => {
         up = true;
         scope.postMessage(WORKER_READY);
-        for (const request of waiting.splice(0)) handle(request);
+        for (const request of waiting.splice(0)) {
+          // One throw must not drop the requests queued behind it; it is
+          // still rethrown, in a task of its own, as the crash it is.
+          try {
+            handle(request);
+          } catch (err) {
+            setTimeout(() => {
+              throw err;
+            });
+          }
+        }
       }),
     (err: unknown) =>
       setTimeout(() => {

@@ -13,6 +13,7 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { WORKER_READY } from '../workerProtocol';
 import { stubFailingWasmFetch, stubWasmFetch } from '../../test/wasmFetch';
+import { serveWithRegexEngine } from '../../utils/regexEngineLoader';
 
 type Handler = ((e: MessageEvent) => void) | null;
 
@@ -100,7 +101,26 @@ describe('worker entries post WORKER_READY (#339)', () => {
     stubWasmFetch();
     const { posted, send } = await load(entries[1]![1]);
     await settle();
-    expect(() => send({ type: 'init', regexEngine: {} })).toThrow();
-    expect(posted).toEqual([{ message: WORKER_READY, handlerInstalled: true }]);
+    // Matching it fails, and is answered as a failed request.
+    send({ type: 'init', regexEngine: {} });
+    expect(posted).toHaveLength(2);
+    const answer = posted[1]!.message as { results: unknown; error?: unknown };
+    expect(answer.results).toBeNull();
+    expect(typeof answer.error).toBe('string');
+  });
+
+  it('handles every queued request when one handler throws, and still surfaces the throw (#436)', async () => {
+    stubWasmFetch();
+    const fakeSelf: { onmessage: Handler; postMessage: (m: unknown) => void } = { onmessage: null, postMessage: () => {} };
+    const handled: number[] = [];
+    serveWithRegexEngine<number>(fakeSelf, (n) => {
+      if (n === 2) throw new Error('handler exploded');
+      handled.push(n);
+    });
+    for (const n of [1, 2, 3]) fakeSelf.onmessage!({ data: n } as MessageEvent<number>);
+    await settle();
+    expect(handled).toEqual([1, 3]);
+    // Rethrown in a task of its own, so the page still sees it as a crash.
+    expect(() => vi.runOnlyPendingTimers()).toThrow(/handler exploded/);
   });
 });
