@@ -22,7 +22,7 @@ export const PIPELINE_DEBOUNCE_MS = 300;
  */
 export const MAX_WORKER_LOAD_FAILURES = 2;
 
-/** How many run budgets `postWhenReady` waits for a worker to load. */
+/** How many run budgets a request waits for its worker to load. */
 export const LOAD_WAIT_FACTOR = 6;
 
 // ---------------------------------------------------------------------------
@@ -50,10 +50,11 @@ export const LOAD_WAIT_FACTOR = 6;
 // A worker runs its requests one at a time, in posting order, so a request's
 // watchdog starts when the worker gets to it: at post when nothing is ahead of
 // it, otherwise when the request ahead is answered, so no request is charged
-// for its predecessors' run time. The first request's
-// budget still covers the module's load; a caller that needs to know whether
-// its timed-out request could have run at all is told whether the worker had
-// loaded, and can wait for the replacement with `postWhenReady`.
+// for its predecessors' run time. Nor for the module's load: until ready, a
+// posted request has no watchdog, and the load timer (LOAD_WAIT_FACTOR run
+// budgets, counted as a load failure) bounds the wait instead. A run budget
+// against a worker still downloading would terminate it, and every new
+// request would restart the download (#420).
 // ---------------------------------------------------------------------------
 
 export interface ManagedWorkerConfig<TReq extends { id: number }, TRes extends { id: number }> {
@@ -67,7 +68,9 @@ export interface ManagedWorkerConfig<TReq extends { id: number }, TRes extends {
    * `request`'s watchdog fired. The worker has been terminated and replaced;
    * `others` were in flight behind it, never answered, and are no longer
    * tracked — post them again or settle them. `loaded` says whether the worker
-   * had sent ready, i.e. whether `request` can have started at all.
+   * had sent ready, i.e. whether `request` can have started at all; since a
+   * watchdog only starts once it has (#420), this lifecycle always passes
+   * true, and a caller's handling of false is a guard, not a path.
    */
   onTimeout: (request: TReq, others: TReq[], loaded: boolean) => void;
   /**
@@ -89,16 +92,16 @@ export interface ManagedWorker<TReq> {
   /** Build a worker now if there is none. False when none can be had. */
   ensure: () => boolean;
   /**
-   * Post a request under a fresh watchdog, building a worker first if needed.
+   * Post a request under a fresh watchdog, building a worker first if needed;
+   * before the worker has loaded, under the load timer until it does.
    * False when no worker can be had — no `Worker` global, or the cap is spent —
    * and the caller falls back.
    */
   post: (request: TReq) => boolean;
   /**
-   * `post`, but once the current worker has loaded, so the watchdog measures
-   * the run alone. For a request that timed out waiting for its worker to
-   * start. If this worker fails to load, the request is handed to
-   * `onLoadFailure` like anything else in flight.
+   * `post`, but not handed to the worker until it has loaded. If it fails to
+   * load, the request is handed to `onLoadFailure` like anything else in
+   * flight, and dropped by `forget`.
    */
   postWhenReady: (request: TReq) => boolean;
   /**
@@ -139,9 +142,10 @@ class ManagedWorkerImpl<TReq extends { id: number }, TRes extends { id: number }
   /** Waiting for the current worker's ready signal before they are posted. */
   private deferred: TReq[] = [];
   /**
-   * Bounds the wait for that signal: a replacement whose fetch hangs neither
-   * loads nor errors, and nothing else would ever settle what waits on it.
-   * Generous next to the run budget, since a slow load is what put it here.
+   * Bounds the wait for that signal, for everything posted or deferred: a
+   * worker whose fetch hangs neither loads nor errors, and nothing else would
+   * ever settle what waits on it. Generous next to the run budget, since a
+   * slow load is not the request's fault.
    */
   private loadTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -174,6 +178,18 @@ class ManagedWorkerImpl<TReq extends { id: number }, TRes extends { id: number }
     const head = this.inFlight.values().next().value;
     if (!head || head.timer !== null) return;
     head.timer = setTimeout(() => this.expire(head), this.config.timeoutMs);
+  }
+
+  private armLoadTimer(): void {
+    this.loadTimer ??= setTimeout(() => {
+      this.loadTimer = null;
+      if (this.ready) return;
+      const requests = this.takeAll();
+      this.discard();
+      this.loadFailures += 1;
+      this.build();
+      this.config.onLoadFailure(requests, this.capped());
+    }, this.config.timeoutMs * LOAD_WAIT_FACTOR);
   }
 
   private clearLoadTimer(): void {
@@ -217,6 +233,8 @@ class ManagedWorkerImpl<TReq extends { id: number }, TRes extends { id: number }
       this.ready = true;
       this.loadFailures = 0;
       this.clearLoadTimer();
+      // What was posted while it loaded has had no watchdog; it starts now.
+      this.armHead();
       const waiting = this.deferred;
       this.deferred = [];
       for (const request of waiting) this.post(request);
@@ -279,7 +297,8 @@ class ManagedWorkerImpl<TReq extends { id: number }, TRes extends { id: number }
       this.inFlight.delete(request.id);
     }
     this.inFlight.set(request.id, { request, timer: null, superseded: false });
-    this.armHead();
+    if (this.ready) this.armHead();
+    else this.armLoadTimer();
     w.postMessage(request);
     return true;
   };
@@ -288,15 +307,7 @@ class ManagedWorkerImpl<TReq extends { id: number }, TRes extends { id: number }
     if (!this.build()) return false;
     if (this.ready) return this.post(request);
     this.deferred.push(request);
-    this.loadTimer ??= setTimeout(() => {
-      this.loadTimer = null;
-      if (this.ready) return;
-      const requests = this.takeAll();
-      this.discard();
-      this.loadFailures += 1;
-      this.build();
-      this.config.onLoadFailure(requests, this.capped());
-    }, this.config.timeoutMs * LOAD_WAIT_FACTOR);
+    this.armLoadTimer();
     return true;
   };
 

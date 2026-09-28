@@ -22,6 +22,7 @@
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { useProcessingPipeline } from '../useProcessingPipeline';
+import { LOAD_WAIT_FACTOR } from '../workerLifecycle';
 import { useAppStore } from '../../store/useAppStore';
 import type { PipelineWorkerRequest } from '../../engine/pipelineWorker';
 
@@ -384,26 +385,28 @@ describe('useProcessingPipeline', () => {
     });
   });
 
-  describe('the load-failure cap after a timeout before load (#339)', () => {
-    it('re-runs inline an input that timed out before its worker ever loaded', async () => {
-      // The worker never started, so the input never ran. When the workers
-      // after it fail to load too, nothing will ever come to run it; the cap
-      // runs it here instead of leaving the preview on the timeout.
+  describe('the load-failure cap after a slow load (#339, #420)', () => {
+    it('runs inline an input whose workers never finish loading', async () => {
+      // The worker never started, so the input never ran. When it and the
+      // worker after it never load, nothing will ever come to run it; the cap
+      // runs it here instead of leaving the preview waiting.
       vi.useFakeTimers();
       vi.stubGlobal('Worker', FakeWorker);
       seed();
       renderHook(() => useProcessingPipeline());
 
-      expect(FakeWorker.instances[0]!.posted).toHaveLength(1);
-      act(() => void vi.advanceTimersByTime(5_000));
-      // Waiting for the replacement to load, not reported as a failure.
+      const request = FakeWorker.instances[0]!.posted[0]!;
+      act(() => void vi.advanceTimersByTime(5_000 * LOAD_WAIT_FACTOR - 1));
+      // Still waiting for it to load, not reported as a failure.
       expect(useAppStore.getState().validationDiagnostics).toEqual([]);
       expect(useAppStore.getState().isProcessing).toBe(true);
-      expect(FakeWorker.instances).toHaveLength(2);
+      expect(FakeWorker.instances).toHaveLength(1);
 
+      act(() => void vi.advanceTimersByTime(1));
+      expect(FakeWorker.instances).toHaveLength(2);
+      expect(FakeWorker.instances[1]!.posted).toEqual([request]);
       act(() => FakeWorker.instances[1]!.failToLoad());
-      act(() => FakeWorker.instances[2]!.failToLoad());
-      expect(FakeWorker.instances).toHaveLength(3);
+      expect(FakeWorker.instances).toHaveLength(2);
       vi.useRealTimers();
       await waitFor(() => expect(useAppStore.getState().processingResult?.events).toHaveLength(2));
       expect(useAppStore.getState().validationDiagnostics).toEqual([]);
@@ -483,39 +486,41 @@ describe('useProcessingPipeline', () => {
       expect(useAppStore.getState().processingResult).not.toBeNull();
     });
 
-    it('runs the latest input once a worker that was slow to load has loaded', () => {
+    it('does not charge the input for a worker slow to load, or restart it on each edit (#420)', () => {
       vi.useFakeTimers();
       vi.stubGlobal('Worker', FakeWorker);
       seed();
       renderHook(() => useProcessingPipeline());
-      const request = FakeWorker.instances[0]!.posted[0]!;
+      const worker = FakeWorker.instances[0]!;
 
-      // The chunk takes longer than the budget: nothing ran.
-      act(() => void vi.advanceTimersByTime(5_000));
-      const replacement = FakeWorker.instances[1]!;
-      expect(replacement.posted).toEqual([]);
-
-      // The replacement is slow too, but its load is not charged to the input.
+      // The chunk takes longer than the budget, and the user edits meanwhile.
       act(() => void vi.advanceTimersByTime(6_000));
-      act(() => replacement.ready());
-      expect(replacement.posted).toEqual([request]);
+      act(() => useAppStore.setState({ propsConf: `${PROPS}TRUNCATE = 0\n` }));
+      act(() => void vi.advanceTimersByTime(300)); // debounce
+      act(() => void vi.advanceTimersByTime(6_000));
+      expect(worker.terminated).toBe(false);
+      expect(FakeWorker.instances).toHaveLength(1);
+      const [first, second] = worker.posted;
+
+      act(() => worker.ready());
+      act(() => worker.answer(first!.id));
       act(() => void vi.advanceTimersByTime(4_900));
-      act(() => replacement.answer(request.id));
+      act(() => worker.answer(second!.id));
 
       const state = useAppStore.getState();
       expect(state.isProcessing).toBe(false);
       expect(state.validationDiagnostics).toEqual([]);
       expect(state.processingResult).not.toBeNull();
-      expect(FakeWorker.instances).toHaveLength(2);
+      expect(FakeWorker.instances).toHaveLength(1);
     });
 
-    it('still blames an input that hangs the worker after the re-post', () => {
+    it('still blames an input that hangs the worker once it has loaded', () => {
       vi.useFakeTimers();
       vi.stubGlobal('Worker', FakeWorker);
       seed();
       renderHook(() => useProcessingPipeline());
-      act(() => void vi.advanceTimersByTime(5_000));
-      act(() => FakeWorker.instances[1]!.ready());
+      act(() => void vi.advanceTimersByTime(10_000));
+      act(() => FakeWorker.instances[0]!.ready());
       act(() => void vi.advanceTimersByTime(5_000));
       expect(useAppStore.getState().validationDiagnostics[0]?.message).toMatch(/backtracking/);
     });

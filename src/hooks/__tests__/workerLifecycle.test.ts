@@ -282,13 +282,14 @@ describe('createManagedWorker (#339)', () => {
   });
 
   describe('watchdog', () => {
-    it('terminates and replaces a worker that overruns, and says whether it had loaded', () => {
+    it('terminates and replaces a worker that overruns', () => {
       const { managed, calls } = setup();
       managed.post(req(1));
       const hung = latest();
+      hung.ready();
       vi.advanceTimersByTime(1000);
       expect(hung.terminated).toBe(true);
-      expect(calls.timeout).toHaveBeenCalledWith(req(1), [], false);
+      expect(calls.timeout).toHaveBeenCalledWith(req(1), [], true);
       expect(FakeWorker.instances).toHaveLength(2);
 
       managed.post(req(2));
@@ -297,13 +298,58 @@ describe('createManagedWorker (#339)', () => {
       expect(calls.timeout).toHaveBeenLastCalledWith(req(2), [], true);
     });
 
+    it('does not start a request\'s budget until its worker has loaded (#420)', () => {
+      const { managed, calls } = setup();
+      managed.post(req(1));
+      const slow = latest();
+      vi.advanceTimersByTime(1000 * LOAD_WAIT_FACTOR - 1);
+      expect(slow.terminated).toBe(false);
+      slow.ready();
+      vi.advanceTimersByTime(999);
+      expect(calls.timeout).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(1);
+      expect(calls.timeout).toHaveBeenCalledWith(req(1), [], true);
+      expect(calls.load).not.toHaveBeenCalled();
+    });
+
+    it('does not restart a loading worker however many requests it is posted (#420)', () => {
+      const { managed, calls } = setup({
+        onLoadFailure: (inFlight, capped) => {
+          calls.load(inFlight, capped);
+          for (const r of inFlight) managed.post(r);
+        },
+      });
+      // Typing on a slow link: each request supersedes the last, and none may
+      // put a run budget on the download.
+      managed.post(req(1));
+      const loading = latest();
+      for (let id = 2; id < LOAD_WAIT_FACTOR * 2; id++) {
+        vi.advanceTimersByTime(450);
+        managed.forget();
+        managed.post(req(id));
+      }
+      vi.advanceTimersByTime(1000 * LOAD_WAIT_FACTOR - 450 * (LOAD_WAIT_FACTOR * 2 - 2) - 1);
+      expect(loading.terminated).toBe(false);
+      expect(FakeWorker.instances).toHaveLength(1);
+      expect(calls.timeout).not.toHaveBeenCalled();
+
+      // The load timer bounds the wait, as a load failure, with the latest request.
+      vi.advanceTimersByTime(1);
+      expect(loading.terminated).toBe(true);
+      expect(calls.load).toHaveBeenCalledWith([req(LOAD_WAIT_FACTOR * 2 - 1)], false);
+      vi.advanceTimersByTime(1000 * LOAD_WAIT_FACTOR);
+      expect(calls.load).toHaveBeenLastCalledWith([req(LOAD_WAIT_FACTOR * 2 - 1)], true);
+      expect(calls.timeout).not.toHaveBeenCalled();
+    });
+
     it('hands back the requests queued behind the one that hung, untracked', () => {
       const { managed, calls } = setup();
       managed.post(req(1));
+      latest().ready();
       vi.advanceTimersByTime(500);
       managed.post(req(2));
       vi.advanceTimersByTime(500);
-      expect(calls.timeout).toHaveBeenCalledWith(req(1), [req(2)], false);
+      expect(calls.timeout).toHaveBeenCalledWith(req(1), [req(2)], true);
       vi.advanceTimersByTime(1000);
       expect(calls.timeout).toHaveBeenCalledTimes(1);
     });
@@ -312,6 +358,7 @@ describe('createManagedWorker (#339)', () => {
       const { managed } = setup();
       for (let i = 1; i <= 4; i++) {
         managed.post(req(i));
+        latest().ready();
         vi.advanceTimersByTime(1000);
       }
       expect(managed.post(req(5))).toBe(true);
@@ -319,18 +366,20 @@ describe('createManagedWorker (#339)', () => {
 
     it('gives a request posted again a fresh budget', () => {
       const { managed, calls } = setup({
-        onLoadFailure: (inFlight) => {
+        onCrash: (inFlight) => {
           for (const r of inFlight) managed.post(r);
         },
       });
       managed.post(req(1));
+      latest().ready();
       vi.advanceTimersByTime(900);
-      latest().failFetch();
+      latest().throw();
+      latest().ready();
       vi.advanceTimersByTime(900);
       expect(calls.timeout).not.toHaveBeenCalled();
       expect(latest().posted).toEqual([req(1)]);
       vi.advanceTimersByTime(100);
-      expect(calls.timeout).toHaveBeenCalledWith(req(1), [], false);
+      expect(calls.timeout).toHaveBeenCalledWith(req(1), [], true);
     });
 
     it('starts a queued request\'s budget when the one ahead is answered (#364)', () => {
@@ -379,7 +428,7 @@ describe('createManagedWorker (#339)', () => {
       expect(calls.load.mock.calls[0]![0]).toEqual([req(2)]);
     });
 
-    it('reads the budget at each post', () => {
+    it('reads the budget when a watchdog starts', () => {
       // useWorkerRequest passes a getter over its latest config.
       let budget = 1000;
       const onTimeout = vi.fn();
@@ -395,6 +444,7 @@ describe('createManagedWorker (#339)', () => {
       });
       budget = 3000;
       managed.post(req(1));
+      latest().ready();
       vi.advanceTimersByTime(2999);
       expect(onTimeout).not.toHaveBeenCalled();
       vi.advanceTimersByTime(1);
@@ -413,9 +463,7 @@ describe('createManagedWorker (#339)', () => {
 
     it('holds a request until the worker loads, then times its run alone', () => {
       const { managed, calls } = setup();
-      managed.post(req(1));
-      vi.advanceTimersByTime(1000);
-      expect(calls.timeout).toHaveBeenCalledWith(req(1), [], false);
+      managed.ensure();
       expect(managed.postWhenReady(req(1))).toBe(true);
       const replacement = latest();
       vi.advanceTimersByTime(5000);
@@ -423,9 +471,9 @@ describe('createManagedWorker (#339)', () => {
       replacement.ready();
       expect(replacement.posted).toEqual([req(1)]);
       vi.advanceTimersByTime(999);
-      expect(calls.timeout).toHaveBeenCalledTimes(1);
+      expect(calls.timeout).not.toHaveBeenCalled();
       vi.advanceTimersByTime(1);
-      expect(calls.timeout).toHaveBeenLastCalledWith(req(1), [], true);
+      expect(calls.timeout).toHaveBeenCalledWith(req(1), [], true);
     });
 
     it('hands a held request to onLoadFailure if the worker fails to load', () => {

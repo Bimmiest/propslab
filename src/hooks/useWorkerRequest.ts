@@ -23,8 +23,9 @@ import { createManagedWorker } from './workerLifecycle';
 //   resent to the replacement, and past MAX_WORKER_LOAD_FAILURES it runs
 //   inline: `new Worker` does not throw when its script cannot be fetched, so
 //   the cap is what stops such a worker being rebuilt forever.
-// - A timeout before the worker loaded is not the request's doing either: it
-//   is posted again once the replacement has loaded.
+// - A slow load is not the request's doing either: no watchdog runs until the
+//   worker has loaded, and a load that outlasts the load timer is a load
+//   failure.
 // - A crash is the request's doing. It is reported as `timeout` and never run
 //   inline, and crashes do not count toward the cap: running a crashing
 //   pattern on the tab's own thread, with no watchdog, is exactly what the

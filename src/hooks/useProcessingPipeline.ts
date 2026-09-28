@@ -19,8 +19,8 @@ const MAX_WORKER_RETRIES = 1;
 // crash-vs-load classification and the load-failure cap — is
 // `createManagedWorker`. This hook's policy on top of it:
 //
-// - Timeout: terminal error, and the input is not retried — unless the worker
-//   had not loaded, when it is posted again once the replacement has.
+// - Timeout: terminal error, and the input is not retried. The watchdog only
+//   runs once the worker has loaded, so a slow load is a load failure, below.
 // - Crash (the worker had loaded): replay once on the replacement, then a
 //   terminal error. A crashed input is never run inline: on the tab's own
 //   thread it would have no watchdog.

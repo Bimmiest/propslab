@@ -158,6 +158,7 @@ describe('useWorkerRequest', () => {
     const { result } = setup();
     const first = latest();
     act(() => result.current.run({ value: 'slow' }));
+    act(() => first.ready());
     act(() => result.current.run({ value: '' }));
 
     act(() => void vi.advanceTimersByTime(5000));
@@ -183,28 +184,30 @@ describe('useWorkerRequest', () => {
     expect(FakeWorker.instances).toHaveLength(1);
   });
 
-  it('re-posts a request that timed out before its worker loaded, once the replacement loads (#364)', () => {
+  it('waits for a slow worker to load, through new requests, and times the run alone (#420)', () => {
     const { result } = setup();
     act(() => result.current.run({ value: 'a' }));
     const slow = latest();
-    act(() => void vi.advanceTimersByTime(1000));
-    expect(slow.terminated).toBe(true);
-    // Never ran, so it is neither a timeout nor handed to the replacement
-    // before that has loaded (its load would eat the budget again).
+    // Typing while the worker loads must neither time out nor restart it.
+    act(() => void vi.advanceTimersByTime(1500));
+    act(() => result.current.run({ value: 'ab' }));
+    act(() => void vi.advanceTimersByTime(1500));
+    act(() => result.current.run({ value: 'abc' }));
+    act(() => void vi.advanceTimersByTime(2000));
+    expect(slow.terminated).toBe(false);
+    expect(FakeWorker.instances).toHaveLength(1);
     expect(result.current.status).toBe('pending');
-    const replacement = latest();
-    expect(replacement.posted).toEqual([]);
 
-    act(() => void vi.advanceTimersByTime(5000));
-    act(() => replacement.ready());
-    expect(replacement.posted).toEqual([{ value: 'a', id: 1 }]);
+    act(() => slow.ready());
+    act(() => slow.respond(1, 'A'));
+    act(() => slow.respond(2, 'AB'));
     act(() => void vi.advanceTimersByTime(999));
-    act(() => replacement.respond(1, 'A'));
+    act(() => slow.respond(3, 'ABC'));
     expect(result.current.status).toBe('ok');
-    expect(result.current.data).toBe('A');
+    expect(result.current.data).toBe('ABC');
   });
 
-  it('runs inline a request that timed out before load if the replacement cannot load either', () => {
+  it('runs inline a request whose workers never load', () => {
     const { result } = setup();
     act(() => result.current.run({ value: 'a' }));
     act(() => void vi.advanceTimersByTime(1000));

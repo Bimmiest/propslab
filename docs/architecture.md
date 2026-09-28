@@ -31,7 +31,7 @@ The lifecycle rules:
 - **Crashes are never retried inline.** A request whose worker crashed never runs on the main thread (#326).
 - **Classification uses the ready signal, not the work sent.** The first request is posted before the worker's script has run, so it can't be used to tell a load failure from a crash (#339).
 - **A watchdog times the request's own run.** A worker runs its requests in order, so a request's budget starts when the one ahead of it is answered, not when it is posted. A request the caller has superseded keeps its watchdog; if it hangs, the newer requests go to the replacement worker unblamed (#364).
-- **A timeout before ready says nothing about the request.** The caller can post it again with `postWhenReady`, which waits for the replacement to load so the load isn't charged to the run (#364).
+- **A load is never charged to a request.** Before ready no watchdog runs, however many requests are posted; the load timer (`LOAD_WAIT_FACTOR` run budgets) bounds the wait, and expiring counts as a load failure. A run budget against a worker still downloading would restart the download on every edit (#420).
 
 A new worker entry must serve through `serveWithRegexEngine`, which posts `WORKER_READY`. A caller must not handle `onerror` itself.
 
