@@ -31,16 +31,22 @@ import {
 export type RegexMatch = Match;
 export type RegexEngineModule = CompiledModule;
 
-/** Instantiate the regex engine from its module (compiled or bytes). */
-export function initRegexEngine(
+/**
+ * Instantiate the regex engine from its module (compiled or bytes). Calling it
+ * again replaces the instance, and with it every compiled pattern: the cache is
+ * emptied so nothing compiled against the old memory is run against the new.
+ */
+export async function initRegexEngine(
   source: CompiledModule | ModuleBytes | PromiseLike<CompiledModule | ModuleBytes>,
 ): Promise<void> {
-  return init(source);
+  await init(source);
+  cache.clear();
 }
 
 /** {@link initRegexEngine}, synchronously: for workers and Node. */
 export function initRegexEngineSync(source: CompiledModule | ModuleBytes): void {
   initSync(source);
+  cache.clear();
 }
 
 export const isRegexEngineReady: () => boolean = isReady;
@@ -98,6 +104,10 @@ export function extractionLimits(matchLimit?: string, depthLimit?: string): Rege
 // ---------------------------------------------------------------------------
 
 const CACHE_LIMIT = 256;
+/**
+ * Emptied, not freed, on every init: the old patterns' code lives in the
+ * replaced instance's memory, which went with it.
+ */
 const cache = new Map<string, Pcre2Regex>();
 
 function compiled(key: string, source: string, flags: string, limits: RegexLimits): Pcre2Regex {

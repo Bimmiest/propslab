@@ -2,6 +2,9 @@ import { describe, it, expect } from 'vitest';
 import {
   cachedRegexCount,
   extractionLimits,
+  initRegexEngine,
+  initRegexEngineSync,
+  regexEngineModule,
   safeRegex,
   SplunkRegex,
   validateRegex,
@@ -231,5 +234,23 @@ describe('compiled-pattern cache', () => {
     for (let i = 0; i < 400; i++) new SplunkRegex(`evict${i}`);
     expect(cachedRegexCount()).toBeLessThanOrEqual(256);
     expect(first.exec('first7')?.[1]).toBe('7');
+  });
+});
+
+describe('a second engine init', () => {
+  // A cached pattern holds code in the replaced instance's memory; running it
+  // after a re-init threw "belongs to an earlier init()".
+  it('recompiles cached patterns instead of running them against the old instance', async () => {
+    const held = new SplunkRegex('reinit(\\d)');
+    expect(held.exec('reinit1')?.[1]).toBe('1');
+
+    initRegexEngineSync(regexEngineModule());
+    expect(cachedRegexCount()).toBe(0);
+    expect(held.exec('reinit2')?.[1]).toBe('2');
+    expect(safeRegex('reinit(\\d)')?.exec('reinit3')?.[1]).toBe('3');
+
+    await initRegexEngine(regexEngineModule());
+    expect(cachedRegexCount()).toBe(0);
+    expect(held.exec('reinit4')?.[1]).toBe('4');
   });
 });
