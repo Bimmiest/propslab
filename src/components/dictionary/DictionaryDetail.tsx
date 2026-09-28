@@ -293,7 +293,7 @@ function SupportCallouts({ info }: { info: DirectiveEntryInfo }) {
 
       {/* Above the description, because it changes how the description
           should be read: everything below is what Splunk does, and this
-          says whether the preview will do it too (#153). */}
+          says whether the preview will do it too. */}
       {info.support === 'ignored' && (
         <Callout tone="danger" icon="warning">
           <strong>Not simulated.</strong> {info.supportNote} The preview ignores this

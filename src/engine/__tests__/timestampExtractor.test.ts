@@ -26,7 +26,7 @@ const iso = (d: Date | null) => d?.toISOString() ?? null;
  */
 const NOW = new Date('2026-08-04T00:00:00.000Z');
 
-/** The step that resolved _time, which is where the provenance lives (#85). */
+/** The step that resolved _time, which is where the provenance lives. */
 const timeSource = (e: SplunkEvent) =>
   e.processingTrace.filter((s) => s.processor === 'timestampExtractor').at(-1)?.timeSource;
 
@@ -47,7 +47,7 @@ describe('extractTimestamps — explicit TIME_FORMAT (regression)', () => {
     expect(iso(e._time)).toBe('2024-01-15T10:00:00.000Z');
   });
 
-  // #66: with TIME_PREFIX set, the format must match immediately after the
+  // With TIME_PREFIX set, the format must match immediately after the
   // prefix. A date elsewhere in the line must NOT be extracted (a broken
   // TIME_PREFIX config fails in Splunk rather than silently grabbing a mid-line
   // date), so the event falls through to the rest of the chain.
@@ -59,7 +59,7 @@ describe('extractTimestamps — explicit TIME_FORMAT (regression)', () => {
       NOW,
     )[0]!;
     // The mid-line date is not used. With nothing to inherit from, the chain
-    // ends at index time (#85) — what matters is that it did not come from the text.
+    // ends at index time — what matters is that it did not come from the text.
     expect(iso(e._time)).toBe(NOW.toISOString());
     expect(timeSource(e)).toBe('current-time');
   });
@@ -131,7 +131,7 @@ describe('extractTimestamps — auto recognition (no TIME_FORMAT)', () => {
     expect(timeSource(e)).toBe('current-time');
   });
 
-  // #12: position-scored recognition — the timestamp at the front of the region
+  // Position-scored recognition — the timestamp at the front of the region
   // wins over a more-specific one embedded later in the message body.
   it('prefers the earliest timestamp over a more-specific one deeper in the text', () => {
     const e = extractTimestamps([event('01/02/2024 note 2023-06-15T08:00:00 tail')], [])[0]!;
@@ -139,7 +139,7 @@ describe('extractTimestamps — auto recognition (no TIME_FORMAT)', () => {
   });
 });
 
-// #12: out-of-range fields are a parse failure, not a silent Date rollover.
+// Out-of-range fields are a parse failure, not a silent Date rollover.
 describe('extractTimestamps — range validation (#12)', () => {
   const fmt = dir('TIME_FORMAT', '%Y-%m-%d %H:%M:%S');
 
@@ -173,7 +173,7 @@ describe('extractTimestamps — range validation (#12)', () => {
   });
 });
 
-// #227: TZ_ALIAS remaps an ambiguous zone abbreviation read out of the event.
+// TZ_ALIAS remaps an ambiguous zone abbreviation read out of the event.
 //
 // Every assertion here is DOC-DERIVED, from the props.conf.spec description of
 // TZ_ALIAS and its own example (`TZ_ALIAS = EST=GMT-5:00,METT=GMT+1:00`). No
@@ -283,15 +283,13 @@ describe('extractTimestamps — TZ_ALIAS (#227)', () => {
   });
 });
 
-// #12: an unresolvable timezone is treated as UTC but now warns instead of
-// drifting silently.
+// An unresolvable timezone is treated as UTC, with a warning.
 describe('extractTimestamps — timezone resolution (#12)', () => {
   const fmt = dir('TIME_FORMAT', '%Y-%m-%d %H:%M:%S');
 
   it('warns when the TZ cannot be resolved and falls back to UTC', () => {
-    // A name no time-zone database has. Europe/London used to stand in for this
-    // case, but IANA names resolve for real now (#159), so only a genuinely
-    // unknown zone still exercises the fallback.
+    // A name no time-zone database has: IANA names resolve, so only a
+    // genuinely unknown zone exercises the fallback.
     const diags: ValidationDiagnostic[] = [];
     const e = extractTimestamps([event('2024-01-15 10:00:00 x')], [fmt, dir('TZ', 'Middle/Earth')], diags)[0]!;
     expect(iso(e._time)).toBe('2024-01-15T10:00:00.000Z');
@@ -345,7 +343,7 @@ describe('#163 — an event with no timestamp inherits the previous one', () => 
       NOW,
     );
     // Splunk always places an event on the timeline; the trace is what says the
-    // value was not read from the event (#85).
+    // value was not read from the event.
     expect(iso(out[0]!._time)).toBe(NOW.toISOString());
     expect(timeSource(out[0]!)).toBe('current-time');
     expect(iso(out[1]!._time)).toBe('2024-01-15T10:00:00.000Z');
@@ -455,11 +453,10 @@ describe('#85 — timestamp sanity bounds', () => {
     expect(timeSource(out[1]!)).toBe('previous-event');
   });
 
-  // This used to assert the jump was rejected. props.conf.spec says an event
-  // beyond MAX_DIFF_SECS_AGO is accepted "only if it has the same exact time
-  // format as the majority of timestamps from the source" — and under an
-  // explicit TIME_FORMAT every timestamp has that format, so it is kept (#286).
-  // Doc-derived; no fixture covers it.
+  // props.conf.spec says an event beyond MAX_DIFF_SECS_AGO is accepted "only if
+  // it has the same exact time format as the majority of timestamps from the
+  // source" — and under an explicit TIME_FORMAT every timestamp has that
+  // format, so it is kept. Doc-derived; no fixture covers it.
   it('keeps a jump backwards beyond MAX_DIFF_SECS_AGO when it is in the TIME_FORMAT', () => {
     const out = extractTimestamps(
       [event('2026-08-03 10:00:00 first'), event('2026-08-03 08:00:00 two hours earlier')],
@@ -490,7 +487,7 @@ describe('#85 — timestamp sanity bounds', () => {
     ]);
   });
 
-  // Doc-derived (#286). Without TIME_FORMAT the "majority format" is judged over
+  // Doc-derived. Without TIME_FORMAT the "majority format" is judged over
   // the events accepted so far in the sample: a backwards jump in the format the
   // file has been using is kept, one in a different shape is the false match
   // the bound exists for, and is refused.
@@ -565,8 +562,8 @@ describe('#85 — timestamp sanity bounds', () => {
 describe('#85 — MAX_DIFF_SECS_HENCE', () => {
   const fmt = dir('TIME_FORMAT', '%Y-%m-%d %H:%M:%S');
 
-  // Previously asserted a rejection; corrected by the spec's same-format
-  // exemption, which it words identically for HENCE and AGO (#286). Doc-derived.
+  // The spec's same-format exemption, which it words identically for HENCE and
+  // AGO. Doc-derived.
   it('keeps a jump forwards beyond MAX_DIFF_SECS_HENCE when it is in the TIME_FORMAT', () => {
     // Three days after the previous event, but still inside MAX_DAYS_HENCE — so
     // this isolates the previous-event bound from the wall-clock one.
@@ -604,8 +601,8 @@ describe('#85 — MAX_DIFF_SECS_HENCE', () => {
 });
 
 describe('#286 — MAX_TIMESTAMP_LOOKAHEAD = 0 / -1 disables the limit', () => {
-  // Doc-derived: props.conf.spec says 0 or -1 disables the length constraint.
-  // Both used to fall back to the 128-character default.
+  // Doc-derived: props.conf.spec says 0 or -1 disables the length constraint,
+  // rather than falling back to the 128-character default.
   const raw = `${'x'.repeat(200)} 2026-08-03 10:00:00`;
   const fmt = dir('TIME_FORMAT', '%Y-%m-%d %H:%M:%S');
 
@@ -631,8 +628,8 @@ describe('#286 — MAX_TIMESTAMP_LOOKAHEAD = 0 / -1 disables the limit', () => {
 
 describe('#286 — a TIME_PREFIX that does not compile', () => {
   // Doc-derived: TIME_PREFIX "cannot be found" means no timestamp is extracted.
-  // A prefix that cannot even be compiled used to be dropped and the scan began
-  // at offset 0, reading a timestamp from exactly where the prefix said not to.
+  // A prefix that cannot even be compiled is not dropped: scanning from offset 0
+  // would read a timestamp from exactly where the prefix said not to.
   it('is treated as never matching, and reported as an error', () => {
     const diagnostics: ValidationDiagnostic[] = [];
     const out = extractTimestamps(

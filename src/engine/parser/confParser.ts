@@ -79,9 +79,9 @@ const CLASS_DIRECTIVE_PREFIXES = [
   'EVAL',
   'SEDCMD',
   'TRANSFORMS',
-  // Class-based in the registry since #178, but missing here, so `RULESET-x`
-  // parsed as a bare key named `RULESET-x`: no class, no support lookup, and
-  // no way for the transforms stage to find it (#275).
+  // Class-based, like the registry says: without it `RULESET-x` would parse as
+  // a bare key named `RULESET-x`, with no class, no support lookup, and no way
+  // for the transforms stage to find it.
   'RULESET',
   'RULESET_DESC',
 ] as const;
@@ -131,7 +131,7 @@ function parseDirectiveKey(key: string): {
  * for `KV_MODE`) and a class prefix (`extract-f` for `EXTRACT-f`), the second
  * being the harder one to spot by eye. Exported because the editor's linter and
  * its quick fix answer this question too, and three implementations of
- * "is this a case typo" would be three chances to disagree (#89).
+ * "is this a case typo" would be three chances to disagree.
  */
 export function miscasedCanonical(
   rawKey: string,
@@ -336,7 +336,7 @@ function parseLayer(
       // a plain attribute (`kv_mode`) or a class prefix (`extract-f`) -- is
       // silently ignored and the default applies. `miscasedCanonical` decides
       // both cases; the editor's linter calls the same function, so the two
-      // validators cannot drift on what counts as a case typo (#89).
+      // validators cannot drift on what counts as a case typo.
       const canonical = miscasedCanonical(rawKey, fileName);
       if (canonical !== undefined) {
         errors.push({

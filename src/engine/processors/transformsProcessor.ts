@@ -38,7 +38,7 @@ type TransformResult = ReturnType<typeof applyRegexTransform>;
  * them in ASCII order of the class name (comma-separated names within one class
  * stay list-ordered). Ordering is decisive once queue routing is last-wins.
  *
- * RULESET-<class> is the other index-time list (#275). It does what
+ * RULESET-<class> is the other index-time list. It does what
  * TRANSFORMS- does, and transforms.conf.spec fixes the order between them:
  * every TRANSFORMS class alphabetically, then every RULESET class
  * alphabetically, then by position within a ruleset. So the two are sorted
@@ -60,11 +60,11 @@ interface TransformsRun {
   warned: {
     /** The DEST_KEY=_raw data-loss warning. */
     rawLoss: Set<string>;
-    /** SEM-7: index-time transforms that extract fields with no WRITE_META/DEST_KEY. */
+    /** Index-time transforms that extract fields with no WRITE_META/DEST_KEY. */
     noWriteMeta: Set<string>;
-    /** SEM-16: a REGEX that does not compile. */
+    /** A REGEX that does not compile. */
     invalidRegex: Set<string>;
-    /** SEM-11: routing via an unknown/unsimulated DEST_KEY. */
+    /** Routing via an unknown/unsimulated DEST_KEY. */
     unknownDestKey: Set<string>;
     /** DEST_KEY reached through a search-time REPORT-, where Splunk ignores it. */
     searchTimeDestKey: Set<string>;
@@ -77,13 +77,13 @@ interface TransformsRun {
 interface EventState {
   event: SplunkEvent;
   /**
-   * CLONE_SOURCETYPE copies show up alongside the original (#87). Collected
+   * CLONE_SOURCETYPE copies show up alongside the original. Collected
    * rather than emitted inline: the clone is taken from the event as it stood
    * when the transform matched, and the original carries on through the rest
    * of the list unchanged.
    */
   clones: SplunkEvent[];
-  /** Directives that reached a transform and changed nothing (#84). */
+  /** Directives that reached a transform and changed nothing. */
   noOps: DirectiveNoOp[];
 }
 
@@ -118,7 +118,7 @@ function noteNoOp(run: TransformsRun, state: EventState, site: TransformSite, re
  * after the eval therefore sees the evaled event. INGEST_EVAL is
  * index-time only, so it is ignored on the search-time (REPORT) pass.
  *
- * STOP_PROCESSING_IF is the same kind of stanza (#275): like INGEST_EVAL
+ * STOP_PROCESSING_IF is the same kind of stanza: like INGEST_EVAL
  * it overrides the stanza's other index-time settings, and it runs after
  * the stanza's INGEST_EVAL, so it sees the evaled event. When it holds,
  * the rules after it in this list are skipped. The spec states that
@@ -187,7 +187,7 @@ function describeMatch(
   if (extracted.length > 0) return `Transform extracted fields: ${extracted.join(', ')}`;
   // A stanza that exists for CLONE_SOURCETYPE, or a REGEX with nothing to
   // capture, matched and extracted nothing — say what it did instead of
-  // "extracted fields:" over an empty list (#346).
+  // "extracted fields:" over an empty list.
   return cloneType
     ? `Transform matched; it extracts no fields, and CLONE_SOURCETYPE = ${cloneType} copies the event`
     : 'Transform matched; it extracted no fields';
@@ -228,10 +228,10 @@ function applyMatch(
   const { stanzaName } = site;
   warnMatched(run, result, stanzaName, transformStanza);
   // An index-time extraction with neither WRITE_META = true nor a
-  // DEST_KEY stores nothing in Splunk (#288). The warning above says so,
-  // and the preview has to agree with it: showing the fields anyway made
-  // the dead config look like a working one, contradicting its own
-  // diagnostic. The field names are still reported, in the warning and
+  // DEST_KEY stores nothing in Splunk. The warning above says so, and the
+  // preview has to agree with it: showing the fields anyway would make the
+  // dead config look like a working one. The field names are still reported,
+  // in the warning and
   // the trace, so the reader can see what was lost.
   const discardedFields =
     phase === 'index-time' && !result.destKey && !stanzaWritesMeta(transformStanza)
@@ -254,7 +254,7 @@ function applyMatch(
   // destroying field values by the same mechanism as SEDCMD. The
   // rewrite is recorded (appendTraceStep) so the same counterfactual
   // attribution applies, with the before/after text — the path
-  // INGEST_EVAL's `_raw=` now shares (#346). Only DEST_KEY = _raw can
+  // INGEST_EVAL's `_raw=` shares. Only DEST_KEY = _raw can
   // change _raw here, so an unchanged _raw records nothing.
   const cloneType =
     phase === 'index-time'
@@ -405,13 +405,6 @@ function warnIndexTimeNoWriteMeta(
 }
 
 /**
- * SEM-11: warn when DEST_KEY is set to something outside the documented Splunk
- * key set. The router falls back to treating an unknown key as a field name, so
- * a typo'd key silently "works" in the preview while doing nothing in Splunk.
- * `_TCP_ROUTING` / `_SYSLOG_ROUTING` are valid keys this tool just doesn't model;
- * they get an informational note rather than a warning. Fires once per stanza.
- */
-/**
  * Attributes transforms.conf documents as valid only for search-time field
  * extractions. Reached through an index-time `TRANSFORMS-`, Splunk ignores them.
  *
@@ -480,7 +473,7 @@ function warnSearchTimeDestKey(
 
 /**
  * A REPORT- whose REGEX matched but produced nothing because it has no FORMAT
- * and no named groups. At search time FORMAT has no default (#288) — the
+ * and no named groups. At search time FORMAT has no default — the
  * `<stanza>::$1` default is index-time only — so this is a silent no-op in
  * Splunk, and the most likely cause is a config written with the index-time
  * default in mind.
@@ -512,6 +505,13 @@ function warnSearchTimeNoFormat(
   });
 }
 
+/**
+ * Warn when DEST_KEY is set to something outside the documented Splunk key
+ * set. The router falls back to treating an unknown key as a field name, so
+ * a typo'd key silently "works" in the preview while doing nothing in Splunk.
+ * `_TCP_ROUTING` / `_SYSLOG_ROUTING` are valid keys this tool just doesn't model;
+ * they get an informational note rather than a warning. Fires once per stanza.
+ */
 function warnUnknownDestKey(
   destKey: string,
   stanzaName: string,

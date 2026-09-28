@@ -160,14 +160,14 @@ function useTokenDrag(
  * the range is snapped out to the tokens it touches and every segment in between
  * (tokens and gaps) is filled, so the highlight is one continuous block.
  *
- * The same selection is reachable from the keyboard (#300). The text is a
+ * The same selection is reachable from the keyboard. The text is a
  * focusable read-only textbox: Left/Right (or Home/End) select a token, Shift
  * extends to the next one, Escape clears, Ctrl/Cmd+C copies it, and the Menu key
  * or Shift+F10 — which the browser delivers as a `contextmenu` event on the
  * focused element — opens the row's existing menu, its "Scaffold from
- * selection" items (Create EXTRACT…, Set as TIME_PREFIX…) included. Native selection stays off rather than being restored:
- * it would bring back exactly what the design removed (the menu clearing it,
- * ranges that end mid-token), and copy is provided for the controlled selection
+ * selection" items (Create EXTRACT…, Set as TIME_PREFIX…) included. Native
+ * selection stays off: it would bring back the menu clearing it and ranges
+ * that end mid-token, and copy is provided for the controlled selection
  * instead.
  */
 export function SelectableRaw({

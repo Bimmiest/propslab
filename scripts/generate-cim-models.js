@@ -6,16 +6,17 @@
 //      (https://splunkbase.splunk.com/app/1621) and extract it:
 //        tar xzf splunk-common-information-model-cim_<ver>.tgz -C /tmp
 //   2. node scripts/generate-cim-models.js /tmp/Splunk_SA_CIM
-//   3. Review the diff, then run `npm test` — the CIM tests assert the fixes
-//      that #37 was opened for, and CIM_VERSION is pinned in the suite.
+//   3. Review the diff, then run `npm test` — the CIM tests assert the
+//      generated models, and CIM_VERSION is pinned in the suite.
 //
 // This is a manual, occasional step (CIM ships roughly annually), not part of
 // the build: nothing here runs at build or install time and the add-on is not
 // vendored. You are running it against a copy of the add-on you obtained and
 // licensed yourself; the output carries identifiers that stay Splunk Inc.'s,
-// which the NOTICE file at the repository root spells out. The point is that the field lists are transcribed by a script with
-// stated rules rather than by hand — #37 existed because a hand-maintained list
-// had drifted into claiming fields that several models never defined.
+// which the NOTICE file at the repository root spells out. The point is that
+// the field lists are transcribed by a script with stated rules rather than by
+// hand: a hand-maintained list drifts into claiming fields a model never
+// defined.
 //
 // The derivation rules are documented in the header this script emits.
 

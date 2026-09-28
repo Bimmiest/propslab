@@ -12,14 +12,12 @@ const MAX_CLONE_DEPTH = 8;
 
 /**
  * Give CLONE_SOURCETYPE copies the index-time processing of their new
- * sourcetype (#282).
+ * sourcetype.
  *
  * transforms.conf.spec: "The duplicated events receive index-time
  * transformations and sed commands for all transforms that match its new
- * host, source, or source type." Without this the clone showed up under the
- * new sourcetype but carried the original's `_raw` untouched — so the
- * canonical use, cloning to a masked sourcetype whose SEDCMD redacts the copy,
- * previewed as an unmasked duplicate.
+ * host, source, or source type." The canonical use is cloning to a masked
+ * sourcetype whose SEDCMD redacts the copy.
  *
  * Only SEDCMD and TRANSFORMS are replayed, because that is all the spec
  * promises: the clone is taken after line breaking and timestamping, which do

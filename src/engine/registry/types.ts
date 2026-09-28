@@ -18,7 +18,7 @@ export interface DirectiveInfo {
   deprecated?: boolean;
   /**
    * What the simulator does with this directive, as opposed to what it knows
-   * about it (#153). Attached from `directiveSupport.ts` rather than written on
+   * about it. Attached from `directiveSupport.ts` rather than written on
    * each entry, so the whole boundary can be read in one place.
    */
   support: DirectiveSupport;

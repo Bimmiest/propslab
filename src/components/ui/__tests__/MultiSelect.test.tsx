@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // ---------------------------------------------------------------------------
 // MultiSelect.test.tsx
-// The popup is a disclosure over a checkbox group (#300): it has to say so,
+// The popup is a disclosure over a checkbox group: it has to say so,
 // and it has to get out of the way when focus leaves it.
 // ---------------------------------------------------------------------------
 

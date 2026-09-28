@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
 // groupNoOps.ts
-// Collapse per-event no-op records into one row per directive (#84).
+// Collapse per-event no-op records into one row per directive.
 //
 // A config mistake is usually wrong for every event, so listing it once per
 // event would bury the answer in the noise it exists to cut through. The event

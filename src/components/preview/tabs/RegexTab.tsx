@@ -118,10 +118,10 @@ function buildGroupColorMap(groups: string[], theme: 'light' | 'dark'): Map<stri
 const NO_RESULTS: (RegexMatchInfo | null)[] = [];
 
 /**
- * Why `name` cannot be the class in an `EXTRACT-<class>` key, or null if it can
- * (#338). The parser only treats a key as a class directive when something
+ * Why `name` cannot be the class in an `EXTRACT-<class>` key, or null if it
+ * can. The parser only treats a key as a class directive when something
  * follows the dash, and splits `key = value` at the first `=`, so an empty class
- * wrote `EXTRACT- = …` (a bare, unknown key) and `a=b` wrote a key that ends at
+ * would write `EXTRACT- = …` (a bare, unknown key) and `a=b` a key that ends at
  * `a` with `b = …` folded into the value. The editor's highlighter stops a class
  * at whitespace or `=`; beyond that, brackets and the like read as stanza syntax
  * to anyone scanning the file. Kept to the characters Splunk's own class names
@@ -183,16 +183,16 @@ function useRegexResults(
   // keystroke the results still describe the previous one. Reported as 'ok',
   // they put the old pattern's counts, cards and highlights next to an "Add to
   // props.conf" button that writes the new one — a pattern that matched nothing
-  // could be committed under the previous pattern's "3/3 events matched"
-  // (#315). Until the results catch up with what is typed, they are pending.
+  // could be committed under the previous pattern's "3/3 events matched".
+  // Until the results catch up with what is typed, they are pending.
   //
   // The results are also tied to the inputs they were matched over. When
   // `allEvents` changes — a pipeline re-run, a search keystroke — the new
   // request is posted from an effect, so the results in hand still index the
-  // previous array; indexing them by position into the new events put one
-  // event's match on another's card and the old total beside the new one (#329).
+  // previous array; indexing them by position into the new events would put
+  // one event's match on another's card and the old total beside the new one.
   // They are kept on screen while the re-run is in flight rather than flashing
-  // the list to pending, and aligned to the new events by text (below, #347).
+  // the list to pending, and aligned to the new events by text (below).
   const settled = match.settled !== null && match.settled.pattern === requestedPattern ? match.settled : null;
   const status = settled ? 'ok' : match.pattern === requestedPattern ? match.status : 'pending';
   // Settled results for the typed pattern standing in while newer inputs are matched.
@@ -201,13 +201,11 @@ function useRegexResults(
   // The settled results, aligned to the events on screen: `undefined` marks an
   // event whose text the settled run never saw. A match depends only on the
   // pattern and the text, so an event that was in the previous inputs already
-  // has its answer. The tab used to render the previous inputs' page slice
-  // while a re-run was in flight, but a search change resets the shared
-  // pagination at once, so events the new filter excludes sat beside page
-  // controls for the new filter, numbered by their old position (#347). Now
-  // the cards, their numbers and the pagination all describe the same events;
-  // a search refinement, whose events are a subset, is answered in full
-  // before the worker replies.
+  // has its answer. A search change resets the shared pagination at once, so
+  // the cards follow the new events rather than the previous inputs' page
+  // slice: the cards, their numbers and the pagination all describe the same
+  // events, and a search refinement, whose events are a subset, is answered in
+  // full before the worker replies.
   const aligned = useMemo<readonly (RegexMatchInfo | null | undefined)[]>(() => {
     if (!settled) return NO_RESULTS;
     if (settled.inputs === rawInputs) return settled.results;
@@ -228,7 +226,7 @@ function useRegexResults(
   }, [pattern, validationError, settled, items, pageOffset, aligned]);
 
   // Exact over the events on screen when every one of them has an answer;
-  // otherwise the settled run's own count, marked as updating (#347).
+  // otherwise the settled run's own count, marked as updating.
   const countExact = settled !== null && aligned.length === rawInputs.length && !aligned.includes(undefined);
   const matchStats = useMemo(() => {
     if (countExact) return { matched: aligned.reduce((n, r) => (r != null ? n + 1 : n), 0), total: rawInputs.length };
@@ -244,11 +242,11 @@ function useRegexResults(
  * Why the pattern cannot be added yet, or null when it can.
  *
  * Adding needs a settled 'ok' run of exactly this pattern over exactly these
- * events — the rule the Create EXTRACT dialog applies (#329). Gated only on
- * compiling, the button wrote a pattern the tab was showing as too slow to
- * evaluate (`(a|aa)+b`), so every pipeline run then hit the 5 s watchdog; and
- * inside the debounce window it wrote a pattern that had not been run at all
- * (#338). A timeout keeps it disabled: the pipeline would hit the same wall.
+ * events — the rule the Create EXTRACT dialog applies. Compiling is not
+ * enough: a pattern the tab shows as too slow to evaluate (`(a|aa)+b`) would
+ * make every pipeline run hit the 5 s watchdog, and inside the debounce window
+ * the pattern has not been run at all. A timeout keeps it disabled: the
+ * pipeline would hit the same wall.
  */
 function addBlockReason(
   pattern: string,
@@ -275,8 +273,8 @@ function addBlockReason(
 /**
  * A confirmation flag that resets itself 1.5 s after it is raised. The reset
  * runs from an effect rather than a bare setTimeout in the click handler, so
- * the timer is cleared if the tab unmounts first — switching sub-tab within
- * 1.5 s of a click left it to fire into an unmounted component (#322).
+ * the timer is cleared if the tab unmounts first (a sub-tab switch within
+ * 1.5 s of a click).
  */
 function useFlashFlag(): [boolean, () => void] {
   const [flag, setFlag] = useState(false);
@@ -306,7 +304,7 @@ export function RegexTab(props: RegexTabProps) {
   // the directive all describe what is typed. The cards that use the colour map
   // render only once the match results belong to that same pattern (see
   // `status` below), so a group's colour in a card always agrees with the
-  // legend beside it (#315).
+  // legend beside it.
   const namedGroups = useMemo(() => extractNamedGroups(pattern), [pattern]);
   const theme = useAppStore((s) => s.theme);
   const groupColorMap = useMemo(() => buildGroupColorMap(namedGroups, theme), [namedGroups, theme]);
@@ -322,8 +320,8 @@ export function RegexTab(props: RegexTabProps) {
       <div className="flex-shrink-0 px-3 py-2 border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
         <div className="flex items-center gap-2 mb-1">
           <label htmlFor={patternId} className="text-xs font-medium text-[var(--color-text-muted)]">Regex Pattern</label>
-          {/* Only settled counts: while matching is pending this read "0/N"
-              for a pattern that had not been tried yet (#315). */}
+          {/* Only settled counts: while matching is pending, "0/N" would
+              describe a pattern that has not been tried yet. */}
           {pattern && !validationError && status === 'ok' && matchStats.total > 0 && (
             <span className="text-[10px] text-[var(--color-text-muted)] ml-auto">
               {matchStats.matched}/{matchStats.total} events matched
@@ -448,9 +446,9 @@ function ExtractDirectivePanel({
   const addDescribedBy = [matchBlock && matchBlockId, classError && classErrorId].filter(Boolean).join(' ') || undefined;
 
   /**
-   * Write the directive straight into props.conf (#88), closing the loop from
-   * experiment to config. The match statistics beside it are whole-dataset
-   * (#78), so what is being committed to is visible at the moment of the click
+   * Write the directive straight into props.conf, closing the loop from
+   * experiment to config. The match statistics beside it are whole-dataset,
+   * so what is being committed to is visible at the moment of the click
    * rather than inferred from the current page.
    */
   const handleAddToProps = () => {
@@ -517,7 +515,7 @@ function ExtractDirectivePanel({
       {/*
         Say what the button is about to do to the metadata. Writing
         [my:sourcetype] and silently repointing the event's sourcetype at it
-        is the right behaviour (#72) but a surprising one to discover after
+        is the right behaviour but a surprising one to discover after
         the fact.
       */}
       {isPlaceholderStanza && (
@@ -705,10 +703,10 @@ function RegexCategoryRows({ category, onInsert, onReplace }: { category: RegexC
 function RegexReferenceRow({ directive: d, isReplace, onPick }: { directive: RegexDirective; isReplace: boolean; onPick: () => void }) {
   const descriptionId = useId();
   return (
-    // Stays a plain row so the table keeps its row and cell semantics. Making
-    // the <tr> itself pressable (#320) gave it role="button", which flattened
-    // its cells, and its aria-label replaced the description a screen reader
-    // would otherwise have read (#335). The keyboard path is the button in the
+    // Stays a plain row so the table keeps its row and cell semantics: a
+    // pressable <tr> gets role="button", which flattens its cells, and its
+    // aria-label would replace the description a screen reader reads. The
+    // keyboard path is the button in the
     // first cell, described by the description cell; the row's own click is a
     // larger mouse target for the same action.
     <tr

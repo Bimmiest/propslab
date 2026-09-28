@@ -1,11 +1,8 @@
 // ---------------------------------------------------------------------------
 // evalNullComparison.test.ts
-// Comparisons against NULL (#343).
-//
-// compare() coerced an absent field to "" before comparing, so
-// `if(missing=="","y","n")` was "y", `missing!="a"` was true and
-// `missing IN ("")` was true: a guard written about a field's value fired on
-// every event that did not have the field.
+// Comparisons against NULL: an absent field is not "", so a guard written
+// about a field's value (`missing != "a"`, `missing IN ("")`) does not fire on
+// events that do not have the field.
 //
 // Doc-derived, not captured — no fidelity fixture covers eval. The SPL Search
 // Reference treats NULL as unknown: a comparison with a NULL operand is NULL,
@@ -149,8 +146,8 @@ describe('boolean operators under three-valued logic (#343)', () => {
 
 describe('consumers of a NULL condition (#343)', () => {
   it('INGEST_EVAL queue=if(...) takes the else branch on a missing field', () => {
-    // Before #343, `level != "INFO"` was true for an event with no `level`,
-    // routing it to nullQueue — the event was silently dropped.
+    // `level != "INFO"` is NULL for an event with no `level`, so it is not
+    // routed to nullQueue.
     const dirs: ConfDirective[] = [
       { key: 'INGEST_EVAL', value: 'queue=if(level!="INFO","nullQueue","indexQueue")', line: 1, directiveType: 'INGEST_EVAL' },
     ];

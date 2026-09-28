@@ -5,7 +5,7 @@
 //
 // Knowing a directive is not the same as simulating it. Every entry here also
 // carries a `support` level from `directiveSupport.ts`, which is the declared
-// boundary of what the preview actually honours (#153).
+// boundary of what the preview actually honours.
 //
 // The entries themselves are data, split by file and provenance under
 // registry/; this module attaches the support levels and builds the lookups.
@@ -128,10 +128,10 @@ export function getDirectiveInfo(
  * return the file it belongs in; otherwise undefined.
  *
  * `getDirectiveInfo` is file-aware but the support table is flat, so an
- * attribute written in the wrong file used to get two verdicts that contradict
- * each other: the engine found its support row and said "recognised but not
- * simulated", while the editor found no entry for this file and called it a
- * possible typo (#278). Neither is the problem. Splunk only reads an attribute
+ * attribute written in the wrong file would get two verdicts that contradict
+ * each other: the engine would find its support row and say "recognised but
+ * not simulated", while the editor, finding no entry for this file, would call
+ * it a possible typo. Neither is the problem. Splunk only reads an attribute
  * from the file whose spec defines it, so the line is dead, and the fix is to
  * move it -- both validators ask this one function so they give that answer
  * together.

@@ -110,8 +110,8 @@ type CompiledEval =
 
 /**
  * Parse each directive's expression once into an AST; per-event evaluation
- * reuses it (SEM-8: parse-once-per-directive instead of re-tokenising every
- * event). The AST also enables lazy evaluation of branching functions.
+ * reuses it rather than re-tokenising every event. The AST also enables lazy
+ * evaluation of branching functions.
  */
 function compileEvals(evalDirectives: ConfDirective[]): CompiledEval[] {
   return evalDirectives
@@ -167,7 +167,7 @@ function applyResults(event: SplunkEvent, results: EvalResults, byField: Map<str
   for (const [field, { value, expression }] of results) {
     if (value === null) {
       // A null result deletes the field, so an EVAL that was meant to create
-      // one leaves no trace of having run at all (#84). Null propagation makes
+      // one leaves no trace of having run at all. Null propagation makes
       // this the single most common way an EVAL silently does nothing.
       noOps.push({
         directive: `EVAL-${field}`,
@@ -216,7 +216,7 @@ export function applyEvalExpressions(
   if (diagnostics) warnDottedFieldRefs(events, evalDirectives, diagnostics);
   const reporter = new EvalReporter(diagnostics);
   const compiled = compileEvals(evalDirectives);
-  /** Field name → the directive that computes it, for locating a no-op (#84). */
+  /** Field name → the directive that computes it, for locating a no-op. */
   const byField = new Map(compiled.map((c) => [c.fieldName, c.dir]));
 
   return events.map((event) => {

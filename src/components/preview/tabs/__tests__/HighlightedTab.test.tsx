@@ -122,8 +122,8 @@ describe('HighlightedTab', () => {
     expect(screen.getByText(/1\/3 events match/)).toBeInTheDocument();
     expect(screen.getByText(/Event #\s*2/)).toBeInTheDocument();
   });
-  // #73: a pin filters the whole dataset, so an unbounded render locked the UI
-  // when the pinned field appeared on every event.
+  // A pin filters the whole dataset, so the render is capped: a field on every
+  // event would otherwise lock the UI.
   it('caps the rendered rows when a pin matches more than the window', () => {
     const many = Array.from({ length: 150 }, (_, i) =>
       toItem(makeEvent(`line ${i}`, { username: `u${i}` }, [

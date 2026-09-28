@@ -1,13 +1,13 @@
 // ---------------------------------------------------------------------------
 // markdown.ts
 // Put document text into Monaco hover/completion Markdown as text, never as
-// Markdown syntax (#296).
+// Markdown syntax.
 //
 // Hover content is Markdown, and some of it is trusted so the "Open in
 // dictionary" `command:` link works. Anything a user typed — a directive key, a
 // class name, a stanza name, a sample line — that is interpolated raw can close
 // the surrounding construct and open its own: a key of
-// `EXTRACT-x](command:foo)[` turned the heading into a clickable command link.
+// `EXTRACT-x](command:foo)[` would turn the heading into a clickable command link.
 // Every user-derived string goes through one of these two helpers instead.
 // ---------------------------------------------------------------------------
 

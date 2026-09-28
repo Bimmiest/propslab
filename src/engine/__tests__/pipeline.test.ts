@@ -66,8 +66,7 @@ describe('runPipeline — DEST_KEY validation (SEM-11)', () => {
 
 // Doc-derived (transforms.conf.spec, DEST_KEY / FORMAT): `_MetaData:Index`
 // takes the bare index name, and only Host/Source/Sourcetype need a
-// `<name>::` prefix. This lint previously demanded `index::` and told users
-// to add it — the opposite of the spec (#281).
+// `<name>::` prefix, so the lint must not ask for `index::`.
 describe('runPipeline — DEST_KEY = MetaData:Index FORMAT lint (#281)', () => {
   const PLAIN_META: EventMetadata = { index: 'main', host: '', source: '', sourcetype: 'st' };
   const props = '[st]\nTRANSFORMS-t = route';

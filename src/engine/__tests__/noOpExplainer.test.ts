@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
 // noOpExplainer.test.ts
-// Why a directive did nothing (#84).
+// Why a directive did nothing.
 //
 // The partial-match tests carry the most weight: a wrong offset is worse than
 // no offset, because it sends someone to the wrong character with confidence.

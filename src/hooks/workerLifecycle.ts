@@ -1,8 +1,8 @@
 /**
  * The worker lifecycle every caller shares, and the timing and failure rules
  * the views that must agree with it read. One copy, so a view that waits "as
- * long as the pipeline does" cannot drift from the pipeline (#335), and so the
- * three callers stop disagreeing about what a dead worker means (#339).
+ * long as the pipeline does" cannot drift from the pipeline, and so the three
+ * callers agree about what a dead worker means.
  *
  * No React here: the TIME_FORMAT hover (`monaco/timePrefixMatcher.ts`) runs
  * outside any component and uses the same lifecycle as the hooks.
@@ -15,10 +15,10 @@ export const PIPELINE_DEBOUNCE_MS = 300;
 
 /**
  * How many workers may fail to *load* in a row before a caller stops building
- * them and falls back (#309). Two, not one: a single start-up death could be a
+ * them and falls back. Two, not one: a single start-up death could be a
  * transient fetch, and costs only one spare construction to find out. Crashes
  * do not count: an input that crashes its worker must never be handed to the
- * tab's own thread (#326).
+ * tab's own thread.
  */
 export const MAX_WORKER_LOAD_FAILURES = 2;
 
@@ -26,37 +26,31 @@ export const MAX_WORKER_LOAD_FAILURES = 2;
 export const LOAD_WAIT_FACTOR = 6;
 
 // ---------------------------------------------------------------------------
-// createManagedWorker (#339)
+// createManagedWorker
 //
 // Construction, the ready signal, the per-request watchdog, crash-vs-load
-// classification, the load-failure cap, and terminate/rebuild. It was written
-// out three times — useProcessingPipeline, useWorkerRequest and the hover's
-// timePrefixMatcher — and the copies disagreed. What each caller does about a
-// failure (resend, replay, run inline, report) is the caller's policy, and it
-// arrives here as callbacks; the lifecycle only says what happened.
+// classification, the load-failure cap, and terminate/rebuild, shared by
+// useProcessingPipeline, useWorkerRequest and the hover's timePrefixMatcher.
+// What each caller does about a failure (resend, replay, run inline, report)
+// is the caller's policy, and it arrives here as callbacks; the lifecycle only
+// says what happened.
 //
 // Classification is by the worker's ready signal (`engine/workerProtocol.ts`),
-// never by whether it had been given work. The earlier rule — "a worker that
-// has not answered and was given nothing died of its own script" — could not
-// cover the first worker: the first request is posted in the same commit the
-// worker is built, before its script has even run, so a module that threw at
-// top level was always charged to that request. The pipeline then reported
-// the mount request as having "crashed repeatedly" and never rendered it; the
-// Regex and Timestamp tabs reported a timeout; and the hover, which had no
-// cap for crashes at all, built a new worker on every hover and blamed the
-// prefix each time. Requests posted before ready are fine: postMessage
-// buffers them until the module has evaluated.
+// never by whether it had been given work: the first request is posted in the
+// same commit the worker is built, before its script has even run, so a
+// module that throws at top level must not be charged to that request.
+// Requests posted before ready are fine: postMessage buffers them until the
+// module has evaluated.
 //
 // `new Worker` does not throw when its chunk cannot be fetched (a 404 after a
 // redeploy, a CSP block); that failure arrives later as an `error` event. It
 // is before ready, so it counts, and past MAX_WORKER_LOAD_FAILURES no further
-// worker is built (#309). A constructor that does throw counts the same way.
+// worker is built. A constructor that does throw counts the same way.
 //
 // A worker runs its requests one at a time, in posting order, so a request's
 // watchdog starts when the worker gets to it: at post when nothing is ahead of
-// it, otherwise when the request ahead is answered (#364). Arming every
-// request at post charged it for its predecessors' run time, so an input edited
-// once mid-run timed out on work that was not its own. The first request's
+// it, otherwise when the request ahead is answered, so no request is charged
+// for its predecessors' run time. The first request's
 // budget still covers the module's load; a caller that needs to know whether
 // its timed-out request could have run at all is told whether the worker had
 // loaded, and can wait for the replacement with `postWhenReady`.
@@ -134,7 +128,7 @@ class ManagedWorkerImpl<TReq extends { id: number }, TRes extends { id: number }
   private ready = false;
   /**
    * Consecutive load failures. Reset when a worker loads, so the cap means
-   * "in a row" (#309); crashes never touch it (#326).
+   * "in a row"; crashes never touch it.
    */
   private loadFailures = 0;
   /**

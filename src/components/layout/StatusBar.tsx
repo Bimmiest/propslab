@@ -125,7 +125,7 @@ function ResultSummary() {
 export function StatusBar() {
   return (
     // A <footer>, so the bar is a contentinfo landmark rather than stray
-    // content outside every landmark (axe `region`, #372).
+    // content outside every landmark (axe `region`).
     <footer
       className="flex items-center justify-between px-4 h-6 shrink-0 text-[11px] select-none"
       style={{

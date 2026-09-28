@@ -17,10 +17,10 @@ export interface TimestampMatchState {
   status: TimestampMatchStatus;
   /**
    * Per-event probes aligned to `raws`. While `pending` these may be the
-   * previous config's probes for the same events, never another page's (#316).
+   * previous config's probes for the same events, never another page's.
    */
   probes: TimestampProbe[];
-  /** Why probing threw, when status is 'error' (#322). */
+  /** Why probing threw, when status is 'error'. */
   error: string | null;
 }
 
@@ -28,12 +28,12 @@ export interface TimestampMatchState {
  * Probe events for their timestamp in a terminatable Web Worker.
  *
  * TIME_PREFIX is a user-supplied regex. PCRE's limits bound each match but not
- * the total over every event, and executed synchronously in a `useMemo` on the
- * render path there was nothing to terminate. Here a slow pattern only stalls
- * the worker, which the watchdog kills and restarts.
+ * the total over every event, and on the render path nothing could terminate
+ * it. Here a slow pattern only stalls the worker, which the watchdog kills and
+ * restarts.
  *
  * The lifecycle around that — construction, staleness, watchdog, teardown —
- * lives in `useWorkerRequest` (#151).
+ * lives in `useWorkerRequest`.
  *
  * Where `Worker` is unavailable (tests / SSR) it falls back to probing on the
  * calling thread; the browser always has a worker and uses the safe path.
@@ -49,7 +49,7 @@ interface Request {
 
 /**
  * Probes tagged with the request that produced them, so a result is never
- * drawn against events it was not computed for (#316). `error` travels in the
+ * drawn against events it was not computed for. `error` travels in the
  * data of an 'ok' outcome rather than as 'invalid', because `useWorkerRequest`
  * swaps an 'invalid' outcome's data for `empty` and the message would go too.
  */
@@ -76,8 +76,8 @@ function sameTimeConfig(a: TimeConfig, b: TimeConfig): boolean {
 export function useTimestampMatch(raws: string[], config: TimeConfig): TimestampMatchState {
   // Compared by value, not identity. The tab rebuilds its config whenever
   // props.conf changes at all, and keyed on identity every keystroke — even in
-  // a stanza that has nothing to do with time — re-posted the whole page to
-  // the worker (#316). Adjusted during render, as React recommends for state
+  // a stanza that has nothing to do with time — would re-post the whole page
+  // to the worker. Adjusted during render, as React recommends for state
   // derived from props, so the request below sees it in the same pass.
   const [stableConfig, setStableConfig] = useState(config);
   if (!sameTimeConfig(stableConfig, config)) setStableConfig(config);
@@ -128,7 +128,7 @@ export function useTimestampMatch(raws: string[], config: TimeConfig): Timestamp
 
   // Probes are only ever returned for the events they were computed from. While
   // a new page is pending, `data` still holds the previous page's probes, and
-  // drawing those offsets over different text highlighted arbitrary spans (#316).
+  // drawing those offsets over different text would highlight arbitrary spans.
   // For the same events under a changed config they are kept, marked pending,
   // so the highlights do not flicker off on every edit.
   const samePage = data.request?.raws === raws;

@@ -9,10 +9,9 @@ import { useAppStore } from '../../store/useAppStore';
 
 /**
  * The two conf files share one syntax (and one Monarch grammar) but expose
- * different directive sets. Registering them as distinct language IDs (UI-4)
- * lets each editor surface only its own completions/hovers instead of both —
- * previously a single `splunk-conf` language carried both provider sets, so the
- * props editor suggested transforms-only keys and vice versa.
+ * different directive sets. Registering them as distinct language IDs lets
+ * each editor surface only its own completions/hovers, so the props editor
+ * never suggests transforms-only keys or the reverse.
  */
 export const PROPS_LANGUAGE_ID = 'splunk-props';
 export const TRANSFORMS_LANGUAGE_ID = 'splunk-transforms';
@@ -296,7 +295,7 @@ const DARK_THEME: monaco.editor.IStandaloneThemeData = {
     { token: 'comment', foreground: '86b86f', fontStyle: 'italic' },
     { token: 'tag', foreground: 'c586c0' },
     { token: 'tag.bracket', foreground: 'c586c0' },
-    { token: 'keyword', foreground: 'a5b4fc' },      /* indigo-300; 400 was 4.4:1 (#372) */
+    { token: 'keyword', foreground: 'a5b4fc' },      /* indigo-300: 400 is below 4.5:1 here */
     { token: 'keyword.other', foreground: 'a5b4fc' },
     { token: 'variable.name', foreground: 'fb923c' }, /* orange-400 */
     { token: 'delimiter', foreground: 'e4e4e7' },
@@ -353,7 +352,7 @@ function registerSplunkConfLanguage() {
   monaco.languages.registerCompletionItemProvider(TRANSFORMS_LANGUAGE_ID, createCompletionProvider('transforms.conf'));
   monaco.languages.registerHoverProvider(TRANSFORMS_LANGUAGE_ID, createHoverProvider('transforms.conf'));
 
-  // Quick fix for the mis-cased-attribute marker (#89).
+  // Quick fix for the mis-cased-attribute marker.
   monaco.languages.registerCodeActionProvider(PROPS_LANGUAGE_ID, createCodeActionProvider('props.conf'));
   monaco.languages.registerCodeActionProvider(TRANSFORMS_LANGUAGE_ID, createCodeActionProvider('transforms.conf'));
 

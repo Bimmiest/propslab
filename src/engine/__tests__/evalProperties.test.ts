@@ -1,9 +1,9 @@
 // ---------------------------------------------------------------------------
 // evalProperties.test.ts
-// Property-based tests for the eval lexer, parser and evaluator (#340).
+// Property-based tests for the eval lexer, parser and evaluator.
 //
-// Example tests pin the cases someone thought of; #332 and #337 were both
-// casing/position combinations nobody had. These generate expressions from the
+// Example tests pin the cases someone thought of, and keyword casing and
+// position combinations are easy to miss. These generate expressions from the
 // eval grammar instead — numbers (leading-dot and negative literals included),
 // strings, fields named after the word operators, every operator with random
 // keyword casing and whitespace, function calls, nested parens — and assert
@@ -12,8 +12,7 @@
 // Nothing here is a claim about Splunk's output: every property compares the
 // simulator with itself (two spellings of one expression, or two expressions the
 // SPL operator table defines as equivalent). No generated field is missing; the
-// NULL-propagation properties in (e) name an absent field explicitly, now that
-// #343 defined what a comparison against NULL yields.
+// NULL-propagation properties in (e) name an absent field explicitly.
 //
 // The seed is fixed so a run is reproducible; a failure prints the
 // counterexample and fast-check's shrunk path.
@@ -104,7 +103,7 @@ const EVENT_FIELDS: Record<string, string> = {
   n: '10',
   m: '2.5',
   e: '',
-  // Named after the word operators: identifiers wherever a value is expected (#332).
+  // Named after the word operators: identifiers wherever a value is expected.
   in: 'v',
   like: 'vx',
   xor: '1',
@@ -117,7 +116,7 @@ const numberLit: fc.Arbitrary<Gen> = fc
   .oneof(
     fc.nat({ max: 999 }).map(String),
     fc.tuple(fc.nat({ max: 99 }), fc.nat({ max: 99 })).map(([i, f]) => `${i}.${f}`),
-    // Leading-dot literal (#312).
+    // Leading-dot literal.
     fc.nat({ max: 99 }).map((f) => `.${f}`),
     // Negative literal: the lexer folds `-` into the number in value position.
     fc.integer({ min: 1, max: 99 }).map((n) => `-${n}`),
@@ -393,7 +392,7 @@ describe('eval operator equivalences (#340)', () => {
 
   it('a XOR b is (a OR b) AND NOT (a AND b) on booleans', () => {
     // Coerced through NOT NOT so both sides are booleans or NULL whatever the
-    // operands are; three-valued logic keeps the identity for NULL too (#343).
+    // operands are; three-valued logic keeps the identity for NULL too.
     const bool = expr.map((g) => `NOT NOT (${text(g)})`);
     fc.assert(
       fc.property(bool, bool, fc.integer(), (a, b, s) => {
@@ -453,7 +452,7 @@ describe('eval AST print/parse round trip (#340)', () => {
   });
 });
 
-// ── (e) NULL propagation (#343) ─────────────────────────
+// ── (e) NULL propagation ────────────────────────────────
 //
 // `missing` is not on the test event, so it evaluates to NULL. Whatever the
 // other operand, a comparison, LIKE or IN involving it is NULL, and NULL is

@@ -77,7 +77,7 @@ function buildDirectiveMap(): Record<string, DirectiveMeta> {
     '%9N': { regex: '(\\d{9})', capture: 'nanoseconds' },
     // The width is Splunk's digit count, so the other widths read the same
     // way: automatic recognition needs them for fractions such as .NET's
-    // seven-digit ticks, whose zone would otherwise be lost (#353).
+    // seven-digit ticks, whose zone would otherwise be lost.
     ...Object.fromEntries(
       [1, 2, 4, 5, 7, 8].map((w) => [`%${w}N`, { regex: `(\\d{${w}})`, capture: 'subseconds' }]),
     ),
@@ -812,9 +812,9 @@ function assembleTimestamp(
 // ---------------------------------------------------------------------------
 // Formatting (the inverse of the parsing above)
 //
-// Lives here rather than in evalProcessor, which is where it grew: the editor's
-// TIME_FORMAT preview (#90) needs the same rendering, and two implementations of
-// strftime would be two chances to disagree about what %3N means.
+// Lives here rather than in evalProcessor: the editor's TIME_FORMAT preview
+// needs the same rendering, and two implementations of strftime would be two
+// chances to disagree about what %3N means.
 // ---------------------------------------------------------------------------
 const STRFTIME_MONTHS_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const STRFTIME_MONTHS_FULL = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -894,7 +894,7 @@ function timeZoneAbbreviation(date: Date): string {
 /**
  * strftime specifiers this simulator understands, derived from the parsing
  * table above rather than restated — a specifier added to one and forgotten in
- * the other would make the editor confidently flag a working format (#90).
+ * the other would make the editor confidently flag a working format.
  */
 export function supportedSpecifiers(): Set<string> {
   const supported = new Set(Object.keys(buildDirectiveMap()));

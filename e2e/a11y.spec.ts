@@ -5,7 +5,7 @@ import { test, expect, openApp, loadExample } from './fixtures';
 const APACHE = /Apache Access Log/i;
 
 /**
- * axe-core scans of every main view (#372), in both themes: most of what axe
+ * axe-core scans of every main view, in both themes: most of what axe
  * finds here is contrast, and the two palettes fail differently.
  *
  * Nothing is excluded, Monaco included — its colours come from our own

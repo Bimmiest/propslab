@@ -10,7 +10,7 @@ export function stanzaNameError(name: string): string | null {
   if (!trimmed) return 'Stanza name cannot be empty.';
   if (/[[\]]/.test(trimmed)) {
     // `foo]bar` renders as `[foo]bar]`, which does not round-trip as one stanza:
-    // the parser stops at the first `]`, so the written file no longer says what
+    // the parser stops at the first `]`, so the written file would not say what
     // the UI showed.
     return 'Stanza name cannot contain "[" or "]" — the header would not parse as a single stanza.';
   }

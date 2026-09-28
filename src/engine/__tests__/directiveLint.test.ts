@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
 // directiveLint.test.ts
-// The two rules that catch mistakes Splunk itself is silent about (#177, #179).
+// The two rules that catch mistakes Splunk itself is silent about.
 // ---------------------------------------------------------------------------
 
 import { describe, it, expect } from 'vitest';
@@ -77,8 +77,8 @@ describe('#179 — a value that is not the documented type', () => {
   });
 
   it('accepts every boolean spelling Splunk does', () => {
-    // y/n/on/off joined the list when the engine and the linter began sharing
-    // one boolean reader (#301): the engine honoured them, the linter did not.
+    // y/n/on/off: the engine and the linter share one boolean reader, so the
+    // linter accepts every spelling the engine honours.
     for (const v of ['true', 'False', '1', '0', 't', 'f', 'yes', 'no', 'y', 'n', 'on', 'off']) {
       const msgs = messagesFor(`SHOULD_LINEMERGE = ${v}\n`);
       expect(msgs.filter((m) => m.includes('takes a boolean')), `for ${v}`).toEqual([]);
@@ -95,7 +95,7 @@ describe('#179 — a value that is not the documented type', () => {
     expect(d?.message).toContain('cannot be negative');
   });
 
-  // Doc-derived (#286): props.conf.spec documents -1 as disabling the lookahead
+  // Doc-derived: props.conf.spec documents -1 as disabling the lookahead
   // limit, so it is a setting rather than a mistake. Other negatives still are.
   it('accepts MAX_TIMESTAMP_LOOKAHEAD = -1, which the spec documents as "no limit"', () => {
     const lint = (v: string) =>

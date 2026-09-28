@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
 // splunkConfCodeActions.test.ts
-// The mis-cased-attribute quick fix (#89).
+// The mis-cased-attribute quick fix.
 //
 // The fix is only useful if it edits the key and nothing else, so most of what
 // is asserted here is what the edit leaves alone.

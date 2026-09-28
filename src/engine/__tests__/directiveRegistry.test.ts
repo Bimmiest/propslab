@@ -1,11 +1,11 @@
 // ---------------------------------------------------------------------------
 // directiveRegistry.test.ts
-// The registry's assembly from the data files under registry/ (#301), and the
-// two per-file listings built from it.
+// The registry's assembly from the data files under registry/, and the two
+// per-file listings built from it.
 //
-// The entries were one array before the split, and the order they were written
-// in is the order completion and the dictionary present them — so what matters
-// here is that assembling them loses nothing and keeps that order.
+// The order the entries are written in is the order completion and the
+// dictionary present them, so assembling them must lose nothing and keep that
+// order.
 // ---------------------------------------------------------------------------
 
 import { describe, it, expect } from 'vitest';

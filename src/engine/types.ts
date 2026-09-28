@@ -6,7 +6,7 @@ export interface EventMetadata {
 }
 
 /**
- * Which rule in the timestamp fallback chain produced an event's `_time` (#85).
+ * Which rule in the timestamp fallback chain produced an event's `_time`.
  * Splunk tries these in order, and *which one fired* is the single most-debugged
  * ingest behaviour — a `_time` that came from the previous event or from the
  * clock looks identical in the output to one that was parsed from the text.
@@ -57,9 +57,7 @@ export interface ProcessingStep {
   /**
    * FIELDALIAS steps only: the alias pairs this step created.
    *
-   * `description` also names them, but as prose for a human to read. The Fields
-   * tab used to recover the mapping by running a regex over that sentence,
-   * which made a reworded description silently empty its Aliases column. The
+   * `description` also names them, but as prose for a human to read. The
    * structured form is what consumers should read; `description` is for display.
    */
   fieldAliases?: { target: string; source: string }[];
@@ -75,7 +73,7 @@ export interface ProcessingStep {
    */
   evalExpressions?: Record<string, string>;
   /**
-   * The event metadata this step rewrote, old value to new (#346). Set by
+   * The event metadata this step rewrote, old value to new. Set by
    * INGEST_EVAL assignments to index/host/source/sourcetype and by DEST_KEY =
    * MetaData:*; absent when the step left the metadata as it found it.
    * Structured for the same reason as `fieldAliases`: `description` names the
@@ -130,7 +128,7 @@ export interface SplunkEvent {
   processingTrace: ProcessingStep[];
   /**
    * Directives that applied to this event and changed nothing, each with the
-   * reason (#84).
+   * reason.
    *
    * Deliberately NOT part of `processingTrace`: that array is "what happened",
    * every consumer of it treats a step as work done, and the Pipeline tab counts
@@ -139,7 +137,7 @@ export interface SplunkEvent {
    */
   noOps?: DirectiveNoOp[];
   /**
-   * Set on an event produced by `CLONE_SOURCETYPE` (#87): the sourcetype the
+   * Set on an event produced by `CLONE_SOURCETYPE`: the sourcetype the
    * original carried when the clone was taken. The clone re-enters the pipeline
    * under its NEW sourcetype, so without this there is nothing linking the pair
    * and a duplicated event looks like a line-breaking bug.
@@ -158,14 +156,14 @@ export interface SplunkEvent {
    * nothing (DATETIME_CONFIG = CURRENT / NONE).
    *
    * The Timestamp tab probes this rather than the final `_raw`, whose TIME_PREFIX
-   * a SEDCMD may already have masked away — the tab then reported "no match" on
-   * an event whose `_time` had been read without trouble (#328). The same string
+   * a SEDCMD may already have masked away, which would report "no match" on an
+   * event whose `_time` was read without trouble. The same string
    * as `_raw` unless a later step replaced it, so it costs nothing until then.
    */
   timestampText?: string;
 }
 
-/** One directive that did nothing to one event, and why (#84). */
+/** One directive that did nothing to one event, and why. */
 export interface DirectiveNoOp {
   /** As written, e.g. `EXTRACT-user`. */
   directive: string;
@@ -184,11 +182,11 @@ export interface ProcessingResult {
   /**
    * The metadata the events were broken with: the run's input after any
    * input-time `sourcetype =` assignment from a `[source::]`/`[host::]`
-   * stanza, but before any index-time rewrite (#330). This is the baseline a
+   * stanza, but before any index-time rewrite. This is the baseline a
    * view compares events against — an assignment applies to every event and
    * is not a change the run made to any one of them. Carried on the result so
    * a view can say which events a run changed without reading the metadata
-   * fields as they are now, which may have been edited since (#316). With no
+   * fields as they are now, which may have been edited since. With no
    * input to process it is the caller's metadata unchanged.
    */
   inputMetadata: EventMetadata;
@@ -330,7 +328,7 @@ export interface PipelineOptions {
    * a yearless TIME_FORMAT is given, the index-time `_time` an event falls back
    * to, and eval's `now()` / `time()`. A caller replaying recorded data — a test
    * fixture, a saved sample — passes the moment it was recorded, so the verdict
-   * does not change as the real clock moves on (#293).
+   * does not change as the real clock moves on.
    */
   now?: number;
 }

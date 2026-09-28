@@ -169,9 +169,8 @@ describe('applyTransforms — index-time extraction without WRITE_META (SEM-7)',
   });
 
   // Doc-derived (transforms.conf.spec, WRITE_META): index-time fields are
-  // written to _meta only when WRITE_META = true (or DEST_KEY = _meta). The
-  // preview used to add them anyway, under a warning saying they have no
-  // effect; now it agrees with the warning (#288).
+  // written to _meta only when WRITE_META = true (or DEST_KEY = _meta), and the
+  // preview agrees with the warning saying they have no effect.
   it('does not add the fields to the event, while still warning and tracing them', () => {
     const diags: ValidationDiagnostic[] = [];
     const conf = transformsConf('grab', { REGEX: '(?<user>\\w+)' });
@@ -195,7 +194,7 @@ describe('applyTransforms — index-time extraction without WRITE_META (SEM-7)',
   });
 
   // Doc-derived (transforms.conf.spec, FORMAT): the `<stanza>::$1` default is
-  // for index-time extractions; the search-time default is empty (#288).
+  // for index-time extractions; the search-time default is empty.
   it('extracts nothing from a REPORT with numbered groups and no FORMAT, and says why', () => {
     const diags: ValidationDiagnostic[] = [];
     const conf = transformsConf('word', { REGEX: '(\\w+)' });
@@ -230,7 +229,7 @@ describe('applyTransforms — INGEST_EVAL interleaving (SEM-2)', () => {
   it('runs an INGEST_EVAL stanza at its list position so a later regex sees the result', () => {
     const conf = multiTransformsConf(
       stanza('rewrite', { INGEST_EVAL: '_raw="HELLO"' }),
-      // WRITE_META added in #288: without it an index-time extraction stores
+      // WRITE_META set: without it an index-time extraction stores
       // nothing, so the field this test observes would (correctly) not appear.
       stanza('extract', { REGEX: '(?<word>HELLO)', WRITE_META: 'true' }),
     );
@@ -318,7 +317,7 @@ describe('applyTransforms — SOURCE_KEY reads pipeline metadata (#53)', () => {
     expect(out.fields.captured_host).toBe('h');
   });
 
-  // Doc-derived: the index key is written bare (`FORMAT = my_index`, #281), so
+  // Doc-derived: the index key is written bare (`FORMAT = my_index`), so
   // it reads back bare too — `index::main` here would be a value nothing wrote.
   it('reads MetaData:Index as the bare index name', () => {
     const conf = transformsConf('t', {
@@ -467,7 +466,7 @@ describe('#87 — CLONE_SOURCETYPE', () => {
 
   // Doc-derived (transforms.conf.spec, CLONE_SOURCETYPE): "The duplicated
   // events receive index-time transformations and sed commands for all
-  // transforms that match its new host, source, or source type." (#282)
+  // transforms that match its new host, source, or source type."
   describe('index-time processing of the clone (#282)', () => {
     const cloneProps =
       '[orig]\nTRANSFORMS-clone = do_clone\n\n[masked]\nSEDCMD-mask = s/\\d{4}-\\d{4}/XXXX-XXXX/g\n';

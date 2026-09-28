@@ -31,9 +31,9 @@ function useLiveCapture(raw: string, trimmed: string): Capture {
     if (!trimmed) return { state: 'empty' };
     if (validationError) return { state: 'invalid', reason: validationError };
     // Matching runs on a debounced copy of the pattern, so for 250 ms after each
-    // keystroke the hook still reports the previous pattern's outcome. Shown as
-    // is, "Captures in this event" described a pattern that was no longer the
-    // one in the box (#329). Only an outcome for exactly this pattern and this
+    // keystroke the hook still reports the previous pattern's outcome, which
+    // would put another pattern's captures under "Captures in this event".
+    // Only an outcome for exactly this pattern and this
     // event counts; anything else is still pending.
     if (matchedPattern !== requestedPattern) return { state: 'pending' };
     if (status === 'invalid') return { state: 'invalid', reason: null };
@@ -52,7 +52,7 @@ function useLiveCapture(raw: string, trimmed: string): Capture {
  * pattern are both editable; the pattern stays derived from the field name until the
  * user edits it directly. A live capture runs the pattern against this event's raw
  * in the regex-match worker, behind its watchdog, so you can see exactly what it
- * grabs before applying; Add stays disabled until that capture has settled (#329).
+ * grabs before applying; Add stays disabled until that capture has settled.
  */
 export function ExtractNameDialog({
   raw,
@@ -101,11 +101,10 @@ export function ExtractNameDialog({
   const trimmed = pattern.trim();
   const capture = useLiveCapture(raw, trimmed);
 
-  // Adding needs a settled 'ok' run of exactly this pattern (#329). `valid` used
-  // to be true while matching was pending, so "Add EXTRACT" wrote a pattern
-  // that had not compiled yet, or was still inside the watchdog window — a
-  // catastrophic regex could reach props.conf before the timeout that would
-  // have flagged it. A timeout keeps the button disabled: the pipeline would
+  // Adding needs a settled 'ok' run of exactly this pattern. While matching is
+  // pending the pattern may not have compiled yet, or may still be inside the
+  // watchdog window — a catastrophic regex could reach props.conf before the
+  // timeout that would flag it. A timeout keeps the button disabled: the pipeline would
   // hit the same wall on every event this stanza applies to.
   const valid = capture.state === 'ok' || capture.state === 'nomatch' || capture.state === 'nogroup';
 

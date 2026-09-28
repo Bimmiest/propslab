@@ -6,7 +6,7 @@ import type {
 } from '../../../../src/engine/types';
 import { MAX_RESPONSE_CHARS, serializeSimulation } from '../serialize';
 
-// #351: everything in a simulate response that grows with the sample is bounded.
+// Everything in a simulate response that grows with the sample is bounded.
 
 const metadata = { index: 'main', host: 'h', source: 's', sourcetype: 'st' };
 

@@ -7,7 +7,7 @@ const allFields = (name: string) => {
   return [...model.requiredFields, ...model.recommendedFields];
 };
 
-// #37: a model's events need ALL of its constraint tags to populate, so a
+// A model's events need ALL of its constraint tags to populate, so a
 // missing tag doesn't weaken membership — it breaks it entirely.
 describe('CIM constraint tags (#37)', () => {
   it('DLP is constrained by tag=dlp tag=incident', () => {
@@ -35,8 +35,8 @@ describe('CIM constraint tags (#37)', () => {
   });
 });
 
-// #37: the hand-written lists claimed fields that the models never defined, so
-// the CIM tab reported non-compliance against fields nobody can populate.
+// Every listed field is one the model defines, so the CIM tab never reports
+// non-compliance against fields nobody can populate.
 describe('CIM field lists match Splunk_SA_CIM (#37)', () => {
   it('is generated from a pinned CIM release', () => {
     expect(CIM_VERSION).toBe('8.5.0');

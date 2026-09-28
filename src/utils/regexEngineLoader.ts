@@ -61,8 +61,7 @@ export interface WorkerScope<Req> {
  * Both outcomes of the load are acted on in a task of their own rather than in
  * the promise callback, so a throw is an uncaught worker error the page sees:
  * an engine that will not load fails before ready, which the page counts as a
- * failure to load (#339), and a handler that throws after ready is a crash, as
- * it was before.
+ * failure to load, and a handler that throws after ready is a crash.
  */
 export function serveWithRegexEngine<Req>(scope: WorkerScope<Req>, handle: (request: Req) => void): void {
   let up = false;

@@ -26,8 +26,8 @@ export interface TimeConfig {
   /**
    * The moment standing in for index time, in epoch ms — the same value as
    * `PipelineOptions.now`, which gives a yearless TIME_FORMAT its year. Omitted,
-   * both fall back to the clock. Without it the prober and a pipeline run with
-   * a fixed `now` put the same timestamp in different years (#313).
+   * both fall back to the clock. Passing it keeps the prober and a pipeline
+   * run with a fixed `now` putting a timestamp in the same year.
    */
   now?: number;
 }
@@ -70,8 +70,8 @@ const EMPTY: TimestampProbe = { match: null, prefix: null };
  * What a config compiles to, once per batch rather than once per event. The
  * TIME_FORMAT regex comes from the extractor's own `timeFormatRegex`, so the
  * prober and the pipeline search the lookahead window identically: anchored
- * right after TIME_PREFIX when there is one. The prober used to scan the window
- * unanchored, and highlighted a date the pipeline then rejected (#313).
+ * right after TIME_PREFIX when there is one, so it never highlights a date the
+ * pipeline rejects.
  */
 interface CompiledTimeConfig {
   config: TimeConfig;
@@ -83,7 +83,7 @@ interface CompiledTimeConfig {
 }
 
 function compile(config: TimeConfig): CompiledTimeConfig {
-  // Trimmed, and empty read as unset, the way the extractor reads it (#328).
+  // Trimmed, and empty read as unset, the way the extractor reads it.
   const timePrefix = config.timePrefix?.trim() || undefined;
   const prefixRegex = timePrefix !== undefined ? safeRegex(timePrefix) : undefined;
   return {
@@ -124,7 +124,7 @@ function probe(raw: string, compiled: CompiledTimeConfig): TimestampProbe {
   if (!formatMatch) return { match: null, prefix };
 
   // Parsed with the same inputs the extractor passes — TZ, TZ_ALIAS and `now` —
-  // so the value shown is the one the pipeline reads (#313). A dateless format
+  // so the value shown is the one the pipeline reads. A dateless format
   // is the exception: the extractor dates it from the previous event, which a
   // per-event probe has no view of, and it lands on 1 January here.
   const parsed = parseTimestampDetailed(formatMatch.text, config.timeFormat, {

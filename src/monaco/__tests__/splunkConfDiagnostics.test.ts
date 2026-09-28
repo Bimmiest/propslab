@@ -119,10 +119,8 @@ describe('computeDiagnostics — undocumented attributes are not typos (#178)', 
     // The engine warns that the preview ignores it; calling it a typo as well
     // sends the user to check spelling that is already correct.
     //
-    // Each key is checked against the conf file it belongs to. Before #178
-    // registered them, both of these sat in a flat undocumented set with no
-    // notion of which file they were valid in, so a transforms.conf key was
-    // excused in props.conf too.
+    // Each key is checked against the conf file it belongs to, so a
+    // transforms.conf key is not excused in props.conf.
     expect(typoMarkers('[st]\nKV_TRIM_SPACES = true')).toEqual([]);
     expect(typoMarkers('[st]\nSTOP_PROCESSING_IF = foo', 'transforms.conf')).toEqual([]);
   });

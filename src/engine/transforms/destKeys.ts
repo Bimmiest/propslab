@@ -1,12 +1,7 @@
 /**
- * The DEST_KEY vocabulary, in one place.
- *
- * Two copies of these sets used to live in `pipeline.ts` (config-time validation)
- * and `transformsProcessor.ts` (match-time warning), and they disagreed:
- * `_INDEX_AND_FORWARD_ROUTING` was "valid but not simulated" to one and unknown
- * to the other, so the same stanza was described two contradictory ways
- * depending on whether its REGEX happened to match — and the router wrote it out
- * as a literal event field.
+ * The DEST_KEY vocabulary, in one place, so config-time validation
+ * (configLint), the match-time warning (transformsProcessor) and the router
+ * describe a stanza the same way whether or not its REGEX happened to match.
  */
 
 /** Keys the router models. Compare after normalising the `_MetaData:` alias. */

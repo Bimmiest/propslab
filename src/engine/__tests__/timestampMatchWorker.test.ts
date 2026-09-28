@@ -1,9 +1,8 @@
 // ---------------------------------------------------------------------------
 // timestampMatchWorker.test.ts
-// A throw inside the prober must come back as a response, not kill the worker
-// (#322). Uncaught, it surfaced as a worker `error` event, which the caller
-// cannot tell from its watchdog firing: the tab said "timed out" and the
-// message was lost.
+// A throw inside the prober must come back as a response, not kill the worker.
+// Uncaught, it would surface as a worker `error` event, which the caller cannot
+// tell from its watchdog firing, and the message would be lost.
 // ---------------------------------------------------------------------------
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -30,7 +29,7 @@ async function loadWorker() {
   await import('../timestampMatchWorker');
   const send = (request: TimestampMatchRequest) =>
     fakeSelf.onmessage!({ data: request } as MessageEvent<TimestampMatchRequest>);
-  // The ready signal (#339) is pinned in workerReady.test.ts; these are about
+  // The ready signal is pinned in workerReady.test.ts; these are about
   // responses, once the engine has loaded.
   await vi.waitFor(() => expect(posted).toEqual([{ type: 'ready' }]));
   posted.shift();

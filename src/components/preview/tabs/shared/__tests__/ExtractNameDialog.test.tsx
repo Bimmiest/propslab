@@ -20,9 +20,8 @@ function setup(pattern?: string) {
   return { onApply, onClose };
 }
 
-// #34: this dialog used to compile and execute the candidate pattern on the main
-// thread on every keystroke, where the pipeline watchdog does not apply. It now
-// runs through the same terminatable worker hook the Regex tab uses.
+// The candidate pattern runs through the same terminatable worker hook the Regex
+// tab uses, never on the main thread, where no watchdog applies.
 describe('ExtractNameDialog — live capture', () => {
   it('shows the captured group for a matching pattern', async () => {
     setup();
@@ -39,12 +38,10 @@ describe('ExtractNameDialog — live capture', () => {
   });
 });
 
-// #329: the capture preview did not check that the hook's outcome was for the
-// pattern in the box, so for 250 ms after each keystroke "Captures in this
-// event" described the previous one; and "Add EXTRACT" was enabled while
-// matching was pending, with no compile check — a pattern that had not been
-// validated, or was still inside the watchdog window, could be written to
-// props.conf. Driven through a fake worker so a request can be held in flight.
+// The capture preview shows only an outcome for the pattern in the box, and
+// "Add EXTRACT" stays disabled while matching is pending, so a pattern that has
+// not been validated, or is still inside the watchdog window, cannot be written
+// to props.conf. Driven through a fake worker so a request can be held in flight.
 describe('ExtractNameDialog — only a settled result for this pattern enables Add (#329)', () => {
   class FakeWorker {
     static instances: FakeWorker[] = [];
@@ -54,7 +51,7 @@ describe('ExtractNameDialog — only a settled result for this pattern enables A
     constructor() { FakeWorker.instances.push(this); }
     postMessage(message: RegexMatchRequest) { this.posted.push(message); }
     terminate() {}
-    /** The module has loaded: a timeout after this is the pattern's, not the load's (#364). */
+    /** The module has loaded: a timeout after this is the pattern's, not the load's. */
     ready() { this.onmessage?.({ data: { type: 'ready' } } as unknown as MessageEvent<RegexMatchResponse>); }
     respond() {
       const req = this.posted[this.posted.length - 1]!;

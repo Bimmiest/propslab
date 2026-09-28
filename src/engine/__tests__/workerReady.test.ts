@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
 // workerReady.test.ts
-// Every worker entry announces that it is up (#339): its module has evaluated
-// and it has loaded its regex engine from the built asset (#368).
+// Every worker entry announces that it is up: its module has evaluated
+// and it has loaded its regex engine from the built asset.
 //
 // The page tells a worker that never started from one that started and then
 // died by whether it has sent WORKER_READY: an error before it is a load

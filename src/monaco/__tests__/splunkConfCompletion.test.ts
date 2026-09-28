@@ -38,8 +38,8 @@ describe.each<ConfFile>(['props.conf', 'transforms.conf'])('directive completion
   const labels = items.map(labelOf);
   const directives = getDirectivesForFile(fileType);
 
-  // #362: unsimulated directives carry an object label, so the "uncategorised"
-  // pass never recognised them as already listed and added each one again.
+  // Unsimulated directives carry an object label; the "uncategorised" pass
+  // must still recognise them as already listed.
   it('lists every label once', () => {
     const dupes = labels.filter((l, i) => labels.indexOf(l) !== i);
     expect(dupes).toEqual([]);

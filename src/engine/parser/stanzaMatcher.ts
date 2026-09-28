@@ -13,7 +13,7 @@ const STANZA_PRIORITY: Record<ConfStanza['type'], number> = {
 
 /**
  * Splunk's documented default `priority`, which splits on whether the stanza
- * matches LITERALLY or by PATTERN — not on the stanza's kind (#198):
+ * matches LITERALLY or by PATTERN — not on the stanza's kind:
  *
  *   * 0 for pattern-matching stanzas.
  *   * 100 for literal-matching stanzas.
@@ -23,11 +23,6 @@ const STANZA_PRIORITY: Record<ConfStanza['type'], number> = {
  * corollary is what pins the direction: setting a priority above 100 is what
  * lets a pattern-matched stanza override a literal-matching one, which only
  * follows if literal is the side sitting at 100.
- *
- * This was previously keyed on stanza type with the values the other way round,
- * which inverted both halves — it put `[<sourcetype>]` at 0 and every
- * `source::`/`host::` stanza at 100 regardless of whether it contained a
- * wildcard at all.
  */
 const LITERAL_DEFAULT_PRIORITY = 100;
 const PATTERN_DEFAULT_PRIORITY = 0;
@@ -152,7 +147,7 @@ export function matchStanzas(stanzas: ConfStanza[], metadata: EventMetadata): Co
     }
   }
 
-  // Stanza kind first, and `priority` cannot reach across it (#198). The spec is
+  // Stanza kind first, and `priority` cannot reach across it. The spec is
   // explicit: "the priority key does *not* affect precedence across <spec>
   // types … [source::<source>] patterns take priority over stanzas with
   // [host::<host>] and [<sourcetype>] patterns, regardless of their respective
@@ -172,8 +167,8 @@ export function matchStanzas(stanzas: ConfStanza[], metadata: EventMetadata): Co
   // A full tie falls to the ASCII order of the stanza name, where the stanza
   // sorting first takes precedence — the spec's rule for colliding patterns, and
   // what the `precedence-ascii-order` capture records (`...fx_a...` beats
-  // `...fx_z...`). Without it the tie fell to file order, so reordering two
-  // stanzas in props.conf changed which one won (#318).
+  // `...fx_z...`). File order must not decide it: reordering two stanzas in
+  // props.conf does not change which one wins.
   matched.sort((a, b) => {
     if (a.priority !== b.priority) return b.priority - a.priority;
     if (a.explicitPriority !== b.explicitPriority) return b.explicitPriority - a.explicitPriority;
@@ -286,13 +281,12 @@ type PatternNode =
 
 /**
  * Parse a `source::`/`host::` pattern once, so matching, specificity and the
- * literal/pattern test all read the same tokenisation — they disagreed before
- * (#30.1), and a second syntax is a second chance for that.
+ * literal/pattern test all read the same tokenisation: a second syntax is a
+ * second chance to disagree.
  *
  * props.conf.spec: "`|` is equivalent to 'or'. `( )` are used to limit scope
- * of `|`." Both were escaped as literal characters, so
- * `[source::/var/log/(messages|secure)]` matched only a file literally named
- * `(messages|secure)` and never `/var/log/secure` (#284).
+ * of `|`." So `[source::/var/log/(messages|secure)]` matches
+ * `/var/log/secure`, not a file literally named `(messages|secure)`.
  *
  * Parentheses are paired up front. One with no partner — `app(1.log` — is kept
  * as a literal character rather than rejected, because a stanza header is not
@@ -336,15 +330,14 @@ function parseStanzaPattern(pattern: string): PatternNode[][] {
         alternatives.push(current);
         pos++;
       } else if (pattern.startsWith('\\\\', pos)) {
-        // props.conf.spec: "\\ = matches a literal backslash '\'". Treating each
-        // backslash as its own literal meant a Windows path written the way the
-        // spec says, `[source::C:\\logs\\app.log]`, looked for two backslashes
-        // per separator and never matched `C:\logs\app.log` (#303).
+        // props.conf.spec: "\\ = matches a literal backslash '\'". So a Windows
+        // path written the way the spec says, `[source::C:\\logs\\app.log]`,
+        // matches `C:\logs\app.log`.
         //
-        // A single backslash not followed by another stays a literal backslash,
-        // as it always was here: the spec defines no other escape, and configs
-        // written `C:\logs\app.log` match today, so reading a lone `\` as an
-        // escape would break them for no gain. One node, so the pair scores one
+        // A single backslash not followed by another stays a literal backslash:
+        // the spec defines no other escape, and configs written
+        // `C:\logs\app.log` match, so reading a lone `\` as an escape would
+        // break them for no gain. One node, so the pair scores one
         // literal character of specificity -- the one it matches.
         current.push({ kind: 'literal', char: '\\' });
         pos += 2;

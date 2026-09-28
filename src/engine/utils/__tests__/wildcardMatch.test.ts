@@ -1,18 +1,18 @@
 // ---------------------------------------------------------------------------
-// `*` glob matching for the XML_IE_* lists (#344).
+// `*` glob matching for the XML_IE_* lists.
 //
 // Doc-derived: props.conf.spec says only that the XML_IE_* lists are
 // comma-separated and accept "*" as a wildcard. The finer points — anchoring,
 // case sensitivity, `*` crossing newlines, every other character literal —
-// are the semantics the previous regex compilation had, kept unchanged; the
-// parity property below pins them to that reference.
+// are those of compiling the glob to a regex; the parity property below pins
+// them to that reference.
 // ---------------------------------------------------------------------------
 
 import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';
 import { compileWildcard } from '../wildcardMatch';
 
-/** The compilation #344 replaced, kept here only as the parity reference. */
+/** The regex compilation, kept here only as the parity reference. */
 function reference(pattern: string): RegExp {
   const source = pattern
     .split('*')

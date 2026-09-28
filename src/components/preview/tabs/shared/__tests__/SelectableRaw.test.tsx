@@ -1,8 +1,7 @@
 // @vitest-environment jsdom
 // ---------------------------------------------------------------------------
 // SelectableRaw.test.tsx
-// The drag's window listeners, and the keyboard path to the same selection
-// (#300).
+// The drag's window listeners, and the keyboard path to the same selection.
 // ---------------------------------------------------------------------------
 
 import { describe, it, expect, vi, afterEach } from 'vitest';

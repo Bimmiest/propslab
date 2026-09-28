@@ -8,7 +8,7 @@ import { effectiveBool, effectiveDirective } from './utils/directiveValues';
 
 // Config lint: the diagnostics `runPipeline` reports about the conf files
 // themselves, split out of the pipeline so that file reads as the order of
-// processing and nothing else (#301). Nothing here changes an event; each
+// processing and nothing else. Nothing here changes an event; each
 // function only appends to `diagnostics`.
 
 type ConfFile = 'props.conf' | 'transforms.conf';
@@ -32,8 +32,8 @@ function lintLookups(propsConf: ParsedConf, diagnostics: ValidationDiagnostic[])
 }
 
 /**
- * Say so when a directive the user has written is not honoured by the preview
- * (#153). Without this the tool is confidently wrong: the key autocompletes,
+ * Say so when a directive the user has written is not honoured by the preview.
+ * Without this the tool is confidently wrong: the key autocompletes,
  * hovers with real documentation, passes validation, and then the output is
  * rendered as though the line were not there. A stated limitation is worth
  * more than a plausible wrong answer.
@@ -48,7 +48,7 @@ function lintDirectiveSupport(dir: ConfDirective, file: ConfFile, diagnostics: V
   // The support table is flat, so an attribute of the other conf file
   // finds its row here and would be reported as "recognised but not
   // simulated" -- or, if simulated, not at all -- while the editor, which
-  // looks it up per file, called it a possible typo (#278). Neither is
+  // looks it up per file, would call it a possible typo. Neither is
   // what is wrong: Splunk does not read it from this file. Checked before
   // the LOOKUP skip, because that skip exists for the props.conf warning
   // above, which never sees a LOOKUP- written in transforms.conf.
@@ -69,15 +69,14 @@ function lintDirectiveSupport(dir: ConfDirective, file: ConfFile, diagnostics: V
 
   // A real attribute the registry has never heard of reaches this loop with
   // no entry and would leave it silently, which is the one way a valid line
-  // can vanish without being declared. #178 swept the registry against the
-  // 10.4.3 spec files so the set is empty today, but a later Splunk release
-  // adds attributes and this is what stops them passing unnoticed. It gets
+  // can vanish without being declared. The registry covers the 10.4.3 spec
+  // files, so the set is empty today, but a later Splunk release adds
+  // attributes and this is what stops them passing unnoticed. It gets
   // the same warning as an `ignored` key, because from where the user is
   // sitting it is the same event: they wrote a directive and it was ignored.
   //
-  // Deliberately cites no issue number. The previous text named #178, which
-  // has since closed -- a diagnostic pointing a user at a finished issue is
-  // the rot #227 was about, reaching the product surface this time.
+  // Deliberately cites no issue number: a diagnostic must not point a user
+  // at an issue that may since have closed.
   if (!entry) {
     if (!isUndocumentedAttribute(baseKey)) return;
     diagnostics.push({
@@ -112,7 +111,7 @@ function lintDirectiveSupport(dir: ConfDirective, file: ConfFile, diagnostics: V
 /**
  * Validate DEST_KEY=MetaData:* stanzas require the matching prefix in FORMAT.
  * Index is deliberately absent: transforms.conf.spec has `_MetaData:Index`
- * take the bare index name, and the prefix rule covers these three only (#281).
+ * take the bare index name, and the prefix rule covers these three only.
  */
 const DEST_KEY_REQUIRED_PREFIX: Record<string, string> = {
   'MetaData:Host': 'host::',
@@ -123,7 +122,7 @@ const DEST_KEY_REQUIRED_PREFIX: Record<string, string> = {
 /**
  * DEST_KEY only accepts a documented set of routing keys; the simulator otherwise
  * falls back to "treat as a field name", which Splunk does not do. The key sets
- * are shared with the router so config-time and match-time agree (#75.3).
+ * are shared with the router so config-time and match-time agree.
  */
 function lintDestKeyValue(destKeyDir: ConfDirective, destKey: string, diagnostics: ValidationDiagnostic[]): void {
   if (VALID_UNSIMULATED_DEST_KEYS.has(destKey)) {
@@ -183,7 +182,7 @@ function lintDestKeys(transformsConf: ParsedConf, diagnostics: ValidationDiagnos
   for (const stanza of transformsConf.stanzas) {
     // Last definition wins, as it does at runtime: with default/ + local/
     // layers the effective FORMAT is the local one, and linting the default's
-    // would warn about a line that no longer applies (or miss the one that does).
+    // would warn about a line that does not apply (or miss the one that does).
     const destKeyDir = effectiveDirective(stanza.directives, 'DEST_KEY');
     const formatDir = effectiveDirective(stanza.directives, 'FORMAT');
     if (!destKeyDir) continue;
@@ -209,7 +208,7 @@ function lintTransformReferences(
   const transformPhase = new Map<string, TransformPhase>();
   for (const stanza of propsConf.stanzas) {
     for (const dir of stanza.directives) {
-      // RULESET- is index-time like TRANSFORMS- (#275): a stanza it names is
+      // RULESET- is index-time like TRANSFORMS-: a stanza it names is
       // referenced, must exist, and is linted as index-time.
       if (dir.directiveType !== 'TRANSFORMS' && dir.directiveType !== 'RULESET' && dir.directiveType !== 'REPORT') continue;
       const phase = dir.directiveType === 'REPORT' ? 'search-time' : 'index-time';
@@ -273,8 +272,8 @@ export function lintConfigs(
   lintUnreferencedTransforms(transformsConf, transformPhase, diagnostics);
 
   // Two classes of mistake Splunk itself is silent about: a transforms setting
-  // that is inert in the phase its stanza is used in (#177), and a value that is
-  // not the type the directive documents (#179). Both load clean and then do
+  // that is inert in the phase its stanza is used in, and a value that is
+  // not the type the directive documents. Both load clean and then do
   // nothing, so this tool is the only place a user could find out.
   lintInertTransformSettings(transformsConf.stanzas, transformPhase, diagnostics);
   lintDirectiveValues(propsConf.stanzas, 'props.conf', diagnostics);

@@ -98,7 +98,7 @@ interface RunContext {
  * key, first wins). `resolveStanzasForEvent` rather than `matchStanzas`
  * because a `[source::…]` or `[host::…]` stanza can assign the sourcetype,
  * which decides what else matches — so it has to be resolved before anything
- * reads the result (#186).
+ * reads the result.
  */
 function resolveDirectives(
   propsConf: ParsedConf,
@@ -148,14 +148,12 @@ function runIndexTime(rawData: string, ctx: RunContext): SplunkEvent[] {
   const { directives, diagnostics, now, propsConf, transformsConf } = ctx;
   // Step 1-2: Line breaking and merging.
   // The SHOULD_LINEMERGE default that INDEXED_EXTRACTIONS implies (off for the
-  // line-per-record formats, on for XML) is decided inside breakLines alone.
-  // This used to inject a synthetic `SHOULD_LINEMERGE = false` here for
-  // csv/tsv/psv/w3c as well — a narrower copy of the same rule, which agreed
-  // with the breaker only by accident and left JSON to the other copy (#322).
+  // line-per-record formats, on for XML) is decided inside breakLines alone;
+  // a second copy of the rule here would drift from it.
   //
-  // Wrapped like every other stage: a throw here used to escape runPipeline
-  // and fail the whole run, where every later stage degrades to a diagnostic.
-  // With nothing broken there are no events to carry forward, so the fallback
+  // Wrapped like every other stage, so a throw degrades to a diagnostic rather
+  // than failing the whole run. With nothing broken there are no events to
+  // carry forward, so the fallback
   // is empty rather than the unbroken input.
   let events = safeProcessor('LINE_BREAKER', [], () => breakLines(rawData, directives, ctx.effectiveMetadata, diagnostics), diagnostics);
 
@@ -167,7 +165,7 @@ function runIndexTime(rawData: string, ctx: RunContext): SplunkEvent[] {
 
   // Step 4b: ROUTE_EVENTS_OLDER_THAN — the spec runs the age test "after
   // timestamp extraction", so it reads the extracted _time, before any
-  // index-time transform can rewrite it (#275).
+  // index-time transform can rewrite it.
   events = safeProcessor('ROUTE_EVENTS_OLDER_THAN', events, () => routeEventsByAge(events, directives, diagnostics, now), diagnostics);
 
   // Step 5: Indexed extractions
@@ -183,7 +181,7 @@ function runIndexTime(rawData: string, ctx: RunContext): SplunkEvent[] {
   events = safeProcessor('TRANSFORMS', events, () => applyTransforms(events, directives, transformsConf, 'index-time', diagnostics, now), diagnostics, 'transforms.conf');
 
   // Step 7b: CLONE_SOURCETYPE copies get the SEDCMD and TRANSFORMS of the
-  // sourcetype they were cloned to (#282).
+  // sourcetype they were cloned to.
   events = safeProcessor('CLONE_SOURCETYPE', events, () => applyCloneIndexTime(events, propsConf, transformsConf, diagnostics, now), diagnostics, 'transforms.conf');
 
   // Step 8: ANNOTATE_PUNCT — the annotation processor runs after regex
@@ -237,7 +235,7 @@ function runSearchTimePerEvent(events: SplunkEvent[], ctx: RunContext, originalM
     const cached = directivesCache.get(key);
     if (cached !== undefined) return cached;
     // Same resolution the batch path uses: an input-time `sourcetype`
-    // assignment first, then `rename` for the search-time set (#186).
+    // assignment first, then `rename` for the search-time set.
     const perEvent = resolveStanzasForEvent(propsConf.stanzas, event.metadata);
     const renamed = getRenamedSourcetype(perEvent.stanzas);
     const stanzas = renamed
@@ -267,7 +265,7 @@ function runSearchTimePerEvent(events: SplunkEvent[], ctx: RunContext, originalM
  * Annotate an event whose metadata was rewritten so the trace shows the
  * re-match. A CLONE_SOURCETYPE copy differs because it was cloned to a new
  * sourcetype, not because a DEST_KEY = MetaData:* transform rewrote it, so its
- * step says that instead (#330).
+ * step says that instead.
  */
 function traceRematch(event: SplunkEvent, originalMetaKey: string, directiveCount: number): SplunkEvent {
   if (metaKey(event.metadata) === originalMetaKey) return event;
@@ -293,9 +291,9 @@ function traceRematch(event: SplunkEvent, originalMetaKey: string, directiveCoun
  *
  * CLONE_SOURCETYPE copies are counted apart: they differ because they were
  * cloned to a new sourcetype, and blaming a DEST_KEY = MetaData:* transform
- * for them sent the reader looking for one that did not exist. Their
- * index-time SEDCMD and TRANSFORMS already come from the new sourcetype
- * (#282), but search-time here does not, so they get their own warning (#330).
+ * for them would send the reader looking for one that does not exist. Their
+ * index-time SEDCMD and TRANSFORMS already come from the new sourcetype,
+ * but search-time here does not, so they get their own warning.
  */
 function warnBatchMetadataRewrites(events: SplunkEvent[], originalMetaKey: string, diagnostics: ValidationDiagnostic[]): void {
   const rewroteMetadata = events.some((e) => e.clonedFrom === undefined && metaKey(e.metadata) !== originalMetaKey);
@@ -382,10 +380,9 @@ export function runPipeline(
 
   // Compared against the metadata the events were BROKEN with, not the caller's:
   // an input-time `sourcetype =` assignment has already been applied to every
-  // event by now, and is not an index-time rewrite. Keying on the caller's
-  // metadata read it as one, so batch mode warned about a DEST_KEY = MetaData:*
-  // transform that did not exist and per-event mode added a StanzaRematch step
-  // to every event (#310).
+  // event by now, and is not an index-time rewrite: keyed on the caller's
+  // metadata, batch mode would warn about a DEST_KEY = MetaData:* transform
+  // that does not exist and per-event mode would re-match every event.
   const originalMetaKey = metaKey(ctx.effectiveMetadata);
   if (options?.perEventPipeline) {
     events = runSearchTimePerEvent(events, ctx, originalMetaKey);
@@ -409,9 +406,8 @@ export function runPipeline(
       eventCount: events.length,
       processingSteps: events.flatMap((e) => e.processingTrace),
       // The metadata the events were broken with — the caller's, after any
-      // input-time `sourcetype =` assignment. Returning the caller's badged
-      // every event of an assigned sourcetype as "Metadata Modified", the UI
-      // counterpart of #310 (#330).
+      // input-time `sourcetype =` assignment, so the UI does not badge every
+      // event of an assigned sourcetype as "Metadata Modified".
       inputMetadata: ctx.effectiveMetadata,
     },
     diagnostics,

@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
 // directiveSupport.test.ts
-// Guards the declared simulation boundary (#153).
+// Guards the declared simulation boundary.
 //
 // A classification table is only worth having if it cannot drift from the code
 // it describes. Three things are asserted here: every registry key is
@@ -108,8 +108,6 @@ describe('directive support classification (#153)', () => {
   });
 
   it('lists nothing as undocumented that the registry has since documented', () => {
-    // This is the drift that #178's own issue body suffered: it named 32
-    // missing attributes, three of which #176 added before anyone acted on it.
     // A list of "things we do not know about" is worth exactly as much as its
     // freshness, so it is asserted rather than trusted.
     const keys = new Set(getAllDirectives().map((d) => d.key));
@@ -135,7 +133,7 @@ describe('directive support classification (#153)', () => {
   });
 
   it('classifies the two keys the registry defines per conf file once, for both', () => {
-    // Simulated since patterns run on PCRE2 (#368); the note carries the caveat
+    // Simulated because patterns run on PCRE2; the note carries the caveat
     // that DEPTH_LIMIT counts differently from PCRE1.
     expect(DIRECTIVE_SUPPORT['MATCH_LIMIT']?.support).toBe('simulated');
     expect(DIRECTIVE_SUPPORT['DEPTH_LIMIT']?.support).toBe('simulated');
@@ -161,12 +159,10 @@ function diagnosticsFor(props: string, transforms = '') {
  * Run `body` with one registry key temporarily reclassified, then put the table
  * back.
  *
- * The `ignored` warning has to stay assertable when nothing is ignored. These
- * tests used to borrow whichever directive happened to be unimplemented —
- * `TZ_ALIAS`, until #227 implemented it and emptied the roster — and a test
- * written that way fails the day the borrowed directive is fixed, which is the
- * wrong signal from a good event. A synthetic entry asserts the mechanism
- * instead of the roster, so the two stop being coupled.
+ * The `ignored` warning has to stay assertable when nothing is ignored. A test
+ * that borrows whichever directive happens to be unimplemented fails the day
+ * it is implemented, which is the wrong signal from a good event; a synthetic
+ * entry asserts the mechanism instead of the roster.
  */
 function withSupport<T>(key: string, entry: SupportEntry, body: () => T): T {
   const original = DIRECTIVE_SUPPORT[key];
@@ -191,9 +187,8 @@ const IGNORED_STANDIN: SupportEntry = {
  * Run `body` with one key temporarily treated as an undocumented attribute.
  *
  * `UNDOCUMENTED_ATTRIBUTES` is typed readonly but is a Set underneath, which is
- * what lets this put a name in and take it out again. The alternative -- naming
- * whichever attribute happens to be unregistered today -- is the shape that
- * broke when #178 registered them all.
+ * what lets this put a name in and take it out again, rather than naming
+ * whichever attribute happens to be unregistered today.
  */
 function withUndocumented<T>(key: string, body: () => T): T {
   const set = UNDOCUMENTED_ATTRIBUTES as Set<string>;
@@ -254,21 +249,18 @@ describe('unsimulated directives are reported rather than ignored (#153)', () =>
   });
 
   it('warns for a valid attribute the registry does not document (#178)', () => {
-    // #178 emptied UNDOCUMENTED_ATTRIBUTES, so this borrows a name the way the
+    // UNDOCUMENTED_ATTRIBUTES is empty, so this borrows a name the way the
     // ignored-directive tests above borrow a classification: the mechanism has
-    // to stay assertable when there is nothing currently parked in it, or it
-    // quietly stops being tested the moment the roster is clean.
-    // A name the registry will never hold, so this cannot break again the way
-    // it did when #178 registered the real attribute it used to borrow.
+    // to stay assertable when there is nothing parked in it. A name the
+    // registry will never hold, so registering real attributes cannot break it.
     const KEY = 'A_FUTURE_SPLUNK_ATTRIBUTE';
     const d = withUndocumented(KEY, () =>
       diagnosticsFor(`${KEY} = foo\n`).find((x) => x.directiveKey === KEY),
     );
     expect(d?.level).toBe('warning');
     expect(d?.message).toContain('valid Splunk attribute');
-    // Deliberately asserts no issue number: the message used to name #178,
-    // which has closed. Pointing a user at a finished issue is the rot #227
-    // was about.
+    // Deliberately asserts no issue number: a message must not point a user
+    // at an issue that may have closed.
     expect(d?.message).not.toContain('#178');
   });
 

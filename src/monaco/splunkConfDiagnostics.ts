@@ -40,7 +40,7 @@ export interface DiagnosticMarker {
 /**
  * Tags the mis-cased-attribute marker so the code action provider can offer the
  * rename against it, rather than re-deriving which markers are fixable by
- * matching on message text (#89).
+ * matching on message text.
  */
 export const MISCASED_MARKER_CODE = 'splunk.miscased-attribute';
 
@@ -123,7 +123,7 @@ function resolveDirectiveInfo(key: string, fileType: ConfFileType): { info: Dire
 function unknownDirectiveMarker(key: string, fileType: ConfFileType, i: number, eqIdx: number): DiagnosticMarker | null {
   // A case-only mismatch is a real attribute written in a casing Splunk
   // ignores, which is a different problem from a typo and has an exact fix.
-  // Marked with MISCASED_MARKER_CODE so the quick fix can find it (#89).
+  // Marked with MISCASED_MARKER_CODE so the quick fix can find it.
   const canonical = miscasedCanonical(key, fileType);
   if (canonical !== undefined) {
     // Warning — this config is dead on a real indexer.
@@ -132,7 +132,7 @@ function unknownDirectiveMarker(key: string, fileType: ConfFileType, i: number, 
 
   // A real attribute of the other conf file is not a typo either: Splunk
   // ignores it here, and the fix is to move it. The engine reports the same
-  // sentence in the validation panel (#278). A warning, like the mis-cased
+  // sentence in the validation panel. A warning, like the mis-cased
   // branch above, because the line is dead on a real indexer. No quick fix:
   // moving a line into another file's stanza is not a safe automatic edit.
   const belongsIn = wrongFileCanonical(key, fileType);
@@ -142,7 +142,7 @@ function unknownDirectiveMarker(key: string, fileType: ConfFileType, i: number, 
 
   // A valid attribute the registry has not documented yet is not a typo,
   // and telling the user it might be sends them to check spelling that is
-  // already correct. The engine warns that the preview ignores it (#178),
+  // already correct. The engine warns that the preview ignores it,
   // the same way it does for a documented-but-`ignored` key — so say
   // nothing more here rather than contradicting it.
   if (isUndocumentedAttribute(key)) return null;
@@ -164,8 +164,8 @@ interface DirectiveLine {
 
 /**
  * A strftime specifier the simulator does not implement is treated as
- * literal text, so the format quietly fails to match rather than erroring
- * (#90). Informational, not a warning: the config may well be correct for a
+ * literal text, so the format quietly fails to match rather than erroring.
+ * Informational, not a warning: the config may well be correct for a
  * real indexer — it is this preview that will be wrong.
  * Offsets are into the value, so they only map back to THIS line when the
  * value was not joined from a continuation. Rather than mis-place a marker
@@ -293,7 +293,7 @@ export function computeDiagnostics(
     // Directives. Recognised with the ENGINE's rule (`DIRECTIVE_RE`) rather than
     // a looser `indexOf('=')` test, so the editor and the diagnostics list agree
     // about what counts as a directive. In particular a leading-whitespace line
-    // is malformed to Splunk, and used to be skipped here without a marker.
+    // is malformed to Splunk, and gets a marker.
     if (!DIRECTIVE_RE.test(line)) {
       markers.push(malformedLineMarker(line, i));
       continue;
@@ -392,14 +392,9 @@ function hasCapturingGroup(pattern: string): boolean {
 /**
  * Best-practice pairings, checked WITHIN each stanza.
  *
- * These used to run as `/^LINE_BREAKER\s*=/m` and friends over the whole
- * document, which is not what either rule means. Splunk resolves directives per
- * stanza, so a `LINE_BREAKER` in one sourcetype was silenced by a
- * `SHOULD_LINEMERGE = false` in an entirely different one — a false negative on
- * exactly the "config that ships dead" class this linter exists to catch. The
- * document-wide search also anchored the marker at the FIRST matching line in
- * the file, so with several stanzas the warning could land on a line that was
- * not the offending one.
+ * Splunk resolves directives per stanza, so a `LINE_BREAKER` in one sourcetype
+ * must not be silenced by a `SHOULD_LINEMERGE = false` in another, and each
+ * marker lands on the offending stanza's own line.
  */
 function checkBestPractices(
   stanzas: SeenStanza[],
@@ -426,8 +421,8 @@ function checkBestPractices(
     const timeFormat = stanza.directives.get('TIME_FORMAT');
 
     // Inspect the VALUE, not mere presence: `SHOULD_LINEMERGE = true` is the
-    // wrong setting alongside a custom LINE_BREAKER, yet mere presence used to
-    // suppress the very warning that asks for `= false`.
+    // wrong setting alongside a custom LINE_BREAKER, and must not suppress the
+    // very warning that asks for `= false`.
     // Read as the engine reads it: a non-boolean explicit value counts as off.
     const linemergeDisabled = shouldLinemerge ? !parseSplunkBool(shouldLinemerge.value, false) : false;
 

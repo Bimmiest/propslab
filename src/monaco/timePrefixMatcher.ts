@@ -1,10 +1,8 @@
 // ---------------------------------------------------------------------------
 // timePrefixMatcher.ts
-// Runs the TIME_FORMAT hover's TIME_PREFIX match off the main thread (#334).
-//
-// The hover used to exec the user's TIME_PREFIX against the sample line on the
-// main thread, where nothing could stop a pattern that backtracked badly, and
-// hovering froze the tab.
+// Runs the TIME_FORMAT hover's TIME_PREFIX match off the main thread, where
+// nothing could stop a pattern that backtracks badly and hovering would freeze
+// the tab.
 //
 // This reuses the Timestamp tab's worker (`timestampMatchWorker.ts`) rather
 // than adding one: a request with `timeFormat: null` asks it for the prefix
@@ -12,19 +10,17 @@
 // kept alive and shared by every hover; a watchdog terminates it when a match
 // overruns, and the next request gets a fresh one. It is a plain module rather
 // than `useWorkerRequest` because hover providers live outside React; the
-// worker's lifecycle is the same `createManagedWorker` the hooks use (#339).
+// worker's lifecycle is the same `createManagedWorker` the hooks use.
 //
 // There is deliberately no inline fallback. A worker that cannot load (a CSP
 // block, a chunk gone after a redeploy, no `Worker` at all) makes the preview
-// omit its sample line — running the prefix here instead is the bug.
+// omit its sample line — running the prefix on this thread is the one thing
+// this module exists to avoid.
 //
 // Several hovers can be in flight at once, and the worker runs them in order,
-// so only the oldest was running when a worker hung or crashed. That one is
+// so only the oldest is running when a worker hangs or crashes. That one is
 // reported; the rest never ran and are replayed on the fresh worker rather
-// than blamed. Before #339 a crash reported every queued entry as an error
-// while a hang replayed them, and a worker whose script threw at top level
-// counted as a crash — uncapped — so every hover built a new worker and
-// blamed its prefix.
+// than blamed.
 // ---------------------------------------------------------------------------
 
 import { createManagedWorker } from '../hooks/workerLifecycle';
@@ -115,7 +111,7 @@ const managed = createManagedWorker<TimestampMatchRequest, TimestampMatchRespons
     replay(queued);
   },
   // No code saw any of these, so none is the pattern's fault: the preview just
-  // goes quiet, and past the cap no worker is built again this session (#309).
+  // goes quiet, and past the cap no worker is built again this session.
   onLoadFailure(inFlight) {
     for (const request of inFlight) finish(request.id, { status: 'unavailable' });
   },

@@ -1,5 +1,5 @@
 /**
- * The four MCP tools from issue #202, each a thin wrapper over existing engine
+ * The four MCP tools, each a thin wrapper over existing engine
  * exports. Handlers are exported separately from `registerTools` so tests can
  * call them without a transport.
  */
@@ -34,9 +34,9 @@ const MAX_CONF_LAYERS = 20;
 
 /**
  * Total conf text one call may carry: every layer of props.conf and
- * transforms.conf together (#335). The per-field limits alone admit twenty
+ * transforms.conf together. The per-field limits alone admit twenty
  * layers of a million characters for each file — forty million characters —
- * which the worker's heap limit was never sized for (runInWorker.ts sizes it
+ * which the worker's heap limit is not sized for (runInWorker.ts sizes it
  * from the sample), and which a timeout then re-parses on the server's own
  * thread to list regex suspects. Two million is still several times the
  * largest real props.conf + transforms.conf pair, default and local together.
@@ -281,7 +281,7 @@ function workerFailure(
     );
   }
   if (err instanceof WorkerBusyError) {
-    // Refused before queuing (#335): the input may be fine, the server is
+    // Refused before queuing: the input may be fine, the server is
     // just full. Said plainly so the agent waits rather than edits its conf.
     return json(
       {

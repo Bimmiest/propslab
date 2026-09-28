@@ -2,9 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { stanzaNameError, renderStanza } from '../scaffold/serialize';
 import { generalize, buildExtractFromSelection } from '../scaffold/fromSelection';
 
-// #35.1: the scaffold wrote the raw sourcetype straight into a stanza header, so
-// `foo]bar` produced `[foo]bar]` — which does not round-trip as one stanza, and
-// nothing blocked Apply.
+// A sourcetype like `foo]bar` would write `[foo]bar]`, which does not
+// round-trip as one stanza, so such a name blocks Apply.
 describe('stanzaNameError (#35.1)', () => {
   it('rejects a name containing a closing bracket', () => {
     expect(stanzaNameError('foo]bar')).toMatch(/\[|\]/);
@@ -36,7 +35,7 @@ describe('stanzaNameError (#35.1)', () => {
   });
 });
 
-// #35.2: `\S+` runs past the closing quote of a JSON value.
+// `\S+` runs past the closing quote of a JSON value.
 describe('generalize — quoted values (#35.2)', () => {
   it('stops at the closing quote inside a quoted JSON value', () => {
     const raw = '{"email":"x@y.com"}';

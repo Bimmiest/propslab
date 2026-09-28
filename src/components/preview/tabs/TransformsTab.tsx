@@ -38,8 +38,8 @@ export function TransformsTab() {
     // per-event descriptions collapse into one row per processor, consistent with
     // the search-time section. Distinct event count and per-event detail are kept.
     // Sets (which keep first-seen order), not Array.includes: a step with a
-    // distinct description per event made this quadratic, over a second at
-    // 20k events (#366).
+    // distinct description per event makes that quadratic, over a second at
+    // 20k events.
     interface Accumulator {
       processor: string;
       phase: StepSummary['phase'];
@@ -109,7 +109,7 @@ export function TransformsTab() {
       <StepSection title="Search-Time Processing" steps={summary.searchTime} phaseColor="var(--color-accent)" />
 
       {/*
-        The directives that ran and changed nothing (#84). Listed after the steps
+        The directives that ran and changed nothing. Listed after the steps
         that did fire, because a silent no-op is only confusing once you have
         looked for it above and not found it.
       */}
@@ -201,8 +201,8 @@ function StepSection({ title, steps, phaseColor }: { title: string; steps: StepS
 
 /**
  * The per-event descriptions of one step. Rendered only while open, and a page
- * at a time: every row of every step used to be in the DOM, closed or not,
- * which is most of what made switching to this tab slow on large inputs (#366).
+ * at a time: every row of every step in the DOM would make switching to this
+ * tab slow on large inputs.
  */
 function PerEventDetail({ descriptions }: { descriptions: string[] }) {
   const [open, setOpen] = useState(false);

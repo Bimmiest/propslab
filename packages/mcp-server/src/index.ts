@@ -50,7 +50,7 @@ async function main(): Promise<void> {
     // is this one. Without forwarding, the default action killed the shim and
     // left the server orphaned, still holding the client's stdio. (A terminal
     // Ctrl-C reaches both through the process group; the second SIGINT is
-    // harmless.) Installing a handler also means the shim no longer dies
+    // harmless.) Installing a handler also means the shim does not die
     // before the child does, so the exit below is always observed.
     const forwarded: NodeJS.Signals[] = ['SIGTERM', 'SIGINT', 'SIGHUP'];
     const forward = (signal: NodeJS.Signals) => {

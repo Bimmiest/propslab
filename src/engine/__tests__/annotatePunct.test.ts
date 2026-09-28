@@ -1,11 +1,9 @@
 // ---------------------------------------------------------------------------
 // annotatePunct.test.ts
-// ANNOTATE_PUNCT and the punct signature (#185).
+// ANNOTATE_PUNCT and the punct signature.
 //
-// The signature rules asserted here are pinned by the punct-* captures from
-// Splunk 10.4.0 (which corrected two pieces of folklore: tab encodes as the
-// letter `t` rather than `\t`, newlines are dropped, and the cap is 50
-// characters, not 30).
+// Capture-derived: the punct-* captures from Splunk 10.4.0 (tab encodes as the
+// letter `t`, newlines are dropped, the cap is 50 characters).
 // ---------------------------------------------------------------------------
 
 import { describe, it, expect } from 'vitest';

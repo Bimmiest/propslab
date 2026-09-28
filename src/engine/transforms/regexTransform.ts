@@ -23,7 +23,7 @@ export interface TransformResult {
   destValue?: string;
   matched: boolean;
   /**
-   * Why the transform had no effect, set only when `matched` is false (#84).
+   * Why the transform had no effect, set only when `matched` is false.
    * Computed here rather than by the caller because this is where SOURCE_KEY
    * has been resolved and LOOKAHEAD applied — recomputing either outside would
    * be a second implementation to keep in step.
@@ -163,7 +163,7 @@ function readRegexSettings(transformStanza: ConfStanza, phase: Phase): RegexSett
     // Splunk still extracts every match — the report-repeat-match and
     // report-transform-search-time captures (10.4.0) both show repeated
     // extraction, the first with REPEAT_MATCH set but irrelevant and the second
-    // without it — and MV_ADD alone decides whether the later values are kept (#285).
+    // without it — and MV_ADD alone decides whether the later values are kept.
     scanAll: phase === 'search-time' || repeatMatch,
     mvAdd: phase === 'search-time' && flag('MV_ADD'),
   };
@@ -267,9 +267,8 @@ function writeDestKey(run: MatchedRun, format: string, destKey: string, priorDes
  * spaces end the value early, and let a captured `::` synthesize a field.
  * `$0` means "what was in the DEST_KEY before the REGEX ran", and this
  * branch is the one with no DEST_KEY — so the reference names nothing and
- * Splunk creates no field for the pair at all. Expanding it to the whole
- * match instead showed the user a field that cannot exist in their real
- * deployment, which is worse than showing nothing (#175).
+ * Splunk creates no field for the pair at all; showing one would be a field
+ * that cannot exist in the real deployment.
  */
 function extractFormatPairs(run: MatchedRun, format: string): void {
   const { result, settings, cleanName } = run;
@@ -277,7 +276,7 @@ function extractFormatPairs(run: MatchedRun, format: string): void {
     (p) => !/\$0(?!\d)/.test(p.key) && !/\$0(?!\d)/.test(p.value),
   );
   const keepFirstMatchOnly = run.phase === 'search-time' && !settings.mvAdd;
-  // Index time without REPEAT_MATCH: the REGEX runs once (#285).
+  // Index time without REPEAT_MATCH: the REGEX runs once.
   for (const m of settings.scanAll ? run.compiled.matchAll(run.sourceValue) : [run.firstMatch]) {
     for (const pair of pairs) {
       // Cleaned because FORMAT can name a field from the DATA (`$1::$2`), so
@@ -286,7 +285,7 @@ function extractFormatPairs(run: MatchedRun, format: string): void {
       if (!field) continue;
       // MV_ADD governs this path too, not just the named-capture-group one:
       // at its default of false Splunk keeps the first match and discards
-      // the rest rather than building a multivalue field (#174). It is a
+      // the rest rather than building a multivalue field. It is a
       // search-time attribute, so an index-time transform still accumulates
       // (when REPEAT_MATCH gives it more than one match to accumulate) --
       // gating both phases on it would make MV_ADD do something where
@@ -302,9 +301,7 @@ function extractFormatPairs(run: MatchedRun, format: string): void {
  * FORMAT path does (`scanAll`): every match at search time, and at index
  * time only under REPEAT_MATCH. When a field is captured more than once,
  * MV_ADD=true accumulates a multivalue field while MV_ADD=false keeps the
- * first value and discards the rest. This used to take the first match only
- * at search time unless REPEAT_MATCH was set, so MV_ADD on named groups did
- * nothing there while the same MV_ADD on a FORMAT stanza worked (#285).
+ * first value and discards the rest — the same rule as a FORMAT stanza.
  */
 function extractNamedGroups(run: MatchedRun): void {
   const { result, settings, cleanName } = run;
@@ -314,10 +311,8 @@ function extractNamedGroups(run: MatchedRun): void {
   // The same rule as `keepFirstMatchOnly` in the FORMAT path, stated the other
   // way round: at search time MV_ADD decides; at index time MV_ADD is inert,
   // and REPEAT_MATCH — the only way there is more than one match to see —
-  // "runs the REGEX multiple times", each match writing the field (#303).
-  // Named groups used to keep the first value here while the FORMAT path
-  // accumulated every match, so the same REPEAT_MATCH extraction produced a
-  // single value or a multivalue depending only on how the REGEX was written.
+  // "runs the REGEX multiple times", each match writing the field, as the
+  // FORMAT path accumulates every match.
   const accumulate = run.phase === 'index-time' || settings.mvAdd;
 
   // `fieldName` arrives final: literal group names get the WRITE_META
@@ -350,8 +345,7 @@ function extractNamedGroups(run: MatchedRun): void {
       if (keyText === undefined || valText === undefined) continue;
       // The name comes from the DATA, exactly as with a FORMAT `$1::$2`, so it
       // gets the same cleaning — CLEAN_KEYS at search time, the WRITE_META
-      // strip at index time. Passing it through raw let `user-name=bob`
-      // produce a field `user-name` that Splunk would call `user_name` (#285).
+      // strip at index time, so `user-name=bob` gives `user_name`, as in Splunk.
       assignField(cleanName(keyText), valText);
     }
 
@@ -371,7 +365,7 @@ function extractNamedGroups(run: MatchedRun): void {
  * FORMAT, so the default only applies to a REGEX that uses numbered groups (at
  * least group 1 must exist to reference).
  *
- * The search-time default is empty (#288): a REPORT- with only numbered groups
+ * The search-time default is empty: a REPORT- with only numbered groups
  * and no FORMAT extracts nothing, rather than inventing a field named after the
  * stanza. Named groups still extract there — the
  * report-named-groups-without-format capture (10.4.0) pins that.

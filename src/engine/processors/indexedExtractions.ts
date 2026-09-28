@@ -84,7 +84,7 @@ interface LineSyntax {
 
 /**
  * How one delimited (csv/tsv/psv) source is read, after the format's defaults
- * have been overridden by the structured-data attributes (#184, #272).
+ * have been overridden by the structured-data attributes.
  */
 interface DelimitedOptions extends LineSyntax {
   /**
@@ -457,16 +457,15 @@ function isW3cDirectiveOnly(raw: string): boolean {
  *
  * Splunk's structured-header processor replaces every character that is not
  * alphanumeric or `_` (props.conf.spec, `HEADER_FIELD_ACCEPTABLE_SPECIAL_CHARACTERS`),
- * and strips the leading underscores it reserves for internal fields. Keeping
- * the raw token meant a W3C/IIS log surfaced `cs-uri-stem`, which is not the
- * name anyone can search for — `cs_uri_stem` is.
+ * and strips the leading underscores it reserves for internal fields, so a
+ * W3C/IIS log's `cs-uri-stem` is indexed as `cs_uri_stem`.
  *
  * `acceptable` is HEADER_FIELD_ACCEPTABLE_SPECIAL_CHARACTERS: characters that
  * survive cleaning. The spec's wording exempts a space by default too; this
- * keeps replacing it, as it did before #272, because no capture settles the
- * point and changing every spaced header name on a doc reading alone is the
- * kind of confident wrong answer the fixtures exist to prevent. Naming a space
- * in the attribute keeps it.
+ * still replaces it, because no capture settles the point and changing every
+ * spaced header name on a doc reading alone is the kind of confident wrong
+ * answer the fixtures exist to prevent. Naming a space in the attribute keeps
+ * it.
  */
 function sanitizeHeaderName(name: string, acceptable = ''): string {
   let out = '';

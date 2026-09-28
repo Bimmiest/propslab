@@ -41,9 +41,9 @@ function evalConcat(node: NodeOf<'concat'>, ctx: EvalCtx): EvalValue {
 /**
  * Short-circuit: Splunk does not evaluate the right operand once the left
  * settles the result. XOR has no short circuit: its answer always depends
- * on both sides (#312).
+ * on both sides.
  *
- * Three-valued logic, as SPL documents it for NULL operands (#343):
+ * Three-valued logic, as SPL documents it for NULL operands:
  * NULL AND false is false, NULL AND true is NULL, NULL OR true is true,
  * NULL OR false is NULL, and NULL XOR anything is NULL. Only a definite
  * false (AND) or true (OR) on the left settles the answer early.
@@ -67,7 +67,7 @@ function evalLogical(node: NodeOf<'logical'>, ctx: EvalCtx): EvalValue {
 function evalIn(node: NodeOf<'in'>, ctx: EvalCtx): EvalValue {
   const left = evalNode(node.value, ctx);
   // A NULL value is in no list and out of none: the answer is NULL, so
-  // neither `missing IN ("")` nor `missing NOT IN ("a")` holds (#343). A
+  // neither `missing IN ("")` nor `missing NOT IN ("a")` holds. A
   // NULL list item simply never matches (its comparison is NULL).
   if (left === null || left === undefined) return null;
   // `some` stops at the first match — no need to evaluate the rest of the list.
@@ -96,8 +96,8 @@ export function evalNode(node: Node, ctx: EvalCtx): EvalValue {
       return n === null ? null : -n;
     }
     case 'not': {
-      // Three-valued: NOT NULL is NULL (#343). Collapsing NULL to false here
-      // made `NOT (missing == "a")` true while `missing != "a"` is NULL.
+      // Three-valued: NOT NULL is NULL, so `NOT (missing == "a")` agrees with
+      // `missing != "a"`, which is NULL.
       const v = toTri(evalNode(node.operand, ctx));
       return v === null ? null : !v;
     }

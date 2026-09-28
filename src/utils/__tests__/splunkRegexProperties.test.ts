@@ -1,14 +1,14 @@
 // ---------------------------------------------------------------------------
 // splunkRegexProperties.test.ts
 // Differential property tests: PCRE2 (the engine) against JS's own RegExp, on
-// the syntax the two read the same way (#340, #368).
+// the syntax the two read the same way.
 //
 // Patterns are generated from literals, escapes, character classes (with
 // regex metacharacters inside them), greedy and lazy quantifiers, capturing,
 // non-capturing, named and lookaround groups, alternation and anchors, rendered
 // once in JS spelling and once in PCRE spelling (`(?P<name>…)`). One class
 // spelling differs: a `]` first in a class is a member in PCRE and written
-// `\]` for JS (#341).
+// `\]` for JS.
 //
 // Differences the comparison steps around, each pinned by an example test in
 // splunkRegex.test.ts instead:
@@ -39,7 +39,7 @@ fc.configureGlobal({ seed: 340, numRuns: 300 });
 
 type Atom =
   // A literal, escape, `.`, or character class. `pcre` is set only where the
-  // PCRE spelling differs: a class whose first member is `]` (#341).
+  // PCRE spelling differs: a class whose first member is `]`.
   | { t: 'text'; s: string; pcre?: string }
   | { t: 'anchor'; s: string }
   | { t: 'group'; kind: 'cap' | 'nc' | 'named' | 'la' | 'nla' | 'lb' | 'nlb'; body: Alt }
@@ -67,7 +67,7 @@ const classItem = fc.constantFrom(
 /**
  * A character class, in both spellings. A `^` is only a negation when first;
  * inside, it is a literal. A `]` first (after any `^`) is a literal member in
- * PCRE, which JS spells `\]` (#341); with it, the class needs no other member.
+ * PCRE, which JS spells `\]`; with it, the class needs no other member.
  */
 const charClass = fc
   .tuple(fc.boolean(), fc.boolean(), fc.array(classItem, { maxLength: 4 }), fc.boolean())

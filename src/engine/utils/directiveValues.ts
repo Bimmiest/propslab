@@ -1,9 +1,9 @@
 /**
  * Reading one attribute out of a directive list, and reading a conf boolean.
  *
- * Every processor used to do both its own way — first match or last, trimmed
- * or not, `=== 'true'` or `!== 'false'` — so the same spelling could switch one
- * attribute on and be ignored by the next (#301). These are the one reading.
+ * Every processor reads through these — last match, trimmed where it matters,
+ * one boolean spelling table — so the same spelling cannot switch one
+ * attribute on and be ignored by the next.
  */
 import type { ConfDirective } from '../types';
 
@@ -11,7 +11,7 @@ import type { ConfDirective } from '../types';
  * The directive that takes effect for `key`: the LAST one in the list.
  *
  * Last, because that is Splunk's rule for a key repeated within a stanza, and
- * because a layered conf (#132) is concatenated lowest precedence first, so the
+ * because a layered conf is concatenated lowest precedence first, so the
  * last definition is also the `local/` one that beat `default/`. The lists this
  * is handed come in two shapes, and last-wins is right for both:
  *

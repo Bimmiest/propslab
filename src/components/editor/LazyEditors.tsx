@@ -3,7 +3,7 @@ import type { MonacoEditor as MonacoEditorComponent } from './MonacoEditor';
 import type { SplunkEditor as SplunkEditorComponent } from './SplunkEditor';
 
 /**
- * Monaco, behind a dynamic import so first paint does not wait for it (#375).
+ * Monaco, behind a dynamic import so first paint does not wait for it.
  *
  * Everything that imports monaco at runtime (MonacoEditor, SplunkEditor,
  * splunkMonacoSetup and the providers it registers) is reached only through

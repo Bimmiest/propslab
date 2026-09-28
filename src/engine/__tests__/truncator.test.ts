@@ -36,7 +36,7 @@ describe('truncateEvents', () => {
     expect(e._raw).toBe(long);
   });
 
-  // BUG-1: a non-numeric TRUNCATE used to slice every event to '' via NaN.
+  // A non-numeric TRUNCATE must not slice every event to '' via NaN.
   it('ignores a non-numeric TRUNCATE instead of blanking every event', () => {
     const diags: ValidationDiagnostic[] = [];
     const e = truncateEvents([event('keep me intact')], truncateDir('abc'), diags)[0]!;
@@ -44,7 +44,7 @@ describe('truncateEvents', () => {
     expect(diags.some((d) => d.message.includes('not a valid byte count'))).toBe(true);
   });
 
-  // #67.1: TRUNCATE is a per-line cap, not a per-(merged-)event cap.
+  // TRUNCATE is a per-line cap, not a per-(merged-)event cap.
   it('leaves a long multi-line event intact when every line is under the limit', () => {
     // 6 lines × 8 chars = 48 bytes total, well over TRUNCATE=20, but each line
     // is only 8 bytes. Splunk truncates per line, so nothing is cut.
@@ -59,7 +59,7 @@ describe('truncateEvents', () => {
     expect(e._raw).toBe(['short', 'this-', 'ok'].join('\n'));
   });
 
-  // #67.2: mid-character truncation must round down to a full UTF-8 character,
+  // Mid-character truncation must round down to a full UTF-8 character,
   // not emit a U+FFFD replacement character for the trailing partial sequence.
   it('rounds down to a UTF-8 character boundary instead of emitting U+FFFD', () => {
     // '€' is 3 bytes (E2 82 AC); "a€" is 4 bytes. A 2-byte cut must drop the
@@ -76,7 +76,7 @@ describe('truncateEvents', () => {
     expect(e._raw).not.toContain('�');
   });
 
-  // #30.2: parseInt is too lenient — these forms must be rejected, not silently
+  // parseInt is too lenient — these forms must be rejected, not silently
   // truncating with a wrong length (1e3→1) or disabling truncation (0x10→0).
   it.each(['0x10', '1e3', '100abc', '1.5', '-5'])(
     'ignores a malformed TRUNCATE value %s',
@@ -103,7 +103,7 @@ describe('#287 — TRUNCATE caps LINE_BREAKER segments, not newline-separated pi
     const directives = [d('SHOULD_LINEMERGE', 'false'), d('LINE_BREAKER', '(\\n)(?=\\{)'), d('TRUNCATE', '20')];
     const events = truncateEvents(breakLines(`${record}\n${record}`, directives, META), directives);
     expect(events).toHaveLength(2);
-    // Every '\n'-piece is under 20 bytes, so the old per-'\n' reading left
+    // Every '\n'-piece is under 20 bytes, so a per-'\n' reading would leave
     // both records whole.
     expect(events.map((e) => e._raw)).toEqual([record.slice(0, 20), record.slice(0, 20)]);
     expect(events.every((e) => e.fields['meta'] === 'truncated')).toBe(true);

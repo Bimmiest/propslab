@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
 // evalCidrAndRegex.test.ts
-// cidrmatch() was a stub that answered false for every address, and replace(),
-// match() and mvfind() swallowed a pattern that would not compile (#291).
+// cidrmatch(), and how replace(), match() and mvfind() report a pattern that
+// will not compile.
 //
 // Doc-derived: cidrmatch("X", Y) is documented as true when IP address Y is in
 // the subnet X, for IPv4 and IPv6. No fidelity fixture covers eval, so these
@@ -28,7 +28,7 @@ function event(fields: Record<string, string> = {}): SplunkEvent {
 const evalDir = (className: string, value: string): ConfDirective =>
   ({ key: `EVAL-${className}`, value, line: 3, directiveType: 'EVAL', className });
 
-// Read through if(): a field cannot be assigned a boolean result (#358).
+// Read through if(): a field cannot be assigned a boolean result.
 const cidr = (range: string, ip: string) =>
   applyEvalExpressions([event({ ip })], [evalDir('r', `if(cidrmatch("${range}", ip), "true", "false")`)])[0]!.fields['r'];
 
@@ -82,11 +82,10 @@ describe('cidrmatch() (#291)', () => {
     expect(cidr(range, ip)).toBe('false');
   });
 
-  // This used to assert 'false' for an absent address. #343 made NULL propagate
-  // through the comparison operators, like() and match(), and cidrmatch() follows
-  // them: the result is NULL, so the EVAL writes no field, and an if() guard
-  // still takes its else branch. Doc-derived (NULL is falsy in a condition), not
-  // captured.
+  // NULL propagates through the comparison operators, like() and match(), and
+  // cidrmatch() follows them: the result is NULL, so the EVAL writes no field,
+  // and an if() guard still takes its else branch. Doc-derived (NULL is falsy
+  // in a condition), not captured.
   it('yields NULL for an absent address, as the comparison operators do (#343)', () => {
     const r = applyEvalExpressions([event()], [evalDir('r', 'cidrmatch("10.0.0.0/8", nope)')])[0]!;
     expect(r.fields['r']).toBeUndefined();

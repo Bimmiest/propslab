@@ -19,9 +19,9 @@ function event(raw = 'hello'): SplunkEvent {
 const dir = (key: string, value: string, directiveType: string, className?: string): ConfDirective =>
   ({ key, value, line: 1, directiveType, className });
 
-// host/source/sourcetype/index are default fields at search time (#56), so a
+// host/source/sourcetype/index are default fields at search time, so a
 // large family of staple TA/CIM directives can read them without any prior
-// extraction. Before this, each silently no-opped with no diagnostic.
+// extraction.
 describe('metadata as search-time default fields (#56)', () => {
   it('EXTRACT ... in source reads the event source', () => {
     const out = extractFields(

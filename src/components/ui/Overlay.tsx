@@ -1,17 +1,13 @@
 // ---------------------------------------------------------------------------
 // Overlay.tsx
-// One overlay implementation, backed by @radix-ui/react-dialog (#149).
-//
-// Replaces the hand-rolled `useOverlay`, which did three things by hand: an
-// Escape layer stack so only the topmost overlay closes, a Tab focus trap, and
-// background inertness. Radix does those three, plus the tail a bespoke trap
-// tends not to cover — scroll lock, `pointer-events` during enter/exit,
-// returning focus to the trigger after a portal unmounts, and iOS Safari's
-// handling of `inert`.
+// One overlay implementation, backed by @radix-ui/react-dialog: an Escape
+// layer stack so only the topmost overlay closes, a Tab focus trap and
+// background inertness, plus the tail a bespoke trap tends not to cover —
+// scroll lock, `pointer-events` during enter/exit, returning focus to the
+// trigger after a portal unmounts, and iOS Safari's handling of `inert`.
 //
 // It is a wrapper rather than five direct usages so the backdrop, the z-index
-// and the dismiss-on-outside-click behaviour stay identical across overlays,
-// which is what the hook was really buying.
+// and the dismiss-on-outside-click behaviour stay identical across overlays.
 // ---------------------------------------------------------------------------
 
 import type { ReactNode } from 'react';

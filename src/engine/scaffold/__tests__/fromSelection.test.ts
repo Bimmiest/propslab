@@ -30,7 +30,7 @@ describe('buildExtractFromSelection', () => {
     expect(buildExtractFromSelection('x=1', '', 'f')).toBeNull();
   });
 
-  // #33: anchor on the selection's real offset, not the first occurrence.
+  // Anchor on the selection's real offset, not the first occurrence.
   it('anchors on the selection offset rather than the first match', () => {
     const raw = 'status=200 code=200';
     // Selecting the second "200" (in code=200, offset 16).
@@ -41,7 +41,7 @@ describe('buildExtractFromSelection', () => {
     expect(noOffset?.value).toBe('status=(?<rc>\\d+)');
   });
 
-  // #32: an illegal field name is sanitised into a valid capture group so the
+  // An illegal field name is sanitised into a valid capture group so the
   // regex compiles (instead of the dialog reporting a misleading "invalid regex").
   it('sanitises an illegal field name into a valid capture group', () => {
     const d = buildExtractFromSelection('a-b=200', '200', 'client-ip');

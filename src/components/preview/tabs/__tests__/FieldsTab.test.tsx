@@ -135,11 +135,9 @@ describe('FieldsTab — nested field counts (#316)', () => {
     expect(within(container).getByText('(2)')).toBeInTheDocument();
   });
 
-  // #335: every toggle was a bare "Expand"/"Collapse" with no state, so a
-  // screen reader heard a column of identical buttons.
-  // #347: the name then flipped between "Expand a" and "Collapse a" as well as
-  // `aria-expanded`, so each toggle announced its new state twice. The name is
-  // now fixed and the state is in `aria-expanded` alone.
+  // Each toggle is named for its field, so a screen reader can tell them
+  // apart, and its state is in `aria-expanded` alone: a name that also flipped
+  // would announce the change twice.
   it('names each toggle for its field and announces its state once', () => {
     useAppStore.setState(initial, true);
     const json = makeEvent({ a: '{}', 'a.b': '{}', 'a.b.c': '1' }, []);

@@ -1,11 +1,8 @@
 // ---------------------------------------------------------------------------
 // stanzaRegistry.ts
 // The stanza header kinds a props.conf file can declare, their precedence, and
-// their pattern syntax.
-//
-// These descriptions used to be string literals inside the Monaco hover
-// provider, which made them unreachable from anywhere else. The dictionary
-// needs the same text, so it lives here and both render from one source.
+// their pattern syntax. The Monaco hover provider and the dictionary both
+// render from this one source.
 // ---------------------------------------------------------------------------
 
 export type StanzaKindId = 'default' | 'sourcetype' | 'host' | 'source';

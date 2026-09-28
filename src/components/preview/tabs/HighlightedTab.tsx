@@ -184,11 +184,9 @@ function eventBadges(
 ): EventBadges {
   const eventFields = Object.keys(item.event.fields).filter((f) => highlightColorMap.has(f));
   // Straight off the EVAL step: the expressions that actually ran for THIS
-  // event, already resolved through stanza matching. This used to be a
-  // case-insensitive regex over the raw props.conf text, which ignored
-  // stanza scoping (an EVAL- under a sourcetype the user is not simulating
-  // still appeared), line continuations, and the case-sensitivity rule the
-  // parser enforces one step earlier.
+  // event, already resolved through stanza matching, line continuations and
+  // the parser's case-sensitivity rule — none of which a scan of the raw
+  // props.conf text would honour.
   const showCalcStrip = fieldFilter === 'calc' || fieldFilter === 'all';
   const evalTrace = item.event.processingTrace.find((t) => t.processor === 'EVAL');
   const eventCalcFields = showCalcStrip
@@ -335,7 +333,7 @@ export function HighlightedTab({ items, allEvents, currentPage, eventsPerPage }:
           {pinnedOverflow && <PinnedOverflowNote total={pinMatches.length} />}
           {/*
             Extraction directives that ran against these events and produced no
-            field (#84) — the case where this tab otherwise shows an event with
+            field — the case where this tab otherwise shows an event with
             nothing highlighted and no reason why.
           */}
           <div className="mb-2">

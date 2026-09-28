@@ -1,10 +1,9 @@
 // ---------------------------------------------------------------------------
 // EffectiveConfigTab.tsx
 // What `splunk btool props list <sourcetype> --debug` prints, for the
-// props.conf and metadata the pipeline last ran with (#86, #347).
+// props.conf and metadata the pipeline last ran with.
 //
-// The simulator has always computed this to decide what to run; it just never
-// showed it. The row that earns the panel is the contested one -- a directive
+// The row that earns the panel is the contested one -- a directive
 // written in one stanza and silently beaten by another -- because that is a
 // wrong preview whose cause is invisible in the editor.
 // ---------------------------------------------------------------------------
@@ -120,10 +119,9 @@ function DirectiveRow({ directive }: { directive: EffectiveDirective }) {
 
 interface EffectiveConfigTabProps {
   /**
-   * What the pipeline ran with, from `usePipelineInputs` in PreviewPanel. The
-   * tab read the live editor state, so in manual-apply mode it listed config
-   * that had not been run under a footer saying it resolved config the way the
-   * preview does (#347). Taken as a prop rather than called here because the
+   * What the pipeline ran with, from `usePipelineInputs` in PreviewPanel, not
+   * the live editor state: in manual-apply mode the live state is config that
+   * has not been run. Taken as a prop rather than called here because the
    * hook can only freeze inputs while mounted, and this tab unmounts whenever
    * another output tab is selected — which is when props.conf gets edited.
    */
@@ -142,8 +140,8 @@ export function EffectiveConfigTab({ inputs }: EffectiveConfigTabProps) {
 
   // Resolved with `resolveStanzasForEvent`, as the pipeline does, so an
   // input-time `sourcetype =` in a [source::] or [host::] stanza brings in the
-  // stanza it assigns. `matchStanzas` alone listed the settings of the
-  // sourcetype being replaced, which the preview never applied (#328).
+  // stanza it assigns. `matchStanzas` alone would list the settings of the
+  // sourcetype being replaced, which the preview never applies.
   const { effective, assignedSourcetype } = useMemo(() => {
     if (propsConf.trim() === '') return { effective: [], assignedSourcetype: undefined };
     const { stanzas } = parseConf(propsConf, 'props.conf');

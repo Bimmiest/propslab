@@ -103,11 +103,11 @@ function trimFrom(side: 'left' | 'right'): Builtin {
 
 // String — an absent argument propagates NULL rather than being coerced to
 // "". `len(nonexistent)` is null, not 0; a plausible-looking 0 is worse than
-// no field at all, because nothing about it says the field was missing (#211).
+// no field at all, because nothing about it says the field was missing.
 // The type predicates (isnull, isnotnull, typeof, isnum, ...) deliberately
 // do not propagate: they answer a question about the value, including its
 // absence. The matching predicates (like, match, cidrmatch) do, as the
-// comparison operators do (#343).
+// comparison operators do.
 const STRING_BUILTINS: Record<string, Builtin> = {
   nullif: (args) => toStr(args[0]) === toStr(args[1]) ? null : args[0] ?? null,
   lower: onString((s) => s.toLowerCase()),
@@ -313,15 +313,15 @@ const TIME_BUILTINS: Record<string, Builtin> = {
 };
 
 function like(args: EvalValue[], ctx: EvalCtx): EvalValue {
-  // NULL in, NULL out, the same as `=` (#343): `x LIKE "%"` parses to this
-  // call, and an absent field is not "" — `like(missing, "%")` used to be
-  // true. NULL is falsy in if()/case(), so a guard still takes its else.
+  // NULL in, NULL out, the same as `=`: `x LIKE "%"` parses to this call, and
+  // an absent field is not "", so `like(missing, "%")` is NULL, not true. NULL
+  // is falsy in if()/case(), so a guard still takes its else.
   const value = strArg(args[0]);
   const likePattern = strArg(args[1]);
   if (value === null || likePattern === null) return null;
   // Escape regex metacharacters first, then translate SQL-style wildcards.
   // A run of `%` collapses to ONE `.*`: it means the same thing, and
-  // `.*.*` backtracks for nothing (#303).
+  // `.*.*` backtracks for nothing.
   const pattern = likePattern
     .replace(/[.+*?^${}()|[\]\\]/g, '\\$&')
     .replace(/%+/g, '.*')
@@ -338,15 +338,14 @@ const OTHER_BUILTINS: Record<string, Builtin> = {
   null: () => null,
   // `true()`/`false()` parse as calls, not as the bare boolean literals the
   // parser already handles — and `true()` is the idiomatic way to write the
-  // trailing default branch of a case(). Without these it evaluated to null,
-  // the branch never fired, and case() fell off the end returning nothing for
-  // precisely the inputs the author wrote a fallback for (#165).
+  // trailing default branch of a case(), which must fire for precisely the
+  // inputs the author wrote a fallback for.
   true: () => true,
   false: () => false,
   like,
   match: (args, ctx) => {
-    // NULL propagates, as for like() and the comparison operators (#343):
-    // matching an absent field against `^$` or `.*` used to answer true.
+    // NULL propagates, as for like() and the comparison operators: matching an
+    // absent field against `^$` or `.*` is NULL, not true.
     const subject = strArg(args[0]);
     const regexText = strArg(args[1]);
     if (subject === null || regexText === null) return null;
@@ -354,9 +353,9 @@ const OTHER_BUILTINS: Record<string, Builtin> = {
     return regex ? regex.test(subject) : false;
   },
   cidrmatch: (args) => {
-    // NULL propagates, as for match() and like() (#343). It used to answer
-    // false for an absent address, which only differs under NOT: `NOT
-    // cidrmatch(...)` on an event without the field was true.
+    // NULL propagates, as for match() and like(). That differs from false
+    // only under NOT: `NOT cidrmatch(...)` on an event without the field is
+    // NULL, not true.
     const range = strArg(args[0]);
     const ip = strArg(args[1]);
     return range === null || ip === null ? null : cidrMatch(range, ip);

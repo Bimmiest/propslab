@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
 // stanzaLevelDirectives.test.ts
 // The four props.conf directives that act on the stanza rather than on the
-// event: `disabled`, `priority`, `sourcetype` and `rename` (#186).
+// event: `disabled`, `priority`, `sourcetype` and `rename`.
 //
 // Three of the four can change WHICH stanza applies, so getting one wrong
 // changes every downstream result rather than one field — which is why they are

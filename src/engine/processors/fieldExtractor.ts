@@ -89,8 +89,8 @@ interface ExtractionState {
   offsetsChanged: boolean;
   traces: SplunkEvent['processingTrace'];
   /**
-   * Every directive that stops early in runExtraction changed nothing, which
-   * is the case the preview has never explained (#84).
+   * Every directive that stops early in runExtraction changed nothing, and
+   * says why here.
    */
   noOps: DirectiveNoOp[];
 }
@@ -152,7 +152,7 @@ function storeGroups(
   const alreadySet: string[] = [];
   for (const [name, value] of Object.entries(groups)) {
     if (value === undefined) continue;
-    // First-wins (simplification — SEM-12): this engine keeps the value from
+    // First-wins (a simplification): this engine keeps the value from
     // the first extraction and discards later ones for the same field name.
     // Real Splunk's behaviour when two search-time extractions yield the same
     // field is closer to producing a multivalue field; verify against a live

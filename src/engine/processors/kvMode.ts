@@ -143,12 +143,12 @@ function parseWholeJson(raw: string): WholeJsonResult {
   const trimmed = raw.trim();
   // A leading `[` alone is not evidence of JSON: `[INFO] started` and other
   // bracketed log prefixes begin with one, and treating them as candidates
-  // raised a "not valid JSON" warning on ordinary events (#289). Only an `[`
+  // would raise a "not valid JSON" warning on ordinary events. Only an `[`
   // followed by something that can start a JSON value -- or close an empty
   // array -- is plausibly an array. That still admits a bracketed timestamp
   // (`[2026-01-15 10:00:00] msg` starts with a digit), which is commoner than
   // `[INFO]`, so an array must also end with `]`. The cost is that a truncated
-  // array no longer warns; a truncated object still does, and whole-event
+  // array does not warn; a truncated object still does, and whole-event
   // arrays are the rarer shape.
   const looksLikeJson =
     trimmed.startsWith('{') || (/^\[\s*[{["\d\-tfn\]]/.test(trimmed) && trimmed.endsWith(']'));
@@ -226,7 +226,7 @@ function extractXml(raw: string, fields: Record<string, string | string[]>, adde
   // Wrap in a root element so fragments with several top-level elements (or
   // none) parse; the reader decodes entities, handles CDATA, and matches
   // multi-line content. It is the engine's own rather than DOMParser, which
-  // exists in neither a Web Worker nor Node (see utils/xmlReader.ts, #280).
+  // exists in neither a Web Worker nor Node (see utils/xmlReader.ts).
   let root = parseXmlDocument(`<_root_>${raw}</_root_>`);
   let wrapped = true;
   if (root === null) {
@@ -300,10 +300,10 @@ function extractKeyValue(
   // single-quoted one.
   //
   // Two independent sweeps cannot be made correct by ordering, because each
-  // quoting style can nest inside the other. Whichever ran first mined the
+  // quoting style can nest inside the other. Whichever runs first mines the
   // other's values: with a double-quoted-first order, `msg="an x='inner' thing"`
-  // invented a field `x = inner` from text inside msg's value; reversing the
-  // order just moved the bug to `msg='an x="inner" thing'`. A single scan
+  // would invent a field `x = inner` from text inside msg's value; reversing
+  // the order just moves the problem to `msg='an x="inner" thing'`. A single scan
   // settles it by position — the quote that opens first consumes through its own
   // close, so whatever is nested inside is never a candidate.
   //
@@ -342,11 +342,9 @@ function extractKeyValue(
   const record = (rawKey: string, value: string): void => {
     // Auto-KV names the field through the same key cleaning transforms use:
     // punctuation to underscores, then leading digits and underscores
-    // stripped. Pinned by the autokv-key captures from 10.4.0 (#207):
+    // stripped. Pinned by the autokv-key captures from 10.4.0:
     // `zone-found` becomes `zone_found`, `2fa` becomes `fa`, and a key that
     // cleans to nothing — including a purely numeric one — is discarded.
-    // (An earlier reading, encoded in a #166 test, had leading digits
-    // surviving; the capture disproved it.)
     const key = cleanFieldKey(rawKey);
     if (!key) return;
     if (seenHere.has(key)) return; // first occurrence wins

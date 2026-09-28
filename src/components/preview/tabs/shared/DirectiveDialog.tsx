@@ -25,10 +25,9 @@ export function DirectiveDialog({
 
   /**
    * Enter submits from the dialog's inputs, but must not hijack an activation
-   * the user aimed at a control. A keyboard user who Tabbed to Cancel and
-   * pressed Enter used to get the directive written into props.conf: this
-   * container handler saw the keydown first, suppressed the button's native
-   * activation with preventDefault(), and applied instead.
+   * the user aimed at a control: Enter on a focused Cancel button must
+   * cancel, not have this container handler preventDefault() the button's
+   * activation and write the directive into props.conf.
    */
   const onKeyDown = (e: ReactKeyboardEvent) => {
     if (e.key !== 'Enter' || applyDisabled) return;

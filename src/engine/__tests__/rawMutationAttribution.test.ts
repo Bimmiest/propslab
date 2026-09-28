@@ -180,9 +180,8 @@ describe('DEST_KEY = _raw field attribution', () => {
 });
 
 describe('INGEST_EVAL _raw= field attribution (#346)', () => {
-  // The repro from #346. INGEST_EVAL's `_raw=` rewrites the event exactly as
-  // DEST_KEY = _raw does, so it must be attributed the same way; it used to be
-  // traced as a bare expression count, naming nothing it destroyed.
+  // INGEST_EVAL's `_raw=` rewrites the event exactly as DEST_KEY = _raw does,
+  // so it must be attributed the same way, naming the fields it destroyed.
   const propsConf = props('TRANSFORMS-m = scrub', 'EXTRACT-s = secret=(?<secret>\\S+)');
   const viaIngestEval = '[scrub]\nINGEST_EVAL = _raw=replace(_raw,"secret=\\\\S+","")\n';
   const viaDestKey = '[scrub]\nREGEX = ^(.*)secret=\\S+(.*)$\nFORMAT = $1$2\nDEST_KEY = _raw\n';

@@ -15,7 +15,7 @@ interface TimestampTabProps {
   /**
    * The inputs of the last pipeline run, from PreviewPanel. This tab unmounts
    * whenever another sub-tab is shown, which is when edits happen, so an
-   * instance of the hook here would start from unrun edits (#347). The
+   * instance of the hook here would start from unrun edits. The
    * fallback serves a tab rendered on its own.
    */
   inputs?: PipelineInputs;
@@ -166,20 +166,20 @@ const STRPTIME_REFERENCE: StrptimeCategory[] = [
 // from a stanza that never matched this event's sourcetype/host/source.
 // `resolveStanzasForEvent`, as the pipeline resolves them, so a `sourcetype =`
 // assigned in a [source::] or [host::] stanza picks the time settings of the
-// stanza it names rather than those of the sourcetype it replaced (#328).
+// stanza it names rather than those of the sourcetype it replaced.
 function parseTimeConfig(propsConf: string, metadata: EventMetadata): TimeConfig {
   const { stanzas } = resolveStanzasForEvent(parseConf(propsConf, 'props.conf').stanzas, metadata);
   const directives = mergeDirectives(stanzas);
   const get = (key: string) => directives.find((d) => d.key === key)?.value.trim();
   return {
-    // An empty TIME_PREFIX is unset, as the extractor reads it (#328).
+    // An empty TIME_PREFIX is unset, as the extractor reads it.
     timePrefix: get('TIME_PREFIX') || null,
     timeFormat: get('TIME_FORMAT') ?? null,
     // Shared with the engine so 0 / -1 (no limit) draw the window it scans.
     maxLookahead: resolveLookahead(get('MAX_TIMESTAMP_LOOKAHEAD')),
     tz: get('TZ') ?? null,
     // Handed to the prober so a %Z the alias table remaps parses to the same
-    // instant the pipeline gives it (#313). `now` is left to the clock, which is
+    // instant the pipeline gives it. `now` is left to the clock, which is
     // what the app's pipeline runs use too.
     tzAlias: get('TZ_ALIAS') ?? null,
   };
@@ -218,12 +218,12 @@ export function TimestampTab({ items, currentPage, eventsPerPage, inputs }: Time
 
   const config = useMemo(() => parseTimeConfig(propsConf, metadata), [propsConf, metadata]);
 
-  // Probing runs in a terminatable worker (#117): TIME_PREFIX is a user regex,
-  // and executing it during render had nothing to interrupt it. Memoised so the
+  // Probing runs in a terminatable worker: TIME_PREFIX is a user regex, and
+  // executed during render nothing could interrupt it. Memoised so the
   // hook re-probes when the events or the config change, not on every render.
   // The text probed is the text the extractor read, not the final `_raw`: a
   // SEDCMD or an index-time transform runs after timestamping and may have
-  // rewritten the very prefix the tab would then fail to find (#328).
+  // rewritten the very prefix the tab would then fail to find.
   const raws = useMemo(() => items.map((item) => timestampTextOf(item.event)), [items]);
   const { status, probes, error } = useTimestampMatch(raws, config);
 
@@ -247,8 +247,8 @@ export function TimestampTab({ items, currentPage, eventsPerPage, inputs }: Time
             No TIME_FORMAT configured in props.conf
           </div>
         ) : status === 'timeout' ? (
-          // The refusal path the old synchronous version could never reach: it
-          // had no way to notice, so the tab simply stopped responding.
+          // The worker's watchdog stopped the probe: say so, rather than
+          // leaving the tab unresponsive.
           <div className="flex flex-col items-center justify-center gap-1 py-12 text-center">
             <span className="text-sm font-medium text-[var(--color-error)]">
               Timestamp matching timed out
@@ -260,9 +260,9 @@ export function TimestampTab({ items, currentPage, eventsPerPage, inputs }: Time
             </span>
           </div>
         ) : status === 'error' ? (
-          // A throw inside the prober, reported as itself. It used to kill the
-          // worker and come out as the timeout message above, which sent people
-          // looking for a backtracking TIME_PREFIX that was not there (#322).
+          // A throw inside the prober, reported as itself rather than as the
+          // timeout above, which would send people looking for a backtracking
+          // TIME_PREFIX that is not there.
           <div className="flex flex-col items-center justify-center gap-1 py-12 text-center">
             <span className="text-sm font-medium text-[var(--color-error)]">
               Timestamp matching failed
@@ -432,13 +432,13 @@ function ConfigValue({ label, value, color }: { label: string; value: string | n
 /**
  * The text timestamp extraction read for this event — `_raw` before SEDCMD,
  * DEST_KEY = _raw and INGEST_EVAL rewrote it — or `_raw` itself when the
- * extractor recorded none (#328).
+ * extractor recorded none.
  */
 function timestampTextOf(event: SplunkEvent): string {
   return event.timestampText ?? event._raw;
 }
 
-/** How the pipeline actually resolved this event's `_time` (#85). */
+/** How the pipeline actually resolved this event's `_time`. */
 function resolvedTimeSource(event: SplunkEvent): TimeSource | undefined {
   return event.processingTrace
     .filter((step) => step.processor === 'timestampExtractor')
@@ -540,8 +540,8 @@ function TimestampOverlay({ raw, probe, config }: { raw: string; probe: Timestam
   if (!result) {
     // No match — show the full lookahead window if the prefix matched, otherwise
     // plain text. The prefix span comes back on the probe rather than being
-    // re-derived here: re-running the user's TIME_PREFIX during render is the
-    // whole bug (#117), and this branch is exactly where it used to happen.
+    // re-derived here: the user's TIME_PREFIX must never run during render,
+    // where no watchdog can stop it.
     const prefix = probe?.prefix;
     {
       if (prefix) {

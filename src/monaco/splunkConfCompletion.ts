@@ -144,7 +144,7 @@ function directiveToCompletionItem(
 
   // A key the preview does not honour still belongs in the list -- it is valid
   // Splunk config and refusing to complete it would be its own wrong answer --
-  // but the list is where the user decides, so it says so there (#153).
+  // but the list is where the user decides, so it says so there.
   const unsimulated = dir.support !== 'simulated';
   const supportSuffix = dir.support === 'ignored' ? ' — not simulated' : dir.support === 'documented' ? ' — out of scope' : '';
 
@@ -174,9 +174,9 @@ function directiveToCompletionItem(
         '```',
       ].join('\n'),
       // Deliberately untrusted. Trust only matters for `command:` links, and
-      // this documentation has none, so marking it trusted granted every
-      // command for no benefit — one interpolated string away from the hover
-      // bug in #296. If a link is ever added here, trust exactly its command
+      // this documentation has none, so marking it trusted would grant every
+      // command for no benefit — one interpolated string away from a forged
+      // command link. If a link is ever added here, trust exactly its command
       // (`{ enabledCommands: [...] }`) and escape anything from the document
       // with ./markdown, as the directive hover does.
     },
@@ -230,7 +230,7 @@ function getValueSuggestions(
       { token: '%Y-%m-%dT%H:%M:%S.%3N%z', desc: 'ISO 8601 with milliseconds and timezone' },
     ];
     for (const { token, desc } of strftimeTokens) {
-      // Same live rendering the hover gives (#90): picking between five opaque
+      // Same live rendering the hover gives: picking between five opaque
       // token strings is guesswork until you can see what each one produces.
       const preview = renderTimeFormatPreview(describeTimeFormat(token));
       items.push({

@@ -41,10 +41,8 @@ interface AggregatedField {
 type FieldRow = AggregatedField & { isParent: boolean; depth: number; parentName: string | null };
 
 /**
- * Alias mapping (target → source), read as data off the FIELDALIAS steps.
- * This was recovered by running a regex over `trace.description` — a display
- * string — so rewording that sentence, or a field name containing a space,
- * silently emptied this column and stopped alias rows being de-duplicated.
+ * Alias mapping (target → source), read as data off the FIELDALIAS steps
+ * rather than parsed out of `trace.description`, which is display text.
  */
 function buildAliasMap(events: SplunkEvent[]): Map<string, string> {
   const map = new Map<string, string>();
@@ -228,7 +226,7 @@ function buildFieldRows(
 
 /**
  * Row ids, so a parent's toggle can name the child rows it shows and hides
- * in `aria-controls` (#347). By position rather than by name: a field name
+ * in `aria-controls`. By position rather than by name: a field name
  * may hold spaces, which would split an id reference list.
  */
 function buildRowIds(rows: FieldRow[], prefix: string): { rowIds: Map<string, string>; childRowIds: Map<string, string[]> } {
@@ -265,10 +263,8 @@ function useCollapsedParents(allParentNames: string[]) {
 
   // Reconcile during render (React's recommended pattern for derived state —
   // avoids a useEffect and its cascading render). This runs whenever a parent
-  // the user has not seen appears, not only on the first pass: the old
-  // `collapsedParents === null` guard fired once, so a parent that appeared
-  // after a props.conf edit rendered expanded and "collapse all on load"
-  // quietly stopped being true.
+  // the user has not seen appears, not only on the first pass, so a parent that
+  // appears after a props.conf edit starts collapsed too.
   const reconciled = reconcileCollapsed(allParentNames, seenParents, collapsedParents);
   if (reconciled) {
     setCollapsedParents(reconciled.collapsed);
@@ -306,8 +302,7 @@ export function FieldsTab() {
   const aliasMap = useMemo(() => buildAliasMap(events), [events]);
 
   // The events × fields × trace walk depends on the events alone, so it has its
-  // own memo. Sharing one with search, sort and the phase filter re-ran it on
-  // every keystroke in the search box and every header click (#316).
+  // own memo rather than re-running on every search keystroke and header click.
   const aggregatedFields = useMemo(() => aggregateFields(events, aliasMap), [events, aliasMap]);
 
   const fieldSummary = useMemo(
@@ -435,8 +430,8 @@ function FieldsToolbar({
           <button
             key={f}
             onClick={() => setPhaseFilter(f)}
-            // A toggle group: without aria-pressed the selected phase was
-            // conveyed by styling alone (#320).
+            // A toggle group: aria-pressed conveys the selected phase, which
+            // styling alone does not.
             aria-pressed={phaseFilter === f}
             className={[
               'px-1.5 py-0.5 text-[10px] rounded transition-colors cursor-pointer border-none',
@@ -563,11 +558,10 @@ function ToggleChevron({ name, collapsed, controls, onToggle }: {
     <button
       className="flex items-center justify-center w-4 h-4 rounded hover:bg-[var(--color-bg-tertiary)] cursor-pointer bg-transparent border-none p-0 transition-colors"
       onClick={() => onToggle(name)}
-      // Named for the field it toggles: a column of bare "Expand"
-      // buttons gave a screen reader no way to tell them apart (#335).
-      // The name stays fixed and `aria-expanded` carries the state: a
-      // name that flipped between "Expand" and "Collapse" announced the
-      // change twice (#347).
+      // Named for the field it toggles, so a screen reader can tell a column
+      // of them apart. The name stays fixed and `aria-expanded` carries the
+      // state: a name that flipped between "Expand" and "Collapse" would
+      // announce the change twice.
       aria-label={`Toggle ${name}`}
       aria-expanded={!collapsed}
       aria-controls={controls}
@@ -675,9 +669,8 @@ function ResizableHeader({
 
   // Teardown for a drag in progress. Kept so an unmount mid-drag — the tab
   // switched, or a new result emptied the table — can remove the document
-  // listeners and give the page its cursor and text selection back. Only
-  // mouseup did that, and it never arrived for a header that was gone, leaving
-  // the whole app on a col-resize cursor with selection disabled (#322).
+  // listeners and give the page its cursor and text selection back; mouseup
+  // never arrives for a header that is gone.
   const endDragRef = useRef<(() => void) | null>(null);
   useEffect(() => () => endDragRef.current?.(), []);
 
@@ -712,7 +705,7 @@ function ResizableHeader({
       className="relative py-2 px-3 font-medium select-none"
       style={{ width }}
       // Only the sorted column carries it, per the APG sortable-table pattern;
-      // the arrow icon alone left the order invisible to a screen reader (#320).
+      // the arrow icon alone leaves the order invisible to a screen reader.
       aria-sort={isActive ? (sortDir === 'asc' ? 'ascending' : 'descending') : undefined}
     >
       <button

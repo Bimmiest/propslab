@@ -58,9 +58,8 @@ const lexString: Lexer = (expr, start, tokens) => {
       i++;
     }
   }
-  // Running off the end without a closing quote is a syntax error. It used
-  // to be accepted as a literal holding the rest of the expression, so a
-  // typo'd `"abc` evaluated instead of being reported (#312).
+  // Running off the end without a closing quote is a syntax error, so a typo'd
+  // `"abc` is reported rather than evaluated as the rest of the expression.
   if (i >= expr.length) throw new Error('Unterminated string literal');
   tokens.push({ type: 'string', value: str });
   return i + 1; // skip closing quote
@@ -71,7 +70,7 @@ const lexQuotedField: Lexer = (expr, start, tokens) => {
   if (expr.charAt(start) !== "'") return null;
   const end = expr.indexOf("'", start + 1);
   // Same rule as a string literal: no closing quote is an error, not a
-  // field named after the rest of the expression (#312).
+  // field named after the rest of the expression.
   if (end === -1) throw new Error('Unterminated quoted field name');
   tokens.push({ type: 'field_ref', value: expr.slice(start + 1, end) });
   return end + 1; // skip closing quote
@@ -85,12 +84,11 @@ const lexQuotedField: Lexer = (expr, start, tokens) => {
  *
  * A leading `.` starts a number (`.5`) under the same condition. Where a
  * value IS in progress the `.` is the concatenation operator, so `a.5` stays
- * `a . 5` and `"x".5` stays `"x" . 5`. Before this, `.5` fell through to the
- * unknown-character skip and `.5 * 2` quietly evaluated to 10 (#312).
+ * `a . 5` and `"x".5` stays `"x" . 5`.
  *
  * The concatenation `.` is a binary operator like the rest, so a value is
- * expected after it too. Leaving it out lexed `"x" . .5` as two dots, which
- * failed to parse, and `"x" . -1` as a subtraction sign (#340).
+ * expected after it too: `"x" . .5` is a concatenation with 0.5, and
+ * `"x" . -1` with -1, not a subtraction.
  */
 const lexNumber: Lexer = (expr, start, tokens) => {
   const prevTok = tokens[tokens.length - 1];
@@ -114,7 +112,7 @@ const lexNumber: Lexer = (expr, start, tokens) => {
     if (expr.charAt(i) === '.') {
       // A second decimal point glued to the literal (`1.2.3`) is a malformed
       // number, not `1.2 . 3`: without this the concatenation rule below
-      // would take the second `.` and quietly produce "1.23" (#312).
+      // would take the second `.` and quietly produce "1.23".
       if (seenDot) {
         if (/\d/.test(expr.charAt(i + 1))) {
           throw new Error(`Malformed number: ${num}${/^[\d.]*/.exec(expr.slice(i))?.[0] ?? ''}`);
@@ -154,12 +152,11 @@ const lexPunctuation: Lexer = (expr, i, tokens) => {
 /**
  * Whether the word `upper` (already upper-cased) is an operator here.
  *
- * The word operators are contextual (#332). AND, OR, XOR, IN and LIKE are
+ * The word operators are contextual. AND, OR, XOR, IN and LIKE are
  * all binary, so they can only be operators straight after a complete
  * value; anywhere a value is expected the word is an ordinary identifier —
  * a field named `xor` or `like`, or a function call when `(` follows, as
- * in `in(x, "a", "b")` or `like(x, "a%")`. Lexing them as operators
- * unconditionally (#312) broke every expression that read such a field.
+ * in `in(x, "a", "b")` or `like(x, "a%")`.
  * NOT is the exception: it is a prefix operator, so value position is
  * exactly where it is legitimate, and after a value it is the NOT of
  * `x NOT IN (...)`. It stays a keyword everywhere.
@@ -169,10 +166,9 @@ function isWordOperator(upper: string, tokens: Token[]): boolean {
   const prevTok = tokens[tokens.length - 1];
   if (endsValue(prevTok) && ['AND', 'OR', 'IN', 'LIKE', 'XOR'].includes(upper)) return true;
   // The IN of `x NOT IN (...)` follows NOT, not a value, so the rule above
-  // alone lexed it as an identifier that kept the user's casing: only an
-  // upper-case `IN` then matched the parser's NOT IN check, and `x not in
-  // (...)` or `x NOT in (...)` failed with "Unexpected token: NOT" (#337).
-  // A NOT that itself follows a value can only be the NOT of NOT IN, so the
+  // alone would lex it as an identifier in the user's casing, and `x not in
+  // (...)` would not parse. A NOT that itself follows a value can only be the
+  // NOT of NOT IN, so the
   // word after it is the operator in any case. A prefix NOT (`NOT in(x,
   // "a")`, `NOT in`) does not follow a value, so the function form and a
   // field named `in` are unaffected.
@@ -210,9 +206,8 @@ export function tokenize(expr: string): Token[] {
       next = lex(expr, i, tokens);
       if (next !== null) break;
     }
-    // Anything else is not part of eval syntax. It used to be skipped without a
-    // word, which is how `.5` lost its point; an expression the simulator does
-    // not understand should be reported, not evaluated as something else (#312).
+    // Anything else is not part of eval syntax: an expression the simulator
+    // does not understand is reported, not evaluated as something else.
     if (next === null) throw new Error(`Unexpected character: ${expr.charAt(i)}`);
     i = next;
   }

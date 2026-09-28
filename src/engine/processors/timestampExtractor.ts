@@ -276,10 +276,8 @@ interface BatchConfig {
  *
  * Splunk assigns an event with no parseable timestamp the `_time` of the
  * event before it, and only falls back to the time of ingest when there is no
- * previous event to inherit from. Returning null instead left whole events
- * unplaceable on a timeline — and any breaking config that can emit a
- * continuation event produces them, so this is not specific to one directive
- * (#163). The state below is carried across the batch, so a later event
+ * previous event to inherit from, so every event lands on the timeline. The
+ * state below is carried across the batch, so a later event
  * inherits from the last event that actually parsed one.
  */
 class TimestampBatch {
@@ -336,11 +334,9 @@ class TimestampBatch {
    * DIFF_SECS pair is measured against the previous event, and props.conf.spec
    * does not make it a hard limit: an event beyond it is accepted "only if it
    * has the same exact time format as the majority of timestamps from the
-   * source". Rejecting outright broke the commonest case it was never meant to
-   * catch — logs pasted newest-first, where every step is backwards and every
-   * timestamp is in the same TIME_FORMAT (#286). What the bound is for is a
-   * stray date of some other shape in the message body, and that is what the
-   * format test still catches.
+   * source". So logs pasted newest-first, where every step is backwards and
+   * every timestamp is in the same TIME_FORMAT, are kept; what the bound
+   * catches is a stray date of some other shape in the message body.
    */
   private outOfBounds(date: Date, format: string): { rejection: string | null; note?: string } {
     const { maxDaysAgo, maxDaysHence, maxDiffSecsAgo, maxDiffSecsHence } = this.bounds;
@@ -416,8 +412,7 @@ class TimestampBatch {
    *
    * With no earlier timestamp to carry from, the default path uses the clock
    * rule too. The spec does not say what happens then; the clock is the only
-   * other date the indexer has, and 1 January -- what a dateless stamp used to
-   * get here -- is certainly not it.
+   * other date the indexer has.
    */
   private supplyDate(
     parsed: ParsedTimestamp,
@@ -492,7 +487,7 @@ class TimestampBatch {
       _time: granular(this.extraMode, date),
       fields,
       // What was read, for the Timestamp tab to probe once SEDCMD or an
-      // index-time transform has rewritten `_raw` (#328).
+      // index-time transform has rewritten `_raw`.
       timestampText: event._raw,
       processingTrace: [
         ...event.processingTrace,
@@ -559,7 +554,7 @@ export function extractTimestamps(
    * The moment that stands in for index time: the MAX_DAYS_AGO/HENCE bounds are
    * measured from it, a yearless format takes its year, and the fallback tail of
    * the chain lands on it. `runPipeline` passes `PipelineOptions.now` so a
-   * recorded fixture keeps being judged against the day it was captured (#293).
+   * recorded fixture keeps being judged against the day it was captured.
    */
   now: Date = new Date(),
 ): SplunkEvent[] {

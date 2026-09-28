@@ -72,8 +72,8 @@ describe('simulate', () => {
   });
 
   it('keeps the response bounded however many events the sample breaks into (#351)', async () => {
-    // 100k one-character events used to return every event's trace steps in
-    // processingSteps — some 80 MB — whatever max_events said.
+    // 100k one-character events: processingSteps must follow max_events, not
+    // carry every event's trace steps (some 80 MB).
     const result = await handleSimulate(
       simulateArgs({
         raw: 'a\n'.repeat(100_000),
@@ -167,7 +167,7 @@ describe('validate', () => {
     expect(out.diagnostics.every((d: { file: string }) => d.file !== 'raw')).toBe(true);
   });
 
-  // #360: a bad regex was reported only in stanzas the dummy event matched.
+  // A bad regex is reported in every stanza, not only those an event matches.
   it('reports a regex that will not compile in any stanza, matched or not', async () => {
     const props = [
       '[foo]',
@@ -200,9 +200,9 @@ describe('validate', () => {
   });
 
   it('says nothing about a dummy event in stanzas that match every event', async () => {
-    // [default] and [host::localhost] used to match the internal dummy sample,
-    // so its processing leaked out as diagnostics about text nobody sent.
-    // This conf drew "replaced the event and dropped 7 of 8 characters".
+    // [default] and [host::localhost] would match a dummy sample, leaking its
+    // processing out as diagnostics about text nobody sent — here, "replaced
+    // the event and dropped 7 of 8 characters".
     const props = ['[default]', 'TRANSFORMS-mask = mask', '[host::localhost]', 'SEDCMD-x = s/v/w/'].join(
       '\n',
     );
@@ -324,7 +324,7 @@ describe('lookup_directive', () => {
   });
 });
 
-// #335: the per-field limits admit 20 layers of 1M characters per file; the
+// The per-field limits admit 20 layers of 1M characters per file; the
 // combined bound keeps a call inside what the worker heap and the timeout
 // path's main-thread re-parse were sized for.
 describe('conf size bound', () => {

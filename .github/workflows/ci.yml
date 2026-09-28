@@ -224,9 +224,7 @@ jobs:
 
       # `npm audit` resolves exactly one lockfile — the one for the tree it is
       # pointed at — so the two steps above say nothing whatsoever about
-      # packages/mcp-server, which carries its own. Nothing audited it until
-      # GHSA-8j4g-w8fx-2239 (hono, under @modelcontextprotocol/sdk) was found by
-      # hand in #226; these steps are what would have reported it.
+      # packages/mcp-server, which carries its own; these steps audit that one.
       - name: Audit the MCP server's production dependencies
         # Same gate as the app's, for the same reason: these are what run on the
         # machine of whoever starts the server, and the process they run in

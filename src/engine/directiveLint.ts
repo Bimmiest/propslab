@@ -9,8 +9,8 @@
 // "this is what Splunk will do", and showing a setting working when a real
 // deployment would ignore it is the failure that matters most.
 //
-//   1. A transforms setting used in the phase where it is inert (#177).
-//   2. A value that is not the type the directive documents (#179).
+//   1. A transforms setting used in the phase where it is inert.
+//   2. A value that is not the type the directive documents.
 // ---------------------------------------------------------------------------
 
 import type { ConfStanza, ValidationDiagnostic } from './types';
@@ -101,8 +101,8 @@ export function lintInertTransformSettings(
 /**
  * Report values that are not the type their directive documents.
  *
- * Deliberately conservative. The registry's metadata is hand-maintained (#178
- * tracks generating it), the fidelity work has already shown Splunk to be
+ * Deliberately conservative. The registry's metadata is hand-maintained, the
+ * fidelity captures have already shown Splunk to be
  * fussier than its own documentation in places, and a false positive on correct
  * config is worse here than a missed one: a user who is told their working
  * config is wrong stops trusting every other diagnostic. So this checks only
@@ -194,7 +194,7 @@ const NON_NEGATIVE = new Set([
 /**
  * The one negative a non-negative directive documents as meaningful.
  * props.conf.spec: MAX_TIMESTAMP_LOOKAHEAD "0 or -1 disables the length
- * constraint", so flagging -1 told users a correct setting was broken (#286).
+ * constraint", so -1 is a correct setting, not a broken one.
  */
 const NEGATIVE_SENTINELS: Readonly<Record<string, string>> = {
   MAX_TIMESTAMP_LOOKAHEAD: '-1',

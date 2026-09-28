@@ -30,8 +30,8 @@ export function MultiSelect({ label, options, selected, onChange, searchable }: 
     }
   };
 
-  // Tabbing out of an open popup used to leave it open behind the focus,
-  // covering whatever the user had moved on to (#300). Only a move to a known
+  // Tabbing out of an open popup closes it, so it does not cover whatever the
+  // user has moved on to. Only a move to a known
   // element outside closes it: a null relatedTarget is a click on something
   // unfocusable inside the popup (its padding, "No matches"), which the
   // outside-mousedown handler below already covers when it is truly outside.
@@ -84,8 +84,8 @@ export function MultiSelect({ label, options, selected, onChange, searchable }: 
         type="button"
         onClick={() => setOpen(!open)}
         // A disclosure, not a listbox: the popup is a group of checkboxes plus a
-        // filter field, and `aria-haspopup="listbox"` announced a widget whose
-        // option/arrow-key model it does not have (#300). aria-expanded and
+        // filter field, and `aria-haspopup="listbox"` would announce a widget
+        // whose option/arrow-key model it does not have. aria-expanded and
         // aria-controls are what the disclosure pattern asks for.
         aria-expanded={open}
         aria-controls={open && options.length > 0 ? popupId : undefined}

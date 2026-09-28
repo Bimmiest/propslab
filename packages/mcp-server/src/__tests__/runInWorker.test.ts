@@ -146,7 +146,7 @@ describe('concurrency cap', () => {
     expect(limiter.active).toBe(0);
   });
 
-  // #335: every queued call holds its input in the server's own heap, so the
+  // Every queued call holds its input in the server's own heap, so the
   // queue is bounded and a call past the bound is refused rather than parked.
   it('bounds the default queue at four calls per slot', () => {
     expect(DEFAULT_MAX_QUEUED_CALLS).toBe(4 * DEFAULT_MAX_CONCURRENT_WORKERS);

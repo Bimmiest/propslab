@@ -6,7 +6,7 @@
  *
  * Message protocol:
  *   in  → PipelineWorkerRequest
- *   out → WORKER_READY once, when the worker has loaded its regex engine (#339); then PipelineWorkerResponse
+ *   out → WORKER_READY once, when the worker has loaded its regex engine; then PipelineWorkerResponse
  */
 
 import { runPipeline } from './pipeline';
@@ -35,7 +35,7 @@ export interface PipelineWorkerResponse {
    * The stack of the error that `error` describes, when it was an `Error` that
    * had one. A separate optional field so every existing reader of `error`
    * keeps getting the bare message: this is for diagnosing a throw that escaped
-   * runPipeline, which the message alone rarely locates (#322).
+   * runPipeline, which the message alone rarely locates.
    */
   stack?: string;
 }

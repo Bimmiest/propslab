@@ -41,7 +41,7 @@ function hasMetadataDiff(eventMeta: EventMetadata, originalMeta: EventMetadata):
   );
 }
 
-/** How long the preview search waits for typing to pause before filtering (#335). */
+/** How long the preview search waits for typing to pause before filtering. */
 const SEARCH_DEBOUNCE_MS = 200;
 
 const PREVIEW_SUB_TABS: { id: PreviewSubTabId; label: string }[] = [
@@ -60,15 +60,15 @@ export function PreviewPanel() {
   const tabsId = useId();
   // Held here rather than in the Effective config tab, which unmounts when
   // another output tab is selected: in manual-apply mode the inputs of the last
-  // run have to survive the edits made while it is hidden (#347).
+  // run have to survive the edits made while it is hidden.
   const pipelineInputs = usePipelineInputs();
   const diagnostics = useAppStore((s) => s.validationDiagnostics);
   // A run that produced no result at all — watchdog timeout, repeated worker
   // crash, an engine throw — clears `processingResult` and says why in an error
-  // diagnostic. Without reading that here the panel fell through to the
-  // first-run "No data yet" invitation, which told a user whose input had just
-  // hung the pipeline to go and paste some input (#294). A successful run always
-  // sets a result, so a null result beside an error can only mean a failure.
+  // diagnostic. It is read here so such a run shows the failure, not the
+  // first-run "No data yet" invitation to paste some input. A successful run
+  // always sets a result, so a null result beside an error can only mean a
+  // failure.
   const failure = result === null
     ? diagnostics.find((d) => d.level === 'error')?.message ?? null
     : null;
@@ -309,17 +309,17 @@ function PreviewSubTab({ pipelineInputs }: { pipelineInputs: PipelineInputs }) {
   const subTabsId = useId();
   const [search, setSearch] = useState('');
   // The input stays bound to `search`, so typing is immediate; everything the
-  // filter drives reads this settled copy. Each keystroke used to rebuild
+  // filter drives reads this settled copy, so a keystroke does not rebuild
   // `filteredEvents`, which re-scans every event, re-runs the Extractions tab's
-  // JSON scan and re-posts the whole dataset to the Regex tab's matcher (#335).
+  // JSON scan and re-posts the whole dataset to the Regex tab's matcher.
   const debouncedSearch = useDebounce(search, SEARCH_DEBOUNCE_MS);
   const [selectedFields, setSelectedFields] = useState<Set<string>>(new Set());
   const [selectedStatus, setSelectedStatus] = useState<Set<string>>(new Set());
   const [selectedChangeState, setSelectedChangeState] = useState<Set<string>>(new Set());
 
   // The metadata of the run that produced these events, not the live fields:
-  // comparing with the fields flagged every event as modified while the user
-  // typed, and rebuilt the event lists on each keystroke (#316).
+  // compared with the live fields, every event would read as modified while the
+  // user typed, and the event lists would rebuild on each keystroke.
   const originalMetadata = result?.inputMetadata;
 
   // Enrich events with original raw + change/drop status

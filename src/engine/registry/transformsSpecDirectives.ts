@@ -1,12 +1,12 @@
-// The transforms.conf.spec 10.4.3 completeness sweep (#178): every attribute
-// the spec defines that transformsDirectives.ts did not.
+// The transforms.conf.spec 10.4.3 completeness sweep: every attribute the spec
+// defines that transformsDirectives.ts does not.
 
 import type { DirectiveDefinition } from './types';
 
-/** transforms.conf.spec attributes added by the #178 sweep. */
+/** transforms.conf.spec attributes from the completeness sweep. */
 export const TRANSFORMS_SPEC_COMPLETENESS: DirectiveDefinition[] = [
   // -------------------------------------------------------------------------
-  // transforms.conf.spec 10.4.3 completeness (#178)
+  // transforms.conf.spec 10.4.3 completeness
   //
   // The other half of the same sweep. Most of these are lookup settings, which
   // are `documented` for the reason every lookup attribute is: a lookup needs

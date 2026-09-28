@@ -1,13 +1,12 @@
 // @vitest-environment jsdom
 // ---------------------------------------------------------------------------
 // Overlay.test.tsx
-// The three guarantees useOverlay hand-rolled, now Radix's (#149).
+// The three overlay guarantees Radix provides: topmost-only Escape, the focus
+// trap, and background inertness.
 //
-// #149 warned that a replacement's tests must be re-verified under jsdom rather
-// than assumed to pass — the hook's own focus-trap filter avoided `offsetParent`
-// precisely because a layout-based check silently matches nothing here. So each
-// assertion below is written to fail if the behaviour disappears, not merely to
-// pass while Radix does nothing.
+// A layout-based check silently matches nothing under jsdom (`offsetParent` is
+// always null here), so each assertion below is written to fail if the
+// behaviour disappears, not merely to pass while Radix does nothing.
 // ---------------------------------------------------------------------------
 
 import { describe, it, expect, vi } from 'vitest';

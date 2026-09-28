@@ -48,10 +48,9 @@ function getMetadataChanges(event: SplunkEvent, original: EventMetadata | undefi
 
 export function RawTab({ items, currentPage, eventsPerPage, search }: RawTabProps) {
   // The run's own input, as in PreviewPanel: the live fields may have been
-  // edited since, which would badge every event as changed (#316). Every
-  // result carries it, so the fallback to the live fields this used to have was
-  // dead code (#335). Undefined only with no result at all (the tab is not
-  // mounted then), when there is nothing to compare against.
+  // edited since, which would badge every event as changed. Undefined only
+  // with no result at all (the tab is not mounted then), when there is
+  // nothing to compare against.
   const originalMetadata = useAppStore((s) => s.processingResult?.inputMetadata);
 
   return (
@@ -330,7 +329,7 @@ function EventRowHeader({ event, globalIdx, isDropped, hasMetadataChanges }: { e
         {/*
           A CLONE_SOURCETYPE copy is byte-identical to its original, so
           without saying where it came from a duplicated event reads as a
-          line-breaking bug rather than the routing rule working (#87).
+          line-breaking bug rather than the routing rule working.
         */}
         {event.clonedFrom !== undefined && (
           <span

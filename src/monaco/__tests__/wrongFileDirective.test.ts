@@ -1,9 +1,7 @@
-// #278: an attribute written in the conf file it does not belong to got two
-// verdicts that contradicted each other and were both wrong -- the engine said
-// "recognised but not simulated" (or nothing, for a simulated key) and the
-// editor said "possible typo?". Each surface now says one thing, the same thing:
-// which file the line belongs in. Lives beside the editor tests because the
-// point is that the two validators agree.
+// An attribute written in the conf file it does not belong to: the engine and
+// the editor each say one thing, the same thing — which file the line belongs
+// in — rather than "recognised but not simulated" or "possible typo?". Lives
+// beside the editor tests because the point is that the two validators agree.
 import { describe, it, expect } from 'vitest';
 import type { editor } from 'monaco-editor';
 import { computeDiagnostics } from '../splunkConfDiagnostics';
@@ -69,8 +67,7 @@ describe('wrongFileCanonical (#278)', () => {
 
 describe('an attribute in the wrong conf file gets one, agreeing, diagnostic per surface (#278)', () => {
   it('CAN_OPTIMIZE_IE in props.conf', () => {
-    // Previously: engine "recognised but not simulated ... Tracked as #275",
-    // editor "Unknown directive ... possible typo?".
+    // Neither "recognised but not simulated" nor "possible typo?".
     const props = '[st]\nCAN_OPTIMIZE_IE = true\n';
     const { engine, editor } = onLine('props.conf', props, '', 2);
     const expected = 'CAN_OPTIMIZE_IE belongs in transforms.conf; in props.conf it has no effect.';
@@ -91,8 +88,8 @@ describe('an attribute in the wrong conf file gets one, agreeing, diagnostic per
   });
 
   it('a props.conf-only attribute in transforms.conf', () => {
-    // KV_MODE is simulated, so the engine used to say nothing at all here and
-    // the only word the user got was the editor's "possible typo?".
+    // KV_MODE is simulated, so without the wrong-file check the engine would
+    // say nothing here.
     const props = '[st]\nTRANSFORMS-x = t1\n';
     const transforms = '[t1]\nREGEX = (x)\nFORMAT = a::$1\nKV_MODE = json\n';
     const { engine, editor } = onLine('transforms.conf', props, transforms, 4);

@@ -1,19 +1,19 @@
 /**
- * Whole-string `*` glob matching, in linear time (#344).
+ * Whole-string `*` glob matching, in linear time.
  *
- * A glob is not a regex, and compiling one to a backtracking regex — each `*`
- * to `.*` — made the matcher exponential in the number of stars: XML_IE_*
- * lists are tested against element values from the event, and
- * `*a*a*a*a*b` against 200 `a`s took seconds. Nothing about a `*`-only glob
+ * A glob is not a regex, and compiled to a backtracking regex — each `*` to
+ * `.*` — matching is exponential in the number of stars: XML_IE_* lists are
+ * tested against element values from the event, and `*a*a*a*a*b` against 200
+ * `a`s takes seconds. Nothing about a `*`-only glob
  * needs backtracking. The text before the first star must be a prefix, the
  * text after the last a suffix, and each segment between them can take its
  * leftmost occurrence after the previous one: an earlier match never leaves
  * less room for what follows, so the greedy choice is always safe.
  *
- * Semantics are those the regex had: anchored at both ends, case-sensitive,
+ * Semantics: anchored at both ends, case-sensitive,
  * `*` matches any run of characters including newlines and the empty string,
  * and every other character — `?`, `.`, `\` included — is literal. Matching
- * is by UTF-16 code unit, as the non-`u` regex's `.` was.
+ * is by UTF-16 code unit, as a non-`u` regex's `.` is.
  */
 export type WildcardMatcher = (s: string) => boolean;
 

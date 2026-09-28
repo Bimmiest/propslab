@@ -1,8 +1,8 @@
 // ---------------------------------------------------------------------------
 // workerLifecycle.test.ts
 // The lifecycle the pipeline, the live-matching hooks and the TIME_FORMAT
-// hover share (#339). Each caller's policy is tested with the caller; these
-// pin what the lifecycle itself reports, so the three cannot drift apart again.
+// hover share. Each caller's policy is tested with the caller; these pin what
+// the lifecycle itself reports, so the three cannot drift apart.
 //
 // The rule at the centre: an error before the worker's ready signal is a load
 // failure, after it a crash — by ready, not by whether work had been posted,

@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 // ---------------------------------------------------------------------------
 // useTimestampMatch.test.tsx
-// What the Timestamp tab is allowed to draw (#316) and how a prober failure is
-// reported (#322). The worker is faked so a response can be held back: every
-// bug here lives in the window between posting a request and its answer.
+// What the Timestamp tab is allowed to draw and how a prober failure is
+// reported. The worker is faked so a response can be held back: everything
+// asserted here lives in the window between posting a request and its answer.
 // ---------------------------------------------------------------------------
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';

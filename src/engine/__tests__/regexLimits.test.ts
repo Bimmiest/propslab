@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
 // regexLimits.test.ts
-// MATCH_LIMIT and DEPTH_LIMIT, simulated since patterns run on PCRE2 (#368).
+// MATCH_LIMIT and DEPTH_LIMIT, simulated because patterns run on PCRE2.
 //
 // Doc-derived (props.conf.spec / transforms.conf.spec): both bound how hard
 // PCRE tries — MATCH_LIMIT the calls to its internal match(), DEPTH_LIMIT how

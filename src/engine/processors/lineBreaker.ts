@@ -14,16 +14,6 @@ import { createTimestampFinder, readTimestampLocation } from './timestampRecogni
 
 const XML_EXTRACTIONS = new Set(['xml', 'xmlkv', 'xmlkv-winevt']);
 
-/**
- * Find a directive by key.
- *
- * The comparison is case-SENSITIVE, like every other processor. Splunk
- * attribute names are case-sensitive, and `confParser` already warns that a
- * mis-cased one "is ignored" — matching case-insensitively here made the
- * simulator honour the very directive it had just told the user was dead
- * (`line_breaker = (X)` warned, then broke the events anyway), which is worse
- * than either behaviour alone: the warning made the wrong output look checked.
- */
 /** How many capturing groups a pattern declares, or 0 if it will not compile. */
 function countCaptureGroups(pattern: string | undefined): number {
   if (pattern === undefined) return 0;
@@ -33,6 +23,11 @@ function countCaptureGroups(pattern: string | undefined): number {
 /**
  * The raw, untrimmed value: the break patterns read through this are regexes,
  * where trailing whitespace is part of the pattern.
+ *
+ * The key comparison is case-SENSITIVE, like every other processor. Splunk
+ * attribute names are case-sensitive, and `confParser` warns that a mis-cased
+ * one "is ignored"; honouring it here would break events by a directive the
+ * user was just told is dead.
  */
 function getDirective(directives: ConfDirective[], key: string): string | undefined {
   return effectiveDirective(directives, key)?.value;
@@ -146,7 +141,7 @@ interface Segment {
  * `end` is where its last segment ends in the raw input. It cannot be derived
  * from `offset + text.length`: merged segments are joined by one `\n`, while
  * the break they replaced may have been `\r\n` or a run of blank lines, so the
- * joined text is shorter than the input it spans (#317).
+ * joined text is shorter than the input it spans.
  */
 interface MergedSegment extends Segment {
   end: number;
@@ -159,8 +154,7 @@ interface MergedSegment extends Segment {
  * LINE_BREAKER identifies the break by its CAPTURE GROUP, so a pattern with
  * no group names nothing to remove and Splunk falls back to the default —
  * breaking on newlines, which leaves the would-be delimiter as an event of
- * its own. Treating the whole match as the separator instead both failed to
- * break where Splunk does and left the newlines in `_raw` (#172).
+ * its own.
  */
 function resolveLineBreaker(
   declared: string | undefined,
@@ -191,10 +185,9 @@ function resolveLineBreaker(
  * the full match starts the next one.
  *
  * Matches are iterated over the WHOLE input from an offset rather than over a
- * re-sliced remainder. Re-slicing hid the text already consumed from a
- * lookbehind — `(?<=\})(\n)` could never see the `}` that ended the previous
- * event — and copied the tail of the input once per event, which is quadratic
- * on a large sample (#283).
+ * re-sliced remainder, so a lookbehind can see the text already consumed —
+ * `(?<=\})(\n)` sees the `}` that ended the previous event — and the tail of
+ * the input is not copied once per event, which would be quadratic.
  */
 function splitSegments(
   rawData: string,
@@ -257,10 +250,9 @@ function splitSegments(
 
     // A break that would not move the event start forward is no break: an
     // empty capture at the start of the current event (`()(?=b)` just
-    // after a previous break) would otherwise end an empty event there, and
-    // the old guard then emitted the next character as an event of its own
-    // (`bcd` came out as `b` + `cd`). Retry one character further on, which
-    // is where the next genuine break can begin (#283).
+    // after a previous break) would otherwise end an empty event there, or
+    // split the next character off as an event of its own. Retry one
+    // character further on, which is where the next genuine break can begin.
     if (captureEnd <= segmentStart) {
       searchFrom = m.index + 1;
       continue;
@@ -282,17 +274,15 @@ function splitSegments(
  * structured formats are one record per line, so merging would hand the
  * extractor several records glued together. For JSON that is not a subtle
  * error — `JSON.parse` of two concatenated objects throws, so the whole event
- * extracted nothing and #164 read as "INDEXED_EXTRACTIONS = JSON is not
- * implemented" when the extractor was never given a parseable event.
- * An explicit SHOULD_LINEMERGE still wins, as it does in Splunk.
+ * would extract nothing. An explicit SHOULD_LINEMERGE still wins, as it does
+ * in Splunk.
  *
- * The XML modes are the exception (#271): an XML record is a document, and
+ * The XML modes are the exception: an XML record is a document, and
  * routinely spans lines. Splitting it per line hands the extractor a string
  * of fragments, none of which parse, and ignores the BREAK_ONLY_BEFORE the
  * user wrote to frame the record. They keep the ordinary default.
  *
- * This is the only place the default is decided; the pipeline used to inject
- * it as well for csv/tsv/psv/w3c, and two copies of one rule drift (#322).
+ * This is the only place the default is decided; two copies of one rule drift.
  */
 function shouldLineMergeFor(directives: ConfDirective[]): boolean {
   const shouldLineMergeVal = getDirective(directives, 'SHOULD_LINEMERGE');
@@ -346,7 +336,7 @@ function readMergeRules(directives: ConfDirective[], diagnostics?: ValidationDia
   const lineStartsWithDate = dateLineTest(directives);
   const mustBreakAfter = compileBreakPattern('MUST_BREAK_AFTER', directives, diagnostics);
 
-  // The negative half of the merging rules (#190). MUST_NOT_BREAK_BEFORE is
+  // The negative half of the merging rules. MUST_NOT_BREAK_BEFORE is
   // deliberately NOT read: three captures (linebreak-must-not-break-before,
   // -explicit, -forced) measure Splunk 10.4.0 breaking anyway against a
   // date rule, BREAK_ONLY_BEFORE, and a MUST_BREAK_AFTER-forced break — the
@@ -356,8 +346,7 @@ function readMergeRules(directives: ConfDirective[], diagnostics?: ValidationDia
 
   // MAX_EVENTS caps how many CONTINUATION lines may be merged into an event,
   // not how many lines the event may total: MAX_EVENTS = 3 produces a
-  // four-line event, as the `linebreak-max-events` capture records. Reading it
-  // as a total broke one line early (#162).
+  // four-line event, as the `linebreak-max-events` capture records.
   const maxEventsStr = getDirective(directives, 'MAX_EVENTS');
   const parsedMaxEvents = maxEventsStr !== undefined ? parseInt(maxEventsStr.trim(), 10) : 256;
   const maxContinuationLines =
@@ -366,12 +355,10 @@ function readMergeRules(directives: ConfDirective[], diagnostics?: ValidationDia
   // MUST_BREAK_AFTER adds a mandatory break; it does not license merging up to
   // that break. When it is the ONLY rule in force — BREAK_ONLY_BEFORE absent
   // and BREAK_ONLY_BEFORE_DATE explicitly false — Splunk has no rule saying
-  // when to continue an event, so it breaks on every line. The engine instead
-  // read MUST_BREAK_AFTER as the sole break rule and merged up to each match,
-  // producing 2 events where Splunk produces 6 (#161).
+  // when to continue an event, so it breaks on every line.
   //
   // Deliberately narrow: with no MUST_BREAK_AFTER either, merging still
-  // happens as before (bounded by MAX_EVENTS), which is what Splunk documents
+  // happens (bounded by MAX_EVENTS), which is what Splunk documents
   // and what no capture contradicts.
   const canMerge = breakOnlyBefore !== null || breakOnlyBeforeDate || mustBreakAfter === null;
 
@@ -416,7 +403,7 @@ function breakReason(seg: Segment, segLines: number, rules: MergeRules, state: M
   else if (rules.breakOnlyBefore !== null && rules.breakOnlyBefore.test(seg.text)) reason = 'break-only-before';
   else if (rules.breakOnlyBeforeDate && rules.lineStartsWithDate(seg.text)) reason = 'date';
 
-  // MUST_NOT_BREAK_AFTER suppression (#190): every rule-driven break is
+  // MUST_NOT_BREAK_AFTER suppression: every rule-driven break is
   // suppressed until MUST_BREAK_AFTER matches, exactly the stateful span
   // the capture `linebreak-must-not-break-after-span` records — dated
   // lines inside the span stay merged. MAX_EVENTS is a hard cap the
@@ -489,8 +476,8 @@ function toEvent(seg: MergedSegment, newlines: number[], metadata: EventMetadata
     start: lineAtOffset(newlines, seg.offset),
     // `seg.end` is exclusive: the line of its LAST character, not of the one
     // after it. A segment ending in `\n` (a custom LINE_BREAKER whose capture
-    // group leaves the newline in the event) otherwise reported its end on
-    // the following line (#331).
+    // group leaves the newline in the event) would otherwise report its end
+    // on the following line.
     end: lineAtOffset(newlines, Math.max(seg.offset, seg.end - 1)),
   };
   const event: SplunkEvent = {
