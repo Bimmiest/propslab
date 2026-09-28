@@ -23,20 +23,18 @@ export function HelpPanel() {
   const searchStages = PIPELINE_STAGES.filter((s) => s.phase === 'search-time');
 
   return (
-    // Force-mounted: the panel slides in and out, so it has to stay in the tree
-    // while closed. Overlay marks a closed force-mounted panel inert, which is
-    // what keeps its off-screen buttons out of the tab order.
+    // The slide is `drawer-slide`'s keyframes on Radix's data-state (index.css):
+    // an exit animation is what Presence waits for before unmounting, where a
+    // transition would be cut off by the unmount.
     <Overlay
       open={helpOpen}
       onClose={toggleHelp}
       label="Pipeline reference"
-      forceMount
       containerClassName=""
-      className="fixed top-0 right-0 bottom-0 z-50 flex flex-col w-[420px] max-w-full shadow-2xl transition-transform duration-250 ease-in-out"
+      className="drawer-slide fixed top-0 right-0 bottom-0 z-50 flex flex-col w-[420px] max-w-full shadow-2xl"
       style={{
         backgroundColor: 'var(--color-bg-primary)',
         borderLeft: '1px solid var(--color-border)',
-        transform: helpOpen ? 'translateX(0)' : 'translateX(100%)',
       }}
     >
       <div className="contents">

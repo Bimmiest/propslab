@@ -104,41 +104,29 @@ describe('Overlay', () => {
     expect(appSibling?.getAttribute('aria-hidden')).toBe('true');
   });
 
-  it('keeps force-mounted content in the tree while closed', () => {
-    // The pipeline reference panel slides out, so it cannot be unmounted.
-    const { baseElement } = render(
-      <Overlay open={false} onClose={() => {}} label="Pipeline reference" forceMount>
-        <button>Inside</button>
-      </Overlay>,
-    );
-    expect(baseElement.querySelector('button')).toBeInTheDocument();
-  });
-
-  it('drops a closed force-mounted overlay out of the accessibility tree', () => {
-    // Left exposed, a closed slide-out panel is still a `dialog` with focusable
-    // buttons parked off-screen — which is what `getByRole` in the rest of the
-    // app then finds instead of the overlay that is actually open.
-    render(
-      <Overlay open={false} onClose={() => {}} label="Pipeline reference" forceMount>
-        <button>Inside</button>
-      </Overlay>,
-    );
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Inside' })).not.toBeInTheDocument();
-  });
-
-  it('leaves the rest of the app reachable while a force-mounted overlay is closed', () => {
-    // Modality scoped to `open`: left permanently modal, Radix keeps the app
-    // aria-hidden while the panel merely sits closed in the tree.
-    render(
+  it('leaves Escape alone once closed', () => {
+    // A closed overlay left in the tree keeps Radix's DismissableLayer, whose
+    // capture-phase handler preventDefaults every Escape in the document —
+    // which, among other things, stopped Escape clearing a search field.
+    const { rerender } = render(
       <>
-        <button>Outside</button>
-        <Overlay open={false} onClose={() => {}} label="Pipeline reference" forceMount>
+        <input type="search" aria-label="Search" />
+        <Overlay open onClose={() => {}} label="Test dialog">
           <button>Inside</button>
         </Overlay>
       </>,
     );
-    expect(screen.getByRole('button', { name: 'Outside' })).toBeInTheDocument();
+    rerender(
+      <>
+        <input type="search" aria-label="Search" />
+        <Overlay open={false} onClose={() => {}} label="Test dialog">
+          <button>Inside</button>
+        </Overlay>
+      </>,
+    );
+    const notPrevented = fireEvent.keyDown(screen.getByLabelText('Search'), { key: 'Escape' });
+    expect(notPrevented).toBe(true);
+    expect(screen.getByLabelText('Search').closest('[aria-hidden="true"]')).toBeNull();
   });
 
   it('forwards a keydown handler to the content, for Enter-to-submit', () => {
