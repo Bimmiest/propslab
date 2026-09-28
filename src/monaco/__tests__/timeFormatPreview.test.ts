@@ -38,7 +38,10 @@ async function buildTimeFormatPreview(format: string, options: TimeFormatPreview
   return preview;
 }
 
-const NOW = new Date('2026-08-04T12:30:45.000Z');
+// Local time, not UTC: the preview renders the current time the way the
+// user's clock reads it (formatStrftime uses the local accessors), so this is
+// the instant that renders as 2026-08-04 12:30:45 on any machine (#407).
+const NOW = new Date(2026, 7, 4, 12, 30, 45);
 
 describe('unsupportedSpecifiers', () => {
   it('accepts a format built entirely from supported specifiers', () => {
