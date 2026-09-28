@@ -8,6 +8,7 @@ All notable changes to Propslab are documented here, newest first.
 
 ### Added
 
+- **Structured output and tool annotations for the MCP server** ([#389](https://github.com/Bimmiest/propslab/issues/389)). `simulate`, `validate`, `explain_precedence` and `lookup_directive` each declare an `outputSchema` and return their result as `structuredContent` alongside the same JSON as text, so a client gets typed results instead of parsing text. Error results stay text-only, and `simulate`'s 2M-character response cap bounds both copies. All four tools are annotated read-only, non-destructive, idempotent and closed-world, so clients can skip the confirmation prompt they show before running a tool with side effects.
 - **Property-based tests for conf parsing, timestamps and the MCP tools** ([#371](https://github.com/Bimmiest/propslab/issues/371)). Generated conf files round-trip through the parser and get the same reading from the editor's linter; generated timestamps across zones, fraction widths, year boundaries and host time zones parse to the instant they encode; random MCP calls never crash the server, stay under the response cap, and `validate` reports every bad pattern. They found, and this fixes:
   - an indented comment or header, a backslash followed by whitespace, `[]`, and a broken header containing `=` were read differently by the editor linter and the parser;
   - four-digit years below 100 were read as 19xx;
