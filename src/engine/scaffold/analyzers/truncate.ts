@@ -2,6 +2,9 @@ import type { ScaffoldSuggestion } from '../types';
 
 const DEFAULT_TRUNCATE = 10000;
 
+declare const TextEncoder: new () => { encode(input: string): Uint8Array };
+const encoder = new TextEncoder();
+
 /**
  * Suggest raising TRUNCATE only when events are long enough that the 10000-byte
  * default would cut them. Suggesting a *lower* value would risk truncating valid
@@ -9,7 +12,9 @@ const DEFAULT_TRUNCATE = 10000;
  * LINE_BREAKER segments the stanza will produce, which is what TRUNCATE caps.
  */
 export function detectTruncate(segments: string[]): ScaffoldSuggestion[] {
-  const lengths = segments.map((l) => l.length).filter((n) => n > 0).sort((a, b) => a - b);
+  // TRUNCATE counts UTF-8 bytes (truncator.ts), so measure bytes, not UTF-16
+  // units: 4000 CJK characters are 12000 bytes and would be cut.
+  const lengths = segments.map((l) => encoder.encode(l).length).filter((n) => n > 0).sort((a, b) => a - b);
   if (lengths.length === 0) return [];
 
   const p99 = percentile(lengths, 0.99);
@@ -27,7 +32,7 @@ export function detectTruncate(segments: string[]): ScaffoldSuggestion[] {
     key: 'TRUNCATE',
     value: String(headroom),
     confidence: 'medium',
-    evidence: `Longest events ≈ ${maxLen} chars — raise TRUNCATE above the ${DEFAULT_TRUNCATE} default`,
+    evidence: `Longest events ≈ ${maxLen} bytes — raise TRUNCATE above the ${DEFAULT_TRUNCATE} default`,
     enabledByDefault: true,
   }];
 }

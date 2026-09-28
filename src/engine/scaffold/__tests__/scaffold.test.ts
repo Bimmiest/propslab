@@ -156,6 +156,12 @@ describe('detectTruncate', () => {
     expect(Number(t!.value)).toBeGreaterThan(10000);
   });
 
+  it('measures UTF-8 bytes, as TRUNCATE does', () => {
+    // 4000 CJK characters are 12000 bytes: over the default, though only 4000 UTF-16 units.
+    const t = byKey(detectTruncate(['日'.repeat(4000)]), 'TRUNCATE');
+    expect(Number(t?.value)).toBeGreaterThanOrEqual(12000);
+  });
+
   it('stays silent for short events (default is fine)', () => {
     expect(detectTruncate(['short line', 'another short one'])).toEqual([]);
   });
