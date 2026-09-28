@@ -21,12 +21,13 @@
 // The seed is fixed so a run is reproducible.
 // ---------------------------------------------------------------------------
 
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import fc from 'fast-check';
 import { fileURLToPath } from 'node:url';
 import { handleExplainPrecedence, handleSimulate, handleValidate } from '../tools';
 import { MAX_RESPONSE_CHARS, serializeSimulation } from '../serialize';
 import { lintRegexDirectives } from '../regexLint';
+import { regexEngineModule } from '../regexEngine';
 import { parseConf } from '../../../../src/engine/parser/confParser';
 import { getDirectivesForFile } from '../../../../src/engine/directiveRegistry';
 import { validateRegex } from '../../../../src/utils/splunkRegex';
@@ -155,6 +156,12 @@ function expectEveryBadPatternReported(
 }
 
 // ── In-process ──────────────────────────────────────────
+
+// The in-process properties call the regex engine on this thread, which the
+// server otherwise loads only for its sandbox workers.
+beforeAll(() => {
+  regexEngineModule();
+});
 
 describe('validate — the regex lint reports every pattern validateRegex rejects', () => {
   it('in every stanza of props and transforms, flat or layered', () => {
