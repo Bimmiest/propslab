@@ -33,7 +33,7 @@ npm run test:e2e      # Playwright, against a production build
 ```bash
 cd packages/mcp-server
 npm ci
-npm test              # pretest runs typecheck + esbuild bundle, then vitest
+npm run test:coverage # typecheck + esbuild bundle first, then vitest with the package's coverage floor
 ```
 
 **`audit`** — `npm audit` over both lockfiles, the app's and `packages/mcp-server`'s. A high-severity advisory in a production dependency fails it; dev-only advisories are reported but never fatal. It installs nothing, so there is nothing to run locally beyond `npm audit --omit=dev --audit-level=high` in each directory.

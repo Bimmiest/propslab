@@ -182,7 +182,8 @@ jobs:
         run: npm ci
 
       - name: Test
-        run: npm test
+        # With the coverage floor in vitest.config.mts, as the app's Test step.
+        run: npm run test:coverage
 
   # Split out of the main job on purpose. Sequentially, a new advisory turned
   # the whole run red after five minutes of tests, and the tests' own verdict

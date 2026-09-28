@@ -113,6 +113,13 @@ updates:
       mcp-server-dependencies:
         patterns: ["*"]
         update-types: [minor, patch]
+      # The root's vitest rule, for the same reason: @vitest/coverage-v8 pins
+      # the exact vitest it ships beside, so a major can only move as a pair.
+      mcp-server-vitest:
+        patterns:
+          - vitest
+          - "@vitest/*"
+        update-types: [major]
     # Majors stay out of the group for the same reason they do above — and note
     # that @modelcontextprotocol/sdk majors move a protocol version, which is a
     # change to read against the spec rather than to wave through.
