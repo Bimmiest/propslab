@@ -48,7 +48,13 @@ gets btool-style provenance back.
 
 ## Setup
 
+The server bundles the engine from the app's `src/`, and the engine imports
+its regex engine, `pcre2-wasm-utf16`, from the repository root's
+`node_modules` — so install the root first, then this package:
+
 ```bash
+# from the repository root
+npm install
 cd packages/mcp-server
 npm install
 npm run build
@@ -128,7 +134,9 @@ reviewed. `docs/engine.md`'s closing section is the spec this implements:
   Process-wide V8 heap flags override worker limits, so the launcher strips
   `--max-old-space-size` / `--max-semi-space-size` / `--max-heap-size` from
   its own arguments and from `NODE_OPTIONS` before re-exec'ing, and says so
-  on stderr. With `PROPSLAB_MCP_NO_REEXEC=1` nothing is stripped.
+  on stderr. It re-execs to do so even when the regex flags above are
+  already on its command line. With `PROPSLAB_MCP_NO_REEXEC=1` nothing is
+  stripped, and the launcher warns on stderr that the flags are in effect.
 - **Every response is bounded** (#351, #414), at 8 MiB
   (`MAX_RESPONSE_BYTES`, `src/responseBudget.ts`) counted as UTF-8 bytes of
   the whole JSON-RPC line the server writes: both copies of the payload,

@@ -303,7 +303,11 @@ function spawnAndWait<T>(
   // Compiled (once per process) before the worker exists and before its
   // budget starts, so no request pays for it.
   const workerData: WorkerData = { ...request, regexEngine: regexEngineModule() };
-  const worker = new Worker(resolvedPath, { workerData, resourceLimits });
+  // `stdout: true` because by default a worker's console.log lands on the
+  // server's stdout, which is the JSON-RPC channel: one stray line corrupts
+  // the stream. `end: false` so the worker exiting does not end stderr.
+  const worker = new Worker(resolvedPath, { workerData, resourceLimits, stdout: true });
+  worker.stdout.pipe(process.stderr, { end: false });
   const exited = new Promise<void>((resolve) => worker.once('exit', () => resolve()));
 
   const result = new Promise<T>((resolve, reject) => {

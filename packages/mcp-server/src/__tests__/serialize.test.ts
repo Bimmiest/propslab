@@ -132,6 +132,12 @@ describe('serializeSimulation', () => {
     expect(out.events[0]._time).toBeNull();
   });
 
+  it("keeps the simulator's _queue routing slot out of indexedFields", () => {
+    const e = { ...event(0, 1, 0), _meta: { _queue: 'myQueue', env: 'prod', tag: ['a', 'b'] } };
+    const out = serializeSimulation(result([e]), [], { maxEvents: 20, includeSnapshots: false });
+    expect(out.events[0].indexedFields).toEqual({ env: 'prod', tag: ['a', 'b'] });
+  });
+
   it('adds nothing when nothing was cut', () => {
     const out = serializeSimulation(result([event(0, 10, 1)]), [], {
       maxEvents: 20,

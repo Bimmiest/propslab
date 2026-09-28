@@ -16,6 +16,7 @@ import type {
   SplunkEvent,
   ValidationDiagnostic,
 } from '../../../src/engine/types';
+import { indexedFields } from '../../../src/engine/utils/metadataFields';
 import {
   elementBytes,
   fitting,
@@ -45,7 +46,7 @@ function serializeEvent(event: SplunkEvent, includeSnapshots: boolean) {
     _time: event._time && !Number.isNaN(event._time.getTime()) ? event._time.toISOString() : null,
     metadata: event.metadata,
     fields: event.fields,
-    indexedFields: event._meta,
+    indexedFields: indexedFields(event._meta),
     lineNumbers: event.lineNumbers,
     processingTrace: event.processingTrace.map((s) => serializeStep(s, includeSnapshots)),
   };

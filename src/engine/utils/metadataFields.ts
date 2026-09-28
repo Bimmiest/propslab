@@ -38,13 +38,20 @@ export function getMetadataField(event: SplunkEvent, name: string): string | und
 }
 
 /**
- * Serialise `_meta` back to the space-separated `key::value` form Splunk stores.
- * `_queue` is the simulator's own routing slot, kept on `_meta` for convenience;
- * Splunk holds the queue under its own key, so it never appears in this text.
+ * An event's indexed fields: `_meta` without `_queue`, the simulator's own
+ * routing slot kept on `_meta` for convenience. Splunk holds the queue under
+ * its own key, so it is never one of the indexed fields.
  */
-function serialiseMeta(meta: Record<string, string | string[]>): string {
-  return Object.entries(meta)
-    .filter(([key]) => key !== '_queue')
+export function indexedFields(
+  meta: SplunkEvent['_meta'],
+): Record<string, string | string[]> {
+  const { _queue: _, ...fields } = meta;
+  return fields;
+}
+
+/** Serialise `_meta` back to the space-separated `key::value` form Splunk stores. */
+function serialiseMeta(meta: SplunkEvent['_meta']): string {
+  return Object.entries(indexedFields(meta))
     .flatMap(([key, values]) =>
       (Array.isArray(values) ? values : [values]).map((value) =>
         /\s/.test(value) ? `${key}::"${value}"` : `${key}::${value}`,

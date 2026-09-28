@@ -304,6 +304,15 @@ describe('built launcher', () => {
     expect(index.startsWith('#!/usr/bin/env node\n')).toBe(true);
   });
 
+  it("README's setup installs the repository root before the package", () => {
+    // The engine imports pcre2-wasm-utf16 from the root node_modules, so on a
+    // fresh clone the package's build fails without the root install.
+    const readme = readFileSync(fileURLToPath(new URL('../../README.md', import.meta.url)), 'utf8');
+    const setup = /## Setup[\s\S]*?```bash\n([\s\S]*?)```/.exec(readme)?.[1] ?? '';
+    const commands = setup.split('\n').filter((l) => l && !l.startsWith('#'));
+    expect(commands.slice(0, 3)).toEqual(['npm install', 'cd packages/mcp-server', 'npm install']);
+  });
+
   it('keeps the shebang off the worker bundle', () => {
     const worker = readFileSync(WORKER_PATH, 'utf8');
     expect(worker.startsWith('#!')).toBe(false);
