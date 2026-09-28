@@ -53,6 +53,14 @@ describe('HelpPanel', () => {
     expect(html).not.toMatch(/var\(--[\w-]+\)\d/);
   });
 
+  it('reports each stage card as an expandable disclosure', () => {
+    renderWithSearch();
+    act(() => useAppStore.getState().toggleHelp());
+    const [card] = screen.getAllByRole('button', { expanded: false }) as [HTMLElement];
+    fireEvent.click(card);
+    expect(card).toHaveAttribute('aria-expanded', 'true');
+  });
+
   it('carries the data-state hook the slide animation keys on', () => {
     renderWithSearch();
     act(() => useAppStore.getState().toggleHelp());

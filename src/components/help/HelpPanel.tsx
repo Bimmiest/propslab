@@ -181,6 +181,7 @@ function StageCard({
       <button
         type="button"
         onClick={onToggle}
+        aria-expanded={isExpanded}
         className="w-full flex items-center gap-3 px-3 py-2.5 text-left cursor-pointer bg-transparent border-none transition-colors hover:bg-[var(--color-bg-secondary)]"
       >
         {/* Step badge */}
