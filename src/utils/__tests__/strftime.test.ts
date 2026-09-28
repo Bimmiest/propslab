@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import fc from 'fast-check';
-import { formatStrftime, parseTimestamp, parseTzAlias, strftimeToRegex, supportedSpecifiers } from '../strftime';
+import { cachedFormatCount, formatStrftime, parseTimestamp, parseTzAlias, strftimeToRegex, supportedSpecifiers } from '../strftime';
 
 /** Helper: ISO string of a parsed timestamp, or null. */
 function iso(text: string, format: string, tz?: string): string | null {
@@ -404,5 +404,21 @@ describe('formatStrftime then parseTimestamp agree for every specifier (#429)', 
       }),
       { seed: 429, numRuns: 2000 },
     );
+  });
+});
+
+describe('tokenise cache (#436)', () => {
+  it('stays bounded, keeps recently used formats, and re-tokenises an evicted one', () => {
+    const cold = strftimeToRegex('%Y-%m-%d cold');
+    const hot = strftimeToRegex('%Y-%m-%d hot');
+    // Each keystroke of a TIME_FORMAT being typed is a new format.
+    for (let i = 0; i < 1000; i++) {
+      strftimeToRegex(`%Y-%m-%d ${i}`);
+      strftimeToRegex('%Y-%m-%d hot');
+    }
+    expect(cachedFormatCount()).toBeLessThanOrEqual(256);
+    expect(strftimeToRegex('%Y-%m-%d hot')).toBe(hot);
+    expect(strftimeToRegex('%Y-%m-%d cold')).not.toBe(cold);
+    expect(iso('2024-01-15 cold', '%Y-%m-%d cold')).toBe('2024-01-15T00:00:00.000Z');
   });
 });

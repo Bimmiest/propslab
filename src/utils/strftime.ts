@@ -174,16 +174,32 @@ interface TokenisedFormat {
  * `parseTimestamp` calls `tokenise` on every invocation, and auto-recognition
  * calls `parseTimestamp` once per candidate format per event — so a 2000-event
  * run re-walked and re-compiled the same dozen formats thousands of times.
- * Formats come from config, so the key space is small and bounded by the conf.
+ * Bounded LRU: every partial TIME_FORMAT typed in the editor, and every format
+ * a long-running MCP client sends, would otherwise stay cached for good.
  */
+const TOKENISE_CACHE_LIMIT = 256;
 const tokeniseCache = new Map<string, TokenisedFormat>();
 
 function tokenise(format: string): TokenisedFormat {
   const cached = tokeniseCache.get(format);
-  if (cached) return cached;
+  if (cached) {
+    // Re-inserted so the Map's order is least-recently-used first.
+    tokeniseCache.delete(format);
+    tokeniseCache.set(format, cached);
+    return cached;
+  }
   const result = tokeniseUncached(format);
+  if (tokeniseCache.size >= TOKENISE_CACHE_LIMIT) {
+    const oldest = tokeniseCache.keys().next();
+    if (!oldest.done) tokeniseCache.delete(oldest.value);
+  }
   tokeniseCache.set(format, result);
   return result;
+}
+
+/** How many tokenised formats the cache holds; for the cache-bound test. */
+export function cachedFormatCount(): number {
+  return tokeniseCache.size;
 }
 
 /**
