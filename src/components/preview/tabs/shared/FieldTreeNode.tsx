@@ -3,6 +3,7 @@ import { type FieldNode, nodeMatchesSearch } from './fieldTreeUtils';
 import { pressable } from '../../../ui/pressable';
 import { copyQuietly } from '../../../../utils/clipboard';
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuLabel } from '../../../ui/ContextMenu';
+import { tint } from '../../../../utils/tint';
 
 interface FieldTreeNodeProps {
   node: FieldNode;
@@ -32,7 +33,7 @@ export function FieldTreeNode({
       <div
         className="flex items-center gap-1 px-1.5 py-0.5 min-h-6 rounded cursor-pointer select-none group"
         style={{
-          backgroundColor: pinned ? node.color + '20' : (active && focused ? node.color + '15' : 'transparent'),
+          backgroundColor: pinned ? tint(node.color, 13) : (active && focused ? tint(node.color, 8) : 'transparent'),
           borderLeft: active && focused ? `2px solid ${node.color}` : '2px solid transparent',
           transition: 'background-color 0.15s, border-color 0.15s',
         }}
@@ -56,7 +57,7 @@ export function FieldTreeNode({
           <span
             className="w-2.5 h-2.5 rounded-sm flex-shrink-0"
             style={{
-              backgroundColor: node.color + '40',
+              backgroundColor: tint(node.color, 25),
               borderLeft: `2px solid ${node.color}`,
               outline: pinned ? `1.5px solid ${node.color}` : 'none',
               outlineOffset: '1px',

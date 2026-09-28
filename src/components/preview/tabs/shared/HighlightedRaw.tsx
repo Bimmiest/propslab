@@ -3,6 +3,7 @@ import { findFieldValuePositions } from '../../../../utils/fieldHighlight';
 import { useFieldFocusState } from './useFieldFocus';
 import { copyQuietly } from '../../../../utils/clipboard';
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuLabel } from '../../../ui/ContextMenu';
+import { tint } from '../../../../utils/tint';
 
 interface Highlight {
   start: number;
@@ -152,7 +153,7 @@ function HighlightedSpan({
         <span
           style={{
             color: hl.color,
-            backgroundColor: active && focused ? hl.color + '20' : 'transparent',
+            backgroundColor: active && focused ? tint(hl.color, 13) : 'transparent',
             opacity: focused && !active ? 0.2 : 1,
             transition: 'opacity 0.15s, background-color 0.15s, color 0.15s',
             cursor: 'pointer',

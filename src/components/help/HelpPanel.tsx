@@ -3,9 +3,7 @@ import { Overlay } from '../ui/Overlay';
 import { useAppStore } from '../../store/useAppStore';
 import { Icon } from '../ui/Icon';
 import { PIPELINE_STAGES, PHASE_LABELS, type PipelineStage } from '../../engine/pipelineStages';
-
-/** A translucent tint of a CSS-variable colour; appending hex alpha to `var(...)` is invalid CSS. */
-const tint = (color: string, pct: number) => `color-mix(in srgb, ${color} ${pct}%, transparent)`;
+import { tint } from '../../utils/tint';
 
 export function HelpPanel() {
   const helpOpen = useAppStore((s) => s.helpOpen);

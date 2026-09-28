@@ -5,6 +5,7 @@ import { CopyButton } from '../editor/CopyButton';
 import { Icon } from '../ui/Icon';
 import { Chip, DirectiveBadges } from './DictionaryBadges';
 import type { DictionaryEntry } from './entries';
+import { tint } from '../../utils/tint';
 
 type DirectiveEntryInfo = Extract<DictionaryEntry, { kind: 'directive' }>['info'];
 type StanzaEntryInfo = Extract<DictionaryEntry, { kind: 'stanza' }>['stanza'];
@@ -245,11 +246,12 @@ function StageLinks({ stages, onOpen }: { stages: ReturnType<typeof getStagesFor
             <span
               className="shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold"
               style={{
-                backgroundColor: `color-mix(in srgb, ${
+                backgroundColor: tint(
                   stage.phase === 'index-time'
                     ? 'var(--color-warning)'
-                    : 'var(--color-accent)'
-                } 18%, transparent)`,
+                    : 'var(--color-accent)',
+                  18,
+                ),
                 color:
                   stage.phase === 'index-time'
                     ? 'var(--color-warning)'

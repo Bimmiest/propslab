@@ -7,6 +7,7 @@ import type { EnrichedEvent } from '../PreviewPanel';
 import { fieldColorAt } from './shared/fieldColors';
 import { useAppStore } from '../../../store/useAppStore';
 import { useApplyDirective } from './shared/useApplyDirective';
+import { tint } from '../../../utils/tint';
 
 // ─── Regex Reference Data ────────────────────────────────────────────────────
 
@@ -392,7 +393,7 @@ function GroupChips({ namedGroups, groupColorMap }: { namedGroups: string[]; gro
             <span
               key={name}
               className="inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded"
-              style={{ backgroundColor: color + '20', color, border: `1px solid ${color}40` }}
+              style={{ backgroundColor: tint(color, 13), color, border: `1px solid ${tint(color, 25)}` }}
             >
               <span className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
               {name}
@@ -416,7 +417,7 @@ function GroupLegend({ namedGroups, groupColorMap }: { namedGroups: string[]; gr
           const color = groupColorMap.get(name) ?? '';
           return (
             <span key={name} className="flex items-center gap-1.5">
-              <span className="w-3 h-2 rounded-sm" style={{ backgroundColor: color + '40', borderBottom: `2px solid ${color}` }} />
+              <span className="w-3 h-2 rounded-sm" style={{ backgroundColor: tint(color, 25), borderBottom: `2px solid ${color}` }} />
               <span className="text-[var(--color-text-muted)]">{name}</span>
             </span>
           );
@@ -851,7 +852,7 @@ function groupSpans(
     result.push(
       <span
         key={`grp-${gh.name}`}
-        style={{ backgroundColor: gh.color + '30', borderBottom: `2px solid ${gh.color}`, color: gh.color }}
+        style={{ backgroundColor: tint(gh.color, 19), borderBottom: `2px solid ${gh.color}`, color: gh.color }}
         className="rounded-sm px-0.5"
         title={`${gh.name}: ${raw.substring(gh.start, gh.end)}`}
       >

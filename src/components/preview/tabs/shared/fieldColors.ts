@@ -2,7 +2,7 @@
 // toggle. The colours are drawn as TEXT, on the pane surfaces and on their own
 // ~20% tint, so no single set can serve both: the light set is Tailwind's
 // -700/-800 shades and the dark set its -300s, each ≥4.5:1 in every such
-// pairing. Hex, because callers append an alpha byte for the tint.
+// pairing. Callers tint them with tint() (utils/tint.ts).
 //
 // Typed as non-empty so `fieldColorAt` has an element it can always fall back
 // on. Every consumer cycles through this palette by index, and a palette with no

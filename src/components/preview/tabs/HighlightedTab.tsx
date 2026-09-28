@@ -13,6 +13,7 @@ import { buildFieldTree } from './shared/fieldTreeUtils';
 import type { FieldNode } from './shared/fieldTreeUtils';
 import { DirectiveNoOpList } from './shared/DirectiveNoOpList';
 import { pressable } from '../../ui/pressable';
+import { tint } from '../../../utils/tint';
 
 const AUTO_PROCESSORS = ['KV_MODE', 'INDEXED_EXTRACTIONS'];
 const MANUAL_PROCESSORS = ['EXTRACT', 'REPORT', 'TRANSFORMS', 'RULESET', 'SEDCMD'];
@@ -655,7 +656,7 @@ function CalcFieldChip({ cf, color, focus, showExpression = false }: {
             className="px-1 py-0.5 rounded-sm max-w-48 truncate"
             style={{
               color,
-              backgroundColor: active && focused ? color + '20' : 'transparent',
+              backgroundColor: active && focused ? tint(color, 13) : 'transparent',
               outline: pinned ? `2px solid ${color}` : 'none',
               outlineOffset: '1px',
               transition: 'background-color 0.15s, color 0.15s',
