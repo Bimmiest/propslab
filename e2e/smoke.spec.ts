@@ -44,6 +44,55 @@ test.describe('boot', () => {
   });
 });
 
+/**
+ * The CSP requires Trusted Types (#458), with an allowlist of the policies
+ * the build creates. A Monaco feature that brings a policy of its own, or a
+ * new string reaching a script or HTML sink, shows up here as a violation.
+ */
+test.describe('trusted types', () => {
+  test('the editor, hovers, the palette and the dictionary run with no violation', async ({ page, complaints }) => {
+    await page.addInitScript(() => {
+      const seen: string[] = [];
+      Object.defineProperty(window, '__e2eViolations', { value: seen });
+      document.addEventListener('securitypolicyviolation', (e) => {
+        seen.push(`${e.violatedDirective}: ${e.sample} (${e.sourceFile}:${e.lineNumber})`);
+      });
+    });
+    const response = await page.goto('/');
+    expect(response?.headers()['content-security-policy']).toContain("require-trusted-types-for 'script'");
+    await expect(page.locator('.monaco-editor').nth(2)).toBeVisible({ timeout: 30_000 });
+    await loadExample(page, APACHE);
+
+    // Typing, the suggest widget and the lint squiggles.
+    const props = page.locator('.monaco-editor').nth(1);
+    await props.click();
+    await page.keyboard.press('Control+End');
+    await page.keyboard.type('\n[tt]\nSHOULD_LINEMERGE = notabool\nTIME_PRE');
+    await expect(page.locator('.suggest-widget')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.squiggly-warning, .squiggly-error, .squiggly-info').first()).toBeVisible({ timeout: 15_000 });
+
+    // A directive hover: markdown rendered through Monaco's sanitizer.
+    const token = props.getByText('SHOULD_LINEMERGE', { exact: true }).last();
+    const box = await token.boundingBox();
+    if (!box) throw new Error('SHOULD_LINEMERGE token not rendered');
+    await dwellUntilVisible(page, box.x + box.width / 2, box.y + box.height / 2, page.getByText('Open in dictionary'));
+
+    await page.keyboard.press('Control+k');
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await page.keyboard.type('dictionary');
+    await page.keyboard.press('Escape');
+
+    await page.getByRole('tab', { name: 'Dictionary' }).click();
+    await expect(page.getByRole('listbox', { name: 'Splunk directives' })).toBeVisible();
+
+    const violations = await page.evaluate(() => (window as unknown as { __e2eViolations: string[] }).__e2eViolations);
+    expect(violations, 'Trusted Types / CSP violations').toEqual([]);
+    expect(complaints.all.filter((c) => /Trusted ?Type/i.test(c)), 'Trusted Types errors').toEqual([]);
+    expect(complaints.all).toEqual([]);
+  });
+});
+
 test.describe('monaco', () => {
   test('mounts three editors and lints what is typed into props.conf', async ({ page, complaints }) => {
     await openApp(page);
