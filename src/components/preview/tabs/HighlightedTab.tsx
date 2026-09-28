@@ -316,7 +316,7 @@ export function HighlightedTab({ items, allEvents, currentPage, eventsPerPage }:
         fieldFilter={fieldFilter}
         setFieldFilter={setFieldFilter}
         pinned={pinnedFields.size > 0 ? {
-          matching: filteredItems.length,
+          matching: pinMatches.length,
           total: allEvents.length,
           count: pinnedFields.size,
           clear: () => { for (const f of pinnedFields) togglePin(f); },

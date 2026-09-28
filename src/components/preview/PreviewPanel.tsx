@@ -301,6 +301,14 @@ interface PreviewFilters {
   selectedChangeState: Set<string>;
 }
 
+/** `selected` without the entries `options` lacks; the same set when none are missing. */
+function pruneSelection(selected: Set<string>, options: string[]): Set<string> {
+  if (selected.size === 0) return selected;
+  const available = new Set(options);
+  const kept = [...selected].filter((s) => available.has(s));
+  return kept.length === selected.size ? selected : new Set(kept);
+}
+
 function matchesFilters(item: EnrichedEvent, filters: PreviewFilters): boolean {
   const { search, selectedFields, selectedStatus, selectedChangeState } = filters;
   if (search && !item.event._raw.toLowerCase().includes(search.toLowerCase())) return false;
@@ -364,11 +372,18 @@ function PreviewSubTab({ pipelineInputs }: { pipelineInputs: PipelineInputs }) {
     return Array.from(fieldSet).sort();
   }, [enrichedEvents]);
 
+  // A field a later run no longer extracts has no checkbox to untick, yet
+  // would keep filtering (to "0 / N" if it was the only one), so it is dropped
+  // from the selection. Set during render, React's pattern for state derived
+  // from props; the pruned set is stable, so this settles in one pass.
+  const liveSelectedFields = useMemo(() => pruneSelection(selectedFields, allFields), [selectedFields, allFields]);
+  if (liveSelectedFields !== selectedFields) setSelectedFields(liveSelectedFields);
+
   // Apply filters
   const filteredEvents = useMemo(() => {
-    const filters = { search: debouncedSearch, selectedFields, selectedStatus, selectedChangeState };
+    const filters = { search: debouncedSearch, selectedFields: liveSelectedFields, selectedStatus, selectedChangeState };
     return enrichedEvents.filter((item) => matchesFilters(item, filters));
-  }, [enrichedEvents, debouncedSearch, selectedFields, selectedStatus, selectedChangeState]);
+  }, [enrichedEvents, debouncedSearch, liveSelectedFields, selectedStatus, selectedChangeState]);
 
   const { paginatedItems, currentPage, totalPages, eventsPerPage, totalItems, setCurrentPage, setEventsPerPage } =
     usePagination(filteredEvents);
@@ -393,7 +408,7 @@ function PreviewSubTab({ pipelineInputs }: { pipelineInputs: PipelineInputs }) {
         search={search}
         onSearchChange={(v) => { setSearch(v); setCurrentPage(1); }}
         allFields={allFields}
-        selectedFields={selectedFields}
+        selectedFields={liveSelectedFields}
         onFieldsChange={(f) => { setSelectedFields(f); setCurrentPage(1); }}
         selectedStatus={selectedStatus}
         onStatusChange={(s) => { setSelectedStatus(s); setCurrentPage(1); }}

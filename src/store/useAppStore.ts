@@ -4,6 +4,9 @@ import type { EventMetadata, OutputTabId, ProcessingResult, ValidationDiagnostic
 /** Top-level workspace the activity rail switches between. */
 export type ActiveView = 'simulator' | 'dictionary';
 
+/** The simulator panels the mobile layout switches between. */
+export type MobileView = 'raw' | 'props' | 'transforms' | 'output';
+
 /** The four inputs an example, or "Clear all", replaces together. */
 export interface SessionInputs {
   rawData: string;
@@ -61,6 +64,13 @@ interface AppState {
 
   activeView: ActiveView;
   setActiveView: (view: ActiveView) => void;
+
+  /**
+   * The simulator panel the mobile layout shows, one at a time. In the store
+   * rather than MobileShell so a jump to an editor line can switch to it.
+   */
+  mobileView: MobileView;
+  setMobileView: (view: MobileView) => void;
 
   /**
    * Directive key the dictionary should show, set when something outside the
@@ -216,6 +226,9 @@ export const useAppStore = create<AppState>((set) => ({
   // reload straight into the dictionary would bury it.
   activeView: 'simulator',
   setActiveView: (view) => set({ activeView: view }),
+
+  mobileView: 'raw',
+  setMobileView: (view) => set({ mobileView: view }),
 
   dictionarySelection: null,
   openDictionaryAt: (key) => set({ dictionarySelection: key, activeView: 'dictionary' }),

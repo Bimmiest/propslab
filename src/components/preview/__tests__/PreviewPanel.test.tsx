@@ -226,3 +226,45 @@ describe('PreviewPanel — the change check is linear in whitespace (#427)', () 
     expect(unmodifiedCount()).toBe('1 / 1');
   });
 });
+
+// A selected field that a later run no longer extracts has no checkbox left to
+// untick, so it must stop filtering rather than leave "0 / N" behind (#432).
+describe('PreviewPanel — the field filter follows the current fields (#432)', () => {
+  const meta: EventMetadata = { index: 'main', host: 'h', source: 's', sourcetype: 'st' };
+  function resultWith(fields: Record<string, string[]>): ProcessingResult {
+    return {
+      events: [{
+        _raw: 'user=alice',
+        _time: null,
+        _meta: {},
+        fields,
+        metadata: meta,
+        lineNumbers: { start: 1, end: 1 },
+        processingTrace: [],
+      }],
+      originalRaw: 'user=alice',
+      eventCount: 1,
+      processingSteps: [],
+      inputMetadata: meta,
+    };
+  }
+
+  beforeEach(() => {
+    useAppStore.setState({ ...initial, activeOutputTab: 'preview', processingResult: resultWith({ user: ['alice'] }) }, true);
+  });
+
+  it('drops a selected field that disappears', () => {
+    const { container } = render(<PreviewPanel />);
+    fireEvent.click(screen.getByRole('button', { name: /Fields/ }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'user' }));
+    expect(screen.getByText('1 / 1')).toBeInTheDocument();
+
+    act(() => useAppStore.setState({ processingResult: resultWith({ other: ['x'] }) }));
+    expect(screen.queryByText(/^\d+ \/ \d+$/)).not.toBeInTheDocument();
+    expect(container.textContent).toContain('user=alice');
+
+    // Nor does it come back with the field.
+    act(() => useAppStore.setState({ processingResult: resultWith({ user: ['alice'] }) }));
+    expect(screen.queryByText(/^\d+ \/ \d+$/)).not.toBeInTheDocument();
+  });
+});

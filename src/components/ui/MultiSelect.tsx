@@ -74,6 +74,9 @@ export function MultiSelect({ label, options, selected, onChange, searchable }: 
 
   const activeCount = selected.size;
   const showSearch = searchable && options.length > 8;
+  // With nothing to choose from the popup is empty, unless something is still
+  // selected: "Clear all" is then the only way to undo it.
+  const hasPopup = options.length > 0 || activeCount > 0;
 
   return (
     // The wrapper listens for keys and focus bubbling up from its own controls;
@@ -88,7 +91,7 @@ export function MultiSelect({ label, options, selected, onChange, searchable }: 
         // whose option/arrow-key model it does not have. aria-expanded and
         // aria-controls are what the disclosure pattern asks for.
         aria-expanded={open}
-        aria-controls={open && options.length > 0 ? popupId : undefined}
+        aria-controls={open && hasPopup ? popupId : undefined}
         className="flex items-center gap-1 px-2 py-1 text-xs rounded border cursor-pointer"
         style={{
           backgroundColor: activeCount > 0 ? 'var(--color-accent)' : 'var(--color-bg-primary)',
@@ -102,7 +105,7 @@ export function MultiSelect({ label, options, selected, onChange, searchable }: 
         )}
         <Icon name="chevron-down" className="w-3 h-3" />
       </button>
-      {open && options.length > 0 && (
+      {open && hasPopup && (
         <div
           id={popupId}
           role="group"

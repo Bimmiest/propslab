@@ -68,4 +68,19 @@ describe('MultiSelect', () => {
     expect(onChange).toHaveBeenCalledWith(new Set());
     expect(document.activeElement).toBe(trigger);
   });
+
+  // A selection can outlive its options; the popup must still open to clear it (#432).
+  it('offers Clear all when a selection remains but no options do', () => {
+    const onChange = vi.fn();
+    render(<MultiSelect label="Fields" options={[]} selected={new Set(['gone'])} onChange={onChange} />);
+    fireEvent.click(screen.getByRole('button', { name: /Fields/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Clear all' }));
+    expect(onChange).toHaveBeenCalledWith(new Set());
+  });
+
+  it('opens nothing when there are no options and nothing selected', () => {
+    render(<MultiSelect label="Fields" options={[]} selected={new Set()} onChange={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: /Fields/ }));
+    expect(screen.queryByRole('group')).not.toBeInTheDocument();
+  });
 });

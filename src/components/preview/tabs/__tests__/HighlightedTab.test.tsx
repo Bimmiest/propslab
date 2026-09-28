@@ -137,6 +137,8 @@ describe('HighlightedTab', () => {
 
     expect(screen.getAllByText(/Event #/)).toHaveLength(100);
     expect(screen.getByText(/Showing the first 100 of 150 events/i)).toBeInTheDocument();
+    // The summary counts every match, not just the rendered window (#432).
+    expect(screen.getByText(/150\/150 events match 1 pinned field/)).toBeInTheDocument();
   });
 
   it('does not cap or announce a truncation when the pin matches few events', () => {

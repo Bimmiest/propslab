@@ -101,4 +101,16 @@ describe('TransformsTab', () => {
     const { container } = render(<TransformsTab />);
     expect(within(container).getByText('No transforms applied yet')).toBeInTheDocument();
   });
+
+  // `'var(--color-warning)' + '20'` is not a colour, so the step badges had no
+  // background at all (#432).
+  it('tints the step badges with a valid colour', () => {
+    useAppStore.setState({ processingResult: resultOf(manyEvents(1)) });
+    const { container } = render(<TransformsTab />);
+    const badge = within(container).getAllByText('1')
+      .find((el) => el.className.includes('rounded-full'))!;
+    const style = badge.getAttribute('style') ?? '';
+    expect(style).toContain('color-mix(in srgb, var(--color-warning) 13%, transparent)');
+    expect(style).not.toMatch(/\)[0-9a-f]{2}\b/);
+  });
 });

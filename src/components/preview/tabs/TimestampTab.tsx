@@ -7,6 +7,7 @@ import { usePipelineInputs, type PipelineInputs } from './shared/usePipelineInpu
 import type { TimeConfig, TimestampProbe } from '../../../engine/timestampMatch';
 import type { EventMetadata, SplunkEvent, TimeSource } from '../../../engine/types';
 import type { EnrichedEvent } from '../PreviewPanel';
+import { tint } from '../../../utils/tint';
 
 interface TimestampTabProps {
   items: EnrichedEvent[];
@@ -25,8 +26,6 @@ interface TimestampTabProps {
 const PREFIX_COLOR = 'var(--color-info)';
 const FORMAT_COLOR = 'var(--color-success)';
 const LOOKAHEAD_COLOR = 'var(--color-error)';
-/** A translucent tint of a CSS-variable colour for highlight backgrounds. */
-const tint = (color: string, pct: number) => `color-mix(in srgb, ${color} ${pct}%, transparent)`;
 
 /** Human-readable descriptions for strftime directives (used by the format breakdown) */
 const DIRECTIVE_DESCRIPTIONS: Record<string, string> = {

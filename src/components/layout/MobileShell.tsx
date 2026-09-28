@@ -1,4 +1,4 @@
-import { useRef, useState, type KeyboardEvent } from 'react';
+import { useRef, type KeyboardEvent } from 'react';
 import { RawPanel } from '../raw/RawPanel';
 import { PropsConfEditor } from '../editor/PropsConfEditor';
 import { TransformsConfEditor } from '../editor/TransformsConfEditor';
@@ -7,9 +7,9 @@ import { DictionaryView } from './lazyViews';
 import { ErrorBoundary } from '../ui/ErrorBoundary';
 import { Icon } from '../ui/Icon';
 import type { IconName } from '../ui/Icon';
-import { useAppStore } from '../../store/useAppStore';
+import { useAppStore, type MobileView as SimulatorMobileView } from '../../store/useAppStore';
 
-type MobileView = 'raw' | 'props' | 'transforms' | 'output' | 'dictionary';
+type MobileView = SimulatorMobileView | 'dictionary';
 
 const VIEWS: { id: MobileView; label: string; icon: IconName }[] = [
   { id: 'raw', label: 'Raw', icon: 'document' },
@@ -31,12 +31,14 @@ const VIEWS: { id: MobileView; label: string; icon: IconName }[] = [
 export function MobileShell() {
   const activeView = useAppStore((s) => s.activeView);
   const setActiveView = useAppStore((s) => s.setActiveView);
-  const [simulatorView, setSimulatorView] = useState<Exclude<MobileView, 'dictionary'>>('raw');
+  const simulatorView = useAppStore((s) => s.mobileView);
+  const setSimulatorView = useAppStore((s) => s.setMobileView);
   const tablistRef = useRef<HTMLDivElement>(null);
 
   // The dictionary tab is backed by the shared `activeView` so that deep links
   // (openDictionaryAt, from the editor hover or the command palette) land here
-  // too; the other four are a local concern with no desktop counterpart.
+  // too; the other four have no desktop counterpart, and are in the store so a
+  // jump to an editor line (revealInEditor) can switch to its editor.
   const view: MobileView = activeView === 'dictionary' ? 'dictionary' : simulatorView;
 
   const setView = (next: MobileView) => {

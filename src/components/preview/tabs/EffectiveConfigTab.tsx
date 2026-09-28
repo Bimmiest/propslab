@@ -16,20 +16,11 @@ import {
   resolveEffectiveConfig,
   type EffectiveDirective,
 } from '../../../engine/parser/effectiveConfig';
-import { getEditor } from '../../editor/editorRegistry';
+import { revealInEditor } from '../../editor/revealInEditor';
 import { Icon } from '../../ui/Icon';
 import type { PipelineInputs } from './shared/usePipelineInputs';
 
-/** Jump the props.conf editor to a line, the way the validation list does. */
-function jumpTo(line: number): void {
-  const ed = getEditor('props.conf');
-  if (!ed) return;
-  ed.focus();
-  requestAnimationFrame(() => {
-    ed.setPosition({ lineNumber: line, column: 1 });
-    ed.revealLineInCenter(line);
-  });
-}
+const jumpTo = (line: number) => revealInEditor('props.conf', line);
 
 const STANZA_TYPE_LABEL: Record<EffectiveDirective['stanza']['type'], string> = {
   source: 'source::',
