@@ -48,19 +48,24 @@ for (const theme of ['dark', 'light'] as const) {
       await expectNoViolations(page, 'simulator (Apache example)');
     });
 
-    test('every output tab and preview sub-tab', async ({ page }) => {
-      await openApp(page);
-      await loadExample(page, APACHE);
-
-      for (const sub of ['Raw', 'Timestamp', 'Extractions', 'Diff', 'Regex']) {
+    // One test per tab: each axe scan takes a few seconds, and ten in one
+    // test ran close to the default timeout on a loaded machine.
+    for (const sub of ['Raw', 'Timestamp', 'Extractions', 'Diff', 'Regex']) {
+      test(`preview sub-tab ${sub}`, async ({ page }) => {
+        await openApp(page);
+        await loadExample(page, APACHE);
         await page.getByRole('tab', { name: new RegExp(`^${sub}$`) }).click();
         await expectNoViolations(page, `Preview › ${sub}`);
-      }
-      for (const tab of ['CIM Models', 'Fields', 'Pipeline', 'Effective config', 'Architecture']) {
+      });
+    }
+    for (const tab of ['CIM Models', 'Fields', 'Pipeline', 'Effective config', 'Architecture']) {
+      test(`output tab ${tab}`, async ({ page }) => {
+        await openApp(page);
+        await loadExample(page, APACHE);
         await page.getByRole('tab', { name: new RegExp(`^${tab}$`) }).click();
         await expectNoViolations(page, tab);
-      }
-    });
+      });
+    }
 
     test('dictionary', async ({ page }) => {
       await openApp(page);
