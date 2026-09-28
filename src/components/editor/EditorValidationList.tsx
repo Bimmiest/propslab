@@ -34,6 +34,7 @@ export function EditorValidationList({ file }: EditorValidationListProps) {
     <div className="border-t border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
       <button
         onClick={() => setExpanded(!expanded)}
+        aria-expanded={expanded}
         className="w-full flex items-center justify-between px-3 py-1 hover:bg-[var(--color-bg-tertiary)] transition-colors cursor-pointer"
       >
         <div className="flex items-center gap-2">

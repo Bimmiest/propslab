@@ -103,7 +103,7 @@ export function Header() {
           <ThemeToggle />
         </div>
       </div>
-      {isProcessing && <ProgressBar />}
+      {isProcessing && <ProgressBar label="Processing" />}
       {/* Screen-reader live region */}
       <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">
         {errorCount > 0

@@ -116,6 +116,16 @@ describe('DictionaryView', () => {
     expect(document.getElementById(active!)).toHaveAttribute('data-entry-id', 'TRUNCATE');
   });
 
+  it('drops aria-activedescendant when the selected entry is filtered out of the list', () => {
+    // The detail pane keeps a filtered-out entry; the listbox must not point
+    // assistive tech at an option it no longer renders.
+    useAppStore.setState({ dictionarySelection: 'TIME_FORMAT' });
+    renderDictionary();
+    fireEvent.click(screen.getByRole('button', { name: 'transforms' }));
+    const active = screen.getByRole('listbox').getAttribute('aria-activedescendant');
+    expect(active).toBeNull();
+  });
+
   it('documents stanza headers alongside directives', () => {
     useAppStore.setState({ dictionarySelection: 'stanza:source' });
     renderDictionary();
