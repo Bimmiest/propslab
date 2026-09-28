@@ -23,6 +23,10 @@ describe('strftime — baseline directives (regression)', () => {
       .toBe('2024-01-15T04:30:00.000Z');
   });
 
+  it('reads a four-digit year below 100 as written, not as 19xx (#371)', () => {
+    expect(iso('0050-06-01 12:00:00', '%Y-%m-%d %H:%M:%S')).toBe('0050-06-01T12:00:00.000Z');
+  });
+
   it('rejects out-of-range components', () => {
     expect(parseTimestamp('2024-13-15 10:00:00', '%Y-%m-%d %H:%M:%S')).toBeNull();
     expect(parseTimestamp('2024-01-32 10:00:00', '%Y-%m-%d %H:%M:%S')).toBeNull();
@@ -248,6 +252,20 @@ describe('strftime — the year of a yearless timestamp (#356)', () => {
 
   it('finds 29 February in the previous year when this one has none', () => {
     expect(at('Feb 29 10:00:00', '2025-03-01T00:00:00Z')).toBe('2024-02-29T10:00:00.000Z');
+  });
+
+  // Found by timestampProperties.test.ts (#371).
+  it('goes back to the last 29 February rather than forward to this year\'s', () => {
+    expect(at('Feb 29 10:00:00', '2024-01-15T00:00:00Z')).toBe('2020-02-29T10:00:00.000Z');
+  });
+
+  it('finds 29 February more than one year back', () => {
+    expect(at('Feb 29 10:00:00', '2026-03-01T00:00:00Z')).toBe('2024-02-29T10:00:00.000Z');
+  });
+
+  it('reads a stamp from a zone already in the new year as that year', () => {
+    // 05:00 on 1 January in UTC+9 is 20:00 on 31 December in UTC — now.
+    expect(at('Jan 1 05:00:00 +0900', '2025-12-31T20:00:00Z', '%b %d %H:%M:%S %z')).toBe('2025-12-31T20:00:00.000Z');
   });
 
   it('does not touch a format that carries a year', () => {

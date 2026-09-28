@@ -140,3 +140,37 @@ describe('computeDiagnostics — agrees with confParser on mis-cased attributes 
     ).toEqual([]);
   });
 });
+
+// Found by diagnosticsParityProperties.test.ts: lines the two validators read
+// differently.
+describe('computeDiagnostics — agrees with confParser on line structure (#371)', () => {
+  const malformedLines = (text: string) => ({
+    engine: parseConf(text, 'props.conf').errors.filter((e) => e.level === 'error').map((e) => e.line),
+    linter: computeDiagnostics(fakeModel(text), 'props.conf')
+      .filter((m) => m.severity === 8)
+      .map((m) => m.startLineNumber),
+  });
+
+  it('reads a broken header holding "=" as a broken header, not a directive keyed "[x"', () => {
+    const text = '[x=y]\\\nk1 = v\n';
+    expect(parseConf(text, 'props.conf').stanzas.flatMap((s) => s.directives).map((d) => d.key)).toEqual(['k1']);
+    expect(malformedLines(text)).toEqual({ engine: [1], linter: [1] });
+  });
+
+  it('flags an empty stanza header in both', () => {
+    expect(malformedLines('[]\n')).toEqual({ engine: [1], linter: [1] });
+  });
+
+  it('flags an indented comment or header in both, as it does an indented directive', () => {
+    expect(malformedLines('  # note\n\t[s]\n')).toEqual({ engine: [1, 2], linter: [1, 2] });
+  });
+
+  it('does not continue a value whose backslash is followed by whitespace', () => {
+    const text = '[s]\nk1 = a\\ \nk2 = b\n';
+    const unknown = computeDiagnostics(fakeModel(text), 'props.conf')
+      .filter((m) => /^Unknown directive/.test(m.message))
+      .map((m) => m.startLineNumber);
+    expect(parseConf(text, 'props.conf').stanzas[0]!.directives.map((d) => d.line)).toEqual([2, 3]);
+    expect(unknown).toEqual([2, 3]);
+  });
+});

@@ -27,13 +27,15 @@ import { getCanonicalDirectiveKey } from '../directiveRegistry';
 // Regex patterns
 // ---------------------------------------------------------------------------
 
-/** Matches a stanza header: `[stanza-name]` */
-const STANZA_RE = /^\[(.+)\]\s*$/;
+/** Matches a stanza header: `[stanza-name]`. Exported for the editor's linter, like DIRECTIVE_RE. */
+export const STANZA_RE = /^\[(.+)\]\s*$/;
 
 /**
  * Matches a key/value directive.
  *
- * The key may not start with whitespace and the `=` may be surrounded by
+ * The key may not start with whitespace or `[`: a `[` line that is not a
+ * well-formed header (`[a=b]\`, `[a] x = y`) is a broken header, not a
+ * directive keyed `[a`. The `=` may be surrounded by
  * optional whitespace.  The value extends to the end of the line (trailing
  * whitespace is preserved because Splunk does the same).
  *
@@ -43,7 +45,7 @@ const STANZA_RE = /^\[(.+)\]\s*$/;
  * list reported it as a malformed line — two validators, side by side in the
  * UI, disagreeing about the same line.
  */
-export const DIRECTIVE_RE = /^([^\s=][^=]*?)\s*=\s*(.*)$/;
+export const DIRECTIVE_RE = /^([^\s=[][^=]*?)\s*=\s*(.*)$/;
 
 /** Matches a comment line. Splunk .conf uses `#` only — `;` is not a comment. */
 const COMMENT_RE = /^#/;
