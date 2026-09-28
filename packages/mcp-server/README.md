@@ -104,6 +104,14 @@ reviewed. `docs/engine.md`'s closing section is the spec this implements:
   backtrack threshold) before anything compiles a regex. User patterns no
   longer run on V8's regex engine, so this now covers only the engine's own
   JavaScript regexes. `PROPSLAB_MCP_NO_REEXEC=1` opts out.
+- **The server runs under Node's permission model**: the launcher re-execs
+  node with `--permission --allow-worker --allow-fs-read=<dist/>`, and with
+  `dist/` as the working directory. The server and its workers can read their
+  own bundle and `pcre2.wasm` and nothing else, and cannot write files, start
+  processes or load native addons. The working directory matters because a
+  worker thread can read below it whatever `--allow-fs-read` says (measured
+  on Node 22 and 24). `PROPSLAB_MCP_NO_REEXEC=1` turns this off along with
+  the rest of the re-exec.
 - **A timeout comes back structured**: budget, every regex-valued directive
   in the conf (file / stanza / key / line / layer), and which of them a
   structural ReDoS heuristic flags — so the agent can repair the pattern rather
