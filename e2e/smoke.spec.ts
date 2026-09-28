@@ -7,6 +7,7 @@ import {
   recordWorkerReplies,
   workerReplies,
   dwellUntilVisible,
+  pointIn,
 } from './fixtures';
 
 const APACHE = /Apache Access Log/i;
@@ -74,9 +75,7 @@ test.describe('trusted types', () => {
 
     // A directive hover: markdown rendered through Monaco's sanitizer.
     const token = props.getByText('SHOULD_LINEMERGE', { exact: true }).last();
-    const box = await token.boundingBox();
-    if (!box) throw new Error('SHOULD_LINEMERGE token not rendered');
-    await dwellUntilVisible(page, box.x + box.width / 2, box.y + box.height / 2, page.getByText('Open in dictionary'));
+    await dwellUntilVisible(page, pointIn(token), page.getByText('Open in dictionary'));
 
     await page.keyboard.press('Control+k');
     await expect(page.getByRole('dialog')).toBeVisible();
@@ -454,11 +453,9 @@ test.describe('dictionary', () => {
 
     const token = props.getByText('TIME_PREFIX', { exact: true }).first();
     await expect(token).toBeVisible();
-    const box = await token.boundingBox();
-    if (!box) throw new Error('TIME_PREFIX token not rendered');
 
     const link = page.getByText('Open in dictionary');
-    await dwellUntilVisible(page, box.x + box.width / 2, box.y + box.height / 2, link);
+    await dwellUntilVisible(page, pointIn(token), link);
 
     await link.click();
 
@@ -579,20 +576,18 @@ test.describe('match workers', () => {
     const props = page.locator('.monaco-editor').nth(1);
     const key = props.getByText('TIME_FORMAT', { exact: true }).first();
     await expect(key).toBeVisible();
-    const box = await key.boundingBox();
-    if (!box) throw new Error('TIME_FORMAT token not rendered');
 
     // The preview hangs off the VALUE, not the key. The font is monospaced, so
     // the key's width gives the character width: `TIME_FORMAT = ` is 14
-    // characters, and six more lands inside `%d/%b/%Y:%H:%M:%S %z`.
-    const charWidth = box.width / 'TIME_FORMAT'.length;
-    const x = box.x + charWidth * 20;
-    const y = box.y + box.height / 2;
+    // characters, and six more lands inside `%d/%b/%Y:%H:%M:%S %z`. Measured
+    // on every attempt: the resize above re-lays out the panels and the editor
+    // asynchronously.
+    const onValue = pointIn(key, 20 / 'TIME_FORMAT'.length);
 
     // "Sample: matched <text> → <iso>" is only rendered from the worker's
     // TIME_PREFIX match; with no worker the hover shows "Now:" alone.
     const sample = page.getByText(/^Sample:/);
-    await dwellUntilVisible(page, x, y, sample);
+    await dwellUntilVisible(page, onValue, sample);
     const hover = page.locator('.monaco-hover').filter({ has: sample });
     await expect(hover).toContainText(`matched ${FIRST_EVENT_TIME} → ${FIRST_EVENT_ISO}`);
     await expect.poll(() => workerReplies(page, TIMESTAMP_WORKER), { message: 'replies from timestampMatchWorker' })
@@ -600,6 +595,40 @@ test.describe('match workers', () => {
 
     expect(complaints.csp, 'blocked by Content-Security-Policy').toEqual([]);
     expect(complaints.all, 'browser errors during the TIME_FORMAT hover').toEqual([]);
+  });
+
+  // #408: under full-suite load the hover's worker can take longer to load
+  // than its load wait (6 s). The first hover then answers without its sample
+  // line, and Monaco keeps showing that answer while the pointer stays put.
+  // Held up here on purpose, so the path is taken on every run.
+  test('a TIME_FORMAT hover whose worker loaded too slowly previews the sample on the next hover', async ({ page }) => {
+    let held = false;
+    await page.context().route(TIMESTAMP_WORKER, async (route) => {
+      if (!held) {
+        held = true;
+        await new Promise((resolve) => setTimeout(resolve, 7_000));
+      }
+      await route.continue();
+    });
+    await openApp(page);
+    await loadExample(page, APACHE);
+    await page.setViewportSize({ width: 1280, height: 1200 });
+    const key = page.locator('.monaco-editor').nth(1).getByText('TIME_FORMAT', { exact: true }).first();
+    await expect(key).toBeVisible();
+    const onValue = pointIn(key, 20 / 'TIME_FORMAT'.length);
+
+    // The first answer, given up on after the load wait: no sample line.
+    const { x, y } = await onValue();
+    await page.mouse.move(x, y);
+    await page.mouse.move(x + 1, y);
+    const hover = page.locator('.monaco-hover');
+    await expect(hover.getByText(/^Now:/)).toBeVisible({ timeout: 15_000 });
+    await expect(hover.getByText(/^Sample:/)).toHaveCount(0);
+
+    // The replacement worker answers the next hover.
+    await dwellUntilVisible(page, onValue, page.getByText(/^Sample:/));
+    await expect(hover.filter({ has: page.getByText(/^Sample:/) }))
+      .toContainText(`matched ${FIRST_EVENT_TIME} → ${FIRST_EVENT_ISO}`);
   });
 });
 

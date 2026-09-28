@@ -116,18 +116,51 @@ export async function loadExample(page: Page, name: RegExp): Promise<void> {
   await expect(page.getByText(/^[1-9]\d* events?$/)).toBeVisible({ timeout: 30_000 });
 }
 
+/** A point in page coordinates. */
+export interface Point {
+  x: number;
+  y: number;
+}
+
 /**
- * Rest the mouse at (`x`, `y`) in a Monaco editor until `shown` is visible.
+ * The point `fx`/`fy` of the way across `target`'s box, read when called. For
+ * dwellUntilVisible, which calls it on every attempt, so a layout that settles
+ * after the test first found the element cannot leave the pointer aimed at
+ * where it used to be.
+ */
+export function pointIn(target: Locator, fx = 0.5, fy = 0.5): () => Promise<Point> {
+  return async () => {
+    const box = await target.boundingBox();
+    if (!box) throw new Error(`${String(target)} is not rendered`);
+    return { x: box.x + box.width * fx, y: box.y + box.height * fy };
+  };
+}
+
+/**
+ * Rest the mouse at `at()` in a Monaco editor until `shown` is visible.
  *
  * Monaco opens the hover on mouse DWELL, and it needs movement to start the
  * timer — a single jump to the token can arrive before the editor is
- * listening and then never repeat. Nudge repeatedly until the widget shows.
+ * listening and then never repeat. So each attempt moves onto the point and
+ * nudges it.
+ *
+ * Each attempt also starts with the pointer off the editor, which closes
+ * whatever hover the last attempt left. Monaco does not ask the provider
+ * again while the pointer stays inside the range of a hover it is showing, so
+ * without this a first answer that could not be complete stayed on screen for
+ * the rest of the wait. That is how the TIME_FORMAT hover test failed (#408):
+ * under load the hover's worker can take longer than its load wait (6 s),
+ * the first answer comes back without the worker's **Sample:** line, and the
+ * replacement worker's answer was never asked for. A user moving the mouse
+ * away and back gets that second answer too.
  */
-export async function dwellUntilVisible(page: Page, x: number, y: number, shown: Locator): Promise<void> {
+export async function dwellUntilVisible(page: Page, at: () => Promise<Point>, shown: Locator): Promise<void> {
   await expect(async () => {
+    await page.mouse.move(0, 0);
+    const { x, y } = await at();
     await page.mouse.move(x, y);
     await page.mouse.move(x + 1, y);
-    await expect(shown).toBeVisible({ timeout: 3_000 });
+    await expect(shown).toBeVisible({ timeout: 4_000 });
   }).toPass({ timeout: 20_000 });
 }
 
