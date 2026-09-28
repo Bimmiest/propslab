@@ -8,4 +8,10 @@ export default defineConfig({
     environment: 'node',
     include: ['src/**/*.test.ts'],
   },
+  // The engine sources the tests import live outside this package, so their
+  // `pcre2-wasm-utf16` import would resolve from the repository root. Dedupe
+  // resolves it from here instead: the copy this package declares.
+  resolve: {
+    dedupe: ['pcre2-wasm-utf16'],
+  },
 });

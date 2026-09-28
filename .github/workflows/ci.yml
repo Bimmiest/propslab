@@ -173,17 +173,11 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            packages/mcp-server/package-lock.json
+          cache-dependency-path: packages/mcp-server/package-lock.json
 
-      - name: Install the engine's dependencies
-        # The server bundles the engine from the app's src/, and the engine
-        # imports its regex engine, pcre2-wasm-utf16, by name, so that resolves
-        # from the root node_modules. Production dependencies are enough.
-        working-directory: .
-        run: npm ci --omit=dev
-
+      # No root install: the package declares the engine's one dependency,
+      # pcre2-wasm-utf16, itself, and its build resolves the engine's import
+      # to that copy. Installing only the package is what proves it.
       - name: Install dependencies
         run: npm ci
 

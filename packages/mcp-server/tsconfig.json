@@ -17,6 +17,14 @@
     // server.ts imports its version from package.json (#319), which esbuild
     // inlines at build time.
     "resolveJsonModule": true,
+    // The engine's `import 'pcre2-wasm-utf16'` would otherwise resolve from
+    // the file's own directory, i.e. the repository root's node_modules. This
+    // package declares the dependency itself, so its copy is the one checked
+    // (and the build aliases it the same way). The target is the package's
+    // `exports["."]`, which a path mapping does not read on its own.
+    "paths": {
+      "pcre2-wasm-utf16": ["./node_modules/pcre2-wasm-utf16/src/index.ts"]
+    },
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "noUnusedLocals": true,

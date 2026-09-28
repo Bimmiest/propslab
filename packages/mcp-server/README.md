@@ -48,13 +48,13 @@ gets btool-style provenance back.
 
 ## Setup
 
-The server bundles the engine from the app's `src/`, and the engine imports
-its regex engine, `pcre2-wasm-utf16`, from the repository root's
-`node_modules` — so install the root first, then this package:
+The server bundles the engine from the app's `src/`. The engine's one
+dependency, its regex engine `pcre2-wasm-utf16`, is declared by this package
+too, at the same release as the app's, and the build resolves the engine's
+import to this package's copy — so the package installs on its own:
 
 ```bash
 # from the repository root
-npm install
 cd packages/mcp-server
 npm install
 npm run build

@@ -78,7 +78,7 @@ Open `reports/mutation/mutation.html` for the survivors, line by line. The engin
 
 ### The regex engine's binary
 
-The module lives in its own repository, [`Bimmiest/pcre2-wasm-utf16`](https://github.com/Bimmiest/pcre2-wasm-utf16), and this one depends on a release tag of it (`package.json`). That repository commits `pcre2.wasm`, built from a pinned PCRE2 release with clang 18 and `wasm-ld`, and its CI rebuilds it and fails unless the result is byte-identical, so the binary is known to come from the source. To change it — a PCRE2 upgrade, a bridge change — make the change there, tag a release, and move the tag in `package.json` here.
+The module lives in its own repository, [`Bimmiest/pcre2-wasm-utf16`](https://github.com/Bimmiest/pcre2-wasm-utf16), and this one depends on a release tag of it (`package.json`). That repository commits `pcre2.wasm`, built from a pinned PCRE2 release with clang 18 and `wasm-ld`, and its CI rebuilds it and fails unless the result is byte-identical, so the binary is known to come from the source. To change it — a PCRE2 upgrade, a bridge change — make the change there, tag a release, and move the tag in `package.json` here and in `packages/mcp-server/package.json`, which declares it too (a test in the package fails while the two differ).
 
 ### The Radix overrides
 
