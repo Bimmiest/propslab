@@ -65,6 +65,14 @@ describe('RegexTab', () => {
     expect(screen.queryByText(/Event #/)).not.toBeInTheDocument();
   });
 
+  it('draws each character once when a group in a lookahead ends past the match (#430)', async () => {
+    const raw = 'foo barbaz qux';
+    const { container } = render(<RegexTab items={[makeItem(raw)]} allEvents={[makeItem(raw)]} currentPage={1} eventsPerPage={10} />);
+    fireEvent.change(screen.getByPlaceholderText(/\\d\+/), { target: { value: 'bar(?=(?P<x>baz))' } });
+    await screen.findByText(/Event #/);
+    expect(container.querySelector('pre')!.textContent).toBe(raw);
+  });
+
   it('surfaces validation error for invalid regex', () => {
     render(<RegexTab items={items} allEvents={items} currentPage={1} eventsPerPage={10} />);
     const input = screen.getByPlaceholderText(/\\d\+/);

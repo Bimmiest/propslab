@@ -822,8 +822,13 @@ function groupSpans(
 
   for (const [name, range] of Object.entries(groupIndices)) {
     if (!range) continue;
+    // A group inside a lookaround can capture text outside the match; only the
+    // part within it is drawn here, or it would be drawn again as post text.
+    const start = Math.max(range[0], fullMatchStart);
+    const end = Math.min(range[1], fullMatchEnd);
+    if (end < start || (end === start && range[1] > range[0])) continue;
     const color = groupColorMap.get(name) ?? 'var(--color-text-primary)';
-    groupHighlights.push({ start: range[0], end: range[1], name, color });
+    groupHighlights.push({ start, end, name, color });
   }
 
   groupHighlights.sort((a, b) => a.start - b.start);
