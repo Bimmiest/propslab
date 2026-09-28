@@ -16,6 +16,7 @@ import type { TimestampMatchRequest, TimestampMatchResponse } from '../../engine
 import { probeTimestamps } from '../../engine/timestampMatch';
 import { SplunkRegex } from '../../utils/splunkRegex';
 import { useAppStore } from '../../store/useAppStore';
+import { LOAD_WAIT_FACTOR } from '../../hooks/workerLifecycle';
 import { createHoverProvider } from '../splunkConfHover';
 import { buildTimeFormatPreview, renderTimeFormatPreview } from '../timeFormatPreview';
 import {
@@ -158,6 +159,7 @@ describe('TIME_FORMAT hover — TIME_PREFIX in a worker (#334)', () => {
     const pending = hover();
     await flush();
     const hung = worker();
+    hung.ready();
     vi.advanceTimersByTime(TIME_PREFIX_TIMEOUT_MS);
     expect(hung.terminated).toBe(true);
     expect(text(await pending)).toContain('**Sample:** preview timed out');
@@ -172,6 +174,7 @@ describe('TIME_FORMAT hover — TIME_PREFIX in a worker (#334)', () => {
   it('replays a request queued behind the one that hung, instead of blaming it', async () => {
     vi.useFakeTimers();
     const first = matchTimePrefix('(a|aa)+b', 'a'.repeat(4000));
+    worker().ready();
     vi.advanceTimersByTime(TIME_PREFIX_TIMEOUT_MS / 2);
     const second = matchTimePrefix('ts=', SAMPLE);
     vi.advanceTimersByTime(TIME_PREFIX_TIMEOUT_MS / 2);
@@ -195,6 +198,64 @@ describe('TIME_FORMAT hover — TIME_PREFIX in a worker (#334)', () => {
     // A late answer is ignored; a match that never ends is still terminated.
     vi.advanceTimersByTime(TIME_PREFIX_TIMEOUT_MS);
     expect(busy.terminated).toBe(true);
+  });
+
+  describe('a worker slow to load (#403)', () => {
+    it('does not blame the prefix: replays it once the replacement has loaded', async () => {
+      vi.useFakeTimers();
+      const pending = hover();
+      await flush();
+      const slow = worker();
+      // The whole budget goes on loading (the PCRE2 wasm fetch and compile).
+      vi.advanceTimersByTime(TIME_PREFIX_TIMEOUT_MS);
+      expect(slow.terminated).toBe(true);
+      const fresh = worker();
+      expect(fresh).not.toBe(slow);
+      expect(fresh.posted).toEqual([]);
+
+      // Loading again takes longer than a run budget; the run is timed alone.
+      vi.advanceTimersByTime(TIME_PREFIX_TIMEOUT_MS * 2);
+      fresh.ready();
+      expect(fresh.posted.map((r) => r.config.timePrefix)).toEqual(['ts=']);
+      vi.advanceTimersByTime(TIME_PREFIX_TIMEOUT_MS / 2);
+      fresh.answer();
+      const markdown = text(await pending);
+      expect(markdown).toContain('matched `2024-01-15`');
+      expect(markdown).not.toContain('timed out');
+    });
+
+    it('replays the requests queued behind it too, in order', async () => {
+      vi.useFakeTimers();
+      const first = matchTimePrefix('ts=', SAMPLE);
+      const second = matchTimePrefix('id=', SAMPLE);
+      vi.advanceTimersByTime(TIME_PREFIX_TIMEOUT_MS);
+      worker().ready();
+      expect(worker().posted.map((r) => r.config.timePrefix)).toEqual(['ts=', 'id=']);
+      worker().answer(worker().posted[0]);
+      worker().answer(worker().posted[1]);
+      await expect(first).resolves.toEqual({ status: 'matched', end: 8 });
+      await expect(second).resolves.toEqual({ status: 'matched', end: 3 });
+    });
+
+    it('omits the sample line, not a timeout, when the replacement never loads', async () => {
+      vi.useFakeTimers();
+      const pending = hover();
+      await flush();
+      vi.advanceTimersByTime(TIME_PREFIX_TIMEOUT_MS);
+      vi.advanceTimersByTime(TIME_PREFIX_TIMEOUT_MS * LOAD_WAIT_FACTOR);
+      const markdown = text(await pending);
+      expect(markdown).toContain('**Now:**');
+      expect(markdown).not.toContain('**Sample:**');
+    });
+
+    it('still blames a prefix that overruns once the worker has loaded', async () => {
+      vi.useFakeTimers();
+      const pending = matchTimePrefix('(a|aa)+b', 'a'.repeat(4000));
+      vi.advanceTimersByTime(TIME_PREFIX_TIMEOUT_MS);
+      worker().ready();
+      vi.advanceTimersByTime(TIME_PREFIX_TIMEOUT_MS);
+      await expect(pending).resolves.toEqual({ status: 'timed-out' });
+    });
   });
 
   it('does not post at all for an already-cancelled token', async () => {
@@ -287,6 +348,7 @@ describe('TIME_FORMAT hover — TIME_PREFIX in a worker (#334)', () => {
     it('drops a cancelled entry queued behind a hang instead of replaying it', async () => {
       vi.useFakeTimers();
       const first = matchTimePrefix('(a|aa)+b', 'a'.repeat(4000));
+      worker().ready();
       const { token, cancel } = cancellable();
       const second = matchTimePrefix('ts=', SAMPLE, token);
       cancel();

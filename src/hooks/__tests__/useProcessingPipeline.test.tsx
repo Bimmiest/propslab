@@ -124,6 +124,8 @@ describe('useProcessingPipeline', () => {
 
     await waitFor(() => expect(useAppStore.getState().processingResult?.events).toHaveLength(2));
     expect(useAppStore.getState().isProcessing).toBe(false);
+    // The status bar says so rather than "Worker idle" (#403).
+    expect(useAppStore.getState().pipelineOnMainThread).toBe(true);
   });
 
   it('runs inline, rather than throwing from the effect, when construction fails', async () => {
@@ -194,6 +196,7 @@ describe('useProcessingPipeline', () => {
     expect(FakeWorker.instances).toHaveLength(2); // capped: no third construction
     await waitFor(() => expect(useAppStore.getState().processingResult?.events).toHaveLength(2));
     expect(useAppStore.getState().validationDiagnostics.some((d) => /Worker/.test(d.message))).toBe(false);
+    expect(useAppStore.getState().pipelineOnMainThread).toBe(true);
 
     // Later requests run inline too, without touching a worker.
     act(() => useAppStore.setState({ rawData: 'one\ntwo\nthree' }));
