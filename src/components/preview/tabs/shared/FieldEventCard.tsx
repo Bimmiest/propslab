@@ -10,7 +10,6 @@ interface FieldEventCardProps {
   fieldColorMap: Map<string, string>;
   /** field name → value(s) to highlight in the raw text */
   fieldValues: Map<string, string | string[]>;
-  activeFields: Set<string> | null;
   titleFor: (field: string, value: string) => string;
   onFieldHover: (field: string | null) => void;
   onFieldClick: (field: string) => void;
@@ -28,7 +27,6 @@ export function FieldEventCard({
   badges,
   fieldColorMap,
   fieldValues,
-  activeFields,
   titleFor,
   onFieldHover,
   onFieldClick,
@@ -48,7 +46,6 @@ export function FieldEventCard({
           raw={event._raw}
           fieldColorMap={fieldColorMap}
           fieldValues={fieldValues}
-          activeFields={activeFields}
           titleFor={titleFor}
           onFieldHover={onFieldHover}
           onFieldClick={onFieldClick}

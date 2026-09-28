@@ -1,4 +1,4 @@
-import { useId, useState, useMemo } from 'react';
+import { createContext, memo, useContext, useId, useState, useMemo, type ReactNode } from 'react';
 
 const normalise = (s: string) => s.replace(/\r\n/g, '\n').replace(/\s+$/, '');
 import type React from 'react';
@@ -52,16 +52,36 @@ const PREVIEW_SUB_TABS: { id: PreviewSubTabId; label: string }[] = [
   { id: 'regex', label: 'Regex' },
 ];
 
-export function PreviewPanel() {
+const PipelineInputsContext = createContext<PipelineInputs | null>(null);
+
+/**
+ * Holds the last run's inputs for the tabs below. Held here rather than in the
+ * Effective config tab, which unmounts when another output tab is selected: in
+ * manual-apply mode the inputs of the last run have to survive the edits made
+ * while it is hidden.
+ *
+ * A component of its own because usePipelineInputs subscribes to props.conf:
+ * called in PreviewPanel, every keystroke re-rendered the whole output. Here
+ * only this provider re-renders; `children` is the same element each time, so
+ * React skips it until the settled inputs themselves change.
+ */
+function PipelineInputsProvider({ children }: { children: ReactNode }) {
+  const pipelineInputs = usePipelineInputs();
+  return <PipelineInputsContext.Provider value={pipelineInputs}>{children}</PipelineInputsContext.Provider>;
+}
+
+function usePipelineInputsContext(): PipelineInputs {
+  const inputs = useContext(PipelineInputsContext);
+  if (!inputs) throw new Error('usePipelineInputsContext outside PipelineInputsProvider');
+  return inputs;
+}
+
+export const PreviewPanel = memo(function PreviewPanel() {
   const activeTab = useAppStore((s) => s.activeOutputTab);
   const setActiveTab = useAppStore((s) => s.setActiveOutputTab);
   const result = useAppStore((s) => s.processingResult);
   const isProcessing = useAppStore((s) => s.isProcessing);
   const tabsId = useId();
-  // Held here rather than in the Effective config tab, which unmounts when
-  // another output tab is selected: in manual-apply mode the inputs of the last
-  // run have to survive the edits made while it is hidden.
-  const pipelineInputs = usePipelineInputs();
   const diagnostics = useAppStore((s) => s.validationDiagnostics);
   // A run that produced no result at all — watchdog timeout, repeated worker
   // crash, an engine throw — clears `processingResult` and says why in an error
@@ -103,12 +123,13 @@ export function PreviewPanel() {
         aria-labelledby={tabId(tabsId, activeTab)}
         aria-busy={isProcessing}
       >
-        <TabContent
-          tab={activeTab}
-          hasData={!!result && result.events.length > 0}
-          failure={failure}
-          pipelineInputs={pipelineInputs}
-        />
+        <PipelineInputsProvider>
+          <TabContent
+            tab={activeTab}
+            hasData={!!result && result.events.length > 0}
+            failure={failure}
+          />
+        </PipelineInputsProvider>
         {isProcessing && (
           <div
             className="absolute inset-0 flex items-center justify-center pointer-events-none"
@@ -121,14 +142,16 @@ export function PreviewPanel() {
       </div>
     </div>
   );
-}
+});
 
-function TabContent({ tab, hasData, failure, pipelineInputs }: {
+// Memoised so the processing overlay toggling on and off around every run does
+// not re-render the tab beneath it.
+const TabContent = memo(function TabContent({ tab, hasData, failure }: {
   tab: OutputTabId;
   hasData: boolean;
   failure: string | null;
-  pipelineInputs: PipelineInputs;
 }) {
+  const pipelineInputs = usePipelineInputsContext();
   if (tab === 'architecture') return <ArchitecturePanel embedded />;
   // Resolves the last run's props.conf and metadata, so it has an answer
   // before any data has been processed — the same reason Architecture sits
@@ -150,7 +173,7 @@ function TabContent({ tab, hasData, failure, pipelineInputs }: {
     case 'transforms': return <TransformsTab />;
     default: return null;
   }
-}
+});
 
 const SAMPLE_ICONS: Record<string, React.ComponentProps<typeof Icon>['name']> = {
   'Apache Access Log': 'terminal',

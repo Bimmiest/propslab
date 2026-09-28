@@ -4,7 +4,7 @@ Contributor-facing internals. The user-facing architecture — pipeline order, s
 
 ## State management
 
-Single Zustand store (`src/store/useAppStore.ts`). The store is flat — components subscribe to individual slices rather than reading the whole store.
+Single Zustand store (`src/store/useAppStore.ts`). The store is flat — components subscribe to individual slices rather than reading the whole store. A subscription re-renders its component on every change, so the ones that change per keystroke sit in leaves: the pipeline hook runs in `PipelineController`, which renders nothing, and PreviewPanel reads the run's inputs through a small provider rather than itself.
 
 ```
 rawData / metadata / propsConf / transformsConf     User inputs (ephemeral)

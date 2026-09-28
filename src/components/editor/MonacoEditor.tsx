@@ -119,6 +119,11 @@ export function MonacoEditor({
   // Later changes are handled by the sync effects below.
   const initialRef = useRef({ value, language, theme, options });
 
+  // The model's text as of our last read or write. The sync effect compares
+  // `value` against this instead of calling getValue(), which rebuilds the
+  // whole buffer as a string: once per keystroke is enough.
+  const modelValueRef = useRef(value);
+
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -138,7 +143,9 @@ export function MonacoEditor({
 
     const subscription = instance.onDidChangeModelContent(() => {
       if (suppressChangeRef.current) return;
-      onChangeRef.current?.(instance.getValue());
+      const next = instance.getValue();
+      modelValueRef.current = next;
+      onChangeRef.current?.(next);
     });
 
     onMountRef.current?.(instance);
@@ -156,7 +163,7 @@ export function MonacoEditor({
   // example, or the scaffold writing a directive into props.conf).
   useEffect(() => {
     const instance = editorRef.current;
-    if (!instance || value === instance.getValue()) return;
+    if (!instance || value === modelValueRef.current) return;
 
     const model = instance.getModel();
     if (!model) return;
@@ -165,6 +172,7 @@ export function MonacoEditor({
     instance.executeEdits('', [{ range: model.getFullModelRange(), text: value, forceMoveMarkers: true }]);
     instance.pushUndoStop();
     suppressChangeRef.current = false;
+    modelValueRef.current = value;
   }, [value]);
 
   useEffect(() => {

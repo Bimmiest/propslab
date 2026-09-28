@@ -8,15 +8,13 @@ import { HelpPanel } from '../help/HelpPanel';
 import { SettingsPanel } from '../settings/SettingsPanel';
 import { FirstRunBanner } from '../onboarding/FirstRunBanner';
 import { DictionaryView, ScaffoldModal } from './lazyViews';
-import { useProcessingPipeline } from '../../hooks/useProcessingPipeline';
+import { PipelineController } from './PipelineController';
 import { useAppStore } from '../../store/useAppStore';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { CommandPalette } from '../ui/CommandPalette';
 import { MobileShell } from './MobileShell';
 
 export function AppShell() {
-  useProcessingPipeline();
-
   const scaffoldOpen = useAppStore((s) => s.scaffoldOpen);
   const toggleScaffold = useAppStore((s) => s.toggleScaffold);
   const activeView = useAppStore((s) => s.activeView);
@@ -35,6 +33,7 @@ export function AppShell() {
 
   return (
     <div className="h-full flex flex-col">
+      <PipelineController />
       {/* Chrome and overlays get boundaries of their own, so one of them
           failing (the scaffold chunk gone after a redeploy, say) costs a
           one-line alert rather than the editors and everything typed in them. */}

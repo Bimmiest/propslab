@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { findFieldValuePositions } from '../../../../utils/fieldHighlight';
-import { isFieldActive, isAnyFocused } from './useFieldFocus';
+import { useFieldFocusState } from './useFieldFocus';
 import { copyQuietly } from '../../../../utils/clipboard';
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuLabel } from '../../../ui/ContextMenu';
 
@@ -17,7 +17,6 @@ interface HighlightedRawProps {
   fieldColorMap: Map<string, string>;
   /** field name → value(s) to locate in the raw text */
   fieldValues: Map<string, string | string[]>;
-  activeFields: Set<string> | null;
   /** Returns the tooltip title for a highlighted span */
   titleFor: (field: string, value: string) => string;
   onFieldHover: (field: string | null) => void;
@@ -120,13 +119,17 @@ function atomicSegments(raw: string, highlights: Highlight[]): AtomicSegment[] {
   return out;
 }
 
+/** Unhighlighted text, dimmed while any field is focused. */
+function PlainSegment({ text }: { text: string }) {
+  const focused = useFieldFocusState() !== 'none';
+  return <span style={{ opacity: focused ? 0.3 : 1, transition: 'opacity 0.15s' }}>{text}</span>;
+}
+
 /** One highlighted field value, with its copy/pin context menu. */
 function HighlightedSpan({
   hl,
   text,
   valueStr,
-  active,
-  focused,
   title,
   onFieldHover,
   onFieldClick,
@@ -134,12 +137,15 @@ function HighlightedSpan({
   hl: Highlight;
   text: string;
   valueStr: string;
-  active: boolean;
-  focused: boolean;
   title: string;
   onFieldHover: (field: string | null) => void;
   onFieldClick: (field: string) => void;
 }) {
+  // Subscribed here rather than passed down, so a hover re-renders only the
+  // spans whose look it changes, not every card on the page.
+  const focusState = useFieldFocusState(hl.field);
+  const focused = focusState !== 'none';
+  const active = focusState !== 'dim';
   return (
     <ContextMenu>
       <ContextMenuTrigger>
@@ -176,35 +182,27 @@ export function HighlightedRaw({
   raw,
   fieldColorMap,
   fieldValues,
-  activeFields,
   titleFor,
   onFieldHover,
   onFieldClick,
   fieldSourceKeys,
   fieldOffsets,
 }: HighlightedRawProps) {
-  const focused = isAnyFocused(activeFields);
-
-  // Segmentation depends only on the raw text and the field/value/offset maps — NOT
-  // on activeFields/focused (which change on every hover). Memoise it so hovering a
-  // field doesn't recompute the whole boundary/atomic split for every visible card.
+  // Segmentation depends only on the raw text and the field/value/offset maps, so
+  // it survives anything that re-renders the card without changing them.
   const atomic = useMemo(
     () => atomicSegments(raw, collectHighlights(raw, fieldColorMap, fieldValues, fieldSourceKeys, fieldOffsets)),
     [raw, fieldColorMap, fieldValues, fieldOffsets, fieldSourceKeys],
   );
 
   if (atomic.length === 0) {
-    return <span style={{ opacity: focused ? 0.3 : 1, transition: 'opacity 0.15s' }}>{raw}</span>;
+    return <PlainSegment text={raw} />;
   }
 
   const segments: React.ReactNode[] = atomic.map(({ start, end, hl }) => {
     const text = raw.substring(start, end);
     if (!hl) {
-      return (
-        <span key={`text-${start}`} style={{ opacity: focused ? 0.3 : 1, transition: 'opacity 0.15s' }}>
-          {text}
-        </span>
-      );
+      return <PlainSegment key={`text-${start}`} text={text} />;
     }
     const raw0 = fieldValues.get(hl.field);
     const valueStr = raw0 === undefined ? text : Array.isArray(raw0) ? raw0.join(', ') : raw0;
@@ -214,8 +212,6 @@ export function HighlightedRaw({
         hl={hl}
         text={text}
         valueStr={valueStr}
-        active={isFieldActive(hl.field, activeFields)}
-        focused={focused}
         title={titleFor(hl.field, text)}
         onFieldHover={onFieldHover}
         onFieldClick={onFieldClick}
