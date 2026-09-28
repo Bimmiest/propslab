@@ -34,6 +34,15 @@ export function parseTimeConfig(propsConf: string, metadata: EventMetadata): Tim
   };
 }
 
+/**
+ * Whether the parser implements `specifier`, asked of the same tokeniser the
+ * editor's "not simulated" warning uses, so the reference and the linter agree.
+ */
+export function isSimulated(specifier: string): boolean {
+  const tokens = formatSpecifiers(specifier);
+  return tokens.length === 1 && tokens[0]!.specifier === specifier && tokens[0]!.supported;
+}
+
 const DESCRIPTIONS = new Map(
   STRPTIME_REFERENCE.flatMap((cat) => cat.directives.map((d) => [d.directive, d.description] as const)),
 );

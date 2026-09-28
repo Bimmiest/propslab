@@ -1,5 +1,6 @@
 import { ReferenceTable } from '../shared/ReferenceTable';
 import { STRPTIME_REFERENCE, type StrptimeCategory, type StrptimeDirective } from './data';
+import { isSimulated } from './timestampLogic';
 
 const STRPTIME_COLUMNS = [
   { label: 'Directive', className: 'pb-1 pr-3 font-medium w-16' },
@@ -51,7 +52,18 @@ function StrptimeCategoryRows({ category, activeDirectives }: { category: Strpti
                 {d.directive}
               </code>
             </td>
-            <td className="py-0.5 pr-3 text-[var(--color-text-secondary)]">{d.description}</td>
+            <td className="py-0.5 pr-3 text-[var(--color-text-secondary)]">
+              {d.description}
+              {/* Text, not colour alone: Splunk reads these, the preview does not. */}
+              {!isSimulated(d.directive) && (
+                <span
+                  className="ml-1.5 px-1 rounded text-[10px] font-medium bg-[var(--color-warning)]/10 text-[var(--color-warning)]"
+                  title={`${d.directive} is not simulated: the preview treats it as literal text, though a real indexer parses it.`}
+                >
+                  not simulated
+                </span>
+              )}
+            </td>
             <td className="py-0.5 text-[var(--color-text-muted)] font-mono text-[11px]">{d.example}</td>
           </tr>
         );

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractDirectives, overlaySegments, parseTimeConfig, resolvedTimeSource, timestampTextOf } from '../timestampLogic';
+import { extractDirectives, isSimulated, overlaySegments, parseTimeConfig, resolvedTimeSource, timestampTextOf } from '../timestampLogic';
 import { STRPTIME_REFERENCE } from '../data';
 import { supportedSpecifiers } from '../../../../../utils/strftime';
 import { probeTimestamp, type TimeConfig } from '../../../../../engine/timestampMatch';
@@ -56,6 +56,17 @@ describe('the strptime reference and the format breakdown (#457)', () => {
   it('describes every specifier the parser implements, once', () => {
     for (const spec of supportedSpecifiers()) expect(referenced, spec).toContain(spec);
     expect(new Set(referenced).size).toBe(referenced.length);
+  });
+
+  it('marks as not simulated exactly the reference rows the parser does not implement', () => {
+    expect(referenced.filter((spec) => !isSimulated(spec))).toEqual([
+      '%C', '%G', '%g', '%h', '%u', '%w', '%P', '%R', '%c', '%x', '%X', '%D', '%r', '%n', '%t', '%V', '%U', '%W',
+    ]);
+    // Whole specifiers only: a longer spelling that starts with one is not it.
+    expect(isSimulated('%Y')).toBe(true);
+    expect(isSimulated('%%')).toBe(true);
+    expect(isSimulated('%Yx')).toBe(false);
+    expect(isSimulated('%0N')).toBe(false);
   });
 
   it('breaks a format down as the parser tokenises it, with the reference\'s descriptions', () => {
