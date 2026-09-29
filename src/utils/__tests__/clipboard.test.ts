@@ -35,6 +35,44 @@ describe('copyToClipboard — fallback failure (#30.4)', () => {
     stubExecCommand(true);
     await expect(copyToClipboard('hi')).resolves.toBeUndefined();
   });
+
+  it('restores focus to the previously focused element', async () => {
+    forceFallback();
+    stubExecCommand(true);
+
+    const input = document.createElement('input');
+    document.body.appendChild(input);
+    input.focus();
+    expect(document.activeElement).toBe(input);
+
+    await copyToClipboard('hi');
+
+    expect(document.activeElement).toBe(input);
+    document.body.removeChild(input);
+  });
+
+  it('restores the previous selection range', async () => {
+    forceFallback();
+    stubExecCommand(true);
+
+    const span = document.createElement('span');
+    span.textContent = 'test text';
+    document.body.appendChild(span);
+
+    const range = document.createRange();
+    range.selectNodeContents(span);
+    const selection = document.getSelection();
+    if (selection) {
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
+
+    await copyToClipboard('hi');
+
+    const currentSelection = document.getSelection();
+    expect(currentSelection?.rangeCount).toBe(1);
+    document.body.removeChild(span);
+  });
 });
 
 describe('copyQuietly', () => {

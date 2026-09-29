@@ -24,24 +24,6 @@ export interface TimestampMatchState {
   error: string | null;
 }
 
-/**
- * Probe events for their timestamp in a terminatable Web Worker.
- *
- * TIME_PREFIX is a user-supplied regex. PCRE's limits bound each match but not
- * the total over every event, and on the render path nothing could terminate
- * it. Here a slow pattern only stalls the worker, which the watchdog kills and
- * restarts.
- *
- * The lifecycle around that — construction, staleness, watchdog, teardown —
- * lives in `useWorkerRequest`.
- *
- * Where `Worker` is unavailable (tests / SSR) it falls back to probing on the
- * calling thread; the browser always has a worker and uses the safe path.
- *
- * `raws` must be referentially stable (memoise it in the caller) so a probe only
- * re-runs when the events or the config actually change.
- */
-
 interface Request {
   raws: string[];
   config: TimeConfig;
@@ -73,6 +55,23 @@ function sameTimeConfig(a: TimeConfig, b: TimeConfig): boolean {
   );
 }
 
+/**
+ * Probe events for their timestamp in a terminatable Web Worker.
+ *
+ * TIME_PREFIX is a user-supplied regex. PCRE's limits bound each match but not
+ * the total over every event, and on the render path nothing could terminate
+ * it. Here a slow pattern only stalls the worker, which the watchdog kills and
+ * restarts.
+ *
+ * The lifecycle around that — construction, staleness, watchdog, teardown —
+ * lives in `useWorkerRequest`.
+ *
+ * Where `Worker` is unavailable (tests / SSR) it falls back to probing on the
+ * calling thread; the browser always has a worker and uses the safe path.
+ *
+ * `raws` must be referentially stable (memoise it in the caller) so a probe only
+ * re-runs when the events or the config actually change.
+ */
 export function useTimestampMatch(raws: string[], config: TimeConfig): TimestampMatchState {
   // Compared by value, not identity. The tab rebuilds its config whenever
   // props.conf changes at all, and keyed on identity every keystroke — even in
