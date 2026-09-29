@@ -1,6 +1,7 @@
 import type { languages, editor, Position, CancellationToken } from 'monaco-editor';
 import { getDirectivesForFile, getDirectivesByCategory, type DirectiveInfo } from '../engine/directiveRegistry';
 import { languages as monacoLanguages } from 'monaco-editor/editor';
+import { endsWithContinuation } from '../engine/utils/directiveValues';
 import { describeTimeFormat, renderTimeFormatPreview } from './timeFormatPreview';
 
 // The runtime enum from the editor API, not a hand-kept copy of its numbers: the
@@ -59,13 +60,6 @@ export function createCompletionProvider(fileType: 'props.conf' | 'transforms.co
       };
     },
   };
-}
-
-/** Whether `line` ends with an odd number of backslashes, which is a continuation. */
-function endsWithContinuation(line: string): boolean {
-  let count = 0;
-  for (let i = line.length - 1; i >= 0 && line[i] === '\\'; i--) count++;
-  return count % 2 === 1;
 }
 
 /** Escape what a snippet body reads specially, so a default is inserted as written. */

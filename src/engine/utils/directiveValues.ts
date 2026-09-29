@@ -134,3 +134,15 @@ export function isEnumMember(value: string, enumValues: readonly string[]): bool
 export function regexProblem(pattern: string): string | null {
   return validateRegex(pattern);
 }
+
+/**
+ * Whether a line's value continues onto the next line: it ends with an ODD
+ * number of backslashes, the last being the very last character. An even run is
+ * escaped backslashes (a Windows path, say), and a backslash followed by
+ * anything, whitespace included, is a literal one. Mirrors confParser's rule.
+ */
+export function endsWithContinuation(line: string): boolean {
+  let count = 0;
+  for (let i = line.length - 1; i >= 0 && line[i] === '\\'; i--) count++;
+  return count % 2 === 1;
+}

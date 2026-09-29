@@ -7,6 +7,7 @@ import {
 } from '../engine/directiveRegistry';
 import { isUndocumentedAttribute } from '../engine/directiveSupport';
 import {
+  endsWithContinuation,
   isDisallowedNegative,
   isEnumMember,
   isIntegerLiteral,
@@ -336,17 +337,6 @@ export function computeDiagnostics(
   checkBestPractices(stanzas, markers, fileType);
 
   return markers;
-}
-
-/**
- * Splunk continues a directive when its line ends with an ODD number of
- * backslashes; an even count is escaped literal backslashes (a Windows path,
- * say), not a continuation. Mirrors `confParser.endsWithContinuation`.
- */
-function endsWithContinuation(value: string): boolean {
-  let count = 0;
-  for (let i = value.length - 1; i >= 0 && value[i] === '\\'; i--) count++;
-  return count % 2 === 1;
 }
 
 /**
