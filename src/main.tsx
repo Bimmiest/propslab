@@ -16,8 +16,17 @@ installDefaultTrustedTypesPolicy()
 // paints light, whatever the saved theme, until the wasm has loaded.
 applyTheme(useAppStore.getState().theme)
 
+// Render a minimal loading indicator before the async load starts.
+const rootElement = document.getElementById('root');
+if (!rootElement) {
+  throw new Error('Root element (#root) not found. The HTML document must contain an element with id="root".');
+}
+
+// Show a simple "Loading…" text before the React app renders.
+rootElement.textContent = 'Loading…';
+
 // Monaco (and its MonacoEnvironment) loads lazily; see LazyEditors.tsx.
-const root = createRoot(document.getElementById('root')!)
+const root = createRoot(rootElement)
 
 // Every user pattern runs on PCRE2 in WebAssembly, and the editor validates
 // patterns as soon as it mounts, so the engine is up before the first render.
