@@ -17,6 +17,10 @@ export default defineConfig({
     environment: 'node',
     include: ['src/**/*.test.{ts,tsx}'],
     setupFiles: ['src/test/setup.ts'],
+    restoreMocks: true,
+    unstubGlobals: true,
+    unstubEnvs: true,
+    testTimeout: 20000,
     coverage: {
       provider: 'v8',
       // Text for a local run, lcov for anything that wants to ingest it, and

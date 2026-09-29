@@ -24,8 +24,9 @@ import { parseExpression, type Node } from '../processors/eval/parser';
 import { evalNode } from '../processors/eval/evaluator';
 import type { EvalValue } from '../processors/eval/values';
 import type { SplunkEvent } from '../types';
+import { fcSeed } from '../../test/fcSeed';
 
-fc.configureGlobal({ seed: 340, numRuns: 300 });
+fc.configureGlobal({ seed: fcSeed(340), numRuns: 300 });
 
 // ── Rendering ───────────────────────────────────────────
 //

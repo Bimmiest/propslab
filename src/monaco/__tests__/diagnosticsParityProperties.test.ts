@@ -25,8 +25,9 @@ import fc from 'fast-check';
 import type { editor } from 'monaco-editor';
 import { computeDiagnostics } from '../splunkConfDiagnostics';
 import { parseConf } from '../../engine/parser/confParser';
+import { fcSeed } from '../../test/fcSeed';
 
-fc.configureGlobal({ seed: 371, numRuns: 300 });
+fc.configureGlobal({ seed: fcSeed(371), numRuns: 300 });
 
 /** Line splitting as Monaco does it: CRLF and LF both end a line, and neither is content. */
 function model(text: string): editor.ITextModel {

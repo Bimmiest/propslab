@@ -543,7 +543,7 @@ describe('applyRegexTransform — CLEAN_KEYS', () => {
 
   it('keeps interior underscores', () => {
     const s = stanza('cols', { DELIMS: '","', FIELDS: '"col_a", "col_b"' });
-    expect(Object.keys(searchTime(event('x,y'), s))).toBeTruthy();
+    expect(Object.keys(searchTime(event('x,y'), s).fields).sort()).toEqual(['col_a', 'col_b']);
     expect(searchTime(event('x,y'), s).fields).toEqual({ col_a: 'x', col_b: 'y' });
   });
 

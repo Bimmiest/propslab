@@ -20,8 +20,9 @@
 import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';
 import { parseTimestamp } from '../strftime';
+import { fcSeed } from '../../test/fcSeed';
 
-const SEED = 399;
+const SEED = fcSeed(399);
 const MIN = 60_000;
 const HOUR = 60 * MIN;
 const DAY = 24 * HOUR;
