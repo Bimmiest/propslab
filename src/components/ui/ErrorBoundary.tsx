@@ -30,7 +30,7 @@ export class ErrorBoundary extends Component<Props, State> {
     return { hasError: true, error };
   }
 
-  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+  override componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error(`[${this.props.panelName ?? 'Unknown'}] Error caught by boundary:`, error, errorInfo);
   }
 
@@ -47,7 +47,7 @@ export class ErrorBoundary extends Component<Props, State> {
     this.handleReset();
   };
 
-  render() {
+  override render() {
     if (this.state.hasError) {
       const { fallback } = this.props;
       if (typeof fallback === 'function') {

@@ -124,6 +124,26 @@ export default defineConfig([
     },
   },
   {
+    // Configuration files (build, test, linting, e2e, MCP server): same base
+    // rules as scripts. No type-aware linting: these run in Node and need
+    // flexible import handling (e.g., .mjs files, optional deps).
+    files: [
+      'eslint.config.js',
+      'stryker.config.mjs',
+      'vitest.stryker.config.ts',
+      'vite.config.ts',
+      'vitest.config.ts',
+      'playwright.config.ts',
+      'packages/mcp-server/vitest.config.mts',
+    ],
+    extends: [js.configs.recommended],
+    languageOptions: {
+      ecmaVersion: 'latest',
+      sourceType: 'module',
+      globals: globals.node,
+    },
+  },
+  {
     // Size and branching limits for hand-written code, so a function stays a
     // sequence of named steps rather than growing back into a 400-line body.
     // Lines are counted without blanks and comments: the rationale comments kept
@@ -162,6 +182,29 @@ export default defineConfig([
       // Playwright fixtures take a callback named `use`, which the React rule
       // reads as a hook call outside a component.
       'react-hooks/rules-of-hooks': 'off',
+    },
+  },
+  {
+    // The engine layer must remain UI-free: no React, no DOM globals, no
+    // UI-specific utilities. Enforce this boundary to keep the engine
+    // portable and testable in isolation.
+    files: ['src/engine/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': ['error',
+        ...[
+          '**/components/**',
+          '**/hooks/**',
+          '**/store/**',
+          '**/monaco/**',
+          'react',
+          'react-dom',
+          'zustand',
+          'monaco-editor*',
+        ].map(pattern => ({
+          name: pattern,
+          message: 'The engine must stay UI-free. Do not import UI components, hooks, or state management from outside the engine, or React/DOM directly.',
+        })),
+      ],
     },
   },
 ])
