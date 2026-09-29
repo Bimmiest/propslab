@@ -6,9 +6,11 @@
 
 let seedLogged = false;
 
+/** The app's tsconfig has no Node types, so `process` is reached through globalThis. */
+const env = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env;
+
 export function fcSeed(defaultSeed: number): number {
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment
-  const envSeed = process.env.FC_SEED;
+  const envSeed = env?.FC_SEED;
   if (envSeed !== undefined) {
     const parsed = Number(envSeed);
     if (!isNaN(parsed)) {
