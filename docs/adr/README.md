@@ -49,3 +49,5 @@ What follows, good and bad: what the rule costs, what it rules out, and what to 
 | [0010](0010-engine-decisions-are-structured-data-on-the-event.md) | What the engine decided is carried as structured data on the event and trace | `src/engine/types.ts` |
 | [0011](0011-raw-rewrites-attributed-by-replay.md) | Fields affected by a `_raw` rewrite are found by replaying extraction | `src/engine/types.ts`, `src/engine/pipeline.ts` |
 | [0012](0012-layered-conf-input.md) | Conf files can be parsed as ordered layers, with provenance | `src/engine/types.ts`, `src/engine/pipeline.ts` |
+| [0013](0013-the-preview-receives-a-reduced-result.md) | The pipeline worker sends the preview a reduced, interned result | `src/utils/viewResult.ts`, `src/engine/pipelineWorker.ts` |
+| [0014](0014-pipeline-worker-failure-policy.md) | A crashed input never runs inline, and the retry budget spans requests | `src/hooks/useProcessingPipeline.ts` |

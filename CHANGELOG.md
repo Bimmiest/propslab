@@ -8,6 +8,7 @@ All notable changes to Propslab are documented here, newest first. Entries say w
 
 ### Added
 
+- **A weekly check of the `production` environment** ([#456](https://github.com/Bimmiest/propslab/issues/456)). `environment.yml` verifies through the API that deploys come from `main` only and that the deployment token is an environment secret; the secret check needs a read-only `SECRETS_READ_TOKEN`.
 - **CI lints the workflows and reviews each PR's dependencies** ([#456](https://github.com/Bimmiest/propslab/issues/456)). New `workflow-lint` and `dependency-review` jobs, a Dependabot cooldown, a `pcre2.wasm` checksum check, and stricter type and switch checks.
 - **The MCP server runs under Node's permission model** ([#455](https://github.com/Bimmiest/propslab/issues/455)). The server and its workers can read only `dist/`, and cannot write files, start processes or load addons.
 - **The MCP server package installs on its own** ([#455](https://github.com/Bimmiest/propslab/issues/455)). It declares `pcre2-wasm-utf16` itself, has a coverage floor, and its request-id scan, message limiter and serializer are mutation-tested.
@@ -46,7 +47,9 @@ All notable changes to Propslab are documented here, newest first. Entries say w
 
 ### Changed
 
-- **Design rationale lives in [`docs/adr/`](docs/adr/README.md), and changelog entries are short** ([#457](https://github.com/Bimmiest/propslab/issues/457)). History-style code comments moved into twelve ADRs, and older entries are cut to a sentence or two.
+- **Large inputs reach the preview faster** ([#454](https://github.com/Bimmiest/propslab/issues/454)). The pipeline worker sends each event's trace without its prose and snapshots, shared between events whose steps match, and summarises the Pipeline tab itself. At 20,000 events the paste to status bar drops from about 2 s to 1.7 s, and the Pipeline tab opens in about 15 ms instead of 95 ([ADR 0013](docs/adr/0013-the-preview-receives-a-reduced-result.md)).
+- **Lint runs typescript-eslint's `strictTypeChecked`** ([#456](https://github.com/Bimmiest/propslab/issues/456)), with three rules tuned and the remaining findings fixed.
+- **Design rationale lives in [`docs/adr/`](docs/adr/README.md), and changelog entries are short** ([#457](https://github.com/Bimmiest/propslab/issues/457)). History-style code comments moved into ADRs, and older entries are cut to a sentence or two.
 - **Every pipeline stage reads one run context** ([#452](https://github.com/Bimmiest/propslab/issues/452)). Stages share one clock, diagnostics list and "already warned" ledger; output is otherwise unchanged.
 - **The Timestamp tab's format breakdown and strptime reference agree with the parser** ([#457](https://github.com/Bimmiest/propslab/issues/457)). Both use the parser's tokeniser, so `%j`, `%N`, `%Q` and `%:z` show and `%%Y` is not a year ([ADR 0003](docs/adr/0003-one-strftime-directive-table.md)).
 - **The strptime reference marks specifiers the preview does not simulate** ([#457](https://github.com/Bimmiest/propslab/issues/457)), such as `%c`, `%x` and `%U`.

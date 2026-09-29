@@ -369,12 +369,9 @@ export function useProcessingPipeline() {
     managed?.forget();
     latestRef.current = { request, state: 'running', crashed: false };
 
-    // The retry budget is NOT reset here. Resetting per request meant a worker
-    // that had just crashed got a fresh budget from the next keystroke, so the
-    // "cap the restart loop" invariant this file documents was never actually
-    // bounded across requests — interleaved auto-run and manual traffic could
-    // restart the worker indefinitely. It is cleared where it should be: when a
-    // request completes cleanly, or when the pipeline gives up on one.
+    // The retry budget spans requests: it is cleared when a request completes
+    // cleanly or the pipeline gives up on one, never by a new request. See
+    // docs/adr/0014-pipeline-worker-failure-policy.md.
     if (managed?.post(request)) {
       setIsProcessing(true);
       return;
@@ -425,10 +422,8 @@ export function useProcessingPipeline() {
   // Manual-run effect: fires when the user clicks "Run pipeline".
   // manualRunTick is only incremented by triggerManualRun() in the store.
   //
-  // `settings` is read through a ref rather than closed over. The effect depends
-  // only on the tick, so relying on the closure made "which settings does a
-  // manual run use?" depend on which render last re-created this effect — and
-  // required suppressing the exhaustive-deps lint to say so.
+  // `settings` is read through a ref: the effect depends only on the tick, and
+  // a manual run uses the settings current at the click.
   useEffect(() => {
     if (manualRunTick === 0) return; // skip the initial mount
     sendRequest(liveInputsRef.current, settingsRef.current);

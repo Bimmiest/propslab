@@ -22,6 +22,7 @@ The stage that makes a decision records it on the event, in structured form, at 
 - `ProcessingStep.timeSource`: which rule in the timestamp fallback chain set `_time`.
 - `ProcessingStep.fieldAliases`, `evalExpressions` and `metadataChanges`: the alias pairs, the expression behind each calculated field (taken from the directives that survived stanza matching for this event), and each metadata change from old value to new.
 - `ProcessingStep.fieldsModified` and `fieldsRemoved`: see [0011](0011-raw-rewrites-attributed-by-replay.md).
+- `ProcessingStep.truncation`: how many lines `TRUNCATE` cut, to how many bytes, and whether the limit was the default.
 - `SplunkEvent.timestampText`: the text the timestamp extractor read, which is `_raw` after line breaking and `TRUNCATE` but before any rewrite.
 - `SplunkEvent.clonedFrom`: the original sourcetype of a `CLONE_SOURCETYPE` copy, so the pair is linked.
 - `SplunkEvent.noOps`: directives that applied and changed nothing, each with a reason. These sit **beside** `processingTrace`, not in it. Every consumer treats a trace step as work done, and the Pipeline tab counts steps.
@@ -30,6 +31,6 @@ The stage that makes a decision records it on the event, in structured form, at 
 
 ## Consequences
 
-- Consumers read the structured fields, never `description`.
+- Consumers read the structured fields, never `description`. The preview never receives `description` per event at all ([0013](0013-the-preview-receives-a-reduced-result.md)).
 - A new explanation the UI needs means a new field recorded by the stage that knows the answer, not UI code that re-derives it.
 - `timestampText` shares its string with `_raw` until a later step replaces `_raw`, so it costs nothing in the common case.
