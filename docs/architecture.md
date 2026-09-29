@@ -1,6 +1,6 @@
 # Architecture notes
 
-Contributor-facing internals. The user-facing architecture — pipeline order, stanza precedence, layout — is in the [README](../README.md).
+Contributor-facing internals. The user-facing architecture — pipeline order, stanza precedence, layout — is in the [README](../README.md). The reasoning behind individual engine design choices, and the issues that led to them, is recorded as architecture decision records in [`docs/adr/`](adr/README.md).
 
 ## State management
 

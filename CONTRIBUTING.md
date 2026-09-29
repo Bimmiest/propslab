@@ -151,6 +151,7 @@ header first — the fields must come from the model JSON, not from memory or do
 
 ## Commits and PRs
 
-- Explain **why** in the commit body, not just what. The `CHANGELOG.md` entries are written the same way and are a fair guide to the house style.
+- Explain **why** in the commit body, not just what.
 - Reference issues with a closing keyword **per issue** — `Closes #1, #2` only closes #1.
-- Add a `CHANGELOG.md` entry for anything a user would notice.
+- Add a `CHANGELOG.md` entry for anything a user would notice. Keep it to one or two sentences stating the user-visible change, with the issue link.
+- **Design rationale and history go in [`docs/adr/`](docs/adr/README.md)**, not in code comments or the changelog. A comment describes what the code does now and any non-obvious constraint; when the reason needs history ("we tried X, #123 showed Y"), write or extend an ADR and point to it from the comment (`See docs/adr/NNNN-….md.`).
