@@ -1,16 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { computeDiagnostics } from '../splunkConfDiagnostics';
 import { parseConf } from '../../engine/parser/confParser';
-import type { editor } from 'monaco-editor';
-
-function fakeModel(text: string): editor.ITextModel {
-  const lines = text.split('\n');
-  return {
-    getLineCount: () => lines.length,
-    getLineContent: (n: number) => lines[n - 1] ?? '',
-    getValue: () => text,
-  } as unknown as editor.ITextModel;
-}
+import { fakeModel } from '../../test/fakeModel';
 
 // The linter and confParser agree on what a directive line is: DIRECTIVE_RE
 // rejects a key that starts with whitespace, so an indented line gets the

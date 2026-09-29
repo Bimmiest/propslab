@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import type { editor, languages } from 'monaco-editor';
+import type { languages } from 'monaco-editor';
+import { fakeModel } from '../../test/fakeModel';
 import { createFoldingRangeProvider } from '../splunkConfFolding';
 
 // The real editor API touches `window` on import; only the kind constants are used.
@@ -10,11 +11,7 @@ vi.mock('monaco-editor/editor', () => ({
 }));
 
 function fold(text: string) {
-  const lines = text.split('\n');
-  const model = {
-    getLineCount: () => lines.length,
-    getLineContent: (n: number) => lines[n - 1] ?? '',
-  } as unknown as editor.ITextModel;
+  const model = fakeModel(text);
   const ranges = createFoldingRangeProvider().provideFoldingRanges(
     model,
     {},
