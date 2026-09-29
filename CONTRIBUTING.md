@@ -13,7 +13,9 @@ npm ci --prefix packages/mcp-server
 npm run dev        # http://localhost:5173
 ```
 
-The second install is not optional if you intend to lint. `npm run lint` is type-aware over the whole repository, `packages/mcp-server` included, and that package resolves `@modelcontextprotocol/sdk` and `zod` from its own `node_modules`. Without them those types don't resolve and every use reports as an unsafe `any` — a wall of errors that have nothing to do with your change.
+The `npm ci --prefix packages/mcp-server` is not optional if you intend to lint. `npm run lint` is type-aware over the whole repository, including `packages/mcp-server`, and that package resolves `@modelcontextprotocol/sdk` and `zod` from its own `node_modules`. Without them those types don't resolve and every use reports as an unsafe `any` — a wall of errors that have nothing to do with your change.
+
+`.claude/` and `CLAUDE.md` are git-ignored (see `.gitignore`) and can be used freely by contributors for local project configuration.
 
 ## The CI checks
 

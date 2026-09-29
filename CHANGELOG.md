@@ -361,7 +361,7 @@ At the time, re-capturing against another Splunk version was a documented manual
 
 ---
 
-## 2026-08-01
+## Pre-1.0 — 2026-08-01
 
 ### Added
 
@@ -411,7 +411,7 @@ At the time, re-capturing against another Splunk version was a documented manual
 
 ---
 
-## 2026-07-30
+## Pre-1.0 — 2026-07-30
 
 ### Fixed
 
@@ -427,7 +427,7 @@ At the time, re-capturing against another Splunk version was a documented manual
 
 ---
 
-## 2026-07-28
+## Pre-1.0 — 2026-07-28
 
 ### Added
 
@@ -440,7 +440,7 @@ At the time, re-capturing against another Splunk version was a documented manual
 
 ---
 
-## 2026-07-04
+## Pre-1.0 — 2026-07-04
 
 ### Fixed
 
@@ -454,7 +454,7 @@ At the time, re-capturing against another Splunk version was a documented manual
 
 ---
 
-## 2026-07-01
+## Pre-1.0 — 2026-07-01
 
 ### Changed
 
@@ -495,7 +495,7 @@ At the time, re-capturing against another Splunk version was a documented manual
 
 ---
 
-## 2026-05-31
+## Pre-1.0 — 2026-05-31
 
 ### Added
 
@@ -510,7 +510,7 @@ At the time, re-capturing against another Splunk version was a documented manual
 
 ---
 
-## 2026-04-21
+## Pre-1.0 — 2026-04-21
 
 ### Fixed
 
@@ -522,7 +522,7 @@ At the time, re-capturing against another Splunk version was a documented manual
 
 ---
 
-## 2026-04-21
+## Pre-1.0 — 2026-04-21
 
 ### Added
 
@@ -548,7 +548,7 @@ At the time, re-capturing against another Splunk version was a documented manual
 
 ---
 
-## 2026-04-20
+## Pre-1.0 — 2026-04-20
 
 ### Added
 
@@ -570,7 +570,7 @@ At the time, re-capturing against another Splunk version was a documented manual
 
 ---
 
-## 2026-04-19
+## Pre-1.0 — 2026-04-19
 
 ### Added
 
@@ -604,7 +604,7 @@ At the time, re-capturing against another Splunk version was a documented manual
 
 ---
 
-## 2026-04-18
+## Pre-1.0 — 2026-04-18
 
 ### Added
 
@@ -636,7 +636,7 @@ At the time, re-capturing against another Splunk version was a documented manual
 
 ---
 
-## 2026-04-17
+## Pre-1.0 — 2026-04-17
 
 ### Fixed
 
