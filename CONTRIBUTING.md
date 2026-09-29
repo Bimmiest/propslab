@@ -155,3 +155,20 @@ header first — the fields must come from the model JSON, not from memory or do
 - Reference issues with a closing keyword **per issue** — `Closes #1, #2` only closes #1.
 - Add a `CHANGELOG.md` entry for anything a user would notice. Keep it to one or two sentences stating the user-visible change, with the issue link.
 - **Design rationale and history go in [`docs/adr/`](docs/adr/README.md)**, not in code comments or the changelog. A comment describes what the code does now and any non-obvious constraint; when the reason needs history ("we tried X, #123 showed Y"), write or extend an ADR and point to it from the comment (`See docs/adr/NNNN-….md.`).
+
+## Release process
+
+**Versioning** follows [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH). Breaking changes increment MAJOR; new features increment MINOR; bug fixes increment PATCH.
+
+**Gate:** All open fidelity questions (issues labeled `question`) must be resolved or closed before a release. A fidelity question represents an outstanding discrepancy with Splunk that needs investigation or clarification.
+
+**Release checklist:**
+
+1. Move `CHANGELOG.md` `Unreleased` section to a new version heading with today's date (e.g., `## [1.2.3] - 2026-09-29`)
+2. Update `package.json` `version` field to the new version
+3. Create a signed tag: `git tag -s vX.Y.Z -m "Release X.Y.Z"` (signing requires GPG setup)
+4. Push the tag: `git push origin vX.Y.Z`
+5. Verify the release workflow succeeds and the environment check is green
+6. Confirm the deployment to the production environment is complete
+
+**Note:** `packages/mcp-server` is versioned independently. Update its `package.json` and tag releases separately as `mcp-server-vX.Y.Z` if needed.
