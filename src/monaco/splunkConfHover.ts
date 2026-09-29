@@ -6,6 +6,27 @@ import { OPEN_DICTIONARY_COMMAND_ID, openDictionaryCommandUri } from './dictiona
 import { escapeMarkdown, inlineCode } from './markdown';
 import { buildTimeFormatPreview, renderTimeFormatPreview } from './timeFormatPreview';
 import { useAppStore } from '../store/useAppStore';
+import { parseConf } from '../engine/parser/confParser';
+import { mergeDirectives } from '../engine/parser/stanzaMatcher';
+import { readTimestampLocation } from '../engine/processors/timestampRecognizer';
+import type { ConfDirective } from '../engine/types';
+
+/**
+ * The first line of `raw` with something on it, without splitting the whole
+ * log: a hover asks this on every move, and the data can be megabytes.
+ */
+export function firstNonBlankLine(raw: string): string | undefined {
+  let start = 0;
+  while (start <= raw.length) {
+    const newline = raw.indexOf('\n', start);
+    const end = newline === -1 ? raw.length : newline;
+    const line = raw.slice(start, end);
+    if (line.trim() !== '') return line;
+    if (newline === -1) return undefined;
+    start = newline + 1;
+  }
+  return undefined;
+}
 
 /**
  * The first non-empty line of the loaded raw data, which is what the preview
@@ -14,29 +35,31 @@ import { useAppStore } from '../store/useAppStore';
  * data is loaded, so a value captured at registration would always be stale.
  */
 function firstSampleLine(): string | undefined {
-  const raw = useAppStore.getState().rawData;
-  return raw.split('\n').find((l) => l.trim() !== '');
+  return firstNonBlankLine(useAppStore.getState().rawData);
 }
 
 /**
- * The TIME_PREFIX in force for a line: the last one defined above it within the
- * same stanza. The engine anchors TIME_FORMAT immediately after TIME_PREFIX, so
- * a preview that ignored it would answer a different question from the pipeline.
+ * The directive on `lineNumber` and the TIME_PREFIX in force for its stanza,
+ * read the way the pipeline reads them: the file is parsed by `parseConf` (so a
+ * continued value is joined and a repeated stanza merged), the stanza's own
+ * directives sit over `[default]`'s, and the last definition of a key wins.
+ * Order within the stanza does not matter, as it does not to Splunk.
+ * Undefined when no directive starts on that line, which is what a continuation
+ * line or a malformed one is.
  */
-function timePrefixFor(model: editor.ITextModel, lineNumber: number): string | undefined {
-  let prefix: string | undefined;
-  for (let i = 1; i < lineNumber; i++) {
-    const text = model.getLineContent(i).trim();
-    if (text.startsWith('[')) {
-      prefix = undefined; // a new stanza resets it
-      continue;
-    }
-    const eq = text.indexOf('=');
-    if (eq > 0 && text.substring(0, eq).trim() === 'TIME_PREFIX') {
-      prefix = text.substring(eq + 1).trim();
-    }
+function directiveWithTimePrefix(
+  model: editor.ITextModel,
+  fileType: 'props.conf' | 'transforms.conf',
+  lineNumber: number,
+): { directive: ConfDirective; timePrefix: string | undefined } | undefined {
+  const { stanzas } = parseConf(model.getValue(), fileType);
+  for (const stanza of stanzas) {
+    const directive = stanza.directives.find((d) => d.line === lineNumber);
+    if (!directive) continue;
+    const defaults = stanza.type === 'default' ? [] : stanzas.filter((s) => s.type === 'default');
+    return { directive, timePrefix: readTimestampLocation(mergeDirectives([stanza, ...defaults])).timePrefix };
   }
-  return prefix;
+  return undefined;
 }
 
 export function createHoverProvider(fileType: 'props.conf' | 'transforms.conf'): languages.HoverProvider {
@@ -76,10 +99,11 @@ export function createHoverProvider(fileType: 'props.conf' | 'transforms.conf'):
         if (info?.valueType === 'strftime') {
           // Asynchronous because TIME_PREFIX is matched in a terminatable
           // worker, never here. A cancelled hover resolves to null.
-          const value = line.substring(eqIdx + 1);
-          return buildTimeFormatPreview(value, {
+          const found = directiveWithTimePrefix(model, fileType, position.lineNumber);
+          if (!found) return null;
+          return buildTimeFormatPreview(found.directive.value, {
             sampleLine: firstSampleLine(),
-            timePrefix: timePrefixFor(model, position.lineNumber),
+            timePrefix: found.timePrefix,
             token,
           }).then((preview) => {
             if (preview === null || token.isCancellationRequested) return null;

@@ -10,6 +10,7 @@
 // ---------------------------------------------------------------------------
 
 import { describe, it, expect } from 'vitest';
+import fc from 'fast-check';
 import {
   effectiveBool,
   effectiveDirective,
@@ -19,6 +20,8 @@ import {
 } from '../utils/directiveValues';
 import { applyKvMode } from '../processors/kvMode';
 import { breakLines } from '../processors/lineBreaker';
+import { getAllDirectives } from '../directiveRegistry';
+import { lintDirectiveValues } from '../directiveLint';
 import { annotatePunct } from '../processors/punctAnnotator';
 import { applyIndexedExtractions } from '../processors/indexedExtractions';
 import { applyRegexTransform } from '../transforms/regexTransform';
@@ -81,14 +84,22 @@ describe('parseSplunkBool', () => {
     expect(isSplunkBoolLiteral(v)).toBe(true);
   });
 
-  it('falls back to the default when absent, empty or not a boolean', () => {
+  it('falls back to the default only when absent or empty', () => {
     for (const fallback of [true, false]) {
       expect(parseSplunkBool(undefined, fallback)).toBe(fallback);
       expect(parseSplunkBool('', fallback)).toBe(fallback);
-      expect(parseSplunkBool('maybe', fallback)).toBe(fallback);
+      expect(parseSplunkBool('  ', fallback)).toBe(fallback);
     }
     expect(isSplunkBoolLiteral('maybe')).toBe(false);
     expect(isSplunkBoolLiteral('')).toBe(false);
+  });
+
+  it('reads any other value as false, whatever the default (Splunk normalizeBoolean)', () => {
+    for (const fallback of [true, false]) {
+      expect(parseSplunkBool('maybe', fallback)).toBe(false);
+      expect(parseSplunkBool('nope', fallback)).toBe(false);
+      expect(parseSplunkBool('2', fallback)).toBe(false);
+    }
   });
 
   it('effectiveBool reads the last definition', () => {
@@ -218,5 +229,63 @@ describe('transforms diagnostics point at the definition that took effect (was: 
     );
     expect(diag).toBeDefined();
     expect(diag?.line).toBe(4);
+  });
+});
+
+// ── One rule for every boolean (#473) ───────────────────────────────────────
+
+describe('every boolean directive follows one rule (#473)', () => {
+  const spellings = [...TRUE_SPELLINGS, ...FALSE_SPELLINGS];
+  const value = fc.oneof(fc.constantFrom(...spellings, 'nope', 'maybe', '2', 'truee', 'onn'), fc.string({ maxLength: 6 }));
+  const booleanDirectives = getAllDirectives().filter((info) => info.valueType === 'boolean');
+
+  it('the registry has boolean directives to check', () => {
+    expect(booleanDirectives.length).toBeGreaterThan(5);
+  });
+
+  it('parseSplunkBool: true spellings are true, everything else false, empty takes the default', () => {
+    fc.assert(
+      fc.property(value, fc.boolean(), (v, fallback) => {
+        const t = v.trim().toLowerCase();
+        const expected = t === '' ? fallback : ['1', 'true', 't', 'yes', 'y', 'on'].includes(t);
+        expect(parseSplunkBool(v, fallback)).toBe(expected);
+      }),
+    );
+  });
+
+  it('the linter flags a boolean directive exactly when the reader will not recognise its value', () => {
+    fc.assert(
+      fc.property(fc.constantFrom(...booleanDirectives), value, (info, v) => {
+        const file = info.appliesTo === 'transforms.conf' ? 'transforms.conf' : 'props.conf';
+        const diagnostics: ValidationDiagnostic[] = [];
+        lintDirectiveValues([stanza('x', { [info.key]: v })], file, diagnostics);
+        const empty = v.trim() === '';
+        expect(diagnostics.length > 0).toBe(!empty && !isSplunkBoolLiteral(v));
+        for (const diag of diagnostics) expect(diag.message).toContain('reads an unrecognised value as false');
+        // ...and what the linter says is what the reader does.
+        if (!empty && !isSplunkBoolLiteral(v)) {
+          expect(parseSplunkBool(v, true)).toBe(false);
+          expect(parseSplunkBool(v, false)).toBe(false);
+        }
+      }),
+      { numRuns: 500 },
+    );
+  });
+
+  it('the readers agree: a non-boolean value switches a default-true and a default-false setting off', () => {
+    const raw = '2026-01-15 10:00:00 a\ncontinued\n2026-01-15 10:00:01 b';
+    // default-true: ANNOTATE_PUNCT, BREAK_ONLY_BEFORE_DATE, CLEAN_KEYS
+    const [punct] = annotatePunct([event('a=b')], [d('ANNOTATE_PUNCT', 'nope')], runCtx());
+    expect(punct?.fields['punct']).toBeUndefined();
+    expect(breakLines('2026-01-15 10:00:00 a\n2026-01-15 10:00:01 b', [d('BREAK_ONLY_BEFORE_DATE', 'nope')], META, runCtx())).toHaveLength(1);
+    const s = stanza('raw', { REGEX: '([\\w.\\-]+)=(\\w+)', FORMAT: '$1::$2', CLEAN_KEYS: 'nope' });
+    expect(applyRegexTransform(event('my.odd-key=value'), s, undefined, 'search-time').fields).toEqual({ 'my.odd-key': 'value' });
+    // SHOULD_LINEMERGE, whatever the structured-format default would have been.
+    expect(breakLines(raw, [d('SHOULD_LINEMERGE', 'nope')], META, runCtx())).toHaveLength(3);
+    expect(
+      breakLines(raw, [d('INDEXED_EXTRACTIONS', 'csv'), d('SHOULD_LINEMERGE', 'nope')], META, runCtx()),
+    ).toHaveLength(3);
+    // An empty SHOULD_LINEMERGE keeps the default (merging on).
+    expect(breakLines(raw, [d('SHOULD_LINEMERGE', '')], META, runCtx())).toHaveLength(2);
   });
 });

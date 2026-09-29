@@ -45,6 +45,7 @@ import type { editor } from 'monaco-editor';
 // Deep import: 0.56+ has no feature entry point for the base editor worker.
 import editorWorker from 'monaco-editor/editor/editor.worker?worker';
 import { acquireModel, saveViewState, takeViewState } from './modelRegistry';
+import { sameText } from './sameText';
 
 // Point Monaco at the locally bundled worker instead of a CDN. Set here, not in
 // main.tsx, so it rides the lazy editor chunk: the `?worker` wrapper matches
@@ -162,7 +163,7 @@ export function MonacoEditor({
       // replaced while no editor showed it (Clear all, loading an example),
       // hold stale text: bring it up to date as an undoable edit.
       monaco.editor.setModelLanguage(model, initialLanguage);
-      if (model.getValue() !== initialValue) {
+      if (!sameText(model.getValue(), initialValue)) {
         model.pushStackElement();
         model.pushEditOperations([], [{ range: model.getFullModelRange(), text: initialValue, forceMoveMarkers: true }], () => null);
         model.pushStackElement();
@@ -199,10 +200,18 @@ export function MonacoEditor({
     const model = instance.getModel();
     if (!model) return;
 
-    suppressChangeRef.current = true;
-    instance.executeEdits('', [{ range: model.getFullModelRange(), text: value, forceMoveMarkers: true }]);
+    // A stop on BOTH sides: executeEdits pushes none of its own, so without the
+    // leading one the replacement joins whatever the user was typing and a single
+    // Ctrl+Z takes both. The flag is cleared in a finally, or a throw would leave
+    // every later user edit unreported to the store.
     instance.pushUndoStop();
-    suppressChangeRef.current = false;
+    suppressChangeRef.current = true;
+    try {
+      instance.executeEdits('', [{ range: model.getFullModelRange(), text: value, forceMoveMarkers: true }]);
+      instance.pushUndoStop();
+    } finally {
+      suppressChangeRef.current = false;
+    }
     modelValueRef.current = value;
   }, [value]);
 

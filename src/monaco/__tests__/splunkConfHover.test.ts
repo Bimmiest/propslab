@@ -2,17 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { marked, type Tokens } from 'marked';
 import { createHoverProvider } from '../splunkConfHover';
 import { OPEN_DICTIONARY_COMMAND_ID, openDictionaryCommandUri } from '../dictionaryCommand';
-import type { editor, Position, languages } from 'monaco-editor';
-
-function fakeModel(text: string): editor.ITextModel {
-  const lines = text.split('\n');
-  return {
-    getLineCount: () => lines.length,
-    getLineContent: (n: number) => lines[n - 1] ?? '',
-    getValue: () => text,
-    getWordAtPosition: () => null,
-  } as unknown as editor.ITextModel;
-}
+import type { Position, languages } from 'monaco-editor';
+import { fakeModel } from '../../test/fakeModel';
 
 const at = (lineNumber: number, column: number) => ({ lineNumber, column }) as Position;
 
