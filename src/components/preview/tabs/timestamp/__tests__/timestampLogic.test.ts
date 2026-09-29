@@ -97,7 +97,7 @@ describe('overlaySegments', () => {
     expect(segments.map((s) => `${s.kind}:${s.text}`)).toEqual([
       'outside:x ', 'prefix:ts=', 'gap: ', 'timestamp:2026-01-15', 'window: ta', 'boundary:]', 'outside:il and more',
     ]);
-    expect(segments.map((s) => s.text).join('').replace(']', '')).toBe(raw);
+    expect(segments.filter((s) => s.kind !== 'boundary').map((s) => s.text).join('')).toBe(raw);
     expect(segments[1]!.title).toBe('TIME_PREFIX: ts=');
     expect(segments[3]!.title).toBe('TIME_FORMAT: %Y-%m-%d\nParsed: 2026-01-15T00:00:00.000Z');
   });
