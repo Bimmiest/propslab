@@ -15,7 +15,7 @@
     "build": "npm run typecheck && npm run build:index && npm run build:worker && npm run build:regex-engine",
     "build:index": "esbuild src/index.ts --bundle --platform=node --target=node24 --format=cjs --outdir=dist --sourcemap --alias:pcre2-wasm-utf16=pcre2-wasm-utf16 --banner:js=\"#!/usr/bin/env node\"",
     "build:worker": "esbuild src/simulateWorker.ts --bundle --platform=node --target=node24 --format=cjs --outdir=dist --sourcemap --alias:pcre2-wasm-utf16=pcre2-wasm-utf16",
-    "build:regex-engine": "node -e \"require('node:fs').copyFileSync(require.resolve('pcre2-wasm-utf16/pcre2.wasm'), 'dist/pcre2.wasm')\"",
+    "build:regex-engine": "node ../../scripts/check-wasm-checksum.mjs && node -e \"require('node:fs').copyFileSync(require.resolve('pcre2-wasm-utf16/pcre2.wasm'), 'dist/pcre2.wasm')\"",
     "start": "node dist/index.js",
     "pretest": "npm run build",
     "test": "vitest run",

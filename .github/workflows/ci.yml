@@ -58,23 +58,35 @@ jobs:
             package-lock.json
             packages/mcp-server/package-lock.json
 
+      # --ignore-scripts, as the deploy build installs (azure-static-web-apps.yml):
+      # CI must test the tree that ships, not one that also ran install scripts.
+      # Nothing here needs them. The only lockfile entries with an install
+      # script are fsevents (macOS-only, optional) and, in the MCP server's,
+      # esbuild, whose postinstall only verifies the platform binary and swaps
+      # a launcher shim for it; the binary arrives through optionalDependencies
+      # and the package works without the swap. pcre2-wasm-utf16 is prebuilt
+      # and has no install or prepare script.
       - name: Install dependencies
-        run: npm ci
-
-      - name: Verify the regex engine's WebAssembly
-        # pcre2-wasm-utf16 is a git dependency: the lockfile pins its commit
-        # but records no integrity hash, and npm audit cannot see it. The
-        # package ships the checksum its build produced; a binary that does not
-        # match it is not the one upstream built and published.
-        working-directory: node_modules/pcre2-wasm-utf16
-        run: sha256sum --check --strict pcre2.wasm.sha256
+        run: npm ci --ignore-scripts
 
       - name: Install MCP server dependencies
         # Lint below is type-aware over the whole repo (projectService), and
         # packages/mcp-server resolves @modelcontextprotocol/sdk and zod from
         # its own node_modules. Without this install those types don't
         # resolve, and every use reports as an unsafe `any`.
-        run: npm ci --prefix packages/mcp-server
+        run: npm ci --ignore-scripts --prefix packages/mcp-server
+
+      - name: Verify the regex engine's WebAssembly
+        # pcre2-wasm-utf16 is a git dependency: the lockfile pins its commit
+        # but records no integrity hash, and npm audit cannot see it. The
+        # package ships the checksum its build produced; a binary that does not
+        # match it is not the one upstream built and published. Both installed
+        # copies are checked: the app's, which ships, and the MCP server's.
+        # Every job that installs the package runs this (mcp-server and
+        # mutation below, the deploy build too), #504.
+        run: |
+          node scripts/check-wasm-checksum.mjs
+          node scripts/check-wasm-checksum.mjs packages/mcp-server
 
       - name: Lint
         run: npm run lint
@@ -91,6 +103,14 @@ jobs:
         # gzip size per chunk against the budgets in the script. Vite only
         # warns past 500 kB, and a warning on every build is read by no one.
         run: node scripts/check-bundle-size.mjs
+
+      - name: Entry graph
+        # The budgets are per chunk, plus a sum over the initial load; none of
+        # them says which chunks load at startup. This fails if dist/index.html
+        # or the entry's static imports reach the Monaco chunk, which must stay
+        # lazy (#467: a code-splitting group once pulled it into every first
+        # load while each chunk stayed inside its budget).
+        run: node scripts/check-entry-graph.mjs
 
       - name: Test
         # --coverage rather than a bare `vitest run`: the thresholds live in
@@ -158,9 +178,22 @@ jobs:
   # its verdict should not be buried under an e2e failure, nor the app's under
   # a worker-thread one. `npm test` builds first (pretest), so this covers
   # typecheck + bundle + the sandbox-timeout tests in one step.
+  #
+  # It runs on all three desktop platforms (#518): the package is what people
+  # install and start on their own machines, where path separators, the
+  # worker-thread spawn and the wasm load differ from the runner Linux. The
+  # tests that only hold on Linux guard themselves, so a leg skips rather than
+  # fails on them. The Linux leg keeps the job's original name, so a required
+  # status check of that name still resolves; the others are new checks.
   mcp-server:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+    name: ${{ matrix.os == 'ubuntu-latest' && 'mcp-server' || format('mcp-server ({0})', matrix.os) }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      # One platform's failure must not hide the verdicts of the others.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
     defaults:
       run:
         working-directory: packages/mcp-server
@@ -178,12 +211,64 @@ jobs:
       # No root install: the package declares the engine's one dependency,
       # pcre2-wasm-utf16, itself, and its build resolves the engine's import
       # to that copy. Installing only the package is what proves it.
+      # --ignore-scripts for the reason given in the app's job above.
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
+
+      - name: Verify the regex engine's WebAssembly
+        # The package's build checks it too (build:regex-engine, which the
+        # Test step's pretest runs); a step of its own names the failure. In
+        # Node rather than sha256sum, which the Windows and macOS runners lack
+        # or spell differently.
+        run: node ../../scripts/check-wasm-checksum.mjs
 
       - name: Test
         # With the coverage floor in vitest.config.mts, as the app's Test step.
         run: npm run test:coverage
+
+  # The default run is deterministic on purpose: one timezone, one locale, a
+  # fixed order, and property-test seeds that FC_SEED can pin. That is what
+  # makes a red run reproducible, and it is also what lets a test that only
+  # passes under those conditions stay green forever (#507). Once a week the
+  # unit suite runs the other way: a zone that is neither UTC nor the runner's,
+  # a non-English locale, files and tests in a random order, and FC_SEED left
+  # unset so property tests draw fresh seeds. The vitest config is used as is,
+  # without the coverage floor, which is not a property of the ordering. Vitest
+  # and fast-check both report the seed that reproduces a failure.
+  randomised:
+    if: github.event_name == 'schedule'
+    name: ${{ format('unit tests, randomised ({0}, {1})', matrix.tz, matrix.lang) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - tz: America/Los_Angeles
+            lang: de_DE.UTF-8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Verify the regex engine's WebAssembly
+        run: node scripts/check-wasm-checksum.mjs
+
+      - name: Test
+        # FC_SEED is deliberately not set anywhere in this job.
+        env:
+          TZ: ${{ matrix.tz }}
+          LANG: ${{ matrix.lang }}
+        run: npx vitest run --sequence.shuffle
 
   # Split out of the main job on purpose. Sequentially, a new advisory turned
   # the whole run red after five minutes of tests, and the tests' own verdict
