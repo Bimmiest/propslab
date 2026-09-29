@@ -214,7 +214,7 @@ export function applyEvalExpressions(
   const evalDirectives = directives.filter((d) => d.directiveType === 'EVAL');
   if (evalDirectives.length === 0) return events;
 
-  if (diagnostics) warnDottedFieldRefs(events, evalDirectives, diagnostics);
+  warnDottedFieldRefs(events, evalDirectives, diagnostics);
   const reporter = new EvalReporter(diagnostics);
   const compiled = compileEvals(evalDirectives);
   /** Field name → the directive that computes it, for locating a no-op. */

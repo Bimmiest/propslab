@@ -44,6 +44,7 @@ npm run test:coverage # typecheck + esbuild bundle first, then vitest with the p
 
 A few things worth knowing:
 
+- **Lint is typescript-eslint's `strictTypeChecked`**, with three rules tuned in `eslint.config.js`, each beside its reason: `no-non-null-assertion` is off, `no-confusing-void-expression` allows arrow shorthand, and `restrict-template-expressions` allows numbers. A deliberate use of a deprecated browser API, or a guard for something jsdom lacks, gets an inline disable saying so.
 - **`npm run build` is the type-check.** There is no separate `tsc --noEmit` step, so a type error surfaces as a build failure.
 - **The e2e suite runs against `dist/`, not the dev server.** A change that works under `vite dev` and not in a production build will pass locally and fail in CI. On a clean checkout the first run needs the browser: `npx playwright install chromium`.
 - **Coverage is a floor, and a ratchet.** The thresholds live in `vitest.config.ts` so a local run gives the same verdict CI does. The engine is held to a higher bar than the app as a whole, because a simulator whose UI is under-tested is annoying while one whose pipeline is under-tested is wrong. Raise the floor when real work raises coverage; do not lower it to make a branch green.
@@ -150,6 +151,7 @@ header first — the fields must come from the model JSON, not from memory or do
 
 ## Commits and PRs
 
-- Explain **why** in the commit body, not just what. The `CHANGELOG.md` entries are written the same way and are a fair guide to the house style.
+- Explain **why** in the commit body, not just what.
 - Reference issues with a closing keyword **per issue** — `Closes #1, #2` only closes #1.
-- Add a `CHANGELOG.md` entry for anything a user would notice.
+- Add a `CHANGELOG.md` entry for anything a user would notice. Keep it to one or two sentences stating the user-visible change, with the issue link.
+- **Design rationale and history go in [`docs/adr/`](docs/adr/README.md)**, not in code comments or the changelog. A comment describes what the code does now and any non-obvious constraint; when the reason needs history ("we tried X, #123 showed Y"), write or extend an ADR and point to it from the comment (`See docs/adr/NNNN-….md.`).

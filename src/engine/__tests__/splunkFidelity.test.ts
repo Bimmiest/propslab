@@ -133,7 +133,7 @@ function engineEvents(fixture: Fixture, injectNow = true): CapturedEvent[] {
     // the engine's punct is compared like any other field.
     const { punct: _punct, ...withoutPunct } = e.fields;
     const compared = fixture.comparePunct ? { ...e.fields } : withoutPunct;
-    for (const name of timeFields) delete compared[name];
+    for (const name of timeFields) Reflect.deleteProperty(compared, name);
     return {
       _raw: e._raw,
       _time: e._time ? e._time.getTime() : null,
@@ -157,9 +157,11 @@ function describeDivergence(actual: CapturedEvent[], expected: CapturedEvent[]):
     if (a._time !== b._time) lines.push(`[${i}] _time: engine ${a._time}, splunk ${b._time}`);
     const keys = new Set([...Object.keys(a.fields), ...Object.keys(b.fields)]);
     for (const k of keys) {
-      const av = JSON.stringify(a.fields[k]);
-      const bv = JSON.stringify(b.fields[k]);
-      if (av !== bv) lines.push(`[${i}] field ${k}: engine ${av ?? '(absent)'}, splunk ${bv ?? '(absent)'}`);
+      // JSON.stringify(undefined) is undefined, whatever its declared type says.
+      const show = (v: unknown) => (v === undefined ? '(absent)' : JSON.stringify(v));
+      const av = show(a.fields[k]);
+      const bv = show(b.fields[k]);
+      if (av !== bv) lines.push(`[${i}] field ${k}: engine ${av}, splunk ${bv}`);
     }
   }
   return lines.join('\n');

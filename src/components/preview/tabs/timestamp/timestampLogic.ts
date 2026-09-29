@@ -2,7 +2,8 @@ import { parseConf } from '../../../../engine/parser/confParser';
 import { mergeDirectives, resolveStanzasForEvent } from '../../../../engine/parser/stanzaMatcher';
 import { resolveLookahead } from '../../../../engine/processors/timestampExtractor';
 import type { TimeConfig, TimestampProbe } from '../../../../engine/timestampMatch';
-import type { EventMetadata, SplunkEvent, TimeSource } from '../../../../engine/types';
+import type { EventMetadata, TimeSource } from '../../../../engine/types';
+import type { ViewEvent } from '../../../../utils/viewResult';
 import { formatSpecifiers } from '../../../../utils/strftime';
 import { STRPTIME_REFERENCE } from './data';
 
@@ -63,12 +64,12 @@ export function extractDirectives(format: string): { directive: string; descript
  * DEST_KEY = _raw and INGEST_EVAL rewrote it — or `_raw` itself when the
  * extractor recorded none.
  */
-export function timestampTextOf(event: SplunkEvent): string {
+export function timestampTextOf(event: ViewEvent): string {
   return event.timestampText ?? event._raw;
 }
 
 /** How the pipeline actually resolved this event's `_time`. */
-export function resolvedTimeSource(event: SplunkEvent): TimeSource | undefined {
+export function resolvedTimeSource(event: ViewEvent): TimeSource | undefined {
   return event.processingTrace
     .filter((step) => step.processor === 'timestampExtractor')
     .at(-1)?.timeSource;

@@ -39,7 +39,7 @@ export function getField<T>(fields: Record<string, T>, name: string): T | undefi
  * Delete an own property, leaving any inherited member of the same name alone.
  */
 export function deleteField(fields: object, name: string): void {
-  if (hasField(fields, name)) delete (fields as Record<string, unknown>)[name];
+  if (hasField(fields, name)) Reflect.deleteProperty(fields, name);
 }
 
 /**

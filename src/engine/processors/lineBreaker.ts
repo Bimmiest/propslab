@@ -55,13 +55,10 @@ function dateLineTest(directives: ConfDirective[]): (line: string) => boolean {
  * The LINE_BREAKER segments each event was built from, as character lengths
  * in `_raw` order (merged segments are joined by one `\n`).
  *
- * TRUNCATE caps a *line*, and props.conf.spec defines a line as what
- * LINE_BREAKER delimits, before line merging — not a `\n`-separated piece of
- * the final event. With the default breaker the two coincide; with a custom
- * one a segment can span many `\n`s (a pretty-printed JSON record), and only
- * the breaker knows where it ends. Kept beside the event rather than on it so
- * the event shape every consumer sees, serialises and compares is unchanged;
- * an event the breaker did not produce simply has no entry.
+ * TRUNCATE caps a LINE_BREAKER segment, which with a custom breaker can span
+ * many `\n`s. Kept beside the event rather than on it so the public event shape
+ * is unchanged; an event the breaker did not produce has no entry.
+ * See docs/adr/0009-truncate-caps-line-breaker-segments.md.
  */
 const segmentLengths = new WeakMap<SplunkEvent, number[]>();
 
@@ -155,7 +152,7 @@ interface MergedSegment extends Segment {
  * LINE_BREAKER identifies the break by its CAPTURE GROUP, so a pattern with
  * no group names nothing to remove and Splunk falls back to the default —
  * breaking on newlines, which leaves the would-be delimiter as an event of
- * its own.
+ * its own. See docs/adr/0007-line-breaking-follows-recorded-splunk-behaviour.md.
  */
 function resolveLineBreaker(
   declared: string | undefined,
@@ -271,19 +268,11 @@ export function splitSegments(
 /**
  * Whether SHOULD_LINEMERGE is in force.
  *
- * SHOULD_LINEMERGE defaults to true, EXCEPT when INDEXED_EXTRACTIONS is set:
- * structured formats are one record per line, so merging would hand the
- * extractor several records glued together. For JSON that is not a subtle
- * error — `JSON.parse` of two concatenated objects throws, so the whole event
- * would extract nothing. An explicit SHOULD_LINEMERGE still wins, as it does
- * in Splunk.
- *
- * The XML modes are the exception: an XML record is a document, and
- * routinely spans lines. Splitting it per line hands the extractor a string
- * of fragments, none of which parse, and ignores the BREAK_ONLY_BEFORE the
- * user wrote to frame the record. They keep the ordinary default.
- *
- * This is the only place the default is decided; two copies of one rule drift.
+ * SHOULD_LINEMERGE defaults to true, EXCEPT when INDEXED_EXTRACTIONS names a
+ * one-record-per-line format, where merging would glue records together. The
+ * XML modes keep the ordinary default, since an XML record spans lines. An
+ * explicit SHOULD_LINEMERGE still wins. This is the only place the default is
+ * decided. See docs/adr/0008-structured-formats-default-line-merging-off.md.
  */
 function shouldLineMergeFor(directives: ConfDirective[]): boolean {
   const shouldLineMergeVal = getDirective(directives, 'SHOULD_LINEMERGE');
@@ -291,8 +280,8 @@ function shouldLineMergeFor(directives: ConfDirective[]): boolean {
   const structured =
     structuredFormat !== undefined && structuredFormat !== '' && structuredFormat !== 'none' &&
     !XML_EXTRACTIONS.has(structuredFormat);
-  // An explicit value that is not a boolean reads as false, as it always has
-  // here; it is the structured-format default that only an absent key gets.
+  // An explicit value that is not a boolean reads as false; only an absent key
+  // gets the structured-format default.
   return shouldLineMergeVal === undefined ? !structured : parseSplunkBool(shouldLineMergeVal, false);
 }
 
@@ -327,9 +316,9 @@ function compileBreakPattern(
 
 function readMergeRules(directives: ConfDirective[], diagnostics?: DiagnosticSink): MergeRules {
   // Not anchored: a line that matches anywhere starts a new event, and the
-  // event starts at the beginning of that line, not at the match. Checked on
-  // Splunk 10.4.0 (#323): BREAK_ONLY_BEFORE = EVENT broke before
-  // `a EVENT 2 is mid-line` and before `  EVENT 3`.
+  // event starts at the beginning of that line, not at the match (checked on
+  // Splunk 10.4.0). The merge rules below all follow recorded Splunk behaviour;
+  // see docs/adr/0007-line-breaking-follows-recorded-splunk-behaviour.md.
   const breakOnlyBefore = compileBreakPattern('BREAK_ONLY_BEFORE', directives, diagnostics);
   // Splunk default: BREAK_ONLY_BEFORE_DATE=true when SHOULD_LINEMERGE=true.
   // Only disabled when explicitly set to a false spelling.
@@ -338,11 +327,8 @@ function readMergeRules(directives: ConfDirective[], diagnostics?: DiagnosticSin
   const mustBreakAfter = compileBreakPattern('MUST_BREAK_AFTER', directives, diagnostics);
 
   // The negative half of the merging rules. MUST_NOT_BREAK_BEFORE is
-  // deliberately NOT read: three captures (linebreak-must-not-break-before,
-  // -explicit, -forced) measure Splunk 10.4.0 breaking anyway against a
-  // date rule, BREAK_ONLY_BEFORE, and a MUST_BREAK_AFTER-forced break — the
-  // spec sentence describes a suppression no observable configuration
-  // exhibits, so the faithful simulation is no effect at all.
+  // deliberately NOT read: the linebreak-must-not-break-before captures show
+  // Splunk 10.4.0 breaking anyway, so the faithful simulation is no effect.
   const mustNotBreakAfter = compileBreakPattern('MUST_NOT_BREAK_AFTER', directives, diagnostics);
 
   // MAX_EVENTS caps how many CONTINUATION lines may be merged into an event,
@@ -353,14 +339,9 @@ function readMergeRules(directives: ConfDirective[], diagnostics?: DiagnosticSin
   const maxContinuationLines =
     Number.isFinite(parsedMaxEvents) && parsedMaxEvents > 0 ? parsedMaxEvents : 256;
 
-  // MUST_BREAK_AFTER adds a mandatory break; it does not license merging up to
-  // that break. When it is the ONLY rule in force — BREAK_ONLY_BEFORE absent
-  // and BREAK_ONLY_BEFORE_DATE explicitly false — Splunk has no rule saying
-  // when to continue an event, so it breaks on every line.
-  //
-  // Deliberately narrow: with no MUST_BREAK_AFTER either, merging still
-  // happens (bounded by MAX_EVENTS), which is what Splunk documents
-  // and what no capture contradicts.
+  // MUST_BREAK_AFTER adds a mandatory break; it does not license merging. When
+  // it is the ONLY rule in force, Splunk breaks on every line. With no
+  // MUST_BREAK_AFTER either, merging still happens (bounded by MAX_EVENTS).
   const canMerge = breakOnlyBefore !== null || breakOnlyBeforeDate || mustBreakAfter === null;
 
   return {

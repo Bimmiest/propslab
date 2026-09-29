@@ -68,7 +68,7 @@ describe('fieldComparator', () => {
     ['name', 'ab'], ['count', 'ba'], ['distinct', 'ba'], ['source', 'ba'], ['aliases', 'ba'], ['values', 'ba'],
   ] as const)('orders by %s, ascending and descending', (key, asc) => {
     expect(order(key, 'asc')).toBe(asc);
-    expect(order(key, 'desc')).toBe([...asc].reverse().join(''));
+    expect(order(key, 'desc')).toBe(Array.from(asc).reverse().join(''));
   });
 });
 

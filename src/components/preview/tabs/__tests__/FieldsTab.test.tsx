@@ -3,7 +3,8 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, fireEvent, within } from '@testing-library/react';
 import { FieldsTab } from '../fields';
 import { useAppStore } from '../../../../store/useAppStore';
-import type { ProcessingResult, SplunkEvent, ProcessingStep } from '../../../../engine/types';
+import type { SplunkEvent, ProcessingStep } from '../../../../engine/types';
+import { toViewResult } from '../../../../utils/viewResult';
 
 function makeEvent(
   fields: Record<string, string>,
@@ -30,13 +31,13 @@ const event = makeEvent(
   ],
 );
 
-const result: ProcessingResult = {
+const result = toViewResult({
   events: [event],
   originalRaw: '',
   eventCount: 1,
   processingSteps: [],
   inputMetadata: { index: 'main', host: '', source: '', sourcetype: '' },
-};
+});
 
 const initial = useAppStore.getState();
 
@@ -121,7 +122,7 @@ describe('FieldsTab — nested field counts (#316)', () => {
       [],
     );
     useAppStore.setState({
-      processingResult: { events: [json], originalRaw: '', eventCount: 1, processingSteps: [], inputMetadata: { index: 'main', host: '', source: '', sourcetype: '' } },
+      processingResult: toViewResult({ events: [json], originalRaw: '', eventCount: 1, processingSteps: [], inputMetadata: { index: 'main', host: '', source: '', sourcetype: '' } }),
     });
     const { container } = render(<FieldsTab />);
     // Parents collapse on load, so only `a` and `z` show, with a's two
@@ -142,7 +143,7 @@ describe('FieldsTab — nested field counts (#316)', () => {
     useAppStore.setState(initial, true);
     const json = makeEvent({ a: '{}', 'a.b': '{}', 'a.b.c': '1' }, []);
     useAppStore.setState({
-      processingResult: { events: [json], originalRaw: '', eventCount: 1, processingSteps: [], inputMetadata: { index: 'main', host: '', source: '', sourcetype: '' } },
+      processingResult: toViewResult({ events: [json], originalRaw: '', eventCount: 1, processingSteps: [], inputMetadata: { index: 'main', host: '', source: '', sourcetype: '' } }),
     });
     const { container } = render(<FieldsTab />);
     const top = within(container).getByRole('button', { name: 'Toggle a' });
@@ -163,7 +164,7 @@ describe('FieldsTab — nested field counts (#316)', () => {
     useAppStore.setState(initial, true);
     const json = makeEvent({ a: '{}', 'a.b': '{}', 'a.b.c': '1', 'a.e': '2' }, []);
     useAppStore.setState({
-      processingResult: { events: [json], originalRaw: '', eventCount: 1, processingSteps: [], inputMetadata: { index: 'main', host: '', source: '', sourcetype: '' } },
+      processingResult: toViewResult({ events: [json], originalRaw: '', eventCount: 1, processingSteps: [], inputMetadata: { index: 'main', host: '', source: '', sourcetype: '' } }),
     });
     const { container } = render(<FieldsTab />);
     const top = within(container).getByRole('button', { name: 'Toggle a' });

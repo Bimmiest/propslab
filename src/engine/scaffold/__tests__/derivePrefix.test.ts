@@ -34,7 +34,7 @@ describe('derivePrefix (#427)', () => {
     for (let t = 0; t < 20000; t++) {
       let s = '';
       const len = rand(12);
-      for (let k = 0; k < len; k++) s += alphabet[rand(alphabet.length)];
+      for (let k = 0; k < len; k++) s += alphabet[rand(alphabet.length)]!;
       expect(derivePrefix(s), JSON.stringify(s)).toBe(reference(s));
     }
   });

@@ -97,7 +97,7 @@ export function truncateEvents(
   // form and ignore anything else, as real Splunk does, rather than silently
   // truncating with a wrong length or blanking the whole preview.
   if (truncateDir && !/^\d+$/.test(rawValue)) {
-    diagnostics?.push({
+    diagnostics.push({
       level: 'warning',
       message: `TRUNCATE = "${rawValue}" is not a valid byte count and was ignored. TRUNCATE expects a non-negative integer (default 10000; 0 disables truncation).`,
       file: 'props.conf',
@@ -143,6 +143,7 @@ export function truncateEvents(
           processor: 'truncator',
           phase: 'index-time' as const,
           description: `Truncated ${truncatedLines} ${plural} to ${maxBytes} bytes each${suffix}`,
+          truncation: { lines: truncatedLines, limitBytes: maxBytes, isDefault },
           inputSnapshot: event._raw.substring(0, 100) + '...',
         },
       ],

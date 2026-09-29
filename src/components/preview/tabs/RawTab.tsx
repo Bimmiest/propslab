@@ -1,7 +1,8 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useAppStore } from '../../../store/useAppStore';
 import type { EnrichedEvent } from '../PreviewPanel';
-import type { EventMetadata, SplunkEvent } from '../../../engine/types';
+import type { EventMetadata } from '../../../engine/types';
+import type { ViewEvent } from '../../../utils/viewResult';
 import { EventContextMenu } from './shared/EventContextMenu';
 import { SelectableRaw, type RawSelection } from './shared/SelectableRaw';
 import { Icon } from '../../ui/Icon';
@@ -30,15 +31,14 @@ interface MetadataChange {
   transform: string | null;
 }
 
-function getMetadataChanges(event: SplunkEvent, original: EventMetadata | undefined): MetadataChange[] {
+function getMetadataChanges(event: ViewEvent, original: EventMetadata | undefined): MetadataChange[] {
   const changes: MetadataChange[] = [];
   if (!original) return changes;
   for (const key of Object.keys(DEST_KEY_LABELS) as (keyof EventMetadata)[]) {
     if (event.metadata[key] !== original[key] && event.metadata[key] !== '') {
-      // Find the transform that caused this change
-      const destKeyTarget = `MetaData:${key.charAt(0).toUpperCase() + key.slice(1)}`;
-      const step = event.processingTrace.find(
-        (s) => s.description.includes(destKeyTarget) || s.description.includes(DEST_KEY_LABELS[key])
+      // The step that last set this key, which wrote the value shown.
+      const step = [...event.processingTrace].reverse().find(
+        (s) => s.metadataChanges?.some((change) => change.key === key) ?? false,
       );
       const transform = step ? step.processor.split(':').pop() ?? null : null;
       changes.push({ field: key, from: original[key] || '(default)', to: event.metadata[key], transform });
@@ -260,7 +260,7 @@ function MetadataField({ label, value, original }: { label: string; value: strin
   );
 }
 
-function MetadataDetails({ event, originalMetadata, metadataChanges }: { event: SplunkEvent; originalMetadata: EventMetadata | undefined; metadataChanges: MetadataChange[] }) {
+function MetadataDetails({ event, originalMetadata, metadataChanges }: { event: ViewEvent; originalMetadata: EventMetadata | undefined; metadataChanges: MetadataChange[] }) {
   return (
     <>
       <div className="px-3 py-1.5 border-t border-[var(--color-border)] bg-[var(--color-bg-tertiary)]">
@@ -315,12 +315,11 @@ function ExpandLabel({ expanded }: { expanded: boolean }) {
   );
 }
 
-function EventRowHeader({ event, globalIdx, isDropped, hasMetadataChanges }: { event: SplunkEvent; globalIdx: number; isDropped: boolean; hasMetadataChanges: boolean }) {
+function EventRowHeader({ event, globalIdx, isDropped, hasMetadataChanges }: { event: ViewEvent; globalIdx: number; isDropped: boolean; hasMetadataChanges: boolean }) {
   const lineCount = event._raw.split('\n').length;
   const charCount = event._raw.length;
 
-  const truncateTrace = event.processingTrace.find((t) => t.processor === 'truncator');
-  const truncatedByDefault = truncateTrace?.description.includes('TRUNCATE default') ?? false;
+  const truncation = event.processingTrace.find((t) => t.truncation)?.truncation;
 
   return (
     <div className="flex items-center justify-between px-3 py-1.5 border-b border-[var(--color-border)] bg-[var(--color-bg-tertiary)]">
@@ -341,12 +340,12 @@ function EventRowHeader({ event, globalIdx, isDropped, hasMetadataChanges }: { e
         <span className="text-xs text-[var(--color-text-muted)]">
           Lines {event.lineNumbers.start}–{event.lineNumbers.end}
         </span>
-        {truncateTrace && (
+        {truncation && (
           <span
             className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-warning)]/10 text-[var(--color-warning)] font-medium"
-            title={truncateTrace.description}
+            title={`Truncated ${truncation.lines} ${truncation.lines === 1 ? 'line' : 'lines'} to ${truncation.limitBytes} bytes each (${truncation.isDefault ? 'TRUNCATE default' : `TRUNCATE=${truncation.limitBytes}`})`}
           >
-            Truncated{truncatedByDefault ? ' (default)' : ''}
+            Truncated{truncation.isDefault ? ' (default)' : ''}
           </span>
         )}
         {/*

@@ -53,7 +53,7 @@ function render(toks: Tok[], rand: () => number): string {
     if (prev !== undefined) {
       const optional = SELF_DELIMITING.has(prev) || SELF_DELIMITING.has(text);
       const choices = optional ? ['', ' ', '  ', '\t', '\n'] : [' ', '  ', '\t', '\n', ' \n '];
-      out += choices[Math.floor(rand() * choices.length)];
+      out += choices[Math.floor(rand() * choices.length)]!;
     }
     out += text;
     prev = text;
@@ -62,7 +62,7 @@ function render(toks: Tok[], rand: () => number): string {
 }
 
 function randomCase(word: string, rand: () => number): string {
-  return [...word].map((c) => (rand() < 0.5 ? c.toLowerCase() : c.toUpperCase())).join('');
+  return Array.from(word).map((c) => (rand() < 0.5 ? c.toLowerCase() : c.toUpperCase())).join('');
 }
 
 /** Canonical rendering: upper-case keywords, single spaces. */

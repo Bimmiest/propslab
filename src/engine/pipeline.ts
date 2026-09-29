@@ -28,14 +28,14 @@ const errorText = (err: unknown) => (err instanceof Error ? err.message : 'Unkno
  *
  * A `per-event` stage's output for an event depends on that event alone, so
  * when the batch throws it is re-run one event at a time and only the events
- * that still throw pass through unchanged: one pathological event no longer
- * strips the stage from the whole batch (#428). The retry reports through a
- * view that drops what the failed attempt already said, and the run's ledger
- * is shared, so it does not repeat a warning.
+ * that still throw pass through unchanged. The retry reports through a view
+ * that drops what the failed attempt already said, and the run's ledger is
+ * shared, so it does not repeat a warning.
  *
  * A `batch` stage reads across events (line breaking, the previous event's
  * `_time`, a CSV header row), and a retry one event at a time would be a
  * different computation, so it falls back to `events` unchanged as a whole.
+ * See docs/adr/0001-stage-failures-degrade-to-diagnostics.md.
  */
 function safeProcessor(
   name: string,
@@ -145,10 +145,8 @@ function resolveDirectives(
   }
 
   // `rename` is search-time only: the event stays indexed as its original
-  // sourcetype, and only search-time config comes from the target — and comes
-  // from the target ALONE, since Splunk does not merge the original's
-  // search-time settings in. Resolved here so index-time processing below is
-  // unaffected by it.
+  // sourcetype, and search-time config comes from the target stanza alone.
+  // See docs/adr/0002-input-time-sourcetype-and-rename.md.
   const renamedSourcetype = getRenamedSourcetype(matchedStanzas);
   if (!renamedSourcetype) return { directives, searchTimeDirectives: directives, effectiveMetadata };
 
@@ -169,15 +167,10 @@ function resolveDirectives(
 /** The index-time stages, in Splunk's order. */
 function runIndexTime(rawData: string, run: PipelineRun): SplunkEvent[] {
   const { directives, propsConf, transformsConf, ctx } = run;
-  // Step 1-2: Line breaking and merging.
-  // The SHOULD_LINEMERGE default that INDEXED_EXTRACTIONS implies (off for the
-  // line-per-record formats, on for XML) is decided inside breakLines alone;
-  // a second copy of the rule here would drift from it.
-  //
-  // Wrapped like every other stage, so a throw degrades to a diagnostic rather
-  // than failing the whole run. With nothing broken there are no events to
-  // carry forward, so the fallback
-  // is empty rather than the unbroken input.
+  // Step 1-2: Line breaking and merging. breakLines alone decides the
+  // SHOULD_LINEMERGE default INDEXED_EXTRACTIONS implies (see
+  // docs/adr/0008-structured-formats-default-line-merging-off.md). With nothing
+  // broken there are no events to carry forward, so the fallback is empty.
   let events = safeProcessor('LINE_BREAKER', [], (_, c) => breakLines(rawData, directives, run.effectiveMetadata, c), ctx, 'props.conf', 'batch');
 
   // Step 3: Truncation
@@ -241,8 +234,8 @@ function runSearchTimeStages(
   ev = safeProcessor('EVAL', ev, (batch, c) => applyEvalExpressions(batch, directives, c), ctx);
   // Step 13: attribute index-time `_raw` rewrites (SEDCMD, DEST_KEY = _raw) to
   // the fields whose extracted value they changed or destroyed. Runs last
-  // because it replays search-time extraction against the pre-rewrite text,
-  // which is the only way the association can be computed at all.
+  // because it replays search-time extraction against the pre-rewrite text.
+  // See docs/adr/0011-raw-rewrites-attributed-by-replay.md.
   return safeProcessor('SEDCMD attribution', ev, (batch, c) => attributeRawMutations(batch, () => directives, transformsConf, c), ctx);
 }
 
@@ -360,6 +353,7 @@ function warnBatchMetadataRewrites(events: SplunkEvent[], originalMetaKey: strin
  * 'local', text }]` — for a caller reading an app off disk, where `local/`
  * overrides `default/` per attribute. `parseConf` merges them; every directive
  * and every diagnostic derived from one then names the layer it came from.
+ * See docs/adr/0012-layered-conf-input.md.
  */
 export function runPipeline(
   rawData: string,
@@ -406,11 +400,9 @@ export function runPipeline(
 
   let events = runIndexTime(truncatedRaw, run);
 
-  // Compared against the metadata the events were BROKEN with, not the caller's:
-  // an input-time `sourcetype =` assignment has already been applied to every
-  // event by now, and is not an index-time rewrite: keyed on the caller's
-  // metadata, batch mode would warn about a DEST_KEY = MetaData:* transform
-  // that does not exist and per-event mode would re-match every event.
+  // Compared against the metadata the events were BROKEN with, not the
+  // caller's: an input-time `sourcetype =` assignment is not an index-time
+  // rewrite. See docs/adr/0002-input-time-sourcetype-and-rename.md.
   const originalMetaKey = metaKey(run.effectiveMetadata);
   if (options?.perEventPipeline) {
     events = runSearchTimePerEvent(events, run, originalMetaKey);

@@ -176,7 +176,7 @@ function delimitedOptions(
     fieldHeaderRegex: compileOption(find('FIELD_HEADER_REGEX'), 'The header was located as if it were unset.', diagnostics),
     // ASCII below 128 only, per the spec; anything else is not a character
     // the header processor can be told to keep.
-    acceptableSpecialChars: [...(find('HEADER_FIELD_ACCEPTABLE_SPECIAL_CHARACTERS')?.value.trim() ?? '')]
+    acceptableSpecialChars: Array.from(find('HEADER_FIELD_ACCEPTABLE_SPECIAL_CHARACTERS')?.value.trim() ?? '')
       .filter((ch) => ch.charCodeAt(0) < 128)
       .join(''),
     missingValueRegex: compileOption(find('MISSING_VALUE_REGEX'), 'No value was treated as missing.', diagnostics),

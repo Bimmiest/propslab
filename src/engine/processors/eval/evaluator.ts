@@ -32,9 +32,9 @@ type NodeOf<K extends Node['kind']> = Extract<Node, { kind: K }>;
  */
 function evalConcat(node: NodeOf<'concat'>, ctx: EvalCtx): EvalValue {
   const left = evalNode(node.left, ctx);
-  if (left === null || left === undefined) return null;
+  if (left === null) return null;
   const right = evalNode(node.right, ctx);
-  if (right === null || right === undefined) return null;
+  if (right === null) return null;
   return toStr(left) + toStr(right);
 }
 
@@ -69,7 +69,7 @@ function evalIn(node: NodeOf<'in'>, ctx: EvalCtx): EvalValue {
   // A NULL value is in no list and out of none: the answer is NULL, so
   // neither `missing IN ("")` nor `missing NOT IN ("a")` holds. A
   // NULL list item simply never matches (its comparison is NULL).
-  if (left === null || left === undefined) return null;
+  if (left === null) return null;
   // `some` stops at the first match — no need to evaluate the rest of the list.
   const match = node.list.some((n) => compare(left, evalNode(n, ctx), '=') === true);
   return node.negate ? !match : match;
@@ -154,7 +154,7 @@ function evalCall(name: string, argNodes: Node[], ctx: EvalCtx): EvalValue {
     case 'coalesce':
       for (const n of argNodes) {
         const v = evalNode(n, ctx);
-        if (v !== null && v !== undefined) return v;
+        if (v !== null) return v;
       }
       return null;
     default:

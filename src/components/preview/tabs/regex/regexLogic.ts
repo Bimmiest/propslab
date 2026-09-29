@@ -122,7 +122,6 @@ function groupSegments(
   const groupHighlights: { start: number; end: number; name: string; color: string }[] = [];
 
   for (const [name, range] of Object.entries(groupIndices)) {
-    if (!range) continue;
     // A group inside a lookaround can capture text outside the match; only the
     // part within it is drawn here, or it would be drawn again as post text.
     const start = Math.max(range[0], fullMatchStart);
@@ -163,7 +162,7 @@ export function highlightSegments(raw: string, matchInfo: RegexMatchInfo, groupC
 
   // Sub-highlights for named groups, from their captured spans.
   const groupIndices = matchInfo.groupSpans;
-  if (groupIndices && Object.keys(groupIndices).length > 0) {
+  if (Object.keys(groupIndices).length > 0) {
     result.push(...groupSegments(raw, matchInfo, groupIndices, groupColorMap));
   } else {
     result.push({ kind: 'whole', key: 'match', text: raw.substring(fullMatchStart, fullMatchEnd) });

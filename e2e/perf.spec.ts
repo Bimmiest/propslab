@@ -51,7 +51,7 @@ EVAL-kb = round(b / 1024, 1)`;
 async function timeTabSwitch(page: Page, tabName: string): Promise<number> {
   return page.evaluate(async (name) => {
     const tab = Array.from(document.querySelectorAll<HTMLElement>('[role="tab"]')).find(
-      (t) => t.textContent?.trim() === name && t.offsetParent !== null,
+      (t) => t.textContent.trim() === name && t.offsetParent !== null,
     );
     if (!tab) throw new Error(`no visible tab named ${name}`);
     const start = performance.now();

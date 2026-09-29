@@ -35,8 +35,8 @@ export function saveViewState(key: string, state: unknown): void {
 }
 
 /** The view state saved for `key`, removed so it is restored at most once. */
-export function takeViewState<S>(key: string): S | undefined {
-  const state = _viewStates.get(key) as S | undefined;
+export function takeViewState(key: string): unknown {
+  const state = _viewStates.get(key);
   _viewStates.delete(key);
   return state;
 }

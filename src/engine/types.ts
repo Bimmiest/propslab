@@ -59,17 +59,16 @@ export interface ProcessingStep {
    *
    * `description` also names them, but as prose for a human to read. The
    * structured form is what consumers should read; `description` is for display.
+   * See docs/adr/0010-engine-decisions-are-structured-data-on-the-event.md.
    */
   fieldAliases?: { target: string; source: string }[];
   /**
    * EVAL steps only: the expression each computed field was produced by, keyed
    * by field name.
    *
-   * Carried here because it is the only place the association is both correct
-   * and already resolved — these are the directives that survived stanza
-   * matching for THIS event. Re-reading props.conf in the UI to recover it (as
-   * the Extractions tab did) reintroduces every question the parser has already
-   * answered: case sensitivity, line continuations, and which stanza applies.
+   * Recorded from the directives that survived stanza matching for THIS event,
+   * so a consumer never re-reads props.conf to recover it.
+   * See docs/adr/0010-engine-decisions-are-structured-data-on-the-event.md.
    */
   evalExpressions?: Record<string, string>;
   /**
@@ -80,17 +79,21 @@ export interface ProcessingStep {
    * change too, but only as prose.
    */
   metadataChanges?: { key: keyof EventMetadata; from: string; to: string }[];
+  /**
+   * truncator steps only: how many lines were cut, to how many bytes, and
+   * whether that limit was TRUNCATE's default rather than a configured value.
+   * Structured for the same reason as `fieldAliases`.
+   */
+  truncation?: { lines: number; limitBytes: number; isDefault: boolean };
 }
 
 /**
  * A single in-place rewrite of `_raw`, recorded at index time so the fields it
  * affected can be attributed after search-time extraction has run.
  *
- * SEDCMD and DEST_KEY = _raw are text substitutions: they have no field
- * parameter and cannot name what they changed. The association only exists by
- * comparison, and the extraction rules needed to compute it do not run until
- * later in the pipeline — hence this transient record rather than an
- * attribution made at the point of the edit.
+ * SEDCMD and DEST_KEY = _raw cannot name the fields they changed, and the
+ * extraction rules that can do not run until search time.
+ * See docs/adr/0011-raw-rewrites-attributed-by-replay.md.
  */
 export interface RawMutation {
   /** Index into the event's `processingTrace` of the step to backfill. */
@@ -134,6 +137,7 @@ export interface SplunkEvent {
    * every consumer of it treats a step as work done, and the Pipeline tab counts
    * its length. A no-op is the absence of work, so it is recorded beside the
    * trace rather than inside it.
+   * See docs/adr/0010-engine-decisions-are-structured-data-on-the-event.md.
    */
   noOps?: DirectiveNoOp[];
   /**
@@ -156,9 +160,8 @@ export interface SplunkEvent {
    * nothing (DATETIME_CONFIG = CURRENT / NONE).
    *
    * The Timestamp tab probes this rather than the final `_raw`, whose TIME_PREFIX
-   * a SEDCMD may already have masked away, which would report "no match" on an
-   * event whose `_time` was read without trouble. The same string
-   * as `_raw` unless a later step replaced it, so it costs nothing until then.
+   * a SEDCMD may have masked away. The same string as `_raw` unless a later step
+   * replaced it, so it costs nothing until then.
    */
   timestampText?: string;
 }
@@ -182,12 +185,9 @@ export interface ProcessingResult {
   /**
    * The metadata the events were broken with: the run's input after any
    * input-time `sourcetype =` assignment from a `[source::]`/`[host::]`
-   * stanza, but before any index-time rewrite. This is the baseline a
-   * view compares events against — an assignment applies to every event and
-   * is not a change the run made to any one of them. Carried on the result so
-   * a view can say which events a run changed without reading the metadata
-   * fields as they are now, which may have been edited since. With no
-   * input to process it is the caller's metadata unchanged.
+   * stanza, but before any index-time rewrite. The baseline a view compares
+   * events against. With no input to process it is the caller's metadata
+   * unchanged. See docs/adr/0002-input-time-sourcetype-and-rename.md.
    */
   inputMetadata: EventMetadata;
 }
@@ -237,8 +237,8 @@ export interface ConfLayer {
 /**
  * What `parseConf` (and therefore `runPipeline`) accepts for a conf file: either
  * a single flat file's text, or an ordered list of layers, lowest precedence
- * first. A single string parses exactly as it always has, with no provenance
- * fields on the result.
+ * first. A single string parses with no provenance fields on the result.
+ * See docs/adr/0012-layered-conf-input.md.
  */
 export type ConfInput = string | ConfLayer[];
 

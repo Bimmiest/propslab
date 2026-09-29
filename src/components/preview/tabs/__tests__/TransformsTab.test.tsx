@@ -5,7 +5,8 @@ import { render as rtlRender, fireEvent, within } from '@testing-library/react';
 import * as RadixTooltip from '@radix-ui/react-tooltip';
 import { TransformsTab } from '../TransformsTab';
 import { useAppStore } from '../../../../store/useAppStore';
-import type { ProcessingResult, SplunkEvent, ProcessingStep } from '../../../../engine/types';
+import type { SplunkEvent, ProcessingStep } from '../../../../engine/types';
+import { toViewResult, type ViewResult } from '../../../../utils/viewResult';
 
 function makeEvent(traces: ProcessingStep[]): SplunkEvent {
   return {
@@ -19,14 +20,14 @@ function makeEvent(traces: ProcessingStep[]): SplunkEvent {
   };
 }
 
-function resultOf(events: SplunkEvent[]): ProcessingResult {
-  return {
+function resultOf(events: SplunkEvent[]): ViewResult {
+  return toViewResult({
     events,
     originalRaw: '',
     eventCount: events.length,
     processingSteps: [],
     inputMetadata: { index: 'main', host: '', source: '', sourcetype: '' },
-  };
+  });
 }
 
 /** `n` events, each with its own LINE_BREAKER description, as the line breaker writes them. */
