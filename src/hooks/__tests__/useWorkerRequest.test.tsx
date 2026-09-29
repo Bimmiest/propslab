@@ -273,6 +273,24 @@ describe('useWorkerRequest', () => {
     expect(FakeWorker.instances).toHaveLength(2);
   });
 
+  it('does not report a crash of a superseded request against the valid edit that replaced it (#491)', () => {
+    const { result } = setup();
+    const first = latest();
+    act(() => result.current.run({ value: 'crashy' }));
+    act(() => first.ready());
+    act(() => result.current.run({ value: 'valid' }));
+
+    act(() => first.crash());
+
+    // Not "too slow": the valid pattern is re-run on the replacement.
+    expect(result.current.status).toBe('pending');
+    expect(FakeWorker.instances).toHaveLength(2);
+    expect(latest().posted).toEqual([{ value: 'valid', id: 2 }]);
+    act(() => latest().respond(2, 'V'));
+    expect(result.current.status).toBe('ok');
+    expect(result.current.data).toBe('V');
+  });
+
   it('terminates the worker on unmount', () => {
     const { unmount } = setup();
     const worker = latest();

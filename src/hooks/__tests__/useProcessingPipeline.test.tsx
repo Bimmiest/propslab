@@ -260,6 +260,37 @@ describe('useProcessingPipeline', () => {
     expect(useAppStore.getState().processingResult).toEqual({ events: [] });
   });
 
+  it('re-runs the newer request unblamed when a superseded one crashes the worker (#491)', async () => {
+    vi.stubGlobal('Worker', FakeWorker);
+    seed();
+    renderHook(() => useProcessingPipeline());
+
+    await waitFor(() => expect(FakeWorker.instances[0]!.posted).toHaveLength(1));
+    act(() => FakeWorker.instances[0]!.answer(FakeWorker.instances[0]!.posted[0]!.id));
+
+    act(() => useAppStore.setState({ rawData: 'crashy' }));
+    await waitFor(() => expect(FakeWorker.instances[0]!.posted).toHaveLength(2));
+    act(() => useAppStore.setState({ rawData: 'valid' }));
+    await waitFor(() => expect(FakeWorker.instances[0]!.posted).toHaveLength(3));
+    const valid = FakeWorker.instances[0]!.posted[2]!;
+
+    act(() => FakeWorker.instances[0]!.crash());
+
+    // The valid input runs on the replacement, and is not marked crashed.
+    expect(FakeWorker.instances).toHaveLength(2);
+    expect(latest().posted).toEqual([valid]);
+    expect(useAppStore.getState().validationDiagnostics.some((d) => /crash/i.test(d.message))).toBe(false);
+
+    // Its retry budget is intact: a real crash of it is replayed once, not given up on.
+    act(() => latest().crash());
+    expect(FakeWorker.instances).toHaveLength(3);
+    expect(FakeWorker.instances[2]!.posted).toEqual([valid]);
+    expect(useAppStore.getState().isProcessing).toBe(true);
+    act(() => FakeWorker.instances[2]!.answer(valid.id));
+    expect(useAppStore.getState().isProcessing).toBe(false);
+    expect(useAppStore.getState().processingResult).toEqual({ events: [] });
+  });
+
   it('gives up with a terminal error when the replay crashes too', async () => {
     vi.stubGlobal('Worker', FakeWorker);
     seed();
