@@ -3,20 +3,11 @@
 // in — rather than "recognised but not simulated" or "possible typo?". Lives
 // beside the editor tests because the point is that the two validators agree.
 import { describe, it, expect } from 'vitest';
-import type { editor } from 'monaco-editor';
 import { computeDiagnostics } from '../splunkConfDiagnostics';
 import { runPipeline } from '../../engine/pipeline';
 import { wrongFileCanonical } from '../../engine/directiveRegistry';
 import type { EventMetadata, ValidationDiagnostic } from '../../engine/types';
-
-function fakeModel(text: string): editor.ITextModel {
-  const lines = text.split('\n');
-  return {
-    getLineCount: () => lines.length,
-    getLineContent: (n: number) => lines[n - 1] ?? '',
-    getValue: () => text,
-  } as unknown as editor.ITextModel;
-}
+import { fakeModel } from '../../test/fakeModel';
 
 const metadata: EventMetadata = { index: 'main', host: 'h', source: 's', sourcetype: 'st' };
 

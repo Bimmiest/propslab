@@ -50,6 +50,11 @@ on:
         default: ''
         type: string
 
+# Nothing by default. Each job below states the permissions it needs, so a job
+# added later without a `permissions:` key gets none, rather than inheriting
+# whatever the repository's default token grants.
+permissions: {}
+
 # Deploys are not interchangeable the way CI runs are. Cancelling one mid-upload
 # can leave the site serving a partially published artifact, and the run that
 # starts last is not reliably the one that finishes last — two quick pushes to
@@ -304,6 +309,18 @@ jobs:
         # explicitly rather than dropping the flag.
         run: npm ci --ignore-scripts
 
+      - name: Verify the regex engine's WebAssembly
+        # This is the job that ships pcre2.wasm, so it is the one that most
+        # needs the check (#504): the dependency is a git one with no
+        # integrity hash in the lockfile, and the package's own checksum is
+        # the only evidence the binary is the one upstream built. Inline
+        # sha256sum rather than scripts/check-wasm-checksum.mjs, which ci.yml
+        # uses: this workflow runs from main but builds whichever commit it
+        # resolved, and a rollback target older than that script would not
+        # have it.
+        working-directory: node_modules/pcre2-wasm-utf16
+        run: sha256sum --check --strict pcre2.wasm.sha256
+
       - name: Build
         run: npm run build
 
@@ -425,3 +442,94 @@ jobs:
           output_location: ""
           skip_app_build: true
           skip_api_build: true
+
+      # The CSP, the Trusted Types allowlist and the wasm MIME mapping are
+      # otherwise only ever checked against the config file and `vite preview`
+      # (#509). The workers obey the header copy alone, and a header Azure
+      # does not send, or sends differently, leaves them unguarded with every
+      # test green. This asks the deployed site what it actually serves: the
+      # page, one hashed script (which also proves the new bundle is the one
+      # answering, since its name is new to this build) and the wasm.
+      #
+      # The URL is the deploy step's `static_web_app_url` output. If the action
+      # does not provide it, this step warns and passes rather than fail the
+      # deploy over a missing input: the comparison cannot run, but the site is
+      # already live, and a red run would only send someone hunting the token.
+      # Once the URL is present, a mismatch fails the job — after the deploy,
+      # so the run goes red while the site is already serving; the fix is a new
+      # deploy or a rollback. The expected policy is the one in the artifact's
+      # own staticwebapp.config.json, so the two cannot drift apart here.
+      - name: Verify the deployed headers
+        env:
+          SITE_URL: ${{ steps.builddeploy.outputs.static_web_app_url }}
+        run: |
+          set -euo pipefail
+          if [ -z "$SITE_URL" ]; then
+            echo "::warning::The deploy step did not output the site URL, so the deployed headers were not checked."
+            exit 0
+          fi
+          if [[ ! $SITE_URL =~ ^https://[A-Za-z0-9.-]+/?$ ]]; then
+            echo "::error::The deploy step's URL is not a plain https origin; refusing to request it."
+            exit 1
+          fi
+          base="${SITE_URL%/}"
+
+          expected_csp=$(jq -r '.globalHeaders["Content-Security-Policy"]' dist/staticwebapp.config.json)
+          script=$(find dist/assets -maxdepth 1 -name 'index-*.js' -printf 'assets/%f\n' -quit)
+          wasm=$(find dist/assets -maxdepth 1 -name '*.wasm' -printf 'assets/%f\n' -quit)
+          if [ -z "$expected_csp" ] || [ "$expected_csp" = null ] || [ -z "$script" ] || [ -z "$wasm" ]; then
+            echo "::error::The build artifact is missing the CSP, the entry script or the wasm."
+            exit 1
+          fi
+
+          hdrs=$(mktemp)
+          fail=0
+
+          # A new deployment takes a moment to reach every edge, and the
+          # hashed script does not exist on the old one: retry until it does.
+          fetch() {
+            local code='' i
+            for i in 1 2 3 4 5 6 7 8 9 10; do
+              code=$(curl -sS -o /dev/null -D "$hdrs" -w '%{http_code}' --max-time 20 "$base/$1" || true)
+              if [ "$code" = 200 ]; then
+                tr -d '\r' < "$hdrs" > "$hdrs.clean"
+                return 0
+              fi
+              sleep 6
+            done
+            echo "::error::GET /$1 returned ${code:-no response}, expected 200."
+            return 1
+          }
+          header() {
+            sed -n "/^$1:/I{s/^[^:]*:[[:space:]]*//;p;q}" "$hdrs.clean"
+          }
+          expect() {
+            if [ "$2" = "$3" ]; then
+              echo "ok    $1"
+            else
+              echo "::error::$1: expected '$3', got '$2'."
+              fail=1
+            fi
+          }
+          check() {
+            local path=$1 type_re=$2 type
+            fetch "$path" || { fail=1; return; }
+            expect "/$path Content-Security-Policy" "$(header content-security-policy)" "$expected_csp"
+            expect "/$path X-Content-Type-Options" "$(header x-content-type-options | tr '[:upper:]' '[:lower:]')" nosniff
+            if [ -z "$(header strict-transport-security)" ]; then
+              echo "::error::/$path has no Strict-Transport-Security header."
+              fail=1
+            fi
+            type=$(header content-type | tr '[:upper:]' '[:lower:]')
+            if [[ $type =~ $type_re ]]; then
+              echo "ok    /$path Content-Type ($type)"
+            else
+              echo "::error::/$path Content-Type: '$type' does not match $type_re."
+              fail=1
+            fi
+          }
+
+          check '' '^text/html'
+          check "$script" '^(text|application)/javascript'
+          check "$wasm" '^application/wasm($|;)'
+          exit "$fail"

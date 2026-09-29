@@ -15,7 +15,7 @@
     "build": "npm run typecheck && npm run build:index && npm run build:worker && npm run build:regex-engine",
     "build:index": "esbuild src/index.ts --bundle --platform=node --target=node24 --format=cjs --outdir=dist --sourcemap --alias:pcre2-wasm-utf16=pcre2-wasm-utf16 --banner:js=\"#!/usr/bin/env node\"",
     "build:worker": "esbuild src/simulateWorker.ts --bundle --platform=node --target=node24 --format=cjs --outdir=dist --sourcemap --alias:pcre2-wasm-utf16=pcre2-wasm-utf16",
-    "build:regex-engine": "node -e \"require('node:fs').copyFileSync(require.resolve('pcre2-wasm-utf16/pcre2.wasm'), 'dist/pcre2.wasm')\"",
+    "build:regex-engine": "node ../../scripts/check-wasm-checksum.mjs && node -e \"require('node:fs').copyFileSync(require.resolve('pcre2-wasm-utf16/pcre2.wasm'), 'dist/pcre2.wasm')\"",
     "start": "node dist/index.js",
     "pretest": "npm run build",
     "test": "vitest run",
@@ -24,7 +24,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.1",
-    "pcre2-wasm-utf16": "github:Bimmiest/pcre2-wasm-utf16#v0.1.0",
+    "pcre2-wasm-utf16": "github:Bimmiest/pcre2-wasm-utf16#e3b48c1087bf70410fc4cb0d65c2ec4bbbf5850b",
     "zod": "^4.6.5"
   },
   "devDependencies": {

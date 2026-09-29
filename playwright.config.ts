@@ -13,6 +13,9 @@ const BASE_URL = `http://127.0.0.1:${PORT}`;
  */
 const SKIP_BUILD = process.env.E2E_SKIP_BUILD === '1';
 
+/** The specs that assert timing budgets; they run in their own project. */
+const PERF_SPECS = /perf\.spec\.ts$/;
+
 /**
  * End-to-end smoke tests, run against a PRODUCTION build.
  *
@@ -52,8 +55,27 @@ export default defineConfig({
     baseURL: BASE_URL,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
+    timezoneId: 'America/Los_Angeles',
+    locale: 'en-GB',
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    {
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'] },
+      testIgnore: PERF_SPECS,
+    },
+    // The performance budgets, apart from the functional suite (#514): a retry
+    // there is a reasonable answer to a flaky click, but here it turns "slower
+    // than the budget" into "slower twice", and a regression that is only
+    // sometimes over passes on the second try. No retries, so a run over budget
+    // fails as measured. Run alone with `playwright test --project=perf`.
+    {
+      name: 'perf',
+      use: { ...devices['Desktop Chrome'] },
+      testMatch: PERF_SPECS,
+      retries: 0,
+    },
+  ],
   webServer: {
     // `--host 127.0.0.1` is not redundant with the port. `vite preview` binds
     // `localhost` by default, which on a GitHub Actions runner resolves to `::1`
@@ -62,7 +84,8 @@ export default defineConfig({
     // healthy build in the log directly above it.
     command: `${SKIP_BUILD ? '' : 'npm run build && '}npm run preview -- --port ${PORT} --strictPort --host 127.0.0.1`,
     url: BASE_URL,
-    reuseExistingServer: !process.env.CI,
+    // Reusing a stale dist/ produces confident, wrong results; always rebuild to ensure freshness.
+    reuseExistingServer: false,
     timeout: 180_000,
     // Piped, not ignored: the server's own startup line ("Local: http://…") is
     // what distinguishes "never bound" from "bound somewhere else", and

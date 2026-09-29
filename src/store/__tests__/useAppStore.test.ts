@@ -101,6 +101,17 @@ describe('selectSessionDirty — work that replacing the inputs would lose (#440
     expect(dirty()).toBe(true);
   });
 
+  it('runs a loaded example in manual-apply mode only (#492)', () => {
+    const sample = SAMPLE_CONFIGS[0]!;
+    useAppStore.getState().loadInputs(sample);
+    expect(useAppStore.getState().manualRunTick).toBe(0);
+
+    useAppStore.setState({ settings: { perEventPipeline: false, manualApply: true }, pipelineDirty: true });
+    useAppStore.getState().loadInputs(sample);
+    expect(useAppStore.getState().manualRunTick).toBe(1);
+    expect(useAppStore.getState().pipelineDirty).toBe(false);
+  });
+
   it('is clean again once the edit is undone by hand', () => {
     useAppStore.getState().setRawData('x');
     useAppStore.getState().setRawData('');

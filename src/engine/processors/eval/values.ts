@@ -169,16 +169,12 @@ export function toTri(v: EvalArg): boolean | null {
   return v === null || v === undefined ? null : toBool(v);
 }
 
-export function compare(left: EvalArg, right: EvalArg, op: string): boolean | null {
-  // Any comparison involving NULL is NULL, not a comparison against "", so a
-  // guard written to test a field's value (`missing != "a"`) does not fire on
-  // events that do not have the field at all. NULL is falsy wherever a condition is read, and
-  // isnull()/isnotnull()/coalesce() are how an expression tests for absence.
-  if (left === null || left === undefined || right === null || right === undefined) return null;
-
-  // Splunk eval: compare numerically only when BOTH sides are numeric (a number
-  // or a string that parses cleanly as one). Otherwise compare as strings. This
-  // avoids coercing a non-numeric operand to 0 — `"abc" == 0` must be false.
+/**
+ * Comparison of two single values: numerically when BOTH are numeric (a number
+ * or a string that parses cleanly as one), otherwise as strings. This avoids
+ * coercing a non-numeric operand to 0 — `"abc" == 0` must be false.
+ */
+function compareScalars(left: EvalValue, right: EvalValue, op: string): boolean {
   const bothNumeric = isNumericValue(left) && isNumericValue(right);
 
   const l = bothNumeric ? numArg(left)! : toStr(left);
@@ -193,4 +189,27 @@ export function compare(left: EvalArg, right: EvalArg, op: string): boolean | nu
     case '>=': return l >= r;
     default: return false;
   }
+}
+
+export function compare(left: EvalArg, right: EvalArg, op: string): boolean | null {
+  // Any comparison involving NULL is NULL, not a comparison against "", so a
+  // guard written to test a field's value (`missing != "a"`) does not fire on
+  // events that do not have the field at all. NULL is falsy wherever a condition is read, and
+  // isnull()/isnotnull()/coalesce() are how an expression tests for absence.
+  if (left === null || left === undefined || right === null || right === undefined) return null;
+
+  // A multivalue operand matches when ANY of its values does (a field with
+  // values a and b satisfies `f == "a"`), and never as the space-joined
+  // string of them (#475). An operand with no values is NULL. `!=` is the
+  // complement of `==` rather than "some value differs", so it agrees with
+  // NOT IN and with `NOT (f == "a")`.
+  if (Array.isArray(left) || Array.isArray(right)) {
+    const lefts = Array.isArray(left) ? left : [left];
+    const rights = Array.isArray(right) ? right : [right];
+    if (lefts.length === 0 || rights.length === 0) return null;
+    const positive = op === '!=' ? '==' : op;
+    const any = lefts.some((l) => rights.some((r) => compareScalars(l, r, positive)));
+    return op === '!=' ? !any : any;
+  }
+  return compareScalars(left, right, op);
 }

@@ -28,8 +28,9 @@
 import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';
 import { safeRegex, type SplunkRegex } from '../splunkRegex';
+import { fcSeed } from '../../test/fcSeed';
 
-fc.configureGlobal({ seed: 340, numRuns: 300 });
+fc.configureGlobal({ seed: fcSeed(340), numRuns: 300 });
 
 // ── Pattern grammar ─────────────────────────────────────
 //

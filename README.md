@@ -10,6 +10,8 @@ Browser-based simulator for Splunk's `props.conf` and `transforms.conf` processi
 
 ## Build
 
+**Prerequisites:** Node 24 (see `.nvmrc`; use `nvm use` or `fnm use`), npm, Git.
+
 ```bash
 npm install
 npm ci --prefix packages/mcp-server  # lint is type-aware over the MCP server too
@@ -22,15 +24,22 @@ npm run test:coverage # …with the coverage floor enforced, as CI runs it
 npm run test:watch   # vitest watch mode
 npm run test:e2e     # Playwright smoke tests (builds, then serves dist/)
 npm run test:e2e:ui  # …in Playwright's interactive runner
+npm run test:mutation # Stryker mutation testing
+npm run check:overrides # Verify the @radix-ui overrides match what the Radix packages pin
 ```
 
-First e2e run on a clean checkout needs the browser: `npx playwright install chromium`.
+**If setup fails:**
+
+- **Old Node version:** Check `.nvmrc` and use `nvm use` or `fnm use` to switch.
+- **Missing Playwright browser:** `npx playwright install chromium` (needed on first e2e run).
+- **Stale node_modules:** `rm -rf node_modules && npm install`.
+- **Stale dist/ causing E2E failures:** `rm -rf dist/ && E2E_SKIP_BUILD=0 npm run test:e2e`.
 
 ## Architecture
 
 Input (raw log + metadata + props.conf + transforms.conf) flows through a single Zustand store. `useProcessingPipeline` debounces changes 300 ms, posts a request to a Web Worker running the full simulation, and writes the result back. A 5 s watchdog kills hung workers and replays the last in-flight request on restart. Each processor is wrapped in `safeProcessor()` — a failure records a diagnostic rather than crashing the pipeline, and only the events it failed on pass through that stage unchanged (stages that read across events, such as line breaking and timestamping, fall back as a whole).
 
-Contributor-facing internals — store layout, Monaco bundling, accessibility patterns — are in [docs/architecture.md](docs/architecture.md).
+Design decisions and their rationale are recorded in [docs/adr/](docs/adr/README.md). Contributor-facing internals — store layout, Monaco bundling, accessibility patterns — are in [docs/architecture.md](docs/architecture.md).
 
 ### Processing order
 
@@ -243,7 +252,7 @@ It exists for the things vitest structurally cannot reach, each of which has fai
 
 One note if you extend it: the app runs the pipeline once on mount with an empty raw log, and `runPipeline` returns a real result for empty input (`eventCount: 0`). So the status bar reads "Worker idle · 0 events" *before* anything is loaded — wait on a non-zero event count, as `loadExample` does, not on the idle state.
 
-`@playwright/test` is pinned to `~1.63.0` to match the Chromium revision preinstalled in the dev container; bump it freely, since CI installs the matching browser itself.
+`@playwright/test` is pinned to `~1.63.0` to match a specific Chromium revision for local development consistency. Bump it freely — CI installs each version's matching browser, so the pin does not affect CI runs.
 
 `ci.yml` runs on every PR, on pushes to main, weekly, and on demand, as independent jobs: `ci` (lint → build (`tsc -b && vite build`) → per-chunk gzip budgets (`scripts/check-bundle-size.mjs`) → tests with coverage → e2e smoke), `mcp-server` (the MCP server's typecheck, bundle and tests), and `audit` (`npm audit` over both lockfiles — high-severity advisories in production dependencies fail it, dev-only ones are reported), `workflow-lint` (actionlint and zizmor over `.github/`), and, on PRs, `dependency-review`. CodeQL runs through GitHub's default code-scanning setup rather than a workflow file.
 
@@ -262,6 +271,15 @@ Node is pinned once, in `.nvmrc`, which both workflows and `package.json`'s `eng
 ## Simulation fidelity
 
 A simulator's correctness oracle is "matches real Splunk", which is a closed-source, versioned, partly undocumented target — so fidelity can never be *proven* complete. It can be bounded. This section is that boundary in one place: what is simulated, what is deliberately not, and where the simulation knowingly diverges. Verify anything suspicious against a real indexer before relying on the output.
+
+**Not simulated** — the following are deliberately out of scope or stubbed:
+
+- Lookups (`LOOKUP-*` directives and lookup tables)
+- Input-layer directives (`EVENT_BREAKER`, `EVENT_BREAKER_ENABLE`, `CHARSET`, `NO_BINARY_CHECK`, `LEARN_SOURCETYPE`)
+- Segmentation (`SEGMENTATION` — changes search-time term segmentation, not event output)
+- Search-time optimization (`CAN_OPTIMIZE`, `OPTIMIZE_IE_EXTRACT`)
+- Line-breaker lookbehind across chunk boundaries (`LINE_BREAKER_LOOKBEHIND`)
+- Stub eval functions (`md5()`, `sha1()`, `sha256()`, `sha512()`; `searchmatch()`, `relative_time()`, `strptime()`, `mvfilter()`, `sigfig()`, `exact()` are partial stubs)
 
 The fixtures under [`src/engine/__tests__/fixtures/`](src/engine/__tests__/fixtures/) are the only assertions here derived from Splunk itself: functional output observed on Splunk Enterprise 10.4.0, owned by the maintainer who captured them under section 18.2 of the Splunk General Terms, and kept as regression pins for behaviour the documentation gets wrong. They are not being re-captured, and the capture script is gone, because the General Terms that govern the free edition and the container do not permit a capture — [the fixtures README](src/engine/__tests__/fixtures/README.md) names the clauses. Everything else asserts against the documentation and says so.
 

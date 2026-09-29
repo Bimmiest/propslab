@@ -7,20 +7,10 @@
 // ---------------------------------------------------------------------------
 
 import { describe, it, expect } from 'vitest';
-import type { editor, languages, Range, Uri } from 'monaco-editor';
+import type { editor, languages, Range } from 'monaco-editor';
 import { createCodeActionProvider } from '../splunkConfCodeActions';
 import { computeDiagnostics, MISCASED_MARKER_CODE } from '../splunkConfDiagnostics';
-
-function fakeModel(text: string): editor.ITextModel {
-  const lines = text.split('\n');
-  return {
-    getLineCount: () => lines.length,
-    getLineContent: (n: number) => lines[n - 1] ?? '',
-    getValue: () => text,
-    getVersionId: () => 1,
-    uri: { toString: () => 'inmemory://props.conf' } as unknown as Uri,
-  } as unknown as editor.ITextModel;
-}
+import { fakeModel } from '../../test/fakeModel';
 
 /**
  * Run the real linter, then feed its markers to the provider the way Monaco

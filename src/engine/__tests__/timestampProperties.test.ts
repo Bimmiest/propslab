@@ -29,8 +29,9 @@ import { recognizeTimestamp } from '../processors/timestampRecognizer';
 import { extractTimestamps } from '../processors/timestampExtractor';
 import type { SplunkEvent } from '../types';
 import { runCtx } from './runCtx';
+import { fcSeed } from '../../test/fcSeed';
 
-fc.configureGlobal({ seed: 371, numRuns: 200 });
+fc.configureGlobal({ seed: fcSeed(371), numRuns: 200 });
 
 const MIN = 60_000;
 const HOUR = 60 * MIN;

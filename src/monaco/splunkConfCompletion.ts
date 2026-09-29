@@ -1,16 +1,14 @@
 import type { languages, editor, Position, CancellationToken } from 'monaco-editor';
 import { getDirectivesForFile, getDirectivesByCategory, type DirectiveInfo } from '../engine/directiveRegistry';
+import { languages as monacoLanguages } from 'monaco-editor/editor';
+import { endsWithContinuation } from '../engine/utils/directiveValues';
 import { describeTimeFormat, renderTimeFormatPreview } from './timeFormatPreview';
 
-// Monaco CompletionItemKind numeric values (monaco-editor doesn't export the enum at runtime
-// when imported as `type`, so we maintain this local mapping for readability).
-const CIK = {
-  Enum: 5,
-  Property: 9,
-  Value: 12,
-  Snippet: 14,
-  Constant: 21,
-} as const;
+// The runtime enum from the editor API, not a hand-kept copy of its numbers: the
+// values are Monaco's to renumber (0.57 has Class=5, Unit=12, Constant=14,
+// Reference=21, and Enum=15, Value=13, Snippet=28), and a stale copy drew every
+// suggestion with the wrong icon.
+const CIK = monacoLanguages.CompletionItemKind;
 
 // Monaco CompletionItemInsertTextRule — 4 = InsertAsSnippet
 const InsertAsSnippet = 4;
@@ -28,10 +26,20 @@ export function createCompletionProvider(fileType: 'props.conf' | 'transforms.co
       const line = model.getLineContent(position.lineNumber);
       const textBefore = line.substring(0, position.column - 1).trimStart();
 
-      // Inside stanza brackets - suggest stanza types
+      // A comment says nothing a completion could finish.
+      if (line.trimStart().startsWith('#')) return { suggestions: [] };
+
+      // The line after a trailing backslash is more of the previous value, in
+      // whatever shape it takes, so it is neither a key nor a fresh value.
+      if (position.lineNumber > 1 && endsWithContinuation(model.getLineContent(position.lineNumber - 1))) {
+        return { suggestions: [] };
+      }
+
+      // Inside stanza brackets - suggest stanza types. Once the bracket is
+      // closed the header is finished: nothing belongs after it.
       if (textBefore.startsWith('[')) {
         return {
-          suggestions: getStanzaSuggestions(model, position),
+          suggestions: textBefore.includes(']') ? [] : getStanzaSuggestions(model, position, fileType),
         };
       }
 
@@ -44,17 +52,29 @@ export function createCompletionProvider(fileType: 'props.conf' | 'transforms.co
         };
       }
 
-      // At start of line - suggest directive keys
+      // At start of line - suggest directive keys. When the line already has its
+      // `= value`, the caret is in the key: complete the key alone rather than
+      // inserting a second `= default`.
       return {
-        suggestions: getDirectiveSuggestions(model, position, fileType),
+        suggestions: getDirectiveSuggestions(model, position, fileType, eqIdx >= 0),
       };
     },
   };
 }
 
-function getStanzaSuggestions(model: editor.ITextModel, position: Position): languages.CompletionItem[] {
+/** Escape what a snippet body reads specially, so a default is inserted as written. */
+function escapeSnippet(text: string): string {
+  return text.replace(/[\\$}]/g, '\\$&');
+}
+
+/** The stanza-name prefixes a file's headers can start with. */
+function getStanzaSuggestions(
+  model: editor.ITextModel,
+  position: Position,
+  fileType: 'props.conf' | 'transforms.conf',
+): languages.CompletionItem[] {
   const range = getWordRange(model, position);
-  return [
+  const items: languages.CompletionItem[] = [
     {
       label: 'default',
       kind: CIK.Enum,
@@ -62,29 +82,33 @@ function getStanzaSuggestions(model: editor.ITextModel, position: Position): lan
       insertText: 'default]',
       range,
     },
-    {
-      label: 'source::',
-      kind: CIK.Enum,
-      detail: 'Source-based stanza (highest precedence)',
-      insertText: 'source::${1:path}]',
-      insertTextRules: InsertAsSnippet,
-      range,
-    },
-    {
-      label: 'host::',
-      kind: CIK.Enum,
-      detail: 'Host-based stanza',
-      insertText: 'host::${1:hostname}]',
-      insertTextRules: InsertAsSnippet,
-      range,
-    },
   ];
+  // transforms.conf stanzas are named transforms: source::, host:: and the rest
+  // are props.conf's way of naming what an event matched.
+  if (fileType === 'transforms.conf') return items;
+
+  const prefixed = (label: string, detail: string, placeholder: string): languages.CompletionItem => ({
+    label,
+    kind: CIK.Enum,
+    detail,
+    insertText: `${label}\${1:${placeholder}}]`,
+    insertTextRules: InsertAsSnippet,
+    range,
+  });
+  items.push(
+    prefixed('source::', 'Source-based stanza (highest precedence)', 'path'),
+    prefixed('host::', 'Host-based stanza', 'hostname'),
+    prefixed('rule::', 'Rule-based sourcetype classification', 'rulename'),
+    prefixed('delayedrule::', 'Delayed rule-based sourcetype classification (checked last)', 'rulename'),
+  );
+  return items;
 }
 
 function getDirectiveSuggestions(
   model: editor.ITextModel,
   position: Position,
-  fileType: 'props.conf' | 'transforms.conf'
+  fileType: 'props.conf' | 'transforms.conf',
+  hasValue: boolean,
 ): languages.CompletionItem[] {
   const directives = getDirectivesForFile(fileType);
   const categories = getDirectivesByCategory(fileType);
@@ -96,7 +120,7 @@ function getDirectiveSuggestions(
   let sortOrder = 0;
   for (const [category, categoryDirectives] of categories) {
     for (const dir of categoryDirectives) {
-      const item = directiveToCompletionItem(dir, range, category, sortOrder++);
+      const item = directiveToCompletionItem(dir, range, category, sortOrder++, hasValue);
       items.push(item);
 
       // For class-based directives, also add the pattern with placeholder
@@ -106,7 +130,7 @@ function getDirectiveSuggestions(
           kind: CIK.Snippet,
           detail: `${dir.key}-<class> (${category})`,
           documentation: dir.description,
-          insertText: `${dir.key}-\${1:classname} = \${2:value}`,
+          insertText: hasValue ? `${dir.key}-\${1:classname}` : `${dir.key}-\${1:classname} = \${2:value}`,
           insertTextRules: InsertAsSnippet,
           sortText: String(sortOrder++).padStart(4, '0'),
           range,
@@ -125,7 +149,7 @@ function getDirectiveSuggestions(
   for (const dir of directives) {
     if (!listed.has(dir.key)) {
       listed.add(dir.key);
-      items.push(directiveToCompletionItem(dir, range, dir.category, sortOrder++));
+      items.push(directiveToCompletionItem(dir, range, dir.category, sortOrder++, hasValue));
     }
   }
 
@@ -136,11 +160,17 @@ function directiveToCompletionItem(
   dir: DirectiveInfo,
   range: languages.CompletionItem['range'],
   category: string,
-  sortOrder: number
+  sortOrder: number,
+  hasValue: boolean,
 ): languages.CompletionItem {
+  // With `= value` already on the line, only the key is inserted.
   const insertText = dir.isClassBased
-    ? `${dir.key}-\${1:classname} = \${2:value}`
-    : `${dir.key} = \${1:${dir.defaultValue || 'value'}}`;
+    ? hasValue
+      ? `${dir.key}-\${1:classname}`
+      : `${dir.key}-\${1:classname} = \${2:value}`
+    : hasValue
+      ? dir.key
+      : `${dir.key} = \${1:${escapeSnippet(dir.defaultValue || 'value')}}`;
 
   // A key the preview does not honour still belongs in the list -- it is valid
   // Splunk config and refusing to complete it would be its own wrong answer --
@@ -181,7 +211,7 @@ function directiveToCompletionItem(
       // with ./markdown, as the directive hover does.
     },
     insertText,
-    insertTextRules: InsertAsSnippet,
+    ...(hasValue && !dir.isClassBased ? {} : { insertTextRules: InsertAsSnippet }),
     sortText: String(sortOrder).padStart(4, '0'),
     range,
   };

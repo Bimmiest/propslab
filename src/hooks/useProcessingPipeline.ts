@@ -300,6 +300,28 @@ function runPipelineInline(
     });
 }
 
+/**
+ * Ctrl/Cmd+Enter runs the pipeline in manual-apply mode, wherever focus is
+ * (#492). Capture phase, and the event stops here, as for the command palette's
+ * Ctrl+K: Monaco binds Ctrl+Enter ("insert line below") on its own element. In
+ * auto mode there is nothing to run, so the key is left to the editor.
+ */
+function useRunShortcut(manualApply: boolean): void {
+  useEffect(() => {
+    if (!manualApply) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (!(e.metaKey || e.ctrlKey) || e.key !== 'Enter') return;
+      e.preventDefault();
+      e.stopPropagation();
+      // The status bar's Run button is disabled mid-run; so is this.
+      const state = useAppStore.getState();
+      if (!e.repeat && !state.isProcessing) state.triggerManualRun();
+    }
+    window.addEventListener('keydown', onKeyDown, { capture: true });
+    return () => window.removeEventListener('keydown', onKeyDown, { capture: true });
+  }, [manualApply]);
+}
+
 export function useProcessingPipeline() {
   const rawData = useAppStore((s) => s.rawData);
   const metadata = useAppStore((s) => s.metadata);
@@ -312,6 +334,7 @@ export function useProcessingPipeline() {
   const setIsProcessing = useAppStore((s) => s.setIsProcessing);
   const setLastProcessingMs = useAppStore((s) => s.setLastProcessingMs);
   const setPipelineDirty = useAppStore((s) => s.setPipelineDirty);
+  useRunShortcut(settings.manualApply);
 
   const workerRef = useRef<ManagedWorker<PipelineWorkerRequest> | null>(null);
   const requestIdRef = useRef(0);

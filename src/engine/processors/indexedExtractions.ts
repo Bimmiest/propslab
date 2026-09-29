@@ -21,7 +21,7 @@ export function applyIndexedExtractions(
 
   switch (mode) {
     case 'json':
-      return extractJsonFields(events, directives);
+      return extractJsonFields(events, directives, ctx);
     case 'csv':
       return extractDelimited(events, directives, ',', 'csv', ctx);
     case 'tsv':
@@ -39,39 +39,75 @@ export function applyIndexedExtractions(
   }
 }
 
-function extractJsonFields(events: SplunkEvent[], directives: ConfDirective[]): SplunkEvent[] {
+function extractJsonFields(events: SplunkEvent[], directives: ConfDirective[], ctx: RunContext): SplunkEvent[] {
   const trimArrayBraces = effectiveBool(directives, 'JSON_TRIM_BRACES_IN_ARRAY_NAMES', false);
-  return events.map((event) => {
-    try {
-      const obj: unknown = JSON.parse(event._raw);
-      if (typeof obj !== 'object' || obj === null) return event;
+  // Events that are not valid JSON, reported once at the end (as KV_MODE = json
+  // does) so a malformed file is not silently read as "no fields".
+  const parseFailures: { line: number; error: string }[] = [];
 
-      const fields = { ...event.fields };
-      const added: string[] = [];
-      const sourceKeys: Record<string, string> = {};
-      const opts = { stripLeadingUnderscore: true, sourceKeys, trimArrayBraces };
-      const depthTruncated = Array.isArray(obj)
-        ? flattenArray(obj as unknown[], fields, added, '', 0, opts)
-        : flattenJson(obj as Record<string, unknown>, fields, added, '', 0, opts);
-
-      return {
-        ...event,
-        fields,
-        fieldSourceKeys: { ...event.fieldSourceKeys, ...sourceKeys },
-        processingTrace: [
-          ...event.processingTrace,
-          {
-            processor: 'INDEXED_EXTRACTIONS(json)',
-            phase: 'index-time' as const,
-            description: `Extracted ${added.length} JSON fields${depthTruncated ? ' (depth limit reached — deeply nested fields omitted)' : ''}`,
-            fieldsAdded: added,
-          },
-        ],
-      };
-    } catch {
+  const result = events.map((event) => {
+    const parsed = parseJsonEvent(event._raw);
+    if (parsed.kind === 'invalid') {
+      parseFailures.push({ line: event.lineNumbers.start, error: parsed.error });
       return event;
     }
+    const obj = parsed.value;
+    if (typeof obj !== 'object' || obj === null) return event;
+
+    const fields = { ...event.fields };
+    const added: string[] = [];
+    const sourceKeys: Record<string, string> = {};
+    const opts = { stripLeadingUnderscore: true, sourceKeys, trimArrayBraces };
+    const depthTruncated = Array.isArray(obj)
+      ? flattenArray(obj as unknown[], fields, added, '', 0, opts)
+      : flattenJson(obj as Record<string, unknown>, fields, added, '', 0, opts);
+
+    return {
+      ...event,
+      fields,
+      fieldSourceKeys: { ...event.fieldSourceKeys, ...sourceKeys },
+      processingTrace: [
+        ...event.processingTrace,
+        {
+          processor: 'INDEXED_EXTRACTIONS(json)',
+          phase: 'index-time' as const,
+          description: `Extracted ${added.length} JSON fields${depthTruncated ? ' (depth limit reached — deeply nested fields omitted)' : ''}`,
+          fieldsAdded: added,
+        },
+      ],
+    };
   });
+
+  const first = parseFailures[0];
+  if (first !== undefined) {
+    const n = parseFailures.length;
+    // A problem with the raw event data, not the config: surface it under the
+    // Raw Log panel, pointing at the first offending line.
+    ctx.diagnostics.push({
+      level: 'warning',
+      file: 'raw',
+      line: first.line,
+      message: `INDEXED_EXTRACTIONS = json: ${n} event${n === 1 ? '' : 's'} not valid JSON — JSON fields skipped (${first.error}).`,
+      suggestion: 'Check for unquoted values, trailing commas, or placeholders like <ID>.',
+    });
+  }
+  return result;
+}
+
+/**
+ * Parse one event as JSON. A leading byte order mark and surrounding
+ * whitespace are not part of the document (a UTF-8 file often starts with a
+ * BOM, and the line breaker can leave a trailing newline), so they are removed
+ * first. Only the parse itself is guarded: a failure in the flattening that
+ * follows is a bug, not bad input, and must not be swallowed here.
+ */
+function parseJsonEvent(raw: string): { kind: 'parsed'; value: unknown } | { kind: 'invalid'; error: string } {
+  const text = raw.replace(/^\uFEFF/, '').trim();
+  try {
+    return { kind: 'parsed', value: JSON.parse(text) };
+  } catch (e) {
+    return { kind: 'invalid', error: e instanceof Error ? e.message : 'invalid JSON' };
+  }
 }
 
 /** How the fields of one line are split: the body's, or the header's. */

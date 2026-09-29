@@ -43,8 +43,9 @@ import type {
   SplunkEvent,
   ValidationDiagnostic,
 } from '../../../../src/engine/types';
+import { fcSeed } from './fcSeed';
 
-fc.configureGlobal({ seed: 371, numRuns: 100 });
+fc.configureGlobal({ seed: fcSeed(371), numRuns: 100 });
 
 /** Built by `pretest`; see tools.test.ts. */
 const WORKER_PATH = fileURLToPath(new URL('../../dist/simulateWorker.js', import.meta.url));

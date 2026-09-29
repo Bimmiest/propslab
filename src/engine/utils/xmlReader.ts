@@ -301,6 +301,9 @@ class Reader {
     this.pos++; // '<'
     const name = this.name();
     const attributes: XmlAttribute[] = [];
+    // Names seen so far: a Set, so an element with very many attributes is not
+    // checked against the whole list for every one (#480).
+    const seenNames = new Set<string>();
     for (;;) {
       const spaced = this.space();
       if (this.src.startsWith('/>', this.pos) || this.src[this.pos] === '>') break;
@@ -311,7 +314,8 @@ class Reader {
       this.eat('=');
       this.space();
       const { value, encoded } = this.attributeValue();
-      if (attributes.some((a) => a.name === attrName)) this.fail();
+      if (seenNames.has(attrName)) this.fail();
+      seenNames.add(attrName);
       attributes.push(encoded ? { name: attrName, value, encoded: true } : { name: attrName, value });
     }
     const empty = this.src[this.pos] === '/';

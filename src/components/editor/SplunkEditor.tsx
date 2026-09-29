@@ -41,7 +41,8 @@ const EDITOR_OPTIONS: editor.IStandaloneEditorConstructionOptions = {
   // the conf languages define no bracket pairs, so block-select only acts just
   // inside a quoted value (selecting its contents) and is otherwise a word select.
   suggestOnTriggerCharacters: true,
-  quickSuggestions: true,
+  // Not in comments or strings: a `#` line is prose, and a quoted value is free text.
+  quickSuggestions: { other: 'on', comments: 'off', strings: 'off' },
   fixedOverflowWidgets: true,
   padding: { top: 8 },
   overviewRulerLanes: 0,

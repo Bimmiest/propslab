@@ -30,9 +30,31 @@ class Parser {
   private pos = 0;
   private depth = 0;
   private static readonly MAX_DEPTH = 50;
+  /**
+   * The longest chain of nested nodes the evaluator will be asked to walk.
+   * Left-associative operators build a left-deep tree, so `a + b + c + ...`
+   * with N terms is N levels deep however flat it reads, and evalNode
+   * recurses once per level. Rejecting the tree here, with a message, is
+   * what keeps a long chain from surfacing as "Maximum call stack size
+   * exceeded" at evaluation time. No real expression comes near it.
+   */
+  private static readonly MAX_TREE_HEIGHT = 1000;
+  /** Height of each operator node built so far (leaves are 0), for MAX_TREE_HEIGHT. */
+  private heights = new WeakMap<Node, number>();
 
   constructor(tokens: Token[]) {
     this.tokens = tokens;
+  }
+
+  /** Register a freshly built node over `children`, rejecting a tree that has grown too deep. */
+  private built<N extends Node>(node: N, ...children: Node[]): N {
+    let tallest = 0;
+    for (const child of children) tallest = Math.max(tallest, this.heights.get(child) ?? 0);
+    if (tallest + 1 > Parser.MAX_TREE_HEIGHT) {
+      throw new Error(`Expression too long or deeply nested (more than ${Parser.MAX_TREE_HEIGHT} chained operations)`);
+    }
+    this.heights.set(node, tallest + 1);
+    return node;
   }
 
   private peek(): Token | undefined {
@@ -85,7 +107,7 @@ class Parser {
       for (let tok = this.peek(); tok?.type === 'op' && ['OR', '||', 'XOR'].includes(tok.value); tok = this.peek()) {
         this.consume();
         const right = this.parseAnd();
-        left = { kind: 'logical', op: tok.value === 'XOR' ? 'XOR' : 'OR', left, right };
+        left = this.built({ kind: 'logical', op: tok.value === 'XOR' ? 'XOR' : 'OR', left, right }, left, right);
       }
       return left;
     } finally {
@@ -98,7 +120,7 @@ class Parser {
     while (this.peek()?.value === 'AND' || this.peek()?.value === '&&') {
       this.consume();
       const right = this.parseNot();
-      left = { kind: 'logical', op: 'AND', left, right };
+      left = this.built({ kind: 'logical', op: 'AND', left, right }, left, right);
     }
     return left;
   }
@@ -106,15 +128,17 @@ class Parser {
   private parseNot(): Node {
     // NOT applies to a NOT expression, not only to a comparison, so `NOT NOT x`
     // parses; parseComparison cannot start with an operator. Counted in a loop
-    // rather than by recursion
-    // so a long run of NOTs cannot exhaust the stack past the depth guard.
+    // rather than by recursion so parsing a long run of NOTs cannot exhaust
+    // the stack. The nodes it builds nest one per NOT, and the evaluator
+    // recurses over them, so each goes through built() and a run longer than
+    // MAX_TREE_HEIGHT is rejected there.
     let nots = 0;
     while (this.peek()?.type === 'op' && (this.peek()?.value === 'NOT' || this.peek()?.value === '!')) {
       this.consume();
       nots++;
     }
     let node = this.parseComparison();
-    for (; nots > 0; nots--) node = { kind: 'not', operand: node };
+    for (; nots > 0; nots--) node = this.built({ kind: 'not', operand: node }, node);
     return node;
   }
 
@@ -144,13 +168,13 @@ class Parser {
     if (tok?.type === 'op' && tok.value === 'LIKE') {
       this.consume();
       const right = this.parseConcat();
-      return { kind: 'call', name: 'like', args: [left, right] };
+      return this.built({ kind: 'call', name: 'like', args: [left, right] }, left, right);
     }
 
     if (tok?.type === 'op' && ['==', '=', '!=', '<', '>', '<=', '>='].includes(tok.value)) {
       const op = this.consume().value;
       const right = this.parseConcat();
-      return { kind: 'compare', op, left, right };
+      return this.built({ kind: 'compare', op, left, right }, left, right);
     }
     return left;
   }
@@ -166,7 +190,7 @@ class Parser {
       }
     }
     this.expect('paren', ')');
-    return { kind: 'in', value: left, list, negate };
+    return this.built({ kind: 'in', value: left, list, negate }, left, ...list);
   }
 
   private parseConcat(): Node {
@@ -174,7 +198,7 @@ class Parser {
     while (this.peek()?.type === 'dot') {
       this.consume();
       const right = this.parseAddSub();
-      left = { kind: 'concat', left, right };
+      left = this.built({ kind: 'concat', left, right }, left, right);
     }
     return left;
   }
@@ -184,7 +208,7 @@ class Parser {
     while (this.peek()?.type === 'op' && (this.peek()?.value === '+' || this.peek()?.value === '-')) {
       const op = this.consume().value;
       const right = this.parseMulDiv();
-      left = { kind: 'arith', op, left, right };
+      left = this.built({ kind: 'arith', op, left, right }, left, right);
     }
     return left;
   }
@@ -194,17 +218,22 @@ class Parser {
     while (this.peek()?.type === 'op' && ['*', '/', '%'].includes(this.peek()!.value)) {
       const op = this.consume().value;
       const right = this.parseUnary();
-      left = { kind: 'arith', op, left, right };
+      left = this.built({ kind: 'arith', op, left, right }, left, right);
     }
     return left;
   }
 
   private parseUnary(): Node {
-    if (this.peek()?.type === 'op' && this.peek()?.value === '-') {
+    // A run of minus signs (`- - x`) negates the negation. Counted in a loop,
+    // like NOT, so the parser does not recurse once per sign.
+    let negations = 0;
+    while (this.peek()?.type === 'op' && this.peek()?.value === '-') {
       this.consume();
-      return { kind: 'neg', operand: this.parsePrimary() };
+      negations++;
     }
-    return this.parsePrimary();
+    let node = this.parsePrimary();
+    for (; negations > 0; negations--) node = this.built({ kind: 'neg', operand: node }, node);
+    return node;
   }
 
   private parsePrimary(): Node {
@@ -249,7 +278,7 @@ class Parser {
           if (value === undefined || list.length === 0) {
             throw new Error('in() requires a value and at least one list item');
           }
-          return { kind: 'in', value, list, negate: false };
+          return this.built({ kind: 'in', value, list, negate: false }, value, ...list);
         }
         return call;
       }
@@ -277,7 +306,7 @@ class Parser {
       }
     }
     this.expect('paren', ')');
-    return { kind: 'call', name, args };
+    return this.built({ kind: 'call', name, args }, ...args);
   }
 }
 

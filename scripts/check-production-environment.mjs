@@ -77,9 +77,66 @@ async function checkSecretScope(token) {
   }
 }
 
+async function checkBranchProtection(token) {
+  if (!token) {
+    failures.push(
+      'GITHUB_TOKEN is not set, so the branch protection rules for main could not be checked. ' +
+        'Add GITHUB_TOKEN with repository permissions to verify branch protection.',
+    );
+    return;
+  }
+
+  let protection;
+  try {
+    protection = await get('/branches/main/protection', token);
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('404')) {
+      failures.push('main branch has no protection rules configured.');
+      return;
+    }
+    // If the token lacks the scope for rulesets, report it and skip
+    if (error instanceof Error && error.message.includes('API returns access denied')) {
+      console.log(`  skipped  token lacks scope to check branch protection rules`);
+      return;
+    }
+    throw error;
+  }
+
+  const checks = [];
+  if (!protection.required_status_checks) {
+    checks.push('required status checks');
+  } else if (!protection.required_status_checks.checks) {
+    checks.push('required status checks (none configured)');
+  }
+
+  if (!protection.required_pull_request_reviews) {
+    checks.push('required pull request reviews');
+  } else if (protection.required_pull_request_reviews.required_approving_review_count < 1) {
+    checks.push('at least one required review');
+  }
+
+  const allowForcesPushes = protection.allow_force_pushes?.enabled;
+  const allowDeletions = protection.allow_deletions?.enabled;
+
+  if (allowForcesPushes) {
+    checks.push('force-pushes are blocked');
+  }
+  if (allowDeletions) {
+    checks.push('deletion is blocked');
+  }
+
+  if (checks.length > 0) {
+    failures.push(`main branch protection is incomplete; missing: ${checks.join(', ')}.`);
+    return;
+  }
+
+  console.log(`  ok  main branch is protected with required reviews and status checks`);
+}
+
 for (const [name, check] of [
   ['branch rule', () => checkBranchRule(process.env.GITHUB_TOKEN)],
   ['secret scope', () => checkSecretScope(process.env.SECRETS_READ_TOKEN)],
+  ['branch protection', () => checkBranchProtection(process.env.GITHUB_TOKEN)],
 ]) {
   try {
     await check();

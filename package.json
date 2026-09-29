@@ -22,7 +22,8 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "test:mutation": "stryker run"
+    "test:mutation": "stryker run",
+    "check:overrides": "node scripts/check-radix-overrides.mjs"
   },
   "dependencies": {
     "@radix-ui/react-context-menu": "^2.3.7",
@@ -31,7 +32,7 @@
     "cmdk": "^1.1.1",
     "diff": "^9.0.0",
     "monaco-editor": "^0.57.0",
-    "pcre2-wasm-utf16": "github:Bimmiest/pcre2-wasm-utf16#v0.1.0",
+    "pcre2-wasm-utf16": "github:Bimmiest/pcre2-wasm-utf16#e3b48c1087bf70410fc4cb0d65c2ec4bbbf5850b",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "react-resizable-panels": "^4.13.3",

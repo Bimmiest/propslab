@@ -411,6 +411,65 @@ describe('createManagedWorker (#339)', () => {
       expect(calls.response).toHaveBeenCalledWith({ id: 2, echo: 'ok' }, req(2));
     });
 
+    it('does not blame a newer request for a crash of the forgotten one it queued behind (#491)', () => {
+      const { managed, calls } = setup();
+      managed.post(req(1));
+      const crashing = latest();
+      crashing.ready();
+      managed.forget();
+      managed.post(req(2));
+      crashing.throw('boom');
+      expect(calls.crash).not.toHaveBeenCalled();
+      expect(calls.load).not.toHaveBeenCalled();
+      expect(crashing.terminated).toBe(true);
+      expect(latest()).not.toBe(crashing);
+      expect(latest().posted).toEqual([req(2)]);
+      latest().ready();
+      latest().respond(2);
+      expect(calls.response).toHaveBeenCalledWith({ id: 2, echo: 'ok' }, req(2));
+    });
+
+    it('still blames the newer request when it is the one that crashes the replacement (#491)', () => {
+      const { managed, calls } = setup();
+      managed.post(req(1));
+      latest().ready();
+      managed.forget();
+      managed.post(req(2));
+      latest().throw('first');
+      latest().ready();
+      latest().throw('second');
+      expect(calls.crash).toHaveBeenCalledTimes(1);
+      expect(calls.crash).toHaveBeenCalledWith([req(2)], 'second');
+    });
+
+    it('reports a crash with only forgotten requests in flight as nothing in flight (#491)', () => {
+      const { managed, calls } = setup();
+      managed.post(req(1));
+      latest().ready();
+      managed.forget();
+      latest().throw('boom');
+      expect(calls.crash).toHaveBeenCalledWith([], 'boom');
+      expect(FakeWorker.instances).toHaveLength(1);
+    });
+
+    it('hands unposted newer requests to onLoadFailure when a crash of the forgotten one leaves no replacement (#491)', () => {
+      let built = 0;
+      const { managed, calls } = setup({
+        create: () => {
+          if (built++ > 0) throw new Error('blocked');
+          return new FakeWorker() as unknown as Worker;
+        },
+      });
+      managed.post(req(1));
+      latest().ready();
+      managed.forget();
+      managed.post(req(2));
+      latest().throw('boom');
+      expect(calls.crash).not.toHaveBeenCalled();
+      expect(calls.load).toHaveBeenCalledTimes(1);
+      expect(calls.load.mock.calls[0]![0]).toEqual([req(2)]);
+    });
+
     it('hands newer requests to onLoadFailure when no replacement can be built after a superseded hang', () => {
       let built = 0;
       const { managed, calls } = setup({

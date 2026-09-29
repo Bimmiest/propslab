@@ -36,9 +36,21 @@ export default defineConfig({
         // barrel stays out on its own merit: nothing imports it, which is what
         // keeps the ~80 basic-languages and the TS/JSON/CSS/HTML language
         // services (and their web workers) out of the bundle. See main.tsx.
+        //
+        // `includeDependenciesRecursively: false` on the Monaco group is
+        // load-bearing (#467). By default a group also captures the
+        // dependencies of the modules it matched; Vite's `__vitePreload`
+        // helper, which the lazy imports need, was absorbed that way and
+        // landed in the Monaco chunk — and the entry, which imports the helper,
+        // then statically imported and modulepreloaded all 3.4 MB of Monaco.
+        // scripts/check-entry-graph.mjs fails CI if that recurs.
         codeSplitting: {
           groups: [
-            { name: 'monaco-editor', test: /monaco-editor[\\/]esm[\\/]vs[\\/]/ },
+            {
+              name: 'monaco-editor',
+              test: /monaco-editor[\\/]esm[\\/]vs[\\/]/,
+              includeDependenciesRecursively: false,
+            },
             { name: 'react-vendor', test: /node_modules[\\/](react|react-dom)[\\/]/ },
           ],
         },

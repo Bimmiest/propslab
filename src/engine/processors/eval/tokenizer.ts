@@ -77,6 +77,21 @@ const lexQuotedField: Lexer = (expr, start, tokens) => {
 };
 
 /**
+ * Where an exponent (`e3`, `E-4`) starting at `i` ends, or `i` when there is
+ * none. Read only when digits follow the `e`, so the coercion of the string
+ * "1e3" and the literal 1e3 agree (see parseDecimal); an `e` with no digits
+ * after it is not part of the number.
+ */
+function exponentEndIndex(expr: string, i: number): number {
+  if (!/[eE]/.test(expr.charAt(i))) return i;
+  let j = i + 1;
+  if (/[+-]/.test(expr.charAt(j))) j++;
+  if (!/\d/.test(expr.charAt(j))) return i;
+  while (/\d/.test(expr.charAt(j))) j++;
+  return j;
+}
+
+/**
  * Numbers. A leading `-` is folded into a numeric literal only when a value
  * cannot already be in progress — at the start, after an operator or comma,
  * or after an OPENING paren. After a CLOSING paren `-` is subtraction, so
@@ -123,6 +138,9 @@ const lexNumber: Lexer = (expr, start, tokens) => {
     }
     num += expr.charAt(i); i++;
   }
+  const exponentEnd = exponentEndIndex(expr, i);
+  num += expr.slice(i, exponentEnd);
+  i = exponentEnd;
   tokens.push({ type: 'number', value: num });
   return i;
 };

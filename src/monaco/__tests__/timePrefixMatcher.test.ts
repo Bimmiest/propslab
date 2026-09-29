@@ -11,7 +11,7 @@
 // ---------------------------------------------------------------------------
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type { editor, Position, languages, CancellationToken } from 'monaco-editor';
+import type { Position, languages, CancellationToken } from 'monaco-editor';
 import type { TimestampMatchRequest, TimestampMatchResponse } from '../../engine/timestampMatchWorker';
 import { probeTimestamps } from '../../engine/timestampMatch';
 import { SplunkRegex } from '../../utils/splunkRegex';
@@ -25,6 +25,7 @@ import {
   TIME_PREFIX_TIMEOUT_MS,
   type PrefixMatcher,
 } from '../timePrefixMatcher';
+import { fakeModel } from '../../test/fakeModel';
 
 class FakeWorker {
   static instances: FakeWorker[] = [];
@@ -85,14 +86,6 @@ function cancellable() {
       listeners.forEach((l) => l());
     },
   };
-}
-
-function fakeModel(text: string): editor.ITextModel {
-  const lines = text.split('\n');
-  return {
-    getLineCount: () => lines.length,
-    getLineContent: (n: number) => lines[n - 1] ?? '',
-  } as unknown as editor.ITextModel;
 }
 
 const CONF = '[my:st]\nTIME_PREFIX = ts=\nTIME_FORMAT = %Y-%m-%d';

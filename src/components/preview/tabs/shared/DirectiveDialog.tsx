@@ -28,9 +28,11 @@ export function DirectiveDialog({
    * the user aimed at a control: Enter on a focused Cancel button must
    * cancel, not have this container handler preventDefault() the button's
    * activation and write the directive into props.conf.
+   * Ignore Enter during IME composition to avoid submitting partially-typed characters.
    */
   const onKeyDown = (e: ReactKeyboardEvent) => {
     if (e.key !== 'Enter' || applyDisabled) return;
+    if (e.nativeEvent.isComposing) return;
     if (e.target instanceof HTMLElement && e.target.closest('button, a, textarea')) return;
     e.preventDefault();
     onApply();

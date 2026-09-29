@@ -202,6 +202,7 @@ function FailureState({ message }: { message: string }) {
 
 function EmptyState() {
   const loadInputs = useAppStore((s) => s.loadInputs);
+  const manualApply = useAppStore((s) => s.settings.manualApply);
 
   // loadInputs, not the four setters: it also makes the example the clean
   // baseline, so an unedited example does not count as work to lose.
@@ -223,6 +224,7 @@ function EmptyState() {
           <p className="text-sm font-semibold text-[var(--color-text-primary)]">No data yet</p>
           <p className="text-xs text-[var(--color-text-muted)] max-w-xs mt-1">
             Paste raw log data on the left, then write a sourcetype stanza in props.conf to simulate the pipeline.
+            {manualApply && ' Manual apply is on: press Run (Ctrl+Enter) to process it.'}
           </p>
         </div>
       </div>

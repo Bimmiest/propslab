@@ -61,10 +61,19 @@ const onString = (f: (s: string) => EvalValue): Builtin => (args) => {
   return s === null ? null : f(s);
 };
 
+/**
+ * A numeric result, with NaN and +/-Infinity turned into NULL. Splunk's
+ * evaluation-function reference says the math functions return NULL when they
+ * cannot produce a number (sqrt of a negative, ln(0)); writing "NaN" or
+ * "-Infinity" into a field, or letting it flow on into arithmetic, is
+ * something Splunk never shows. See also #446.
+ */
+const finite = (n: number): EvalValue => (Number.isFinite(n) ? n : null);
+
 /** A function of one numeric argument; a non-numeric (or NULL) argument yields NULL. */
-const onNumber = (f: (n: number) => EvalValue): Builtin => (args) => {
+const onNumber = (f: (n: number) => number): Builtin => (args) => {
   const n = numArg(args[0]);
-  return n === null ? null : f(n);
+  return n === null ? null : finite(f(n));
 };
 
 /** An unsimulated function: warn, then return `result(args)`. */
@@ -76,6 +85,9 @@ const stub = (name: string, result: (args: EvalValue[]) => EvalValue): Builtin =
 function substr(args: EvalValue[]): EvalValue {
   const s = strArg(args[0]);
   if (s === null) return null;
+  // A NULL start or length is NULL, like a NULL string: a missing length must
+  // not read as "no characters".
+  if (args[1] === null || args[2] === null) return null;
   const start = toNum(args[1]);
   // Checked against Splunk (#397): a start of 0 reads as 1, and a negative
   // start that reaches back past the first character is NULL, not clamped.
@@ -88,19 +100,30 @@ function substr(args: EvalValue[]): EvalValue {
   return len > 0 ? s.slice(startIdx, startIdx + len) : '';
 }
 
-function trimFrom(side: 'left' | 'right'): Builtin {
+/** What trim(), ltrim() and rtrim() strip when no character set is given. */
+const DEFAULT_TRIM_CHARS = ' \t\n\r';
+
+/**
+ * trim(X, Y), ltrim(X, Y) and rtrim(X, Y): remove any of the characters in Y
+ * from the given side(s) of X (Splunk eval functions reference). One
+ * implementation and one default set, so the three cannot disagree on the same
+ * input (JS String.prototype.trim also strips NBSP and BOM, which the others
+ * never did).
+ */
+function trimFrom(sides: 'left' | 'right' | 'both'): Builtin {
   return (args) => {
     const s = strArg(args[0]);
     if (s === null) return null;
-    const chars = args[1] !== undefined ? toStr(args[1]) : ' \t\n\r';
-    if (side === 'left') {
-      let i = 0;
-      while (i < s.length && chars.includes(s.charAt(i))) i++;
-      return s.substring(i);
+    const chars = args[1] !== undefined ? toStr(args[1]) : DEFAULT_TRIM_CHARS;
+    let start = 0;
+    let end = s.length;
+    if (sides !== 'right') {
+      while (start < end && chars.includes(s.charAt(start))) start++;
     }
-    let i = s.length - 1;
-    while (i >= 0 && chars.includes(s.charAt(i))) i--;
-    return s.substring(0, i + 1);
+    if (sides !== 'left') {
+      while (end > start && chars.includes(s.charAt(end - 1))) end--;
+    }
+    return s.substring(start, end);
   };
 }
 
@@ -124,7 +147,7 @@ const STRING_BUILTINS: Record<string, Builtin> = {
     if (!regex) return s;
     return regex.replace(s, splunkReplacement(toStr(args[2])), true);
   },
-  trim: onString((s) => s.trim()),
+  trim: trimFrom('both'),
   ltrim: trimFrom('left'),
   rtrim: trimFrom('right'),
   urldecode: onString((s) => {
@@ -133,11 +156,14 @@ const STRING_BUILTINS: Record<string, Builtin> = {
   }),
   split: (args) => {
     const s = strArg(args[0]);
-    if (s === null) return null;
-    return s.split(toStr(args[1]));
+    // A NULL delimiter is NULL, not "split into single characters".
+    const delimiter = strArg(args[1]);
+    if (s === null || delimiter === null) return null;
+    return s.split(delimiter);
   },
   mvjoin: (args) => {
-    if (args[0] === null || args[0] === undefined) return null;
+    // A NULL delimiter is NULL, not an empty join.
+    if (args[0] === null || args[0] === undefined || args[1] === null) return null;
     return toMv(args[0]).join(toStr(args[1]));
   },
 };
@@ -218,18 +244,18 @@ const MATH_BUILTINS: Record<string, Builtin> = {
     const factor = Math.pow(10, decimals);
     // Splunk rounds halves away from zero; JS Math.round rounds toward +∞.
     const scaled = val * factor;
-    return (Math.sign(scaled) * Math.round(Math.abs(scaled))) / factor;
+    return finite((Math.sign(scaled) * Math.round(Math.abs(scaled))) / factor);
   },
   sqrt: onNumber(Math.sqrt),
   pow: (args) => {
     const base = numArg(args[0]);
     const exp = numArg(args[1]);
-    return base === null || exp === null ? null : Math.pow(base, exp);
+    return base === null || exp === null ? null : finite(Math.pow(base, exp));
   },
   log: (args) => {
     const val = numArg(args[0]);
     const base = args[1] !== undefined ? numArg(args[1]) : 10;
-    return val === null || base === null ? null : Math.log(val) / Math.log(base);
+    return val === null || base === null ? null : finite(Math.log(val) / Math.log(base));
   },
   ln: onNumber(Math.log),
   exp: onNumber(Math.exp),
@@ -380,6 +406,11 @@ const BUILTINS = new Map<string, Builtin>(Object.entries({
   ...TIME_BUILTINS,
   ...OTHER_BUILTINS,
 }));
+
+/** The name of every non-branching function, for the registry-level fidelity test. */
+export function builtinNames(): string[] {
+  return [...BUILTINS.keys()];
+}
 
 /** Non-branching functions: all arguments are already evaluated. */
 export function evalBuiltin(fn: string, args: EvalValue[], ctx: EvalCtx): EvalValue {

@@ -16,7 +16,13 @@
 import type { ConfStanza, ValidationDiagnostic } from './types';
 import { atDirective } from './parser/provenance';
 import { getDirectiveInfo } from './directiveRegistry';
-import { effectiveDirective, isSplunkBoolLiteral } from './utils/directiveValues';
+import {
+  effectiveDirective,
+  isDisallowedNegative,
+  isEnumMember,
+  isIntegerLiteral,
+  isSplunkBoolLiteral,
+} from './utils/directiveValues';
 
 /**
  * transforms.conf settings that do nothing in one of the two phases. A stanza's
@@ -148,9 +154,9 @@ export function lintDirectiveValues(
       }
 
       if (info.valueType === 'number') {
-        if (!/^[+-]?\d+$/.test(value)) {
+        if (!isIntegerLiteral(value)) {
           report(`${dir.key} takes an integer, and "${value}" is not one.`);
-        } else if (value.startsWith('-') && NON_NEGATIVE.has(info.key) && NEGATIVE_SENTINELS[info.key] !== value) {
+        } else if (isDisallowedNegative(info.key, value)) {
           report(
             `${dir.key} cannot be negative — "${value}" will not do what it looks like it does.`,
           );
@@ -159,10 +165,7 @@ export function lintDirectiveValues(
       }
 
       if (info.valueType === 'enum' && info.enumValues) {
-        // `multi:<stanza>` is the one enum member that carries an argument.
-        const base = value.toLowerCase().split(':')[0] ?? '';
-        const allowed = info.enumValues.map((v) => v.toLowerCase());
-        if (!allowed.includes(value.toLowerCase()) && !allowed.includes(base)) {
+        if (!isEnumMember(value, info.enumValues)) {
           report(
             `${dir.key} does not accept "${value}". Splunk falls back to the default rather than ` +
               `reporting it. Valid values: ${info.enumValues.join(', ')}.`,
@@ -173,30 +176,3 @@ export function lintDirectiveValues(
     }
   }
 }
-
-/**
- * Numeric directives the spec documents as non-negative. A negative here is not
- * merely odd — Splunk treats it as unset, so the setting silently does nothing.
- */
-const NON_NEGATIVE = new Set([
-  'TRUNCATE',
-  'MAX_EVENTS',
-  'MAX_TIMESTAMP_LOOKAHEAD',
-  'MAX_DAYS_AGO',
-  'MAX_DAYS_HENCE',
-  'MAX_DIFF_SECS_AGO',
-  'MAX_DIFF_SECS_HENCE',
-  'MATCH_LIMIT',
-  'DEPTH_LIMIT',
-  'LINE_BREAKER_LOOKBEHIND',
-  'HEADER_FIELD_LINE_NUMBER',
-]);
-
-/**
- * The one negative a non-negative directive documents as meaningful.
- * props.conf.spec: MAX_TIMESTAMP_LOOKAHEAD "0 or -1 disables the length
- * constraint", so -1 is a correct setting, not a broken one.
- */
-const NEGATIVE_SENTINELS: Readonly<Record<string, string>> = {
-  MAX_TIMESTAMP_LOOKAHEAD: '-1',
-};

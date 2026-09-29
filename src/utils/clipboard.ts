@@ -10,12 +10,23 @@ export async function copyToClipboard(text: string): Promise<void> {
     // Async Clipboard API unavailable (insecure context) — fall back below.
   }
 
+  // Remember the previous selection and active element to restore later
+  const previousSelection = document.getSelection();
+  const previousActiveElement = document.activeElement as HTMLElement | null;
+  const previousSelectionRange = previousSelection?.rangeCount ? previousSelection.getRangeAt(0) : null;
+
   const textarea = document.createElement('textarea');
   textarea.value = text;
   textarea.style.position = 'fixed';
   textarea.style.opacity = '0';
+  textarea.setAttribute('aria-hidden', 'true');
+  textarea.readOnly = true;
   document.body.appendChild(textarea);
+
+  // Select the text; for iOS, explicitly set the selection range
   textarea.select();
+  textarea.setSelectionRange(0, text.length);
+
   // Deliberately uninitialized: the try below either assigns or throws past
   // the read, so a seed value would be dead (no-useless-assignment). A finally
   // without a catch still leaves `ok` definitely assigned at the read.
@@ -28,6 +39,18 @@ export async function copyToClipboard(text: string): Promise<void> {
     ok = document.execCommand('copy');
   } finally {
     document.body.removeChild(textarea);
+
+    // Restore the previous selection and focus
+    if (previousSelectionRange) {
+      const selection = document.getSelection();
+      if (selection) {
+        selection.removeAllRanges();
+        selection.addRange(previousSelectionRange);
+      }
+    }
+    if (previousActiveElement) {
+      previousActiveElement.focus();
+    }
   }
   if (!ok) throw new Error('Copy to clipboard failed');
 }

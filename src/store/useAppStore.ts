@@ -205,15 +205,21 @@ export const useAppStore = create<AppState>((set) => ({
   setTransformsConf: (text) => set({ transformsConf: text }),
 
   loadedInputs: EMPTY_INPUTS,
+  // Loading is a decision to look at these inputs, so in manual-apply mode it
+  // runs them, as pressing Run would: otherwise an example card or a palette
+  // command changes the editors and nothing else (#492).
   loadInputs: (inputs) =>
-    set({
+    set((state) => ({
       rawData: inputs.rawData,
       propsConf: inputs.propsConf,
       transformsConf: inputs.transformsConf,
       metadata: { ...inputs.metadata },
       loadedInputs: inputs,
       currentPage: 1,
-    }),
+      ...(state.settings.manualApply
+        ? { manualRunTick: state.manualRunTick + 1, pipelineDirty: false }
+        : {}),
+    })),
 
   processingResult: null,
   setProcessingResult: (result) => set({ processingResult: result }),

@@ -1,3 +1,6 @@
+// First, for its side effect: the Trusted Types default policy must exist
+// before any other module evaluates. See installTrustedTypes.ts.
+import './installTrustedTypes'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import * as RadixTooltip from '@radix-ui/react-tooltip'
@@ -6,18 +9,22 @@ import App from './App.tsx'
 import { loadRegexEngine } from './utils/regexEngineLoader'
 import { applyTheme } from './hooks/useTheme'
 import { useAppStore } from './store/useAppStore'
-import { installDefaultTrustedTypesPolicy } from './trustedTypes'
-
-// Before anything creates a worker: the CSP requires Trusted Types, and the
-// default policy is what lets a worker's same-origin URL through.
-installDefaultTrustedTypesPolicy()
 
 // Before the engine await, not in useTheme's effect alone: otherwise the page
 // paints light, whatever the saved theme, until the wasm has loaded.
 applyTheme(useAppStore.getState().theme)
 
+// Render a minimal loading indicator before the async load starts.
+const rootElement = document.getElementById('root');
+if (!rootElement) {
+  throw new Error('Root element (#root) not found. The HTML document must contain an element with id="root".');
+}
+
+// Show a simple "Loading…" text before the React app renders.
+rootElement.textContent = 'Loading…';
+
 // Monaco (and its MonacoEnvironment) loads lazily; see LazyEditors.tsx.
-const root = createRoot(document.getElementById('root')!)
+const root = createRoot(rootElement)
 
 // Every user pattern runs on PCRE2 in WebAssembly, and the editor validates
 // patterns as soon as it mounts, so the engine is up before the first render.

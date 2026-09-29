@@ -1,5 +1,5 @@
 import * as monaco from 'monaco-editor/editor';
-import type { languages } from 'monaco-editor';
+import type { IDisposable, languages } from 'monaco-editor';
 import { createCompletionProvider } from '../../monaco/splunkConfCompletion';
 import { createHoverProvider } from '../../monaco/splunkConfHover';
 import { createFoldingRangeProvider } from '../../monaco/splunkConfFolding';
@@ -16,7 +16,13 @@ import { useAppStore } from '../../store/useAppStore';
 export const PROPS_LANGUAGE_ID = 'splunk-props';
 export const TRANSFORMS_LANGUAGE_ID = 'splunk-transforms';
 
-let languageRegistered = false;
+/**
+ * What registration handed back: every provider, tokenizer and command
+ * disposable, kept so the whole set can be taken down again. Null until
+ * registration has SUCCEEDED, so an attempt that threw part-way is retried
+ * instead of leaving the editor half-registered for good.
+ */
+let registration: IDisposable[] | null = null;
 
 /**
  * Idempotently register the splunk-conf language, providers and the
@@ -25,10 +31,94 @@ let languageRegistered = false;
  * mobile can mount on its own before any SplunkEditor exists.
  */
 export function ensureSplunkMonaco() {
-  if (!languageRegistered) {
-    languageRegistered = true;
-    registerSplunkConfLanguage();
+  if (registration) return;
+  const disposables: IDisposable[] = [];
+  try {
+    registerSplunkConfLanguage(disposables);
+  } catch (error) {
+    // Undo what was registered so the retry does not stack a second set on it.
+    disposeAll(disposables);
+    throw error;
   }
+  registration = disposables;
+}
+
+/** Take down everything `ensureSplunkMonaco` registered; the next call registers afresh. */
+export function disposeSplunkMonaco() {
+  if (!registration) return;
+  const disposables = registration;
+  registration = null;
+  disposeAll(disposables);
+}
+
+function disposeAll(disposables: IDisposable[]) {
+  for (const disposable of disposables.splice(0).reverse()) disposable.dispose();
+}
+
+// In dev, editing a provider module re-evaluates this one, and the next mount
+// would register a second set of completion, hover, folding and code action
+// providers beside the old (duplicate hovers). Dispose the old set first.
+if (import.meta.hot) {
+  import.meta.hot.dispose(disposeSplunkMonaco);
+}
+
+type MonarchRule = languages.IMonarchLanguageRule;
+
+/**
+ * The states that tokenize one kind of directive value, with continuations read
+ * the way the parser reads them.
+ *
+ * A value continues onto the next line when its line ends with an ODD number of
+ * backslashes, the last one being the very last character (an even run is
+ * escaped backslashes; a backslash followed by a space is a literal one). The
+ * next line is then more of the value WHATEVER it starts with, so `[a-z]+`,
+ * `#x` and `KEY = v` on it are value text, not a header, a comment or a
+ * directive; and it continues further only if it too ends in an odd run.
+ * Indentation has nothing to do with it.
+ *
+ *   `name`      the value's first line, and the state a finished value rests in
+ *               until the next line starts (which pops it).
+ *   `nameCont`  a line that follows a trailing backslash, at its first
+ *               character: decides whether the line continues again (`More`)
+ *               or ends the value (`Last`), by looking ahead over the whole
+ *               line, and consumes that first character or escaped pair as
+ *               text so the state it moves to is not popped on this same line.
+ *   `nameMore`  the rest of such a line, ending in a backslash that returns to
+ *               `nameCont` for the next one.
+ *   `nameLast`  the rest of the line that ends the value.
+ *
+ * `body` is the highlighting for the kind of value; `pairToken` colours an
+ * escaped backslash pair, which must be taken as a pair before a trailing
+ * backslash is looked for.
+ */
+function valueStates(name: string, pairToken: string, body: MonarchRule[]): Record<string, MonarchRule[]> {
+  const pair: MonarchRule = [/\\\\/, pairToken];
+  return {
+    [name]: [
+      [/^./, { token: '@rematch', next: '@pop' }],
+      pair,
+      [/\\$/, { token: 'escape', switchTo: `@${name}Cont` }],
+      ...body,
+    ],
+    [`${name}Cont`]: [
+      // A line that is just the backslash: still a continuation.
+      [/^\\$/, 'escape'],
+      // Ends in an odd run of backslashes: this line continues too.
+      [/^(?=(?:[^\\]|\\.)*\\$)(?:\\.|.)/, { token: 'string', switchTo: `@${name}More` }],
+      // An empty line ends the value (the parser appends nothing to it).
+      [/^$/, { token: '', next: '@pop' }],
+      [/^(?:\\.|.)/, { token: 'string', switchTo: `@${name}Last` }],
+    ],
+    [`${name}More`]: [
+      pair,
+      [/\\$/, { token: 'escape', switchTo: `@${name}Cont` }],
+      ...body,
+    ],
+    [`${name}Last`]: [
+      [/^./, { token: '@rematch', next: '@pop' }],
+      ...body,
+    ],
+  };
 }
 
 const MONARCH_GRAMMAR: languages.IMonarchLanguage = {
@@ -105,7 +195,10 @@ const MONARCH_GRAMMAR: languages.IMonarchLanguage = {
         },
       }],
       [/^([a-z_][a-z_0-9]*)(\s*=)/, ['keyword.other', { token: 'delimiter', next: '@value' }]],
-      [/=\s*/, { token: 'delimiter', next: '@value' }],
+      // Any other directive, by the parser's own rule (DIRECTIVE_RE): the key starts
+      // at column 0 with something other than whitespace, `=` or `[`. An indented
+      // `key = value` is malformed to the parser, so it starts no value here either.
+      [/^([^\s=[][^=]*?)(\s*=\s*)/, ['identifier', { token: 'delimiter', next: '@value' }]],
       [/./, 'string'],
     ],
     stanza: [
@@ -114,80 +207,36 @@ const MONARCH_GRAMMAR: languages.IMonarchLanguage = {
       [/\]/, { token: 'tag.bracket', next: '@pop' }],
     ],
     // Generic values (numbers, booleans, strftime, plain strings)
-    value: [
-      [/^./, { token: '@rematch', next: '@pop' }],
-      [/\\\s*$/, { token: 'escape', next: '@valueCont' }],
+    ...valueStates('value', 'string', [
       [/\b(true|false)\b/i, 'constant.language'],
       [/\b\d+(\.\d+)?\b/, 'number'],
       [/%\d+[Nn]/, 'type'],
       [/%[YymdHeIMSpbBaAZzsTF]/, 'type'],
       [/./, 'string'],
-    ],
-    // Continuation states: same rules but only pop when a new directive starts (non-whitespace at line start)
-    valueCont: [
-      [/^\S/, { token: '@rematch', next: '@pop' }],
-      [/\\\s*$/, 'escape'],
-      [/\b(true|false)\b/i, 'constant.language'],
-      [/\b\d+(\.\d+)?\b/, 'number'],
-      [/%\d+[Nn]/, 'type'],
-      [/%[YymdHeIMSpbBaAZzsTF]/, 'type'],
-      [/./, 'string'],
-    ],
+    ]),
     // FIELDALIAS values: sourceField AS aliasField [, sourceField AS aliasField ...]
-    fieldAliasValue: [
-      [/^./, { token: '@rematch', next: '@pop' }],
-      [/\\\s*$/, { token: 'escape', next: '@fieldAliasValueCont' }],
+    ...valueStates('fieldAliasValue', 'variable', [
       [/\b(AS|as|As)\b/, 'keyword'],
       [/,/, 'delimiter'],
       [/\s+/, ''],
       [/[a-zA-Z_][\w.{}*-]*/, 'variable'],
-    ],
-    fieldAliasValueCont: [
-      [/^\S/, { token: '@rematch', next: '@pop' }],
-      [/\\\s*$/, 'escape'],
-      [/\b(AS|as|As)\b/, 'keyword'],
-      [/,/, 'delimiter'],
-      [/\s+/, ''],
-      [/[a-zA-Z_][\w.{}*-]*/, 'variable'],
-    ],
+    ]),
     // Comma-separated stanza/transform references (REPORT, TRANSFORMS)
-    listValue: [
-      [/^./, { token: '@rematch', next: '@pop' }],
-      [/\\\s*$/, { token: 'escape', next: '@listValueCont' }],
+    ...valueStates('listValue', 'tag', [
       [/,/, 'delimiter'],
       [/\s+/, ''],
       [/[^\s,\\]+/, 'tag'],
-    ],
-    listValueCont: [
-      [/^\S/, { token: '@rematch', next: '@pop' }],
-      [/\\\s*$/, 'escape'],
-      [/,/, 'delimiter'],
-      [/\s+/, ''],
-      [/[^\s,\\]+/, 'tag'],
-    ],
+    ]),
     // LOOKUP values: lookup_name field1 (AS alias1)? field2 (AS alias2)? ...
-    lookupValue: [
-      [/^./, { token: '@rematch', next: '@pop' }],
-      [/\\\s*$/, { token: 'escape', next: '@lookupValueCont' }],
+    ...valueStates('lookupValue', 'variable', [
       [/\b(AS|as|As)\b/, 'keyword'],
       [/\b(OUTPUT|OUTPUTNEW|output|outputnew)\b/, 'keyword'],
       [/,/, 'delimiter'],
       [/\s+/, ''],
       [/[a-zA-Z_][\w.{}*-]*/, 'variable'],
-    ],
-    lookupValueCont: [
-      [/^\S/, { token: '@rematch', next: '@pop' }],
-      [/\\\s*$/, 'escape'],
-      [/\b(AS|as|As)\b/, 'keyword'],
-      [/\b(OUTPUT|OUTPUTNEW|output|outputnew)\b/, 'keyword'],
-      [/,/, 'delimiter'],
-      [/\s+/, ''],
-      [/[a-zA-Z_][\w.{}*-]*/, 'variable'],
-    ],
+    ]),
     // Regex pattern values (EXTRACT, LINE_BREAKER, REGEX, etc.)
-    regexValue: [
-      [/^./, { token: '@rematch', next: '@pop' }],
-      [/\\\s*$/, { token: 'escape', next: '@regexValueCont' }],
+    ...valueStates('regexValue', 'regexp.escape', [
       [/\b(true|false)\b/i, 'constant.language'],
       [/\b\d+(\.\d+)?\b/, 'number'],
       [/\(\?P?<\w+>/, 'regexp.escape'],
@@ -196,23 +245,9 @@ const MONARCH_GRAMMAR: languages.IMonarchLanguage = {
       [/[[\](){}|^$.*+?]/, 'regexp'],
       [/\$\d+/, 'variable.value'],
       [/./, 'string'],
-    ],
-    regexValueCont: [
-      [/^\S/, { token: '@rematch', next: '@pop' }],
-      [/\\\s*$/, 'escape'],
-      [/\b(true|false)\b/i, 'constant.language'],
-      [/\b\d+(\.\d+)?\b/, 'number'],
-      [/\(\?P?<\w+>/, 'regexp.escape'],
-      [/\(\?[=!:]/, 'regexp.escape'],
-      [/\\[rntdwsDWsSbB\\/.^$*+?()[\]{}|]/, 'regexp.escape'],
-      [/[[\](){}|^$.*+?]/, 'regexp'],
-      [/\$\d+/, 'variable.value'],
-      [/./, 'string'],
-    ],
+    ]),
     // EVAL expressions (SPL eval language)
-    evalValue: [
-      [/^./, { token: '@rematch', next: '@pop' }],
-      [/\\\s*$/, { token: 'escape', next: '@evalValueCont' }],
+    ...valueStates('evalValue', 'string', [
       [/"[^"]*"/, 'string'],
       [/'[^']*'/, 'variable'],
       [/\b(true|false|null)\b/i, 'constant.language'],
@@ -228,26 +263,7 @@ const MONARCH_GRAMMAR: languages.IMonarchLanguage = {
         },
       }],
       [/./, ''],
-    ],
-    evalValueCont: [
-      [/^\S/, { token: '@rematch', next: '@pop' }],
-      [/\\\s*$/, 'escape'],
-      [/"[^"]*"/, 'string'],
-      [/'[^']*'/, 'variable'],
-      [/\b(true|false|null)\b/i, 'constant.language'],
-      [/\b(AND|OR|NOT)\b/i, 'keyword'],
-      [/\b\d+(\.\d+)?\b/, 'number'],
-      [/==|!=|>=|<=|&&|\|\||\./, 'operator'],
-      [/[+\-*/%<>=!]/, 'operator'],
-      [/[(),;]/, 'delimiter'],
-      [/[a-zA-Z_]\w*/, {
-        cases: {
-          '@evalFunctions': 'support.function',
-          '@default': 'variable',
-        },
-      }],
-      [/./, ''],
-    ],
+    ]),
   },
 };
 
@@ -325,7 +341,7 @@ const DARK_THEME: monaco.editor.IStandaloneThemeData = {
   },
 };
 
-function registerSplunkConfLanguage() {
+function registerSplunkConfLanguage(disposables: IDisposable[]) {
   monaco.languages.register({ id: PROPS_LANGUAGE_ID });
   monaco.languages.register({ id: TRANSFORMS_LANGUAGE_ID });
 
@@ -333,28 +349,28 @@ function registerSplunkConfLanguage() {
   // the store's vanilla API because Monaco commands run outside React — and
   // guarded on the argument type because the id is addressable from any
   // `command:` URI Monaco decides to trust.
-  monaco.editor.registerCommand(OPEN_DICTIONARY_COMMAND_ID, (_accessor, ...args: unknown[]) => {
+  disposables.push(monaco.editor.registerCommand(OPEN_DICTIONARY_COMMAND_ID, (_accessor, ...args: unknown[]) => {
     const key = args[0];
     if (typeof key === 'string' && key.length > 0) {
       useAppStore.getState().openDictionaryAt(key);
     }
-  });
+  }));
 
   // Both languages share the same grammar and folding behaviour…
-  monaco.languages.setMonarchTokensProvider(PROPS_LANGUAGE_ID, MONARCH_GRAMMAR);
-  monaco.languages.setMonarchTokensProvider(TRANSFORMS_LANGUAGE_ID, MONARCH_GRAMMAR);
-  monaco.languages.registerFoldingRangeProvider(PROPS_LANGUAGE_ID, createFoldingRangeProvider());
-  monaco.languages.registerFoldingRangeProvider(TRANSFORMS_LANGUAGE_ID, createFoldingRangeProvider());
+  disposables.push(monaco.languages.setMonarchTokensProvider(PROPS_LANGUAGE_ID, MONARCH_GRAMMAR));
+  disposables.push(monaco.languages.setMonarchTokensProvider(TRANSFORMS_LANGUAGE_ID, MONARCH_GRAMMAR));
+  disposables.push(monaco.languages.registerFoldingRangeProvider(PROPS_LANGUAGE_ID, createFoldingRangeProvider()));
+  disposables.push(monaco.languages.registerFoldingRangeProvider(TRANSFORMS_LANGUAGE_ID, createFoldingRangeProvider()));
 
   // …but each gets only its own completions and hovers.
-  monaco.languages.registerCompletionItemProvider(PROPS_LANGUAGE_ID, createCompletionProvider('props.conf'));
-  monaco.languages.registerHoverProvider(PROPS_LANGUAGE_ID, createHoverProvider('props.conf'));
-  monaco.languages.registerCompletionItemProvider(TRANSFORMS_LANGUAGE_ID, createCompletionProvider('transforms.conf'));
-  monaco.languages.registerHoverProvider(TRANSFORMS_LANGUAGE_ID, createHoverProvider('transforms.conf'));
+  disposables.push(monaco.languages.registerCompletionItemProvider(PROPS_LANGUAGE_ID, createCompletionProvider('props.conf')));
+  disposables.push(monaco.languages.registerHoverProvider(PROPS_LANGUAGE_ID, createHoverProvider('props.conf')));
+  disposables.push(monaco.languages.registerCompletionItemProvider(TRANSFORMS_LANGUAGE_ID, createCompletionProvider('transforms.conf')));
+  disposables.push(monaco.languages.registerHoverProvider(TRANSFORMS_LANGUAGE_ID, createHoverProvider('transforms.conf')));
 
   // Quick fix for the mis-cased-attribute marker.
-  monaco.languages.registerCodeActionProvider(PROPS_LANGUAGE_ID, createCodeActionProvider('props.conf'));
-  monaco.languages.registerCodeActionProvider(TRANSFORMS_LANGUAGE_ID, createCodeActionProvider('transforms.conf'));
+  disposables.push(monaco.languages.registerCodeActionProvider(PROPS_LANGUAGE_ID, createCodeActionProvider('props.conf')));
+  disposables.push(monaco.languages.registerCodeActionProvider(TRANSFORMS_LANGUAGE_ID, createCodeActionProvider('transforms.conf')));
 
   monaco.editor.defineTheme('splunk-light', LIGHT_THEME);
   monaco.editor.defineTheme('splunk-dark', DARK_THEME);
