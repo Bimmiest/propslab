@@ -8,6 +8,11 @@ All notable changes to Propslab are documented here, newest first. Entries say w
 
 ### Added
 
+- **An entry-graph gate and an initial-load budget** ([#467](https://github.com/Bimmiest/propslab/issues/467)). `check-entry-graph.mjs` fails the build if the startup path reaches the Monaco chunk; `check-bundle-size.mjs` budgets the modulepreload set and the codicon font.
+- **Governance files** ([#520](https://github.com/Bimmiest/propslab/issues/520)): CODEOWNERS, issue forms (bug, fidelity question, enhancement), a PR template, a code of conduct, and a release process in CONTRIBUTING; the environment check now asserts `main`'s branch protection.
+- **Directive evidence test** ([#505](https://github.com/Bimmiest/propslab/issues/505)). Every simulated directive must be backed by a Splunk fixture or a test that sets it; the fixture-backed count is ratcheted, and the fidelity suite can no longer skip silently.
+- **Table-driven eval builtin fidelity test** ([#512](https://github.com/Bimmiest/propslab/issues/512)), a model-based property test of the worker lifecycle ([#513](https://github.com/Bimmiest/propslab/issues/513)), a lint/editor diagnostics parity property ([#500](https://github.com/Bimmiest/propslab/issues/500)), a Monaco `fakeModel` contract test and a grammar/parser agreement property ([#516](https://github.com/Bimmiest/propslab/issues/516)), and a docs consistency test ([#519](https://github.com/Bimmiest/propslab/issues/519)).
+
 - **A weekly check of the `production` environment** ([#456](https://github.com/Bimmiest/propslab/issues/456)). `environment.yml` verifies through the API that deploys come from `main` only and that the deployment token is an environment secret; the secret check needs a read-only `SECRETS_READ_TOKEN`.
 - **CI lints the workflows and reviews each PR's dependencies** ([#456](https://github.com/Bimmiest/propslab/issues/456)). New `workflow-lint` and `dependency-review` jobs, a Dependabot cooldown, a `pcre2.wasm` checksum check, and stricter type and switch checks.
 - **The MCP server runs under Node's permission model** ([#455](https://github.com/Bimmiest/propslab/issues/455)). The server and its workers can read only `dist/`, and cannot write files, start processes or load addons.
@@ -46,6 +51,13 @@ All notable changes to Propslab are documented here, newest first. Entries say w
 - **A README link to a closed issue is replaced** ([#184](https://github.com/Bimmiest/propslab/issues/184) → [#272](https://github.com/Bimmiest/propslab/issues/272)).
 
 ### Changed
+
+- **Every CI install runs with `--ignore-scripts`, and the wasm checksum is verified in every job and in the MCP build** ([#504](https://github.com/Bimmiest/propslab/issues/504)). `pcre2-wasm-utf16` is pinned by commit ([#518](https://github.com/Bimmiest/propslab/issues/518)); a weekly job runs the suite shuffled under a non-UTC zone and locale, and the MCP job runs on Windows and macOS too.
+- **Deploy hardening** ([#509](https://github.com/Bimmiest/propslab/issues/509)): the CSP test pins every directive's exact sources, a post-deploy step checks the served headers and wasm MIME type, `Strict-Transport-Security` is sent, and the Trusted Types policy is installed by a side-effect module imported first.
+- **Test hygiene** ([#507](https://github.com/Bimmiest/propslab/issues/507)): property seeds come from `FC_SEED` when set, mocks and globals are restored per test, Playwright pins a time zone and locale and never reuses a stale server.
+- **Booleans**: an unrecognised value now reads as false everywhere, as Splunk's `normalizeBoolean` does, and the engine lint and editor diagnostics share one set of value predicates ([#473](https://github.com/Bimmiest/propslab/issues/473), [#500](https://github.com/Bimmiest/propslab/issues/500)).
+- **Editor**: completion no longer fires in comments or continuation lines, inserts a bare key over an existing value, and offers stanza kinds per file ([#501](https://github.com/Bimmiest/propslab/issues/501)); the TIME_FORMAT hover reads the effective stanza through the engine's parser ([#502](https://github.com/Bimmiest/propslab/issues/502)); the Monarch grammar and folding model continuations as the parser does ([#503](https://github.com/Bimmiest/propslab/issues/503)).
+- **Lint and TypeScript** ([#510](https://github.com/Bimmiest/propslab/issues/510), in part): config files are linted, the engine cannot import UI modules, and `noImplicitOverride` is on.
 
 - **Large inputs reach the preview faster** ([#454](https://github.com/Bimmiest/propslab/issues/454)). The pipeline worker sends each event's trace without its prose and snapshots, shared between events whose steps match, and summarises the Pipeline tab itself. At 20,000 events the paste to status bar drops from about 2 s to 1.7 s, and the Pipeline tab opens in about 15 ms instead of 95 ([ADR 0013](docs/adr/0013-the-preview-receives-a-reduced-result.md)).
 - **Lint runs typescript-eslint's `strictTypeChecked`** ([#456](https://github.com/Bimmiest/propslab/issues/456)), with three rules tuned and the remaining findings fixed.
@@ -87,6 +99,15 @@ All notable changes to Propslab are documented here, newest first. Entries say w
 - **The registry generator proposed in #178 is deliberately not built.** The registry stays hand-maintained, and the drift test that depended on a generator is removed.
 
 ### Fixed
+
+- **The entry chunk statically imported the whole Monaco chunk** ([#467](https://github.com/Bimmiest/propslab/issues/467)). First load fell from 1108 kB to 232 kB gzip.
+- **The windowed field tree stopped following scroll when it mounted past the threshold** ([#469](https://github.com/Bimmiest/propslab/issues/469)).
+- **A crash of a superseded worker request was blamed on the newest queued request** ([#491](https://github.com/Bimmiest/propslab/issues/491)).
+- **Manual-apply mode**: loading an example now runs it, Ctrl/Cmd+Enter runs, and the empty state says so ([#492](https://github.com/Bimmiest/propslab/issues/492)).
+- **eval**: `trim(X, Y)` honours Y and the three trims share one default set ([#474](https://github.com/Bimmiest/propslab/issues/474)); a multivalue operand compares as any-match ([#475](https://github.com/Bimmiest/propslab/issues/475)); a NULL later argument to `split`, `substr` and `mvjoin` yields NULL ([#481](https://github.com/Bimmiest/propslab/issues/481)); non-finite math results yield NULL; deep expressions are rejected with a clear message, `1e3` parses, and `- - x` parses ([#484](https://github.com/Bimmiest/propslab/issues/484)).
+- **INDEXED_EXTRACTIONS = json** strips a BOM and reports invalid JSON ([#482](https://github.com/Bimmiest/propslab/issues/482)); **KV_MODE = xml** no longer creates a field named the empty string, and both XML processors share one walker ([#483](https://github.com/Bimmiest/propslab/issues/483)); the KV_MODE and XML reader dedupe loops are linear ([#480](https://github.com/Bimmiest/propslab/issues/480), in part).
+- **Completion item kinds** were wrong for Monaco 0.57 ([#499](https://github.com/Bimmiest/propslab/issues/499)); loading an example now has its own undo stop and a remount no longer pushes spurious undo entries on CRLF ([#503](https://github.com/Bimmiest/propslab/issues/503)).
+- **Small UX** ([#497](https://github.com/Bimmiest/propslab/issues/497), [#511](https://github.com/Bimmiest/propslab/issues/511), in part): the header shows the platform's modifier key, Enter during IME composition no longer applies a directive, the clipboard fallback restores focus and selection, a loading line shows while the wasm loads, and the error boundary uses the status tokens.
 
 - **A stage that fails on one event no longer drops out for the whole batch** ([#452](https://github.com/Bimmiest/propslab/issues/452)). Per-event stages are re-run per event, and only the failing events pass through unchanged ([ADR 0001](docs/adr/0001-stage-failures-degrade-to-diagnostics.md)).
 - **"Did not fire" explanations are capped at 50 missed events per directive** ([#452](https://github.com/Bimmiest/propslab/issues/452)). Later misses read "Not analysed: explanation limit reached for this directive".
