@@ -3,7 +3,8 @@ import { flattenJson, flattenArray } from '../utils/flattenJson';
 import { hasField, setField, addFieldValue } from '../utils/fieldBag';
 import { cleanFieldKey } from '../transforms/regexTransform';
 import { effectiveBool, effectiveValue } from '../utils/directiveValues';
-import { parseXmlDocument, xmlChildElements, xmlTextContent, type XmlElement } from '../utils/xmlReader';
+import { parseXmlDocument, xmlChildElements } from '../utils/xmlReader';
+import { walkXmlFields } from '../utils/xmlFields';
 import type { RunContext } from '../runContext';
 
 export function applyKvMode(
@@ -240,14 +241,24 @@ function extractJson(
   return { depthLimited: false, parseError: whole.kind === 'invalid' ? whole.error : undefined };
 }
 
-function addMvField(fields: Record<string, string | string[]>, added: string[], key: string, value: string): void {
+function addMvField(
+  fields: Record<string, string | string[]>,
+  added: string[],
+  /** The keys in `added`, kept alongside it so the check is not a scan of the list. */
+  seen: Set<string>,
+  key: string,
+  value: string,
+): void {
   // hasOwn-guarded + `__proto__`-safe so a key like `toString` is stored as a
   // real field instead of reading back the inherited Object.prototype member.
   addFieldValue(fields, key, value);
   // Record the key whether the field was created or gained another value: the
   // caller drops its whole field bag when `added` is empty, so an append that
   // went unrecorded was silently thrown away.
-  if (!added.includes(key)) added.push(key);
+  if (!seen.has(key)) {
+    seen.add(key);
+    added.push(key);
+  }
 }
 
 function extractXml(raw: string, fields: Record<string, string | string[]>, added: string[]): void {
@@ -269,56 +280,13 @@ function extractXml(raw: string, fields: Record<string, string | string[]>, adde
   // Walk from the *document's* root elements, not from the synthetic wrapper:
   // field names are dotted paths and `_root_` must not appear in any of them.
   const roots = wrapped ? xmlChildElements(root) : [root];
+  // The walk is shared with INDEXED_EXTRACTIONS = xml (utils/xmlFields.ts), so
+  // the two name fields the same way; here every pair accumulates as a
+  // multivalue field, so repeated data is not first-wins in one place and
+  // multivalue in another.
+  const seen = new Set(added);
   for (const el of roots) {
-    walkXmlElement(el, fields, added);
-  }
-}
-
-// Iterative pre-order walk: the reader accepts any depth, so recursion here
-// overflowed the stack on deeply nested input (#428). Paths are carried as
-// joined strings rather than copied arrays, which made depth quadratic.
-function walkXmlElement(
-  root: XmlElement,
-  fields: Record<string, string | string[]>,
-  added: string[],
-): void {
-  const stack: { el: XmlElement; path: string }[] = [{ el: root, path: root.localName }];
-  for (let top = stack.pop(); top !== undefined; top = stack.pop()) {
-    const { el, path } = top;
-    const tagName = el.localName;
-    // Splunk names an XML field by its dotted path from the document root and
-    // includes the root element itself, so `<event><user>…` extracts `event.user`
-    // rather than `user` -- pinned by the `kvmode-xml` capture from 10.4.0.
-
-    // Extract attributes. These keep their bare names rather than taking the path
-    // prefix the element leaves get: no capture pins attribute naming, and the
-    // WinEventLog convention below is the one behaviour here we do know.
-    for (const attr of el.attributes) {
-      // "Name" attribute on an element uses TagName_Name as field name (Windows EventLog convention).
-      const fieldName = attr.name === 'Name' ? `${tagName}_Name` : attr.name;
-      // Accumulate like the leaf-text path below: within one mode, repeated data
-      // should not be first-wins in one place and multivalue in another.
-      if (attr.value) addMvField(fields, added, fieldName, attr.value);
-    }
-
-    const children = xmlChildElements(el);
-
-    if (children.length === 0) {
-      // Leaf node — extract text content as a field.
-      const value = xmlTextContent(el).trim();
-      // For <Tag Name="fieldName">value</Tag>, use the Name attribute as the field name.
-      const nameAttr = el.attributes.find((a) => a.name === 'Name')?.value;
-      const fieldKey = nameAttr ?? path;
-      if (value) {
-        addMvField(fields, added, fieldKey, value);
-      }
-    } else {
-      // Parent node — children pushed in reverse so they pop in document order.
-      for (let i = children.length - 1; i >= 0; i--) {
-        const child = children[i]!;
-        stack.push({ el: child, path: `${path}.${child.localName}` });
-      }
-    }
+    for (const { name, value } of walkXmlFields(el, 'xml')) addMvField(fields, added, seen, name, value);
   }
 }
 
@@ -442,6 +410,7 @@ function extractKeyValue(
  */
 function extractMultiKv(raw: string, fields: Record<string, string | string[]>, added: string[]): void {
   const isSeparator = (line: string) => /^[\s\-=_|+]+$/.test(line);
+  const seen = new Set(added);
   const lines = raw.split(/\r?\n/).filter((l) => l.trim().length > 0);
   if (lines.length < 2) return;
 
@@ -464,7 +433,7 @@ function extractMultiKv(raw: string, fields: Record<string, string | string[]>, 
     if (tokens.length === cols.length) {
       for (const [c, col] of cols.entries()) {
         const value = tokens[c]?.[0];
-        if (value) addMvField(fields, added, col.name, value);
+        if (value) addMvField(fields, added, seen, col.name, value);
       }
       continue;
     }
@@ -476,7 +445,7 @@ function extractMultiKv(raw: string, fields: Record<string, string | string[]>, 
     for (const [c, col] of cols.entries()) {
       const end = cols[c + 1]?.start ?? line.length;
       const value = line.slice(col.start, end).trim();
-      if (value) addMvField(fields, added, col.name, value);
+      if (value) addMvField(fields, added, seen, col.name, value);
     }
   }
 }

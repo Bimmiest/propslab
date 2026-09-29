@@ -47,6 +47,28 @@ const WINEVT =
   "<EventData><Data Name='SubjectUserName'>alice</Data><Data Name='LogonType'>3</Data></EventData>" +
   '</Event>';
 
+describe('INDEXED_EXTRACTIONS = xml and KV_MODE = xml share one walk (#483)', () => {
+  const docs = [
+    '<event><user>alice</user><src ip="10.0.0.1"/></event>',
+    '<Event><EventData><Data Name="TargetUser">bob</Data><Data Name="">v</Data></EventData></Event>',
+    '<r><item>one</item><item>two</item><Provider Name="Svc"/></r>',
+  ];
+
+  it.each(docs)('name the same fields for %s', (doc) => {
+    const indexed = fieldsOf(doc, xmlDirs('xml'));
+    const { result } = runPipeline(
+      doc,
+      { index: 'main', host: 'h', source: 's', sourcetype: 'x' },
+      '[x]\nSHOULD_LINEMERGE = false\nKV_MODE = xml\n',
+      '',
+      { perEventPipeline: false, captureOffsets: false },
+    );
+    const searchTime = result.events[0]!.fields;
+    for (const [name, value] of Object.entries(indexed)) expect(searchTime[name]).toEqual(value);
+    expect(Object.keys(indexed)).not.toContain('');
+  });
+});
+
 describe('INDEXED_EXTRACTIONS xml family — naming (#271)', () => {
   it('xml names leaves by dotted path from the root, as KV_MODE = xml does', () => {
     const f = fieldsOf('<event><user>alice</user><src ip="10.0.0.1"/></event>', xmlDirs('xml'));

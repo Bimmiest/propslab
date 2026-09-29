@@ -132,6 +132,49 @@ describe('KV_MODE = xml', () => {
   });
 });
 
+describe('KV_MODE = xml — an empty Name attribute (#483)', () => {
+  // A Name attribute names the leaf it sits on only when it says something: an
+  // empty one names nothing, so the leaf keeps its dotted path rather than
+  // becoming a field called "" (INDEXED_EXTRACTIONS = xml already did this).
+  it('falls back to the path for <Data Name="">v</Data>', () => {
+    const fields = fieldsOf('<Event><Data Name="">v</Data></Event>');
+    expect(fields['Event.Data']).toBe('v');
+    expect(Object.keys(fields)).not.toContain('');
+  });
+
+  it('still names a leaf by a non-empty Name attribute', () => {
+    expect(fieldsOf('<Event><Data Name="User">v</Data></Event>')['User']).toBe('v');
+  });
+});
+
+describe('KV_MODE = xml — an event with very many elements (#480)', () => {
+  // The default TRUNCATE = 10000 hides this; 0 lifts it. Distinct element names
+  // were checked against a growing list, which took seconds at this size.
+  const props = 'SHOULD_LINEMERGE = false\nTRUNCATE = 0\nKV_MODE = xml\n';
+
+  it('extracts 40k distinct elements quickly', () => {
+    const n = 40_000;
+    let body = '';
+    for (let i = 0; i < n; i++) body += `<e${i}>v</e${i}>`;
+    const start = performance.now();
+    const fields = fieldsOf(`<r>${body}</r>`, props);
+    const elapsed = performance.now() - start;
+    expect(fields['r.e0']).toBe('v');
+    expect(fields[`r.e${n - 1}`]).toBe('v');
+    // Generous: a regression guard for a quadratic loop, not a benchmark.
+    expect(elapsed).toBeLessThan(3000);
+  });
+
+  it('reads an element with 40k distinct attributes quickly', () => {
+    let attrs = '';
+    for (let i = 0; i < 40_000; i++) attrs += ` a${i}="v"`;
+    const start = performance.now();
+    const fields = fieldsOf(`<r${attrs}/>`, props);
+    expect(fields['a0']).toBe('v');
+    expect(performance.now() - start).toBeLessThan(3000);
+  });
+});
+
 afterEach(() => {
   vi.unstubAllGlobals();
 });
