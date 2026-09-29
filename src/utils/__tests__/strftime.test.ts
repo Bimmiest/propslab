@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import fc from 'fast-check';
 import { cachedFormatCount, formatSpecifiers, formatStrftime, parseTimestamp, parseTzAlias, strftimeToRegex, supportedSpecifiers, unsupportedSpecifiers } from '../strftime';
+import { fcSeed } from '../../test/fcSeed';
 
 /** Helper: ISO string of a parsed timestamp, or null. */
 function iso(text: string, format: string, tz?: string): string | null {
@@ -402,7 +403,7 @@ describe('formatStrftime then parseTimestamp agree for every specifier (#429)', 
         expect(parseTimestamp(text, format)?.getTime(), `${format} → ${text}`)
           .toBe(Math.floor(ms / precision) * precision);
       }),
-      { seed: 429, numRuns: 2000 },
+      { seed: fcSeed(429), numRuns: 2000 },
     );
   });
 });

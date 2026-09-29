@@ -52,6 +52,8 @@ export default defineConfig({
     baseURL: BASE_URL,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
+    timezoneId: 'America/Los_Angeles',
+    locale: 'en-GB',
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {
@@ -62,7 +64,8 @@ export default defineConfig({
     // healthy build in the log directly above it.
     command: `${SKIP_BUILD ? '' : 'npm run build && '}npm run preview -- --port ${PORT} --strictPort --host 127.0.0.1`,
     url: BASE_URL,
-    reuseExistingServer: !process.env.CI,
+    // Reusing a stale dist/ produces confident, wrong results; always rebuild to ensure freshness.
+    reuseExistingServer: false,
     timeout: 180_000,
     // Piped, not ignored: the server's own startup line ("Local: http://…") is
     // what distinguishes "never bound" from "bound somewhere else", and

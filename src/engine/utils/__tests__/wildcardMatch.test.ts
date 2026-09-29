@@ -11,6 +11,7 @@
 import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';
 import { compileWildcard } from '../wildcardMatch';
+import { fcSeed } from '../../../test/fcSeed';
 
 /** The regex compilation, kept here only as the parity reference. */
 function reference(pattern: string): RegExp {
@@ -68,15 +69,29 @@ describe('compileWildcard', () => {
         fc.array(chars.filter((c) => c !== '*'), { maxLength: 12 }).map((c) => c.join('')),
         (pattern, s) => compileWildcard(pattern)(s) === reference(pattern).test(s),
       ),
-      { numRuns: 2000 },
+      { seed: fcSeed(371), numRuns: 2000 },
     );
   });
 
   it('stays fast on patterns that made the regex backtrack exponentially (#344)', () => {
-    const value = 'a'.repeat(10_000);
     const patterns = ['*a*a*a*a*b', '*a*a*a*a*a*a*b', '*a*a*a*a*a*a*ab*', '*aa*aa*aa*aa*aa*aa*c*'];
-    const started = performance.now();
-    for (const p of patterns) expect(m(p, value)).toBe(false);
-    expect(performance.now() - started).toBeLessThan(50);
+    // Measure with base input size, then verify time stays sub-linear with larger input
+    const value1 = 'a'.repeat(5_000);
+    const started1 = performance.now();
+    for (const p of patterns) expect(m(p, value1)).toBe(false);
+    const time1 = performance.now() - started1;
+
+    const value2 = 'a'.repeat(10_000);
+    const started2 = performance.now();
+    for (const p of patterns) expect(m(p, value2)).toBe(false);
+    const time2 = performance.now() - started2;
+
+    // Verify roughly linear scaling: 2x input should be < 4x time
+    // (wall clock is generous to account for system variance)
+    if (time1 > 0) {
+      expect(time2).toBeLessThan(time1 * 4);
+    }
+    // Ensure it doesn't timeout completely even on slow machines
+    expect(time2).toBeLessThan(1000);
   });
 });

@@ -19,8 +19,9 @@
 import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';
 import { parseConf } from '../parser/confParser';
+import { fcSeed } from '../../test/fcSeed';
 
-fc.configureGlobal({ seed: 371, numRuns: 200 });
+fc.configureGlobal({ seed: fcSeed(371), numRuns: 200 });
 
 // ── Model ───────────────────────────────────────────────
 
