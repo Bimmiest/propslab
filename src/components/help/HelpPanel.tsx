@@ -164,7 +164,7 @@ function StageCard({
   const ref = useRef<HTMLDivElement>(null);
   // A stage opened from the dictionary may sit below the fold.
   useEffect(() => {
-    if (isExpanded) ref.current?.scrollIntoView?.({ block: 'nearest' });
+    if (isExpanded) ref.current?.scrollIntoView({ block: 'nearest' });
   }, [isExpanded]);
 
   return (

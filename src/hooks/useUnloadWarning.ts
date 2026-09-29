@@ -6,6 +6,7 @@ function warn(e: BeforeUnloadEvent) {
   // ones that still ask for it. Either way the browser shows its own generic
   // prompt, and nothing of the session is written anywhere (#453).
   e.preventDefault();
+  // eslint-disable-next-line @typescript-eslint/no-deprecated -- deliberately, for those browsers
   e.returnValue = '';
 }
 

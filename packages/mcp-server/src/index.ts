@@ -98,7 +98,7 @@ async function main(): Promise<void> {
     child.on('exit', (code, signal) => {
       for (const s of forwarded) process.off(s, forward);
       if (signal) {
-        process.exitCode = 128 + (os.constants.signals[signal] ?? 0);
+        process.exitCode = 128 + os.constants.signals[signal];
         process.kill(process.pid, signal);
         return;
       }

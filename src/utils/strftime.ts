@@ -148,11 +148,11 @@ function expandComposites(format: string): string {
         i += 2;
         continue;
       }
-      result += format[i];
+      result += format[i]!;
       i += 1;
       continue;
     }
-    result += format[i];
+    result += format[i]!;
     i += 1;
   }
   return result;
@@ -352,7 +352,7 @@ function ianaOffsetAt(formatter: Intl.DateTimeFormat, atMs: number): number {
   let year = num('year');
   // `era` is requested so a BC year is not silently read as AD — Splunk data
   // will never contain one, but a wrong answer is worse than a rejected one.
-  if (parts.find((p) => p.type === 'era')?.value?.startsWith('B')) year = 1 - year;
+  if (parts.find((p) => p.type === 'era')?.value.startsWith('B')) year = 1 - year;
 
   // Some ICU versions render midnight as hour 24 under hour12: false.
   const hour = num('hour') === 24 ? 0 : num('hour');

@@ -77,6 +77,16 @@ describe('truncateEvents', () => {
     expect(e._raw).not.toContain('�');
   });
 
+  it('records the cut on the step as data: lines, limit, and whether it was the default', () => {
+    const configured = truncateEvents([event('abcdefghij\nabcdefghij\nabc')], truncateDir('5'), runCtx())[0]!;
+    const step = configured.processingTrace.at(-1)!;
+    expect(step.processor).toBe('truncator');
+    expect(step.truncation).toEqual({ lines: 2, limitBytes: 5, isDefault: false });
+
+    const byDefault = truncateEvents([event('x'.repeat(10_001))], [], runCtx())[0]!;
+    expect(byDefault.processingTrace.at(-1)!.truncation).toEqual({ lines: 1, limitBytes: 10_000, isDefault: true });
+  });
+
   // parseInt is too lenient — these forms must be rejected, not silently
   // truncating with a wrong length (1e3→1) or disabling truncation (0x10→0).
   it.each(['0x10', '1e3', '100abc', '1.5', '-5'])(

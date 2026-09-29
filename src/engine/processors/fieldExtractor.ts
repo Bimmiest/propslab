@@ -43,7 +43,7 @@ export function extractFields(
     // EXTRACT lacks.
     const regex = pattern ? safeRegex(pattern, '', limits) : null;
     // An extraction that does not compile is skipped, so surface it.
-    if (pattern && !regex && diagnostics) {
+    if (pattern && !regex) {
       diagnostics.push({
         level: 'warning',
         message: `EXTRACT-${dir.className ?? ''} was skipped: its pattern does not compile (${validateRegex(pattern) ?? 'invalid regex'}). No fields were extracted.`,

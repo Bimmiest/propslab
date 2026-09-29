@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import type { EventMetadata, OutputTabId, ProcessingResult, ValidationDiagnostic } from '../engine/types';
+import type { EventMetadata, OutputTabId, ValidationDiagnostic } from '../engine/types';
+import type { ViewResult } from '../utils/viewResult';
 
 /** Top-level workspace the activity rail switches between. */
 export type ActiveView = 'simulator' | 'dictionary';
@@ -50,8 +51,8 @@ interface AppState {
   /** Replace all four inputs at once and make that the new clean baseline. */
   loadInputs: (inputs: SessionInputs) => void;
 
-  processingResult: ProcessingResult | null;
-  setProcessingResult: (result: ProcessingResult | null) => void;
+  processingResult: ViewResult | null;
+  setProcessingResult: (result: ViewResult | null) => void;
 
   validationDiagnostics: ValidationDiagnostic[];
   setValidationDiagnostics: (diags: ValidationDiagnostic[]) => void;

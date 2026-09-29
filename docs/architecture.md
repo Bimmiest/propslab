@@ -35,6 +35,10 @@ The lifecycle rules:
 
 A new worker entry must serve through `serveWithRegexEngine`, which posts `WORKER_READY`. A caller must not handle `onerror` itself.
 
+### What the pipeline worker sends back
+
+The pipeline worker does not post `runPipeline`'s result as is. At 20k events, cloning it cost as much as the run itself, and most of that was per-event traces: prose and before/after snapshots on every step, which no view reads per event. `toViewResult` (`utils/viewResult.ts`) reduces each step to its structured fields (`TraceStep`) and interns the traces, so events whose steps match share one array and structured clone sends it once; it also interns metadata and drops `timestampText` where it equals `_raw`. The Pipeline tab, the one view that shows step prose, reads `stepSummaries`, which the worker builds from the full traces. The store holds a `ViewResult`, and the inline fallback applies the same reduction, so the views see one shape either way. A view that needs something new from a step reads a structured field (`metadataChanges`, `truncation`, `timeSource`), never `description`.
+
 ## Monaco bundling
 
 Monaco's widgets (hover, suggest, code actions, folding, find, multi-cursor) are *contributions*, imported separately from the API surface (`monaco-editor/editor`) in `MonacoEditor.tsx` — one `monaco-editor/features/*/register` module at a time, not all of them, which would also register sticky scroll, rename, code lens and ~40 more contributions the app never enables. `monaco-editor/editor` alone registers providers that nothing ever renders, so dropping a contribution silently removes its feature; the e2e suite exercises each one. `vite.config.ts` groups the slim `esm/vs` tree via `codeSplitting` (Rolldown's replacement for `manualChunks` — it claims modules the graph already reached rather than naming ids to pull in). A bad split type-checks and builds, then fails to mount an editor — which is one of the things the e2e suite exists to catch (see the README's Tests section).

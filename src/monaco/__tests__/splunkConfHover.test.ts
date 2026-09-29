@@ -24,7 +24,7 @@ function hoverText(line: string): string {
     {} as never,
     undefined,
   ) as languages.Hover | null | undefined;
-  return result?.contents?.map((c) => c.value).join('\n') ?? '';
+  return result?.contents.map((c) => c.value).join('\n') ?? '';
 }
 
 // A stanza header with a trailing space (`[foo] `) gets a hover, as confParser's

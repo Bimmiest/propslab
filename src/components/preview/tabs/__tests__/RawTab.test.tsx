@@ -24,7 +24,7 @@ const pageTwo = [makeItem('second event', 2)];
 
 // The expanded metadata bar renders `sourcetype=…`; the label and value live in
 // separate elements, so match against the flattened text rather than a node.
-const metadataShown = () => document.body.textContent?.includes('sourcetype') === true;
+const metadataShown = () => document.body.textContent.includes('sourcetype');
 
 // EventRow holds expand/selection state locally, so rows are keyed by event,
 // not by their slot on the page: one event's expanded state must not appear on
@@ -109,7 +109,7 @@ describe('RawTab — metadata baseline is the run (#335)', () => {
     const meta = { index: 'main', host: 'h', source: 's', sourcetype: 'st' };
     useAppStore.setState({
       metadata: { ...meta, host: 'edited-since' },
-      processingResult: { events: [pageOne[0]!.event], originalRaw: 'first event', eventCount: 1, processingSteps: [], inputMetadata: meta },
+      processingResult: { events: [pageOne[0]!.event], originalRaw: 'first event', eventCount: 1, stepSummaries: [], inputMetadata: meta },
     });
     const { container } = render(<RawTab items={pageOne} currentPage={1} eventsPerPage={1} search="" />);
     expect(container.textContent).not.toContain('Metadata modified');
@@ -138,7 +138,7 @@ describe('RawTab — a clone and its original are separate rows (#422)', () => {
     const items = [original, cloneOf(original, 'copy'), cloneOf(original, 'copy')];
     const { container } = render(<RawTab items={items} currentPage={1} eventsPerPage={10} search="" />);
     expect(screen.getAllByText(/^Event #\d+$/)).toHaveLength(3);
-    expect(container.textContent?.match(/Cloned from st/g)).toHaveLength(2);
+    expect(container.textContent.match(/Cloned from st/g)).toHaveLength(2);
     const sameKey = errors.mock.calls.filter((args: unknown[]) => args.some((a) => String(a).includes('same key')));
     expect(sameKey).toEqual([]);
   });
@@ -160,5 +160,53 @@ describe('RawTab — a clone and its original are separate rows (#422)', () => {
     expect(document.body.textContent).toContain('Selected: user');
     rerender(<RawTab items={[makeItem('name=bob', 1)]} currentPage={1} eventsPerPage={10} search="" />);
     expect(document.body.textContent).not.toContain('Selected:');
+  });
+});
+
+// Read from structured step fields, not step prose: the preview's traces carry
+// no descriptions (see toViewResult).
+describe('RawTab — metadata attribution and truncation from structured steps', () => {
+  const initial = useAppStore.getState();
+  afterEach(() => { useAppStore.setState(initial, true); });
+
+  function itemWith(trace: SplunkEvent['processingTrace']): EnrichedEvent {
+    const item = makeItem('GET /a 200', 1);
+    item.event.metadata = { ...item.event.metadata, host: 'web02' };
+    item.event.processingTrace = trace;
+    item.hasMetadataChanges = true;
+    return item;
+  }
+
+  it('names the step that last set the metadata key', () => {
+    const meta = { index: 'main', host: 'h', source: 's', sourcetype: 'st' };
+    useAppStore.setState({
+      processingResult: { events: [], originalRaw: '', eventCount: 0, stepSummaries: [], inputMetadata: meta },
+    });
+    const item = itemWith([
+      { processor: 'TRANSFORMS-a:first_host', phase: 'index-time', description: '', metadataChanges: [{ key: 'host', from: 'h', to: 'web01' }] },
+      { processor: 'TRANSFORMS-a:set_index', phase: 'index-time', description: '', metadataChanges: [{ key: 'index', from: 'main', to: 'main' }] },
+      { processor: 'TRANSFORMS-a:last_host', phase: 'index-time', description: '', metadataChanges: [{ key: 'host', from: 'web01', to: 'web02' }] },
+    ]);
+    render(<RawTab items={[item]} currentPage={1} eventsPerPage={1} search="" />);
+    fireEvent.click(screen.getByRole('button', { name: /Metadata/i }));
+    expect(screen.getByText('[last_host]')).toBeInTheDocument();
+    expect(screen.queryByText('[first_host]')).toBeNull();
+  });
+
+  it('badges a truncated event and says whether the limit was the default', () => {
+    const item = makeItem('x'.repeat(20), 1);
+    item.event.processingTrace = [
+      { processor: 'truncator', phase: 'index-time', truncation: { lines: 2, limitBytes: 10000, isDefault: true } },
+    ];
+    const { rerender } = render(<RawTab items={[item]} currentPage={1} eventsPerPage={1} search="" />);
+    const badge = screen.getByText('Truncated (default)');
+    expect(badge).toHaveAttribute('title', 'Truncated 2 lines to 10000 bytes each (TRUNCATE default)');
+
+    const configured = makeItem('x'.repeat(20), 1);
+    configured.event.processingTrace = [
+      { processor: 'truncator', phase: 'index-time', truncation: { lines: 1, limitBytes: 5, isDefault: false } },
+    ];
+    rerender(<RawTab items={[configured]} currentPage={1} eventsPerPage={1} search="" />);
+    expect(screen.getByText('Truncated')).toHaveAttribute('title', 'Truncated 1 line to 5 bytes each (TRUNCATE=5)');
   });
 });

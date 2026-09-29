@@ -9,7 +9,8 @@
 // ---------------------------------------------------------------------------
 
 import { useMemo, useState } from 'react';
-import type { DirectiveNoOp, SplunkEvent } from '../../../../engine/types';
+import type { DirectiveNoOp } from '../../../../engine/types';
+import type { ViewEvent } from '../../../../utils/viewResult';
 import { groupNoOps, type GroupedNoOp } from '../../../../engine/groupNoOps';
 import { describeNoOp } from '../../../../engine/noOpExplainer';
 import { revealInEditor } from '../../../editor/revealInEditor';
@@ -78,7 +79,7 @@ export function DirectiveNoOpList({
   events,
   phase,
 }: {
-  events: SplunkEvent[];
+  events: readonly ViewEvent[];
   /** Restrict to one pipeline half; omit for all. */
   phase?: DirectiveNoOp['phase'];
 }) {

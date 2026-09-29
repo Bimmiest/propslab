@@ -105,10 +105,10 @@ function unescapeTranslateSet(set: string, delimiter: string): string {
   let out = '';
   for (let i = 0; i < set.length; i++) {
     if (set[i] !== '\\' || i === set.length - 1) {
-      out += set[i];
+      out += set[i]!;
       continue;
     }
-    const next = set[++i];
+    const next = set[++i]!;
     out +=
       next === 'n' ? '\n' : next === 't' ? '\t' : next === 'r' ? '\r' : next === delimiter ? delimiter : next;
   }
@@ -130,8 +130,8 @@ function parseTransliterate(
   dir?: ConfDirective,
   diagnostics?: DiagnosticSink,
 ): SedCommand | null {
-  const from = [...unescapeTranslateSet(fromRaw, delimiter)];
-  const to = [...unescapeTranslateSet(toRaw, delimiter)];
+  const from = Array.from(unescapeTranslateSet(fromRaw, delimiter));
+  const to = Array.from(unescapeTranslateSet(toRaw, delimiter));
 
   if (from.length === 0) return null;
   if (from.length !== to.length) {
@@ -195,7 +195,7 @@ export function parseSedExpression(
 
   for (let i = 2; i < trimmed.length; i++) {
     if (escaped) {
-      current += trimmed[i];
+      current += trimmed[i]!;
       escaped = false;
       continue;
     }
@@ -209,7 +209,7 @@ export function parseSedExpression(
       current = '';
       continue;
     }
-    current += trimmed[i];
+    current += trimmed[i]!;
   }
   if (current) parts.push(current);
 

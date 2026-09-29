@@ -30,7 +30,7 @@ export interface GroupedNoOp {
   eventsAffected: number;
 }
 
-export function groupNoOps(events: SplunkEvent[]): GroupedNoOp[] {
+export function groupNoOps(events: readonly Pick<SplunkEvent, 'noOps'>[]): GroupedNoOp[] {
   const groups = new Map<string, GroupedNoOp & { seen: Map<string, number> }>();
 
   for (const event of events) {

@@ -23,7 +23,7 @@ export default defineConfig([
     files: ['**/*.{ts,tsx}'],
     extends: [
       js.configs.recommended,
-      tseslint.configs.recommendedTypeChecked,
+      tseslint.configs.strictTypeChecked,
       reactHooks.configs.flat.recommended,
       reactRefresh.configs.vite,
     ],
@@ -50,6 +50,17 @@ export default defineConfig([
       // as handling a union member, since it is where the new one would
       // silently land.
       '@typescript-eslint/switch-exhaustiveness-check': 'error',
+      // With noUncheckedIndexedAccess on, `arr[i]!` after a bounds check is
+      // how an index the code has already proven is read; this rule would ask
+      // for a runtime guard restating that check at more than 1,100 sites.
+      '@typescript-eslint/no-non-null-assertion': 'off',
+      // `onClick={() => setOpen(false)}` returns the setter's void; the rule's
+      // own option exempts that shorthand, and still reports a void value used
+      // anywhere it could be mistaken for a result.
+      '@typescript-eslint/no-confusing-void-expression': ['error', { ignoreArrowShorthand: true }],
+      // Counts and offsets go into messages everywhere. Numbers stringify
+      // predictably; objects, nullish values and the rest stay reported.
+      '@typescript-eslint/restrict-template-expressions': ['error', { allowNumber: true }],
     },
   },
   {

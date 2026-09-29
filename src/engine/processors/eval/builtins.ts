@@ -266,7 +266,7 @@ function mvzip(args: EvalValue[]): EvalValue {
   const len = Math.min(a.length, b.length);
   const result: string[] = [];
   for (let i = 0; i < len; i++) {
-    result.push(a[i] + delim + b[i]);
+    result.push(a[i]! + delim + b[i]!);
   }
   return result;
 }

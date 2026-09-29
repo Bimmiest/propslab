@@ -151,7 +151,7 @@ export function minMax(args: EvalValue[], which: 'min' | 'max'): EvalValue {
   let best: EvalValue | undefined;
   for (const v of args.flatMap((a) => (Array.isArray(a) ? a : [a]))) {
     // NULLs are not candidates: min(null, 3) is 3, and min(null) is NULL.
-    if (v === null || v === undefined) continue;
+    if (v === null) continue;
     if (best === undefined) { best = v; continue; }
     const cmp = compareEvalValues(v, best);
     if (which === 'min' ? cmp < 0 : cmp > 0) best = v;

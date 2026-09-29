@@ -1,4 +1,4 @@
-import type { SplunkEvent } from '../../../../engine/types';
+import type { ViewEvent } from '../../../../utils/viewResult';
 import type { WindowSegment } from '../../../../hooks/useWindowedRows';
 import type { PhaseFilter, SortDir, SortKey } from './data';
 
@@ -21,7 +21,7 @@ export type FieldRow = AggregatedField & { isParent: boolean; depth: number; par
  * Alias mapping (target → source), read as data off the FIELDALIAS steps
  * rather than parsed out of `trace.description`, which is display text.
  */
-export function buildAliasMap(events: SplunkEvent[]): Map<string, string> {
+export function buildAliasMap(events: readonly ViewEvent[]): Map<string, string> {
   const map = new Map<string, string>();
   for (const event of events) {
     for (const trace of event.processingTrace) {
@@ -33,7 +33,7 @@ export function buildAliasMap(events: SplunkEvent[]): Map<string, string> {
   return map;
 }
 
-export function aggregateFields(events: SplunkEvent[], aliasMap: Map<string, string>): AggregatedField[] {
+export function aggregateFields(events: readonly ViewEvent[], aliasMap: Map<string, string>): AggregatedField[] {
   const fields = new Map<string, AggregatedField>();
 
   for (const event of events) {

@@ -34,6 +34,7 @@ const selected = () => screen.getByTestId('sel').textContent;
  */
 function stubCaretAt(offset: number) {
   const doc = document as Document & { caretRangeFromPoint?: (x: number, y: number) => Range | null };
+  // eslint-disable-next-line @typescript-eslint/no-deprecated -- jsdom has neither caret API; this stubs the fallback SelectableRaw reads
   doc.caretRangeFromPoint = () => {
     const box = screen.getByRole('textbox');
     const walker = document.createTreeWalker(box, NodeFilter.SHOW_TEXT);

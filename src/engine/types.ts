@@ -80,6 +80,12 @@ export interface ProcessingStep {
    * change too, but only as prose.
    */
   metadataChanges?: { key: keyof EventMetadata; from: string; to: string }[];
+  /**
+   * truncator steps only: how many lines were cut, to how many bytes, and
+   * whether that limit was TRUNCATE's default rather than a configured value.
+   * Structured for the same reason as `fieldAliases`.
+   */
+  truncation?: { lines: number; limitBytes: number; isDefault: boolean };
 }
 
 /**

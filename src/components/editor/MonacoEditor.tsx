@@ -167,7 +167,7 @@ export function MonacoEditor({
         model.pushEditOperations([], [{ range: model.getFullModelRange(), text: initialValue, forceMoveMarkers: true }], () => null);
         model.pushStackElement();
       }
-      const viewState = takeViewState<editor.ICodeEditorViewState>(key);
+      const viewState = takeViewState(key) as editor.ICodeEditorViewState | undefined;
       if (viewState) instance.restoreViewState(viewState);
     }
 

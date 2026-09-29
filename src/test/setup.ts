@@ -34,6 +34,7 @@ if (typeof window !== 'undefined') {
   // Nor scrollIntoView, which any list that keeps a keyboard selection in view
   // will call. jsdom has no layout, so a no-op is the honest stand-in — without
   // it the call throws and surfaces as an unhandled error beside passing tests.
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- absent under jsdom, whatever the types say
   if (!Element.prototype.scrollIntoView) {
     Element.prototype.scrollIntoView = function scrollIntoView() {};
   }

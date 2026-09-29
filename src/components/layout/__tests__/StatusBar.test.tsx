@@ -4,7 +4,8 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import * as RadixTooltip from '@radix-ui/react-tooltip';
 import { StatusBar } from '../StatusBar';
 import { useAppStore } from '../../../store/useAppStore';
-import type { ProcessingResult, ValidationDiagnostic, SplunkEvent } from '../../../engine/types';
+import type { ValidationDiagnostic, SplunkEvent } from '../../../engine/types';
+import { toViewResult, type ViewResult } from '../../../utils/viewResult';
 
 function makeEvent(fields: Record<string, string>): SplunkEvent {
   return {
@@ -39,7 +40,7 @@ describe('StatusBar', () => {
   });
 
   it('shows "Worker idle" after a worker run', () => {
-    useAppStore.setState({ processingResult: { events: [], eventCount: 0 } as unknown as ProcessingResult });
+    useAppStore.setState({ processingResult: { events: [], eventCount: 0 } as unknown as ViewResult });
     renderStatusBar();
     expect(screen.getByText('Worker idle')).toBeInTheDocument();
     expect(screen.queryByTestId('pipeline-main-thread')).toBeNull();
@@ -47,7 +48,7 @@ describe('StatusBar', () => {
 
   it('says the pipeline runs on the main thread, not "Worker idle", after a worker load failure (#403)', () => {
     useAppStore.setState({
-      processingResult: { events: [], eventCount: 0 } as unknown as ProcessingResult,
+      processingResult: { events: [], eventCount: 0 } as unknown as ViewResult,
       pipelineOnMainThread: true,
     });
     renderStatusBar();
@@ -72,13 +73,13 @@ describe('StatusBar', () => {
   });
 
   it('shows event count, distinct field count, and "Valid" when result has no diagnostics', () => {
-    const result: ProcessingResult = {
+    const result = toViewResult({
       events: [makeEvent({ a: '1', b: '2' }), makeEvent({ a: '3', c: '4' })],
       originalRaw: '',
       eventCount: 2,
       processingSteps: [],
       inputMetadata: { index: 'main', host: '', source: '', sourcetype: '' },
-    };
+    });
     useAppStore.setState({ processingResult: result, validationDiagnostics: [] });
     renderStatusBar();
     expect(screen.getByText('2 events')).toBeInTheDocument();
@@ -94,7 +95,7 @@ describe('StatusBar', () => {
       { level: 'warning', message: 'w1', file: 'props.conf' },
     ];
     useAppStore.setState({
-      processingResult: { events: [], originalRaw: '', eventCount: 0, processingSteps: [], inputMetadata: { index: 'main', host: '', source: '', sourcetype: '' } },
+      processingResult: toViewResult({ events: [], originalRaw: '', eventCount: 0, processingSteps: [], inputMetadata: { index: 'main', host: '', source: '', sourcetype: '' } }),
       validationDiagnostics: diags,
     });
     renderStatusBar();
