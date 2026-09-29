@@ -1,0 +1,66 @@
+name: Fidelity Question
+description: Report a discrepancy between Propslab and Splunk
+labels: [question]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        If Propslab's output differs from real Splunk, help us understand it. Provide:
+        - The input line(s) you tested
+        - The `props.conf` and `transforms.conf` stanzas
+        - What Splunk produced
+        - Your Splunk version and build
+        - Confirmation you observed this on a licensed instance you own
+  - type: textarea
+    id: input
+    attributes:
+      label: Input line(s)
+      description: The raw event or log line(s) you're testing
+      placeholder: "Example: 192.168.1.1 - user [01/Jan/2024:12:00:00 +0000]"
+    validations:
+      required: true
+  - type: textarea
+    id: props
+    attributes:
+      label: props.conf stanza
+      description: The relevant stanza from props.conf
+      placeholder: |
+        [sourcetype]
+        TRANSFORMS = transform1, transform2
+    validations:
+      required: true
+  - type: textarea
+    id: transforms
+    attributes:
+      label: transforms.conf stanzas
+      description: Any relevant stanzas from transforms.conf
+      placeholder: |
+        [transform1]
+        REGEX = ...
+        FORMAT = ...
+    validations:
+      required: true
+  - type: textarea
+    id: splunk-output
+    attributes:
+      label: What Splunk produced
+      description: The events and fields your Splunk instance generated
+      placeholder: "Events and extracted field values..."
+    validations:
+      required: true
+  - type: textarea
+    id: splunk-version
+    attributes:
+      label: Splunk version and build
+      description: The exact version and build number (e.g., "10.4.0, build abc123")
+      placeholder: "10.4.0, build abc123"
+    validations:
+      required: true
+  - type: checkboxes
+    id: licensed
+    attributes:
+      label: Confirmation
+      description: Confirm you observed this on a licensed Splunk instance you own
+      options:
+        - label: I confirmed this on a Splunk instance licensed to me or my organization
+          required: true
