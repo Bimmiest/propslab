@@ -1,6 +1,6 @@
 # Architecture notes
 
-Contributor-facing internals. The user-facing architecture — pipeline order, stanza precedence, layout — is in the [README](../README.md).
+Contributor-facing internals. The user-facing architecture — pipeline order, stanza precedence, layout — is in the [README](../README.md). The reasoning behind individual engine design choices, and the issues that led to them, is recorded as architecture decision records in [`docs/adr/`](adr/README.md).
 
 ## State management
 
@@ -34,6 +34,10 @@ The lifecycle rules:
 - **A load is never charged to a request.** Before ready no watchdog runs, however many requests are posted; the load timer (`LOAD_WAIT_FACTOR` run budgets) bounds the wait, and expiring counts as a load failure. A run budget against a worker still downloading would restart the download on every edit (#420).
 
 A new worker entry must serve through `serveWithRegexEngine`, which posts `WORKER_READY`. A caller must not handle `onerror` itself.
+
+### What the pipeline worker sends back
+
+The pipeline worker does not post `runPipeline`'s result as is. At 20k events, cloning it cost as much as the run itself, and most of that was per-event traces: prose and before/after snapshots on every step, which no view reads per event. `toViewResult` (`utils/viewResult.ts`) reduces each step to its structured fields (`TraceStep`) and interns the traces, so events whose steps match share one array and structured clone sends it once; it also interns metadata and drops `timestampText` where it equals `_raw`. The Pipeline tab, the one view that shows step prose, reads `stepSummaries`, which the worker builds from the full traces. The store holds a `ViewResult`, and the inline fallback applies the same reduction, so the views see one shape either way. A view that needs something new from a step reads a structured field (`metadataChanges`, `truncation`, `timeSource`), never `description`.
 
 ## Monaco bundling
 

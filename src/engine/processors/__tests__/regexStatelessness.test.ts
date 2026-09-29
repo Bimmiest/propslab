@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { extractFields } from '../fieldExtractor';
 import { applySedCommands } from '../sedCmd';
 import type { SplunkEvent, ConfDirective } from '../../types';
+import { runCtx } from '../../__tests__/runCtx';
 
 function makeEvent(raw: string): SplunkEvent {
   return {
@@ -24,15 +25,15 @@ describe('extractFields — statelessness', () => {
 
   it('extracts fields identically on first and second call', () => {
     const events = [makeEvent('alice login'), makeEvent('bob logout')];
-    const first = extractFields(events, directives);
-    const second = extractFields(events, directives);
+    const first = extractFields(events, directives, runCtx());
+    const second = extractFields(events, directives, runCtx());
     expect(first[0]!.fields).toEqual(second[0]!.fields);
     expect(first[1]!.fields).toEqual(second[1]!.fields);
   });
 
   it('extracts fields from every event, not just the first', () => {
     const events = [makeEvent('alice login'), makeEvent('bob logout')];
-    const result = extractFields(events, directives);
+    const result = extractFields(events, directives, runCtx());
     expect(result[0]!.fields['user']).toBe('alice');
     expect(result[1]!.fields['user']).toBe('bob');
   });
@@ -43,15 +44,15 @@ describe('applySedCommands — statelessness', () => {
 
   it('replaces identically on first and second call', () => {
     const events = [makeEvent('foo baz foo'), makeEvent('foo qux')];
-    const first = applySedCommands(events, directives);
-    const second = applySedCommands(events, directives);
+    const first = applySedCommands(events, directives, runCtx());
+    const second = applySedCommands(events, directives, runCtx());
     expect(first[0]!._raw).toBe(second[0]!._raw);
     expect(first[1]!._raw).toBe(second[1]!._raw);
   });
 
   it('replaces all occurrences in every event', () => {
     const events = [makeEvent('foo baz foo'), makeEvent('foo qux')];
-    const result = applySedCommands(events, directives);
+    const result = applySedCommands(events, directives, runCtx());
     expect(result[0]!._raw).toBe('bar baz bar');
     expect(result[1]!._raw).toBe('bar qux');
   });

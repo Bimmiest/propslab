@@ -6,7 +6,8 @@ import { render, screen, fireEvent, act } from '@testing-library/react';
 import { PreviewPanel } from '../PreviewPanel';
 import { useAppStore, selectSessionDirty } from '../../../store/useAppStore';
 import { SAMPLE_CONFIGS } from '../../../engine/sampleData';
-import type { EventMetadata, ProcessingResult } from '../../../engine/types';
+import type { EventMetadata } from '../../../engine/types';
+import { toViewResult, type ViewResult } from '../../../utils/viewResult';
 
 const initial = useAppStore.getState();
 
@@ -70,8 +71,8 @@ describe('PreviewPanel', () => {
 describe('PreviewPanel — metadata changes are relative to the run (#316)', () => {
   const runMeta: EventMetadata = { index: 'main', host: 'web01', source: '/var/log/app.log', sourcetype: 'app' };
 
-  function resultWith(host: string): ProcessingResult {
-    return {
+  function resultWith(host: string): ViewResult {
+    return toViewResult({
       events: [{
         _raw: 'GET /index.html 200',
         _time: null,
@@ -85,7 +86,7 @@ describe('PreviewPanel — metadata changes are relative to the run (#316)', () 
       eventCount: 1,
       processingSteps: [],
       inputMetadata: runMeta,
-    };
+    });
   }
 
   function metadataModifiedCount(): string | null {
@@ -118,9 +119,9 @@ describe('PreviewPanel — metadata changes are relative to the run (#316)', () 
 // does not rebuild `filteredEvents` (a scan of every event and a re-post of the
 // dataset to the Regex tab's matcher); the input does not wait.
 describe('PreviewPanel — search is debounced (#335)', () => {
-  function resultOf(raws: string[]): ProcessingResult {
+  function resultOf(raws: string[]): ViewResult {
     const meta: EventMetadata = { index: 'main', host: 'h', source: 's', sourcetype: 'st' };
-    return {
+    return toViewResult({
       events: raws.map((raw, i) => ({
         _raw: raw,
         _time: null,
@@ -134,7 +135,7 @@ describe('PreviewPanel — search is debounced (#335)', () => {
       eventCount: raws.length,
       processingSteps: [],
       inputMetadata: meta,
-    };
+    });
   }
 
   beforeEach(() => {
@@ -197,8 +198,8 @@ describe('PreviewPanel — Effective config shows the last run in manual-apply m
 // that is not at the end.
 describe('PreviewPanel — the change check is linear in whitespace (#427)', () => {
   const meta: EventMetadata = { index: 'main', host: 'h', source: 's', sourcetype: 'st' };
-  function resultOf(raw: string, originalRaw: string): ProcessingResult {
-    return {
+  function resultOf(raw: string, originalRaw: string): ViewResult {
+    return toViewResult({
       events: [{
         _raw: raw,
         _time: null,
@@ -212,7 +213,7 @@ describe('PreviewPanel — the change check is linear in whitespace (#427)', () 
       eventCount: 1,
       processingSteps: [],
       inputMetadata: meta,
-    };
+    });
   }
 
   function unmodifiedCount(): string | null {
@@ -246,8 +247,8 @@ describe('PreviewPanel — the change check is linear in whitespace (#427)', () 
 // untick, so it must stop filtering rather than leave "0 / N" behind (#432).
 describe('PreviewPanel — the field filter follows the current fields (#432)', () => {
   const meta: EventMetadata = { index: 'main', host: 'h', source: 's', sourcetype: 'st' };
-  function resultWith(fields: Record<string, string[]>): ProcessingResult {
-    return {
+  function resultWith(fields: Record<string, string[]>): ViewResult {
+    return toViewResult({
       events: [{
         _raw: 'user=alice',
         _time: null,
@@ -261,7 +262,7 @@ describe('PreviewPanel — the field filter follows the current fields (#432)', 
       eventCount: 1,
       processingSteps: [],
       inputMetadata: meta,
-    };
+    });
   }
 
   beforeEach(() => {

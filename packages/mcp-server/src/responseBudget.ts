@@ -92,10 +92,14 @@ export const CAP_NOTE = `The response is capped at ${MAX_RESPONSE_BYTES} bytes.`
  * the slack covers the digits the real kept counts add.
  */
 class Budget {
-  constructor(private left: number) {}
+  private left: number;
+
+  constructor(left: number) {
+    this.left = left;
+  }
 
   /** How many leading items to keep, spending at most `share` of what is left. */
-  take<T>(items: readonly T[], share = 1): number {
+  take(items: readonly unknown[], share = 1): number {
     const { count, used } = fit(items, elementBytes, this.left * share);
     this.left -= used;
     return count;
@@ -118,7 +122,7 @@ const budgetAfter = (shell: object) =>
  * A response with one list, cut to fit: `build(kept)` makes the response
  * with the first `kept` items, adding its count and note when some are cut.
  */
-export function cutToFit<T, R extends object>(items: readonly T[], build: (kept: number) => R): R {
+export function cutToFit<R extends object>(items: readonly unknown[], build: (kept: number) => R): R {
   return build(budgetAfter(build(0)).take(items));
 }
 
@@ -155,7 +159,7 @@ export function boundExplain(full: ExplainResponse): ExplainResponse {
     partial?: [number, number];
   }): ExplainResponse => {
     const notes: string[] = [];
-    const count = <K extends string>(key: K, kept: number, total: number, what: string) => {
+    const count = <K extends string>(key: K, kept: number, total: number, what: string): Partial<Record<K, number>> => {
       if (kept >= total) return {};
       notes.push(cutNote(what, kept, total));
       return { [key]: total } as Record<K, number>;

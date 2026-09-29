@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { applySedCommands } from '../processors/sedCmd';
 import type { ConfDirective, SplunkEvent, ValidationDiagnostic } from '../types';
+import { runCtx } from './runCtx';
 
 const ev = (raw: string): SplunkEvent => ({
   _raw: raw, _time: null, _meta: {}, fields: {},
@@ -12,7 +13,7 @@ const sed = (value: string, className = 'x'): ConfDirective =>
 
 function run(value: string, raw: string) {
   const diagnostics: ValidationDiagnostic[] = [];
-  const event = applySedCommands([ev(raw)], [sed(value)], diagnostics)[0]!;
+  const event = applySedCommands([ev(raw)], [sed(value)], runCtx(diagnostics))[0]!;
   return { raw: event._raw, diagnostics };
 }
 

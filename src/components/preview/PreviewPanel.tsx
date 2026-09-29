@@ -8,16 +8,17 @@ import { useAppStore } from '../../store/useAppStore';
 import { Tabs } from '../ui/Tabs';
 import { tabId, tabPanelId } from '../ui/tabIds';
 import { Icon } from '../ui/Icon';
-import type { EventMetadata, OutputTabId, PreviewSubTabId, SplunkEvent } from '../../engine/types';
+import type { EventMetadata, OutputTabId, PreviewSubTabId } from '../../engine/types';
+import type { ViewEvent } from '../../utils/viewResult';
 import { SAMPLE_CONFIGS } from '../../engine/sampleData';
 import { RawTab } from './tabs/RawTab';
 import { HighlightedTab } from './tabs/HighlightedTab';
 import { DiffTab } from './tabs/DiffTab';
-import { TimestampTab } from './tabs/TimestampTab';
-import { RegexTab } from './tabs/RegexTab';
+import { TimestampTab } from './tabs/timestamp';
+import { RegexTab } from './tabs/regex';
 import { CimModelsTab } from './tabs/CimModelsTab';
 import { EffectiveConfigTab } from './tabs/EffectiveConfigTab';
-import { FieldsTab } from './tabs/FieldsTab';
+import { FieldsTab } from './tabs/fields';
 import { TransformsTab } from './tabs/TransformsTab';
 import { ArchitecturePanel } from '../architecture/ArchitecturePanel';
 import { PreviewFilterBar } from './PreviewFilterBar';
@@ -27,7 +28,7 @@ import { useDebounce } from '../../hooks/useDebounce';
 import { usePipelineInputs, type PipelineInputs } from './tabs/shared/usePipelineInputs';
 
 export interface EnrichedEvent {
-  event: SplunkEvent;
+  event: ViewEvent;
   originalRaw: string;
   hasChanges: boolean;
   hasMetadataChanges: boolean;
@@ -270,7 +271,7 @@ function EmptyState() {
 
 /** Enrich events with original raw + change/drop status. */
 function enrichEvents(
-  events: SplunkEvent[],
+  events: ViewEvent[],
   originalRaw: string,
   originalMetadata: EventMetadata | undefined,
 ): EnrichedEvent[] {

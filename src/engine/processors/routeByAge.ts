@@ -1,6 +1,7 @@
-import type { ConfDirective, SplunkEvent, ValidationDiagnostic } from '../types';
+import type { ConfDirective, SplunkEvent } from '../types';
 import { atDirective } from '../parser/provenance';
 import { effectiveDirective } from '../utils/directiveValues';
+import type { RunContext } from '../runContext';
 
 const UNIT_MS: Record<string, number> = { s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 };
 
@@ -42,9 +43,9 @@ export function parseAge(value: string): number | null {
 export function routeEventsByAge(
   events: SplunkEvent[],
   directives: ConfDirective[],
-  diagnostics: ValidationDiagnostic[],
-  now: number,
+  ctx: RunContext,
 ): SplunkEvent[] {
+  const { diagnostics, now } = ctx;
   const dir = effectiveDirective(directives, 'ROUTE_EVENTS_OLDER_THAN');
   if (!dir) return events;
   const raw = dir.value.trim();

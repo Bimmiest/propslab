@@ -5,7 +5,7 @@
 
 import type { SplunkEvent, ConfStanza, ConfDirective } from '../types';
 import { extractionLimits, safeRegex, validateRegex, type RegexMatch, type SplunkRegex } from '../../utils/splunkRegex';
-import { longestPartialMatch, type NoOpReason } from '../noOpExplainer';
+import { explainNoMatch, type NoOpReason } from '../noOpExplainer';
 import { getField, hasField, setField, addFieldValue } from '../utils/fieldBag';
 import { stripLeadingUnderscoreForField } from '../utils/internalFields';
 import { getSourceKeyValue } from '../utils/metadataFields';
@@ -192,6 +192,7 @@ function noMatchResult(
   pattern: string,
   sourceValue: string,
   phase: Phase,
+  mayExplain: () => boolean,
 ): TransformResult {
   const result: TransformResult = { fields: {}, matched: false };
   // DEFAULT_VALUE: an index-time transform whose REGEX fails writes this value
@@ -212,10 +213,7 @@ function noMatchResult(
   if (compiled.lastError !== undefined) {
     return { ...result, noOp: { kind: 'regex-limit', error: compiled.lastError } };
   }
-  const partial = longestPartialMatch(pattern, sourceValue);
-  result.noOp = partial
-    ? { kind: 'no-match', partialEnd: partial.end, partialPattern: partial.prefix }
-    : { kind: 'no-match' };
+  result.noOp = explainNoMatch(pattern, sourceValue, mayExplain());
   return result;
 }
 
@@ -385,6 +383,12 @@ export function applyRegexTransform(
   transformStanza: ConfStanza,
   onInvalidRegex?: (pattern: string) => void,
   phase: Phase = 'index-time',
+  /**
+   * Whether a REGEX that did not match is analysed for how far it got. Asked
+   * only when it did not match, so the caller can count analyses against the
+   * run's per-directive cap.
+   */
+  mayExplain: () => boolean = () => true,
 ): TransformResult {
   const settings = readRegexSettings(transformStanza, phase);
   const { regexDir, sourceKeyDir } = settings;
@@ -413,7 +417,7 @@ export function applyRegexTransform(
   // The first match decides named vs numbered handling and is the only match
   // for non-REPEAT_MATCH extraction.
   const firstMatch = compiled.exec(sourceValue);
-  if (!firstMatch) return noMatchResult(transformStanza, settings, compiled, pattern, sourceValue, phase);
+  if (!firstMatch) return noMatchResult(transformStanza, settings, compiled, pattern, sourceValue, phase, mayExplain);
 
   const run: MatchedRun = {
     result: { fields: {}, matched: true },

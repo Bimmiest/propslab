@@ -12,7 +12,8 @@ import { createElement, type ComponentProps } from 'react';
 import { PreviewPanel, type EnrichedEvent } from '../PreviewPanel';
 import { HighlightedTab } from '../tabs/HighlightedTab';
 import { useAppStore } from '../../../store/useAppStore';
-import type { ProcessingResult, SplunkEvent } from '../../../engine/types';
+import type { SplunkEvent } from '../../../engine/types';
+import { toViewResult } from '../../../utils/viewResult';
 
 const renders = vi.hoisted(() => ({ cim: 0, card: 0 }));
 
@@ -60,13 +61,13 @@ afterEach(() => {
 
 describe('PreviewPanel render isolation', () => {
   it('does not re-render the active tab while the inputs are typed into or a run is in flight', () => {
-    const result: ProcessingResult = {
+    const result = toViewResult({
       events: [makeEvent('a=1', { a: '1' })],
       originalRaw: 'a=1',
       eventCount: 1,
       processingSteps: [],
       inputMetadata: initial.metadata,
-    };
+    });
     useAppStore.setState({ activeOutputTab: 'cim', processingResult: result });
     render(<PreviewPanel />);
     expect(screen.getByText('cim tab')).toBeInTheDocument();

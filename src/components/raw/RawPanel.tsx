@@ -91,6 +91,7 @@ export function RawPanel() {
           onMount={handleMount}
           theme={theme === 'dark' ? 'splunk-dark' : 'splunk-light'}
           options={EDITOR_OPTIONS}
+          modelKey="raw"
         />
         {!rawData && (
           <div

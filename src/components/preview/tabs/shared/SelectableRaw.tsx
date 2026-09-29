@@ -40,7 +40,12 @@ function offsetFromPoint(container: HTMLElement, x: number, y: number): number |
   if (typeof doc.caretPositionFromPoint === 'function') {
     const pos = doc.caretPositionFromPoint(x, y);
     if (pos) { node = pos.offsetNode; off = pos.offset; }
-  } else if (typeof doc.caretRangeFromPoint === 'function') {
+  } else if (
+    // The fallback for older browsers without caretPositionFromPoint.
+    // eslint-disable-next-line @typescript-eslint/no-deprecated
+    typeof doc.caretRangeFromPoint === 'function'
+  ) {
+    // eslint-disable-next-line @typescript-eslint/no-deprecated
     const r = doc.caretRangeFromPoint(x, y);
     if (r) { node = r.startContainer; off = r.startOffset; }
   }

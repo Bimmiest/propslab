@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
-import type { SplunkEvent } from '../../../../engine/types';
+import type { ViewEvent } from '../../../../utils/viewResult';
 import { copyQuietly } from '../../../../utils/clipboard';
 import { useApplyDirective } from './useApplyDirective';
 import { ExtractNameDialog } from './ExtractNameDialog';
@@ -26,7 +26,7 @@ function currentSelection(): string {
  * `selectionText`, when provided (the Raw tab's React-controlled token selection),
  * takes precedence over the native window.getSelection fallback used elsewhere.
  */
-export function EventContextMenu({ event, children, selectionText, selectionStart }: { event: SplunkEvent; children: ReactNode; selectionText?: string; selectionStart?: number }) {
+export function EventContextMenu({ event, children, selectionText, selectionStart }: { event: ViewEvent; children: ReactNode; selectionText?: string; selectionStart?: number }) {
   const { stanza, apply: applyDirective } = useApplyDirective();
 
   // Capture the native selection when the menu opens — by the time an item's onSelect

@@ -1,4 +1,4 @@
-import type { SplunkEvent, ConfDirective, ValidationDiagnostic } from '../types';
+import type { SplunkEvent, ConfDirective } from '../types';
 import { validateRegex } from '../../utils/splunkRegex';
 import {
   parseTimestampDetailed,
@@ -10,6 +10,7 @@ import { atDirective } from '../parser/provenance';
 import { setField } from '../utils/fieldBag';
 import { effectiveBool, effectiveDirective, effectiveValue } from '../utils/directiveValues';
 import { createTimestampFinder, readTimestampLocation, type TimestampSearch } from './timestampRecognizer';
+import type { RunContext, DiagnosticSink } from '../runContext';
 
 // Re-exported for the Timestamp tab's prober, which searches the way this does.
 export { matchTimeFormat, resolveLookahead, timeFormatRegex, type TimeFormatMatch } from './timestampRecognizer';
@@ -178,7 +179,7 @@ function noTimestampAdded(extraMode: ExtraTimeFieldsMode): { fieldsAdded?: strin
 function warnInvalidTzAlias(
   tzAliasDir: ConfDirective | undefined,
   invalid: readonly string[],
-  diagnostics?: ValidationDiagnostic[],
+  diagnostics?: DiagnosticSink,
 ): void {
   if (!diagnostics || invalid.length === 0) return;
   diagnostics.push({
@@ -200,7 +201,7 @@ function warnInvalidTzAlias(
  */
 function unresolvedTzReporter(
   anchor: ConfDirective | undefined,
-  diagnostics?: ValidationDiagnostic[],
+  diagnostics?: DiagnosticSink,
 ): ((value: string) => void) | undefined {
   if (!diagnostics) return undefined;
   const reported = new Set<string>();
@@ -225,7 +226,7 @@ function unresolvedTzReporter(
 function warnBrokenPrefix(
   pattern: string | undefined,
   timePrefixDir: ConfDirective | undefined,
-  diagnostics?: ValidationDiagnostic[],
+  diagnostics?: DiagnosticSink,
 ): void {
   if (!diagnostics || pattern === undefined) return;
   const why = validateRegex(pattern) ?? 'invalid regex';
@@ -268,7 +269,7 @@ interface BatchConfig {
   bounds: TimestampBounds;
   parseOptions: ParseOptions;
   boundsAnchor: ConfDirective | undefined;
-  diagnostics?: ValidationDiagnostic[];
+  diagnostics?: DiagnosticSink;
 }
 
 /**
@@ -302,7 +303,7 @@ class TimestampBatch {
   private readonly parseOptions: ParseOptions;
   /** Where an out-of-bounds warning points: TIME_FORMAT, else TZ. */
   private readonly boundsAnchor: ConfDirective | undefined;
-  private readonly diagnostics: ValidationDiagnostic[] | undefined;
+  private readonly diagnostics: DiagnosticSink | undefined;
 
   constructor(config: BatchConfig) {
     this.now = config.now;
@@ -549,15 +550,16 @@ class TimestampBatch {
 export function extractTimestamps(
   events: SplunkEvent[],
   directives: ConfDirective[],
-  diagnostics?: ValidationDiagnostic[],
   /**
-   * The moment that stands in for index time: the MAX_DAYS_AGO/HENCE bounds are
+   * `ctx.now` stands in for index time: the MAX_DAYS_AGO/HENCE bounds are
    * measured from it, a yearless format takes its year, and the fallback tail of
    * the chain lands on it. `runPipeline` passes `PipelineOptions.now` so a
    * recorded fixture keeps being judged against the day it was captured.
    */
-  now: Date = new Date(),
+  ctx: RunContext,
 ): SplunkEvent[] {
+  const { diagnostics } = ctx;
+  const now = new Date(ctx.now);
   const timeFormatDir = effectiveDirective(directives, 'TIME_FORMAT');
   const tzDir = effectiveDirective(directives, 'TZ');
   const tzAliasDir = effectiveDirective(directives, 'TZ_ALIAS');

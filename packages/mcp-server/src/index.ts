@@ -8,12 +8,15 @@
  *
  * It re-execs whenever heap-size flags need stripping (heapFlags.ts), even if
  * the regex flags are already on the command line: only a fresh process sheds
- * a heap flag already in effect.
+ * a heap flag already in effect. Likewise when the permission model is off:
+ * the server runs under it, reading nothing but its own bundle
+ * (permissionFlags.ts).
  *
  * `PROPSLAB_MCP_NO_REEXEC=1` opts out; `v8Flags.ts`'s setFlagsFromString
  * fallback still applies, best-effort — but heap-size flags are then not
  * stripped, so an inherited `--max-old-space-size` overrides the sandbox's
- * per-worker heap limit, and the launcher says so on stderr.
+ * per-worker heap limit, and the launcher says so on stderr. Nor is the
+ * permission model applied.
  *
  * Because the client holds the pid of this shim rather than of the server,
  * the shim forwards termination signals to the child and exits the way the
@@ -22,6 +25,7 @@
 import { spawn } from 'node:child_process';
 import os from 'node:os';
 import { stripHeapSizeFlags, stripHeapSizeFlagsFromNodeOptions } from './heapFlags';
+import { permissionEnabled, permissionFlags } from './permissionFlags';
 import { flagsAlreadySet, REGEXP_FALLBACK_FLAGS } from './v8Flags';
 
 async function main(): Promise<void> {
@@ -43,7 +47,7 @@ async function main(): Promise<void> {
           'them, so they override the sandbox heap limit',
       );
     }
-  } else if (!flagsAlreadySet() || heapFlagsSet) {
+  } else if (!flagsAlreadySet() || heapFlagsSet || !permissionEnabled()) {
     if (heapFlagsSet) {
       console.error(
         'propslab MCP server: ignoring V8 heap-size flags so the sandbox heap limit applies',
@@ -53,11 +57,17 @@ async function main(): Promise<void> {
       process.execPath,
       [
         ...(flagsAlreadySet() ? [] : REGEXP_FALLBACK_FLAGS),
+        ...(permissionEnabled() ? [] : permissionFlags(__dirname)),
         ...execArgv,
         __filename,
         ...process.argv.slice(2),
       ],
-      { stdio: 'inherit', env },
+      // cwd is the bundle directory because, under the permission model, a
+      // worker thread can read anything below the process's working directory
+      // whatever --allow-fs-read says (measured on Node 22 and 24; the main
+      // thread is not affected). A client that starts the server from `/` or
+      // a home directory would otherwise hand the sandbox all of it.
+      { stdio: 'inherit', env, cwd: __dirname },
     );
     // This process is only a shim: whatever the MCP client does to it has to
     // reach the real server, and whatever the server does has to come back.
@@ -88,7 +98,7 @@ async function main(): Promise<void> {
     child.on('exit', (code, signal) => {
       for (const s of forwarded) process.off(s, forward);
       if (signal) {
-        process.exitCode = 128 + (os.constants.signals[signal] ?? 0);
+        process.exitCode = 128 + os.constants.signals[signal];
         process.kill(process.pid, signal);
         return;
       }

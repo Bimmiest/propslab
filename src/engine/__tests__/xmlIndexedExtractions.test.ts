@@ -13,6 +13,7 @@ import { describe, it, expect } from 'vitest';
 import { applyIndexedExtractions } from '../processors/indexedExtractions';
 import { runPipeline } from '../pipeline';
 import type { SplunkEvent, ConfDirective, ValidationDiagnostic } from '../types';
+import { runCtx } from './runCtx';
 
 function event(raw: string): SplunkEvent {
   return {
@@ -36,7 +37,7 @@ function xmlDirs(mode: string, ...rest: ConfDirective[]): ConfDirective[] {
 }
 
 function fieldsOf(raw: string, directives: ConfDirective[]) {
-  return applyIndexedExtractions([event(raw)], directives)[0]!.fields;
+  return applyIndexedExtractions([event(raw)], directives, runCtx())[0]!.fields;
 }
 
 const WINEVT =
@@ -91,7 +92,7 @@ describe('XML_INDEXED_EXTRACTIONS_PIPELINE (#271)', () => {
     const out = applyIndexedExtractions(
       [event('<a><b>1</b></a>')],
       [d('INDEXED_EXTRACTIONS', 'xml')],
-      diagnostics,
+      runCtx(diagnostics),
     );
     expect(out[0]!.fields).toEqual({});
     expect(diagnostics.some((x) => x.directiveKey === 'XML_INDEXED_EXTRACTIONS_PIPELINE')).toBe(true);

@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, fireEvent, within } from '@testing-library/react';
-import { FieldsTab } from '../FieldsTab';
+import { FieldsTab } from '../fields';
 import { useAppStore } from '../../../../store/useAppStore';
-import type { ProcessingResult, SplunkEvent, ProcessingStep } from '../../../../engine/types';
+import type { SplunkEvent, ProcessingStep } from '../../../../engine/types';
+import { toViewResult } from '../../../../utils/viewResult';
 
 function makeEvent(
   fields: Record<string, string>,
@@ -30,13 +31,13 @@ const event = makeEvent(
   ],
 );
 
-const result: ProcessingResult = {
+const result = toViewResult({
   events: [event],
   originalRaw: '',
   eventCount: 1,
   processingSteps: [],
   inputMetadata: { index: 'main', host: '', source: '', sourcetype: '' },
-};
+});
 
 const initial = useAppStore.getState();
 
@@ -121,7 +122,7 @@ describe('FieldsTab — nested field counts (#316)', () => {
       [],
     );
     useAppStore.setState({
-      processingResult: { events: [json], originalRaw: '', eventCount: 1, processingSteps: [], inputMetadata: { index: 'main', host: '', source: '', sourcetype: '' } },
+      processingResult: toViewResult({ events: [json], originalRaw: '', eventCount: 1, processingSteps: [], inputMetadata: { index: 'main', host: '', source: '', sourcetype: '' } }),
     });
     const { container } = render(<FieldsTab />);
     // Parents collapse on load, so only `a` and `z` show, with a's two
@@ -142,7 +143,7 @@ describe('FieldsTab — nested field counts (#316)', () => {
     useAppStore.setState(initial, true);
     const json = makeEvent({ a: '{}', 'a.b': '{}', 'a.b.c': '1' }, []);
     useAppStore.setState({
-      processingResult: { events: [json], originalRaw: '', eventCount: 1, processingSteps: [], inputMetadata: { index: 'main', host: '', source: '', sourcetype: '' } },
+      processingResult: toViewResult({ events: [json], originalRaw: '', eventCount: 1, processingSteps: [], inputMetadata: { index: 'main', host: '', source: '', sourcetype: '' } }),
     });
     const { container } = render(<FieldsTab />);
     const top = within(container).getByRole('button', { name: 'Toggle a' });
@@ -163,7 +164,7 @@ describe('FieldsTab — nested field counts (#316)', () => {
     useAppStore.setState(initial, true);
     const json = makeEvent({ a: '{}', 'a.b': '{}', 'a.b.c': '1', 'a.e': '2' }, []);
     useAppStore.setState({
-      processingResult: { events: [json], originalRaw: '', eventCount: 1, processingSteps: [], inputMetadata: { index: 'main', host: '', source: '', sourcetype: '' } },
+      processingResult: toViewResult({ events: [json], originalRaw: '', eventCount: 1, processingSteps: [], inputMetadata: { index: 'main', host: '', source: '', sourcetype: '' } }),
     });
     const { container } = render(<FieldsTab />);
     const top = within(container).getByRole('button', { name: 'Toggle a' });
@@ -205,5 +206,40 @@ describe('FieldsTab — column resize teardown (#322)', () => {
     fireEvent.mouseDown(within(container).getByRole('separator', { name: 'Resize Events column' }), { clientX: 100 });
     fireEvent.mouseUp(document);
     expect(document.body.style.cursor).toBe('');
+  });
+});
+
+describe('FieldsTab — windowed for wide events (#454)', () => {
+  // 2,000 flat fields: every row used to be in the DOM.
+  const wide = makeEvent(
+    Object.fromEntries(Array.from({ length: 2000 }, (_, i) => [`f${String(i).padStart(4, '0')}`, String(i)])),
+    [],
+  );
+
+  beforeEach(() => {
+    useAppStore.setState(initial, true);
+    useAppStore.setState({ processingResult: { ...result, events: [wide] } });
+  });
+
+  it('renders a window of rows, and reports the full size and each row\'s position', () => {
+    const { container } = render(<FieldsTab />);
+    const table = within(container).getByRole('table');
+    expect(table).toHaveAttribute('aria-rowcount', '2001');
+    const rows = container.querySelectorAll('tbody tr[aria-rowindex]');
+    expect(rows.length).toBeGreaterThan(10);
+    expect(rows.length).toBeLessThan(200);
+    // Sorted by name for a stable order: the first data row is row 2.
+    fireEvent.click(within(container).getByRole('button', { name: /Field Name/ }));
+    const first = container.querySelector('tbody tr[aria-rowindex]');
+    expect(first).toHaveAttribute('aria-rowindex', '2');
+    expect(first).toHaveTextContent('f0000');
+    expect(within(container).getByText('2000 fields')).toBeInTheDocument();
+  });
+
+  it('still finds a row outside the window through the search box', () => {
+    const { container } = render(<FieldsTab />);
+    fireEvent.change(within(container).getByRole('textbox', { name: 'Search fields' }), { target: { value: 'f1999' } });
+    expect(within(container).getByText('f1999')).toBeInTheDocument();
+    expect(within(container).getByRole('table')).toHaveAttribute('aria-rowcount', '2');
   });
 });

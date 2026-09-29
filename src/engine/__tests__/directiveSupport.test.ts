@@ -170,7 +170,7 @@ function withSupport<T>(key: string, entry: SupportEntry, body: () => T): T {
   try {
     return body();
   } finally {
-    if (original === undefined) delete DIRECTIVE_SUPPORT[key];
+    if (original === undefined) Reflect.deleteProperty(DIRECTIVE_SUPPORT, key);
     else DIRECTIVE_SUPPORT[key] = original;
   }
 }

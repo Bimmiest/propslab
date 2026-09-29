@@ -19,9 +19,11 @@ const HEAP_SIZE_FLAG_IN_OPTIONS =
 /** `process.execArgv` minus any heap-size flag (and a separate numeric value). */
 export function stripHeapSizeFlags(execArgv: readonly string[]): string[] {
   const kept: string[] = [];
-  for (let i = 0; i < execArgv.length; i++) {
-    if (!HEAP_SIZE_FLAG.test(execArgv[i])) kept.push(execArgv[i]);
-    else if (!execArgv[i].includes('=') && /^\d+$/.test(execArgv[i + 1] ?? '')) i++;
+  let skipValue = false;
+  for (const [i, arg] of execArgv.entries()) {
+    if (skipValue) skipValue = false;
+    else if (!HEAP_SIZE_FLAG.test(arg)) kept.push(arg);
+    else skipValue = !arg.includes('=') && /^\d+$/.test(execArgv[i + 1] ?? '');
   }
   return kept;
 }

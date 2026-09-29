@@ -1,15 +1,17 @@
-import type { SplunkEvent, ConfDirective, ValidationDiagnostic } from '../types';
+import type { SplunkEvent, ConfDirective } from '../types';
 import { flattenJson, flattenArray } from '../utils/flattenJson';
 import { hasField, setField, addFieldValue } from '../utils/fieldBag';
 import { cleanFieldKey } from '../transforms/regexTransform';
 import { effectiveBool, effectiveValue } from '../utils/directiveValues';
 import { parseXmlDocument, xmlChildElements, xmlTextContent, type XmlElement } from '../utils/xmlReader';
+import type { RunContext } from '../runContext';
 
 export function applyKvMode(
   events: SplunkEvent[],
   directives: ConfDirective[],
-  diagnostics?: ValidationDiagnostic[],
+  ctx: RunContext,
 ): SplunkEvent[] {
+  const { diagnostics } = ctx;
   const mode = effectiveValue(directives, 'KV_MODE')?.toLowerCase() ?? 'auto';
 
   if (mode === 'none') return events;
@@ -81,8 +83,9 @@ export function applyKvMode(
   };
 
   // Events whose extraction threw. Caught per event so one pathological event
-  // costs only its own fields: letting it escape made the pipeline fall back
-  // to the whole batch unmodified.
+  // costs only its own fields. safeProcessor's per-event retry would do the
+  // same, but it re-runs the stage one event at a time, and the invalid-JSON
+  // summary below would then be reported once per event instead of once.
   const failures: { line: number; error: string }[] = [];
 
   const result = events.map((event) => {
@@ -95,7 +98,7 @@ export function applyKvMode(
   });
 
   const failed = failures[0];
-  if (failed !== undefined && diagnostics) {
+  if (failed !== undefined) {
     const n = failures.length;
     diagnostics.push({
       level: 'error',
@@ -106,7 +109,7 @@ export function applyKvMode(
   }
 
   const first = parseFailures[0];
-  if (first !== undefined && diagnostics) {
+  if (first !== undefined) {
     const n = parseFailures.length;
     // This is a problem with the raw event data, not the config — surface it under
     // the Raw Log panel and point `line` at the offending input line so the user
@@ -395,7 +398,7 @@ function extractKeyValue(
   const candidates: { at: number; key: string; value: string }[] = [];
 
   for (const match of raw.matchAll(quoted)) {
-    const start = match.index ?? 0;
+    const start = match.index;
     bareParts.push(raw.slice(bareFrom, start), ' '.repeat(match[0].length));
     bareFrom = start + match[0].length;
     const key = match[1];
@@ -421,7 +424,7 @@ function extractKeyValue(
   for (const match of bareScan.matchAll(bare)) {
     const key = match[1];
     const value = match[2];
-    if (key && value !== undefined) candidates.push({ at: match.index ?? 0, key, value });
+    if (key && value !== undefined) candidates.push({ at: match.index, key, value });
   }
 
   candidates.sort((a, b) => a.at - b.at);
@@ -446,7 +449,7 @@ function extractMultiKv(raw: string, fields: Record<string, string | string[]>, 
   if (header === undefined) return;
   const cols: Array<{ name: string; start: number }> = [];
   for (const m of header.matchAll(/\S+/g)) {
-    cols.push({ name: m[0], start: m.index ?? 0 });
+    cols.push({ name: m[0], start: m.index });
   }
   if (cols.length < 2) return;
 

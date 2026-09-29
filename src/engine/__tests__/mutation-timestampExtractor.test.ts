@@ -8,6 +8,7 @@
 import { describe, it, expect } from 'vitest';
 import { extractTimestamps } from '../processors/timestampExtractor';
 import type { SplunkEvent, ConfDirective, ValidationDiagnostic } from '../types';
+import { runCtx } from './runCtx';
 
 function event(raw: string): SplunkEvent {
   return {
@@ -31,7 +32,7 @@ const step = (e: SplunkEvent) => e.processingTrace.filter((s) => s.processor ===
 const iso = (e: SplunkEvent) => e._time?.toISOString() ?? null;
 
 const run = (raws: string[], directives: ConfDirective[], diagnostics?: ValidationDiagnostic[]) =>
-  extractTimestamps(raws.map(event), directives, diagnostics, NOW);
+  extractTimestamps(raws.map(event), directives, runCtx(diagnostics, { now: NOW }));
 
 describe('MAX_DAYS_AGO and MAX_DAYS_HENCE', () => {
   it('accept a timestamp exactly on the bound and reject one a second past it', () => {
@@ -191,8 +192,7 @@ describe('a dateless timestamp read off the clock', () => {
     const [e] = extractTimestamps(
       [event('00:30:00 +0500 x')],
       [dir('TIME_FORMAT', '%H:%M:%S %z'), dir('DETERMINE_TIMESTAMP_DATE_WITH_SYSTEM_TIME', 'true')],
-      undefined,
-      now,
+      runCtx(undefined, { now: now }),
     );
     expect(iso(e!)).toBe('2026-01-15T19:30:00.000Z');
     expect(step(e!).description).toBe(

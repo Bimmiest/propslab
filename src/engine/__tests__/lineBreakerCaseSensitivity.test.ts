@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { runPipeline } from '../pipeline';
 import { breakLines } from '../processors/lineBreaker';
 import type { ConfDirective, EventMetadata } from '../types';
+import { runCtx } from './runCtx';
 
 const META: EventMetadata = { index: 'main', host: '', source: '', sourcetype: 'st' };
 const dir = (key: string, value: string): ConfDirective =>
@@ -38,7 +39,7 @@ describe('lineBreaker — directive keys are case-sensitive (#119)', () => {
   it.each(['should_linemerge', 'break_only_before', 'must_break_after', 'max_events'])(
     'ignores mis-cased %s',
     (key) => {
-      const events = breakLines('a\nb\nc', [dir(key, 'false')], META);
+      const events = breakLines('a\nb\nc', [dir(key, 'false')], META, runCtx());
       // With every merge directive mis-cased, defaults apply: SHOULD_LINEMERGE
       // is on and no date-like line breaks, so all three lines merge.
       expect(events).toHaveLength(1);

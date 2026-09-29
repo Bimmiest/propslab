@@ -1,10 +1,10 @@
 import type { ReactNode } from 'react';
-import type { SplunkEvent } from '../../../../engine/types';
+import type { ViewEvent } from '../../../../utils/viewResult';
 import { HighlightedRaw } from './HighlightedRaw';
 import { EventContextMenu } from './EventContextMenu';
 
 interface FieldEventCardProps {
-  event: SplunkEvent;
+  event: ViewEvent;
   globalIdx: number;
   badges: ReactNode;
   fieldColorMap: Map<string, string>;

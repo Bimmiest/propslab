@@ -1,4 +1,6 @@
 import type { ConfDirective, SplunkEvent, ValidationDiagnostic } from '../types';
+import type { RunContext } from '../runContext';
+import { transformsMessageKey } from './ingestEval';
 import { evaluateExpression, regexFailureMessage } from '../processors/evalProcessor';
 import { atDirective } from '../parser/provenance';
 import { effectiveDirective } from '../utils/directiveValues';
@@ -34,24 +36,19 @@ export function stopConditionHolds(value: string | number | boolean | null | str
 export function evaluateStopCondition(
   event: SplunkEvent,
   stanzaDirectives: ConfDirective[],
-  diagnostics: ValidationDiagnostic[] | undefined,
-  now: number,
-  /**
-   * Messages this run has already reported. This runs once per event, and a
-   * config problem reported 500 times buries everything else.
-   */
-  reported: Set<string> = new Set(),
+  ctx: RunContext,
 ): { stop: boolean; expression: string } | undefined {
+  const { diagnostics, now } = ctx;
   // Last definition wins, as for every other transforms setting.
   const dir = effectiveDirective(stanzaDirectives, 'STOP_PROCESSING_IF');
   if (!dir) return undefined;
   const expression = dir.value.trim();
   if (expression === '') return undefined;
 
+  // This runs once per event, and a config problem reported 500 times buries
+  // everything else, so each message is reported once per run.
   const report = (level: ValidationDiagnostic['level'], message: string) => {
-    if (!diagnostics || reported.has(message)) return;
-    reported.add(message);
-    diagnostics.push({ level, message, file: 'transforms.conf', ...atDirective(dir), directiveKey: dir.key });
+    diagnostics.report(transformsMessageKey(message), { level, message, file: 'transforms.conf', ...atDirective(dir), directiveKey: dir.key });
   };
 
   try {

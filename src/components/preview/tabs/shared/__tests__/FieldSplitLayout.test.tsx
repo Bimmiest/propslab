@@ -64,3 +64,20 @@ describe('FieldSplitLayout — restores the saved split (#432)', () => {
     expect(flexGrow(container, `${KEY}-events`)).not.toBe('70');
   });
 });
+
+// A long event overflows the pane with nothing focusable inside; axe's
+// scrollable-region-focusable flagged it once a wide JSON event was loaded.
+describe('FieldSplitLayout — the events pane is reachable by keyboard', () => {
+  for (const collapsed of [false, true]) {
+    it(`is a named tab stop with the sidebar ${collapsed ? 'hidden' : 'shown'}`, () => {
+      const { getByRole } = render(
+        <FieldSplitLayout storageKey={KEY} collapsed={collapsed} sidebar={<div>side</div>}>
+          <div>body</div>
+        </FieldSplitLayout>,
+      );
+      const pane = getByRole('region', { name: 'Events' });
+      expect(pane).toHaveAttribute('tabindex', '0');
+      expect(pane).toHaveTextContent('body');
+    });
+  }
+});

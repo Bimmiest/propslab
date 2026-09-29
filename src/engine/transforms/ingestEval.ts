@@ -1,4 +1,4 @@
-import type { SplunkEvent, ConfDirective, ValidationDiagnostic } from '../types';
+import type { SplunkEvent, ConfDirective } from '../types';
 import { evaluateExpression, regexFailureMessage } from '../processors/evalProcessor';
 import { stripLeadingUnderscoreForField } from '../utils/internalFields';
 import { deleteField, setField } from '../utils/fieldBag';
@@ -7,6 +7,7 @@ import { effectiveDirective } from '../utils/directiveValues';
 import { appendTraceStep, metadataChanges } from '../utils/traceStep';
 import { BOOLEAN_ASSIGNMENT_ERROR, numArg } from '../processors/eval/values';
 import { dateFromEpochSeconds, epochOutOfRangeMessage } from '../utils/epochTime';
+import type { DiagnosticsCollector, RunContext } from '../runContext';
 
 // Split "field=expr, field2=fn(a,b)" on top-level commas only — not inside parens
 // and not inside a string literal (e.g. msg="a,b" must stay one assignment).
@@ -82,26 +83,15 @@ function splitAssignment(expr: string): { fieldName: string; evalExpr: string } 
 }
 
 /**
- * What INGEST_EVAL has already reported. The transforms pass calls
- * applyIngestEval once per event, so it owns one of these for the whole run
- * and passes it in; sets local to the call would forget between events.
+ * The run-wide ledger keys INGEST_EVAL reports under. The transforms pass
+ * calls applyIngestEval once per event, so a set local to the call would
+ * forget between events. Warnings are keyed by message (stubs, regex
+ * failures, out-of-range `_time`), and STOP_PROCESSING_IF reports under the
+ * same key, since its stub warning reads the same as this one.
  */
-export interface IngestEvalReported {
-  /** Fields whose assignment threw. */
-  errors: Set<string>;
-  /** Builtins that are not fully simulated. */
-  stubs: Set<string>;
-  /**
-   * Warnings, by message: stubs, regex failures and out-of-range `_time`.
-   * STOP_PROCESSING_IF reports into the same set, since its stub warning reads
-   * the same as this one.
-   */
-  messages: Set<string>;
-}
-
-export function newIngestEvalReported(): IngestEvalReported {
-  return { errors: new Set(), stubs: new Set(), messages: new Set() };
-}
+export const transformsMessageKey = (message: string) => `transforms message|${message}`;
+const errorKey = (fieldName: string) => `INGEST_EVAL error|${fieldName}`;
+const stubKey = (fn: string) => `INGEST_EVAL stub|${fn}`;
 
 /**
  * `_time=<epoch>`. A number no Date can hold keeps the event's previous
@@ -111,8 +101,7 @@ function assignTime(
   event: SplunkEvent,
   epoch: number | null,
   dir: ConfDirective,
-  diagnostics: ValidationDiagnostic[] | undefined,
-  reported: IngestEvalReported,
+  diagnostics: DiagnosticsCollector,
 ): void {
   if (epoch === null) return;
   const time = dateFromEpochSeconds(epoch);
@@ -121,29 +110,24 @@ function assignTime(
     return;
   }
   const message = epochOutOfRangeMessage('INGEST_EVAL _time', epoch);
-  if (diagnostics && !reported.messages.has(message)) {
-    reported.messages.add(message);
-    diagnostics.push({
-      level: 'warning',
-      message,
-      file: 'transforms.conf',
-      ...atDirective(dir),
-      directiveKey: dir.key,
-    });
-  }
+  diagnostics.report(transformsMessageKey(message), {
+    level: 'warning',
+    message,
+    file: 'transforms.conf',
+    ...atDirective(dir),
+    directiveKey: dir.key,
+  });
 }
 
 /** A builtin that is not fully simulated, once per function per run. */
 function reportStub(
   fn: string,
   dir: ConfDirective,
-  diagnostics: ValidationDiagnostic[] | undefined,
-  reported: IngestEvalReported,
+  diagnostics: DiagnosticsCollector,
 ): void {
-  if (!diagnostics || reported.stubs.has(fn)) return;
-  reported.stubs.add(fn);
+  if (!diagnostics.once(stubKey(fn))) return;
   const message = `${fn}() is not fully simulated — results may differ from real Splunk`;
-  reported.messages.add(message);
+  diagnostics.once(transformsMessageKey(message));
   diagnostics.push({
     level: 'warning',
     message,
@@ -156,20 +140,16 @@ function reportStub(
 export function applyIngestEval(
   events: SplunkEvent[],
   directives: ConfDirective[],
-  diagnostics?: ValidationDiagnostic[],
-  /** What now()/time() return, in epoch ms. See `PipelineOptions.now`. */
-  now: number = Date.now(),
-  /** What this run has already reported; see IngestEvalReported. */
-  reported: IngestEvalReported = newIngestEvalReported(),
+  /** `ctx.now` is what now()/time() return. */
+  ctx: RunContext,
 ): SplunkEvent[] {
+  const { diagnostics, now } = ctx;
   // A stanza may repeat INGEST_EVAL; Splunk's last-definition-wins rule means
   // only the final directive applies (each may still hold several comma-separated
   // assignments, all of which run).
   const lastIngestEval = effectiveDirective(directives, 'INGEST_EVAL');
   if (lastIngestEval === undefined) return events;
   const ingestEvalDirs = [lastIngestEval];
-
-  const { errors: reportedErrors } = reported;
 
   return events.map((event) => {
     const currentEvent = { ...event, fields: { ...event.fields } };
@@ -186,26 +166,23 @@ export function applyIngestEval(
 
         try {
           const result = evaluateExpression(evalExpr, currentEvent, (fn) => {
-            reportStub(fn, ingestEvalDir, diagnostics, reported);
+            reportStub(fn, ingestEvalDir, diagnostics);
           }, now, (fn, pattern) => {
             const message = `INGEST_EVAL ${fieldName}: ${regexFailureMessage(fn, pattern)}`;
-            if (diagnostics && !reported.messages.has(message)) {
-              reported.messages.add(message);
-              diagnostics.push({
-                level: 'warning',
-                message,
-                file: 'transforms.conf',
-                ...atDirective(ingestEvalDir),
-                directiveKey: ingestEvalDir.key,
-              });
-            }
+            diagnostics.report(transformsMessageKey(message), {
+              level: 'warning',
+              message,
+              file: 'transforms.conf',
+              ...atDirective(ingestEvalDir),
+              directiveKey: ingestEvalDir.key,
+            });
           });
           // Refused as in EVAL-: the assignment writes nothing, not "true".
           if (typeof result === 'boolean') throw new Error(BOOLEAN_ASSIGNMENT_ERROR);
           // INGEST_EVAL can rewrite the event's timestamp and raw text, not just
           // add indexed fields. Route _time/_raw to the event rather than fields.
           if (fieldName === '_time') {
-            assignTime(currentEvent, numArg(result), ingestEvalDir, diagnostics, reported);
+            assignTime(currentEvent, numArg(result), ingestEvalDir, diagnostics);
           } else if (fieldName === '_raw') {
             currentEvent._raw =
               result === null ? '' : Array.isArray(result) ? result.join('\n') : String(result);
@@ -241,16 +218,13 @@ export function applyIngestEval(
             setField(currentEvent.fields, fieldName, String(result));
           }
         } catch (err) {
-          if (diagnostics && !reportedErrors.has(fieldName)) {
-            reportedErrors.add(fieldName);
-            diagnostics.push({
-              level: 'error',
-              message: `INGEST_EVAL ${fieldName}: ${err instanceof Error ? err.message : String(err)}`,
-              file: 'transforms.conf',
-              ...atDirective(ingestEvalDir),
-              directiveKey: ingestEvalDir.key,
-            });
-          }
+          diagnostics.report(errorKey(fieldName), {
+            level: 'error',
+            message: `INGEST_EVAL ${fieldName}: ${err instanceof Error ? err.message : String(err)}`,
+            file: 'transforms.conf',
+            ...atDirective(ingestEvalDir),
+            directiveKey: ingestEvalDir.key,
+          });
         }
       }
     }

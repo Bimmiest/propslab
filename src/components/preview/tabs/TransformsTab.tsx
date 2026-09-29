@@ -4,26 +4,7 @@ import { useAppStore } from '../../../store/useAppStore';
 import { Icon } from '../../ui/Icon';
 import { Tooltip } from '../../ui/Tooltip';
 import { tint } from '../../../utils/tint';
-
-interface StepSummary {
-  processor: string;
-  phase: 'index-time' | 'search-time';
-  /** Distinct per-event descriptions, in first-seen order. */
-  descriptions: string[];
-  /** The one line shown for the step. */
-  summaryText: string;
-  eventsAffected: number;
-  totalEvents: number;
-  fieldsAdded: string[];
-  /** Fields this step left extractable but devalued (e.g. a mask rule). */
-  fieldsModified: string[];
-  /** Fields this step made unextractable by deleting the text they anchor on. */
-  fieldsRemoved: string[];
-}
-
-// Strip a trailing "(…)" detail (e.g. "(lines 1-1)") so per-event variants of an
-// index-time step collapse to one representative summary line.
-const stripDetail = (d: string) => d.replace(/\s*\([^)]*\)\s*$/, '');
+import type { StepSummary } from '../../../utils/viewResult';
 
 /** Per-event detail rows rendered at first, and added per "show more". */
 const DETAIL_PAGE_SIZE = 100;
@@ -31,71 +12,13 @@ const DETAIL_PAGE_SIZE = 100;
 export function TransformsTab() {
   const result = useAppStore((s) => s.processingResult);
 
+  // Summarised in the worker, which has every event's full trace; see toViewResult.
   const summary = useMemo(() => {
-    if (!result) return { indexTime: [] as StepSummary[], searchTime: [] as StepSummary[] };
-
-    const totalEvents = result.events.length;
-    // Group by processor (not processor+description) so index-time steps with
-    // per-event descriptions collapse into one row per processor, consistent with
-    // the search-time section. Distinct event count and per-event detail are kept.
-    // Sets (which keep first-seen order), not Array.includes: a step with a
-    // distinct description per event makes that quadratic, over a second at
-    // 20k events.
-    interface Accumulator {
-      processor: string;
-      phase: StepSummary['phase'];
-      descriptions: Set<string>;
-      fieldsAdded: Set<string>;
-      fieldsModified: Set<string>;
-      fieldsRemoved: Set<string>;
-      events: Set<number>;
-    }
-    const stepMap = new Map<string, Accumulator>();
-
-    result.events.forEach((event, eventIdx) => {
-      for (const step of event.processingTrace) {
-        let entry = stepMap.get(step.processor);
-        if (!entry) {
-          entry = {
-            processor: step.processor,
-            phase: step.phase,
-            descriptions: new Set(),
-            fieldsAdded: new Set(),
-            fieldsModified: new Set(),
-            fieldsRemoved: new Set(),
-            events: new Set<number>(),
-          };
-          stepMap.set(step.processor, entry);
-        }
-        entry.events.add(eventIdx);
-        entry.descriptions.add(step.description);
-        for (const f of step.fieldsAdded ?? []) entry.fieldsAdded.add(f);
-        for (const f of step.fieldsModified ?? []) entry.fieldsModified.add(f);
-        for (const f of step.fieldsRemoved ?? []) entry.fieldsRemoved.add(f);
-      }
-    });
-
-    const indexTime: StepSummary[] = [];
-    const searchTime: StepSummary[] = [];
-    for (const entry of stepMap.values()) {
-      const descriptions = [...entry.descriptions];
-      const reps = new Set(descriptions.map(stripDetail));
-      const step: StepSummary = {
-        processor: entry.processor,
-        phase: entry.phase,
-        descriptions,
-        summaryText: reps.size === 1 ? reps.values().next().value! : descriptions[0]!,
-        eventsAffected: entry.events.size,
-        totalEvents,
-        fieldsAdded: [...entry.fieldsAdded],
-        fieldsModified: [...entry.fieldsModified],
-        fieldsRemoved: [...entry.fieldsRemoved],
-      };
-      if (step.phase === 'index-time') indexTime.push(step);
-      else searchTime.push(step);
-    }
-
-    return { indexTime, searchTime };
+    const steps = result?.stepSummaries ?? [];
+    return {
+      indexTime: steps.filter((step) => step.phase === 'index-time'),
+      searchTime: steps.filter((step) => step.phase === 'search-time'),
+    };
   }, [result]);
 
   return (

@@ -12,7 +12,7 @@
 // ---------------------------------------------------------------------------
 
 import type { DirectiveNoOp, SplunkEvent } from './types';
-import { describeNoOp } from './noOpExplainer';
+import { describeNoOp, noOpDirectiveKey } from './noOpExplainer';
 
 export interface GroupedNoOp {
   directive: string;
@@ -21,15 +21,21 @@ export interface GroupedNoOp {
   phase: DirectiveNoOp['phase'];
   /** Distinct explanations seen for this directive, most common first. */
   reasons: { text: string; events: number }[];
+  /**
+   * Events past the run's explanation cap for this directive, which carry no
+   * explanation. Counted apart from `reasons` so they never outnumber the real
+   * ones into the headline.
+   */
+  notExplained: number;
   eventsAffected: number;
 }
 
-export function groupNoOps(events: SplunkEvent[]): GroupedNoOp[] {
+export function groupNoOps(events: readonly Pick<SplunkEvent, 'noOps'>[]): GroupedNoOp[] {
   const groups = new Map<string, GroupedNoOp & { seen: Map<string, number> }>();
 
   for (const event of events) {
     for (const noOp of event.noOps ?? []) {
-      const key = `${noOp.file}:${noOp.line}:${noOp.directive}`;
+      const key = noOpDirectiveKey(noOp);
       let group = groups.get(key);
       if (!group) {
         group = {
@@ -38,12 +44,17 @@ export function groupNoOps(events: SplunkEvent[]): GroupedNoOp[] {
           line: noOp.line,
           phase: noOp.phase,
           reasons: [],
+          notExplained: 0,
           eventsAffected: 0,
           seen: new Map<string, number>(),
         };
         groups.set(key, group);
       }
       group.eventsAffected++;
+      if (noOp.reason.kind === 'not-explained') {
+        group.notExplained++;
+        continue;
+      }
       const text = describeNoOp(noOp.reason);
       group.seen.set(text, (group.seen.get(text) ?? 0) + 1);
     }

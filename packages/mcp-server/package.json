@@ -13,19 +13,23 @@
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
     "build": "npm run typecheck && npm run build:index && npm run build:worker && npm run build:regex-engine",
-    "build:index": "esbuild src/index.ts --bundle --platform=node --target=node24 --format=cjs --outdir=dist --sourcemap --banner:js=\"#!/usr/bin/env node\"",
-    "build:worker": "esbuild src/simulateWorker.ts --bundle --platform=node --target=node24 --format=cjs --outdir=dist --sourcemap",
-    "build:regex-engine": "node -e \"require('node:fs').copyFileSync(require.resolve('pcre2-wasm-utf16/pcre2.wasm', { paths: ['../..'] }), 'dist/pcre2.wasm')\"",
+    "build:index": "esbuild src/index.ts --bundle --platform=node --target=node24 --format=cjs --outdir=dist --sourcemap --alias:pcre2-wasm-utf16=pcre2-wasm-utf16 --banner:js=\"#!/usr/bin/env node\"",
+    "build:worker": "esbuild src/simulateWorker.ts --bundle --platform=node --target=node24 --format=cjs --outdir=dist --sourcemap --alias:pcre2-wasm-utf16=pcre2-wasm-utf16",
+    "build:regex-engine": "node -e \"require('node:fs').copyFileSync(require.resolve('pcre2-wasm-utf16/pcre2.wasm'), 'dist/pcre2.wasm')\"",
     "start": "node dist/index.js",
     "pretest": "npm run build",
-    "test": "vitest run"
+    "test": "vitest run",
+    "pretest:coverage": "npm run build",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.1",
+    "pcre2-wasm-utf16": "github:Bimmiest/pcre2-wasm-utf16#v0.1.0",
     "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",
+    "@vitest/coverage-v8": "^5.0.2",
     "esbuild": "^0.28.2",
     "fast-check": "^4.10.2",
     "typescript": "~5.9.3",

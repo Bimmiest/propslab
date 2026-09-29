@@ -15,13 +15,13 @@ import {
 
 /**
  * Where the module is: beside the bundle (the build copies it into dist/, so
- * dist/ still works when copied away from the package), or in the root
- * install of the pcre2-wasm-utf16 package when running from source.
+ * dist/ still works when copied away from the package), or in this package's
+ * install of pcre2-wasm-utf16 when running from source.
  */
 function modulePath(): string {
   const candidates = [
     path.join(__dirname, 'pcre2.wasm'),
-    path.join(__dirname, '..', '..', '..', 'node_modules', 'pcre2-wasm-utf16', 'pcre2.wasm'),
+    path.join(__dirname, '..', 'node_modules', 'pcre2-wasm-utf16', 'pcre2.wasm'),
   ];
   const found = candidates.find((p) => existsSync(p));
   if (!found) throw new Error(`pcre2.wasm not found (looked in ${candidates.join(', ')})`);

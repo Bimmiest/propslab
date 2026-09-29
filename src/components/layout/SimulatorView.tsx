@@ -39,7 +39,8 @@ export const SimulatorView = memo(function SimulatorView() {
   const transformsCollapsed = useAppStore((s) => !!s.collapsedPanels['transforms.conf']);
 
   // Build the resizable panel group key based on which panels are expanded
-  // This forces a clean re-mount when collapse state changes
+  // This forces a clean re-mount when collapse state changes; the editors keep
+  // their models and view state across it (modelRegistry).
   const layoutKey = `${propsCollapsed ? 'pc' : 'pe'}-${transformsCollapsed ? 'tc' : 'te'}`;
 
   return (

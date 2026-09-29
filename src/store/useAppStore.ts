@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import type { EventMetadata, OutputTabId, ProcessingResult, ValidationDiagnostic } from '../engine/types';
+import type { EventMetadata, OutputTabId, ValidationDiagnostic } from '../engine/types';
+import type { ViewResult } from '../utils/viewResult';
 
 /** Top-level workspace the activity rail switches between. */
 export type ActiveView = 'simulator' | 'dictionary';
@@ -50,8 +51,8 @@ interface AppState {
   /** Replace all four inputs at once and make that the new clean baseline. */
   loadInputs: (inputs: SessionInputs) => void;
 
-  processingResult: ProcessingResult | null;
-  setProcessingResult: (result: ProcessingResult | null) => void;
+  processingResult: ViewResult | null;
+  setProcessingResult: (result: ViewResult | null) => void;
 
   validationDiagnostics: ValidationDiagnostic[];
   setValidationDiagnostics: (diags: ValidationDiagnostic[]) => void;
@@ -314,7 +315,7 @@ export const useAppStore = create<AppState>((set) => ({
 /**
  * Whether the session holds work that replacing the inputs would lose: an
  * editor or metadata field differs from what was last loaded. Anything that
- * overwrites all the inputs (loading an example, clearing, a future
+ * overwrites all the inputs (loading an example, clearing, the
  * beforeunload warning) asks this rather than keeping its own notion of dirty.
  */
 export function selectSessionDirty(s: AppState): boolean {

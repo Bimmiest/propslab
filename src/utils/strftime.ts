@@ -44,7 +44,8 @@ interface DirectiveMeta {
   capture: string;
   /**
    * The directive rendered for a Date, in local time: what `regex` reads back.
-   * Kept beside the regex so parsing and formatting cannot drift apart (#429).
+   * Kept beside the regex so parsing and formatting cannot drift apart.
+   * See docs/adr/0003-one-strftime-directive-table.md.
    */
   format: (date: Date) => string;
 }
@@ -148,11 +149,11 @@ function expandComposites(format: string): string {
         i += 2;
         continue;
       }
-      result += format[i];
+      result += format[i]!;
       i += 1;
       continue;
     }
-    result += format[i];
+    result += format[i]!;
     i += 1;
   }
   return result;
@@ -169,13 +170,10 @@ interface TokenisedFormat {
 }
 
 /**
- * Tokenised formats, keyed on the format string.
- *
- * `parseTimestamp` calls `tokenise` on every invocation, and auto-recognition
- * calls `parseTimestamp` once per candidate format per event — so a 2000-event
- * run re-walked and re-compiled the same dozen formats thousands of times.
- * Bounded LRU: every partial TIME_FORMAT typed in the editor, and every format
- * a long-running MCP client sends, would otherwise stay cached for good.
+ * Tokenised formats, keyed on the format string. Auto-recognition parses each
+ * candidate format once per event, so the same few formats recur constantly.
+ * A bounded LRU, so formats typed in the editor or sent by an MCP client do not
+ * accumulate. See docs/adr/0004-bounded-time-format-cache.md.
  */
 const TOKENISE_CACHE_LIMIT = 256;
 const tokeniseCache = new Map<string, TokenisedFormat>();
@@ -352,7 +350,7 @@ function ianaOffsetAt(formatter: Intl.DateTimeFormat, atMs: number): number {
   let year = num('year');
   // `era` is requested so a BC year is not silently read as AD — Splunk data
   // will never contain one, but a wrong answer is worse than a rejected one.
-  if (parts.find((p) => p.type === 'era')?.value?.startsWith('B')) year = 1 - year;
+  if (parts.find((p) => p.type === 'era')?.value.startsWith('B')) year = 1 - year;
 
   // Some ICU versions render midnight as hour 24 under hour12: false.
   const hour = num('hour') === 24 ? 0 : num('hour');
@@ -375,6 +373,7 @@ function ianaOffsetAt(formatter: Intl.DateTimeFormat, atMs: number): number {
  * to the first occurrence, which is what most strptime implementations do and
  * what a user comparing against a real indexer will usually see. Both depend
  * only on the offsets, not on which side of UTC the zone is.
+ * See docs/adr/0006-time-zone-resolution.md.
  */
 function ianaWallClockToEpoch(formatter: Intl.DateTimeFormat, wallAsUtcMs: number): number {
   const before = ianaOffsetAt(formatter, wallAsUtcMs - 86_400_000);
@@ -407,12 +406,10 @@ function resolveTzOffsetMinutes(tz: string): number | null {
     return known;
   }
 
-  // GMT-relative form, which is how props.conf.spec writes TZ_ALIAS targets:
-  // its own example is `EST=GMT-5:00`. The hour may be a single digit there,
-  // which the numeric branch below deliberately does not accept (%z never
-  // produces one). The sign is plain arithmetic from UTC rather than the POSIX
-  // TZ convention that inverts it, so `GMT-5` is UTC-5 and lands on Eastern
-  // Standard — the reading that makes Splunk's own example mean what it says.
+  // GMT-relative form, as props.conf.spec writes TZ_ALIAS targets
+  // (`EST=GMT-5:00`). The hour may be one digit here, unlike the %z branch
+  // below. The sign is plain arithmetic, not POSIX's inverted one, so `GMT-5`
+  // is UTC-5. See docs/adr/0006-time-zone-resolution.md.
   const gmtRelative = /^(?:GMT|UTC)([+-])(\d{1,2})(?::?(\d{2}))?$/.exec(upper);
   if (gmtRelative) {
     const sign = gmtRelative[1] === '+' ? 1 : -1;
@@ -568,7 +565,7 @@ export interface ParseTimestampOptions {
   now?: Date;
   /**
    * The date to use when the format has none (see `hasDate`). Without it such a
-   * timestamp lands on 1 January of `now`'s year, which is what it always did.
+   * timestamp lands on 1 January of `now`'s year.
    */
   dateForDateless?: CalendarDate;
 }
@@ -592,11 +589,10 @@ export function parseTimestampDetailed(
   const current = assembleTimestamp(text, format, options, thisYear);
   if (!yearless) return current;
 
-  // A date written without a year is the most recent one it can be, the
-  // convention syslog readers follow for RFC 3164 stamps: `Dec 31 23:59:00`
-  // read on 1 January is last year's, not eleven months ahead. Convention-
-  // derived; no capture covers it. A stamp slightly ahead of the clock (skew)
-  // stays in this year.
+  // A date written without a year is the most recent one it can be (the syslog
+  // convention; no capture covers it). A stamp slightly ahead of the clock
+  // (skew) stays in this year. See
+  // docs/adr/0005-yearless-timestamps-take-the-most-recent-year.md.
   const latest = now.getTime() + YEARLESS_FUTURE_TOLERANCE_MS;
   const fits = (p: ParsedTimestamp | null): p is ParsedTimestamp => p !== null && p.date.getTime() <= latest;
   if (fits(current)) {
@@ -752,12 +748,8 @@ function resolveZone(
   const { tz, onUnresolvedTz, tzAlias } = options;
   // A zone written in the event (%Z) beats the stanza's TZ, and an explicit
   // numeric offset (%z) beats both — it needs no resolution at all.
-  //
-  // TZ_ALIAS rewrites the zone read out of the event, which is the ambiguity it
-  // exists for: EST is Eastern US in one deployment and Eastern Australia in
-  // another, and only the operator knows which. It deliberately does not touch
-  // the stanza's own TZ — that value was named explicitly, and letting a table
-  // entry redirect it would make an unambiguous setting ambiguous again.
+  // TZ_ALIAS rewrites only the zone read out of the event, never the stanza's
+  // TZ. See docs/adr/0006-time-zone-resolution.md.
   const aliased = bag.tzName === undefined ? undefined : tzAlias?.get(bag.tzName.toUpperCase());
   const zoneName = aliased ?? bag.tzName ?? tz;
 
@@ -789,9 +781,8 @@ function resolveZone(
     }
 
     // Genuinely unresolvable: a typo, or a zone this runtime has no data for.
-    // When an alias was applied, name both halves — reporting only the target
-    // would describe a string the operator never wrote in their events, and
-    // reporting only the abbreviation would hide which side is actually broken.
+    // When an alias was applied, name both halves: the abbreviation the event
+    // carried and the target that failed.
     onUnresolvedTz?.(aliased === undefined ? zoneName : `${bag.tzName} (TZ_ALIAS → ${aliased})`);
   }
 
@@ -847,11 +838,8 @@ function assembleTimestamp(
 }
 
 // ---------------------------------------------------------------------------
-// Formatting (the inverse of the parsing above)
-//
-// Lives here rather than in evalProcessor: the editor's TIME_FORMAT preview
-// needs the same rendering, and two implementations of strftime would be two
-// chances to disagree about what %3N means.
+// Formatting (the inverse of the parsing above), shared by eval strftime() and
+// the editor's TIME_FORMAT preview. See docs/adr/0003-one-strftime-directive-table.md.
 // ---------------------------------------------------------------------------
 /**
  * Format a Date with a Splunk strftime string. Uses the browser's local timezone
@@ -895,7 +883,7 @@ export function formatStrftime(date: Date, format: string): string {
 /**
  * `%j` — the local day of the year, 1-366. Counted between calendar dates
  * rather than local midnights, whose difference is not a whole number of days
- * when a DST change falls between them (#429).
+ * when a DST change falls between them.
  */
 function dayOfYear(date: Date): number {
   const year = date.getFullYear();
@@ -930,14 +918,21 @@ export function supportedSpecifiers(): Set<string> {
   return new Set([...Object.keys(DIRECTIVE_MAP), '%T', '%F', '%%']);
 }
 
+/** A specifier in a TIME_FORMAT, where it sits, and whether this simulator implements it. */
+export interface FormatSpecifier {
+  specifier: string;
+  index: number;
+  supported: boolean;
+}
+
 /**
- * Specifiers in a TIME_FORMAT that this simulator does not implement, with the
- * offset each sits at. A `%` followed by nothing recognisable is reported too:
- * `%Y-%m-%d %H:%i` is a real mistake (`%i` is MySQL, not strftime) and silently
- * matching the literal `i` is how it survives to production.
+ * Every specifier in a TIME_FORMAT, in order, tokenised as parsing and
+ * formatting read it: table directives longest first, and the composites %T
+ * and %F and the %% escape whole. The Timestamp tab's breakdown reads a format
+ * with this, so it names the same tokens the parser does.
  */
-export function unsupportedSpecifiers(format: string): { specifier: string; index: number }[] {
-  const found: { specifier: string; index: number }[] = [];
+export function formatSpecifiers(format: string): FormatSpecifier[] {
+  const found: FormatSpecifier[] = [];
 
   let i = 0;
   while (i < format.length) {
@@ -948,24 +943,38 @@ export function unsupportedSpecifiers(format: string): { specifier: string; inde
 
     const directive = directiveAt(format, i);
     if (directive) {
+      found.push({ specifier: directive.spec, index: i, supported: true });
       i += directive.spec.length;
       continue;
     }
 
     const two = format.slice(i, i + 2);
     if (two === '%%' || two === '%T' || two === '%F') {
+      found.push({ specifier: two, index: i, supported: true });
       i += 2;
       continue;
     }
     if (two.length < 2) {
-      found.push({ specifier: '%', index: i });
+      found.push({ specifier: '%', index: i, supported: false });
       break;
     }
     // An unknown width, e.g. %0N, is reported whole rather than as `%0`.
     const specifier = /^%\dN/.exec(format.slice(i, i + 3))?.[0] ?? two;
-    found.push({ specifier, index: i });
+    found.push({ specifier, index: i, supported: false });
     i += specifier.length;
   }
 
   return found;
+}
+
+/**
+ * Specifiers in a TIME_FORMAT that this simulator does not implement, with the
+ * offset each sits at. A `%` followed by nothing recognisable is reported too:
+ * `%Y-%m-%d %H:%i` is a real mistake (`%i` is MySQL, not strftime) and silently
+ * matching the literal `i` is how it survives to production.
+ */
+export function unsupportedSpecifiers(format: string): { specifier: string; index: number }[] {
+  return formatSpecifiers(format)
+    .filter((s) => !s.supported)
+    .map(({ specifier, index }) => ({ specifier, index }));
 }

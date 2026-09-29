@@ -6,6 +6,11 @@ import App from './App.tsx'
 import { loadRegexEngine } from './utils/regexEngineLoader'
 import { applyTheme } from './hooks/useTheme'
 import { useAppStore } from './store/useAppStore'
+import { installDefaultTrustedTypesPolicy } from './trustedTypes'
+
+// Before anything creates a worker: the CSP requires Trusted Types, and the
+// default policy is what lets a worker's same-origin URL through.
+installDefaultTrustedTypesPolicy()
 
 // Before the engine await, not in useTheme's effect alone: otherwise the page
 // paints light, whatever the saved theme, until the wasm has loaded.

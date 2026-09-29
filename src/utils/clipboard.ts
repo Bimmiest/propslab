@@ -24,6 +24,7 @@ export async function copyToClipboard(text: string): Promise<void> {
     // execCommand can return false (or throw in a sandboxed iframe) without
     // copying. Propagate that as a rejection so callers don't show a false
     // "copied" confirmation.
+    // eslint-disable-next-line @typescript-eslint/no-deprecated -- the fallback for when the Clipboard API is unavailable
     ok = document.execCommand('copy');
   } finally {
     document.body.removeChild(textarea);

@@ -8,7 +8,7 @@ import { routeEventsByAge } from './processors/routeByAge';
 import { applyIndexedExtractions } from './processors/indexedExtractions';
 import { annotatePunct } from './processors/punctAnnotator';
 import { applySedCommands } from './processors/sedCmd';
-import { applyTransforms, newTransformsWarned } from './processors/transformsProcessor';
+import { applyTransforms } from './processors/transformsProcessor';
 import { applyCloneIndexTime } from './processors/cloneSourcetype';
 import { extractFields } from './processors/fieldExtractor';
 import { applyKvMode } from './processors/kvMode';
@@ -16,39 +16,65 @@ import { applyFieldAliases } from './processors/fieldAlias';
 import { applyEvalExpressions } from './processors/evalProcessor';
 import { attributeRawMutations } from './processors/rawMutationAttribution';
 import { lintConfigs, lintMatchedDirectives } from './configLint';
+import { createRunContext, withDiagnostics, type RunContext, type RunLimits } from './runContext';
 
+type Stage = (batch: SplunkEvent[], ctx: RunContext) => SplunkEvent[];
+
+const errorText = (err: unknown) => (err instanceof Error ? err.message : 'Unknown error');
+
+/**
+ * Run one stage so that a throw degrades to a diagnostic rather than failing
+ * the run.
+ *
+ * A `per-event` stage's output for an event depends on that event alone, so
+ * when the batch throws it is re-run one event at a time and only the events
+ * that still throw pass through unchanged. The retry reports through a view
+ * that drops what the failed attempt already said, and the run's ledger is
+ * shared, so it does not repeat a warning.
+ *
+ * A `batch` stage reads across events (line breaking, the previous event's
+ * `_time`, a CSV header row), and a retry one event at a time would be a
+ * different computation, so it falls back to `events` unchanged as a whole.
+ * See docs/adr/0001-stage-failures-degrade-to-diagnostics.md.
+ */
 function safeProcessor(
   name: string,
   events: SplunkEvent[],
-  fn: () => SplunkEvent[],
-  diagnostics: ValidationDiagnostic[],
-  file: ValidationDiagnostic['file'] = 'props.conf'
+  fn: Stage,
+  ctx: RunContext,
+  file: ValidationDiagnostic['file'] = 'props.conf',
+  shape: 'per-event' | 'batch' = 'per-event',
 ): SplunkEvent[] {
+  const { diagnostics } = ctx;
+  const start = diagnostics.list.length;
   try {
-    return fn();
+    return fn(events, ctx);
   } catch (err) {
+    if (shape === 'batch' || events.length <= 1) {
+      diagnostics.push({ level: 'error', message: `Processor "${name}" failed: ${errorText(err)}`, file });
+      return events; // Return unmodified events on failure
+    }
+  }
+
+  const retry = withDiagnostics(ctx, diagnostics.deduplicating(diagnostics.list.slice(start)));
+  const failures: { line: number; error: string }[] = [];
+  const out = events.flatMap((event) => {
+    try {
+      return fn([event], retry);
+    } catch (err) {
+      failures.push({ line: event.lineNumbers.start, error: errorText(err) });
+      return [event];
+    }
+  });
+  const first = failures[0];
+  if (first !== undefined) {
+    const n = failures.length;
     diagnostics.push({
       level: 'error',
-      message: `Processor "${name}" failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
-      file,
+      file: 'raw',
+      line: first.line,
+      message: `Processor "${name}" failed on ${n} event${n === 1 ? '' : 's'}, which ${n === 1 ? 'passes' : 'pass'} through it unchanged (${first.error}).`,
     });
-    return events; // Return unmodified events on failure
-  }
-}
-
-/**
- * Collapse diagnostics that are identical in everything a reader can see. Used
- * by the per-event pipeline, where config-level problems would otherwise be
- * reported once per event.
- */
-function dedupeDiagnostics(diagnostics: ValidationDiagnostic[]): ValidationDiagnostic[] {
-  const seen = new Set<string>();
-  const out: ValidationDiagnostic[] = [];
-  for (const d of diagnostics) {
-    const key = `${d.level}|${d.file}|${d.layer ?? ''}|${d.line ?? ''}|${d.directiveKey ?? ''}|${d.message}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(d);
   }
   return out;
 }
@@ -61,10 +87,9 @@ function dedupeDiagnostics(diagnostics: ValidationDiagnostic[]): ValidationDiagn
  * presented as a real one. Losing the partial trailing line is the honest
  * outcome, and the warning says so.
  */
-function capInput(rawData: string, diagnostics: ValidationDiagnostic[]): string {
-  const MAX_RAW_SIZE = 1_000_000;
-  if (rawData.length <= MAX_RAW_SIZE) return rawData;
-  const capped = rawData.slice(0, MAX_RAW_SIZE);
+function capInput(rawData: string, limits: RunLimits, diagnostics: ValidationDiagnostic[]): string {
+  if (rawData.length <= limits.maxRawChars) return rawData;
+  const capped = rawData.slice(0, limits.maxRawChars);
   const lastBreak = capped.lastIndexOf('\n');
   const truncatedRaw = lastBreak > 0 ? capped.slice(0, lastBreak) : capped;
   diagnostics.push({
@@ -78,8 +103,8 @@ function capInput(rawData: string, diagnostics: ValidationDiagnostic[]): string 
   return truncatedRaw;
 }
 
-/** Everything one run's stages share once the conf files are parsed and matched. */
-interface RunContext {
+/** The run context, plus what its stages share once the conf files are parsed and matched. */
+interface PipelineRun {
   propsConf: ParsedConf;
   transformsConf: ParsedConf;
   /** Index-time directives: the stanzas matching the (assigned) metadata, merged. */
@@ -88,9 +113,7 @@ interface RunContext {
   searchTimeDirectives: ConfDirective[];
   /** The metadata the events were broken with: the caller's, after any input-time assignment. */
   effectiveMetadata: EventMetadata;
-  diagnostics: ValidationDiagnostic[];
-  now: number;
-  captureOffsets: boolean;
+  ctx: RunContext;
 }
 
 /**
@@ -104,7 +127,7 @@ function resolveDirectives(
   propsConf: ParsedConf,
   metadata: EventMetadata,
   diagnostics: ValidationDiagnostic[],
-): Pick<RunContext, 'directives' | 'searchTimeDirectives' | 'effectiveMetadata'> {
+): Pick<PipelineRun, 'directives' | 'searchTimeDirectives' | 'effectiveMetadata'> {
   const resolved = resolveStanzasForEvent(propsConf.stanzas, metadata);
   const matchedStanzas = resolved.stanzas;
   const effectiveMetadata = resolved.metadata;
@@ -122,10 +145,8 @@ function resolveDirectives(
   }
 
   // `rename` is search-time only: the event stays indexed as its original
-  // sourcetype, and only search-time config comes from the target — and comes
-  // from the target ALONE, since Splunk does not merge the original's
-  // search-time settings in. Resolved here so index-time processing below is
-  // unaffected by it.
+  // sourcetype, and search-time config comes from the target stanza alone.
+  // See docs/adr/0002-input-time-sourcetype-and-rename.md.
   const renamedSourcetype = getRenamedSourcetype(matchedStanzas);
   if (!renamedSourcetype) return { directives, searchTimeDirectives: directives, effectiveMetadata };
 
@@ -144,53 +165,49 @@ function resolveDirectives(
 }
 
 /** The index-time stages, in Splunk's order. */
-function runIndexTime(rawData: string, ctx: RunContext): SplunkEvent[] {
-  const { directives, diagnostics, now, propsConf, transformsConf } = ctx;
-  // Step 1-2: Line breaking and merging.
-  // The SHOULD_LINEMERGE default that INDEXED_EXTRACTIONS implies (off for the
-  // line-per-record formats, on for XML) is decided inside breakLines alone;
-  // a second copy of the rule here would drift from it.
-  //
-  // Wrapped like every other stage, so a throw degrades to a diagnostic rather
-  // than failing the whole run. With nothing broken there are no events to
-  // carry forward, so the fallback
-  // is empty rather than the unbroken input.
-  let events = safeProcessor('LINE_BREAKER', [], () => breakLines(rawData, directives, ctx.effectiveMetadata, diagnostics), diagnostics);
+function runIndexTime(rawData: string, run: PipelineRun): SplunkEvent[] {
+  const { directives, propsConf, transformsConf, ctx } = run;
+  // Step 1-2: Line breaking and merging. breakLines alone decides the
+  // SHOULD_LINEMERGE default INDEXED_EXTRACTIONS implies (see
+  // docs/adr/0008-structured-formats-default-line-merging-off.md). With nothing
+  // broken there are no events to carry forward, so the fallback is empty.
+  let events = safeProcessor('LINE_BREAKER', [], (_, c) => breakLines(rawData, directives, run.effectiveMetadata, c), ctx, 'props.conf', 'batch');
 
   // Step 3: Truncation
-  events = safeProcessor('TRUNCATE', events, () => truncateEvents(events, directives, diagnostics), diagnostics);
+  events = safeProcessor('TRUNCATE', events, (batch, c) => truncateEvents(batch, directives, c), ctx);
 
-  // Step 4: Timestamp extraction
-  events = safeProcessor('Timestamp', events, () => extractTimestamps(events, directives, diagnostics, new Date(now)), diagnostics);
+  // Step 4: Timestamp extraction. Batch-shaped: an event with no timestamp
+  // inherits the previous event's.
+  events = safeProcessor('Timestamp', events, (batch, c) => extractTimestamps(batch, directives, c), ctx, 'props.conf', 'batch');
 
   // Step 4b: ROUTE_EVENTS_OLDER_THAN — the spec runs the age test "after
   // timestamp extraction", so it reads the extracted _time, before any
   // index-time transform can rewrite it.
-  events = safeProcessor('ROUTE_EVENTS_OLDER_THAN', events, () => routeEventsByAge(events, directives, diagnostics, now), diagnostics);
+  events = safeProcessor('ROUTE_EVENTS_OLDER_THAN', events, (batch, c) => routeEventsByAge(batch, directives, c), ctx);
 
-  // Step 5: Indexed extractions
-  events = safeProcessor('INDEXED_EXTRACTIONS', events, () => applyIndexedExtractions(events, directives, diagnostics, new Date(now)), diagnostics);
+  // Step 5: Indexed extractions. Batch-shaped: CSV's header row names the
+  // fields of every row after it. The XML modes catch per event themselves.
+  events = safeProcessor('INDEXED_EXTRACTIONS', events, (batch, c) => applyIndexedExtractions(batch, directives, c), ctx, 'props.conf', 'batch');
 
   // Step 6: SEDCMD
-  events = safeProcessor('SEDCMD', events, () => applySedCommands(events, directives, diagnostics), diagnostics);
+  events = safeProcessor('SEDCMD', events, (batch, c) => applySedCommands(batch, directives, c), ctx);
 
   // Step 7: Index-time TRANSFORMS — regex transforms, DEST_KEY routing, and
   // INGEST_EVAL / STOP_PROCESSING_IF stanzas are all applied here, interleaved
   // in TRANSFORMS-<class> list order, then every RULESET-<class> after them
   // (only when a props.conf stanza references them).
-  // One set of warning ledgers for this stage and the clone pass, which calls
-  // applyTransforms once per clone.
-  const warned = newTransformsWarned();
-  events = safeProcessor('TRANSFORMS', events, () => applyTransforms(events, directives, transformsConf, 'index-time', diagnostics, now, warned), diagnostics, 'transforms.conf');
+  // This stage and the clone pass, which calls applyTransforms once per clone,
+  // report against the run's one warning ledger.
+  events = safeProcessor('TRANSFORMS', events, (batch, c) => applyTransforms(batch, directives, transformsConf, 'index-time', c), ctx, 'transforms.conf');
 
   // Step 7b: CLONE_SOURCETYPE copies get the SEDCMD and TRANSFORMS of the
   // sourcetype they were cloned to.
-  events = safeProcessor('CLONE_SOURCETYPE', events, () => applyCloneIndexTime(events, propsConf, transformsConf, diagnostics, now, warned), diagnostics, 'transforms.conf');
+  events = safeProcessor('CLONE_SOURCETYPE', events, (batch, c) => applyCloneIndexTime(batch, propsConf, transformsConf, c), ctx, 'transforms.conf');
 
   // Step 8: ANNOTATE_PUNCT — the annotation processor runs after regex
   // replacement, so the punct signature reflects _raw as indexed (post-SEDCMD,
   // post-transforms), not as ingested.
-  return safeProcessor('ANNOTATE_PUNCT', events, () => annotatePunct(events, directives), diagnostics);
+  return safeProcessor('ANNOTATE_PUNCT', events, (batch, c) => annotatePunct(batch, directives, c), ctx);
 }
 
 /**
@@ -200,26 +217,26 @@ function runIndexTime(rawData: string, ctx: RunContext): SplunkEvent[] {
 function runSearchTimeStages(
   events: SplunkEvent[],
   directives: ConfDirective[],
+  run: PipelineRun,
   ctx: RunContext,
-  diagnostics: ValidationDiagnostic[],
 ): SplunkEvent[] {
-  const { transformsConf, now, captureOffsets } = ctx;
+  const { transformsConf } = run;
   // Step 8: EXTRACT (inline field extraction)
-  let ev = safeProcessor('EXTRACT', events, () => extractFields(events, directives, diagnostics, captureOffsets), diagnostics);
+  let ev = safeProcessor('EXTRACT', events, (batch, c) => extractFields(batch, directives, c), ctx);
   // Step 9: Search-time REPORT transforms (run BEFORE automatic KV — Splunk's
   // documented order is inline EXTRACT → REPORT field transforms → automatic KV).
-  ev = safeProcessor('REPORT', ev, () => applyTransforms(ev, directives, transformsConf, 'search-time', diagnostics), diagnostics, 'transforms.conf');
+  ev = safeProcessor('REPORT', ev, (batch, c) => applyTransforms(batch, directives, transformsConf, 'search-time', c), ctx, 'transforms.conf');
   // Step 10: KV_MODE (automatic key-value extraction)
-  ev = safeProcessor('KV_MODE', ev, () => applyKvMode(ev, directives, diagnostics), diagnostics);
+  ev = safeProcessor('KV_MODE', ev, (batch, c) => applyKvMode(batch, directives, c), ctx);
   // Step 11: FIELDALIAS
-  ev = safeProcessor('FIELDALIAS', ev, () => applyFieldAliases(ev, directives, diagnostics), diagnostics);
+  ev = safeProcessor('FIELDALIAS', ev, (batch, c) => applyFieldAliases(batch, directives, c), ctx);
   // Step 12: EVAL (calculated fields)
-  ev = safeProcessor('EVAL', ev, () => applyEvalExpressions(ev, directives, diagnostics, now), diagnostics);
+  ev = safeProcessor('EVAL', ev, (batch, c) => applyEvalExpressions(batch, directives, c), ctx);
   // Step 13: attribute index-time `_raw` rewrites (SEDCMD, DEST_KEY = _raw) to
   // the fields whose extracted value they changed or destroyed. Runs last
-  // because it replays search-time extraction against the pre-rewrite text,
-  // which is the only way the association can be computed at all.
-  return safeProcessor('SEDCMD attribution', ev, () => attributeRawMutations(ev, () => directives, transformsConf), diagnostics);
+  // because it replays search-time extraction against the pre-rewrite text.
+  // See docs/adr/0011-raw-rewrites-attributed-by-replay.md.
+  return safeProcessor('SEDCMD attribution', ev, (batch, c) => attributeRawMutations(batch, () => directives, transformsConf, c), ctx);
 }
 
 const metaKey = (m: EventMetadata) => `${m.sourcetype}|${m.host}|${m.source}`;
@@ -228,10 +245,10 @@ const metaKey = (m: EventMetadata) => `${m.sourcetype}|${m.host}|${m.source}`;
  * Per-event search time: resolve each event's directives from its own
  * metadata, re-matching stanzas for events whose metadata changed at index time.
  */
-function runSearchTimePerEvent(events: SplunkEvent[], ctx: RunContext, originalMetaKey: string): SplunkEvent[] {
-  const { propsConf } = ctx;
+function runSearchTimePerEvent(events: SplunkEvent[], run: PipelineRun, originalMetaKey: string): SplunkEvent[] {
+  const { propsConf } = run;
   const directivesCache = new Map<string, ConfDirective[]>();
-  directivesCache.set(originalMetaKey, ctx.searchTimeDirectives);
+  directivesCache.set(originalMetaKey, run.searchTimeDirectives);
 
   const eventDirectives = events.map((event) => {
     const key = metaKey(event.metadata);
@@ -252,16 +269,14 @@ function runSearchTimePerEvent(events: SplunkEvent[], ctx: RunContext, originalM
   // Each processor is called once PER EVENT here, so a diagnostic describing a
   // *config* problem (an invalid KV_MODE regex, an eval parse failure, a REPORT
   // whose REGEX will not compile) would be pushed once per event: 500 events,
-  // 500 identical warnings. Collect into a scratch array and merge the distinct
-  // entries afterwards. Genuinely per-event diagnostics carry their own line
-  // number, so they differ and all survive.
-  const perEventDiagnostics: ValidationDiagnostic[] = [];
-  const processed = events.flatMap((event, i) => {
+  // 500 identical warnings. Report through a view that keeps only the distinct
+  // entries. Genuinely per-event diagnostics carry their own line number, so
+  // they differ and all survive.
+  const ctx = withDiagnostics(run.ctx, run.ctx.diagnostics.deduplicating());
+  return events.flatMap((event, i) => {
     const evDirs = eventDirectives[i] ?? [];
-    return runSearchTimeStages([traceRematch(event, originalMetaKey, evDirs.length)], evDirs, ctx, perEventDiagnostics);
+    return runSearchTimeStages([traceRematch(event, originalMetaKey, evDirs.length)], evDirs, run, ctx);
   });
-  ctx.diagnostics.push(...dedupeDiagnostics(perEventDiagnostics));
-  return processed;
 }
 
 /**
@@ -338,6 +353,7 @@ function warnBatchMetadataRewrites(events: SplunkEvent[], originalMetaKey: strin
  * 'local', text }]` — for a caller reading an app off disk, where `local/`
  * overrides `default/` per attribute. `parseConf` merges them; every directive
  * and every diagnostic derived from one then names the layer it came from.
+ * See docs/adr/0012-layered-conf-input.md.
  */
 export function runPipeline(
   rawData: string,
@@ -347,6 +363,14 @@ export function runPipeline(
   options?: PipelineOptions
 ): { result: ProcessingResult; diagnostics: ValidationDiagnostic[] } {
   const diagnostics: ValidationDiagnostic[] = [];
+  const ctx = createRunContext({
+    // Read once, so every stage of one run agrees on what "now" is.
+    now: options?.now ?? Date.now(),
+    // Defaults to true: the browser reads these offsets to highlight extracted
+    // fields, so declining them has to be an explicit choice by a caller that does not.
+    captureOffsets: options?.captureOffsets ?? true,
+    diagnostics,
+  });
 
   if (!rawData.trim()) {
     return {
@@ -355,7 +379,7 @@ export function runPipeline(
     };
   }
 
-  const truncatedRaw = capInput(rawData, diagnostics);
+  const truncatedRaw = capInput(rawData, ctx.limits, diagnostics);
 
   // 1. Parse configurations
   const propsConf = parseConf(propsConfInput, 'props.conf');
@@ -366,32 +390,25 @@ export function runPipeline(
   // stanzas match this event, and none of it changes what the pipeline does.
   lintConfigs(propsConf, transformsConf, diagnostics);
 
-  const ctx: RunContext = {
+  const run: PipelineRun = {
     propsConf,
     transformsConf,
     ...resolveDirectives(propsConf, metadata, diagnostics),
-    diagnostics,
-    // Read once, so every stage of one run agrees on what "now" is.
-    now: options?.now ?? Date.now(),
-    // Defaults to true: the browser reads these offsets to highlight extracted
-    // fields, so declining them has to be an explicit choice by a caller that does not.
-    captureOffsets: options?.captureOffsets ?? true,
+    ctx,
   };
-  lintMatchedDirectives(ctx.directives, diagnostics);
+  lintMatchedDirectives(run.directives, diagnostics);
 
-  let events = runIndexTime(truncatedRaw, ctx);
+  let events = runIndexTime(truncatedRaw, run);
 
-  // Compared against the metadata the events were BROKEN with, not the caller's:
-  // an input-time `sourcetype =` assignment has already been applied to every
-  // event by now, and is not an index-time rewrite: keyed on the caller's
-  // metadata, batch mode would warn about a DEST_KEY = MetaData:* transform
-  // that does not exist and per-event mode would re-match every event.
-  const originalMetaKey = metaKey(ctx.effectiveMetadata);
+  // Compared against the metadata the events were BROKEN with, not the
+  // caller's: an input-time `sourcetype =` assignment is not an index-time
+  // rewrite. See docs/adr/0002-input-time-sourcetype-and-rename.md.
+  const originalMetaKey = metaKey(run.effectiveMetadata);
   if (options?.perEventPipeline) {
-    events = runSearchTimePerEvent(events, ctx, originalMetaKey);
+    events = runSearchTimePerEvent(events, run, originalMetaKey);
   } else {
     warnBatchMetadataRewrites(events, originalMetaKey, diagnostics);
-    events = runSearchTimeStages(events, ctx.searchTimeDirectives, ctx, diagnostics);
+    events = runSearchTimeStages(events, run.searchTimeDirectives, run, ctx);
   }
 
   // Belt and braces: a processor that threw leaves `rawMutations` in place, and
@@ -411,7 +428,7 @@ export function runPipeline(
       // The metadata the events were broken with — the caller's, after any
       // input-time `sourcetype =` assignment, so the UI does not badge every
       // event of an assigned sourcetype as "Metadata Modified".
-      inputMetadata: ctx.effectiveMetadata,
+      inputMetadata: run.effectiveMetadata,
     },
     diagnostics,
   };

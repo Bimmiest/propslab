@@ -1,12 +1,16 @@
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, type RefObject, useRef, useState } from 'react';
 import { isAnyFocused } from './useFieldFocus';
+import { Icon } from '../../../ui/Icon';
 
 interface FieldSidebarProps {
   fieldCount: number;
   activeFields: Set<string> | null;
   onCollapse: () => void;
-  /** Render the item list given current search and focused state */
-  renderItems: (search: string, focused: boolean) => ReactNode;
+  /**
+   * Render the item list given current search and focused state. `scrollRef`
+   * is the list's scrolling container, for windowing.
+   */
+  renderItems: (search: string, focused: boolean, scrollRef: RefObject<HTMLDivElement | null>) => ReactNode;
   /** Optional controls rendered between search and the item list (e.g. expand/collapse all) */
   renderControls?: (search: string) => ReactNode;
 }
@@ -19,6 +23,7 @@ export function FieldSidebar({
   renderControls,
 }: FieldSidebarProps) {
   const [search, setSearch] = useState('');
+  const listRef = useRef<HTMLDivElement>(null);
   const focused = isAnyFocused(activeFields);
   const lowerSearch = search.toLowerCase();
 
@@ -32,26 +37,18 @@ export function FieldSidebar({
           onClick={onCollapse}
           title="Collapse field panel"
         >
-          <svg
-            className="w-3.5 h-3.5"
-            style={{ color: 'var(--color-text-muted)' }}
-            fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-          </svg>
+          <Icon name="chevron-right" className="w-3.5 h-3.5" style={{ color: 'var(--color-text-muted)' }} />
         </button>
       </div>
 
       {/* Search + controls */}
       <div className="flex-shrink-0 px-2 py-2 border-b border-[var(--color-border)]">
         <div className="relative mb-1.5">
-          <svg
+          <Icon
+            name="search"
             className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 pointer-events-none"
             style={{ color: 'var(--color-text-muted)' }}
-            fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
+          />
           <input
             type="text"
             aria-label="Filter fields"
@@ -70,8 +67,8 @@ export function FieldSidebar({
       </div>
 
       {/* Item list */}
-      <div className="flex-1 overflow-auto px-1 py-1">
-        {renderItems(lowerSearch, focused)}
+      <div ref={listRef} className="flex-1 overflow-auto px-1 py-1">
+        {renderItems(lowerSearch, focused, listRef)}
       </div>
     </div>
   );

@@ -1,0 +1,38 @@
+name: Environment
+
+# The deploy workflow is only as safe as two settings of the `production`
+# environment that no file in the repository records: its deployments are
+# limited to `main`, and the deployment token is an environment secret rather
+# than a repository one. The README states both; this checks them weekly
+# through the API, so the statement is verified rather than assumed.
+# scripts/check-production-environment.mjs says what each check reads.
+on:
+  schedule:
+    - cron: '0 7 * * 1'
+  workflow_dispatch:
+
+# The environment endpoints read with `actions: read`. Listing secret names
+# needs a permission no GITHUB_TOKEN can hold, so that check uses
+# SECRETS_READ_TOKEN (a fine-grained token, Secrets: read-only).
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  production:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version-file: .nvmrc
+
+      - name: production deploys from main only, and holds the deployment token
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SECRETS_READ_TOKEN: ${{ secrets.SECRETS_READ_TOKEN }}
+        run: node scripts/check-production-environment.mjs

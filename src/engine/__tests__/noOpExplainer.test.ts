@@ -7,7 +7,7 @@
 // ---------------------------------------------------------------------------
 
 import { describe, it, expect } from 'vitest';
-import { longestPartialMatch, explainRegexNoOp, describeNoOp, type NoOpReason } from '../noOpExplainer';
+import { longestPartialMatch, explainNoMatch, explainRegexNoOp, describeNoOp, noOpDirectiveKey, type NoOpReason } from '../noOpExplainer';
 
 describe('longestPartialMatch', () => {
   it('reports where the pattern stopped agreeing with the text', () => {
@@ -111,6 +111,7 @@ describe('describeNoOp', () => {
       { kind: 'no-match' },
       { kind: 'no-match', partialEnd: 4 },
       { kind: 'fields-already-set', fields: ['user'] },
+      { kind: 'not-explained' },
     ];
     for (const reason of reasons) {
       const text = describeNoOp(reason);
@@ -122,5 +123,30 @@ describe('describeNoOp', () => {
   it('agrees in number when several fields were already set', () => {
     expect(describeNoOp({ kind: 'fields-already-set', fields: ['a', 'b'] })).toContain('were already set');
     expect(describeNoOp({ kind: 'fields-already-set', fields: ['a'] })).toContain('was already set');
+  });
+
+  it('says plainly when an event was past the explanation limit', () => {
+    expect(describeNoOp({ kind: 'not-explained' })).toBe('Not analysed: explanation limit reached for this directive');
+  });
+});
+
+describe('explainNoMatch', () => {
+  it('analyses a miss while the directive has explanations left', () => {
+    expect(explainNoMatch(String.raw`user=(?<user>\w+)@`, 'user=alice here', true)).toMatchObject({
+      kind: 'no-match',
+      partialEnd: 'user=alice'.length,
+    });
+  });
+
+  it('does not analyse a miss past the limit, and says so', () => {
+    expect(explainNoMatch(String.raw`user=(?<user>\w+)@`, 'user=alice here', false)).toEqual({ kind: 'not-explained' });
+  });
+});
+
+describe('noOpDirectiveKey', () => {
+  it('keeps two directives on the same line apart', () => {
+    const a = noOpDirectiveKey({ file: 'props.conf', line: 3, directive: 'EXTRACT-a' });
+    expect(a).not.toBe(noOpDirectiveKey({ file: 'props.conf', line: 3, directive: 'EXTRACT-b' }));
+    expect(a).not.toBe(noOpDirectiveKey({ file: 'transforms.conf', line: 3, directive: 'EXTRACT-a' }));
   });
 });
