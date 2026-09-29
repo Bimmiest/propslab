@@ -35,6 +35,43 @@ describe('deployed security headers', () => {
     }
   });
 
+  // The two tests above catch drift between the copies, not a weakening made
+  // to both: `'unsafe-inline'` or `https:` added to script-src in the meta and
+  // the header passes them. So the sources are pinned exactly (#509). Loosening
+  // a directive is a security decision, and it should have to edit this table.
+  describe('exact source lists', () => {
+    // undefined: the directive is absent, so the browser falls back (to
+    // default-src for connect-src) or, for frame-ancestors, cannot honour it.
+    const exact: Record<string, string[] | undefined> = {
+      'script-src': ["'self'", "'wasm-unsafe-eval'"],
+      'default-src': ["'self'"],
+      'object-src': ["'none'"],
+      'base-uri': ["'self'"],
+      'img-src': ["'self'", 'data:'],
+      'worker-src': ["'self'"],
+      // No connect-src: the app makes no cross-origin requests, and
+      // default-src 'self' already covers fetch of the wasm and the workers.
+      'connect-src': undefined,
+    };
+    const copies = {
+      'header (staticwebapp.config.json)': () => parsePolicy(headers['Content-Security-Policy'] ?? ''),
+      'meta (index.html)': () => parsePolicy(metaContent!),
+    };
+    for (const [copy, policy] of Object.entries(copies)) {
+      for (const [directive, sources] of Object.entries(exact)) {
+        it(`${copy}: ${directive} is exactly ${sources ? sources.join(' ') : 'absent'}`, () => {
+          expect(policy().get(directive)).toEqual(sources);
+        });
+      }
+    }
+
+    // frame-ancestors is ignored in a <meta> policy, so only the header has it.
+    it('header: frame-ancestors is exactly none; meta does not carry it', () => {
+      expect(copies['header (staticwebapp.config.json)']().get('frame-ancestors')).toEqual(["'none'"]);
+      expect(copies['meta (index.html)']().get('frame-ancestors')).toBeUndefined();
+    });
+  });
+
   it('adds the header-only and hardening directives', () => {
     const header = parsePolicy(headers['Content-Security-Policy'] ?? '');
     expect(header.get('frame-ancestors')).toEqual(["'none'"]);
@@ -72,5 +109,10 @@ describe('deployed security headers', () => {
       expect(permissions).toMatch(new RegExp(`(^|,\\s*)${feature}=\\(\\)`));
     }
     expect(headers['X-Content-Type-Options']).toBe('nosniff');
+  });
+
+  it('sends Strict-Transport-Security with a lifetime of at least a year', () => {
+    const hsts = headers['Strict-Transport-Security'] ?? '';
+    expect(Number(/(?:^|;\s*)max-age=(\d+)/.exec(hsts)?.[1])).toBeGreaterThanOrEqual(31_536_000);
   });
 });

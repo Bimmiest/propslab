@@ -60,16 +60,25 @@ jobs:
             package-lock.json
             packages/mcp-server/package-lock.json
 
+      # --ignore-scripts, as in ci.yml and the deploy build: the same tree is
+      # tested everywhere. See ci.yml for why nothing here needs install scripts.
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       # The run includes the MCP server's tests for the modules it mutates
       # there, and Stryker's first pass runs every included test: they import
       # the package's SDK, and one of them spawns the built server.
       - name: Install and build the MCP server
         run: |
-          npm ci --prefix packages/mcp-server
+          npm ci --ignore-scripts --prefix packages/mcp-server
           npm run build --prefix packages/mcp-server
+
+      - name: Verify the regex engine's WebAssembly
+        # Both installed copies, as in ci.yml (#504): the mutation run executes
+        # the engine on a binary that nothing else here has vouched for.
+        run: |
+          node scripts/check-wasm-checksum.mjs
+          node scripts/check-wasm-checksum.mjs packages/mcp-server
 
       # The same scope and exclusions as `mutate` in stryker.config.mjs: tests, type-only
       # modules, worker entry points and data tables are never mutated. Deleted

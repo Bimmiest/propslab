@@ -13,6 +13,9 @@ const BASE_URL = `http://127.0.0.1:${PORT}`;
  */
 const SKIP_BUILD = process.env.E2E_SKIP_BUILD === '1';
 
+/** The specs that assert timing budgets; they run in their own project. */
+const PERF_SPECS = /perf\.spec\.ts$/;
+
 /**
  * End-to-end smoke tests, run against a PRODUCTION build.
  *
@@ -53,7 +56,24 @@ export default defineConfig({
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    {
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'] },
+      testIgnore: PERF_SPECS,
+    },
+    // The performance budgets, apart from the functional suite (#514): a retry
+    // there is a reasonable answer to a flaky click, but here it turns "slower
+    // than the budget" into "slower twice", and a regression that is only
+    // sometimes over passes on the second try. No retries, so a run over budget
+    // fails as measured. Run alone with `playwright test --project=perf`.
+    {
+      name: 'perf',
+      use: { ...devices['Desktop Chrome'] },
+      testMatch: PERF_SPECS,
+      retries: 0,
+    },
+  ],
   webServer: {
     // `--host 127.0.0.1` is not redundant with the port. `vite preview` binds
     // `localhost` by default, which on a GitHub Actions runner resolves to `::1`
