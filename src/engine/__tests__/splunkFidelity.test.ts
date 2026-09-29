@@ -52,6 +52,9 @@ const FIXTURE_MODULES = import.meta.glob<{ default: Fixture }>('./fixtures/splun
 });
 
 interface Manifest {
+  splunk: { version: string; build: string };
+  capturedAt: string;
+  cases: string[];
   excludedFields: { names: string[]; prefixes: string[] };
 }
 
@@ -71,7 +74,10 @@ const MANIFEST_MODULES = import.meta.glob<{ default: Manifest }>('./fixtures/spl
  */
 function excludedTimeFields(version: string): Set<string> {
   const entry = Object.entries(MANIFEST_MODULES).find(([path]) => path.includes(`/splunk-${version}/`));
-  const excluded = entry?.[1].default.excludedFields ?? { names: [], prefixes: [] };
+  if (!entry) {
+    throw new Error(`manifest.json not found for Splunk ${version}`);
+  }
+  const excluded = entry[1].default.excludedFields;
   return new Set(
     EXTRA_TIME_FIELD_NAMES.filter(
       (name) => excluded.names.includes(name) || excluded.prefixes.some((prefix) => name.startsWith(prefix)),
@@ -80,8 +86,11 @@ function excludedTimeFields(version: string): Set<string> {
 }
 
 /** Every captured version directory. More than one is fine; each is asserted. */
-function fixtureSets(): Array<{ version: string; fixtures: Fixture[] }> {
+function fixtureSets(): Array<{ version: string; fixtures: Fixture[]; manifest: Manifest }> {
   const byVersion = new Map<string, Fixture[]>();
+  const manifests = new Map<string, Manifest>();
+
+  // Load fixtures
   for (const [path, mod] of Object.entries(FIXTURE_MODULES)) {
     if (path.endsWith('/manifest.json')) continue;
     const version = /\/splunk-([^/]+)\//.exec(path)?.[1];
@@ -90,7 +99,21 @@ function fixtureSets(): Array<{ version: string; fixtures: Fixture[] }> {
     list.push(mod.default);
     byVersion.set(version, list);
   }
-  return [...byVersion.entries()].map(([version, fixtures]) => ({ version, fixtures }));
+
+  // Load manifests
+  for (const [path, mod] of Object.entries(MANIFEST_MODULES)) {
+    const version = /\/splunk-([^/]+)\//.exec(path)?.[1];
+    if (!version) continue;
+    manifests.set(version, mod.default);
+  }
+
+  return [...byVersion.entries()].map(([version, fixtures]) => {
+    const manifest = manifests.get(version);
+    if (!manifest) {
+      throw new Error(`manifest.json not found for Splunk ${version}`);
+    }
+    return { version, fixtures, manifest };
+  });
 }
 
 /**
@@ -169,7 +192,37 @@ function describeDivergence(actual: CapturedEvent[], expected: CapturedEvent[]):
 
 const sets = fixtureSets();
 
-describe.skipIf(sets.length === 0)('Splunk fidelity fixtures', () => {
+describe('Splunk fidelity fixtures', () => {
+  // Hard assertions that fixture infrastructure is properly set up
+  it('has at least one fixture set', () => {
+    expect(sets.length).toBeGreaterThan(0);
+  });
+
+  it('manifest.json exists and parses for each version', () => {
+    for (const { manifest } of sets) {
+      expect(manifest).toBeTruthy();
+      expect(manifest.splunk).toBeTruthy();
+      expect(manifest.cases).toBeInstanceOf(Array);
+    }
+  });
+
+  it('manifest.cases matches fixture files and corpus', () => {
+    const corpusIds = new Set(CORPUS.map((c) => c.id));
+
+    for (const { version, fixtures, manifest } of sets) {
+      const fixtureIds = new Set(fixtures.map((f) => f.id));
+
+      const sortedManifest = [...manifest.cases].sort();
+      const sortedFixtures = [...fixtureIds].sort();
+      const sortedCorpus = [...corpusIds].sort();
+
+      expect(sortedManifest, `manifest.cases for ${version} does not match fixture files`)
+        .toEqual(sortedFixtures);
+      expect(sortedManifest, `manifest.cases for ${version} does not match corpus ids`)
+        .toEqual(sortedCorpus);
+    }
+  });
+
   for (const { version, fixtures } of sets) {
     describe(`Splunk ${version}`, () => {
       it('every fixture has a corpus case', () => {
