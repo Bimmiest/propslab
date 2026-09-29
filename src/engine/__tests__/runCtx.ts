@@ -4,8 +4,10 @@
 import { createRunContext, type RunContext } from '../runContext';
 import type { ValidationDiagnostic } from '../types';
 
-// Fixed default timestamp for reproducible tests: 2024-01-15T10:00:00.000Z
-const DEFAULT_NOW = 1705317600000;
+// Fixed default clock for reproducible tests: 2026-09-01T00:00:00.000Z. Recent
+// enough that the dated inputs the suite uses stay inside MAX_DAYS_AGO and
+// are not in the future; tests that care about the clock pass `now`.
+const DEFAULT_NOW = 1788220800000;
 
 export function runCtx(
   diagnostics?: ValidationDiagnostic[],
