@@ -32,6 +32,8 @@ describe('NULL in, NULL out', () => {
     'floor(missing)', 'round(missing)', 'sqrt(missing)', 'pow(missing, 2)', 'pow(2, missing)',
     'log(missing)', 'log(8, missing)', 'ln(missing)', 'exp(missing)', 'mvcount(missing)', 'strftime(missing, "%Y")',
     'abs("x")', 'sqrt("x")', 'null()',
+    // A NULL second or third argument is NULL too (#481), not "" or 0.
+    'split("a,b", missing)', 'substr("abc", 1, missing)', 'substr("abc", missing)', 'mvjoin(split("a,b", ","), missing)',
   ])('%s', (expr) => {
     expect(value(expr)).toBeNull();
   });

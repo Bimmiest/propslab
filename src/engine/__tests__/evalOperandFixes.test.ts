@@ -1,0 +1,144 @@
+// Eval operand handling: trim's character set (#474), multivalue operands in
+// comparisons and IN (#475), and the expression parser's limits and literals
+// (#484).
+//
+// Doc-derived (Splunk eval function and operator reference), not captured; no
+// fixture covers eval, so each assertion is kept to the documented behaviour.
+import { describe, it, expect } from 'vitest';
+import { evaluateExpression } from '../processors/eval/evaluator';
+import type { SplunkEvent } from '../types';
+
+function event(fields: Record<string, string | string[]> = {}): SplunkEvent {
+  return {
+    _raw: 'raw',
+    _time: null,
+    _meta: {},
+    fields,
+    metadata: { index: 'main', host: 'h', source: 's', sourcetype: 'st' },
+    lineNumbers: { start: 1, end: 1 },
+    processingTrace: [],
+  };
+}
+
+const value = (expr: string, fields: Record<string, string | string[]> = {}) =>
+  evaluateExpression(expr, event(fields), undefined, 0);
+
+describe('trim(X, Y) removes the characters in Y from both sides (#474)', () => {
+  // Splunk eval functions: trim(<str>,<trim_chars>) "removes the characters in
+  // trim_chars from both sides of the string".
+  it.each([
+    ['trim("xyyx", "x")', 'yy'],
+    ['trim("\\"quoted\\"", "\\"")', 'quoted'],
+    ['trim("xyxabyxy", "xy")', 'ab'],
+    ['trim("xxx", "x")', ''],
+    ['trim("zab", "xy")', 'zab'],
+  ] as const)('%s = %j', (expr, out) => {
+    expect(value(expr)).toBe(out);
+  });
+
+  it('trim, ltrim and rtrim share one default set, so they agree on the same input', () => {
+    // NBSP is not in the default set for any of them (JS trim() would strip it).
+    const nbsp = ' ';
+    const input = ` \t${nbsp}a${nbsp}\n `;
+    const f = { s: input };
+    expect(value('trim(s)', f)).toBe(`${nbsp}a${nbsp}`);
+    expect(value('ltrim(s)', f)).toBe(`${nbsp}a${nbsp}\n `);
+    expect(value('rtrim(s)', f)).toBe(` \t${nbsp}a${nbsp}`);
+  });
+});
+
+describe('multivalue operands match when any value does (#475)', () => {
+  const mv = { mv: ['a', 'b'] };
+
+  it.each([
+    ['mv == "a"', true],
+    ['mv == "b"', true],
+    ['mv == "c"', false],
+    // Never the space-joined form.
+    ['mv == "a b"', false],
+    ['"a" == mv', true],
+    ['mv = "a"', true],
+    ['mv != "c"', true],
+    // != is the complement of ==, not "some value differs".
+    ['mv != "a"', false],
+    ['mv IN ("a")', true],
+    ['mv IN ("c", "b")', true],
+    ['mv IN ("c")', false],
+    ['mv IN ("a b")', false],
+    ['mv NOT IN ("a")', false],
+    ['mv NOT IN ("c")', true],
+  ] as const)('%s = %j', (expr, out) => {
+    expect(value(expr, mv)).toBe(out);
+  });
+
+  it('a multivalue field with no values compares as NULL, like a missing field', () => {
+    const empty = { mv: [] as string[] };
+    expect(value('mv == "a"', empty)).toBeNull();
+    expect(value('mv != "a"', empty)).toBeNull();
+    expect(value('mv IN ("a")', empty)).toBeNull();
+    expect(value('mv NOT IN ("a")', empty)).toBeNull();
+  });
+
+  it('a multivalue result of a function is compared the same way', () => {
+    expect(value('split("a,b", ",") == "b"')).toBe(true);
+  });
+});
+
+describe('expression size limit (#484)', () => {
+  it('rejects a 200k-term chain with a clear diagnostic, not a stack overflow', () => {
+    const chain = Array.from({ length: 200_000 }, () => '1').join('+');
+    expect(() => value(chain)).toThrow(/too long or deeply nested/);
+    expect(() => value(chain)).not.toThrow(/call stack/);
+  });
+
+  it.each([
+    ['concat', Array.from({ length: 5000 }, () => '"a"').join('.')],
+    ['AND', Array.from({ length: 5000 }, () => '1').join(' AND ')],
+    ['NOT', `${'NOT '.repeat(5000)}1`],
+    ['unary minus', `${'- '.repeat(5000)}1`],
+  ])('rejects a long %s chain', (_name, expr) => {
+    expect(() => value(expr)).toThrow(/too long or deeply nested/);
+  });
+
+  it('still evaluates a chain of a few hundred terms', () => {
+    const chain = Array.from({ length: 500 }, () => '1').join('+');
+    expect(value(chain)).toBe(500);
+  });
+});
+
+describe('exponent literals (#484)', () => {
+  // The string "1e3" already coerces to 1000 (parseDecimal); the literal now
+  // means the same thing.
+  it.each([
+    ['1e3', 1000],
+    ['1E3', 1000],
+    ['2.5e-1', 0.25],
+    ['1e+2 + 1', 101],
+    ['.5e1', 5],
+    ['-1e2', -100],
+    ['1e3 * 2', 2000],
+  ] as const)('%s = %d', (expr, n) => {
+    expect(value(expr)).toBe(n);
+  });
+
+  it('agrees with the coercion of the same text as a string', () => {
+    expect(value('"1e3" + 1')).toBe(value('1e3 + 1'));
+  });
+
+  it('an e with no digits after it is not an exponent', () => {
+    expect(() => value('1e')).toThrow();
+    expect(() => value('1e+')).toThrow();
+  });
+});
+
+describe('unary minus repeats (#484)', () => {
+  it.each([
+    ['- - 3', 3],
+    ['- - - 3', -3],
+    ['-(-3)', 3],
+    ['- -x', 4],
+    ['-x', -4],
+  ] as const)('%s = %d', (expr, n) => {
+    expect(value(expr, { x: '4' })).toBe(n);
+  });
+});
