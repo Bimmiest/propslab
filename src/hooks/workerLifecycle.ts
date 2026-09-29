@@ -74,10 +74,15 @@ export interface ManagedWorkerConfig<TReq extends { id: number }, TRes extends {
    */
   onTimeout: (request: TReq, others: TReq[], loaded: boolean) => void;
   /**
-   * A worker that had loaded died. `inFlight` (oldest first) is untracked; the
-   * oldest is the one it was running. A replacement is built only when
-   * something was in flight: one that dies with nothing to do is replaced on
-   * the next post, so a script that dies idle cannot rebuild itself in a loop.
+   * A worker that had loaded died while running `inFlight[0]`, and `inFlight`
+   * (oldest first) is untracked. Only called when the request it was running is
+   * one the caller still wants, or when nothing is left to run (`inFlight` is
+   * empty): when the worker died on a request the caller had forgotten, the
+   * lifecycle re-posts the newer ones on the replacement, unblamed, exactly as
+   * for a timeout, since none of them had started (#491). A replacement is
+   * built only when something was in flight: one that dies with nothing to do
+   * is replaced on the next post, so a script that dies idle cannot rebuild
+   * itself in a loop.
    */
   onCrash: (inFlight: TReq[], message: string) => void;
   /**
@@ -253,6 +258,10 @@ class ManagedWorkerImpl<TReq extends { id: number }, TRes extends { id: number }
   /** The current worker raised an error: a load failure or a crash. */
   private fail(message: string): void {
     const loaded = this.ready;
+    // The head is the request the worker was running. If it was forgotten, the
+    // crash is not the fault of anything still wanted, so takeAll dropping it
+    // must not leave a newer, unstarted request looking like the one that died.
+    const headSuperseded = this.inFlight.values().next().value?.superseded ?? false;
     const requests = this.takeAll();
     this.discard();
     if (!loaded) {
@@ -262,7 +271,21 @@ class ManagedWorkerImpl<TReq extends { id: number }, TRes extends { id: number }
       return;
     }
     if (requests.length > 0) this.build();
+    if (headSuperseded && requests.length > 0) {
+      this.repostUnblamed(requests);
+      return;
+    }
     this.config.onCrash(requests, message);
+  }
+
+  /**
+   * Run requests that never started on the replacement worker. Whatever cannot
+   * be posted is handed to `onLoadFailure`: no code saw it.
+   */
+  private repostUnblamed(requests: TReq[]): void {
+    const unposted: TReq[] = [];
+    for (const request of requests) if (!this.post(request)) unposted.push(request);
+    if (unposted.length > 0) this.config.onLoadFailure(unposted, this.capped());
   }
 
   private expire(tracked: Tracked<TReq>): void {
@@ -278,9 +301,7 @@ class ManagedWorkerImpl<TReq extends { id: number }, TRes extends { id: number }
     }
     // Nobody is waiting for the request that hung, and the ones behind it
     // never started: run them on the replacement, unblamed.
-    const unposted: TReq[] = [];
-    for (const request of others) if (!this.post(request)) unposted.push(request);
-    if (unposted.length > 0) this.config.onLoadFailure(unposted, this.capped());
+    this.repostUnblamed(others);
   }
 
   // The public members are arrow properties so they stay bound when a caller

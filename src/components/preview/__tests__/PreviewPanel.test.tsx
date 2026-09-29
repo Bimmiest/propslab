@@ -21,6 +21,23 @@ describe('PreviewPanel', () => {
     expect(screen.getByText('No data yet')).toBeInTheDocument();
   });
 
+  it('tells a manual-apply user to press Run, and only then (#492)', () => {
+    const { unmount } = render(<PreviewPanel />);
+    expect(screen.queryByText(/press Run/)).not.toBeInTheDocument();
+    unmount();
+
+    act(() => useAppStore.setState({ settings: { perEventPipeline: false, manualApply: true } }));
+    render(<PreviewPanel />);
+    expect(screen.getByText(/press Run/)).toBeInTheDocument();
+  });
+
+  it('runs an example loaded from the empty state in manual-apply mode (#492)', () => {
+    useAppStore.setState({ settings: { perEventPipeline: false, manualApply: true } });
+    render(<PreviewPanel />);
+    fireEvent.click(screen.getByRole('button', { name: /Apache Access Log/ }));
+    expect(useAppStore.getState().manualRunTick).toBe(1);
+  });
+
   it('shows the failure, not the empty state, when a run produced no result', () => {
     useAppStore.setState({
       processingResult: null,

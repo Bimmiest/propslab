@@ -25,6 +25,7 @@ import { useProcessingPipeline } from '../useProcessingPipeline';
 import { LOAD_WAIT_FACTOR, type ManagedWorkerConfig } from '../workerLifecycle';
 import { useAppStore } from '../../store/useAppStore';
 import type { PipelineWorkerRequest } from '../../engine/pipelineWorker';
+import { SAMPLE_CONFIGS } from '../../engine/sampleData';
 
 // The real lifecycle, with each config kept so a test can hand the hook's
 // policy a callback the lifecycle's own timing no longer produces.
@@ -221,6 +222,75 @@ describe('useProcessingPipeline', () => {
     expect(FakeWorker.instances).toHaveLength(2);
   });
 
+  it('runs an example loaded in manual-apply mode, and leaves nothing out of date (#492)', async () => {
+    vi.stubGlobal('Worker', FakeWorker);
+    seed();
+    useAppStore.setState({ settings: { perEventPipeline: false, manualApply: true } });
+    renderHook(() => useProcessingPipeline());
+    expect(FakeWorker.instances[0]!.posted).toHaveLength(0);
+
+    const sample = SAMPLE_CONFIGS[0]!;
+    act(() => useAppStore.getState().loadInputs(sample));
+
+    await waitFor(() => expect(FakeWorker.instances[0]!.posted).toHaveLength(1));
+    const request = FakeWorker.instances[0]!.posted[0]!;
+    expect(request.rawData).toBe(sample.rawData);
+    expect(request.propsConfText).toBe(sample.propsConf);
+    expect(useAppStore.getState().pipelineDirty).toBe(false);
+
+    // Once the debounce settles on the loaded inputs they match the run: still clean.
+    await act(() => new Promise<void>((resolve) => setTimeout(resolve, 400)));
+    expect(useAppStore.getState().pipelineDirty).toBe(false);
+    expect(FakeWorker.instances[0]!.posted).toHaveLength(1);
+  });
+
+  describe('Ctrl/Cmd+Enter (#492)', () => {
+    const press = (init: KeyboardEventInit) => {
+      const e = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true, ...init });
+      act(() => void window.dispatchEvent(e));
+      return e;
+    };
+
+    it('runs the pipeline in manual-apply mode', async () => {
+      vi.stubGlobal('Worker', FakeWorker);
+      seed();
+      useAppStore.setState({ settings: { perEventPipeline: false, manualApply: true } });
+      renderHook(() => useProcessingPipeline());
+      expect(FakeWorker.instances[0]!.posted).toHaveLength(0);
+
+      const e = press({ ctrlKey: true });
+      expect(e.defaultPrevented).toBe(true);
+      await waitFor(() => expect(FakeWorker.instances[0]!.posted).toHaveLength(1));
+      act(() => FakeWorker.instances[0]!.answer(FakeWorker.instances[0]!.posted[0]!.id));
+
+      press({ metaKey: true });
+      await waitFor(() => expect(FakeWorker.instances[0]!.posted).toHaveLength(2));
+    });
+
+    it('ignores a plain Enter, and a press while a run is in progress', async () => {
+      vi.stubGlobal('Worker', FakeWorker);
+      seed();
+      useAppStore.setState({ settings: { perEventPipeline: false, manualApply: true } });
+      renderHook(() => useProcessingPipeline());
+
+      expect(press({}).defaultPrevented).toBe(false);
+      press({ ctrlKey: true });
+      await waitFor(() => expect(FakeWorker.instances[0]!.posted).toHaveLength(1));
+      press({ ctrlKey: true }); // still processing
+      await act(() => new Promise<void>((resolve) => setTimeout(resolve, 20)));
+      expect(FakeWorker.instances[0]!.posted).toHaveLength(1);
+    });
+
+    it('is left to the editor in auto mode', async () => {
+      vi.stubGlobal('Worker', FakeWorker);
+      seed();
+      renderHook(() => useProcessingPipeline());
+      await waitFor(() => expect(FakeWorker.instances[0]!.posted).toHaveLength(1));
+      expect(press({ ctrlKey: true }).defaultPrevented).toBe(false);
+      expect(useAppStore.getState().manualRunTick).toBe(0);
+    });
+  });
+
   it('reports nothing for a load failure with no request in flight (#309)', async () => {
     vi.stubGlobal('Worker', FakeWorker);
     seed();
@@ -256,6 +326,37 @@ describe('useProcessingPipeline', () => {
     expect(useAppStore.getState().isProcessing).toBe(true);
 
     act(() => latest().answer(request.id));
+    expect(useAppStore.getState().isProcessing).toBe(false);
+    expect(useAppStore.getState().processingResult).toEqual({ events: [] });
+  });
+
+  it('re-runs the newer request unblamed when a superseded one crashes the worker (#491)', async () => {
+    vi.stubGlobal('Worker', FakeWorker);
+    seed();
+    renderHook(() => useProcessingPipeline());
+
+    await waitFor(() => expect(FakeWorker.instances[0]!.posted).toHaveLength(1));
+    act(() => FakeWorker.instances[0]!.answer(FakeWorker.instances[0]!.posted[0]!.id));
+
+    act(() => useAppStore.setState({ rawData: 'crashy' }));
+    await waitFor(() => expect(FakeWorker.instances[0]!.posted).toHaveLength(2));
+    act(() => useAppStore.setState({ rawData: 'valid' }));
+    await waitFor(() => expect(FakeWorker.instances[0]!.posted).toHaveLength(3));
+    const valid = FakeWorker.instances[0]!.posted[2]!;
+
+    act(() => FakeWorker.instances[0]!.crash());
+
+    // The valid input runs on the replacement, and is not marked crashed.
+    expect(FakeWorker.instances).toHaveLength(2);
+    expect(latest().posted).toEqual([valid]);
+    expect(useAppStore.getState().validationDiagnostics.some((d) => /crash/i.test(d.message))).toBe(false);
+
+    // Its retry budget is intact: a real crash of it is replayed once, not given up on.
+    act(() => latest().crash());
+    expect(FakeWorker.instances).toHaveLength(3);
+    expect(FakeWorker.instances[2]!.posted).toEqual([valid]);
+    expect(useAppStore.getState().isProcessing).toBe(true);
+    act(() => FakeWorker.instances[2]!.answer(valid.id));
     expect(useAppStore.getState().isProcessing).toBe(false);
     expect(useAppStore.getState().processingResult).toEqual({ events: [] });
   });
