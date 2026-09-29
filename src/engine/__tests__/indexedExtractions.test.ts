@@ -57,6 +57,39 @@ describe('applyIndexedExtractions — JSON', () => {
     expect(events[0]!.fields).toEqual({});
   });
 
+  // A file saved as "UTF-8 with BOM" starts its first line with U+FEFF, which
+  // is not part of the JSON document (RFC 8259 section 8.1 lets a parser
+  // ignore it), and Splunk reads such a file's first event normally.
+  it('reads JSON that starts with a byte order mark or has surrounding whitespace (#482)', () => {
+    const events = applyIndexedExtractions(
+      [event('﻿{"a":1}'), event('  {"b":2}\n')],
+      [dir('json')],
+      runCtx());
+    expect(events[0]!.fields['a']).toBe('1');
+    expect(events[1]!.fields['b']).toBe('2');
+  });
+
+  it('reports events that are not valid JSON instead of skipping them silently (#482)', () => {
+    const diagnostics: ValidationDiagnostic[] = [];
+    const bad = event('{"a":1,}');
+    bad.lineNumbers = { start: 3, end: 3 };
+    const events = applyIndexedExtractions(
+      [event('{"ok":1}'), bad, event('not json')],
+      [dir('json')],
+      runCtx(diagnostics));
+    expect(events[0]!.fields['ok']).toBe('1');
+    expect(events[1]!.fields).toEqual({});
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0]).toMatchObject({ level: 'warning', file: 'raw', line: 3 });
+    expect(diagnostics[0]!.message).toMatch(/INDEXED_EXTRACTIONS = json: 2 events not valid JSON/);
+  });
+
+  it('reports nothing for valid JSON, including a scalar', () => {
+    const diagnostics: ValidationDiagnostic[] = [];
+    applyIndexedExtractions([event('{"a":1}'), event('42')], [dir('json')], runCtx(diagnostics));
+    expect(diagnostics).toEqual([]);
+  });
+
   it('extracts a key named after a prototype member instead of mangling it', () => {
     const events = applyIndexedExtractions([event('{"toString":"v"}')], [dir('json')], runCtx());
     expect(events[0]!.fields['toString']).toBe('v');
