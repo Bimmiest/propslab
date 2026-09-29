@@ -37,6 +37,49 @@ const CORPUS_SOURCE = Object.values(
 
 const ALL_TEST_TEXT = [...TEST_SOURCES.map(([, text]) => text), ...CORPUS_SOURCE].join('\n');
 
+/**
+ * Simulated directives that appear in test comments or prose but not in
+ * assignment form inside a string/template literal. These are documented as
+ * known gaps so the count can only decrease.
+ */
+const UNEXERCISED_SIMULATED: string[] = [
+  'MAX_DAYS_AGO',
+  'MAX_DAYS_HENCE',
+  'MAX_DIFF_SECS_AGO',
+  'MAX_DIFF_SECS_HENCE',
+  'FIELD_HEADER_REGEX',
+  'HEADER_FIELD_ACCEPTABLE_SPECIAL_CHARACTERS',
+  'MISSING_VALUE_REGEX',
+  'XML_IE_INCLUDE',
+  'XML_IE_INCLUDE_MV',
+  'XML_IE_EXCLUDE',
+  'XML_IE_EXCLUDE_MV',
+  'XML_IE_EXCLUDE_VALS',
+  'XML_IE_MAX_EXTRACTED_VALUE_SIZE',
+  'MATCH_LIMIT',
+  'ADD_EXTRA_TIME_FIELDS',
+  'DETERMINE_TIMESTAMP_DATE_WITH_SYSTEM_TIME',
+  // TODO: These directives are simulated but have no documented test exercises.
+  // Add test exercises in assignment form (KEY = value in a string/template literal)
+  // to remove them from this list. The count can only decrease.
+];
+
+/**
+ * Check if a directive key appears in assignment form in test source code.
+ * This matches patterns like `KEY = value` or `KEY-subname = value` inside
+ * strings or template literals, excluding prose mentions and comments.
+ */
+function isExercisedInTest(key: string): boolean {
+  // Match KEY (with optional class suffix) followed by = inside a string context
+  // Pattern: (start of line or quote)[\n"'`\\n])\s*KEY(-[A-Za-z0-9_]+)?\s*=
+  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp(
+    `(^|[\\n"'` + '`' + `\\\\n])\\s*${escapedKey}(-[A-Za-z0-9_]+)?\\s*=`,
+    'm'
+  );
+  return pattern.test(ALL_TEST_TEXT);
+}
+
 describe('directive support classification (#153)', () => {
   it('classifies every directive in the registry', () => {
     const unclassified = getAllDirectives()
@@ -76,14 +119,17 @@ describe('directive support classification (#153)', () => {
     const untested = Object.entries(DIRECTIVE_SUPPORT)
       .filter(([, e]) => e.support === 'simulated')
       .map(([key]) => key)
-      // Class-based keys appear as `EXTRACT-name` in a conf body, so match the
-      // bare prefix rather than requiring the exact registry key.
-      .filter((key) => !ALL_TEST_TEXT.includes(key));
+      .filter((key) => !isExercisedInTest(key) && !UNEXERCISED_SIMULATED.includes(key));
     expect(
       untested,
-      'these are declared simulated but no test mentions them -- either they are not really ' +
-        'simulated, or the behaviour is unasserted, and both are the same problem for a simulator',
+      'these are declared simulated but no test contains them in assignment form (KEY = value) -- ' +
+        'either they are not really simulated, or the behaviour is unasserted. If this is expected, ' +
+        'add the key to UNEXERCISED_SIMULATED with a TODO comment.',
     ).toEqual([]);
+  });
+
+  it('does not grow the unexercised simulated directives list', () => {
+    expect(UNEXERCISED_SIMULATED.length).toBeLessThanOrEqual(16);
   });
 
   it('keeps the README counts in step with the table', () => {

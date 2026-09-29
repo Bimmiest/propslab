@@ -21,7 +21,8 @@ export interface FixtureCase {
   id: string;
   /**
    * Registry keys (see `directiveRegistry.ts`) this case is ground truth for.
-   * Drives the coverage report against the declared `simulated` surface.
+   * Drives the manifest validation in `splunkFidelity.test.ts` and evidence
+   * classification in `directiveEvidence.test.ts`.
    */
   directives: string[];
   /**
