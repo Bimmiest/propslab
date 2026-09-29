@@ -26,6 +26,8 @@ const noMatch: DirectiveNoOp = {
   reason: { kind: 'no-match', partialEnd: 10 },
 };
 
+const notExplained: DirectiveNoOp = { ...noMatch, reason: { kind: 'not-explained' } };
+
 const missingStanza: DirectiveNoOp = {
   directive: 'TRANSFORMS-mask → [maskit]',
   file: 'props.conf',
@@ -56,6 +58,19 @@ describe('groupNoOps', () => {
 
   it('returns nothing for events with no no-ops', () => {
     expect(groupNoOps([event([])])).toEqual([]);
+  });
+
+  it('counts events past the explanation limit apart from the reasons (#452)', () => {
+    // Fifty analysed misses and 450 past the cap: the headline must stay the
+    // real reason, not "not analysed", however many there are of the latter.
+    const groups = groupNoOps([
+      event([noMatch]),
+      event([notExplained]),
+      event([notExplained]),
+    ]);
+    expect(groups[0]?.eventsAffected).toBe(3);
+    expect(groups[0]?.notExplained).toBe(2);
+    expect(groups[0]?.reasons).toEqual([{ text: expect.stringContaining('stopped agreeing') as string, events: 1 }]);
   });
 });
 
@@ -93,6 +108,25 @@ describe('DirectiveNoOpList', () => {
     const indexTime = render(<DirectiveNoOpList events={events} phase="index-time" />);
     expect(indexTime.container.textContent).toContain('maskit');
     expect(indexTime.container.textContent).not.toContain('EXTRACT-user');
+  });
+
+  it('says how many events were not analysed, under the real reason', () => {
+    const { container } = render(
+      <DirectiveNoOpList events={[event([noMatch]), event([notExplained]), event([notExplained])]} />,
+    );
+    expect(container.textContent).toContain('no effect on 3 of 3 events');
+    expect(within(container).getByText(/stopped agreeing at character 10/)).toBeInTheDocument();
+    expect(container.textContent).toContain(
+      'Not analysed: explanation limit reached for this directive (2 more events)',
+    );
+    // Not offered as another reason: it is the absence of one.
+    expect(within(container).queryByRole('button', { name: /other reason/ })).toBeNull();
+  });
+
+  it('falls back to the limit message when no event was analysed', () => {
+    const { container } = render(<DirectiveNoOpList events={[event([notExplained])]} />);
+    expect(container.textContent).toContain('Not analysed: explanation limit reached for this directive');
+    expect(container.textContent).not.toContain('more event');
   });
 
   it('hides secondary reasons behind a toggle', () => {

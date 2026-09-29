@@ -3,6 +3,7 @@ import { extractFields } from '../processors/fieldExtractor';
 import { applyFieldAliases } from '../processors/fieldAlias';
 import { applyEvalExpressions } from '../processors/evalProcessor';
 import type { SplunkEvent, ConfDirective } from '../types';
+import { runCtx } from './runCtx';
 
 function event(raw = 'hello'): SplunkEvent {
   return {
@@ -27,12 +28,13 @@ describe('metadata as search-time default fields (#56)', () => {
     const out = extractFields(
       [event()],
       [dir('EXTRACT-app', '/var/log/(?<app>\\w+)/ in source', 'EXTRACT', 'app')],
+      runCtx(),
     )[0]!;
     expect(out.fields.app).toBe('app');
   });
 
   it('FIELDALIAS host AS dvc aliases the metadata host', () => {
-    const out = applyFieldAliases([event()], [dir('FIELDALIAS-cim', 'host AS dvc', 'FIELDALIAS', 'cim')])[0]!;
+    const out = applyFieldAliases([event()], [dir('FIELDALIAS-cim', 'host AS dvc', 'FIELDALIAS', 'cim')], runCtx())[0]!;
     expect(out.fields.dvc).toBe('web01');
   });
 
@@ -45,6 +47,7 @@ describe('metadata as search-time default fields (#56)', () => {
         dir('EVAL-st', 'sourcetype', 'EVAL', 'st'),
         dir('EVAL-i', 'index', 'EVAL', 'i'),
       ],
+      runCtx(),
     )[0]!;
     expect(out.fields.s).toBe('/var/log/app/api.log');
     expect(out.fields.h).toBe('web01');
@@ -54,12 +57,12 @@ describe('metadata as search-time default fields (#56)', () => {
 
   it('an extracted field of the same name still wins', () => {
     const ev = { ...event(), fields: { host: 'from-payload' } };
-    const out = applyFieldAliases([ev], [dir('FIELDALIAS-x', 'host AS dvc', 'FIELDALIAS', 'x')])[0]!;
+    const out = applyFieldAliases([ev], [dir('FIELDALIAS-x', 'host AS dvc', 'FIELDALIAS', 'x')], runCtx())[0]!;
     expect(out.fields.dvc).toBe('from-payload');
   });
 
   it('leaves an unrelated missing field unresolved', () => {
-    const out = applyEvalExpressions([event()], [dir('EVAL-x', 'nosuchfield', 'EVAL', 'x')])[0]!;
+    const out = applyEvalExpressions([event()], [dir('EVAL-x', 'nosuchfield', 'EVAL', 'x')], runCtx())[0]!;
     expect(out.fields.x).toBeUndefined();
   });
 });

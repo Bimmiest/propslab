@@ -110,6 +110,8 @@ PCRE2's limits bound each match. They do not bound a run: many events, several p
 
 Measured on a 20,000-event synthetic key-value input (EXTRACT ×2, a `REPORT` with `MV_ADD`, `SEDCMD`, `TIME_PREFIX`) in Node, the pipeline took 2.3 s on PCRE2 against 1.7 s on V8's irregexp; on the two bundled examples scaled to the 1 MB input cap, 0–25% slower. A typical `EXTRACT` costs about 1.8 µs per event against irregexp's 1.4 µs. In the browser, the end-to-end suite's 20,000-event paste (`e2e/perf.spec.ts`) ran its pipeline in about 2.7 s against 2.5 s before, on the same machine.
 
+Explaining a directive that did nothing (`event.noOps`) is bounded per run as well. For a pattern that did not match, the engine searches for how far it got, which costs about log(atoms) extra regex runs; it does that for the first 50 events each directive misses in a run. After that, the directive's misses carry `{ kind: 'not-explained' }` instead of `{ kind: 'no-match', … }`, which `describeNoOp` renders as "Not analysed: explanation limit reached for this directive". A caller that groups no-ops should count those events apart from the explained ones, as `groupNoOps` does.
+
 Automatic timestamp recognition's format table (`timestampRecognizer.ts`) stays on JavaScript regexes: those patterns are generated from strftime formats, not written by a user, and run on every line.
 
 ## Running the engine under Node

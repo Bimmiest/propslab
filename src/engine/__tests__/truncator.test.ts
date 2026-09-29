@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { truncateEvents } from '../processors/truncator';
 import { breakLines } from '../processors/lineBreaker';
 import type { SplunkEvent, ConfDirective, ValidationDiagnostic } from '../types';
+import { runCtx } from './runCtx';
 
 function event(raw: string): SplunkEvent {
   return {
@@ -21,25 +22,25 @@ function truncateDir(value: string): ConfDirective[] {
 
 describe('truncateEvents', () => {
   it('truncates events longer than the byte limit', () => {
-    const e = truncateEvents([event('abcdefghij')], truncateDir('5'))[0]!;
+    const e = truncateEvents([event('abcdefghij')], truncateDir('5'), runCtx())[0]!;
     expect(e._raw).toBe('abcde');
   });
 
   it('leaves shorter events untouched', () => {
-    const e = truncateEvents([event('abc')], truncateDir('100'))[0]!;
+    const e = truncateEvents([event('abc')], truncateDir('100'), runCtx())[0]!;
     expect(e._raw).toBe('abc');
   });
 
   it('TRUNCATE = 0 disables truncation', () => {
     const long = 'x'.repeat(50);
-    const e = truncateEvents([event(long)], truncateDir('0'))[0]!;
+    const e = truncateEvents([event(long)], truncateDir('0'), runCtx())[0]!;
     expect(e._raw).toBe(long);
   });
 
   // A non-numeric TRUNCATE must not slice every event to '' via NaN.
   it('ignores a non-numeric TRUNCATE instead of blanking every event', () => {
     const diags: ValidationDiagnostic[] = [];
-    const e = truncateEvents([event('keep me intact')], truncateDir('abc'), diags)[0]!;
+    const e = truncateEvents([event('keep me intact')], truncateDir('abc'), runCtx(diags))[0]!;
     expect(e._raw).toBe('keep me intact');
     expect(diags.some((d) => d.message.includes('not a valid byte count'))).toBe(true);
   });
@@ -49,13 +50,13 @@ describe('truncateEvents', () => {
     // 6 lines × 8 chars = 48 bytes total, well over TRUNCATE=20, but each line
     // is only 8 bytes. Splunk truncates per line, so nothing is cut.
     const raw = Array.from({ length: 6 }, (_, i) => `line-${i}0`).join('\n');
-    const e = truncateEvents([event(raw)], truncateDir('20'))[0]!;
+    const e = truncateEvents([event(raw)], truncateDir('20'), runCtx())[0]!;
     expect(e._raw).toBe(raw);
   });
 
   it('truncates only the individual lines that exceed the limit', () => {
     const raw = ['short', 'this-line-is-way-too-long', 'ok'].join('\n');
-    const e = truncateEvents([event(raw)], truncateDir('5'))[0]!;
+    const e = truncateEvents([event(raw)], truncateDir('5'), runCtx())[0]!;
     expect(e._raw).toBe(['short', 'this-', 'ok'].join('\n'));
   });
 
@@ -64,14 +65,14 @@ describe('truncateEvents', () => {
   it('rounds down to a UTF-8 character boundary instead of emitting U+FFFD', () => {
     // '€' is 3 bytes (E2 82 AC); "a€" is 4 bytes. A 2-byte cut must drop the
     // whole '€' and yield "a", not "a�".
-    const e = truncateEvents([event('a€')], truncateDir('2'))[0]!;
+    const e = truncateEvents([event('a€')], truncateDir('2'), runCtx())[0]!;
     expect(e._raw).toBe('a');
     expect(e._raw).not.toContain('�');
   });
 
   it('keeps a multi-byte character that fits exactly within the limit', () => {
     // "€€" is 6 bytes; a 3-byte cut keeps exactly one '€'.
-    const e = truncateEvents([event('€€')], truncateDir('3'))[0]!;
+    const e = truncateEvents([event('€€')], truncateDir('3'), runCtx())[0]!;
     expect(e._raw).toBe('€');
     expect(e._raw).not.toContain('�');
   });
@@ -83,7 +84,7 @@ describe('truncateEvents', () => {
     (bad) => {
       const diags: ValidationDiagnostic[] = [];
       const long = 'x'.repeat(50);
-      const e = truncateEvents([event(long)], truncateDir(bad), diags)[0]!;
+      const e = truncateEvents([event(long)], truncateDir(bad), runCtx(diags))[0]!;
       expect(e._raw).toBe(long); // unchanged
       expect(diags.some((d) => d.message.includes('not a valid byte count'))).toBe(true);
     },
@@ -101,7 +102,7 @@ describe('#287 — TRUNCATE caps LINE_BREAKER segments, not newline-separated pi
   it('cuts a multi-line JSON record kept in one segment by a custom LINE_BREAKER', () => {
     const record = '{\n  "a": "0123456789",\n  "b": "0123456789"\n}';
     const directives = [d('SHOULD_LINEMERGE', 'false'), d('LINE_BREAKER', '(\\n)(?=\\{)'), d('TRUNCATE', '20')];
-    const events = truncateEvents(breakLines(`${record}\n${record}`, directives, META), directives);
+    const events = truncateEvents(breakLines(`${record}\n${record}`, directives, META, runCtx()), directives, runCtx());
     expect(events).toHaveLength(2);
     // Every '\n'-piece is under 20 bytes, so a per-'\n' reading would leave
     // both records whole.
@@ -115,7 +116,7 @@ describe('#287 — TRUNCATE caps LINE_BREAKER segments, not newline-separated pi
     // left alone and only the over-long line is cut.
     const raw = '2026-01-15T10:00:00Z start\nshort\n' + 'x'.repeat(50) + '\nshort';
     const directives = [d('TRUNCATE', '30')];
-    const [e] = truncateEvents(breakLines(raw, directives, META), directives);
+    const [e] = truncateEvents(breakLines(raw, directives, META, runCtx()), directives, runCtx());
     expect(e!._raw).toBe('2026-01-15T10:00:00Z start\nshort\n' + 'x'.repeat(30) + '\nshort');
   });
 
@@ -128,12 +129,12 @@ describe('#287 — TRUNCATE caps LINE_BREAKER segments, not newline-separated pi
       d('BREAK_ONLY_BEFORE_DATE', 'false'),
       d('TRUNCATE', '12'),
     ];
-    const [e] = truncateEvents(breakLines(raw, directives, META), directives);
+    const [e] = truncateEvents(breakLines(raw, directives, META, runCtx()), directives, runCtx());
     expect(e!._raw).toBe(`${'p'.repeat(8)}\n${'q'.repeat(3)}\n${'r'.repeat(4)}`);
   });
 
   it('falls back to newline-separated lines for an event breakLines did not build', () => {
-    const e = truncateEvents([event('abcdefgh\nab')], truncateDir('4'))[0]!;
+    const e = truncateEvents([event('abcdefgh\nab')], truncateDir('4'), runCtx())[0]!;
     expect(e._raw).toBe('abcd\nab');
   });
 });

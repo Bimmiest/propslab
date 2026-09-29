@@ -28,7 +28,7 @@ First e2e run on a clean checkout needs the browser: `npx playwright install chr
 
 ## Architecture
 
-Input (raw log + metadata + props.conf + transforms.conf) flows through a single Zustand store. `useProcessingPipeline` debounces changes 300 ms, posts a request to a Web Worker running the full simulation, and writes the result back. A 5 s watchdog kills hung workers and replays the last in-flight request on restart. Each processor is wrapped in `safeProcessor()` — failures record a diagnostic and return the events unchanged rather than crashing the pipeline.
+Input (raw log + metadata + props.conf + transforms.conf) flows through a single Zustand store. `useProcessingPipeline` debounces changes 300 ms, posts a request to a Web Worker running the full simulation, and writes the result back. A 5 s watchdog kills hung workers and replays the last in-flight request on restart. Each processor is wrapped in `safeProcessor()` — a failure records a diagnostic rather than crashing the pipeline, and only the events it failed on pass through that stage unchanged (stages that read across events, such as line breaking and timestamping, fall back as a whole).
 
 Contributor-facing internals — store layout, Monaco bundling, accessibility patterns — are in [docs/architecture.md](docs/architecture.md).
 

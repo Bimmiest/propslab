@@ -1,8 +1,8 @@
-import type { SplunkEvent, ConfDirective, DirectiveNoOp, ParsedConf, ProcessingStep, ValidationDiagnostic } from '../types';
-import type { NoOpReason } from '../noOpExplainer';
+import type { SplunkEvent, ConfDirective, DirectiveNoOp, ParsedConf, ProcessingStep } from '../types';
+import { noOpDirectiveKey, type NoOpReason } from '../noOpExplainer';
 import { applyRegexTransform } from '../transforms/regexTransform';
 import { applyDestKey } from '../transforms/destKeyRouter';
-import { applyIngestEval, newIngestEvalReported, type IngestEvalReported } from '../transforms/ingestEval';
+import { applyIngestEval } from '../transforms/ingestEval';
 import { evaluateStopCondition } from '../transforms/stopProcessing';
 import { byClassName } from '../utils/asciiCompare';
 import { appendTraceStep, metadataChanges } from '../utils/traceStep';
@@ -11,6 +11,7 @@ import { atDirective, atStanza } from '../parser/provenance';
 import { effectiveDirective, parseSplunkBool } from '../utils/directiveValues';
 import { validateRegex } from '../../utils/splunkRegex';
 import { epochOutOfRangeMessage } from '../utils/epochTime';
+import type { DiagnosticsCollector, RunContext } from '../runContext';
 
 // A DEST_KEY=_raw transform that shrinks the event by at least this fraction is
 // treated as accidental data loss (FORMAT did not reproduce the rest of the line).
@@ -52,51 +53,23 @@ function orderedTransformLists(directives: ConfDirective[], phase: Phase): ConfD
   return phase === 'index-time' ? [...byType('TRANSFORMS'), ...byType('RULESET')] : byType('REPORT');
 }
 
-/**
- * The once-per-stanza warning ledgers. The index-time stage and the
- * CLONE_SOURCETYPE pass share one, so a clone, which is its own
- * applyTransforms call, does not repeat what the originals reported.
- */
-export interface TransformsWarned {
-  /** The DEST_KEY=_raw data-loss warning. */
-  rawLoss: Set<string>;
-  /** Index-time transforms that extract fields with no WRITE_META/DEST_KEY. */
-  noWriteMeta: Set<string>;
-  /** A REGEX that does not compile. */
-  invalidRegex: Set<string>;
-  /** Routing via an unknown/unsimulated DEST_KEY. */
-  unknownDestKey: Set<string>;
-  /** DEST_KEY = _time given a value no Date can hold. */
-  timeOutOfRange: Set<string>;
-  /** DEST_KEY reached through a search-time REPORT-, where Splunk ignores it. */
-  searchTimeDestKey: Set<string>;
-  searchOnlyAttrs: Set<string>;
-  searchTimeNoFormat: Set<string>;
-  /** INGEST_EVAL errors and warnings, which it would otherwise repeat per event. */
-  ingestEval: IngestEvalReported;
-}
-
-export function newTransformsWarned(): TransformsWarned {
-  return {
-    rawLoss: new Set(),
-    noWriteMeta: new Set(),
-    invalidRegex: new Set(),
-    unknownDestKey: new Set(),
-    timeOutOfRange: new Set(),
-    searchTimeDestKey: new Set(),
-    searchOnlyAttrs: new Set(),
-    searchTimeNoFormat: new Set(),
-    ingestEval: newIngestEvalReported(),
-  };
-}
-
-/** One applyTransforms call: its settings, and the warning ledgers it reports against. */
+/** One applyTransforms call: its phase, and the run it reports into. */
 interface TransformsRun {
   phase: Phase;
-  diagnostics: ValidationDiagnostic[] | undefined;
-  now: number;
+  ctx: RunContext;
+  diagnostics: DiagnosticsCollector;
   stanzaMap: Map<string, TransformStanza>;
-  warned: TransformsWarned;
+}
+
+/**
+ * The run-wide key for a once-per-stanza warning. The index-time stage and the
+ * CLONE_SOURCETYPE pass share the run's ledger, so a clone, which is its own
+ * applyTransforms call, does not repeat what the originals reported. Keyed by
+ * phase too: a stanza reached by both TRANSFORMS- and REPORT- is reported on
+ * each pass.
+ */
+function warnKey(run: TransformsRun, warning: string, stanzaName: string): string {
+  return `transforms|${run.phase}|${warning}|${stanzaName}`;
 }
 
 /** One event on its way through the transform lists. */
@@ -124,14 +97,13 @@ interface TransformSite {
   stanzaName: string;
 }
 
+/** Where a no-op at `site` is reported: the list directive, naming the stanza. */
+function noOpSite(site: TransformSite) {
+  return { directive: `${site.dir.key} → [${site.stanzaName}]`, file: 'props.conf' as const, line: site.dir.line };
+}
+
 function noteNoOp(run: TransformsRun, state: EventState, site: TransformSite, reason: NoOpReason): void {
-  state.noOps.push({
-    directive: `${site.dir.key} → [${site.stanzaName}]`,
-    file: 'props.conf',
-    line: site.dir.line,
-    phase: run.phase,
-    reason,
-  });
+  state.noOps.push({ ...noOpSite(site), phase: run.phase, reason });
 }
 
 /**
@@ -163,9 +135,9 @@ function runEvalStanza(
 ): boolean {
   if (run.phase !== 'index-time') return false;
   if (ingestEvalDirs.length > 0) {
-    state.event = applyIngestEval([state.event], ingestEvalDirs, run.diagnostics, run.now, run.warned.ingestEval)[0] ?? state.event;
+    state.event = applyIngestEval([state.event], ingestEvalDirs, run.ctx)[0] ?? state.event;
   }
-  const stop = evaluateStopCondition(state.event, transformStanza.directives, run.diagnostics, run.now, run.warned.ingestEval.messages);
+  const stop = evaluateStopCondition(state.event, transformStanza.directives, run.ctx);
   if (!stop) return false;
   const { listLabel } = site;
   const description = !stop.stop
@@ -185,17 +157,16 @@ function runEvalStanza(
 
 /** The once-per-stanza warnings a matched regex transform can raise before routing. */
 function warnMatched(run: TransformsRun, result: TransformResult, stanzaName: string, transformStanza: TransformStanza): void {
-  const { diagnostics, warned } = run;
-  if (!diagnostics) return;
+  const { diagnostics } = run;
   if (run.phase === 'index-time') {
-    warnIndexTimeNoWriteMeta(result, stanzaName, transformStanza, diagnostics, warned.noWriteMeta);
+    warnIndexTimeNoWriteMeta(result, stanzaName, transformStanza, diagnostics, warnKey(run, 'noWriteMeta', stanzaName));
   }
   // applyRegexTransform already ignored DEST_KEY on the search-time pass
   // (it is index-time only); say so, rather than silently applying half
   // the stanza.
   if (run.phase === 'search-time') {
-    warnSearchTimeDestKey(stanzaName, transformStanza, diagnostics, warned.searchTimeDestKey);
-    warnSearchTimeNoFormat(result, stanzaName, transformStanza, diagnostics, warned.searchTimeNoFormat);
+    warnSearchTimeDestKey(stanzaName, transformStanza, diagnostics, warnKey(run, 'searchTimeDestKey', stanzaName));
+    warnSearchTimeNoFormat(result, stanzaName, transformStanza, diagnostics, warnKey(run, 'searchTimeNoFormat', stanzaName));
   }
 }
 
@@ -250,7 +221,7 @@ function applyMatch(
   transformStanza: TransformStanza,
   result: TransformResult,
 ): void {
-  const { phase, diagnostics, warned } = run;
+  const { phase, diagnostics } = run;
   const { stanzaName } = site;
   warnMatched(run, result, stanzaName, transformStanza);
   // An index-time extraction with neither WRITE_META = true nor a
@@ -270,20 +241,18 @@ function applyMatch(
   // (last-wins). nullQueue events are flagged (and shown as dropped) only
   // after the whole list runs; they are never removed mid-list.
   const routed = applyDestKey(state.event, effective, (value) => {
-    if (!diagnostics || warned.timeOutOfRange.has(stanzaName)) return;
-    warned.timeOutOfRange.add(stanzaName);
-    diagnostics.push({
+    diagnostics.report(warnKey(run, 'timeOutOfRange', stanzaName), {
       level: 'warning',
       message: epochOutOfRangeMessage(`DEST_KEY = _time in transform "${stanzaName}"`, value),
       file: 'transforms.conf',
       ...positionOfKeyOrStanza(transformStanza, 'DEST_KEY'),
     });
   });
-  if (result.destKey === '_raw' && diagnostics) {
-    warnRawLoss(beforeRaw, routed._raw, stanzaName, transformStanza, diagnostics, warned.rawLoss);
+  if (result.destKey === '_raw') {
+    warnRawLoss(beforeRaw, routed._raw, stanzaName, transformStanza, diagnostics, warnKey(run, 'rawLoss', stanzaName));
   }
-  if (result.destKey && diagnostics) {
-    warnUnknownDestKey(result.destKey, stanzaName, transformStanza, diagnostics, warned.unknownDestKey);
+  if (result.destKey) {
+    warnUnknownDestKey(result.destKey, stanzaName, transformStanza, diagnostics, warnKey(run, 'unknownDestKey', stanzaName));
   }
   // DEST_KEY = _raw overwrites the whole event with the FORMAT output,
   // destroying field values by the same mechanism as SEDCMD. The
@@ -310,24 +279,22 @@ function applyMatch(
 
 /** Run one REGEX (or DELIMS) transform stanza against the event. */
 function runRegexStanza(run: TransformsRun, state: EventState, site: TransformSite, transformStanza: TransformStanza): void {
-  const { phase, diagnostics, warned } = run;
+  const { phase, diagnostics } = run;
   const { stanzaName } = site;
   const result = applyRegexTransform(state.event, transformStanza, (pattern) => {
-    if (!diagnostics || warned.invalidRegex.has(stanzaName)) return;
-    warned.invalidRegex.add(stanzaName);
-    diagnostics.push({
+    diagnostics.report(warnKey(run, 'invalidRegex', stanzaName), {
       level: 'warning',
       message: `Transform "${stanzaName}" was skipped: its REGEX (${pattern}) does not compile (${validateRegex(pattern) ?? 'invalid regex'}).`,
       file: 'transforms.conf',
       ...positionOfKeyOrStanza(transformStanza, 'REGEX'),
     });
-  }, phase);
+  }, phase, () => run.ctx.explanations.take(noOpDirectiveKey(noOpSite(site))));
 
   // Fires whether or not the transform matched: a DELIMS stanza reached
   // through TRANSFORMS- extracts nothing at all, so `matched` is false and
   // a warning gated on it would never reach the one config that needs it.
-  if (phase === 'index-time' && diagnostics) {
-    warnIndexTimeSearchOnlyAttrs(stanzaName, transformStanza, diagnostics, warned.searchOnlyAttrs);
+  if (phase === 'index-time') {
+    warnIndexTimeSearchOnlyAttrs(stanzaName, transformStanza, diagnostics, warnKey(run, 'searchOnlyAttrs', stanzaName));
   }
 
   if (result.matched) applyMatch(run, state, site, transformStanza, result);
@@ -363,21 +330,17 @@ export function applyTransforms(
   directives: ConfDirective[],
   transformsConf: ParsedConf,
   phase: Phase,
-  diagnostics?: ValidationDiagnostic[],
-  /** Epoch ms that INGEST_EVAL's now()/time() read. See `PipelineOptions.now`. */
-  now: number = Date.now(),
-  /** What this pipeline run has already warned about; see TransformsWarned. */
-  warned: TransformsWarned = newTransformsWarned(),
+  /** `ctx.now` is what INGEST_EVAL's now()/time() read. */
+  ctx: RunContext,
 ): SplunkEvent[] {
   const transformDirectives = orderedTransformLists(directives, phase);
   if (transformDirectives.length === 0) return events;
 
   const run: TransformsRun = {
     phase,
-    diagnostics,
-    now,
+    ctx,
+    diagnostics: ctx.diagnostics,
     stanzaMap: new Map(transformsConf.stanzas.map((s) => [s.name, s])),
-    warned,
   };
 
   return events.flatMap((event) => {
@@ -412,16 +375,14 @@ function warnIndexTimeNoWriteMeta(
   result: { fields: Record<string, string | string[]>; destKey?: string },
   stanzaName: string,
   transformStanza: ParsedConf['stanzas'][number],
-  diagnostics: ValidationDiagnostic[],
-  warned: Set<string>,
+  diagnostics: DiagnosticsCollector,
+  key: string,
 ): void {
-  if (warned.has(stanzaName)) return;
   // Only a concern when the transform produced fields and did not route anywhere.
   if (result.destKey || Object.keys(result.fields).length === 0) return;
   if (stanzaWritesMeta(transformStanza)) return;
 
-  warned.add(stanzaName);
-  diagnostics.push({
+  diagnostics.report(key, {
     level: 'warning',
     message:
       `Index-time transform "${stanzaName}" extracts fields (${Object.keys(result.fields).join(', ')}) but has no ` +
@@ -446,18 +407,16 @@ const SEARCH_TIME_ONLY_ATTRS = ['DELIMS', 'FIELDS', 'MV_ADD', 'CLEAN_KEYS', 'KEE
 function warnIndexTimeSearchOnlyAttrs(
   stanzaName: string,
   transformStanza: ParsedConf['stanzas'][number],
-  diagnostics: ValidationDiagnostic[],
-  warned: Set<string>,
+  diagnostics: DiagnosticsCollector,
+  key: string,
 ): void {
-  if (warned.has(stanzaName)) return;
-  const present = SEARCH_TIME_ONLY_ATTRS.filter((key) =>
-    transformStanza.directives.some((d) => d.key === key),
+  const present = SEARCH_TIME_ONLY_ATTRS.filter((attr) =>
+    transformStanza.directives.some((d) => d.key === attr),
   );
   if (present.length === 0) return;
-  warned.add(stanzaName);
 
   const hasDelims = present.includes('DELIMS');
-  diagnostics.push({
+  diagnostics.report(key, {
     level: 'warning',
     message:
       `Transform "${stanzaName}" sets ${present.join(', ')}, but it is referenced by an index-time TRANSFORMS-. ` +
@@ -481,15 +440,13 @@ function warnIndexTimeSearchOnlyAttrs(
 function warnSearchTimeDestKey(
   stanzaName: string,
   transformStanza: ParsedConf['stanzas'][number],
-  diagnostics: ValidationDiagnostic[],
-  warned: Set<string>,
+  diagnostics: DiagnosticsCollector,
+  key: string,
 ): void {
-  if (warned.has(stanzaName)) return;
   const destKeyDir = effectiveDirective(transformStanza.directives, 'DEST_KEY');
   if (!destKeyDir) return;
-  warned.add(stanzaName);
   const destKey = destKeyDir.value.trim();
-  diagnostics.push({
+  diagnostics.report(key, {
     level: 'warning',
     message:
       `Transform "${stanzaName}" sets DEST_KEY = ${destKey}, but it is referenced by a search-time REPORT-. ` +
@@ -511,18 +468,17 @@ function warnSearchTimeNoFormat(
   result: { fields: Record<string, string | string[]> },
   stanzaName: string,
   transformStanza: ParsedConf['stanzas'][number],
-  diagnostics: ValidationDiagnostic[],
-  warned: Set<string>,
+  diagnostics: DiagnosticsCollector,
+  key: string,
 ): void {
-  if (warned.has(stanzaName) || Object.keys(result.fields).length > 0) return;
-  const has = (key: string) => transformStanza.directives.some((d) => d.key === key);
+  if (Object.keys(result.fields).length > 0) return;
+  const has = (attr: string) => transformStanza.directives.some((d) => d.key === attr);
   if (has('FORMAT') || has('DELIMS')) return;
   // A named group that simply did not participate in this match also leaves
   // `fields` empty; that is data, not config, so stay quiet for it.
   const regex = effectiveDirective(transformStanza.directives, 'REGEX')?.value ?? '';
   if (/\(\?P?<(?![=!])/.test(regex)) return;
-  warned.add(stanzaName);
-  diagnostics.push({
+  diagnostics.report(key, {
     level: 'warning',
     message:
       `Transform "${stanzaName}" is referenced by a search-time REPORT- and its REGEX matched, but it has no ` +
@@ -545,13 +501,12 @@ function warnUnknownDestKey(
   destKey: string,
   stanzaName: string,
   transformStanza: ParsedConf['stanzas'][number],
-  diagnostics: ValidationDiagnostic[],
-  warned: Set<string>,
+  diagnostics: DiagnosticsCollector,
+  key: string,
 ): void {
   // Mirror the router's _MetaData:→MetaData: alias normalisation before comparing.
   const normalized = normaliseDestKey(destKey);
-  if (SIMULATED_DEST_KEYS.has(normalized) || warned.has(stanzaName)) return;
-  warned.add(stanzaName);
+  if (SIMULATED_DEST_KEYS.has(normalized) || !diagnostics.once(key)) return;
 
   const line = effectiveDirective(transformStanza.directives, 'DEST_KEY')?.line ?? transformStanza.lineRange.start;
   if (VALID_UNSIMULATED_DEST_KEYS.has(normalized)) {
@@ -585,16 +540,14 @@ function warnRawLoss(
   afterRaw: string,
   stanzaName: string,
   transformStanza: ParsedConf['stanzas'][number],
-  diagnostics: ValidationDiagnostic[],
-  warned: Set<string>,
+  diagnostics: DiagnosticsCollector,
+  key: string,
 ): void {
-  if (warned.has(stanzaName)) return;
   const origLen = beforeRaw.length;
   const dropped = origLen - afterRaw.length;
   if (origLen === 0 || dropped <= 0 || dropped / origLen <= RAW_LOSS_THRESHOLD) return;
 
-  warned.add(stanzaName);
-  diagnostics.push({
+  diagnostics.report(key, {
     level: 'warning',
     message:
       `DEST_KEY = _raw in transform "${stanzaName}" replaced the event and dropped ${dropped} of ${origLen} characters. ` +

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { applyIngestEval } from '../transforms/ingestEval';
 import { runPipeline } from '../pipeline';
 import type { SplunkEvent, ConfDirective, EventMetadata, ValidationDiagnostic } from '../types';
+import { runCtx } from './runCtx';
 
 function event(raw: string): SplunkEvent {
   return {
@@ -21,12 +22,12 @@ function ingestDir(value: string): ConfDirective[] {
 
 describe('applyIngestEval', () => {
   it('assigns a literal value to a field', () => {
-    const e = applyIngestEval([event('x')], ingestDir('tag="prod"'))[0]!;
+    const e = applyIngestEval([event('x')], ingestDir('tag="prod"'), runCtx())[0]!;
     expect(e.fields.tag).toBe('prod');
   });
 
   it('splits multiple top-level assignments on commas', () => {
-    const e = applyIngestEval([event('x')], ingestDir('a="1", b="2"'))[0]!;
+    const e = applyIngestEval([event('x')], ingestDir('a="1", b="2"'), runCtx())[0]!;
     expect(e.fields.a).toBe('1');
     expect(e.fields.b).toBe('2');
   });
@@ -37,18 +38,18 @@ describe('applyIngestEval', () => {
       { key: 'INGEST_EVAL', value: 'tag="first"', line: 1, directiveType: 'INGEST_EVAL' },
       { key: 'INGEST_EVAL', value: 'tag="second"', line: 2, directiveType: 'INGEST_EVAL' },
     ];
-    const e = applyIngestEval([event('x')], dirs)[0]!;
+    const e = applyIngestEval([event('x')], dirs, runCtx())[0]!;
     expect(e.fields.tag).toBe('second');
   });
 
   // BUG-3: a comma inside a string literal must not split the assignment.
   it('does not split on a comma inside a quoted string', () => {
-    const e = applyIngestEval([event('x')], ingestDir('msg="a,b"'))[0]!;
+    const e = applyIngestEval([event('x')], ingestDir('msg="a,b"'), runCtx())[0]!;
     expect(e.fields.msg).toBe('a,b');
   });
 
   it('does not split on a comma inside parentheses', () => {
-    const e = applyIngestEval([event('x')], ingestDir('n=if(1==1,"yes","no")'))[0]!;
+    const e = applyIngestEval([event('x')], ingestDir('n=if(1==1,"yes","no")'), runCtx())[0]!;
     expect(e.fields.n).toBe('yes');
   });
 
@@ -56,7 +57,7 @@ describe('applyIngestEval', () => {
   // following top-level comma must still split, not be swallowed.
   it('closes a literal ending in an escaped backslash and splits the next assignment', () => {
     // a = the Windows path `c:\` (written `c:\\` in the config), then b=2.
-    const e = applyIngestEval([event('x')], ingestDir('a="c:\\\\", b=2'))[0]!;
+    const e = applyIngestEval([event('x')], ingestDir('a="c:\\\\", b=2'), runCtx())[0]!;
     expect(e.fields.a).toBe('c:\\');
     expect(e.fields.b).toBe('2');
   });
@@ -67,6 +68,7 @@ describe('applyIngestEval — queue assignment routes the event (#58)', () => {
     const out = applyIngestEval(
       [event('DEBUG connection retry')],
       ingestDir('queue=if(match(_raw,"DEBUG"), "nullQueue", "indexQueue")'),
+      runCtx(),
     )[0]!;
     expect(out._meta._queue).toBe('nullQueue');
     expect(out.fields.queue).toBeUndefined();
@@ -76,6 +78,7 @@ describe('applyIngestEval — queue assignment routes the event (#58)', () => {
     const out = applyIngestEval(
       [event('INFO all good')],
       ingestDir('queue=if(match(_raw,"DEBUG"), "nullQueue", "indexQueue")'),
+      runCtx(),
     )[0]!;
     expect(out._meta._queue).toBe('indexQueue');
     expect(out.fields.queue).toBeUndefined();
@@ -83,7 +86,7 @@ describe('applyIngestEval — queue assignment routes the event (#58)', () => {
 
   it('does not mutate the input event', () => {
     const input = event('DEBUG x');
-    applyIngestEval([input], ingestDir('queue="nullQueue"'));
+    applyIngestEval([input], ingestDir('queue="nullQueue"'), runCtx());
     expect(input._meta._queue).toBeUndefined();
   });
 });
@@ -110,7 +113,7 @@ describe('applyIngestEval — metadata keys rewrite the event metadata (#327)', 
     ['source', 'source="/var/log/app.log"', '/var/log/app.log'],
     ['sourcetype', 'sourcetype="app:json"', 'app:json'],
   ] as const)('%s= sets metadata.%s, not a field', (key, expr, expected) => {
-    const out = applyIngestEval([event('x')], ingestDir(expr))[0]!;
+    const out = applyIngestEval([event('x')], ingestDir(expr), runCtx())[0]!;
     expect(out.metadata[key]).toBe(expected);
     expect(out.fields[key]).toBeUndefined();
   });
@@ -119,56 +122,57 @@ describe('applyIngestEval — metadata keys rewrite the event metadata (#327)', 
     const out = applyIngestEval(
       [event('ERROR auth failed')],
       ingestDir('index=if(match(_raw, "auth"), "security", index)'),
+      runCtx(),
     )[0]!;
     expect(out.metadata.index).toBe('security');
   });
 
   it('lets a later assignment in the same list read the rewritten metadata', () => {
-    const out = applyIngestEval([event('x')], ingestDir('sourcetype="new", tag=sourcetype'))[0]!;
+    const out = applyIngestEval([event('x')], ingestDir('sourcetype="new", tag=sourcetype'), runCtx())[0]!;
     expect(out.metadata.sourcetype).toBe('new');
     expect(out.fields.tag).toBe('new');
   });
 
   it('keeps the existing metadata when the expression is null', () => {
-    const out = applyIngestEval([event('x')], ingestDir('host=null()'))[0]!;
+    const out = applyIngestEval([event('x')], ingestDir('host=null()'), runCtx())[0]!;
     expect(out.metadata.host).toBe('h');
   });
 
   it('does not mutate the input event', () => {
     const input = event('x');
-    applyIngestEval([input], ingestDir('index="security"'));
+    applyIngestEval([input], ingestDir('index="security"'), runCtx());
     expect(input.metadata.index).toBe('main');
   });
 });
 
 describe('applyIngestEval — the := operator (#327)', () => {
   it('assigns to the named field, not one ending in a colon', () => {
-    const out = applyIngestEval([event('x')], ingestDir('x := "1"'))[0]!;
+    const out = applyIngestEval([event('x')], ingestDir('x := "1"'), runCtx())[0]!;
     expect(out.fields.x).toBe('1');
     expect(out.fields['x:']).toBeUndefined();
   });
 
   it('replaces an existing field value', () => {
     const input = { ...event('x'), fields: { x: 'old' } };
-    const out = applyIngestEval([input], ingestDir('x:="new"'))[0]!;
+    const out = applyIngestEval([input], ingestDir('x:="new"'), runCtx())[0]!;
     expect(out.fields.x).toBe('new');
   });
 
   it('mixes with = in a comma-separated list', () => {
-    const out = applyIngestEval([event('x')], ingestDir('a="1", b:=a . "2", index:="security"'))[0]!;
+    const out = applyIngestEval([event('x')], ingestDir('a="1", b:=a . "2", index:="security"'), runCtx())[0]!;
     expect(out.fields.a).toBe('1');
     expect(out.fields.b).toBe('12');
     expect(out.metadata.index).toBe('security');
   });
 
   it('routes the special keys the same way = does', () => {
-    const out = applyIngestEval([event('DEBUG x')], ingestDir('queue:="nullQueue", _raw:="y"'))[0]!;
+    const out = applyIngestEval([event('DEBUG x')], ingestDir('queue:="nullQueue", _raw:="y"'), runCtx())[0]!;
     expect(out._meta._queue).toBe('nullQueue');
     expect(out._raw).toBe('y');
   });
 
   it('ignores an assignment with no field name', () => {
-    const out = applyIngestEval([event('x')], ingestDir(':="1"'))[0]!;
+    const out = applyIngestEval([event('x')], ingestDir(':="1"'), runCtx())[0]!;
     expect(out.fields).toEqual({});
   });
 });
@@ -204,7 +208,7 @@ describe('applyIngestEval — the trace says what was rewritten (#346)', () => {
   const step = (e: SplunkEvent) => e.processingTrace[e.processingTrace.length - 1]!;
 
   it('records each metadata rewrite old → new, structured and in the description', () => {
-    const out = applyIngestEval([event('x')], ingestDir('index="security", host="web01", tag="t"'))[0]!;
+    const out = applyIngestEval([event('x')], ingestDir('index="security", host="web01", tag="t"'), runCtx())[0]!;
     expect(step(out).metadataChanges).toEqual([
       { key: 'index', from: 'main', to: 'security' },
       { key: 'host', from: 'h', to: 'web01' },
@@ -216,19 +220,19 @@ describe('applyIngestEval — the trace says what was rewritten (#346)', () => {
   });
 
   it('records the net change when one list rewrites a key twice', () => {
-    const out = applyIngestEval([event('x')], ingestDir('index="a", index="b"'))[0]!;
+    const out = applyIngestEval([event('x')], ingestDir('index="a", index="b"'), runCtx())[0]!;
     expect(step(out).metadataChanges).toEqual([{ key: 'index', from: 'main', to: 'b' }]);
   });
 
   it('records nothing for an assignment that leaves the metadata as it was', () => {
-    const out = applyIngestEval([event('x')], ingestDir('index="main", host=null(), tag="t"'))[0]!;
+    const out = applyIngestEval([event('x')], ingestDir('index="main", host=null(), tag="t"'), runCtx())[0]!;
     expect(step(out).metadataChanges).toBeUndefined();
     expect(step(out).description).toBe('Evaluated 3 ingest-time expression(s)');
   });
 
   it('records a _raw rewrite as a mutation of its own step, with before/after text', () => {
     const input = { ...event('user=alice secret=hunter2'), processingTrace: [{ processor: 'p', phase: 'index-time' as const, description: 'd' }] };
-    const out = applyIngestEval([input], ingestDir('_raw=replace(_raw, "secret=\\\\S+", "")'))[0]!;
+    const out = applyIngestEval([input], ingestDir('_raw=replace(_raw, "secret=\\\\S+", "")'), runCtx())[0]!;
     expect(out._raw).toBe('user=alice ');
     expect(out.rawMutations).toEqual([{ traceIndex: 1, rawBefore: 'user=alice secret=hunter2', rawAfter: 'user=alice ' }]);
     expect(step(out).inputSnapshot).toContain('secret=hunter2');
@@ -236,7 +240,7 @@ describe('applyIngestEval — the trace says what was rewritten (#346)', () => {
   });
 
   it('records no mutation when _raw is assigned its own value', () => {
-    const out = applyIngestEval([event('x')], ingestDir('_raw=_raw'))[0]!;
+    const out = applyIngestEval([event('x')], ingestDir('_raw=_raw'), runCtx())[0]!;
     expect(out.rawMutations).toBeUndefined();
     expect(step(out).inputSnapshot).toBeUndefined();
   });
@@ -271,12 +275,12 @@ describe('INGEST_EVAL _time out of the Date range (#417)', () => {
   );
 
   it('accepts the edges of the range and refuses just past them', () => {
-    const [lo] = applyIngestEval([event('x')], ingestDir('_time=-8640000000000'));
-    const [hi] = applyIngestEval([event('x')], ingestDir('_time=8640000000000'));
+    const [lo] = applyIngestEval([event('x')], ingestDir('_time=-8640000000000'), runCtx());
+    const [hi] = applyIngestEval([event('x')], ingestDir('_time=8640000000000'), runCtx());
     expect(lo!._time!.getTime()).toBe(-8.64e15);
     expect(hi!._time!.getTime()).toBe(8.64e15);
     const diagnostics: ValidationDiagnostic[] = [];
-    const [past] = applyIngestEval([event('x')], ingestDir('_time=8640000000001'), diagnostics);
+    const [past] = applyIngestEval([event('x')], ingestDir('_time=8640000000001'), runCtx(diagnostics));
     expect(past!._time).toBeNull();
     expect(diagnostics).toHaveLength(1);
   });

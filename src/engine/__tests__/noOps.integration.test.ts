@@ -156,3 +156,44 @@ describe('#415 — explaining no-ops stays cheap at volume', () => {
     // The pipeline itself takes seconds under coverage instrumentation.
   }, 30_000);
 });
+
+describe('#452 — explanations are capped per directive per run', () => {
+  const lines = (n: number) => Array.from({ length: n }, (_, i) => `user=u${i} action=login`).join('\n');
+  const LIMIT = 50;
+
+  function kindsFor(directive: string, props: string, transforms: string, perEventPipeline: boolean) {
+    const { result } = runPipeline(lines(LIMIT + 10), metadata, props, transforms, { perEventPipeline, captureOffsets: false });
+    return result.events.map((e) => e.noOps?.find((n) => n.directive === directive)?.reason.kind);
+  }
+
+  const cases: [string, string, string][] = [
+    ['EXTRACT-email', '[my_app]\nSHOULD_LINEMERGE = false\nEXTRACT-email = user=(?<user>\\w+)@\n', ''],
+    ['SEDCMD-mask', '[my_app]\nSHOULD_LINEMERGE = false\nSEDCMD-mask = s/password=\\S+/password=xxx/g\n', ''],
+    [
+      'TRANSFORMS-t → [route]',
+      '[my_app]\nSHOULD_LINEMERGE = false\nTRANSFORMS-t = route\n',
+      '[route]\nREGEX = ^DEBUG\nDEST_KEY = queue\nFORMAT = nullQueue\n',
+    ],
+    [
+      'REPORT-r → [pairs]',
+      '[my_app]\nSHOULD_LINEMERGE = false\nREPORT-r = pairs\n',
+      '[pairs]\nREGEX = (\\w+):(\\d+)\nFORMAT = $1::$2\n',
+    ],
+  ];
+
+  for (const perEventPipeline of [false, true]) {
+    it.each(cases)(`analyses the first ${LIMIT} misses of %s, then says it stopped (perEvent=${perEventPipeline})`, (directive, props, transforms) => {
+      const kinds = kindsFor(directive, props, transforms, perEventPipeline);
+      expect(kinds.slice(0, LIMIT).every((k) => k === 'no-match')).toBe(true);
+      expect(kinds.slice(LIMIT)).toEqual(Array(10).fill('not-explained'));
+    });
+  }
+
+  it('counts each directive apart', () => {
+    const props = '[my_app]\nSHOULD_LINEMERGE = false\nEXTRACT-a = user=(?<a>\\w+)@\nEXTRACT-b = user=(?<b>\\w+)#\n';
+    const { result } = runPipeline(lines(LIMIT), metadata, props, '', { perEventPipeline: false });
+    const kinds = result.events.flatMap((e) => (e.noOps ?? []).map((n) => n.reason.kind));
+    expect(kinds).toHaveLength(2 * LIMIT);
+    expect(kinds.every((k) => k === 'no-match')).toBe(true);
+  });
+});

@@ -1,4 +1,4 @@
-import type { SplunkEvent, ConfDirective, DirectiveNoOp, ValidationDiagnostic } from '../types';
+import type { SplunkEvent, ConfDirective, DirectiveNoOp } from '../types';
 import type { NoOpReason } from '../noOpExplainer';
 import { isInternalField } from '../utils/internalFields';
 import { byClassName } from '../utils/asciiCompare';
@@ -11,6 +11,7 @@ import {
   fieldQuotingWarning,
 } from '../utils/fieldRef';
 import { atDirective } from '../parser/provenance';
+import type { RunContext, DiagnosticSink } from '../runContext';
 
 interface AliasMapping {
   source: string;
@@ -25,8 +26,9 @@ interface CompiledAlias extends AliasMapping {
 export function applyFieldAliases(
   events: SplunkEvent[],
   directives: ConfDirective[],
-  diagnostics?: ValidationDiagnostic[],
+  ctx: RunContext,
 ): SplunkEvent[] {
+  const { diagnostics } = ctx;
   const aliasDirectives = directives
     .filter((d) => d.directiveType === 'FIELDALIAS')
     .sort(byClassName);
@@ -99,7 +101,7 @@ export function applyFieldAliases(
 
 function compileAliases(
   aliasDirectives: ConfDirective[],
-  diagnostics?: ValidationDiagnostic[],
+  diagnostics?: DiagnosticSink,
 ): CompiledAlias[] {
   const compiled: CompiledAlias[] = [];
   const warnedWildcard = new Set<string>();
@@ -148,7 +150,7 @@ function compileAliases(
 function maybeWarnStrippedRef(
   alias: CompiledAlias,
   event: SplunkEvent,
-  diagnostics: ValidationDiagnostic[] | undefined,
+  diagnostics: DiagnosticSink | undefined,
   reportedStrippedRefs: Set<string>,
 ): void {
   if (

@@ -106,7 +106,7 @@ If a captured fixture disagrees with an existing test, the fixture wins. Update 
 
 ### Add a directive
 1. Add a `DirectiveInfo` entry to the props or transforms data file under `src/engine/registry/` (the `*SpecDirectives.ts` files hold the spec-completeness sweep; anything new goes in `propsDirectives.ts` or `transformsDirectives.ts`). `directiveRegistry.ts` assembles them, and autocomplete, hover, linting and the dictionary pick it up.
-2. If it needs processing logic: create or edit a processor in `src/engine/processors/` and wire it into `src/engine/pipeline.ts` at the correct position, wrapped in `safeProcessor()`.
+2. If it needs processing logic: create or edit a processor in `src/engine/processors/` and wire it into `src/engine/pipeline.ts` at the correct position, wrapped in `safeProcessor()`. It reads the run's clock, limits and diagnostics from the `RunContext` (`src/engine/runContext.ts`) it is passed, never from defaults of its own; a warning that should appear once per run goes through `ctx.diagnostics.report(key, …)`, not a set local to the call.
 3. Follow the classification and fixture rules above — the support-table tests enforce them.
 
 ### Add an eval function

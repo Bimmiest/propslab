@@ -46,6 +46,7 @@ All notable changes to Propslab are documented here, newest first.
 
 ### Changed
 
+- **Every pipeline stage reads one run context** ([#452](https://github.com/Bimmiest/propslab/issues/452)). Stages no longer fall back to `Date.now()` or a fresh diagnostics list, and the per-run "already warned" sets live in one keyed ledger. Output is otherwise unchanged.
 - **The Timestamp tab's format breakdown and strptime reference agree with the parser** ([#457](https://github.com/Bimmiest/propslab/issues/457)). Specifiers are described once and formats are broken down with the parser's own tokeniser: `%j`, `%k`, `%N`, `%Q` and `%:z` now appear in the breakdown, `%%Y` no longer shows a year, and the reference describes `%Q` as a subsecond (not epoch milliseconds) and lists every width of `%N` and `%Q`.
 - **The strptime reference marks the specifiers the preview does not simulate** ([#457](https://github.com/Bimmiest/propslab/issues/457)). Rows such as `%c`, `%x` and `%U` carry a "not simulated" label from the same check as the editor warning.
 - **Dragging a panel divider previews the split and applies it on release** ([#391](https://github.com/Bimmiest/propslab/issues/391)). The simulator's splits and the event-list/sidebar split in the output tabs move only a copy of the divider while you drag, so the editors and long event lists re-lay out once instead of on every pointer move. Arrow-key resizing still applies on each press. Editors collapse only from their header buttons, so there is no drag-to-collapse threshold to tune.
@@ -83,6 +84,8 @@ All notable changes to Propslab are documented here, newest first.
 
 ### Fixed
 
+- **A stage that fails on one event no longer drops out for the whole batch** ([#452](https://github.com/Bimmiest/propslab/issues/452)). When `EXTRACT`, `REPORT`, `EVAL`, `TRANSFORMS` or another per-event stage threw on one event, every event came back without that stage. It is now re-run one event at a time, and only the events it fails on pass through unchanged, with one error counting them. Line breaking, timestamping and `INDEXED_EXTRACTIONS` read across events, so they still fall back as a whole.
+- **"Did not fire" explanations are capped at 50 missed events per directive** ([#452](https://github.com/Bimmiest/propslab/issues/452)). Later misses read "Not analysed: explanation limit reached for this directive", counted apart from the real reason.
 - **The `TIME_FORMAT` hover e2e test no longer fails when its worker loads slowly** ([#408](https://github.com/Bimmiest/propslab/issues/408)). The helper held the pointer over a hover that came back without its Sample line, so Monaco never asked again; each attempt now starts a fresh hover.
 Entries #414–#441 are the seventh review's findings. Its questions about what Splunk itself does are filed separately (#442–#451) and not changed here; the Splunk 10.4.0 fixtures still pass.
 

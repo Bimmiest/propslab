@@ -1,4 +1,4 @@
-import type { SplunkEvent, ConfDirective, DirectiveNoOp, ValidationDiagnostic } from '../types';
+import type { SplunkEvent, ConfDirective, DirectiveNoOp } from '../types';
 import { fieldQuotingWarning } from '../utils/fieldRef';
 import { deleteField, setField } from '../utils/fieldBag';
 import { atDirective } from '../parser/provenance';
@@ -6,6 +6,7 @@ import { BOOLEAN_ASSIGNMENT_ERROR, type EvalValue } from './eval/values';
 import { type Node, parseExpression } from './eval/parser';
 import { evalNode } from './eval/evaluator';
 import { regexFailureMessage } from './eval/builtins';
+import type { RunContext, DiagnosticSink } from '../runContext';
 
 // EVAL- as a props processor: which directives run, how their results land on
 // the event, and the diagnostics they raise. The expression language itself is
@@ -24,7 +25,7 @@ export { regexFailureMessage };
 function warnDottedFieldRefs(
   events: SplunkEvent[],
   evalDirectives: ConfDirective[],
-  diagnostics: ValidationDiagnostic[],
+  diagnostics: DiagnosticSink,
 ): void {
   const reportedDotted = new Set<string>();
   const allFieldNames = new Set<string>();
@@ -54,9 +55,9 @@ class EvalReporter {
   private readonly reportedErrors = new Set<string>();
   private readonly reportedStubs = new Set<string>();
   private readonly reportedRegex = new Set<string>();
-  private readonly diagnostics: ValidationDiagnostic[] | undefined;
+  private readonly diagnostics: DiagnosticSink | undefined;
 
-  constructor(diagnostics: ValidationDiagnostic[] | undefined) {
+  constructor(diagnostics: DiagnosticSink | undefined) {
     this.diagnostics = diagnostics;
   }
 
@@ -206,10 +207,10 @@ function applyResults(event: SplunkEvent, results: EvalResults, byField: Map<str
 export function applyEvalExpressions(
   events: SplunkEvent[],
   directives: ConfDirective[],
-  diagnostics?: ValidationDiagnostic[],
-  /** What now()/time() return, in epoch ms. See `PipelineOptions.now`. */
-  now: number = Date.now(),
+  /** `ctx.now` is what now()/time() return. */
+  ctx: RunContext,
 ): SplunkEvent[] {
+  const { diagnostics, now } = ctx;
   const evalDirectives = directives.filter((d) => d.directiveType === 'EVAL');
   if (evalDirectives.length === 0) return events;
 

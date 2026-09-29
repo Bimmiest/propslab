@@ -25,6 +25,7 @@ import { applyRegexTransform } from '../transforms/regexTransform';
 import { lintMatchedDirectives } from '../configLint';
 import { runPipeline } from '../pipeline';
 import type { ConfDirective, ConfStanza, EventMetadata, SplunkEvent, ValidationDiagnostic } from '../types';
+import { runCtx } from './runCtx';
 
 const META: EventMetadata = { index: 'main', host: 'h', source: 's', sourcetype: 'st' };
 
@@ -102,11 +103,11 @@ describe('SHOULD_LINEMERGE accepts every true spelling (was: exactly "true", unt
   const raw = '2026-01-15 10:00:00 a\ncontinued\n2026-01-15 10:00:01 b';
 
   it.each(['1', 'yes', 't', 'on', 'true '])('merges for %j', (v) => {
-    expect(breakLines(raw, [d('SHOULD_LINEMERGE', v)], META)).toHaveLength(2);
+    expect(breakLines(raw, [d('SHOULD_LINEMERGE', v)], META, runCtx())).toHaveLength(2);
   });
 
   it('still reads an explicit non-boolean as false, as it did', () => {
-    expect(breakLines(raw, [d('SHOULD_LINEMERGE', 'maybe')], META)).toHaveLength(3);
+    expect(breakLines(raw, [d('SHOULD_LINEMERGE', 'maybe')], META, runCtx())).toHaveLength(3);
   });
 });
 
@@ -130,6 +131,7 @@ describe('WRITE_META, REPEAT_MATCH, MV_ADD and JSON_TRIM_BRACES_IN_ARRAY_NAMES a
     const [e] = applyIndexedExtractions(
       [event('{"a":["x","y"]}')],
       [d('INDEXED_EXTRACTIONS', 'json'), d('JSON_TRIM_BRACES_IN_ARRAY_NAMES', 'yes')],
+      runCtx(),
     );
     expect(e?.fields['a']).toEqual(['x', 'y']);
   });
@@ -139,22 +141,22 @@ describe('WRITE_META, REPEAT_MATCH, MV_ADD and JSON_TRIM_BRACES_IN_ARRAY_NAMES a
 
 describe('default-true settings accept every false spelling (was: exactly "false", or false/0)', () => {
   it.each(['0', 'no', 'f', 'off'])('AUTO_KV_JSON = %s turns automatic JSON off', (v) => {
-    const [e] = applyKvMode([event('{"action":"login"}')], [d('AUTO_KV_JSON', v)]);
+    const [e] = applyKvMode([event('{"action":"login"}')], [d('AUTO_KV_JSON', v)], runCtx());
     expect(e?.fields['action']).toBeUndefined();
   });
 
   it('KV_TRIM_SPACES = off keeps the outer spaces (off was the one false spelling it missed)', () => {
-    const [e] = applyKvMode([event('a="  x  "')], [d('KV_TRIM_SPACES', 'off')]);
+    const [e] = applyKvMode([event('a="  x  "')], [d('KV_TRIM_SPACES', 'off')], runCtx());
     expect(e?.fields['a']).toBe('  x  ');
   });
 
   it.each(['0', 'no'])('BREAK_ONLY_BEFORE_DATE = %s stops breaking before dates', (v) => {
     const raw = '2026-01-15 10:00:00 a\n2026-01-15 10:00:01 b';
-    expect(breakLines(raw, [d('BREAK_ONLY_BEFORE_DATE', v)], META)).toHaveLength(1);
+    expect(breakLines(raw, [d('BREAK_ONLY_BEFORE_DATE', v)], META, runCtx())).toHaveLength(1);
   });
 
   it.each(['0', 'no'])('ANNOTATE_PUNCT = %s drops the punct field', (v) => {
-    const [e] = annotatePunct([event('a=b')], [d('ANNOTATE_PUNCT', v)]);
+    const [e] = annotatePunct([event('a=b')], [d('ANNOTATE_PUNCT', v)], runCtx());
     expect(e?.fields['punct']).toBeUndefined();
   });
 
@@ -173,6 +175,7 @@ describe('default-true settings accept every false spelling (was: exactly "false
         d('XML_INDEXED_EXTRACTIONS_PIPELINE', 'typing'),
         d('XML_IE_SKIP_XML_ENCODED_VALS', '0'),
       ],
+      runCtx(),
     );
     expect(e?.fields['Cmd']).toBe('a & b');
   });

@@ -1,15 +1,17 @@
-import type { SplunkEvent, ConfDirective, ValidationDiagnostic } from '../types';
+import type { SplunkEvent, ConfDirective } from '../types';
 import { flattenJson, flattenArray } from '../utils/flattenJson';
 import { hasField, setField, addFieldValue } from '../utils/fieldBag';
 import { cleanFieldKey } from '../transforms/regexTransform';
 import { effectiveBool, effectiveValue } from '../utils/directiveValues';
 import { parseXmlDocument, xmlChildElements, xmlTextContent, type XmlElement } from '../utils/xmlReader';
+import type { RunContext } from '../runContext';
 
 export function applyKvMode(
   events: SplunkEvent[],
   directives: ConfDirective[],
-  diagnostics?: ValidationDiagnostic[],
+  ctx: RunContext,
 ): SplunkEvent[] {
+  const { diagnostics } = ctx;
   const mode = effectiveValue(directives, 'KV_MODE')?.toLowerCase() ?? 'auto';
 
   if (mode === 'none') return events;
@@ -81,8 +83,9 @@ export function applyKvMode(
   };
 
   // Events whose extraction threw. Caught per event so one pathological event
-  // costs only its own fields: letting it escape made the pipeline fall back
-  // to the whole batch unmodified.
+  // costs only its own fields. safeProcessor's per-event retry would do the
+  // same, but it re-runs the stage one event at a time, and the invalid-JSON
+  // summary below would then be reported once per event instead of once.
   const failures: { line: number; error: string }[] = [];
 
   const result = events.map((event) => {

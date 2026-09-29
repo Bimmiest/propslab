@@ -22,12 +22,13 @@
  * Those are readings, not ground truth, and the tests say so.
  */
 
-import type { ConfDirective, SplunkEvent, ValidationDiagnostic } from '../types';
+import type { ConfDirective, SplunkEvent } from '../types';
 import { setField } from '../utils/fieldBag';
 import { atDirective } from '../parser/provenance';
 import { parseXmlDocument, xmlChildElements, type XmlElement } from '../utils/xmlReader';
 import { effectiveDirective, parseSplunkBool } from '../utils/directiveValues';
 import { compileWildcard, type WildcardMatcher } from '../utils/wildcardMatch';
+import type { RunContext } from '../runContext';
 
 export type XmlIndexedMode = 'xml' | 'xmlkv' | 'xmlkv-winevt';
 
@@ -59,8 +60,9 @@ export function extractXmlIndexed(
   events: SplunkEvent[],
   directives: ConfDirective[],
   mode: XmlIndexedMode,
-  diagnostics?: ValidationDiagnostic[],
+  ctx: RunContext,
 ): SplunkEvent[] {
+  const { diagnostics } = ctx;
   const find = (key: string) => effectiveDirective(directives, key);
 
   // The spec makes XML_INDEXED_EXTRACTIONS_PIPELINE the switch for the XML
@@ -70,7 +72,7 @@ export function extractXmlIndexed(
   // extraction on here.
   const pipeline = find('XML_INDEXED_EXTRACTIONS_PIPELINE')?.value.trim().toLowerCase();
   if (pipeline === undefined || !PIPELINES.has(pipeline)) {
-    diagnostics?.push({
+    diagnostics.push({
       level: 'warning',
       message:
         `INDEXED_EXTRACTIONS = ${mode} extracts nothing: XML indexed extraction needs ` +
@@ -86,7 +88,8 @@ export function extractXmlIndexed(
   const processor = `INDEXED_EXTRACTIONS(${mode})`;
 
   // Caught per event so one pathological event costs only its own fields:
-  // letting it escape made the pipeline fall back to the whole batch unmodified.
+  // INDEXED_EXTRACTIONS is a batch-shaped stage (CSV headers), so an escaping
+  // throw makes the pipeline fall back to the whole batch unmodified.
   const failures: { line: number; error: string }[] = [];
 
   const result = events.map((event) => {
@@ -141,7 +144,7 @@ export function extractXmlIndexed(
   const failed = failures[0];
   if (failed !== undefined) {
     const n = failures.length;
-    diagnostics?.push({
+    diagnostics.push({
       level: 'error',
       file: 'raw',
       line: failed.line,

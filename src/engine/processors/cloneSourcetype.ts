@@ -1,7 +1,8 @@
-import type { ParsedConf, SplunkEvent, ValidationDiagnostic } from '../types';
+import type { ParsedConf, SplunkEvent } from '../types';
 import { matchStanzas, mergeDirectives } from '../parser/stanzaMatcher';
 import { applySedCommands } from './sedCmd';
-import { applyTransforms, newTransformsWarned, type TransformsWarned } from './transformsProcessor';
+import { applyTransforms } from './transformsProcessor';
+import type { RunContext } from '../runContext';
 
 /**
  * How many clone generations are followed before giving up. A cycle is caught
@@ -34,16 +35,14 @@ export function applyCloneIndexTime(
   events: SplunkEvent[],
   propsConf: ParsedConf,
   transformsConf: ParsedConf,
-  diagnostics: ValidationDiagnostic[],
-  /** Epoch ms that INGEST_EVAL's now()/time() read. See `PipelineOptions.now`. */
-  now: number = Date.now(),
   /**
-   * The TRANSFORMS stage's warning ledgers. Each clone is its own
-   * applyTransforms call, and fresh ledgers would repeat every INGEST_EVAL or
-   * stanza warning once per clone.
+   * The run, whose warning ledger the TRANSFORMS stage shares. Each clone is
+   * its own applyTransforms call, and a fresh ledger would repeat every
+   * INGEST_EVAL or stanza warning once per clone.
    */
-  warned: TransformsWarned = newTransformsWarned(),
+  ctx: RunContext,
 ): SplunkEvent[] {
+  const { diagnostics } = ctx;
   if (!events.some((e) => e.clonedFrom !== undefined)) return events;
 
   // Warn once per sourcetype pair, not once per event.
@@ -71,8 +70,8 @@ export function applyCloneIndexTime(
     }
 
     const directives = mergeDirectives(matchStanzas(propsConf.stanzas, clone.metadata));
-    let out = applySedCommands([clone], directives, diagnostics);
-    out = applyTransforms(out, directives, transformsConf, 'index-time', diagnostics, now, warned);
+    let out = applySedCommands([clone], directives, ctx);
+    out = applyTransforms(out, directives, transformsConf, 'index-time', ctx);
 
     // applyTransforms returns the clone first and any clones IT emitted after.
     const [processed, ...grandchildren] = out;

@@ -1,9 +1,10 @@
 import type { SplunkEvent, ConfDirective, DirectiveNoOp, RawMutation, ValidationDiagnostic } from '../types';
-import { longestPartialMatch } from '../noOpExplainer';
+import { explainNoMatch, noOpDirectiveKey } from '../noOpExplainer';
 import { safeRegex, validateRegex, type RegexMatch, type SplunkRegex } from '../../utils/splunkRegex';
 import { byClassName } from '../utils/asciiCompare';
 import { changeWindow } from '../utils/changeWindow';
 import { atDirective } from '../parser/provenance';
+import type { RunContext, DiagnosticSink } from '../runContext';
 
 interface SedCommand {
   className: string;
@@ -127,7 +128,7 @@ function parseTransliterate(
   toRaw: string,
   delimiter: string,
   dir?: ConfDirective,
-  diagnostics?: ValidationDiagnostic[],
+  diagnostics?: DiagnosticSink,
 ): SedCommand | null {
   const from = [...unescapeTranslateSet(fromRaw, delimiter)];
   const to = [...unescapeTranslateSet(toRaw, delimiter)];
@@ -169,7 +170,7 @@ function parseTransliterate(
 export function parseSedExpression(
   value: string,
   dir?: ConfDirective,
-  diagnostics?: ValidationDiagnostic[],
+  diagnostics?: DiagnosticSink,
 ): SedCommand | null {
   const trimmed = value.trim();
   if (!trimmed) return null;
@@ -271,8 +272,9 @@ export function parseSedExpression(
 export function applySedCommands(
   events: SplunkEvent[],
   directives: ConfDirective[],
-  diagnostics?: ValidationDiagnostic[],
+  ctx: RunContext,
 ): SplunkEvent[] {
+  const { diagnostics } = ctx;
   const sedDirectives = directives
     .filter((d) => d.directiveType === 'SEDCMD')
     .sort(byClassName);
@@ -327,18 +329,15 @@ export function applySedCommands(
         });
       } else {
         const limitHit = cmd.pattern?.lastError;
-        const partial =
-          limitHit === undefined && cmd.pattern ? longestPartialMatch(cmd.pattern.source, before) : null;
+        const site = { directive: cmd.directive.key, file: 'props.conf' as const, line: cmd.directive.line };
         noOps.push({
-          directive: cmd.directive.key,
-          file: 'props.conf',
-          line: cmd.directive.line,
+          ...site,
           phase: 'index-time',
           reason:
             limitHit !== undefined
               ? { kind: 'regex-limit', error: limitHit }
-              : partial
-                ? { kind: 'no-match', partialEnd: partial.end, partialPattern: partial.prefix }
+              : cmd.pattern
+                ? explainNoMatch(cmd.pattern.source, before, ctx.explanations.take(noOpDirectiveKey(site)))
                 : { kind: 'no-match' },
         });
       }
