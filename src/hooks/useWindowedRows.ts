@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useMemo, useState, type FocusEvent, type RefObject } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState, type FocusEvent, type RefObject } from 'react';
 
 /** A rendered row, or blank space standing in for the rows not rendered. */
 export type WindowSegment =
@@ -93,7 +93,12 @@ export function useWindowedRows(
   const [pinned, setPinned] = useState<number | null>(null);
   const active = count > threshold;
 
-  useLayoutEffect(() => {
+  // A passive effect, not a layout one: the ref is often owned by an ancestor
+  // (the field sidebar's list), whose host element is attached only after this
+  // component's layout effects have run, so `scrollRef.current` was null on a
+  // first mount and the listeners were never attached (#469). Refs are all
+  // attached by the time passive effects run.
+  useEffect(() => {
     const el = scrollRef.current;
     if (!el || !active) return;
     const onScroll = () => setScrollTop(Math.floor(el.scrollTop / SCROLL_STEP) * SCROLL_STEP);
@@ -116,6 +121,9 @@ export function useWindowedRows(
 
   // Whenever the rendered rows change: rows that wrap make the real height
   // differ from the estimate, and the spacers are only right if the average is.
+  // Layout, so a correction lands before paint; on a first mount under an
+  // ancestor-owned ref the element is not attached yet, and the first
+  // scroll/measure state change in the effect above re-runs this.
   useLayoutEffect(() => {
     const el = scrollRef.current;
     if (!el || !active) return;
