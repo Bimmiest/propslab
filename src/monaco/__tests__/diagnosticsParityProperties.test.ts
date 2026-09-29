@@ -22,21 +22,14 @@
 
 import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';
-import type { editor } from 'monaco-editor';
 import { computeDiagnostics } from '../splunkConfDiagnostics';
+import { fakeModel } from '../../test/fakeModel';
 import { parseConf } from '../../engine/parser/confParser';
+import { isIntegerLiteral } from '../../engine/utils/directiveValues';
 
 fc.configureGlobal({ seed: 371, numRuns: 300 });
 
-/** Line splitting as Monaco does it: CRLF and LF both end a line, and neither is content. */
-function model(text: string): editor.ITextModel {
-  const lines = text.split(/\r?\n/);
-  return {
-    getLineCount: () => lines.length,
-    getLineContent: (n: number) => lines[n - 1] ?? '',
-    getValue: () => text,
-  } as unknown as editor.ITextModel;
-}
+const model = fakeModel;
 
 const ws = fc.constantFrom('', ' ', '\t', '  ');
 const valueText = fc
@@ -102,10 +95,10 @@ describe('computeDiagnostics and confParser read generated files alike', () => {
         // The linter validates the value trimmed, as the engine reads it.
         const engine = parseConf(text, 'props.conf')
           .stanzas.flatMap((s) => s.directives)
-          .filter((d) => d.key === 'MAX_EVENTS' && d.value.trim() !== '' && isNaN(Number(d.value.trim())))
+          .filter((d) => d.key === 'MAX_EVENTS' && d.value.trim() !== '' && !isIntegerLiteral(d.value))
           .map((d) => `${d.line}:${d.value.trim()}`);
         const linter = computeDiagnostics(model(text), 'props.conf')
-          .filter((m) => m.message.startsWith('Expected numeric value for "MAX_EVENTS"'))
+          .filter((m) => m.message.startsWith('Expected an integer for "MAX_EVENTS"'))
           .map((m) => `${m.startLineNumber}:${/got "([\s\S]*)"$/.exec(m.message)?.[1]}`);
         expect(linter.sort()).toEqual(engine.sort());
       }),

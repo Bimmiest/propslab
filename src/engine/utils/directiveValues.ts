@@ -6,6 +6,7 @@
  * attribute on and be ignored by the next.
  */
 import type { ConfDirective } from '../types';
+import { validateRegex } from '../../utils/splunkRegex';
 
 /**
  * The directive that takes effect for `key`: the LAST one in the list.
@@ -56,24 +57,80 @@ export function isSplunkBoolLiteral(value: string): boolean {
 }
 
 /**
- * Read a conf boolean, falling back to `defaultValue` when it is absent, empty
- * or not a boolean spelling at all.
- *
- * An unrecognised value takes the default rather than a fixed `false` because
- * that is what every reader here already did with one — `=== 'true'` readers of
- * default-false settings and `!== 'false'` readers of default-true ones — and
- * the directive linter is what reports such a value. Only the recognised
- * spellings were ever inconsistent.
+ * Read a conf boolean the way Splunk does: the true spellings are true and
+ * EVERYTHING else is false (splunk.util's `normalizeBoolean`). Only an absent or
+ * empty value takes `defaultValue`: an empty assignment resets the setting to
+ * its default, whereas `ANNOTATE_PUNCT = nope` is a value Splunk reads, and
+ * reads as false. The directive linter reports such a value; this is what the
+ * preview then does with it, so the two say the same thing.
  */
 export function parseSplunkBool(value: string | undefined, defaultValue: boolean): boolean {
   const v = value?.trim().toLowerCase();
-  if (v === undefined) return defaultValue;
-  if (TRUE_SPELLINGS.has(v)) return true;
-  if (FALSE_SPELLINGS.has(v)) return false;
-  return defaultValue;
+  if (v === undefined || v === '') return defaultValue;
+  return TRUE_SPELLINGS.has(v);
 }
 
 /** `parseSplunkBool` of the effective value of `key`. */
 export function effectiveBool(directives: readonly ConfDirective[], key: string, defaultValue: boolean): boolean {
   return parseSplunkBool(effectiveDirective(directives, key)?.value, defaultValue);
+}
+
+// ---------------------------------------------------------------------------
+// Value predicates shared by the engine's directive lint and the editor's
+// diagnostics. Both read a directive's value through these, so a value cannot
+// be an error in one and fine in the other.
+// ---------------------------------------------------------------------------
+
+/** Whether `value` (trimmed) is an integer as Splunk reads one: optional sign, digits only. */
+export function isIntegerLiteral(value: string): boolean {
+  return /^[+-]?\d+$/.test(value.trim());
+}
+
+/**
+ * Numeric directives the spec documents as non-negative. A negative here is not
+ * merely odd — Splunk treats it as unset, so the setting silently does nothing.
+ */
+const NON_NEGATIVE = new Set([
+  'TRUNCATE',
+  'MAX_EVENTS',
+  'MAX_TIMESTAMP_LOOKAHEAD',
+  'MAX_DAYS_AGO',
+  'MAX_DAYS_HENCE',
+  'MAX_DIFF_SECS_AGO',
+  'MAX_DIFF_SECS_HENCE',
+  'MATCH_LIMIT',
+  'DEPTH_LIMIT',
+  'LINE_BREAKER_LOOKBEHIND',
+  'HEADER_FIELD_LINE_NUMBER',
+]);
+
+/**
+ * The one negative a non-negative directive documents as meaningful.
+ * props.conf.spec: MAX_TIMESTAMP_LOOKAHEAD "0 or -1 disables the length
+ * constraint", so -1 is a correct setting, not a broken one.
+ */
+const NEGATIVE_SENTINELS: Readonly<Record<string, string>> = {
+  MAX_TIMESTAMP_LOOKAHEAD: '-1',
+};
+
+/** Whether `key` is documented as non-negative and `value` is a negative that is not its sentinel. */
+export function isDisallowedNegative(key: string, value: string): boolean {
+  const v = value.trim();
+  return v.startsWith('-') && NON_NEGATIVE.has(key) && NEGATIVE_SENTINELS[key] !== v;
+}
+
+/**
+ * Whether `value` is a member of an enum. Case-insensitive, and `multi:<stanza>`
+ * (the one member that carries an argument) is matched on the part before the
+ * colon.
+ */
+export function isEnumMember(value: string, enumValues: readonly string[]): boolean {
+  const v = value.trim().toLowerCase();
+  const allowed = enumValues.map((e) => e.toLowerCase());
+  return allowed.includes(v) || allowed.includes(v.split(':')[0] ?? '');
+}
+
+/** Why `pattern` does not compile as a Splunk regex, or null when it does. */
+export function regexProblem(pattern: string): string | null {
+  return validateRegex(pattern);
 }

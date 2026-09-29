@@ -280,9 +280,9 @@ function shouldLineMergeFor(directives: ConfDirective[]): boolean {
   const structured =
     structuredFormat !== undefined && structuredFormat !== '' && structuredFormat !== 'none' &&
     !XML_EXTRACTIONS.has(structuredFormat);
-  // An explicit value that is not a boolean reads as false; only an absent key
-  // gets the structured-format default.
-  return shouldLineMergeVal === undefined ? !structured : parseSplunkBool(shouldLineMergeVal, false);
+  // Only an absent (or empty) key gets the structured-format default; an
+  // explicit non-boolean reads as false, like every other boolean.
+  return parseSplunkBool(shouldLineMergeVal, !structured);
 }
 
 /** The line-merging rules of a stanza, compiled once per breakLines call. */

@@ -6,10 +6,16 @@ import {
   WRONG_FILE_MESSAGE,
 } from '../engine/directiveRegistry';
 import { isUndocumentedAttribute } from '../engine/directiveSupport';
-import { isSplunkBoolLiteral, parseSplunkBool } from '../engine/utils/directiveValues';
+import {
+  isDisallowedNegative,
+  isEnumMember,
+  isIntegerLiteral,
+  isSplunkBoolLiteral,
+  parseSplunkBool,
+  regexProblem,
+} from '../engine/utils/directiveValues';
 import { DIRECTIVE_RE, STANZA_RE, miscasedCanonical, MISCASED_MESSAGE } from '../engine/parser/confParser';
 import { unsupportedSpecifiers } from '../utils/strftime';
-import { validateRegex } from '../utils/splunkRegex';
 
 /**
  * One directive as the linter saw it, for the stanza-scoped checks below.
@@ -188,7 +194,7 @@ function checkStrftime(d: DirectiveLine, markers: DiagnosticMarker[]): void {
 /** Why `value` is not a valid value of `info`'s type, as a marker severity and message, or null. */
 function valueTypeProblem(info: DirectiveInfo, baseKey: string, value: string): [8 | 4, string] | null {
   if (info.valueType === 'regex') {
-    const error = validateRegex(value);
+    const error = regexProblem(value);
     return error ? [8, `Invalid regex pattern: ${error}`] : null;
   }
   // The engine's own reading, so the editor never flags a spelling the
@@ -196,13 +202,13 @@ function valueTypeProblem(info: DirectiveInfo, baseKey: string, value: string): 
   if (info.valueType === 'boolean' && !isSplunkBoolLiteral(value)) {
     return [4, `Expected boolean value (true/false) for "${baseKey}", got "${value}"`];
   }
-  if (info.valueType === 'number' && isNaN(Number(value))) {
-    return [4, `Expected numeric value for "${baseKey}", got "${value}"`];
+  if (info.valueType === 'number') {
+    if (!isIntegerLiteral(value)) return [4, `Expected an integer for "${baseKey}", got "${value}"`];
+    if (isDisallowedNegative(info.key, value)) {
+      return [4, `"${baseKey}" cannot be negative — "${value}" will not do what it looks like it does`];
+    }
   }
-  if (
-    info.valueType === 'enum' && info.enumValues &&
-    !info.enumValues.includes(value.toLowerCase()) && !info.enumValues.includes(value)
-  ) {
+  if (info.valueType === 'enum' && info.enumValues && !isEnumMember(value, info.enumValues)) {
     return [4, `Invalid value "${value}" for "${baseKey}". Valid values: ${info.enumValues.join(', ')}`];
   }
   return null;
