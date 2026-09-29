@@ -40,7 +40,7 @@
 // The seed comes from FC_SEED when set, and is fixed otherwise.
 // ---------------------------------------------------------------------------
 
-import { describe, it, expect, vi, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import fc from 'fast-check';
 import { createManagedWorker, MAX_WORKER_LOAD_FAILURES, type ManagedWorker } from '../workerLifecycle';
 import { WORKER_READY } from '../../engine/workerProtocol';
@@ -432,13 +432,10 @@ const commands: fc.Arbitrary<Cmd>[] = [
 ];
 
 describe('workerLifecycle as a state machine (#513)', () => {
-  beforeAll(() => {
-    vi.stubGlobal('Worker', FakeWorker);
-  });
-  afterAll(() => {
-    vi.unstubAllGlobals();
-  });
+  // Stubbed per test, not once: vitest's `unstubGlobals` resets stubs before
+  // each test, which would undo a beforeAll stub.
   beforeEach(() => {
+    vi.stubGlobal('Worker', FakeWorker);
     vi.useFakeTimers();
   });
   afterEach(() => {
