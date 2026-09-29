@@ -41,6 +41,13 @@ function getSavedLayout(storageKey: string): Layout | undefined {
   return undefined;
 }
 
+/**
+ * The events pane scrolls, and a long event (one wide JSON object, say)
+ * overflows it with nothing focusable inside to scroll to, so a keyboard user
+ * could not reach the rest. A named tab stop lets the arrow keys scroll it.
+ */
+const SCROLL_REGION = { tabIndex: 0, role: 'region', 'aria-label': 'Events' } as const;
+
 interface FieldSplitLayoutProps {
   storageKey: string;
   collapsed: boolean;
@@ -57,7 +64,7 @@ export function FieldSplitLayout({ storageKey, collapsed, sidebar, children }: F
 
   if (collapsed) {
     return (
-      <div className="flex-1 min-w-0 h-full overflow-auto p-3 space-y-3">
+      <div className="flex-1 min-w-0 h-full overflow-auto p-3 space-y-3" {...SCROLL_REGION}>
         {children}
       </div>
     );
@@ -68,7 +75,7 @@ export function FieldSplitLayout({ storageKey, collapsed, sidebar, children }: F
   return (
     <Group orientation="horizontal" id={storageKey} defaultLayout={initialLayout} onLayoutChanged={saveLayout} resizePreviewMode="separator">
       <Panel defaultSize="85" minSize="40" id={eventsId(storageKey)}>
-        <div className="h-full overflow-auto p-3 space-y-3">
+        <div className="h-full overflow-auto p-3 space-y-3" {...SCROLL_REGION}>
           {children}
         </div>
       </Panel>

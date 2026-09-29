@@ -92,7 +92,11 @@ export const CAP_NOTE = `The response is capped at ${MAX_RESPONSE_BYTES} bytes.`
  * the slack covers the digits the real kept counts add.
  */
 class Budget {
-  constructor(private left: number) {}
+  private left: number;
+
+  constructor(left: number) {
+    this.left = left;
+  }
 
   /** How many leading items to keep, spending at most `share` of what is left. */
   take<T>(items: readonly T[], share = 1): number {

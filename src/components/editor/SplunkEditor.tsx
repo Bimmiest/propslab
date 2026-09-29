@@ -130,6 +130,7 @@ export function SplunkEditor({ value, onChange, fileType = 'props.conf', languag
       onMount={handleMount}
       theme={theme === 'dark' ? 'splunk-dark' : 'splunk-light'}
       options={OPTIONS_BY_FILE[fileType]}
+      modelKey={fileType}
       beforeMount={ensureSplunkMonaco}
     />
   );

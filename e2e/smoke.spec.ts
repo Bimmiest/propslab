@@ -7,6 +7,7 @@ import {
   recordWorkerReplies,
   workerReplies,
   dwellUntilVisible,
+  pointIn,
 } from './fixtures';
 
 const APACHE = /Apache Access Log/i;
@@ -41,6 +42,53 @@ test.describe('boot', () => {
     expect(policy).toContain("form-action 'none'");
     // Every worker is a same-origin file; see the comment above the tag.
     expect(policy).not.toContain('blob:');
+  });
+});
+
+/**
+ * The CSP requires Trusted Types (#458), with an allowlist of the policies
+ * the build creates. A Monaco feature that brings a policy of its own, or a
+ * new string reaching a script or HTML sink, shows up here as a violation.
+ */
+test.describe('trusted types', () => {
+  test('the editor, hovers, the palette and the dictionary run with no violation', async ({ page, complaints }) => {
+    await page.addInitScript(() => {
+      const seen: string[] = [];
+      Object.defineProperty(window, '__e2eViolations', { value: seen });
+      document.addEventListener('securitypolicyviolation', (e) => {
+        seen.push(`${e.violatedDirective}: ${e.sample} (${e.sourceFile}:${e.lineNumber})`);
+      });
+    });
+    const response = await page.goto('/');
+    expect(response?.headers()['content-security-policy']).toContain("require-trusted-types-for 'script'");
+    await expect(page.locator('.monaco-editor').nth(2)).toBeVisible({ timeout: 30_000 });
+    await loadExample(page, APACHE);
+
+    // Typing, the suggest widget and the lint squiggles.
+    const props = page.locator('.monaco-editor').nth(1);
+    await props.click();
+    await page.keyboard.press('Control+End');
+    await page.keyboard.type('\n[tt]\nSHOULD_LINEMERGE = notabool\nTIME_PRE');
+    await expect(page.locator('.suggest-widget')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.squiggly-warning, .squiggly-error, .squiggly-info').first()).toBeVisible({ timeout: 15_000 });
+
+    // A directive hover: markdown rendered through Monaco's sanitizer.
+    const token = props.getByText('SHOULD_LINEMERGE', { exact: true }).last();
+    await dwellUntilVisible(page, pointIn(token), page.getByText('Open in dictionary'));
+
+    await page.keyboard.press('Control+k');
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await page.keyboard.type('dictionary');
+    await page.keyboard.press('Escape');
+
+    await page.getByRole('tab', { name: 'Dictionary' }).click();
+    await expect(page.getByRole('listbox', { name: 'Splunk directives' })).toBeVisible();
+
+    const violations = await page.evaluate(() => (window as unknown as { __e2eViolations: string[] }).__e2eViolations);
+    expect(violations, 'Trusted Types / CSP violations').toEqual([]);
+    expect(complaints.all.filter((c) => /Trusted ?Type/i.test(c)), 'Trusted Types errors').toEqual([]);
+    expect(complaints.all).toEqual([]);
   });
 });
 
@@ -137,6 +185,57 @@ test.describe('monaco contributions', () => {
     await typeIntoProps(page, '[web]\nTRUNCATE = 1');
     await page.keyboard.press('Control+f');
     await expect(page.locator('.monaco-editor').nth(1).locator('.find-widget.visible')).toBeVisible();
+  });
+});
+
+test.describe('editor state across remounts', () => {
+  // Collapsing a panel remounts the editors; each file's model is kept, so
+  // what was typed before the collapse can still be undone after it (#453).
+  test('undo still works after props.conf is collapsed and expanded', async ({ page, complaints }) => {
+    await openApp(page);
+    const props = () => page.locator('.monaco-editor').nth(1);
+    await props().click();
+    await page.keyboard.type('[web]\nTRUNCATE = 1');
+    await expect(props().locator('.view-lines')).toContainText('TRUNCATE = 1');
+
+    await page.getByTitle('Collapse props.conf').click();
+    await expect(page.locator('.monaco-editor')).toHaveCount(2);
+    await page.getByTitle('Expand props.conf').click();
+    await expect(page.locator('.monaco-editor')).toHaveCount(3);
+    await expect(props().locator('.view-lines')).toContainText('TRUNCATE = 1');
+
+    await props().locator('.view-lines').click();
+    await expect(async () => {
+      await page.keyboard.press('Control+z');
+      await expect(props().locator('.view-lines')).not.toContainText('TRUNCATE', { timeout: 500 });
+    }).toPass({ timeout: 10_000 });
+    expect(complaints.all).toEqual([]);
+  });
+
+  test('a close or reload asks first only once the session is edited', async ({ page }) => {
+    await openApp(page);
+    let prompts = 0;
+    page.on('dialog', (dialog) => {
+      if (dialog.type() === 'beforeunload') prompts++;
+      void dialog.dismiss();
+    });
+    // Chromium shows the prompt only after a user gesture on the page.
+    await page.locator('.monaco-editor').nth(1).click();
+    await page.close({ runBeforeUnload: true });
+    await expect.poll(() => page.isClosed()).toBe(true);
+    expect(prompts).toBe(0);
+  });
+
+  test('a close with edits in props.conf is held for confirmation', async ({ page }) => {
+    await openApp(page);
+    await page.locator('.monaco-editor').nth(1).click();
+    await page.keyboard.type('[web]');
+    const dialog = page.waitForEvent('dialog');
+    await page.close({ runBeforeUnload: true });
+    const shown = await dialog;
+    expect(shown.type()).toBe('beforeunload');
+    await shown.dismiss();
+    expect(page.isClosed()).toBe(false);
   });
 });
 
@@ -354,11 +453,9 @@ test.describe('dictionary', () => {
 
     const token = props.getByText('TIME_PREFIX', { exact: true }).first();
     await expect(token).toBeVisible();
-    const box = await token.boundingBox();
-    if (!box) throw new Error('TIME_PREFIX token not rendered');
 
     const link = page.getByText('Open in dictionary');
-    await dwellUntilVisible(page, box.x + box.width / 2, box.y + box.height / 2, link);
+    await dwellUntilVisible(page, pointIn(token), link);
 
     await link.click();
 
@@ -479,20 +576,18 @@ test.describe('match workers', () => {
     const props = page.locator('.monaco-editor').nth(1);
     const key = props.getByText('TIME_FORMAT', { exact: true }).first();
     await expect(key).toBeVisible();
-    const box = await key.boundingBox();
-    if (!box) throw new Error('TIME_FORMAT token not rendered');
 
     // The preview hangs off the VALUE, not the key. The font is monospaced, so
     // the key's width gives the character width: `TIME_FORMAT = ` is 14
-    // characters, and six more lands inside `%d/%b/%Y:%H:%M:%S %z`.
-    const charWidth = box.width / 'TIME_FORMAT'.length;
-    const x = box.x + charWidth * 20;
-    const y = box.y + box.height / 2;
+    // characters, and six more lands inside `%d/%b/%Y:%H:%M:%S %z`. Measured
+    // on every attempt: the resize above re-lays out the panels and the editor
+    // asynchronously.
+    const onValue = pointIn(key, 20 / 'TIME_FORMAT'.length);
 
     // "Sample: matched <text> → <iso>" is only rendered from the worker's
     // TIME_PREFIX match; with no worker the hover shows "Now:" alone.
     const sample = page.getByText(/^Sample:/);
-    await dwellUntilVisible(page, x, y, sample);
+    await dwellUntilVisible(page, onValue, sample);
     const hover = page.locator('.monaco-hover').filter({ has: sample });
     await expect(hover).toContainText(`matched ${FIRST_EVENT_TIME} → ${FIRST_EVENT_ISO}`);
     await expect.poll(() => workerReplies(page, TIMESTAMP_WORKER), { message: 'replies from timestampMatchWorker' })
@@ -500,6 +595,40 @@ test.describe('match workers', () => {
 
     expect(complaints.csp, 'blocked by Content-Security-Policy').toEqual([]);
     expect(complaints.all, 'browser errors during the TIME_FORMAT hover').toEqual([]);
+  });
+
+  // #408: under full-suite load the hover's worker can take longer to load
+  // than its load wait (6 s). The first hover then answers without its sample
+  // line, and Monaco keeps showing that answer while the pointer stays put.
+  // Held up here on purpose, so the path is taken on every run.
+  test('a TIME_FORMAT hover whose worker loaded too slowly previews the sample on the next hover', async ({ page }) => {
+    let held = false;
+    await page.context().route(TIMESTAMP_WORKER, async (route) => {
+      if (!held) {
+        held = true;
+        await new Promise((resolve) => setTimeout(resolve, 7_000));
+      }
+      await route.continue();
+    });
+    await openApp(page);
+    await loadExample(page, APACHE);
+    await page.setViewportSize({ width: 1280, height: 1200 });
+    const key = page.locator('.monaco-editor').nth(1).getByText('TIME_FORMAT', { exact: true }).first();
+    await expect(key).toBeVisible();
+    const onValue = pointIn(key, 20 / 'TIME_FORMAT'.length);
+
+    // The first answer, given up on after the load wait: no sample line.
+    const { x, y } = await onValue();
+    await page.mouse.move(x, y);
+    await page.mouse.move(x + 1, y);
+    const hover = page.locator('.monaco-hover');
+    await expect(hover.getByText(/^Now:/)).toBeVisible({ timeout: 15_000 });
+    await expect(hover.getByText(/^Sample:/)).toHaveCount(0);
+
+    // The replacement worker answers the next hover.
+    await dwellUntilVisible(page, onValue, page.getByText(/^Sample:/));
+    await expect(hover.filter({ has: page.getByText(/^Sample:/) }))
+      .toContainText(`matched ${FIRST_EVENT_TIME} → ${FIRST_EVENT_ISO}`);
   });
 });
 
@@ -549,7 +678,9 @@ test.describe('regex engine', () => {
     expect(loadMs).toBeLessThan(LOAD_BUDGET_MS);
     expect(wasmFetches.length, 'the page loads the module').toBeGreaterThan(0);
     expect(new Set(wasmFetches).size, 'every load is of the one same-origin asset').toBe(1);
-    expect(new URL(wasmFetches[0]).origin).toBe(new URL(page.url()).origin);
+    for (const url of new Set(wasmFetches)) {
+      expect(new URL(url).origin).toBe(new URL(page.url()).origin);
+    }
 
     expect(complaints.csp, 'blocked by Content-Security-Policy').toEqual([]);
     expect(complaints.all, 'browser errors').toEqual([]);

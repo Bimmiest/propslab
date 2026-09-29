@@ -18,7 +18,7 @@ import v8 from 'node:v8';
 export const REGEXP_FALLBACK_FLAGS = [
   '--enable-experimental-regexp-engine-on-excessive-backtracks',
   '--regexp-backtracks-before-fallback=1000',
-];
+] as const;
 
 export function flagsAlreadySet(): boolean {
   return process.execArgv.includes(REGEXP_FALLBACK_FLAGS[0]);

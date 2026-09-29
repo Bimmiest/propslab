@@ -1,9 +1,11 @@
 import { useTheme } from './hooks/useTheme';
+import { useUnloadWarning } from './hooks/useUnloadWarning';
 import { AppShell } from './components/layout/AppShell';
 import { RootErrorBoundary } from './components/ui/RootErrorBoundary';
 
 function App() {
   useTheme();
+  useUnloadWarning();
 
   return (
     <>

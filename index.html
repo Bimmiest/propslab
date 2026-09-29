@@ -21,6 +21,15 @@
       file: MonacoEnvironment.getWorker hands Monaco its worker, so Monaco's
       blob: bootstrap is never reached.
 
+      Trusted Types are required for script sinks, so a future innerHTML or
+      script-URL sink is a hard error rather than a DOM-XSS hole. The allowlist
+      is every policy the build creates, found by running the e2e suite under a
+      report-only policy: Monaco's named policies (dompurify is the hover
+      sanitizer's), and `default`, installed by src/trustedTypes.ts, which lets
+      a same-origin worker URL through. No name is created twice, so there is
+      no 'allow-duplicates'. A new Monaco feature import may bring a policy of
+      its own: the e2e suite fails on the violation, and its name goes here.
+
       A <meta> policy covers this document only; a worker takes its policy from
       its own response headers. public/staticwebapp.config.json therefore sends
       this policy as a header too, plus frame-ancestors, which a <meta> tag
@@ -28,7 +37,7 @@
       src/__tests__/deployHeaders.test.ts fails if the header drops a directive
       this one has (a browser enforces the intersection of both).
     -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; font-src 'self' data:; form-action 'none';" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; font-src 'self' data:; form-action 'none'; require-trusted-types-for 'script'; trusted-types default dompurify defaultWorkerFactory diffEditorWidget diffReview domLineBreaksComputer editorViewLayer richScreenReaderContent standaloneColorizer tokenizeToString;" />
     <title>Propslab</title>
   </head>
   <body class="h-full">

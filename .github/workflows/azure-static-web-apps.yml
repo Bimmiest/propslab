@@ -13,8 +13,14 @@ name: Azure Static Web Apps CI/CD
 # call `main` — so it narrows the noise, and the `event == 'push'` check in the
 # job's `if` is what actually keeps pull requests (and CI's weekly schedule,
 # which re-grades a commit that is already live) from deploying.
+#
+# zizmor flags every `workflow_run` as dangerous because the usual pattern
+# checks out and runs the triggering PR's code with a privileged token. This
+# one never touches the triggering run's head: it builds the newest commit
+# main has contained (see "Resolve commit" and "Refuse commits not on main"),
+# and the job that holds the token checks nothing out at all.
 on:
-  workflow_run:
+  workflow_run: # zizmor: ignore[dangerous-triggers]
     workflows: [CI]
     types: [completed]
     branches: [main]
@@ -130,8 +136,8 @@ jobs:
   # action. It never checks out the repository at all.
   build:
     # `conclusion` is the whole run's verdict, so every CI job — app, MCP
-    # server and audit — has to be green. `event` is the event CI itself ran
-    # on; only a push to main is a candidate for production. DEPLOY_PAUSED
+    # server, audit and workflow lint — has to be green. `event` is the event
+    # CI itself ran on; only a push to main is a candidate for production. DEPLOY_PAUSED
     # stops the automatic path only — a dispatch is how you roll back while
     # paused (see the concurrency note). It is read again here, not just
     # in the group expression, so a run queued before the switch was set and

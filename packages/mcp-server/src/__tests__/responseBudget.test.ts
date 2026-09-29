@@ -81,8 +81,8 @@ describe('boundExplain', () => {
       const out = boundExplain(full);
       expect(wire(out)).toBeLessThanOrEqual(MAX_PAYLOAD_BYTES);
       expect(out.stanzas).toHaveLength(1);
-      expect(out.stanzas[0].directives.length).toBeLessThan(100_000);
-      expect(out.stanzas[0].directiveCount).toBe(100_000);
+      expect(out.stanzas[0]?.directives.length).toBeLessThan(100_000);
+      expect(out.stanzas[0]?.directiveCount).toBe(100_000);
       expect(out).not.toHaveProperty('stanzaCount');
       expect(out.truncationNote).toMatch(/directiveCount/);
     }

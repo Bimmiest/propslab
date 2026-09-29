@@ -11,6 +11,12 @@ describe('idFromHead', () => {
     // After other members, including nested ones holding an "id" of their own.
     ['{"method":"m","meta":{"id":1,"s":"}\\""},"list":[{"id":2}],"id":3,', 3],
     ['{"\\u0069d":4,', 4],
+    // Values it has to step over without parsing them.
+    ['{"method":"tools/call, then \\"more\\"","id":5,', 5],
+    ['{"n":1,"id":2,', 2],
+    ['{"a":1,"b":true,"c":null,"d":-2.5e3 ,"id":9,', 9],
+    ['{"a":{"b":[1,{"c":"]"}],"d":{}},"e":[],"id":6,', 6],
+    ['{"id":8}', 8],
   ])('finds the id in %j', (head, id) => {
     expect(idFromHead(head)).toBe(id);
   });
@@ -26,6 +32,16 @@ describe('idFromHead', () => {
     ['[{"id":1}]', 'a batch'],
     ['garbage', 'not JSON'],
     ['', 'empty'],
+    ['{"id":12x,', 'number run into other characters'],
+    ['{"id":true,', 'boolean id'],
+    ['x"id":1,', 'not an object'],
+    ['{x":1,"id":2,', 'an unquoted key'],
+    ['{"a" 1,"id":2,', 'a member without a colon'],
+    ['{"a":"x"x"id":2,', 'junk between members'],
+    ['{"a":1} ,"id":2,', 'members after the object closes'],
+    ['{"a":1],"id":2,', 'a stray bracket'],
+    ['{"a":{"b":1', 'nested object cut off by the window'],
+    ['{"a":12', 'number cut off before the id'],
   ])('gives up on %j (%s)', (head) => {
     expect(idFromHead(head)).toBeUndefined();
   });
@@ -51,6 +67,9 @@ describe('idFromTail', () => {
     ['"a":1,"id":null}', 'null id'],
     ['"a":1,"id":2.5}', 'non-integer id'],
     ['"a":1,"xid":2}', 'a different key'],
+    ['"a":1,"ab":2}', 'a different key of the same length'],
+    [',"id":57', 'no closing brace, where dropping the last character would read 5'],
+    [',"id"=5}', 'a separator other than a colon'],
     ['', 'empty'],
   ])('gives up on %j (%s)', (tail) => {
     expect(idFromTail(tail)).toBeUndefined();

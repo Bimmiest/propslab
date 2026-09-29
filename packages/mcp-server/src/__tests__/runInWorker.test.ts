@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readlinkSync } from 'node:fs';
 import { execFileSync, spawn } from 'node:child_process';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   DEFAULT_MAX_CONCURRENT_WORKERS,
@@ -15,6 +16,8 @@ import type { WorkerRequest } from '../protocol';
 import { handleSimulate } from '../tools';
 import { stripHeapSizeFlags, stripHeapSizeFlagsFromNodeOptions } from '../heapFlags';
 import { REGEXP_FALLBACK_FLAGS } from '../v8Flags';
+import { permissionFlags } from '../permissionFlags';
+import { resultText } from './resultText';
 
 /**
  * The sandbox's non-timeout bounds — heap limit, concurrency cap — and the
@@ -28,6 +31,8 @@ const OOM_WORKER = fixture('oomWorker.cjs');
 const SLEEP_WORKER = fixture('sleepWorker.cjs');
 const LOG_WORKER = fixture('logWorker.cjs');
 const LAUNCHER = fileURLToPath(new URL('../../dist/index.js', import.meta.url));
+// Outside every directory the permission tests allow.
+const PACKAGE_JSON = fileURLToPath(new URL('../../package.json', import.meta.url));
 
 // The fixtures read only what they need out of workerData, so the request is
 // a stand-in rather than a real engine op.
@@ -81,7 +86,7 @@ describe.skipIf(heapFlagsInEffect)('worker heap limit', () => {
       { workerPath: OOM_WORKER, resourceLimits: TINY_HEAP, limiter: new Semaphore(1) },
     );
     expect(result.isError).toBe(true);
-    const out = JSON.parse(result.content[0].text);
+    const out = JSON.parse(resultText(result));
     expect(out.error).toBe('out_of_memory');
     expect(out.heap_limit_mb).toBe(16);
     expect(out.guidance).toMatch(/smaller raw sample/);
@@ -157,7 +162,7 @@ describe('concurrency cap', () => {
   it('refuses a call once the queue is full, without disturbing the queue', async () => {
     const limiter = new Semaphore(1, 2);
     const release = await limiter.acquire();
-    const queued = [limiter.acquire(), limiter.acquire()];
+    const queued = [limiter.acquire(), limiter.acquire()] as const;
     expect(limiter.queued).toBe(2);
     await expect(limiter.acquire()).rejects.toBeInstanceOf(WorkerBusyError);
     expect(limiter.queued).toBe(2);
@@ -193,7 +198,7 @@ describe('concurrency cap', () => {
         { workerPath: SLEEP_WORKER, limiter },
       );
       expect(result.isError).toBe(true);
-      const out = JSON.parse(result.content[0].text);
+      const out = JSON.parse(resultText(result));
       expect(out.error).toBe('busy');
       expect(out.max_concurrent).toBe(1);
       expect(out.max_queued).toBe(0);
@@ -317,7 +322,7 @@ describe('cancellation', () => {
       { workerPath: NEVER_SPAWN, limiter: new Semaphore(1), signal: AbortSignal.abort() },
     );
     expect(result.isError).toBe(true);
-    const out = JSON.parse(result.content[0].text);
+    const out = JSON.parse(resultText(result));
     expect(out.error).toBe('cancelled');
     expect(out.started).toBe(false);
   });
@@ -364,6 +369,32 @@ describe('heap-size flag stripping', () => {
     ).toBe('--require "/a path/x.js"');
     const untouched = '--require  "/a  path/x.js"   --enable-source-maps';
     expect(stripHeapSizeFlagsFromNodeOptions(untouched)).toBe(untouched);
+  });
+});
+
+describe('permission model', () => {
+  // Run from the allowed directory, as the launcher runs the server: a worker
+  // can read below its process's cwd regardless of the flags.
+  it('lets the process and its workers read the bundle directory and nothing else', () => {
+    const fixtures = path.dirname(LOG_WORKER);
+    const out = execFileSync(
+      process.execPath,
+      [...permissionFlags(fixtures), path.join(fixtures, 'permissionProbe.cjs'), PACKAGE_JSON],
+      { encoding: 'utf8', cwd: fixtures },
+    );
+    const denied = { inside: 'ok', outside: 'ERR_ACCESS_DENIED' };
+    expect(JSON.parse(out)).toEqual({ main: denied, worker: denied });
+  });
+
+  it('is not what makes the probe fail: without the flags, both reads succeed', () => {
+    const fixtures = path.dirname(LOG_WORKER);
+    const out = execFileSync(
+      process.execPath,
+      [path.join(fixtures, 'permissionProbe.cjs'), PACKAGE_JSON],
+      { encoding: 'utf8' },
+    );
+    const allowed = { inside: 'ok', outside: 'ok' };
+    expect(JSON.parse(out)).toEqual({ main: allowed, worker: allowed });
   });
 });
 
@@ -465,6 +496,62 @@ describe.skipIf(process.platform !== 'linux')('launcher', () => {
     } finally {
       launcher.kill('SIGTERM');
       await exitOf(launcher);
+    }
+  }, 20_000);
+
+  it('starts the server under the permission model, reading only its bundle', async () => {
+    const { launcher, serverPid } = await startLauncher();
+    try {
+      const cmdline = readFileSync(`/proc/${serverPid}/cmdline`, 'utf8').split('\0');
+      expect(cmdline).toEqual(expect.arrayContaining(permissionFlags(path.dirname(LAUNCHER))));
+      expect(cmdline.filter((a) => a.startsWith('--allow-'))).toEqual([
+        '--allow-worker',
+        `--allow-fs-read=${path.dirname(LAUNCHER)}`,
+      ]);
+      // Workers can read below the cwd whatever the flags say (see index.ts).
+      expect(readlinkSync(`/proc/${serverPid}/cwd`)).toBe(path.dirname(LAUNCHER));
+    } finally {
+      launcher.kill('SIGTERM');
+      await exitOf(launcher);
+    }
+  }, 20_000);
+
+  it('answers a simulate call under the permission model', async () => {
+    const { launcher } = await startLauncher();
+    const exited = exitOf(launcher);
+    let stdout = '';
+    launcher.stdout?.on('data', (chunk: Buffer) => (stdout += chunk.toString()));
+    const send = (msg: unknown) => launcher.stdin?.write(`${JSON.stringify(msg)}\n`);
+    send({
+      jsonrpc: '2.0',
+      id: 0,
+      method: 'initialize',
+      params: {
+        protocolVersion: '2025-06-18',
+        capabilities: {},
+        clientInfo: { name: 'propslab-permission-test', version: '0.0.0' },
+      },
+    });
+    send({ jsonrpc: '2.0', method: 'notifications/initialized' });
+    send({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'tools/call',
+      params: {
+        name: 'simulate',
+        arguments: { raw: 'a=1\n', sourcetype: 'st', props_conf: '[st]\nEXTRACT-x = a=(?<n>\\d+)' },
+      },
+    });
+    try {
+      // The worker reads its bundle and the regex engine from dist/, so a
+      // field extracted by a PCRE2 pattern shows both were allowed.
+      await vi.waitFor(() => expect(stdout).toContain('"id":1'), { timeout: 15_000 });
+      const response = stdout.split('\n').find((l) => l.includes('"id":1')) ?? '';
+      const out = JSON.parse(resultText(JSON.parse(response).result));
+      expect(out.events[0].fields.n).toBe('1');
+    } finally {
+      launcher.stdin?.end();
+      await exited;
     }
   }, 20_000);
 

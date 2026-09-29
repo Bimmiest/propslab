@@ -314,7 +314,7 @@ export const useAppStore = create<AppState>((set) => ({
 /**
  * Whether the session holds work that replacing the inputs would lose: an
  * editor or metadata field differs from what was last loaded. Anything that
- * overwrites all the inputs (loading an example, clearing, a future
+ * overwrites all the inputs (loading an example, clearing, the
  * beforeunload warning) asks this rather than keeping its own notion of dirty.
  */
 export function selectSessionDirty(s: AppState): boolean {

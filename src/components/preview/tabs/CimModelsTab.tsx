@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useAppStore } from '../../../store/useAppStore';
 import { validateCimCompliance } from '../../../engine/cim/cimModels';
 import { ProgressBar } from '../../ui/ProgressBar';
+import { Icon } from '../../ui/Icon';
 
 export function CimModelsTab() {
   const result = useAppStore((s) => s.processingResult);
@@ -93,12 +94,10 @@ function CimModelCard({ result }: { result: ReturnType<typeof validateCimComplia
         <div className="w-32">
           <ProgressBar value={result.totalPercent} variant="default" label="Total" />
         </div>
-        <svg
+        <Icon
+          name="chevron-down"
           className={`w-4 h-4 text-[var(--color-text-muted)] transition-transform ${expanded ? 'rotate-180' : ''}`}
-          fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-        </svg>
+        />
       </button>
 
       {expanded && (

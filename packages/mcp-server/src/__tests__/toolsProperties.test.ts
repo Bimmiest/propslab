@@ -33,6 +33,7 @@ import { MAX_PAYLOAD_BYTES, MAX_RESPONSE_BYTES, responseBytes } from '../respons
 import { explainOutputShape, simulateOutputShape, validateOutputShape } from '../outputSchemas';
 import { lintRegexDirectives } from '../regexLint';
 import { regexEngineModule } from '../regexEngine';
+import { resultText } from './resultText';
 import { parseConf } from '../../../../src/engine/parser/confParser';
 import { getDirectivesForFile } from '../../../../src/engine/directiveRegistry';
 import { validateRegex } from '../../../../src/utils/splunkRegex';
@@ -127,7 +128,7 @@ const sample = fc
 
 // ── Helpers ─────────────────────────────────────────────
 
-const text = (r: { content: { text: string }[] }) => r.content[0].text;
+const text = resultText;
 
 /** A success's structuredContent is its text payload, valid against `shape`. */
 function expectStructured(
@@ -241,8 +242,9 @@ describe('serializeSimulation — the response stays under MAX_PAYLOAD_BYTES', (
       { numRuns: 60 },
     );
     // Each run serializes up to 8 MB twice over; alongside the worker-heavy
-    // suites that is past the default timeout.
-  }, 30_000);
+    // suites that is past the default timeout, and coverage instrumentation
+    // (npm run test:coverage) makes it about five times slower again.
+  }, 120_000);
 });
 
 // ── Through the handlers (one worker per call) ──────────

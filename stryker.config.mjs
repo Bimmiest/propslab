@@ -19,6 +19,11 @@ export default {
     // The date parser and the regex adapter the engine runs on.
     'src/utils/strftime.ts',
     'src/utils/splunkRegex.ts',
+    // The MCP server's pure functions (#455): the oversize-message limiter,
+    // the request-id scan behind its error, and the response serializer.
+    'packages/mcp-server/src/requestId.ts',
+    'packages/mcp-server/src/messageLimit.ts',
+    'packages/mcp-server/src/serialize.ts',
     '!src/engine/**/__tests__/**',
     '!src/engine/**/*.test.ts',
     '!src/engine/types.ts',

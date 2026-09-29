@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/staticwebapp.config.json",
   "globalHeaders": {
-    "Content-Security-Policy": "default-src 'self'; base-uri 'self'; object-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; font-src 'self' data:; form-action 'none'; frame-ancestors 'none'",
+    "Content-Security-Policy": "default-src 'self'; base-uri 'self'; object-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; font-src 'self' data:; form-action 'none'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types default dompurify defaultWorkerFactory diffEditorWidget diffReview domLineBreaksComputer editorViewLayer richScreenReaderContent standaloneColorizer tokenizeToString",
     "X-Frame-Options": "DENY",
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "no-referrer",

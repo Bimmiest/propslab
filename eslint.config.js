@@ -18,7 +18,7 @@ const nodeOnlyGlobals = {
 export default defineConfig([
   // All generated: build output (the app's and any package's), and the
   // reports the test suites write.
-  globalIgnores(['**/dist', 'playwright-report', 'test-results', 'coverage', '.stryker-tmp', 'reports']),
+  globalIgnores(['**/dist', 'playwright-report', 'test-results', 'coverage', '.stryker-tmp', 'reports', '.claude']),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [
@@ -45,6 +45,11 @@ export default defineConfig([
         argsIgnorePattern: '^_',
         caughtErrorsIgnorePattern: '^_',
       }],
+      // A union gains a member (a new directive kind, a new diagnostic code)
+      // and every switch over it has to name it: a `default:` does not count
+      // as handling a union member, since it is where the new one would
+      // silently land.
+      '@typescript-eslint/switch-exhaustiveness-check': 'error',
     },
   },
   {

@@ -44,6 +44,7 @@ import 'monaco-editor/features/codicon/register';
 import type { editor } from 'monaco-editor';
 // Deep import: 0.56+ has no feature entry point for the base editor worker.
 import editorWorker from 'monaco-editor/editor/editor.worker?worker';
+import { acquireModel, saveViewState, takeViewState } from './modelRegistry';
 
 // Point Monaco at the locally bundled worker instead of a CDN. Set here, not in
 // main.tsx, so it rides the lazy editor chunk: the `?worker` wrapper matches
@@ -69,6 +70,12 @@ export interface MonacoEditorProps {
    * `updateOptions` on every render for no benefit.
    */
   options?: editor.IStandaloneEditorConstructionOptions;
+  /**
+   * Keeps this file's model and view state across unmounts (see
+   * modelRegistry), so a remount keeps undo history, cursor and scroll.
+   * Read once, at mount. Without it the model is disposed with the editor.
+   */
+  modelKey?: string;
   /** Runs before the editor is constructed — register languages/themes here. */
   beforeMount?: () => void;
   onMount?: (instance: editor.IStandaloneCodeEditor) => void;
@@ -94,6 +101,7 @@ export function MonacoEditor({
   language,
   theme,
   options,
+  modelKey,
   beforeMount,
   onMount,
 }: MonacoEditorProps) {
@@ -117,7 +125,7 @@ export function MonacoEditor({
 
   // Initial props, captured so the construction effect can stay dependency-free.
   // Later changes are handled by the sync effects below.
-  const initialRef = useRef({ value, language, theme, options });
+  const initialRef = useRef({ value, language, theme, options, modelKey });
 
   // The model's text as of our last read or write. The sync effect compares
   // `value` against this instead of calling getValue(), which rebuilds the
@@ -128,11 +136,19 @@ export function MonacoEditor({
     const container = containerRef.current;
     if (!container) return;
 
-    const { value: initialValue, language: initialLanguage, theme: initialTheme, options: initialOptions } = initialRef.current;
+    const {
+      value: initialValue,
+      language: initialLanguage,
+      theme: initialTheme,
+      options: initialOptions,
+      modelKey: key,
+    } = initialRef.current;
 
     beforeMountRef.current?.();
 
-    const model = monaco.editor.createModel(initialValue, initialLanguage);
+    const model = key
+      ? acquireModel(key, () => monaco.editor.createModel(initialValue, initialLanguage))
+      : monaco.editor.createModel(initialValue, initialLanguage);
     const instance = monaco.editor.create(container, {
       model,
       automaticLayout: true,
@@ -140,6 +156,20 @@ export function MonacoEditor({
     });
     monaco.editor.setTheme(initialTheme);
     editorRef.current = instance;
+
+    if (key) {
+      // A kept model may predate a language change or, if the text was
+      // replaced while no editor showed it (Clear all, loading an example),
+      // hold stale text: bring it up to date as an undoable edit.
+      monaco.editor.setModelLanguage(model, initialLanguage);
+      if (model.getValue() !== initialValue) {
+        model.pushStackElement();
+        model.pushEditOperations([], [{ range: model.getFullModelRange(), text: initialValue, forceMoveMarkers: true }], () => null);
+        model.pushStackElement();
+      }
+      const viewState = takeViewState<editor.ICodeEditorViewState>(key);
+      if (viewState) instance.restoreViewState(viewState);
+    }
 
     const subscription = instance.onDidChangeModelContent(() => {
       if (suppressChangeRef.current) return;
@@ -152,7 +182,8 @@ export function MonacoEditor({
 
     return () => {
       subscription.dispose();
-      instance.getModel()?.dispose();
+      if (key) saveViewState(key, instance.saveViewState());
+      else instance.getModel()?.dispose();
       instance.dispose();
       editorRef.current = null;
     };

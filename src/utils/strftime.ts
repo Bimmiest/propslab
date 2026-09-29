@@ -930,14 +930,21 @@ export function supportedSpecifiers(): Set<string> {
   return new Set([...Object.keys(DIRECTIVE_MAP), '%T', '%F', '%%']);
 }
 
+/** A specifier in a TIME_FORMAT, where it sits, and whether this simulator implements it. */
+export interface FormatSpecifier {
+  specifier: string;
+  index: number;
+  supported: boolean;
+}
+
 /**
- * Specifiers in a TIME_FORMAT that this simulator does not implement, with the
- * offset each sits at. A `%` followed by nothing recognisable is reported too:
- * `%Y-%m-%d %H:%i` is a real mistake (`%i` is MySQL, not strftime) and silently
- * matching the literal `i` is how it survives to production.
+ * Every specifier in a TIME_FORMAT, in order, tokenised as parsing and
+ * formatting read it: table directives longest first, and the composites %T
+ * and %F and the %% escape whole. The Timestamp tab's breakdown reads a format
+ * with this, so it names the same tokens the parser does.
  */
-export function unsupportedSpecifiers(format: string): { specifier: string; index: number }[] {
-  const found: { specifier: string; index: number }[] = [];
+export function formatSpecifiers(format: string): FormatSpecifier[] {
+  const found: FormatSpecifier[] = [];
 
   let i = 0;
   while (i < format.length) {
@@ -948,24 +955,38 @@ export function unsupportedSpecifiers(format: string): { specifier: string; inde
 
     const directive = directiveAt(format, i);
     if (directive) {
+      found.push({ specifier: directive.spec, index: i, supported: true });
       i += directive.spec.length;
       continue;
     }
 
     const two = format.slice(i, i + 2);
     if (two === '%%' || two === '%T' || two === '%F') {
+      found.push({ specifier: two, index: i, supported: true });
       i += 2;
       continue;
     }
     if (two.length < 2) {
-      found.push({ specifier: '%', index: i });
+      found.push({ specifier: '%', index: i, supported: false });
       break;
     }
     // An unknown width, e.g. %0N, is reported whole rather than as `%0`.
     const specifier = /^%\dN/.exec(format.slice(i, i + 3))?.[0] ?? two;
-    found.push({ specifier, index: i });
+    found.push({ specifier, index: i, supported: false });
     i += specifier.length;
   }
 
   return found;
+}
+
+/**
+ * Specifiers in a TIME_FORMAT that this simulator does not implement, with the
+ * offset each sits at. A `%` followed by nothing recognisable is reported too:
+ * `%Y-%m-%d %H:%i` is a real mistake (`%i` is MySQL, not strftime) and silently
+ * matching the literal `i` is how it survives to production.
+ */
+export function unsupportedSpecifiers(format: string): { specifier: string; index: number }[] {
+  return formatSpecifiers(format)
+    .filter((s) => !s.supported)
+    .map(({ specifier, index }) => ({ specifier, index }));
 }

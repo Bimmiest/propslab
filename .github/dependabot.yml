@@ -13,6 +13,13 @@ updates:
       day: monday
       time: "06:00"
     open-pull-requests-limit: 5
+    # A release is at its most dangerous in its first days: a hijacked
+    # maintainer account publishes, and it takes the registry and the community
+    # a few days to notice and yank it. Waiting a week before proposing a
+    # version lets that happen to someone else first. Security updates are not
+    # held back — cooldown applies to version updates only.
+    cooldown:
+      default-days: 7
     groups:
       # Minor and patch bumps land as one PR per group. Individually they rarely
       # merit a review, and a single CI run across ten of them carries the same
@@ -96,6 +103,9 @@ updates:
       interval: weekly
       day: monday
       time: "06:00"
+    # Same week's wait as the root entry, for the same reason.
+    cooldown:
+      default-days: 7
     groups:
       # One group rather than the production/development split above: this
       # package has seven direct dependencies, and splitting seven across two PRs
@@ -103,6 +113,13 @@ updates:
       mcp-server-dependencies:
         patterns: ["*"]
         update-types: [minor, patch]
+      # The root's vitest rule, for the same reason: @vitest/coverage-v8 pins
+      # the exact vitest it ships beside, so a major can only move as a pair.
+      mcp-server-vitest:
+        patterns:
+          - vitest
+          - "@vitest/*"
+        update-types: [major]
     # Majors stay out of the group for the same reason they do above — and note
     # that @modelcontextprotocol/sdk majors move a protocol version, which is a
     # change to read against the spec rather than to wave through.
@@ -124,6 +141,10 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    # A compromised action tag is the same hazard as a compromised package,
+    # and the SHA pin only protects us if we do not raise it on day one.
+    cooldown:
+      default-days: 7
     groups:
       github-actions:
         patterns: ["*"]

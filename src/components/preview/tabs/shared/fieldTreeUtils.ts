@@ -99,3 +99,28 @@ export function nodeMatchesSearch(node: FieldNode, search: string): boolean {
   if (node.name.toLowerCase().includes(search)) return true;
   return node.children.some((c) => nodeMatchesSearch(c, search));
 }
+
+/** A sidebar row: a node, and how far it is indented. */
+export interface VisibleFieldNode {
+  node: FieldNode;
+  /** Left padding in px, each level adding its own depth × 10 to its parent's. */
+  indent: number;
+}
+
+/**
+ * The rows the field sidebar shows, in order: every node that matches the
+ * search or has a descendant that does, below parents that are expanded.
+ * Flat, so the list can be windowed (#454).
+ */
+export function flattenVisibleTree(roots: FieldNode[], collapsed: Set<string>, search: string): VisibleFieldNode[] {
+  const out: VisibleFieldNode[] = [];
+  const visit = (node: FieldNode, parentIndent: number) => {
+    if (!nodeMatchesSearch(node, search)) return;
+    const indent = parentIndent + node.depth * 10;
+    out.push({ node, indent });
+    if (collapsed.has(node.name)) return;
+    for (const child of node.children) visit(child, indent);
+  };
+  for (const root of roots) visit(root, 0);
+  return out;
+}

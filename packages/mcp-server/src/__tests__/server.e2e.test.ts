@@ -8,6 +8,7 @@ import { AjvJsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/ajv
 import type { JsonSchemaType } from '@modelcontextprotocol/sdk/validation';
 import { createServer } from '../server';
 import { DEFAULT_MAX_CONCURRENT_WORKERS } from '../runInWorker';
+import { resultText } from './resultText';
 
 /**
  * End to end through the SDK: a real Client talking to the server from
@@ -27,7 +28,7 @@ type TextResult = {
   structuredContent?: Record<string, unknown>;
   isError?: boolean;
 };
-const payload = (r: unknown) => JSON.parse((r as TextResult).content[0].text);
+const payload = (r: unknown) => JSON.parse(resultText(r as TextResult));
 
 let client: Client;
 let close: () => Promise<void>;
@@ -181,7 +182,7 @@ describe('MCP server end to end', () => {
       arguments: { raw: 'x\n', sourcetype: 'st', timeout_ms: 5 },
     });
     expect(result.isError).toBe(true);
-    expect((result as TextResult).content[0].text).toMatch(/timeout_ms/);
+    expect(resultText(result as TextResult)).toMatch(/timeout_ms/);
   });
 
   it('frees sandbox slots when the client cancels a call', async () => {
@@ -304,13 +305,22 @@ describe('built launcher', () => {
     expect(index.startsWith('#!/usr/bin/env node\n')).toBe(true);
   });
 
-  it("README's setup installs the repository root before the package", () => {
-    // The engine imports pcre2-wasm-utf16 from the root node_modules, so on a
-    // fresh clone the package's build fails without the root install.
-    const readme = readFileSync(fileURLToPath(new URL('../../README.md', import.meta.url)), 'utf8');
-    const setup = /## Setup[\s\S]*?```bash\n([\s\S]*?)```/.exec(readme)?.[1] ?? '';
-    const commands = setup.split('\n').filter((l) => l && !l.startsWith('#'));
-    expect(commands.slice(0, 3)).toEqual(['npm install', 'cd packages/mcp-server', 'npm install']);
+  it('bundles the same pcre2-wasm-utf16 commit the app is tested against', () => {
+    // The package declares the regex engine itself and the build resolves the
+    // engine's import to that copy, while the app's suite runs the same engine
+    // source against the root's. Two different releases would mean the server
+    // ships a regex engine nothing tested.
+    const read = (rel: string) =>
+      JSON.parse(readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8')) as {
+        dependencies?: Record<string, string>;
+        packages?: Record<string, { resolved?: string }>;
+      };
+    const spec = (rel: string) => read(rel).dependencies?.['pcre2-wasm-utf16'];
+    const pinned = (rel: string) => read(rel).packages?.['node_modules/pcre2-wasm-utf16']?.resolved;
+    expect(spec('../../package.json')).toBeDefined();
+    expect(spec('../../package.json')).toBe(spec('../../../../package.json'));
+    expect(pinned('../../package-lock.json')).toMatch(/#[0-9a-f]{40}$/);
+    expect(pinned('../../package-lock.json')).toBe(pinned('../../../../package-lock.json'));
   });
 
   it('keeps the shebang off the worker bundle', () => {

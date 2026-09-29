@@ -17,7 +17,7 @@ The second install is not optional if you intend to lint. `npm run lint` is type
 
 ## The CI checks
 
-[`ci.yml`](.github/workflows/ci.yml) runs three jobs, independently, on every PR, on pushes to main, weekly and on demand. A PR needs all three green — and so does the automatic deploy, which runs only after a push to main's CI run passes and then ships the newest commit on main whose whole CI run passed. A manual deploy is not CI-gated: dispatching the deploy workflow on `main` redeploys that same newest green commit, or, with its `sha` input set, rolls back to any commit main has contained, whether or not its CI passed. A rollback only sticks if the repository variable `DEPLOY_PAUSED` is set to `true` *before* you dispatch it — otherwise the next automatic deploy undoes it, or cancels it while it is still queued — and it stays in place until you delete the variable once the fix is on main. The [README](README.md#tests) describes the deploy workflow in full.
+[`ci.yml`](.github/workflows/ci.yml) runs five jobs, independently, on every PR, on pushes to main, weekly and on demand (`dependency-review` on PRs only). A PR needs all of them green — and so does the automatic deploy, which runs only after a push to main's CI run passes and then ships the newest commit on main whose whole CI run passed. A manual deploy is not CI-gated: dispatching the deploy workflow on `main` redeploys that same newest green commit, or, with its `sha` input set, rolls back to any commit main has contained, whether or not its CI passed. A rollback only sticks if the repository variable `DEPLOY_PAUSED` is set to `true` *before* you dispatch it — otherwise the next automatic deploy undoes it, or cancels it while it is still queued — and it stays in place until you delete the variable once the fix is on main. The [README](README.md#tests) describes the deploy workflow in full.
 
 **`ci`** — the app, in this order:
 
@@ -33,10 +33,14 @@ npm run test:e2e      # Playwright, against a production build
 ```bash
 cd packages/mcp-server
 npm ci
-npm test              # pretest runs typecheck + esbuild bundle, then vitest
+npm run test:coverage # typecheck + esbuild bundle first, then vitest with the package's coverage floor
 ```
 
 **`audit`** — `npm audit` over both lockfiles, the app's and `packages/mcp-server`'s. A high-severity advisory in a production dependency fails it; dev-only advisories are reported but never fatal. It installs nothing, so there is nothing to run locally beyond `npm audit --omit=dev --audit-level=high` in each directory.
+
+**`workflow-lint`** — [actionlint](https://github.com/rhysd/actionlint) and [zizmor](https://docs.zizmor.sh/) over `.github/`. Locally: `go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 && actionlint`, and `uvx zizmor==1.30.1 .` (or `pipx run`). A zizmor finding that is deliberate gets an inline `# zizmor: ignore[<audit>]` with the reason beside it, as the deploy workflow's `workflow_run` trigger has.
+
+**`dependency-review`** — on PRs, GitHub's dependency review over the PR's dependency diff, failing on a newly added high-severity advisory. CodeQL is not a workflow here: it runs through GitHub's default code-scanning setup (JavaScript/TypeScript and Actions) and reports as the "Analyze" checks.
 
 A few things worth knowing:
 
@@ -46,12 +50,15 @@ A few things worth knowing:
 
 ## Mutation testing
 
-Coverage says a line ran; it does not say a test would notice the line being wrong. [Stryker](https://stryker-mutator.io/) answers that by making small edits to `src/engine/**` and the two utils it runs on (`strftime.ts`, `splunkRegex.ts`) — flipping a `<`, emptying a string, deleting a call — and rerunning the tests that reach each one. A mutant no test fails on has *survived*, and marks behaviour nothing asserts.
+Coverage says a line ran; it does not say a test would notice the line being wrong. [Stryker](https://stryker-mutator.io/) answers that by making small edits to `src/engine/**`, the two utils it runs on (`strftime.ts`, `splunkRegex.ts`), and three pure modules of the MCP server (`requestId.ts`, `messageLimit.ts`, `serialize.ts`) — flipping a `<`, emptying a string, deleting a call — and rerunning the tests that reach each one. A mutant no test fails on has *survived*, and marks behaviour nothing asserts.
 
 ```bash
 npm run test:mutation                  # full run; about 75 minutes on 4 cores
 npm run test:mutation -- --mutate src/engine/processors/kvMode.ts   # one file, a few minutes
+npm run test:mutation -- --mutate packages/mcp-server/src/requestId.ts
 ```
+
+Every run includes those modules' tests, which need the MCP server installed and built (`npm ci --prefix packages/mcp-server && npm run build --prefix packages/mcp-server`): one of them talks to the built server. Those three score 90.9% together.
 
 Open `reports/mutation/mutation.html` for the survivors, line by line. The engine scores 79.6%, and `thresholds.break` in [`stryker.config.mjs`](stryker.config.mjs) holds it at 78% — a floor and a ratchet, like coverage.
 
@@ -74,7 +81,7 @@ Open `reports/mutation/mutation.html` for the survivors, line by line. The engin
 
 ### The regex engine's binary
 
-The module lives in its own repository, [`Bimmiest/pcre2-wasm-utf16`](https://github.com/Bimmiest/pcre2-wasm-utf16), and this one depends on a release tag of it (`package.json`). That repository commits `pcre2.wasm`, built from a pinned PCRE2 release with clang 18 and `wasm-ld`, and its CI rebuilds it and fails unless the result is byte-identical, so the binary is known to come from the source. To change it — a PCRE2 upgrade, a bridge change — make the change there, tag a release, and move the tag in `package.json` here.
+The module lives in its own repository, [`Bimmiest/pcre2-wasm-utf16`](https://github.com/Bimmiest/pcre2-wasm-utf16), and this one depends on a release tag of it (`package.json`). That repository commits `pcre2.wasm`, built from a pinned PCRE2 release with clang 18 and `wasm-ld`, and its CI rebuilds it and fails unless the result is byte-identical, so the binary is known to come from the source. To change it — a PCRE2 upgrade, a bridge change — make the change there, tag a release, and move the tag in `package.json` here and in `packages/mcp-server/package.json`, which declares it too (a test in the package fails while the two differ).
 
 ### The Radix overrides
 

@@ -48,11 +48,17 @@ export default defineConfig({
   plugins: [...(base.plugins ?? []), strykerTestNamePattern],
   test: {
     ...base.test,
-    // The engine's tests, and those of the two utils the engine runs on.
+    // The engine's tests, those of the two utils the engine runs on, and
+    // those of the MCP server modules in stryker.config.mjs's `mutate`. The
+    // package's tests import its SDK from packages/mcp-server/node_modules,
+    // so a run needs that install too.
     include: [
       'src/engine/**/*.test.ts',
       'src/utils/__tests__/strftime*.test.ts',
       'src/utils/__tests__/splunkRegex*.test.ts',
+      'packages/mcp-server/src/__tests__/requestId.test.ts',
+      'packages/mcp-server/src/__tests__/messageLimit.test.ts',
+      'packages/mcp-server/src/__tests__/serialize.test.ts',
     ],
     exclude: [
       ...(base.test?.exclude ?? []),

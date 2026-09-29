@@ -43,6 +43,28 @@ describe('deployed security headers', () => {
     expect(header.get('script-src')).not.toContain("'unsafe-eval'");
   });
 
+  // #458: a DOM-XSS sink added later fails loudly instead of working. The
+  // meta policy carries the same directives (checked above).
+  it('requires Trusted Types for script sinks, allowing only the policies the build creates', () => {
+    const header = parsePolicy(headers['Content-Security-Policy'] ?? '');
+    expect(header.get('require-trusted-types-for')).toEqual(["'script'"]);
+    const allowed = header.get('trusted-types') ?? [];
+    // src/trustedTypes.ts, for Vite's same-origin worker URLs.
+    expect(allowed).toContain('default');
+    // Monaco's own, created when the editor chunk loads, and its sanitizer's.
+    for (const name of ['defaultWorkerFactory', 'editorViewLayer', 'domLineBreaksComputer', 'tokenizeToString', 'dompurify']) {
+      expect(allowed).toContain(name);
+    }
+    expect(allowed).not.toContain("'none'");
+    expect(allowed).not.toContain('*');
+  });
+
+  it('enforces Trusted Types in the meta policy as well as the header', () => {
+    const meta = parsePolicy(metaContent!);
+    expect(meta.get('require-trusted-types-for')).toEqual(["'script'"]);
+    expect(meta.get('trusted-types')).toEqual(parsePolicy(headers['Content-Security-Policy'] ?? '').get('trusted-types'));
+  });
+
   it('sets COOP and a Permissions-Policy denying unused features', () => {
     expect(headers['Cross-Origin-Opener-Policy']).toBe('same-origin');
     const permissions = headers['Permissions-Policy'] ?? '';
