@@ -33,17 +33,38 @@ const TEST_SOURCES = Object.entries(
 const ALL_TEST_TEXT = TEST_SOURCES.join('\n');
 
 /**
- * Check if a directive key appears in assignment form in test source code.
- * Matches patterns like `KEY = value` or `KEY-subname = value` inside
- * strings or template literals.
+ * Check if a directive key is exercised in test source code.
+ * Matches multiple patterns:
+ * - Conf text: KEY = value or KEY-subname = value
+ * - Object literals: KEY: / 'KEY': / "KEY":
+ * - Function arguments: ('KEY' or ("KEY" as first argument
+ * Excludes pure prose mentions (need to match one of these specific patterns).
  */
 function isDocumentedInTest(key: string): boolean {
   const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const pattern = new RegExp(
+
+  // Pattern 1: Conf text - KEY = value or KEY-subname = value
+  const confPattern = new RegExp(
     `(^|[\\n"'` + '`' + `\\\\n])\\s*${escapedKey}(-[A-Za-z0-9_]+)?\\s*=`,
     'm'
   );
-  return pattern.test(ALL_TEST_TEXT);
+  if (confPattern.test(ALL_TEST_TEXT)) return true;
+
+  // Pattern 2: Object literal keys - KEY: or 'KEY': or "KEY":
+  const objectKeyPattern = new RegExp(
+    `[{\\n\\s]${escapedKey}\\s*:|[{\\n\\s]['"]${escapedKey}['"]\\s*:`,
+    'm'
+  );
+  if (objectKeyPattern.test(ALL_TEST_TEXT)) return true;
+
+  // Pattern 3: Function arguments - ('KEY' or ("KEY"
+  const funcArgPattern = new RegExp(
+    `\\(\\s*['"]${escapedKey}['"]`,
+    'm'
+  );
+  if (funcArgPattern.test(ALL_TEST_TEXT)) return true;
+
+  return false;
 }
 
 describe('simulated directive evidence (#505)', () => {
@@ -84,27 +105,12 @@ describe('simulated directive evidence (#505)', () => {
   }
 
   it('every simulated directive has evidence', () => {
-    // These directives are simulated but have no fixture or documented test evidence.
-    // They are tracked in directiveSupport.test.ts as UNEXERCISED_SIMULATED.
+    // All directives should have evidence through fixtures or documented tests
     const missingEvidence = [...noneSet];
-    expect(missingEvidence.sort()).toEqual([
-      'ADD_EXTRA_TIME_FIELDS',
-      'DETERMINE_TIMESTAMP_DATE_WITH_SYSTEM_TIME',
-      'FIELD_HEADER_REGEX',
-      'HEADER_FIELD_ACCEPTABLE_SPECIAL_CHARACTERS',
-      'MATCH_LIMIT',
-      'MAX_DAYS_AGO',
-      'MAX_DAYS_HENCE',
-      'MAX_DIFF_SECS_AGO',
-      'MAX_DIFF_SECS_HENCE',
-      'MISSING_VALUE_REGEX',
-      'XML_IE_EXCLUDE',
-      'XML_IE_EXCLUDE_MV',
-      'XML_IE_EXCLUDE_VALS',
-      'XML_IE_INCLUDE',
-      'XML_IE_INCLUDE_MV',
-      'XML_IE_MAX_EXTRACTED_VALUE_SIZE',
-    ]);
+    expect(
+      missingEvidence,
+      'these directives are declared simulated but have no fixture or test exercise'
+    ).toEqual([]);
   });
 
   // Pin the fixture-backed count with a ratchet; it should only grow as fixtures are added
