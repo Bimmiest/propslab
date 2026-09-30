@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { useDebounce } from './useDebounce';
 import { useWorkerRequest } from './useWorkerRequest';
 import { matchInputs } from '../engine/regexMatch';
@@ -75,20 +75,14 @@ const EMPTY_MATCHED: Matched = { pattern: '', inputs: EMPTY_INPUTS, results: EMP
  * only re-run when the pattern or the events actually change.
  */
 export function useRegexMatch(pattern: string, inputs: string[]): RegexMatchState {
-  // The request in flight. The worker's response carries only the request id,
-  // and `useWorkerRequest` drops every response but the latest request's, so
-  // whatever `interpret` sees answers the request posted last. Read in the
-  // worker's message handler, never during render.
-  const postedRef = useRef<Request>({ pattern: '', inputs: EMPTY_INPUTS });
-
   const { status, data, run } = useWorkerRequest<Request, RegexMatchResponse, Matched>({
     createWorker,
     timeoutMs: REGEX_TIMEOUT_MS,
     empty: EMPTY_MATCHED,
-    interpret: (response) =>
+    interpret: (response, request) =>
       response.results === null
         ? { status: 'invalid', data: EMPTY_MATCHED }
-        : { status: 'ok', data: { ...postedRef.current, results: response.results } },
+        : { status: 'ok', data: { ...request, results: response.results } },
     runInline: ({ pattern: pat, inputs: inp }) => {
       const out = matchInputs(pat, inp);
       return out === null
@@ -96,14 +90,16 @@ export function useRegexMatch(pattern: string, inputs: string[]): RegexMatchStat
         : { status: 'ok', data: { pattern: pat, inputs: inp, results: out } };
     },
     isIdle: ({ pattern: pat }) => !pat,
+    // The events go to the worker once per set, not with every keystroke's
+    // pattern, and a pattern typed past is skipped rather than run.
+    sendAhead: { inputs: (request) => request.inputs, rest: ({ pattern: pat }) => ({ pattern: pat }) },
+    latestOnly: true,
   });
 
   const debouncedPattern = useDebounce(pattern, 250);
 
   useEffect(() => {
-    const request = { pattern: debouncedPattern, inputs };
-    postedRef.current = request;
-    run(request);
+    run({ pattern: debouncedPattern, inputs });
   }, [debouncedPattern, inputs, run]);
 
   // Only an 'ok' outcome carries data to tag; the others (idle, pending,

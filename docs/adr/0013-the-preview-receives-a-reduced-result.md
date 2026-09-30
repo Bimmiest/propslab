@@ -15,6 +15,7 @@ Stripping the prose alone saved nothing, because the object count is the cost. I
 
 - The worker posts `toViewResult(result)`, not the result itself. Each step keeps only its structured fields (`TraceStep`). Each event's trace is interned by those fields, so events with matching steps share one array. Metadata objects are interned, and `timestampText` is dropped where it equals `_raw`, which is what its readers fall back to.
 - The Pipeline tab reads `stepSummaries`, which the worker builds from the full traces.
+- The views that need the fields as a whole read `fieldStats` — distinct names, per-field event counts, JSON containers — which the worker computes once per run ([#496](https://github.com/Bimmiest/propslab/issues/496)).
 - The store holds a `ViewResult`. The inline fallback applies the same reduction, so the views see one shape either way.
 - A shared trace array is read-only.
 

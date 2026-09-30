@@ -1,4 +1,5 @@
 import type { ProcessingResult, ProcessingStep, SplunkEvent } from '../engine/types';
+import { computeFieldStats, type FieldStats } from './fieldStats';
 
 /**
  * What the preview receives from a pipeline run, as opposed to what
@@ -10,7 +11,9 @@ import type { ProcessingResult, ProcessingStep, SplunkEvent } from '../engine/ty
  * event. So the worker sends each event's trace without them, interned: events
  * whose steps match share one array, which structured clone sends once. The
  * one view that needs the prose, the Pipeline tab, gets it summarised in the
- * worker (`stepSummaries`), across every event.
+ * worker (`stepSummaries`), across every event. So does what several views
+ * need about the fields as a whole (`fieldStats`): the distinct names, how
+ * many events have each, and which hold JSON containers.
  */
 
 /** A trace step without its prose and snapshots. */
@@ -43,6 +46,8 @@ export interface ViewResult extends Omit<ProcessingResult, 'events' | 'processin
   events: ViewEvent[];
   /** The Pipeline tab's rows, in first-seen order. */
   stepSummaries: StepSummary[];
+  /** The fields across every event, counted once here rather than by each view. */
+  fieldStats: FieldStats;
 }
 
 // Strip a trailing "(…)" detail (e.g. "(lines 1-1)") so per-event variants of an
@@ -139,7 +144,8 @@ function toTraceStep(step: ProcessingStep): TraceStep {
  * The result the preview holds: each event's trace reduced to `TraceStep`s
  * and interned, its metadata interned, `timestampText` dropped where it is
  * `_raw` (which is what readers fall back to), and the flat
- * `processingSteps` replaced by the Pipeline tab's summary.
+ * `processingSteps` replaced by the Pipeline tab's summary, and the field
+ * statistics added.
  */
 export function toViewResult(result: ProcessingResult): ViewResult {
   const traces = new Map<string, readonly TraceStep[]>();
@@ -172,5 +178,6 @@ export function toViewResult(result: ProcessingResult): ViewResult {
     inputMetadata: result.inputMetadata,
     events,
     stepSummaries: summarizeSteps(result.events),
+    fieldStats: computeFieldStats(result.events),
   };
 }

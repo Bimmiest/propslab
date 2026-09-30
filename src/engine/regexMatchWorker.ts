@@ -6,18 +6,20 @@
  * worker rather than freezing the UI tab.
  *
  * Message protocol:
- *   in  → RegexMatchRequest
- *   out → WORKER_READY once, when the worker has loaded its regex engine; then RegexMatchResponse
+ *   in  → WorkerInputsMessage<string[]> (the events, once per set), RegexMatchRequest
+ *   out → WORKER_READY once, when the worker has loaded its regex engine; then a
+ *         RegexMatchResponse, or a WorkerSkippedResponse, per request
  */
 
 import { matchInputs } from './regexMatch';
 import type { RegexMatchInfo } from './regexMatch';
 import { serveWithRegexEngine } from '../utils/regexEngineLoader';
+import { createRequestQueue, type QueuedRequest, type WorkerInputsMessage, type WorkerSkippedResponse } from './workerProtocol';
 
-export interface RegexMatchRequest {
-  id: number;
+export interface RegexMatchRequest extends QueuedRequest {
   pattern: string;
-  inputs: string[];
+  /** The inputs, when not sent ahead in an inputs message named by `inputsId`. */
+  inputs?: string[];
 }
 
 export interface RegexMatchResponse {
@@ -32,15 +34,24 @@ export interface RegexMatchResponse {
   error?: string;
 }
 
+const serve = createRequestQueue<string[], RegexMatchRequest>({
+  run: (request, sent) => {
+    const { id, pattern } = request;
+    let response: RegexMatchResponse;
+    try {
+      const inputs = request.inputs ?? sent;
+      if (inputs === undefined) throw new Error('No inputs to match against');
+      response = { id, results: matchInputs(pattern, inputs) };
+    } catch (err) {
+      response = { id, results: null, error: err instanceof Error ? err.message : String(err) };
+    }
+    self.postMessage(response);
+  },
+  skip: ({ id }) => self.postMessage({ id, skipped: true } satisfies WorkerSkippedResponse),
+  defer: (drain) => setTimeout(drain),
+  rethrow: (err) => setTimeout(() => { throw err; }),
+});
+
 // Loads the regex engine from its fixed asset URL, then signals ready and
 // serves requests in order; see serveWithRegexEngine.
-serveWithRegexEngine<RegexMatchRequest>(self, (request) => {
-  const { id, pattern, inputs } = request;
-  let response: RegexMatchResponse;
-  try {
-    response = { id, results: matchInputs(pattern, inputs) };
-  } catch (err) {
-    response = { id, results: null, error: err instanceof Error ? err.message : String(err) };
-  }
-  self.postMessage(response);
-});
+serveWithRegexEngine<RegexMatchRequest | WorkerInputsMessage<string[]>>(self, serve);

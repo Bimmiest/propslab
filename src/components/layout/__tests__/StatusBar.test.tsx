@@ -6,6 +6,7 @@ import { StatusBar } from '../StatusBar';
 import { useAppStore } from '../../../store/useAppStore';
 import type { ValidationDiagnostic, SplunkEvent } from '../../../engine/types';
 import { toViewResult, type ViewResult } from '../../../utils/viewResult';
+import { EMPTY_FIELD_STATS } from '../../../utils/fieldStats';
 
 function makeEvent(fields: Record<string, string>): SplunkEvent {
   return {
@@ -40,7 +41,7 @@ describe('StatusBar', () => {
   });
 
   it('shows "Worker idle" after a worker run', () => {
-    useAppStore.setState({ processingResult: { events: [], eventCount: 0 } as unknown as ViewResult });
+    useAppStore.setState({ processingResult: { events: [], eventCount: 0, fieldStats: EMPTY_FIELD_STATS } as unknown as ViewResult });
     renderStatusBar();
     expect(screen.getByText('Worker idle')).toBeInTheDocument();
     expect(screen.queryByTestId('pipeline-main-thread')).toBeNull();
@@ -48,7 +49,7 @@ describe('StatusBar', () => {
 
   it('says the pipeline runs on the main thread, not "Worker idle", after a worker load failure (#403)', () => {
     useAppStore.setState({
-      processingResult: { events: [], eventCount: 0 } as unknown as ViewResult,
+      processingResult: { events: [], eventCount: 0, fieldStats: EMPTY_FIELD_STATS } as unknown as ViewResult,
       pipelineOnMainThread: true,
     });
     renderStatusBar();

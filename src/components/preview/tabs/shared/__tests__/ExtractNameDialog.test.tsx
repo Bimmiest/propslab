@@ -4,6 +4,7 @@ import { render, screen, waitFor, fireEvent, act } from '@testing-library/react'
 import { ExtractNameDialog } from '../ExtractNameDialog';
 import { matchInputs } from '../../../../../engine/regexMatch';
 import type { RegexMatchRequest, RegexMatchResponse } from '../../../../../engine/regexMatchWorker';
+import { lastRequest, requestsIn } from '../../../../../test/workerInputs';
 
 function setup(pattern?: string) {
   const onApply = vi.fn();
@@ -47,15 +48,15 @@ describe('ExtractNameDialog — only a settled result for this pattern enables A
     static instances: FakeWorker[] = [];
     onmessage: ((e: MessageEvent<RegexMatchResponse>) => void) | null = null;
     onerror: ((e: ErrorEvent) => void) | null = null;
-    posted: RegexMatchRequest[] = [];
+    posted: unknown[] = [];
     constructor() { FakeWorker.instances.push(this); }
-    postMessage(message: RegexMatchRequest) { this.posted.push(message); }
+    postMessage(message: unknown) { this.posted.push(message); }
     terminate() {}
     /** The module has loaded: a timeout after this is the pattern's, not the load's. */
     ready() { this.onmessage?.({ data: { type: 'ready' } } as unknown as MessageEvent<RegexMatchResponse>); }
     respond() {
-      const req = this.posted[this.posted.length - 1]!;
-      this.onmessage?.({ data: { id: req.id, results: matchInputs(req.pattern, req.inputs) } } as MessageEvent<RegexMatchResponse>);
+      const { request: req, inputs } = lastRequest<RegexMatchRequest, string[]>(this.posted, (r) => r.inputs);
+      this.onmessage?.({ data: { id: req.id, results: matchInputs(req.pattern, inputs) } } as MessageEvent<RegexMatchResponse>);
     }
   }
   const worker = () => FakeWorker.instances[FakeWorker.instances.length - 1]!;
@@ -116,7 +117,7 @@ describe('ExtractNameDialog — only a settled result for this pattern enables A
     act(() => { vi.advanceTimersByTime(250); });
     expect(addButton()).toBeDisabled();
     // Only the idle request that clears the previous pattern, never this one.
-    expect(worker().posted.slice(posted).map((r) => r.pattern)).not.toContain('(?<x>unbalanced');
+    expect(requestsIn<RegexMatchRequest>(worker().posted.slice(posted)).map((r) => r.pattern)).not.toContain('(?<x>unbalanced');
   });
 
   it('keeps Add disabled when the pattern times out', () => {

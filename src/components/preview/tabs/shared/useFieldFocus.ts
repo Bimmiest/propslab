@@ -22,6 +22,12 @@ export interface FieldFocusStore {
   getActive: () => Set<string> | null;
   setHoveredField: (field: string | null) => void;
   togglePin: (field: string) => void;
+  /**
+   * Unpin every field not in `fields`. A pin on a field the latest run no
+   * longer extracts has no sidebar entry to unpin it from, and would leave
+   * the tab filtering to "0/N events" with nothing to show.
+   */
+  retainPins: (fields: ReadonlySet<string>) => void;
 }
 
 export function createFieldFocusStore(): FieldFocusStore {
@@ -52,6 +58,12 @@ export function createFieldFocusStore(): FieldFocusStore {
       if (next.has(field)) next.delete(field);
       else next.add(field);
       pinned = next;
+      update();
+    },
+    retainPins: (fields) => {
+      const kept = [...pinned].filter((f) => fields.has(f));
+      if (kept.length === pinned.size) return;
+      pinned = new Set(kept);
       update();
     },
   };

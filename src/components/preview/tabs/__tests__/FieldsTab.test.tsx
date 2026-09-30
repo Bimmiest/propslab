@@ -31,13 +31,14 @@ const event = makeEvent(
   ],
 );
 
-const result = toViewResult({
+const raw = {
   events: [event],
   originalRaw: '',
   eventCount: 1,
   processingSteps: [],
   inputMetadata: { index: 'main', host: '', source: '', sourcetype: '' },
-});
+};
+const result = toViewResult(raw);
 
 const initial = useAppStore.getState();
 
@@ -218,7 +219,7 @@ describe('FieldsTab — windowed for wide events (#454)', () => {
 
   beforeEach(() => {
     useAppStore.setState(initial, true);
-    useAppStore.setState({ processingResult: { ...result, events: [wide] } });
+    useAppStore.setState({ processingResult: toViewResult({ ...raw, events: [wide] }) });
   });
 
   it('renders a window of rows, and reports the full size and each row\'s position', () => {

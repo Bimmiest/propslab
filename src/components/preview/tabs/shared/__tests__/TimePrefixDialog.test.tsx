@@ -4,6 +4,7 @@ import { render, screen, fireEvent, act } from '@testing-library/react';
 import { TimePrefixDialog } from '../TimePrefixDialog';
 import { matchInputs } from '../../../../../engine/regexMatch';
 import type { RegexMatchRequest, RegexMatchResponse } from '../../../../../engine/regexMatchWorker';
+import { lastRequest, requestsIn } from '../../../../../test/workerInputs';
 
 // TIME_PREFIX is a user regex like EXTRACT's, so "Set TIME_PREFIX" gets the
 // same gate: a pattern that does not compile, or has not yet cleared the
@@ -13,14 +14,14 @@ describe('TimePrefixDialog — only a settled result for this pattern enables Se
     static instances: FakeWorker[] = [];
     onmessage: ((e: MessageEvent<RegexMatchResponse>) => void) | null = null;
     onerror: ((e: ErrorEvent) => void) | null = null;
-    posted: RegexMatchRequest[] = [];
+    posted: unknown[] = [];
     constructor() { FakeWorker.instances.push(this); }
-    postMessage(message: RegexMatchRequest) { this.posted.push(message); }
+    postMessage(message: unknown) { this.posted.push(message); }
     terminate() {}
     ready() { this.onmessage?.({ data: { type: 'ready' } } as unknown as MessageEvent<RegexMatchResponse>); }
     respond() {
-      const req = this.posted[this.posted.length - 1]!;
-      this.onmessage?.({ data: { id: req.id, results: matchInputs(req.pattern, req.inputs) } } as MessageEvent<RegexMatchResponse>);
+      const { request: req, inputs } = lastRequest<RegexMatchRequest, string[]>(this.posted, (r) => r.inputs);
+      this.onmessage?.({ data: { id: req.id, results: matchInputs(req.pattern, inputs) } } as MessageEvent<RegexMatchResponse>);
     }
   }
   const worker = () => FakeWorker.instances[FakeWorker.instances.length - 1]!;
@@ -75,7 +76,7 @@ describe('TimePrefixDialog — only a settled result for this pattern enables Se
     fireEvent.change(input(), { target: { value: '(unbalanced' } });
     act(() => { vi.advanceTimersByTime(250); });
     expect(setButton()).toBeDisabled();
-    expect(worker().posted.map((r) => r.pattern)).not.toContain('(unbalanced');
+    expect(requestsIn<RegexMatchRequest>(worker().posted).map((r) => r.pattern)).not.toContain('(unbalanced');
   });
 
   it('keeps Set disabled when the pattern times out', () => {

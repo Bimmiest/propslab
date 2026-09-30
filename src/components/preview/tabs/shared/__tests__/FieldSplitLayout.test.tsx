@@ -81,3 +81,4 @@ describe('FieldSplitLayout — the events pane is reachable by keyboard', () => 
     });
   }
 });
+

@@ -126,16 +126,16 @@ export default defineConfig({
           lines: 97,
         },
         'src/components/**': {
-          statements: 82,
-          branches: 73,
-          functions: 78,
+          statements: 83,
+          branches: 75,
+          functions: 80,
           lines: 85,
         },
         'src/hooks/**': {
           statements: 92,
           branches: 82,
           functions: 95,
-          lines: 94,
+          lines: 96,
         },
         'src/monaco/**': {
           statements: 91,
