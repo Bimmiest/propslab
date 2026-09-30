@@ -100,6 +100,13 @@ All notable changes to Propslab are documented here, newest first. Entries say w
 
 ### Fixed
 
+- **A run stops at 25,000 events** ([#479](https://github.com/Bimmiest/propslab/issues/479)), with a warning naming the first line not processed, so a `LINE_BREAKER` that breaks on every character can no longer turn a megabyte into a million events. Library callers can set their own bounds through `PipelineOptions.limits`.
+- **A line whose newline falls exactly at the input cap is kept**, and a `DEST_KEY = _meta` FORMAT containing `_queue::…` no longer turns the event's queue into a list ([#478](https://github.com/Bimmiest/propslab/issues/478)).
+- **The time-zone formatter cache is bounded** to 64 names, and the ReDoS heuristic flags patterns over 5,000 characters instead of scanning them ([#480](https://github.com/Bimmiest/propslab/issues/480)).
+- **Per-event search time keeps an index-time sourcetype rewrite** ([#466](https://github.com/Bimmiest/propslab/issues/466)). An event rewritten by `DEST_KEY = MetaData:Sourcetype` or copied by `CLONE_SOURCETYPE` gets the new sourcetype's search-time settings; the `[source::]` stanza's `sourcetype =` is no longer applied a second time.
+- **`TZ = CET` follows summer time** ([#470](https://github.com/Bimmiest/propslab/issues/470)), as do `EET`, `WET` and `MET`, instead of a fixed offset all year; a `CET` read from the event with `%Z` still means standard time.
+- **A time-only `TIME_FORMAT` rolls over midnight** ([#471](https://github.com/Bimmiest/propslab/issues/471)): `23:59:59` then `00:00:01` puts the second event on the next day.
+- **A loading pipeline worker is no longer terminated when every request waiting on it was superseded** ([#523](https://github.com/Bimmiest/propslab/issues/523)), which on a slow connection rebuilt a healthy worker per edit.
 - **Dev-dependency advisories are resolved, and `main`'s workflow lint is green again.** `brace-expansion` moves to 5.0.12 and `qs` (under Stryker) to 6.16.0, clearing three high and three moderate `npm audit` findings; an unused loop variable in the post-deploy header check no longer fails `actionlint`.
 - **The entry-graph and bundle-size gates parse `dist/index.html` instead of matching tags with a regex.** The regex missed upper-case tags, single-quoted or unquoted attributes and a `>` inside an attribute value, so a startup reference written that way escaped both checks (CodeQL `js/bad-tag-filter`).
 - **Directive completion pops up again while a key is being typed.** A key with no `=` yet was coloured as a string, and the editor's quick suggestions are off inside strings, so completion appeared only on Ctrl+Space (a regression from [#501](https://github.com/Bimmiest/propslab/issues/501)).
