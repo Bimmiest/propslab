@@ -15,12 +15,6 @@ import type { RunContext, DiagnosticSink } from '../runContext';
 
 const XML_EXTRACTIONS = new Set(['xml', 'xmlkv', 'xmlkv-winevt']);
 
-/** How many capturing groups a pattern declares, or 0 if it will not compile. */
-function countCaptureGroups(pattern: string | undefined): number {
-  if (pattern === undefined) return 0;
-  return safeRegex(pattern)?.captureCount ?? 0;
-}
-
 /**
  * The raw, untrimmed value: the break patterns read through this are regexes,
  * where trailing whitespace is part of the pattern.
@@ -160,7 +154,24 @@ function resolveLineBreaker(
   diagnostics?: DiagnosticSink,
 ): string {
   if (declared === undefined) return DEFAULT_LINE_BREAKER;
-  if (countCaptureGroups(declared) > 0) return declared;
+  const compiled = safeRegex(declared);
+  // A pattern that does not compile is reported as that, with the engine's own
+  // error: telling the author of `([\r\n]+` (an unclosed group) to add
+  // parentheses would send them the wrong way. The group check only makes
+  // sense for a pattern that compiled.
+  if (compiled === null) {
+    diagnostics?.push({
+      level: 'warning',
+      message:
+        `LINE_BREAKER pattern (${declared}) does not compile (${validateRegex(declared) ?? 'invalid regex'}). ` +
+        'Events were broken on newlines instead.',
+      file: 'props.conf',
+      ...atDirective(effectiveDirective(directives, 'LINE_BREAKER')),
+      directiveKey: 'LINE_BREAKER',
+    });
+    return DEFAULT_LINE_BREAKER;
+  }
+  if (compiled.captureCount > 0) return declared;
   diagnostics?.push({
     level: 'warning',
     message:
