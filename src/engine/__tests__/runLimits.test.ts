@@ -60,9 +60,14 @@ describe('maxRawChars (#478)', () => {
     const { result, diagnostics } = run('ab\ncd\nef', UNMERGED, { maxRawChars: 5 });
     expect(result.originalRaw).toBe('ab\ncd');
     expect(result.events.map((e) => e._raw)).toEqual(['ab', 'cd']);
-    expect(truncationWarnings(diagnostics).map((d) => d.message)).toEqual([
-      'Input truncated to 5 characters for performance (original: 8). Truncation is aligned to the last ' +
-        'complete line, so the final partial event is dropped rather than processed half-formed.',
+    expect(truncationWarnings(diagnostics)).toEqual([
+      {
+        level: 'warning',
+        file: 'props.conf',
+        message:
+          'Input truncated to 5 characters for performance (original: 8). Truncation is aligned to the last ' +
+          'complete line, so the final partial event is dropped rather than processed half-formed.',
+      },
     ]);
   });
 
@@ -70,6 +75,11 @@ describe('maxRawChars (#478)', () => {
     const { result } = run('ab\ncde\nf', UNMERGED, { maxRawChars: 5 });
     expect(result.originalRaw).toBe('ab');
     expect(result.events.map((e) => e._raw)).toEqual(['ab']);
+  });
+
+  it('does not cut back to a line break at the very start, which would leave nothing', () => {
+    const { result } = run('\nabcdefgh', UNMERGED, { maxRawChars: 5 });
+    expect(result.originalRaw).toBe('\nabcd');
   });
 
   it('keeps the cut text when there is no line break to align to', () => {

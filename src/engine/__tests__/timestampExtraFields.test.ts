@@ -252,9 +252,11 @@ describe('DETERMINE_TIMESTAMP_DATE_WITH_SYSTEM_TIME (#273)', () => {
   });
 
   it('says in the trace where the date came from', () => {
-    const [, second] = run(RAWS, [TIME_ONLY]);
-    const step = second?.processingTrace.find((s) => s.processor === 'timestampExtractor');
-    expect(step?.description).toContain('previous timestamp');
+    const [, , third] = run(RAWS, [TIME_ONLY]);
+    const step = third?.processingTrace.find((s) => s.processor === 'timestampExtractor');
+    expect(step?.description).toBe(
+      'Extracted timestamp: 2026-08-04T13:00:00.000Z (no date in the timestamp: date carried from the previous timestamp)',
+    );
   });
 
   it('leaves a timestamp that has a date alone', () => {
