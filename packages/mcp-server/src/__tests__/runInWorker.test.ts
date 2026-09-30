@@ -56,8 +56,8 @@ interface SleepResult {
 // below covers the stripping itself.
 const heapFlagsInEffect =
   stripHeapSizeFlags(process.execArgv).length !== process.execArgv.length ||
-  stripHeapSizeFlagsFromNodeOptions(process.env.NODE_OPTIONS ?? '') !==
-    (process.env.NODE_OPTIONS ?? '');
+  stripHeapSizeFlagsFromNodeOptions(process.env['NODE_OPTIONS'] ?? '') !==
+    (process.env['NODE_OPTIONS'] ?? '');
 
 describe.skipIf(heapFlagsInEffect)('worker heap limit', () => {
   it('maps ERR_WORKER_OUT_OF_MEMORY to WorkerOutOfMemoryError', async () => {
@@ -580,7 +580,7 @@ describe.skipIf(process.platform !== 'linux')('launcher', () => {
   const startLauncher = (extraEnv: Record<string, string> = {}, nodeArgs: string[] = []) =>
     new Promise<{ launcher: ReturnType<typeof spawn>; serverPid: number }>((resolve, reject) => {
       const env = { ...process.env, ...extraEnv };
-      delete env.PROPSLAB_MCP_NO_REEXEC;
+      delete env['PROPSLAB_MCP_NO_REEXEC'];
       const launcher = spawn(process.execPath, [...nodeArgs, LAUNCHER], {
         stdio: ['pipe', 'pipe', 'pipe'],
         env,
@@ -748,7 +748,7 @@ describe.skipIf(process.platform !== 'linux')('launcher', () => {
   /** Runs the launcher as given until it is listening; returns its stderr so far. */
   const listening = async (args: string[], cwd: string) => {
     const env = { ...process.env };
-    delete env.PROPSLAB_MCP_NO_REEXEC;
+    delete env['PROPSLAB_MCP_NO_REEXEC'];
     const server = spawn(process.execPath, args, { stdio: ['pipe', 'pipe', 'pipe'], env, cwd });
     let stderr = '';
     server.stderr.on('data', (chunk: Buffer) => (stderr += chunk.toString()));

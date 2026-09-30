@@ -54,14 +54,15 @@ export function buildFieldTree(
     return node;
   }
 
-  for (const name of Array.from(fieldColorMap.keys()).sort()) {
+  // Sorted by name, which for distinct strings is the default (UTF-16) order.
+  for (const [name, color] of [...fieldColorMap].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
     const parts = name.split('.');
     const existing = nodeMap.get(name);
     if (existing) {
       // This path was already synthesized as a container but is ALSO a real
       // extracted field (e.g. both `a.b` and `a.b.c` were extracted). Promote it
       // to a real node: adopt its true colour/processor and keep its children.
-      existing.color = fieldColorMap.get(name)!;
+      existing.color = color;
       existing.processor = fieldProcessorMap.get(name) ?? existing.processor;
       synthesized.delete(name);
       continue;
@@ -69,7 +70,7 @@ export function buildFieldTree(
     const node: FieldNode = {
       name,
       leafName: parts.at(-1) ?? name,
-      color: fieldColorMap.get(name)!,
+      color,
       processor: fieldProcessorMap.get(name) ?? null,
       isContainer: containerFields.has(name),
       depth: parts.length - 1,

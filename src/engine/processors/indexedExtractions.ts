@@ -175,8 +175,7 @@ function decodeDelimiterChar(raw: string): { char?: string; whitespace?: true; n
     case 'ws':
       return { whitespace: true };
   }
-  const hex = /^\\x([0-9a-f]{2})$/i.exec(v);
-  if (hex) return { char: String.fromCharCode(parseInt(hex[1]!, 16)) };
+  if (/^\\x[0-9a-f]{2}$/i.test(v)) return { char: String.fromCharCode(parseInt(v.slice(2), 16)) };
   const unquoted = v.length >= 2 && v.startsWith('"') && v.endsWith('"') ? v.slice(1, -1) : v;
   return unquoted.length > 0 ? { char: unquoted.charAt(0) } : null;
 }
@@ -371,7 +370,10 @@ function extractDelimited(
   let working = events;
   if (opts.preambleRegex) {
     let skip = 0;
-    while (skip < working.length && opts.preambleRegex.test(working[skip]!._raw)) skip++;
+    for (const e of working) {
+      if (!opts.preambleRegex.test(e._raw)) break;
+      skip++;
+    }
     working = working.slice(skip);
   }
 
@@ -569,7 +571,7 @@ function parseDelimitedLine(line: string, opts: LineSyntax): string[] {
     opts.whitespaceDelimiter ? ch === ' ' || ch === '\t' : ch === opts.delimiter;
 
   for (let i = 0; i < line.length; i++) {
-    const ch = line[i]!;
+    const ch = line.charAt(i);
 
     if (opts.quote !== null && ch === opts.quote) {
       if (inQuotes && line[i + 1] === opts.quote) {

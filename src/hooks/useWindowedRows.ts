@@ -137,7 +137,7 @@ export function useWindowedRows(
 
   const onFocus = useCallback((e: FocusEvent<HTMLElement>) => {
     const row = e.target.closest<HTMLElement>('[data-window-index]');
-    const index = row ? Number(row.dataset.windowIndex) : NaN;
+    const index = row ? Number(row.dataset['windowIndex']) : NaN;
     setPinned(Number.isInteger(index) ? index : null);
   }, []);
 

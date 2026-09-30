@@ -62,7 +62,7 @@ export function FieldTreeList({
 
   const handleFocus = (e: FocusEvent<HTMLElement>) => {
     onFocus(e);
-    const name = e.target instanceof HTMLElement ? e.target.dataset.fieldRow : undefined;
+    const name = e.target instanceof HTMLElement ? e.target.dataset['fieldRow'] : undefined;
     if (name !== undefined) setActiveName(name);
   };
 
@@ -70,8 +70,8 @@ export function FieldTreeList({
     // Only from a row itself: keys in the context menu, portalled but still
     // inside this React subtree, are the menu's.
     const { target: source } = e;
-    if (!(source instanceof HTMLElement) || source.dataset.fieldRow === undefined) return;
-    const current = rows.findIndex((row) => row.node.name === source.dataset.fieldRow);
+    if (!(source instanceof HTMLElement) || source.dataset['fieldRow'] === undefined) return;
+    const current = rows.findIndex((row) => row.node.name === source.dataset['fieldRow']);
     let next = -1;
     if (e.key === 'ArrowDown') next = Math.min(current + 1, rows.length - 1);
     else if (e.key === 'ArrowUp') next = Math.max(current - 1, 0);

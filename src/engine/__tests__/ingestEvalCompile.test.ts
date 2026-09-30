@@ -44,9 +44,9 @@ describe('INGEST_EVAL compiles once per run (#486)', () => {
     const out = applyIngestEval(['x', 'yy', 'zzz', 'w'].map(event), dirs, runCtx());
     expect(parses.count).toBe(3);
     // The compiled tree is evaluated against each event.
-    expect(out.map((e) => e.fields.a)).toEqual(['1', '2', '3', '1']);
-    expect(out.map((e) => e.fields.b)).toEqual(['kx', 'kyy', 'kzzz', 'kw']);
-    expect(out.map((e) => e.fields.c)).toEqual(['X', 'YY', 'ZZZ', 'W']);
+    expect(out.map((e) => e.fields['a'])).toEqual(['1', '2', '3', '1']);
+    expect(out.map((e) => e.fields['b'])).toEqual(['kx', 'kyy', 'kzzz', 'kw']);
+    expect(out.map((e) => e.fields['c'])).toEqual(['X', 'YY', 'ZZZ', 'W']);
   });
 
   it('keeps parsing once across separate calls in one run, one event at a time', () => {
@@ -74,8 +74,8 @@ describe('INGEST_EVAL compiles once per run (#486)', () => {
     const ctx = runCtx();
     const out = applyIngestEval([event('x'), event('yy')], [ingest('a=1+, b=len(_raw)')], ctx);
     expect(parses.count).toBe(2);
-    expect(out.map((e) => e.fields.b)).toEqual(['1', '2']);
-    expect(out.every((e) => e.fields.a === undefined)).toBe(true);
+    expect(out.map((e) => e.fields['b'])).toEqual(['1', '2']);
+    expect(out.every((e) => e.fields['a'] === undefined)).toBe(true);
     // Reported once, not once per event.
     expect(ctx.diagnostics.list.filter((d) => d.level === 'error')).toHaveLength(1);
   });
@@ -87,7 +87,7 @@ describe('INGEST_EVAL compiles once per run (#486)', () => {
     for (const perEventPipeline of [false, true]) {
       parses.count = 0;
       const { result } = runPipeline('one\ntwo\nthree\nfour\nfive', meta, props, transforms, { perEventPipeline });
-      expect(result.events.map((e) => e.fields.n)).toEqual(['3', '3', '5', '4', '4']);
+      expect(result.events.map((e) => e.fields['n'])).toEqual(['3', '3', '5', '4', '4']);
       // Two assignments; the count is not multiplied by the five events.
       expect(parses.count).toBe(2);
     }

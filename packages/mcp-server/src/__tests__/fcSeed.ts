@@ -7,7 +7,7 @@
 let seedLogged = false;
 
 export function fcSeed(defaultSeed: number): number {
-  const envSeed = process.env.FC_SEED;
+  const envSeed = process.env['FC_SEED'];
   if (envSeed !== undefined) {
     const parsed = Number(envSeed);
     if (!isNaN(parsed)) {

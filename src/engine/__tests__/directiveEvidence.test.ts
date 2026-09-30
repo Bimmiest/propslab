@@ -109,7 +109,7 @@ function readRecordings(): Recording[] {
       process: { env: Record<string, string | undefined>; getBuiltinModule: (id: 'node:fs') => Fs };
     }
   ).process;
-  const dir = proc.env.PROPSLAB_EVIDENCE_DIR;
+  const dir = proc.env['PROPSLAB_EVIDENCE_DIR'];
   const fs = proc.getBuiltinModule('node:fs');
   if (!dir || !fs.existsSync(dir)) return [];
   return fs
@@ -235,7 +235,7 @@ describe('simulated directive evidence (#505)', () => {
       `  - Total: ${simulated.length}`,
     ].join('\n');
 
-    if (import.meta.env.SHOW_EVIDENCE) {
+    if (import.meta.env['SHOW_EVIDENCE']) {
       // eslint-disable-next-line no-console
       console.info(summary);
     }

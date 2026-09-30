@@ -86,36 +86,36 @@ describe('ADD_EXTRA_TIME_FIELDS (#273)', () => {
     // 10:05 at -05:00 is 15:05 UTC; date_hour is the 10 the event says.
     const [e] = run(['2024-01-15T10:05:03-0500 x'], [dir('TIME_FORMAT', '%Y-%m-%dT%H:%M:%S%z')]);
     expect(e?._time?.toISOString()).toBe('2024-01-15T15:05:03.000Z');
-    expect(e?.fields.date_hour).toBe('10');
-    expect(e?.fields.date_zone).toBe('-300');
+    expect(e?.fields['date_hour']).toBe('10');
+    expect(e?.fields['date_zone']).toBe('-300');
   });
 
   it('takes the zone from TZ when the stamp has none', () => {
     const [winter] = run(['2024-01-15 10:00:00 x'], [FORMAT, dir('TZ', 'America/New_York')]);
     const [summer] = run(['2024-07-15 10:00:00 x'], [FORMAT, dir('TZ', 'America/New_York')]);
-    expect(winter?.fields.date_zone).toBe('-300');
-    expect(summer?.fields.date_zone).toBe('-240');
-    expect(summer?.fields.date_hour).toBe('10');
+    expect(winter?.fields['date_zone']).toBe('-300');
+    expect(summer?.fields['date_zone']).toBe('-240');
+    expect(summer?.fields['date_hour']).toBe('10');
   });
 
   it('measures timestartpos / timeendpos in _raw, past a TIME_PREFIX', () => {
     const raw = 'id=5 ts=2024-01-15 10:00:00 rest';
     const [e] = run([raw], [FORMAT, dir('TIME_PREFIX', 'ts=')]);
-    expect(e?.fields.timestartpos).toBe('8');
-    expect(e?.fields.timeendpos).toBe('27');
+    expect(e?.fields['timestartpos']).toBe('8');
+    expect(e?.fields['timeendpos']).toBe('27');
     expect(raw.slice(8, 27)).toBe('2024-01-15 10:00:00');
   });
 
   it('measures the positions of an auto-recognised timestamp too', () => {
     const raw = 'host a: 2024-01-15 10:00:00 msg';
     const [e] = run([raw], []);
-    expect(raw.slice(Number(e?.fields.timestartpos), Number(e?.fields.timeendpos))).toBe('2024-01-15 10:00:00');
+    expect(raw.slice(Number(e?.fields['timestartpos']), Number(e?.fields['timeendpos']))).toBe('2024-01-15 10:00:00');
   });
 
   it('gives an epoch timestamp a zone of 0', () => {
     const [e] = run(['1705312800 msg'], []);
-    expect(e?.fields.date_zone).toBe('0');
-    expect(e?.fields.date_hour).toBe('10');
+    expect(e?.fields['date_zone']).toBe('0');
+    expect(e?.fields['date_hour']).toBe('10');
   });
 
   it('marks an event whose _time was not read from its text with timestamp=none, and no date_*', () => {
@@ -160,7 +160,7 @@ describe('ADD_EXTRA_TIME_FIELDS (#273)', () => {
       '',
       { perEventPipeline: false, now: NOW.getTime() },
     );
-    expect(result.events[0]?.fields.date_month).toBe('january');
+    expect(result.events[0]?.fields['date_month']).toBe('january');
   });
 
   it('is read from the props.conf stanza by the pipeline', () => {
@@ -172,9 +172,9 @@ describe('ADD_EXTRA_TIME_FIELDS (#273)', () => {
         '',
         { perEventPipeline: false, now: NOW.getTime() },
       ).result.events[0]!;
-    expect(at('all').fields.date_month).toBe('january');
-    expect(at('none').fields.date_month).toBeUndefined();
-    expect(at('none').fields.timestartpos).toBeUndefined();
+    expect(at('all').fields['date_month']).toBe('january');
+    expect(at('none').fields['date_month']).toBeUndefined();
+    expect(at('none').fields['timestartpos']).toBeUndefined();
   });
 });
 
@@ -262,7 +262,7 @@ describe('DETERMINE_TIMESTAMP_DATE_WITH_SYSTEM_TIME (#273)', () => {
       new Date('2026-08-04T03:00:00Z'),
     );
     expect(e?._time?.toISOString()).toBe('2026-08-04T02:00:00.000Z');
-    expect(e?.fields.date_mday).toBe('3');
+    expect(e?.fields['date_mday']).toBe('3');
   });
 
   it('says in the trace where the date came from', () => {

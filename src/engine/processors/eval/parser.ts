@@ -215,7 +215,7 @@ class Parser {
 
   private parseMulDiv(): Node {
     let left = this.parseUnary();
-    while (this.peek()?.type === 'op' && ['*', '/', '%'].includes(this.peek()!.value)) {
+    for (let tok = this.peek(); tok?.type === 'op' && ['*', '/', '%'].includes(tok.value); tok = this.peek()) {
       const op = this.consume().value;
       const right = this.parseUnary();
       left = this.built({ kind: 'arith', op, left, right }, left, right);

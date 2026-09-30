@@ -289,10 +289,12 @@ function mvzip(args: EvalValue[]): EvalValue {
   const delim = args[2] !== undefined ? toStr(args[2]) : ',';
   // Splunk mvzip behaves like a zip: it stops at the shorter field rather
   // than padding out to the longer one.
-  const len = Math.min(a.length, b.length);
   const result: string[] = [];
-  for (let i = 0; i < len; i++) {
-    result.push(a[i]! + delim + b[i]!);
+  const rest = b.values();
+  for (const left of a) {
+    const right = rest.next();
+    if (right.done) break;
+    result.push(left + delim + right.value);
   }
   return result;
 }

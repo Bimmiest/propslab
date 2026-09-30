@@ -46,10 +46,11 @@ export function computeFieldStats(events: readonly WithFields[]): FieldStats {
   const containers = new Set<string>();
   for (const { fields } of events) {
     for (const key in fields) {
-      if (!Object.hasOwn(fields, key)) continue;
+      const value = fields[key];
+      if (value === undefined || !Object.hasOwn(fields, key)) continue;
       counts.set(key, (counts.get(key) ?? 0) + 1);
       // A field is a container once; later values need no JSON.parse.
-      if (!containers.has(key) && isJsonContainer(fields[key]!)) containers.add(key);
+      if (!containers.has(key) && isJsonContainer(value)) containers.add(key);
     }
   }
   return { eventCount: events.length, names: [...counts.keys()], counts, containers: [...containers] };

@@ -157,7 +157,7 @@ describe('docs/engine.md examples', () => {
     expect(output?.diagnostics.filter((d) => d.level === 'error')).toEqual([]);
     const fields = output?.result.events[0]?.fields;
     // default/ supplies one EXTRACT and local/ another; neither replaces the other.
-    expect(fields?.name).toBe('alice');
-    expect(fields?.num).toBe('42');
+    expect(fields?.['name']).toBe('alice');
+    expect(fields?.['num']).toBe('42');
   });
 });

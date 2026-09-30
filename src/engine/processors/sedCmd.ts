@@ -103,11 +103,12 @@ function sedWarning(
 function unescapeTranslateSet(set: string, delimiter: string): string {
   let out = '';
   for (let i = 0; i < set.length; i++) {
-    if (set[i] !== '\\' || i === set.length - 1) {
-      out += set[i]!;
+    const ch = set.charAt(i);
+    if (ch !== '\\' || i === set.length - 1) {
+      out += ch;
       continue;
     }
-    const next = set[++i]!;
+    const next = set.charAt(++i);
     out +=
       next === 'n' ? '\n' : next === 't' ? '\t' : next === 'r' ? '\r' : next === delimiter ? delimiter : next;
   }
@@ -176,22 +177,23 @@ function splitSedFields(trimmed: string, delimiter: string): { parts: string[]; 
   let escaped = false;
 
   for (let i = 2; i < trimmed.length; i++) {
+    const ch = trimmed.charAt(i);
     if (escaped) {
-      current += trimmed[i]!;
+      current += ch;
       escaped = false;
       continue;
     }
-    if (trimmed[i] === '\\') {
+    if (ch === '\\') {
       escaped = true;
       current += '\\';
       continue;
     }
-    if (trimmed[i] === delimiter) {
+    if (ch === delimiter) {
       parts.push(current);
       current = '';
       continue;
     }
-    current += trimmed[i]!;
+    current += ch;
   }
   const closed = parts.length;
   if (current) parts.push(current);

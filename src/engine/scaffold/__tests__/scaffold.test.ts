@@ -267,6 +267,6 @@ describe('scaffoldConfig end to end — TRUNCATE sized to the whole object', () 
     const props = renderStanza(sourcetype, suggestions.filter((s) => s.enabledByDefault));
     const { result } = runPipeline(raw, { ...META, sourcetype }, props, '');
     expect(result.events.map((e) => e._raw)).toEqual([raw]);
-    expect(result.events[0]?.fields.meta).toBeUndefined();
+    expect(result.events[0]?.fields['meta']).toBeUndefined();
   });
 });

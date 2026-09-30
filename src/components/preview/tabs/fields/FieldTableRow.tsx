@@ -26,7 +26,7 @@ export function FieldTableRow({
       data-window-row=""
       data-window-index={rowIndex}
       className="border-b border-[var(--color-border-subtle)] hover:bg-[var(--color-bg-secondary)] transition-colors">
-      <td className="py-1.5 px-3 font-mono font-medium" style={{ width: columnWidths.name }}>
+      <td className="py-1.5 px-3 font-mono font-medium" style={{ width: columnWidths['name'] }}>
         <div className="flex items-center gap-1.5">
           <FieldNameCell
             name={field.name}
@@ -48,7 +48,7 @@ export function FieldTableRow({
           )}
         </div>
       </td>
-      <td className="py-1.5 px-3" style={{ width: columnWidths.aliases }}>
+      <td className="py-1.5 px-3" style={{ width: columnWidths['aliases'] }}>
         {field.aliases.length > 0 && (
           <div className="flex flex-wrap gap-1">
             {field.aliases.map((alias) => (
@@ -63,13 +63,13 @@ export function FieldTableRow({
           </div>
         )}
       </td>
-      <td className="py-1.5 px-3 text-[var(--color-text-secondary)]" style={{ width: columnWidths.count }}>
+      <td className="py-1.5 px-3 text-[var(--color-text-secondary)]" style={{ width: columnWidths['count'] }}>
         {field.count}/{eventCount}
       </td>
-      <td className="py-1.5 px-3 text-[var(--color-text-secondary)]" style={{ width: columnWidths.distinct }}>
+      <td className="py-1.5 px-3 text-[var(--color-text-secondary)]" style={{ width: columnWidths['distinct'] }}>
         {field.values.size}
       </td>
-      <td className="py-1.5 px-3" style={{ width: columnWidths.source }}>
+      <td className="py-1.5 px-3" style={{ width: columnWidths['source'] }}>
         <div className="flex flex-wrap gap-1">
           {Array.from(field.phases).map((phase) => (
             <span
@@ -87,7 +87,7 @@ export function FieldTableRow({
           ))}
         </div>
       </td>
-      <td className="py-1.5 px-3 font-mono text-[var(--color-text-secondary)] truncate" style={{ width: columnWidths.values, maxWidth: columnWidths.values }}>
+      <td className="py-1.5 px-3 font-mono text-[var(--color-text-secondary)] truncate" style={{ width: columnWidths['values'], maxWidth: columnWidths['values'] }}>
         {Array.from(field.values).slice(0, 3).join(', ')}
       </td>
     </tr>

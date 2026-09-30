@@ -305,7 +305,7 @@ describe('applyIndexedExtractions — header is the first content line (#14)', (
       runCtx(),
     );
     expect(events).toHaveLength(1);
-    expect(events[0]!.fields.host).toBe('myhost');
+    expect(events[0]!.fields['host']).toBe('myhost');
   });
 
   it('skips a leading comment line', () => {
@@ -315,7 +315,7 @@ describe('applyIndexedExtractions — header is the first content line (#14)', (
       runCtx(),
     );
     expect(events).toHaveLength(1);
-    expect(events[0]!.fields.host).toBe('myhost');
+    expect(events[0]!.fields['host']).toBe('myhost');
     expect(events[0]!.fields['#_exported_2024_01_15']).toBeUndefined();
   });
 
@@ -332,9 +332,9 @@ describe('applyIndexedExtractions — header names are sanitized (#68)', () => {
       [dir('w3c')],
       runCtx(),
     );
-    expect(events[0]!.fields.c_ip).toBe('10.0.0.1');
-    expect(events[0]!.fields.cs_uri_stem).toBe('/index.html');
-    expect(events[0]!.fields.sc_status).toBe('200');
+    expect(events[0]!.fields['c_ip']).toBe('10.0.0.1');
+    expect(events[0]!.fields['cs_uri_stem']).toBe('/index.html');
+    expect(events[0]!.fields['sc_status']).toBe('200');
     expect(events[0]!.fields['cs-uri-stem']).toBeUndefined();
   });
 
@@ -344,8 +344,8 @@ describe('applyIndexedExtractions — header names are sanitized (#68)', () => {
       [dir('csv')],
       runCtx(),
     );
-    expect(events[0]!.fields.req_id).toBe('abc');
-    expect(events[0]!.fields.user_name).toBe('alice');
+    expect(events[0]!.fields['req_id']).toBe('abc');
+    expect(events[0]!.fields['user_name']).toBe('alice');
   });
 
   it('drops a W3C directive line that is not the first event', () => {
@@ -355,7 +355,7 @@ describe('applyIndexedExtractions — header names are sanitized (#68)', () => {
       runCtx(),
     );
     expect(events).toHaveLength(1);
-    expect(events[0]!.fields.cs_method).toBe('GET');
+    expect(events[0]!.fields['cs_method']).toBe('GET');
   });
 });
 

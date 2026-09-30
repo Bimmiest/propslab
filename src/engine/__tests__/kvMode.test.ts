@@ -285,12 +285,12 @@ describe('applyKvMode — multi (multikv)', () => {
 describe('applyKvMode — a repeated key keeps its first value (#169, was #64)', () => {
   it('keeps the first of a repeated bare key', () => {
     const out = applyKvMode([event('user=alice user=bob')], [dir('auto')], runCtx())[0]!;
-    expect(out.fields.user).toBe('alice');
+    expect(out.fields['user']).toBe('alice');
   });
 
   it('keeps the first of a repeated quoted key', () => {
     const out = applyKvMode([event('msg="first one" msg="second one"')], [dir('auto')], runCtx())[0]!;
-    expect(out.fields.msg).toBe('first one');
+    expect(out.fields['msg']).toBe('first one');
   });
 
   it('reads "first" positionally, not by which quoting style is scanned first', () => {
@@ -298,27 +298,27 @@ describe('applyKvMode — a repeated key keeps its first value (#169, was #64)',
     // of the bare scan; without ordering by position the later quoted pair
     // would beat the earlier bare one.
     const out = applyKvMode([event('user=alice user="bob smith"')], [dir('auto')], runCtx())[0]!;
-    expect(out.fields.user).toBe('alice');
+    expect(out.fields['user']).toBe('alice');
   });
 
   it('keeps a single occurrence scalar', () => {
     const out = applyKvMode([event('user=alice')], [dir('auto')], runCtx())[0]!;
-    expect(out.fields.user).toBe('alice');
+    expect(out.fields['user']).toBe('alice');
   });
 
   it('does not append to a field an earlier processor already extracted', () => {
     const ev = { ...event('user=bob'), fields: { user: 'from-indexed-extraction' } };
     const out = applyKvMode([ev], [dir('auto')], runCtx())[0]!;
-    expect(out.fields.user).toBe('from-indexed-extraction');
+    expect(out.fields['user']).toBe('from-indexed-extraction');
   });
 });
 
 describe('applyKvMode — a value may contain = (#170)', () => {
   it('splits on the first = and keeps the rest of the token', () => {
     const out = applyKvMode([event('filter=a=b query=x=y=z plain=ok')], [dir('auto')], runCtx())[0]!;
-    expect(out.fields.filter).toBe('a=b');
-    expect(out.fields.query).toBe('x=y=z');
-    expect(out.fields.plain).toBe('ok');
+    expect(out.fields['filter']).toBe('a=b');
+    expect(out.fields['query']).toBe('x=y=z');
+    expect(out.fields['plain']).toBe('ok');
   });
 
   it('does not invent a field from the text after an inner =', () => {
@@ -328,8 +328,8 @@ describe('applyKvMode — a value may contain = (#170)', () => {
 
   it('still handles base64, which routinely ends in padding', () => {
     const out = applyKvMode([event('token=aGVsbG8= next=1')], [dir('auto')], runCtx())[0]!;
-    expect(out.fields.token).toBe('aGVsbG8=');
-    expect(out.fields.next).toBe('1');
+    expect(out.fields['token']).toBe('aGVsbG8=');
+    expect(out.fields['next']).toBe('1');
   });
 });
 
@@ -366,7 +366,7 @@ describe('applyKvMode — extraction never mutates the input event (#63)', () =>
   it('records an append so the result is not discarded', () => {
     const ev = { ...event(TABLE), fields: { NAME: ['zero'] } };
     const out = applyKvMode([ev], [dir('multi')], runCtx())[0]!;
-    expect(out.fields.NAME).toEqual(['zero', 'a', 'b']);
+    expect(out.fields['NAME']).toEqual(['zero', 'a', 'b']);
   });
 });
 

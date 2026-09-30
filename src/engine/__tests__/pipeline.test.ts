@@ -58,7 +58,7 @@ describe('runPipeline — DEST_KEY validation (SEM-11)', () => {
     expect(about).toHaveLength(1);
     expect(about[0]!.message).toMatch(/no routing effect/);
     expect(about[0]!.message).not.toMatch(/field name/);
-    expect(result.events[0]!.fields.made_up_key).toBeUndefined();
+    expect(result.events[0]!.fields['made_up_key']).toBeUndefined();
   });
 
   it('warns that _TCP_ROUTING is valid but not simulated', () => {
@@ -126,14 +126,14 @@ describe('runPipeline — INGEST_EVAL is scoped to referencing stanzas (SEM-2)',
     const props = '[st]\n'; // no TRANSFORMS reference to the eval stanza
     const transforms = '[addtag]\nINGEST_EVAL = tag="prod"';
     const { result } = runPipeline('a log line', PLAIN_META, props, transforms);
-    expect(result.events[0]!.fields.tag).toBeUndefined();
+    expect(result.events[0]!.fields['tag']).toBeUndefined();
   });
 
   it('applies an INGEST_EVAL stanza when a TRANSFORMS-<class> references it', () => {
     const props = '[st]\nTRANSFORMS-t = addtag';
     const transforms = '[addtag]\nINGEST_EVAL = tag="prod"';
     const { result } = runPipeline('a log line', PLAIN_META, props, transforms);
-    expect(result.events[0]!.fields.tag).toBe('prod');
+    expect(result.events[0]!.fields['tag']).toBe('prod');
   });
 });
 
@@ -212,13 +212,13 @@ describe('runPipeline — an input-time sourcetype assignment is not an index-ti
   it('batch mode does not warn about a metadata rewrite', () => {
     const { result, diagnostics } = runPipeline(raw, meta, props, '', { perEventPipeline: false });
     expect(rewriteWarning(diagnostics)).toBe(false);
-    expect(result.events.map((e) => e.fields.k)).toEqual(['one', 'two']);
+    expect(result.events.map((e) => e.fields['k'])).toEqual(['one', 'two']);
   });
 
   it('per-event mode adds no StanzaRematch step and keeps the assigned sourcetype\'s search-time config', () => {
     const { result } = runPipeline(raw, meta, props, '', { perEventPipeline: true });
     expect(result.processingSteps.some((s) => s.processor === 'StanzaRematch')).toBe(false);
-    expect(result.events.map((e) => e.fields.k)).toEqual(['one', 'two']);
+    expect(result.events.map((e) => e.fields['k'])).toEqual(['one', 'two']);
   });
 
   it('still reports a genuine DEST_KEY = MetaData:Sourcetype rewrite on top of the assignment', () => {
@@ -326,8 +326,8 @@ describe('runPipeline — per-event search time keeps an index-time sourcetype (
     const { result } = runPipeline('hello', meta, props('TRANSFORMS-a = setst'), transforms, { perEventPipeline: true });
     const [event] = result.events;
     expect(event?.metadata.sourcetype).toBe('other');
-    expect(event?.fields.foo).toBe('hello');
-    expect(event?.fields.appfield).toBeUndefined();
+    expect(event?.fields['foo']).toBe('hello');
+    expect(event?.fields['appfield']).toBeUndefined();
     expect(event && rematch(event)).toMatch(/^Metadata rewritten at index-time \(sourcetype → "other"\); stanzas re-matched for search-time using 2 directives$/);
   });
 

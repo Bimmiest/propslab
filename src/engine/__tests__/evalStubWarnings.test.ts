@@ -41,6 +41,6 @@ describe('eval — every unsimulated builtin warns (#127)', () => {
 
   it('sigfig still returns a usable value alongside the warning', () => {
     const r = applyEvalExpressions([ev()], [evalDir('sigfig(n)')], runCtx())[0]!;
-    expect(r.fields.out).toBe('3.14159');
+    expect(r.fields['out']).toBe('3.14159');
   });
 });

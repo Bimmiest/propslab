@@ -32,8 +32,8 @@ const recorded = vi.hoisted(() => ({ keys: new Set<string>() }));
 vi.mock('../engine/pipeline', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../engine/pipeline')>();
   const { parseConf } = await import('../engine/parser/confParser');
-  const dir = (globalThis as unknown as { process: { env: Record<string, string | undefined> } }).process.env
-    .PROPSLAB_EVIDENCE_DIR;
+  const { env } = (globalThis as unknown as { process: { env: Record<string, string | undefined> } }).process;
+  const dir = env['PROPSLAB_EVIDENCE_DIR'];
   if (!dir) return actual;
 
   const runPipeline: typeof actual.runPipeline = (raw, metadata, props, transforms, options) => {
@@ -62,7 +62,7 @@ afterAll(() => {
       process: { env: Record<string, string | undefined>; getBuiltinModule: (id: 'node:fs') => Fs };
     }
   ).process;
-  const dir = proc.env.PROPSLAB_EVIDENCE_DIR;
+  const dir = proc.env['PROPSLAB_EVIDENCE_DIR'];
   const testPath = expect.getState().testPath;
   if (!dir || !testPath || recorded.keys.size === 0) return;
 

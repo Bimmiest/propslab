@@ -23,13 +23,13 @@ function ingestDir(value: string): ConfDirective[] {
 describe('applyIngestEval', () => {
   it('assigns a literal value to a field', () => {
     const e = applyIngestEval([event('x')], ingestDir('tag="prod"'), runCtx())[0]!;
-    expect(e.fields.tag).toBe('prod');
+    expect(e.fields['tag']).toBe('prod');
   });
 
   it('splits multiple top-level assignments on commas', () => {
     const e = applyIngestEval([event('x')], ingestDir('a="1", b="2"'), runCtx())[0]!;
-    expect(e.fields.a).toBe('1');
-    expect(e.fields.b).toBe('2');
+    expect(e.fields['a']).toBe('1');
+    expect(e.fields['b']).toBe('2');
   });
 
   // Two INGEST_EVAL lines in a stanza — Splunk applies only the last.
@@ -39,18 +39,18 @@ describe('applyIngestEval', () => {
       { key: 'INGEST_EVAL', value: 'tag="second"', line: 2, directiveType: 'INGEST_EVAL' },
     ];
     const e = applyIngestEval([event('x')], dirs, runCtx())[0]!;
-    expect(e.fields.tag).toBe('second');
+    expect(e.fields['tag']).toBe('second');
   });
 
   // BUG-3: a comma inside a string literal must not split the assignment.
   it('does not split on a comma inside a quoted string', () => {
     const e = applyIngestEval([event('x')], ingestDir('msg="a,b"'), runCtx())[0]!;
-    expect(e.fields.msg).toBe('a,b');
+    expect(e.fields['msg']).toBe('a,b');
   });
 
   it('does not split on a comma inside parentheses', () => {
     const e = applyIngestEval([event('x')], ingestDir('n=if(1==1,"yes","no")'), runCtx())[0]!;
-    expect(e.fields.n).toBe('yes');
+    expect(e.fields['n']).toBe('yes');
   });
 
   // A value ending in an escaped backslash (\\) closes the quote — the
@@ -58,8 +58,8 @@ describe('applyIngestEval', () => {
   it('closes a literal ending in an escaped backslash and splits the next assignment', () => {
     // a = the Windows path `c:\` (written `c:\\` in the config), then b=2.
     const e = applyIngestEval([event('x')], ingestDir('a="c:\\\\", b=2'), runCtx())[0]!;
-    expect(e.fields.a).toBe('c:\\');
-    expect(e.fields.b).toBe('2');
+    expect(e.fields['a']).toBe('c:\\');
+    expect(e.fields['b']).toBe('2');
   });
 });
 
@@ -71,7 +71,7 @@ describe('applyIngestEval — queue assignment routes the event (#58)', () => {
       runCtx(),
     )[0]!;
     expect(out._meta._queue).toBe('nullQueue');
-    expect(out.fields.queue).toBeUndefined();
+    expect(out.fields['queue']).toBeUndefined();
   });
 
   it('routes a non-matching event to indexQueue', () => {
@@ -81,7 +81,7 @@ describe('applyIngestEval — queue assignment routes the event (#58)', () => {
       runCtx(),
     )[0]!;
     expect(out._meta._queue).toBe('indexQueue');
-    expect(out.fields.queue).toBeUndefined();
+    expect(out.fields['queue']).toBeUndefined();
   });
 
   it('does not mutate the input event', () => {
@@ -130,7 +130,7 @@ describe('applyIngestEval — metadata keys rewrite the event metadata (#327)', 
   it('lets a later assignment in the same list read the rewritten metadata', () => {
     const out = applyIngestEval([event('x')], ingestDir('sourcetype="new", tag=sourcetype'), runCtx())[0]!;
     expect(out.metadata.sourcetype).toBe('new');
-    expect(out.fields.tag).toBe('new');
+    expect(out.fields['tag']).toBe('new');
   });
 
   it('keeps the existing metadata when the expression is null', () => {
@@ -148,20 +148,20 @@ describe('applyIngestEval — metadata keys rewrite the event metadata (#327)', 
 describe('applyIngestEval — the := operator (#327)', () => {
   it('assigns to the named field, not one ending in a colon', () => {
     const out = applyIngestEval([event('x')], ingestDir('x := "1"'), runCtx())[0]!;
-    expect(out.fields.x).toBe('1');
+    expect(out.fields['x']).toBe('1');
     expect(out.fields['x:']).toBeUndefined();
   });
 
   it('replaces an existing field value', () => {
     const input = { ...event('x'), fields: { x: 'old' } };
     const out = applyIngestEval([input], ingestDir('x:="new"'), runCtx())[0]!;
-    expect(out.fields.x).toBe('new');
+    expect(out.fields['x']).toBe('new');
   });
 
   it('mixes with = in a comma-separated list', () => {
     const out = applyIngestEval([event('x')], ingestDir('a="1", b:=a . "2", index:="security"'), runCtx())[0]!;
-    expect(out.fields.a).toBe('1');
-    expect(out.fields.b).toBe('12');
+    expect(out.fields['a']).toBe('1');
+    expect(out.fields['b']).toBe('12');
     expect(out.metadata.index).toBe('security');
   });
 
@@ -191,14 +191,14 @@ describe('runPipeline — INGEST_EVAL metadata rewrites re-match stanzas (#327)'
     const ev = result.events[0]!;
     expect(ev.metadata.sourcetype).toBe('new_st');
     expect(ev.metadata.index).toBe('security');
-    expect(ev.fields.seen).toBe('new_st');
+    expect(ev.fields['seen']).toBe('new_st');
     expect(ev.processingTrace.some((s) => s.processor === 'StanzaRematch')).toBe(true);
   });
 
   it('batch mode warns that search-time config still follows the original sourcetype', () => {
     const { result, diagnostics } = runPipeline('a', meta, props, transforms, { perEventPipeline: false });
     expect(result.events[0]!.metadata.sourcetype).toBe('new_st');
-    expect(result.events[0]!.fields.seen).toBeUndefined();
+    expect(result.events[0]!.fields['seen']).toBeUndefined();
     expect(diagnostics.some((d) => d.message.includes('sourcetype/host/source rewritten'))).toBe(true);
   });
 });

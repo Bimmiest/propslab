@@ -36,16 +36,19 @@ function buildContextPatterns(key: string, value: string): RegExp[] {
  *   field "GID"). When provided, context patterns are tried with this key first so that
  *   stripped-underscore fields from INDEXED_EXTRACTIONS=json can be located correctly.
  */
+/** The last dotted segment of a field path (the whole name when it has no dot). */
+function leafOf(path: string): string {
+  return path.slice(path.lastIndexOf('.') + 1);
+}
+
 export function findFieldValuePositions(
   raw: string,
   field: string,
   value: string,
   originalKey?: string,
 ): number[] {
-  const leafName = field.includes('.') ? field.split('.').pop()! : field;
-  const originalLeaf = originalKey
-    ? (originalKey.includes('.') ? originalKey.split('.').pop()! : originalKey)
-    : undefined;
+  const leafName = leafOf(field);
+  const originalLeaf = originalKey ? leafOf(originalKey) : undefined;
 
   // Collect unique keys to try. Prefer original (un-stripped) key so `_GID` matches before `GID`.
   const keysToTry = originalLeaf && originalLeaf !== leafName

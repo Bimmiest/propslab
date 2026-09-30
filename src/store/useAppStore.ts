@@ -202,10 +202,10 @@ function loadSettings(): { perEventPipeline: boolean; manualApply: boolean } {
     const parsed = JSON.parse(saved) as unknown;
     if (!parsed || typeof parsed !== 'object') return fallback;
     const o = parsed as Record<string, unknown>;
-    const perEventPipeline = o.perEventPipeline === true;
+    const perEventPipeline = o['perEventPipeline'] === true;
     return {
       perEventPipeline,
-      manualApply: perEventPipeline || o.manualApply === true,
+      manualApply: perEventPipeline || o['manualApply'] === true,
     };
   } catch {
     return fallback;

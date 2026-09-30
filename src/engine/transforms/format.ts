@@ -80,8 +80,8 @@ export function expandFormat(format: string, match: FormatMatch, priorDestValue?
   const groups = match.groups;
   return format.replace(FORMAT_REF_PATTERN, (whole: string, digits: string | undefined, name: string | undefined) => {
     if (digits === undefined) {
-      if (!groups) return whole;
-      return groups[name!] ?? '';
+      // The pattern matched `${name}`, so `name` is set whenever `digits` is not.
+      return groups && name !== undefined ? (groups[name] ?? '') : whole;
     }
     // The pattern greedily grabs every trailing digit, but a reference resolves
     // to at most `maxIndex`. Mirror PCRE/JS `$nn` fallback: take the LONGEST

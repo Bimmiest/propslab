@@ -68,7 +68,7 @@ describe('FIELDALIAS — never binds an inherited member (#120)', () => {
       [dir('FIELDALIAS-x', 'toString AS dvc', 'FIELDALIAS', 'x')],
       runCtx(),
     )[0]!;
-    expect(r.fields.dvc).toBe('real-value');
+    expect(r.fields['dvc']).toBe('real-value');
   });
 
   it('ASNEW does not treat an inherited member as an existing target', () => {
@@ -88,7 +88,7 @@ describe('EVAL — reads and writes such names as fields (#120)', () => {
       [dir('EVAL-out', 'if(isnull(toString), "absent", "present")', 'EVAL', 'out')],
       runCtx(),
     )[0]!;
-    expect(r.fields.out).toBe('absent');
+    expect(r.fields['out']).toBe('absent');
   });
 
   it('writes a computed field with a prototype-colliding name', () => {
@@ -113,6 +113,6 @@ describe('INGEST_EVAL / INDEXED_EXTRACTIONS — same names, same treatment (#120
       dir('INDEXED_EXTRACTIONS', 'csv', 'INDEXED_EXTRACTIONS'),
     ], runCtx())[0]!;
     expect(r.fields.toString).toBe('1');
-    expect(r.fields.b).toBe('2');
+    expect(r.fields['b']).toBe('2');
   });
 });

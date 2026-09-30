@@ -15,15 +15,15 @@ describe('sampleData — Palo Alto byte columns (#76)', () => {
     const { result } = runPipeline(pan.rawData, meta, pan.propsConf, pan.transformsConf);
     const first = result.events[0]!;
     // Row 1 columns after `action`: 120 (total), 80 (sent), 40 (received).
-    expect(first.fields.bytes).toBe('120');
-    expect(first.fields.bytes_sent).toBe('80');
-    expect(first.fields.bytes_received).toBe('40');
+    expect(first.fields['bytes']).toBe('120');
+    expect(first.fields['bytes_sent']).toBe('80');
+    expect(first.fields['bytes_received']).toBe('40');
   });
 
   it("makes the sample's own EVAL-bytes_total agree with the total column", () => {
     const { result } = runPipeline(pan.rawData, meta, pan.propsConf, pan.transformsConf);
     for (const event of result.events) {
-      expect(event.fields.bytes_total).toBe(event.fields.bytes);
+      expect(event.fields['bytes_total']).toBe(event.fields['bytes']);
     }
   });
 });

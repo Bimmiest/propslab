@@ -155,10 +155,10 @@ describe('probeTimestamp agrees with extractTimestamps (#313)', () => {
     const probe = probeTimestamp(
       raw,
       config({
-        timePrefix: stanza.TIME_PREFIX ?? null,
-        timeFormat: stanza.TIME_FORMAT ?? null,
-        tz: stanza.TZ ?? null,
-        tzAlias: stanza.TZ_ALIAS ?? null,
+        timePrefix: stanza['TIME_PREFIX'] ?? null,
+        timeFormat: stanza['TIME_FORMAT'] ?? null,
+        tz: stanza['TZ'] ?? null,
+        tzAlias: stanza['TZ_ALIAS'] ?? null,
         now: now.getTime(),
       }),
     );
@@ -180,8 +180,8 @@ describe('probeTimestamp agrees with extractTimestamps (#313)', () => {
     const { extracted, source, probe } = both(raw, { TIME_PREFIX: 'ts=', TIME_FORMAT: '%Y-%m-%d %H:%M:%S' });
     expect(source).toBe('TIME_FORMAT');
     expect(probe.match).not.toBeNull();
-    expect(String(probe.match!.tsStart)).toBe(extracted.fields.timestartpos);
-    expect(String(probe.match!.tsEnd)).toBe(extracted.fields.timeendpos);
+    expect(String(probe.match!.tsStart)).toBe(extracted.fields['timestartpos']);
+    expect(String(probe.match!.tsEnd)).toBe(extracted.fields['timeendpos']);
     expect(probe.match!.matchedText).toBe('2026-01-15 10:00:00');
     expect(probe.match!.parsedTimeMs).toBe(extracted._time!.getTime());
   });
@@ -222,7 +222,7 @@ describe('probeTimestamp agrees with extractTimestamps (#313)', () => {
       });
       expect(source).toBe('TIME_FORMAT');
       expect(probe.prefix).toBeNull();
-      expect(String(probe.match!.tsStart)).toBe(extracted.fields.timestartpos);
+      expect(String(probe.match!.tsStart)).toBe(extracted.fields['timestartpos']);
       expect(probe.match!.parsedTimeMs).toBe(extracted._time!.getTime());
     }
   });
@@ -245,7 +245,7 @@ describe('probeTimestamp agrees with extractTimestamps (#313)', () => {
       TIME_FORMAT: '%Y-%m-%d %H:%M:%S',
     });
     expect(source).toBe('TIME_FORMAT');
-    expect(String(probe.match!.tsStart)).toBe(extracted.fields.timestartpos);
+    expect(String(probe.match!.tsStart)).toBe(extracted.fields['timestartpos']);
     expect(probe.match!.parsedTimeMs).toBe(extracted._time!.getTime());
   });
 });

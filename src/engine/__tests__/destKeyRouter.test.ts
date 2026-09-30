@@ -114,22 +114,22 @@ describe('applyDestKey — empty destValue still routes', () => {
 describe('applyDestKey — _meta (SEM-11)', () => {
   it('parses space-separated key::value pairs', () => {
     const event = applyDestKey(baseEvent(), result('_meta', 'a::1 b::2'));
-    expect(event._meta.a).toBe('1');
-    expect(event._meta.b).toBe('2');
+    expect(event._meta['a']).toBe('1');
+    expect(event._meta['b']).toBe('2');
   });
 
   it('keeps a quoted value containing spaces intact', () => {
     const event = applyDestKey(baseEvent(), result('_meta', 'label::"two words" n::5'));
-    expect(event._meta.label).toBe('two words');
-    expect(event._meta.n).toBe('5');
+    expect(event._meta['label']).toBe('two words');
+    expect(event._meta['n']).toBe('5');
   });
 
   it('keeps every value of a repeated key, since indexed fields are multivalue (#359)', () => {
     const event = applyDestKey(baseEvent(), result('_meta', 'tag::a tag::b'));
-    expect(event._meta.tag).toEqual(['a', 'b']);
+    expect(event._meta['tag']).toEqual(['a', 'b']);
     const again = applyDestKey(event, result('_meta', 'tag::c'));
-    expect(again._meta.tag).toEqual(['a', 'b', 'c']);
-    expect(event._meta.tag).toEqual(['a', 'b']); // the input event is not mutated
+    expect(again._meta['tag']).toEqual(['a', 'b', 'c']);
+    expect(event._meta['tag']).toEqual(['a', 'b']); // the input event is not mutated
   });
 
   it('never writes a _queue:: pair into the single-valued routing slot (#478)', () => {
@@ -157,12 +157,12 @@ describe('applyDestKey — _meta (SEM-11)', () => {
 describe('applyDestKey — unsimulated routing keys are not written as fields (#75.3)', () => {
   it('does not invent a field for _TCP_ROUTING', () => {
     const out = applyDestKey(baseEvent(), result('_TCP_ROUTING', 'my_group'));
-    expect(out.fields._TCP_ROUTING).toBeUndefined();
+    expect(out.fields['_TCP_ROUTING']).toBeUndefined();
   });
 
   it('does not invent a field for _INDEX_AND_FORWARD_ROUTING', () => {
     const out = applyDestKey(baseEvent(), result('_INDEX_AND_FORWARD_ROUTING', 'local'));
-    expect(out.fields._INDEX_AND_FORWARD_ROUTING).toBeUndefined();
+    expect(out.fields['_INDEX_AND_FORWARD_ROUTING']).toBeUndefined();
   });
 
   // Doc-derived: transforms.conf.spec lists the DEST_KEY values Splunk accepts,
@@ -172,15 +172,15 @@ describe('applyDestKey — unsimulated routing keys are not written as fields (#
   it('leaves the event alone for a key outside the documented set', () => {
     const before = baseEvent();
     const out = applyDestKey(before, { ...result('my_custom_field', 'v'), fields: { kept: 'k' } });
-    expect(out.fields.my_custom_field).toBeUndefined();
-    expect(out.fields.kept).toBe('k');
+    expect(out.fields['my_custom_field']).toBeUndefined();
+    expect(out.fields['kept']).toBe('k');
     expect(out._raw).toBe(before._raw);
     expect(out.metadata).toEqual(before.metadata);
     expect(out._meta).toEqual(before._meta);
   });
 
   it('leaves the event alone for an empty value under an unknown key too', () => {
-    expect(applyDestKey(baseEvent(), result('anon_field', '')).fields.anon_field).toBeUndefined();
+    expect(applyDestKey(baseEvent(), result('anon_field', '')).fields['anon_field']).toBeUndefined();
   });
 });
 

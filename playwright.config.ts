@@ -11,7 +11,7 @@ const BASE_URL = `http://127.0.0.1:${PORT}`;
  * "probably fine". CI sets this on the e2e step alone, immediately after its own
  * build step, which is the only place the claim is checked.
  */
-const SKIP_BUILD = process.env.E2E_SKIP_BUILD === '1';
+const SKIP_BUILD = process.env['E2E_SKIP_BUILD'] === '1';
 
 /** The specs that assert timing budgets; they run in their own project. */
 const PERF_SPECS = /perf(-[\w-]+)?\.spec\.ts$/;
@@ -45,12 +45,12 @@ const PERF_SPECS = /perf(-[\w-]+)?\.spec\.ts$/;
 export default defineConfig({
   testDir: './e2e',
   // A CI failure caused by a stray `test.only` is worse than the inconvenience.
-  forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 1 : 0,
+  forbidOnly: !!process.env['CI'],
+  retries: process.env['CI'] ? 1 : 0,
   // The suite is small and the server is shared; parallelism buys little and
   // makes the console-error assertions harder to attribute.
   workers: 1,
-  reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : [['list']],
+  reporter: process.env['CI'] ? [['github'], ['html', { open: 'never' }]] : [['list']],
   use: {
     baseURL: BASE_URL,
     trace: 'retain-on-failure',

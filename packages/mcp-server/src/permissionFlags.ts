@@ -62,7 +62,7 @@ export function adoptPresetPermission(
   bundleDir: string,
   {
     execArgv = process.execArgv,
-    nodeOptions = process.env.NODE_OPTIONS ?? '',
+    nodeOptions = process.env['NODE_OPTIONS'] ?? '',
     cwd = () => process.cwd(),
     chdir = (dir) => {
       process.chdir(dir);

@@ -180,7 +180,7 @@ describe('applyTransforms — index-time extraction without WRITE_META (SEM-7)',
     const diags: ValidationDiagnostic[] = [];
     const conf = transformsConf('grab', { REGEX: '(?<user>\\w+)' });
     const e = applyTransforms([event('alice')], transformsDir('grab'), conf, 'index-time', runCtx(diags))[0]!;
-    expect(e.fields.user).toBeUndefined();
+    expect(e.fields['user']).toBeUndefined();
     expect(diags.some((d) => d.message.includes('no effect'))).toBe(true);
     const step = e.processingTrace.at(-1);
     expect(step?.fieldsAdded).toEqual([]);
@@ -195,7 +195,7 @@ describe('applyTransforms — index-time extraction without WRITE_META (SEM-7)',
       { key: 'WRITE_META', value: 'true', line: 3, directiveType: 'WRITE_META' },
     );
     const e = applyTransforms([event('alice')], transformsDir('grab'), conf, 'index-time', runCtx())[0]!;
-    expect(e.fields.user).toBe('alice');
+    expect(e.fields['user']).toBe('alice');
   });
 
   // Doc-derived (transforms.conf.spec, FORMAT): the `<stanza>::$1` default is
@@ -212,7 +212,7 @@ describe('applyTransforms — index-time extraction without WRITE_META (SEM-7)',
   it('keeps the index-time default FORMAT for the same stanza under TRANSFORMS-', () => {
     const conf = transformsConf('word', { REGEX: '(\\w+)', WRITE_META: 'true' });
     const e = applyTransforms([event('alice')], transformsDir('word'), conf, 'index-time', runCtx())[0]!;
-    expect(e.fields.word).toBe('alice');
+    expect(e.fields['word']).toBe('alice');
   });
 
   it('does not warn about a named-group REPORT whose group did not participate', () => {
@@ -226,7 +226,7 @@ describe('applyTransforms — index-time extraction without WRITE_META (SEM-7)',
   it('still stores what DEST_KEY = _meta writes', () => {
     const conf = transformsConf('grab', { REGEX: '(\\w+)', DEST_KEY: '_meta', FORMAT: 'user::$1' });
     const e = applyTransforms([event('alice')], transformsDir('grab'), conf, 'index-time', runCtx())[0]!;
-    expect(e._meta.user).toBe('alice');
+    expect(e._meta['user']).toBe('alice');
   });
 });
 
@@ -241,7 +241,7 @@ describe('applyTransforms — INGEST_EVAL interleaving (SEM-2)', () => {
     // List order: eval rewrites _raw, then the regex extracts from the new _raw.
     const e = applyTransforms([event('original text')], transformsDir('rewrite, extract'), conf, 'index-time', runCtx())[0]!;
     expect(e._raw).toBe('HELLO');
-    expect(e.fields.word).toBe('HELLO');
+    expect(e.fields['word']).toBe('HELLO');
   });
 
   it('does not run INGEST_EVAL on the search-time (REPORT) pass', () => {
@@ -287,7 +287,7 @@ describe('applyTransforms — DEST_KEY is index-time only (#57)', () => {
       DEST_KEY: 'queue',
     });
     const out = applyTransforms([event('user=alice')], reportDir('r'), conf, 'search-time', runCtx(diags))[0]!;
-    expect(out.fields.user).toBe('alice');
+    expect(out.fields['user']).toBe('alice');
     expect(out._meta._queue).toBeUndefined();
     expect(diags.some((d) => d.message.includes('DEST_KEY is index-time only'))).toBe(true);
   });
@@ -319,7 +319,7 @@ describe('applyTransforms — SOURCE_KEY reads pipeline metadata (#53)', () => {
       WRITE_META: 'true',
     });
     const out = applyTransforms([event('x')], transformsDir('t'), conf, 'index-time', runCtx())[0]!;
-    expect(out.fields.captured_host).toBe('h');
+    expect(out.fields['captured_host']).toBe('h');
   });
 
   // Doc-derived: the index key is written bare (`FORMAT = my_index`), so
@@ -333,7 +333,7 @@ describe('applyTransforms — SOURCE_KEY reads pipeline metadata (#53)', () => {
     });
     const ev = { ...event('x'), metadata: { ...event('x').metadata, index: 'main' } };
     const out = applyTransforms([ev], transformsDir('t'), conf, 'index-time', runCtx())[0]!;
-    expect(out.fields.captured_index).toBe('main');
+    expect(out.fields['captured_index']).toBe('main');
   });
 
   it('reads an unrerouted queue as indexQueue', () => {
@@ -344,7 +344,7 @@ describe('applyTransforms — SOURCE_KEY reads pipeline metadata (#53)', () => {
       WRITE_META: 'true',
     });
     const out = applyTransforms([event('x')], transformsDir('t'), conf, 'index-time', runCtx())[0]!;
-    expect(out.fields.q).toBe('indexQueue');
+    expect(out.fields['q']).toBe('indexQueue');
   });
 
   it('reads _meta as space-separated key::value pairs', () => {
@@ -356,7 +356,7 @@ describe('applyTransforms — SOURCE_KEY reads pipeline metadata (#53)', () => {
       WRITE_META: 'true',
     });
     const out = applyTransforms([ev], transformsDir('t'), conf, 'index-time', runCtx())[0]!;
-    expect(out.fields.tier_copy).toBe('gold');
+    expect(out.fields['tier_copy']).toBe('gold');
   });
 
   // #437: the simulator keeps queue routing in _meta._queue; that is not text
@@ -370,14 +370,14 @@ describe('applyTransforms — SOURCE_KEY reads pipeline metadata (#53)', () => {
       WRITE_META: 'true',
     });
     const out = applyTransforms([ev], transformsDir('t'), conf, 'index-time', runCtx())[0]!;
-    expect(out.fields.meta_copy).toBe('tier::gold');
+    expect(out.fields['meta_copy']).toBe('tier::gold');
   });
 
   it('still reads the queue through SOURCE_KEY = queue after a reroute', () => {
     const conf = transformsConf('t', { SOURCE_KEY: 'queue', REGEX: '(\\w+)', FORMAT: 'q::$1', WRITE_META: 'true' });
     const ev = { ...event('x'), _meta: { _queue: 'nullQueue' } };
     const out = applyTransforms([ev], transformsDir('t'), conf, 'index-time', runCtx())[0]!;
-    expect(out.fields.q).toBe('nullQueue');
+    expect(out.fields['q']).toBe('nullQueue');
   });
 });
 
@@ -598,13 +598,13 @@ describe('applyTransforms — DEST_KEY=_meta keeps every match and value (#359)'
       WRITE_META: 'true',
     });
     const e = applyTransforms([event('n=1 n=2 n=3')], transformsDir('nums'), conf, 'index-time', runCtx())[0]!;
-    expect(e._meta.num).toEqual(['1', '2', '3']);
+    expect(e._meta['num']).toEqual(['1', '2', '3']);
   });
 
   it('writes the first match only without REPEAT_MATCH', () => {
     const conf = transformsConf('nums', { REGEX: 'n=(\\d+)', FORMAT: 'num::$1', DEST_KEY: '_meta' });
     const e = applyTransforms([event('n=1 n=2 n=3')], transformsDir('nums'), conf, 'index-time', runCtx())[0]!;
-    expect(e._meta.num).toBe('1');
+    expect(e._meta['num']).toBe('1');
   });
 });
 
@@ -614,12 +614,12 @@ describe('applyTransforms — FORMAT is expanded in one pass (#365)', () => {
   it('does not re-expand ${name} text that came from a capture', () => {
     const conf = transformsConf('f', { REGEX: '(?<a>\\S+) (\\S+)', FORMAT: 'f::$2', WRITE_META: 'true' });
     const e = applyTransforms([event('x ${a}')], transformsDir('f'), conf, 'index-time', runCtx())[0]!;
-    expect(e.fields.f).toBe('${a}');
+    expect(e.fields['f']).toBe('${a}');
   });
 
   it('still expands a written ${name} reference', () => {
     const conf = transformsConf('f', { REGEX: '(?<a>\\S+) (\\S+)', FORMAT: 'f::${a}-$2', WRITE_META: 'true' });
     const e = applyTransforms([event('x y')], transformsDir('f'), conf, 'index-time', runCtx())[0]!;
-    expect(e.fields.f).toBe('x-y');
+    expect(e.fields['f']).toBe('x-y');
   });
 });
