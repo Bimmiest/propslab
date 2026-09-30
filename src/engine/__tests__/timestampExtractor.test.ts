@@ -1,18 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { extractTimestamps, resolveLookahead } from '../processors/timestampExtractor';
 import type { SplunkEvent, ConfDirective, ValidationDiagnostic } from '../types';
-import { runCtx } from './runCtx';
+import { runCtx, FIXED_NOW } from './runCtx';
+import { makeEvent } from '../../test/makeEvent';
 
 function event(raw: string): SplunkEvent {
-  return {
-    _raw: raw,
-    _time: null,
-    _meta: {},
-    fields: {},
-    metadata: { index: 'main', host: 'h', source: 's', sourcetype: 'st' },
-    lineNumbers: { start: 1, end: 1 },
-    processingTrace: [],
-  };
+  return makeEvent(raw);
 }
 
 function dir(key: string, value: string): ConfDirective {
@@ -36,7 +29,7 @@ describe('extractTimestamps — explicit TIME_FORMAT (regression)', () => {
     const e = extractTimestamps(
       [event('2024-01-15 10:00:00 some log')],
       [dir('TIME_FORMAT', '%Y-%m-%d %H:%M:%S')],
-      runCtx(),
+      runCtx(FIXED_NOW),
     )[0]!;
     expect(iso(e._time)).toBe('2024-01-15T10:00:00.000Z');
   });
@@ -45,7 +38,7 @@ describe('extractTimestamps — explicit TIME_FORMAT (regression)', () => {
     const e = extractTimestamps(
       [event('id=5 ts=2024-01-15T10:00:00 rest')],
       [dir('TIME_FORMAT', '%Y-%m-%dT%H:%M:%S'), dir('TIME_PREFIX', 'ts=')],
-      runCtx(),
+      runCtx(FIXED_NOW),
     )[0]!;
     expect(iso(e._time)).toBe('2024-01-15T10:00:00.000Z');
   });
@@ -58,7 +51,7 @@ describe('extractTimestamps — explicit TIME_FORMAT (regression)', () => {
     const e = extractTimestamps(
       [event('ts=pending job started 2024-01-15 10:00:00')],
       [dir('TIME_FORMAT', '%Y-%m-%d %H:%M:%S'), dir('TIME_PREFIX', 'ts=')],
-      runCtx(undefined, { now: NOW }),
+      runCtx(NOW),
     )[0]!;
     // The mid-line date is not used. With nothing to inherit from, the chain
     // ends at index time — what matters is that it did not come from the text.
@@ -70,7 +63,7 @@ describe('extractTimestamps — explicit TIME_FORMAT (regression)', () => {
     const e = extractTimestamps(
       [event('ts=  2024-01-15 10:00:00')],
       [dir('TIME_FORMAT', '%Y-%m-%d %H:%M:%S'), dir('TIME_PREFIX', 'ts=')],
-      runCtx(),
+      runCtx(FIXED_NOW),
     )[0]!;
     expect(iso(e._time)).toBe('2024-01-15T10:00:00.000Z');
   });
@@ -80,7 +73,7 @@ describe('extractTimestamps — explicit TIME_FORMAT (regression)', () => {
     const e = extractTimestamps(
       [event('log message here 2024-01-15 10:00:00')],
       [dir('TIME_FORMAT', '%Y-%m-%d %H:%M:%S')],
-      runCtx(),
+      runCtx(FIXED_NOW),
     )[0]!;
     expect(iso(e._time)).toBe('2024-01-15T10:00:00.000Z');
   });
@@ -90,7 +83,7 @@ describe('extractTimestamps — explicit TIME_FORMAT (regression)', () => {
     const e = extractTimestamps(
       [event('2024-01-15T10:00:00Z some log')],
       [dir('TIME_FORMAT', '%Y-%m-%dT%H:%M:%S%z'), dir('TZ', 'America/New_York')],
-      runCtx(),
+      runCtx(FIXED_NOW),
     )[0]!;
     expect(iso(e._time)).toBe('2024-01-15T10:00:00.000Z');
   });
@@ -98,27 +91,27 @@ describe('extractTimestamps — explicit TIME_FORMAT (regression)', () => {
 
 describe('extractTimestamps — auto recognition (no TIME_FORMAT)', () => {
   it('recognises ISO 8601', () => {
-    const e = extractTimestamps([event('2024-01-15T10:00:00 hello')], [], runCtx())[0]!;
+    const e = extractTimestamps([event('2024-01-15T10:00:00 hello')], [], runCtx(FIXED_NOW))[0]!;
     expect(iso(e._time)).toBe('2024-01-15T10:00:00.000Z');
   });
 
   it('recognises ISO 8601 with Z as UTC', () => {
-    const e = extractTimestamps([event('2024-01-15T10:00:00.250Z hello')], [], runCtx())[0]!;
+    const e = extractTimestamps([event('2024-01-15T10:00:00.250Z hello')], [], runCtx(FIXED_NOW))[0]!;
     expect(iso(e._time)).toBe('2024-01-15T10:00:00.250Z');
   });
 
   it('honours a numeric zone offset', () => {
-    const e = extractTimestamps([event('2024-01-15T10:00:00+05:00 hello')], [], runCtx())[0]!;
+    const e = extractTimestamps([event('2024-01-15T10:00:00+05:00 hello')], [], runCtx(FIXED_NOW))[0]!;
     expect(iso(e._time)).toBe('2024-01-15T05:00:00.000Z');
   });
 
   it('recognises an Apache access-log timestamp', () => {
-    const e = extractTimestamps([event('10.0.0.1 - - [15/Jan/2024:10:00:00 +0000] "GET /"')], [], runCtx())[0]!;
+    const e = extractTimestamps([event('10.0.0.1 - - [15/Jan/2024:10:00:00 +0000] "GET /"')], [], runCtx(FIXED_NOW))[0]!;
     expect(iso(e._time)).toBe('2024-01-15T10:00:00.000Z');
   });
 
   it('recognises a leading epoch (seconds)', () => {
-    const e = extractTimestamps([event('1705312800 event body')], [], runCtx())[0]!;
+    const e = extractTimestamps([event('1705312800 event body')], [], runCtx(FIXED_NOW))[0]!;
     expect(iso(e._time)).toBe('2024-01-15T10:00:00.000Z');
   });
 
@@ -126,13 +119,13 @@ describe('extractTimestamps — auto recognition (no TIME_FORMAT)', () => {
     const e = extractTimestamps(
       [event('garbage 9999 when=2024-01-15T10:00:00 tail')],
       [dir('TIME_PREFIX', 'when=')],
-      runCtx(),
+      runCtx(FIXED_NOW),
     )[0]!;
     expect(iso(e._time)).toBe('2024-01-15T10:00:00.000Z');
   });
 
   it('falls back to index time when no timestamp is recognisable', () => {
-    const e = extractTimestamps([event('no timestamp anywhere here')], [], runCtx(undefined, { now: NOW }))[0]!;
+    const e = extractTimestamps([event('no timestamp anywhere here')], [], runCtx(NOW))[0]!;
     expect(iso(e._time)).toBe(NOW.toISOString());
     expect(timeSource(e)).toBe('current-time');
   });
@@ -140,7 +133,7 @@ describe('extractTimestamps — auto recognition (no TIME_FORMAT)', () => {
   // Position-scored recognition — the timestamp at the front of the region
   // wins over a more-specific one embedded later in the message body.
   it('prefers the earliest timestamp over a more-specific one deeper in the text', () => {
-    const e = extractTimestamps([event('01/02/2024 note 2023-06-15T08:00:00 tail')], [], runCtx())[0]!;
+    const e = extractTimestamps([event('01/02/2024 note 2023-06-15T08:00:00 tail')], [], runCtx(FIXED_NOW))[0]!;
     expect(iso(e._time)).toBe('2024-01-02T00:00:00.000Z');
   });
 });
@@ -150,7 +143,7 @@ describe('extractTimestamps — range validation (#12)', () => {
   const fmt = dir('TIME_FORMAT', '%Y-%m-%d %H:%M:%S');
 
   it('rejects an impossible day (Feb 30) instead of rolling into March', () => {
-    const e = extractTimestamps([event('2024-02-30 10:00:00 x')], [fmt], runCtx(undefined, { now: NOW }))[0]!;
+    const e = extractTimestamps([event('2024-02-30 10:00:00 x')], [fmt], runCtx(NOW))[0]!;
     // Feb 30 is a parse failure, so the text supplies no timestamp and the
     // chain falls through — it must never roll over into a neighbouring date.
     expect(iso(e._time)).toBe(NOW.toISOString());
@@ -158,7 +151,7 @@ describe('extractTimestamps — range validation (#12)', () => {
   });
 
   it('rejects an out-of-range month (13)', () => {
-    const e = extractTimestamps([event('2024-13-01 10:00:00 x')], [fmt], runCtx(undefined, { now: NOW }))[0]!;
+    const e = extractTimestamps([event('2024-13-01 10:00:00 x')], [fmt], runCtx(NOW))[0]!;
     // month 13 is a parse failure, so the text supplies no timestamp and the
     // chain falls through — it must never roll over into a neighbouring date.
     expect(iso(e._time)).toBe(NOW.toISOString());
@@ -166,7 +159,7 @@ describe('extractTimestamps — range validation (#12)', () => {
   });
 
   it('rejects an out-of-range hour (25)', () => {
-    const e = extractTimestamps([event('2024-01-15 25:00:00 x')], [fmt], runCtx(undefined, { now: NOW }))[0]!;
+    const e = extractTimestamps([event('2024-01-15 25:00:00 x')], [fmt], runCtx(NOW))[0]!;
     // hour 25 is a parse failure, so the text supplies no timestamp and the
     // chain falls through — it must never roll over into a neighbouring date.
     expect(iso(e._time)).toBe(NOW.toISOString());
@@ -174,7 +167,7 @@ describe('extractTimestamps — range validation (#12)', () => {
   });
 
   it('still accepts a valid leap day', () => {
-    const e = extractTimestamps([event('2024-02-29 10:00:00 x')], [fmt], runCtx())[0]!;
+    const e = extractTimestamps([event('2024-02-29 10:00:00 x')], [fmt], runCtx(FIXED_NOW))[0]!;
     expect(iso(e._time)).toBe('2024-02-29T10:00:00.000Z');
   });
 });
@@ -197,7 +190,7 @@ describe('extractTimestamps — TZ_ALIAS (#227)', () => {
     const e = extractTimestamps(
       [event('2024-01-15 10:00:00 EST x')],
       [fmt, dir('TZ_ALIAS', 'EST=GMT-5:00,METT=GMT+1:00')],
-      runCtx(diags),
+      runCtx(FIXED_NOW, diags),
     )[0]!;
     // EST aliased to GMT-5:00 → local 10:00 is 15:00 UTC.
     expect(iso(e._time)).toBe('2024-01-15T15:00:00.000Z');
@@ -211,7 +204,7 @@ describe('extractTimestamps — TZ_ALIAS (#227)', () => {
     const e = extractTimestamps(
       [event('2024-01-15 10:00:00 EST x')],
       [fmt, dir('TZ_ALIAS', 'EST=GMT+10:00')],
-      runCtx(diags),
+      runCtx(FIXED_NOW, diags),
     )[0]!;
     expect(iso(e._time)).toBe('2024-01-15T00:00:00.000Z');
     expect(diags).toHaveLength(0);
@@ -222,8 +215,8 @@ describe('extractTimestamps — TZ_ALIAS (#227)', () => {
     const alias = dir('TZ_ALIAS', 'XYZ=Europe/London');
     // London is GMT in January and BST in July. A fixed offset could not do
     // both, which is what makes the IANA target worth accepting.
-    const winter = extractTimestamps([event('2024-01-15 10:00:00 XYZ x')], [fmt, alias], runCtx(diags))[0]!;
-    const summer = extractTimestamps([event('2024-07-15 10:00:00 XYZ x')], [fmt, alias], runCtx(diags))[0]!;
+    const winter = extractTimestamps([event('2024-01-15 10:00:00 XYZ x')], [fmt, alias], runCtx(FIXED_NOW, diags))[0]!;
+    const summer = extractTimestamps([event('2024-07-15 10:00:00 XYZ x')], [fmt, alias], runCtx(FIXED_NOW, diags))[0]!;
     expect(iso(winter._time)).toBe('2024-01-15T10:00:00.000Z');
     expect(iso(summer._time)).toBe('2024-07-15T09:00:00.000Z');
     expect(diags).toHaveLength(0);
@@ -233,7 +226,7 @@ describe('extractTimestamps — TZ_ALIAS (#227)', () => {
     const e = extractTimestamps(
       [event('2024-01-15 10:00:00 est x')],
       [fmt, dir('TZ_ALIAS', 'EST=GMT-5:00')],
-      runCtx(),
+      runCtx(FIXED_NOW),
     )[0]!;
     expect(iso(e._time)).toBe('2024-01-15T15:00:00.000Z');
   });
@@ -242,7 +235,7 @@ describe('extractTimestamps — TZ_ALIAS (#227)', () => {
     const e = extractTimestamps(
       [event('2024-01-15 10:00:00 PST x')],
       [fmt, dir('TZ_ALIAS', 'EST=GMT+10:00')],
-      runCtx(),
+      runCtx(FIXED_NOW),
     )[0]!;
     // PST keeps its built-in -0800: 10:00 local is 18:00 UTC.
     expect(iso(e._time)).toBe('2024-01-15T18:00:00.000Z');
@@ -255,7 +248,7 @@ describe('extractTimestamps — TZ_ALIAS (#227)', () => {
     const e = extractTimestamps(
       [event('2024-01-15 10:00:00 x')],
       [dir('TIME_FORMAT', '%Y-%m-%d %H:%M:%S'), dir('TZ', 'EST'), dir('TZ_ALIAS', 'EST=GMT+10:00')],
-      runCtx(diags),
+      runCtx(FIXED_NOW, diags),
     )[0]!;
     expect(iso(e._time)).toBe('2024-01-15T15:00:00.000Z');
     expect(diags).toHaveLength(0);
@@ -266,7 +259,7 @@ describe('extractTimestamps — TZ_ALIAS (#227)', () => {
     const e = extractTimestamps(
       [event('2024-01-15 10:00:00 EST x')],
       [fmt, dir('TZ_ALIAS', 'GMT-6:00,EST=GMT-5:00')],
-      runCtx(diags),
+      runCtx(FIXED_NOW, diags),
     )[0]!;
     expect(iso(e._time)).toBe('2024-01-15T15:00:00.000Z');
     const warning = diags.find((d) => d.directiveKey === 'TZ_ALIAS');
@@ -279,7 +272,7 @@ describe('extractTimestamps — TZ_ALIAS (#227)', () => {
     const e = extractTimestamps(
       [event('2024-01-15 10:00:00 EST x')],
       [fmt, dir('TZ_ALIAS', 'EST=Middle/Earth')],
-      runCtx(diags),
+      runCtx(FIXED_NOW, diags),
     )[0]!;
     // Unresolvable, so UTC — the documented fallback for any zone.
     expect(iso(e._time)).toBe('2024-01-15T10:00:00.000Z');
@@ -299,7 +292,7 @@ describe('extractTimestamps — timezone resolution (#12)', () => {
     // A name no time-zone database has: IANA names resolve, so only a
     // genuinely unknown zone exercises the fallback.
     const diags: ValidationDiagnostic[] = [];
-    const e = extractTimestamps([event('2024-01-15 10:00:00 x')], [fmt, dir('TZ', 'Middle/Earth')], runCtx(diags))[0]!;
+    const e = extractTimestamps([event('2024-01-15 10:00:00 x')], [fmt, dir('TZ', 'Middle/Earth')], runCtx(FIXED_NOW, diags))[0]!;
     expect(iso(e._time)).toBe('2024-01-15T10:00:00.000Z');
     expect(diags.some((d) => d.level === 'warning' && /Middle\/Earth/.test(d.message))).toBe(true);
   });
@@ -307,7 +300,7 @@ describe('extractTimestamps — timezone resolution (#12)', () => {
   it('resolves an IANA zone name against its real offset, without warning (#159)', () => {
     const diags: ValidationDiagnostic[] = [];
     // London is BST (+01:00) in July, so 10:00 local is 09:00Z.
-    const e = extractTimestamps([event('2024-07-15 10:00:00 x')], [fmt, dir('TZ', 'Europe/London')], runCtx(diags))[0]!;
+    const e = extractTimestamps([event('2024-07-15 10:00:00 x')], [fmt, dir('TZ', 'Europe/London')], runCtx(FIXED_NOW, diags))[0]!;
     expect(iso(e._time)).toBe('2024-07-15T09:00:00.000Z');
     expect(diags).toHaveLength(0);
   });
@@ -316,14 +309,14 @@ describe('extractTimestamps — timezone resolution (#12)', () => {
     // Doc-derived: TZ is a zoneinfo name, and zoneinfo's CET observes DST, as
     // Europe/Paris does: 10:00 on 1 July is 08:00Z, not the fixed +01:00's 09:00Z.
     const diags: ValidationDiagnostic[] = [];
-    const e = extractTimestamps([event('2026-07-01 10:00:00 x')], [fmt, dir('TZ', 'CET')], runCtx(diags))[0]!;
+    const e = extractTimestamps([event('2026-07-01 10:00:00 x')], [fmt, dir('TZ', 'CET')], runCtx(FIXED_NOW, diags))[0]!;
     expect(iso(e._time)).toBe('2026-07-01T08:00:00.000Z');
     expect(diags).toHaveLength(0);
   });
 
   it('does not warn for a resolvable numeric TZ offset', () => {
     const diags: ValidationDiagnostic[] = [];
-    const e = extractTimestamps([event('2024-01-15 10:00:00 x')], [fmt, dir('TZ', '-0500')], runCtx(diags))[0]!;
+    const e = extractTimestamps([event('2024-01-15 10:00:00 x')], [fmt, dir('TZ', '-0500')], runCtx(FIXED_NOW, diags))[0]!;
     // TZ=-0500 → local 10:00 is 15:00 UTC.
     expect(iso(e._time)).toBe('2024-01-15T15:00:00.000Z');
     expect(diags).toHaveLength(0);
@@ -334,7 +327,7 @@ describe('extractTimestamps — timezone resolution (#12)', () => {
     extractTimestamps(
       [event('2024-01-15 10:00:00 a'), event('2024-01-16 11:00:00 b')],
       [fmt, dir('TZ', 'Middle/Earth')],
-      runCtx(diags),
+      runCtx(FIXED_NOW, diags),
     );
     expect(diags.filter((d) => /Middle\/Earth/.test(d.message))).toHaveLength(1);
   });
@@ -347,7 +340,7 @@ describe('#163 — an event with no timestamp inherits the previous one', () => 
     const out = extractTimestamps(
       [event('2024-01-15 10:00:00 first'), event('continuation with no date')],
       [fmt],
-      runCtx(),
+      runCtx(FIXED_NOW),
     );
     expect(iso(out[0]!._time)).toBe('2024-01-15T10:00:00.000Z');
     expect(iso(out[1]!._time)).toBe('2024-01-15T10:00:00.000Z');
@@ -357,7 +350,7 @@ describe('#163 — an event with no timestamp inherits the previous one', () => 
     const out = extractTimestamps(
       [event('no date here'), event('2024-01-15 10:00:00 later')],
       [fmt],
-      runCtx(undefined, { now: NOW }),
+      runCtx(NOW),
     );
     // Splunk always places an event on the timeline; the trace is what says the
     // value was not read from the event.
@@ -370,7 +363,7 @@ describe('#163 — an event with no timestamp inherits the previous one', () => 
     const out = extractTimestamps(
       [event('2024-01-15 10:00:00 a'), event('2024-01-16 11:00:00 b'), event('no date')],
       [fmt],
-      runCtx(),
+      runCtx(FIXED_NOW),
     );
     expect(iso(out[2]!._time)).toBe('2024-01-16T11:00:00.000Z');
   });
@@ -379,13 +372,13 @@ describe('#163 — an event with no timestamp inherits the previous one', () => 
     const out = extractTimestamps(
       [event('ts=2024-01-15 10:00:00 a'), event('no prefix on this line')],
       [fmt, dir('TIME_PREFIX', 'ts=')],
-      runCtx(),
+      runCtx(FIXED_NOW),
     );
     expect(iso(out[1]!._time)).toBe('2024-01-15T10:00:00.000Z');
   });
 
   it('records the inheritance in the trace rather than implying extraction', () => {
-    const out = extractTimestamps([event('2024-01-15 10:00:00 a'), event('no date')], [fmt], runCtx());
+    const out = extractTimestamps([event('2024-01-15 10:00:00 a'), event('no date')], [fmt], runCtx(FIXED_NOW));
     const step = out[1]!.processingTrace.at(-1);
     expect(step?.description).toContain('inherited');
   });
@@ -398,7 +391,7 @@ describe('#85 — DATETIME_CONFIG', () => {
     const e = extractTimestamps(
       [event('2024-01-15 10:00:00 has a perfectly good date')],
       [fmt, dir('DATETIME_CONFIG', 'CURRENT')],
-      runCtx(undefined, { now: NOW }),
+      runCtx(NOW),
     )[0]!;
     expect(iso(e._time)).toBe(NOW.toISOString());
     expect(timeSource(e)).toBe('datetime-config-current');
@@ -408,14 +401,14 @@ describe('#85 — DATETIME_CONFIG', () => {
     const e = extractTimestamps(
       [event('2024-01-15 10:00:00 has a perfectly good date')],
       [fmt, dir('DATETIME_CONFIG', 'NONE')],
-      runCtx(undefined, { now: NOW }),
+      runCtx(NOW),
     )[0]!;
     expect(iso(e._time)).toBe(NOW.toISOString());
     expect(timeSource(e)).toBe('datetime-config-none');
   });
 
   it('is case-insensitive, as conf values are', () => {
-    const e = extractTimestamps([event('x')], [dir('DATETIME_CONFIG', 'current')], runCtx(undefined, { now: NOW }))[0]!;
+    const e = extractTimestamps([event('x')], [dir('DATETIME_CONFIG', 'current')], runCtx(NOW))[0]!;
     expect(timeSource(e)).toBe('datetime-config-current');
   });
 
@@ -425,7 +418,7 @@ describe('#85 — DATETIME_CONFIG', () => {
     const e = extractTimestamps(
       [event('2024-01-15 10:00:00 x')],
       [fmt, dir('DATETIME_CONFIG', '/etc/apps/my_app/datetime.xml')],
-      runCtx(undefined, { now: NOW }),
+      runCtx(NOW),
     )[0]!;
     expect(iso(e._time)).toBe('2024-01-15T10:00:00.000Z');
     expect(timeSource(e)).toBe('TIME_FORMAT');
@@ -436,7 +429,7 @@ describe('#85 — timestamp sanity bounds', () => {
   const fmt = dir('TIME_FORMAT', '%Y-%m-%d %H:%M:%S');
 
   it('accepts a timestamp inside the default bounds', () => {
-    const e = extractTimestamps([event('2026-08-03 10:00:00 x')], [fmt], runCtx(undefined, { now: NOW }))[0]!;
+    const e = extractTimestamps([event('2026-08-03 10:00:00 x')], [fmt], runCtx(NOW))[0]!;
     expect(iso(e._time)).toBe('2026-08-03T10:00:00.000Z');
     expect(timeSource(e)).toBe('TIME_FORMAT');
   });
@@ -445,7 +438,7 @@ describe('#85 — timestamp sanity bounds', () => {
     const e = extractTimestamps(
       [event('2026-07-01 10:00:00 x')],
       [fmt, dir('MAX_DAYS_AGO', '7')],
-      runCtx(undefined, { now: NOW }),
+      runCtx(NOW),
     )[0]!;
     expect(iso(e._time)).toBe(NOW.toISOString());
     expect(timeSource(e)).toBe('current-time');
@@ -453,7 +446,7 @@ describe('#85 — timestamp sanity bounds', () => {
 
   it('rejects a timestamp further ahead than MAX_DAYS_HENCE', () => {
     // Default MAX_DAYS_HENCE is 2 days, so a date a year out is refused.
-    const e = extractTimestamps([event('2027-08-04 10:00:00 x')], [fmt], runCtx(undefined, { now: NOW }))[0]!;
+    const e = extractTimestamps([event('2027-08-04 10:00:00 x')], [fmt], runCtx(NOW))[0]!;
     expect(timeSource(e)).toBe('current-time');
   });
 
@@ -461,7 +454,7 @@ describe('#85 — timestamp sanity bounds', () => {
     const out = extractTimestamps(
       [event('2026-08-03 10:00:00 good'), event('2027-08-04 10:00:00 way out')],
       [fmt],
-      runCtx(undefined, { now: NOW }),
+      runCtx(NOW),
     );
     expect(iso(out[1]!._time)).toBe('2026-08-03T10:00:00.000Z');
     expect(timeSource(out[1]!)).toBe('previous-event');
@@ -475,7 +468,7 @@ describe('#85 — timestamp sanity bounds', () => {
     const out = extractTimestamps(
       [event('2026-08-03 10:00:00 first'), event('2026-08-03 08:00:00 two hours earlier')],
       [fmt, dir('MAX_DIFF_SECS_AGO', '3600')],
-      runCtx(undefined, { now: NOW }),
+      runCtx(NOW),
     );
     expect(iso(out[1]!._time)).toBe('2026-08-03T08:00:00.000Z');
     expect(timeSource(out[1]!)).toBe('TIME_FORMAT');
@@ -490,7 +483,7 @@ describe('#85 — timestamp sanity bounds', () => {
         event('2026-08-03 06:00:00 a'),
       ],
       [fmt],
-      runCtx(undefined, { now: NOW }),
+      runCtx(NOW),
     );
     expect(out.map((e) => iso(e._time))).toEqual([
       '2026-08-03T12:00:00.000Z',
@@ -507,7 +500,7 @@ describe('#85 — timestamp sanity bounds', () => {
     const out = extractTimestamps(
       [event('2026-08-03T12:00:00 a'), event('2026-08-03T11:59:00 b'), event('2026-08-03T06:00:00 c')],
       [],
-      runCtx(undefined, { now: NOW }),
+      runCtx(NOW),
     );
     expect(iso(out[2]!._time)).toBe('2026-08-03T06:00:00.000Z');
     expect(timeSource(out[2]!)).toBe('auto-recognition');
@@ -518,7 +511,7 @@ describe('#85 — timestamp sanity bounds', () => {
     const out = extractTimestamps(
       [event('2026-08-03T12:00:00 a'), event('2026-08-03T11:59:00 b'), event('08/01/2026 06:00:00 c')],
       [],
-      runCtx(diagnostics, { now: NOW }),
+      runCtx(NOW, diagnostics),
     );
     expect(iso(out[2]!._time)).toBe('2026-08-03T11:59:00.000Z');
     expect(timeSource(out[2]!)).toBe('previous-event');
@@ -529,7 +522,7 @@ describe('#85 — timestamp sanity bounds', () => {
     const out = extractTimestamps(
       [event('2026-08-03 10:00:00 first'), event('2026-08-03 09:30:00 half an hour earlier')],
       [fmt, dir('MAX_DIFF_SECS_AGO', '3600')],
-      runCtx(undefined, { now: NOW }),
+      runCtx(NOW),
     );
     expect(iso(out[1]!._time)).toBe('2026-08-03T09:30:00.000Z');
     expect(timeSource(out[1]!)).toBe('TIME_FORMAT');
@@ -540,7 +533,7 @@ describe('#85 — timestamp sanity bounds', () => {
     extractTimestamps(
       [event('2027-08-04 10:00:00 a'), event('2027-08-05 10:00:00 b'), event('2027-08-06 10:00:00 c')],
       [fmt],
-      runCtx(diagnostics, { now: NOW }),
+      runCtx(NOW, diagnostics),
     );
     const bounds = diagnostics.filter((d) => d.message.includes('MAX_DAYS_HENCE'));
     expect(bounds).toHaveLength(1);
@@ -548,7 +541,7 @@ describe('#85 — timestamp sanity bounds', () => {
   });
 
   it('names the bound that rejected the timestamp in the trace', () => {
-    const e = extractTimestamps([event('2027-08-04 10:00:00 x')], [fmt], runCtx(undefined, { now: NOW }))[0]!;
+    const e = extractTimestamps([event('2027-08-04 10:00:00 x')], [fmt], runCtx(NOW))[0]!;
     const step = e.processingTrace.at(-1);
     expect(step?.description).toContain('MAX_DAYS_HENCE');
     expect(step?.description).toContain('rejected');
@@ -560,7 +553,7 @@ describe('#85 — timestamp sanity bounds', () => {
     const out = extractTimestamps(
       [event('2026-08-03 10:00:00 good'), event('2027-08-04 10:00:00 rejected'), event('no date')],
       [fmt],
-      runCtx(undefined, { now: NOW }),
+      runCtx(NOW),
     );
     expect(iso(out[2]!._time)).toBe('2026-08-03T10:00:00.000Z');
   });
@@ -577,7 +570,7 @@ describe('#85 — MAX_DIFF_SECS_HENCE', () => {
     const out = extractTimestamps(
       [event('2026-08-01 10:00:00 first'), event('2026-08-04 09:00:00 three days later')],
       [fmt, dir('MAX_DIFF_SECS_HENCE', '3600')],
-      runCtx(undefined, { now: NOW }),
+      runCtx(NOW),
     );
     expect(iso(out[1]!._time)).toBe('2026-08-04T09:00:00.000Z');
     expect(timeSource(out[1]!)).toBe('TIME_FORMAT');
@@ -587,7 +580,7 @@ describe('#85 — MAX_DIFF_SECS_HENCE', () => {
     const out = extractTimestamps(
       [event('2026-08-01T10:00:00 first'), event('08/03/2026 09:00:00 two days later')],
       [dir('MAX_DIFF_SECS_HENCE', '3600')],
-      runCtx(undefined, { now: NOW }),
+      runCtx(NOW),
     );
     expect(iso(out[1]!._time)).toBe('2026-08-01T10:00:00.000Z');
     expect(timeSource(out[1]!)).toBe('previous-event');
@@ -597,7 +590,7 @@ describe('#85 — MAX_DIFF_SECS_HENCE', () => {
     const out = extractTimestamps(
       [event('2026-08-01 10:00:00 first'), event('2026-08-01 10:30:00 half an hour later')],
       [fmt, dir('MAX_DIFF_SECS_HENCE', '3600')],
-      runCtx(undefined, { now: NOW }),
+      runCtx(NOW),
     );
     expect(iso(out[1]!._time)).toBe('2026-08-01T10:30:00.000Z');
     expect(timeSource(out[1]!)).toBe('TIME_FORMAT');
@@ -611,13 +604,13 @@ describe('#286 — MAX_TIMESTAMP_LOOKAHEAD = 0 / -1 disables the limit', () => {
   const fmt = dir('TIME_FORMAT', '%Y-%m-%d %H:%M:%S');
 
   it('does not find a deep timestamp under the default', () => {
-    const e = extractTimestamps([event(raw)], [fmt], runCtx(undefined, { now: NOW }))[0]!;
+    const e = extractTimestamps([event(raw)], [fmt], runCtx(NOW))[0]!;
     expect(timeSource(e)).toBe('current-time');
   });
 
   for (const value of ['0', '-1']) {
     it(`finds it with MAX_TIMESTAMP_LOOKAHEAD = ${value}`, () => {
-      const e = extractTimestamps([event(raw)], [fmt, dir('MAX_TIMESTAMP_LOOKAHEAD', value)], runCtx(undefined, { now: NOW }))[0]!;
+      const e = extractTimestamps([event(raw)], [fmt, dir('MAX_TIMESTAMP_LOOKAHEAD', value)], runCtx(NOW))[0]!;
       expect(iso(e._time)).toBe('2026-08-03T10:00:00.000Z');
     });
   }
@@ -639,7 +632,7 @@ describe('#286 — a TIME_PREFIX that does not compile', () => {
     const out = extractTimestamps(
       [event('2026-08-03 10:00:00 a'), event('2026-08-03 10:00:01 b')],
       [dir('TIME_FORMAT', '%Y-%m-%d %H:%M:%S'), dir('TIME_PREFIX', 'ts=(')],
-      runCtx(diagnostics, { now: NOW }),
+      runCtx(NOW, diagnostics),
     );
     expect(out.map(timeSource)).toEqual(['current-time', 'current-time']);
     const errors = diagnostics.filter((d) => d.directiveKey === 'TIME_PREFIX');
@@ -650,10 +643,10 @@ describe('#286 — a TIME_PREFIX that does not compile', () => {
 
   it('gives PCRE\'s reason, and does not refuse a pattern for backtracking (#368)', () => {
     const diagnostics: ValidationDiagnostic[] = [];
-    extractTimestamps([event('x')], [dir('TIME_PREFIX', '(?<=a+)b')], runCtx(diagnostics, { now: NOW }));
+    extractTimestamps([event('x')], [dir('TIME_PREFIX', '(?<=a+)b')], runCtx(NOW, diagnostics));
     expect(diagnostics.find((d) => d.directiveKey === 'TIME_PREFIX')?.message).toMatch(/lookbehind/);
     const quiet: ValidationDiagnostic[] = [];
-    extractTimestamps([event('x')], [dir('TIME_PREFIX', '(a+)+')], runCtx(quiet, { now: NOW }));
+    extractTimestamps([event('x')], [dir('TIME_PREFIX', '(a+)+')], runCtx(NOW, quiet));
     expect(quiet.filter((d) => d.directiveKey === 'TIME_PREFIX')).toEqual([]);
   });
 });
@@ -664,7 +657,7 @@ describe('extractTimestamps — auto-recognition keeps the zone (#353)', () => {
   // props.conf.spec applies only to timestamps without one. No capture covers
   // these shapes.
   const auto = (raw: string, directives: ConfDirective[] = []) =>
-    iso(extractTimestamps([event(raw)], directives, runCtx(undefined, { now: NOW }))[0]!._time);
+    iso(extractTimestamps([event(raw)], directives, runCtx(NOW))[0]!._time);
 
   it('reads a zone after a microsecond fraction', () => {
     expect(auto('2025-12-31T10:00:00.123456+05:00 msg')).toBe('2025-12-31T05:00:00.123Z');

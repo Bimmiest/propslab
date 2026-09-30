@@ -20,18 +20,11 @@ import { evaluateExpression } from '../processors/eval/evaluator';
 import { applyIngestEval } from '../transforms/ingestEval';
 import { evaluateStopCondition } from '../transforms/stopProcessing';
 import type { SplunkEvent, ConfDirective } from '../types';
-import { runCtx } from './runCtx';
+import { runCtx, FIXED_NOW } from './runCtx';
+import { makeEvent } from '../../test/makeEvent';
 
 function event(fields: Record<string, string> = {}): SplunkEvent {
-  return {
-    _raw: 'raw',
-    _time: null,
-    _meta: {},
-    fields,
-    metadata: { index: 'main', host: 'h', source: 's', sourcetype: 'st' },
-    lineNumbers: { start: 1, end: 1 },
-    processingTrace: [],
-  };
+  return makeEvent('raw', { fields });
 }
 
 const evalDir = (value: string): ConfDirective =>
@@ -39,7 +32,7 @@ const evalDir = (value: string): ConfDirective =>
 
 /** What `EVAL-out = expr` writes, or undefined when it writes nothing. */
 function evalWith(expr: string, fields: Record<string, string> = {}) {
-  return applyEvalExpressions([event(fields)], [evalDir(expr)], runCtx())[0]!.fields['out'];
+  return applyEvalExpressions([event(fields)], [evalDir(expr)], runCtx(FIXED_NOW))[0]!.fields['out'];
 }
 
 /** The raw eval value, for asserting NULL itself rather than its effect. */
@@ -152,8 +145,8 @@ describe('consumers of a NULL condition (#343)', () => {
     const dirs: ConfDirective[] = [
       { key: 'INGEST_EVAL', value: 'queue=if(level!="INFO","nullQueue","indexQueue")', line: 1, directiveType: 'INGEST_EVAL' },
     ];
-    expect(applyIngestEval([event()], dirs, runCtx())[0]!._meta._queue).toBe('indexQueue');
-    expect(applyIngestEval([event({ level: 'DEBUG' })], dirs, runCtx())[0]!._meta._queue).toBe('nullQueue');
+    expect(applyIngestEval([event()], dirs, runCtx(FIXED_NOW))[0]!._meta._queue).toBe('indexQueue');
+    expect(applyIngestEval([event({ level: 'DEBUG' })], dirs, runCtx(FIXED_NOW))[0]!._meta._queue).toBe('nullQueue');
   });
 
   it('STOP_PROCESSING_IF does not stop on a NULL condition', () => {
@@ -161,7 +154,7 @@ describe('consumers of a NULL condition (#343)', () => {
     const dirs: ConfDirective[] = [
       { key: 'STOP_PROCESSING_IF', value: 'level != "INFO"', line: 1, directiveType: 'STOP_PROCESSING_IF' },
     ];
-    expect(evaluateStopCondition(event(), dirs, runCtx([], { now: 0 }))?.stop).toBe(false);
-    expect(evaluateStopCondition(event({ level: 'DEBUG' }), dirs, runCtx([], { now: 0 }))?.stop).toBe(true);
+    expect(evaluateStopCondition(event(), dirs, runCtx(0, []))?.stop).toBe(false);
+    expect(evaluateStopCondition(event({ level: 'DEBUG' }), dirs, runCtx(0, []))?.stop).toBe(true);
   });
 });

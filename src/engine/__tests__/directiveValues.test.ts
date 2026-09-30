@@ -28,7 +28,8 @@ import { applyRegexTransform } from '../transforms/regexTransform';
 import { lintMatchedDirectives } from '../configLint';
 import { runPipeline } from '../pipeline';
 import type { ConfDirective, ConfStanza, EventMetadata, SplunkEvent, ValidationDiagnostic } from '../types';
-import { runCtx } from './runCtx';
+import { runCtx, FIXED_NOW } from './runCtx';
+import { makeEvent } from '../../test/makeEvent';
 
 const META: EventMetadata = { index: 'main', host: 'h', source: 's', sourcetype: 'st' };
 
@@ -37,15 +38,7 @@ function d(key: string, value: string, line = 1): ConfDirective {
 }
 
 function event(raw: string): SplunkEvent {
-  return {
-    _raw: raw,
-    _time: null,
-    _meta: {},
-    fields: {},
-    metadata: { ...META },
-    lineNumbers: { start: 1, end: 1 },
-    processingTrace: [],
-  };
+  return makeEvent(raw);
 }
 
 function stanza(name: string, directives: Record<string, string>): ConfStanza {
@@ -114,11 +107,11 @@ describe('SHOULD_LINEMERGE accepts every true spelling (was: exactly "true", unt
   const raw = '2026-01-15 10:00:00 a\ncontinued\n2026-01-15 10:00:01 b';
 
   it.each(['1', 'yes', 't', 'on', 'true '])('merges for %j', (v) => {
-    expect(breakLines(raw, [d('SHOULD_LINEMERGE', v)], META, runCtx())).toHaveLength(2);
+    expect(breakLines(raw, [d('SHOULD_LINEMERGE', v)], META, runCtx(FIXED_NOW))).toHaveLength(2);
   });
 
   it('still reads an explicit non-boolean as false, as it did', () => {
-    expect(breakLines(raw, [d('SHOULD_LINEMERGE', 'maybe')], META, runCtx())).toHaveLength(3);
+    expect(breakLines(raw, [d('SHOULD_LINEMERGE', 'maybe')], META, runCtx(FIXED_NOW))).toHaveLength(3);
   });
 });
 
@@ -142,7 +135,7 @@ describe('WRITE_META, REPEAT_MATCH, MV_ADD and JSON_TRIM_BRACES_IN_ARRAY_NAMES a
     const [e] = applyIndexedExtractions(
       [event('{"a":["x","y"]}')],
       [d('INDEXED_EXTRACTIONS', 'json'), d('JSON_TRIM_BRACES_IN_ARRAY_NAMES', 'yes')],
-      runCtx(),
+      runCtx(FIXED_NOW),
     );
     expect(e?.fields['a']).toEqual(['x', 'y']);
   });
@@ -152,22 +145,22 @@ describe('WRITE_META, REPEAT_MATCH, MV_ADD and JSON_TRIM_BRACES_IN_ARRAY_NAMES a
 
 describe('default-true settings accept every false spelling (was: exactly "false", or false/0)', () => {
   it.each(['0', 'no', 'f', 'off'])('AUTO_KV_JSON = %s turns automatic JSON off', (v) => {
-    const [e] = applyKvMode([event('{"action":"login"}')], [d('AUTO_KV_JSON', v)], runCtx());
+    const [e] = applyKvMode([event('{"action":"login"}')], [d('AUTO_KV_JSON', v)], runCtx(FIXED_NOW));
     expect(e?.fields['action']).toBeUndefined();
   });
 
   it('KV_TRIM_SPACES = off keeps the outer spaces (off was the one false spelling it missed)', () => {
-    const [e] = applyKvMode([event('a="  x  "')], [d('KV_TRIM_SPACES', 'off')], runCtx());
+    const [e] = applyKvMode([event('a="  x  "')], [d('KV_TRIM_SPACES', 'off')], runCtx(FIXED_NOW));
     expect(e?.fields['a']).toBe('  x  ');
   });
 
   it.each(['0', 'no'])('BREAK_ONLY_BEFORE_DATE = %s stops breaking before dates', (v) => {
     const raw = '2026-01-15 10:00:00 a\n2026-01-15 10:00:01 b';
-    expect(breakLines(raw, [d('BREAK_ONLY_BEFORE_DATE', v)], META, runCtx())).toHaveLength(1);
+    expect(breakLines(raw, [d('BREAK_ONLY_BEFORE_DATE', v)], META, runCtx(FIXED_NOW))).toHaveLength(1);
   });
 
   it.each(['0', 'no'])('ANNOTATE_PUNCT = %s drops the punct field', (v) => {
-    const [e] = annotatePunct([event('a=b')], [d('ANNOTATE_PUNCT', v)], runCtx());
+    const [e] = annotatePunct([event('a=b')], [d('ANNOTATE_PUNCT', v)], runCtx(FIXED_NOW));
     expect(e?.fields['punct']).toBeUndefined();
   });
 
@@ -186,7 +179,7 @@ describe('default-true settings accept every false spelling (was: exactly "false
         d('XML_INDEXED_EXTRACTIONS_PIPELINE', 'typing'),
         d('XML_IE_SKIP_XML_ENCODED_VALS', '0'),
       ],
-      runCtx(),
+      runCtx(FIXED_NOW),
     );
     expect(e?.fields['Cmd']).toBe('a & b');
   });
@@ -304,17 +297,17 @@ describe('every boolean directive follows one rule (#473)', () => {
   it('the readers agree: a non-boolean value switches a default-true and a default-false setting off', () => {
     const raw = '2026-01-15 10:00:00 a\ncontinued\n2026-01-15 10:00:01 b';
     // default-true: ANNOTATE_PUNCT, BREAK_ONLY_BEFORE_DATE, CLEAN_KEYS
-    const [punct] = annotatePunct([event('a=b')], [d('ANNOTATE_PUNCT', 'nope')], runCtx());
+    const [punct] = annotatePunct([event('a=b')], [d('ANNOTATE_PUNCT', 'nope')], runCtx(FIXED_NOW));
     expect(punct?.fields['punct']).toBeUndefined();
-    expect(breakLines('2026-01-15 10:00:00 a\n2026-01-15 10:00:01 b', [d('BREAK_ONLY_BEFORE_DATE', 'nope')], META, runCtx())).toHaveLength(1);
+    expect(breakLines('2026-01-15 10:00:00 a\n2026-01-15 10:00:01 b', [d('BREAK_ONLY_BEFORE_DATE', 'nope')], META, runCtx(FIXED_NOW))).toHaveLength(1);
     const s = stanza('raw', { REGEX: '([\\w.\\-]+)=(\\w+)', FORMAT: '$1::$2', CLEAN_KEYS: 'nope' });
     expect(applyRegexTransform(event('my.odd-key=value'), s, undefined, 'search-time').fields).toEqual({ 'my.odd-key': 'value' });
     // SHOULD_LINEMERGE, whatever the structured-format default would have been.
-    expect(breakLines(raw, [d('SHOULD_LINEMERGE', 'nope')], META, runCtx())).toHaveLength(3);
+    expect(breakLines(raw, [d('SHOULD_LINEMERGE', 'nope')], META, runCtx(FIXED_NOW))).toHaveLength(3);
     expect(
-      breakLines(raw, [d('INDEXED_EXTRACTIONS', 'csv'), d('SHOULD_LINEMERGE', 'nope')], META, runCtx()),
+      breakLines(raw, [d('INDEXED_EXTRACTIONS', 'csv'), d('SHOULD_LINEMERGE', 'nope')], META, runCtx(FIXED_NOW)),
     ).toHaveLength(3);
     // An empty SHOULD_LINEMERGE keeps the default (merging on).
-    expect(breakLines(raw, [d('SHOULD_LINEMERGE', '')], META, runCtx())).toHaveLength(2);
+    expect(breakLines(raw, [d('SHOULD_LINEMERGE', '')], META, runCtx(FIXED_NOW))).toHaveLength(2);
   });
 });

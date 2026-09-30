@@ -12,18 +12,11 @@ import { describe, it, expect } from 'vitest';
 import { applyEvalExpressions } from '../processors/evalProcessor';
 import { runPipeline } from '../pipeline';
 import type { SplunkEvent, ConfDirective, ValidationDiagnostic } from '../types';
-import { runCtx } from './runCtx';
+import { runCtx, FIXED_NOW } from './runCtx';
+import { makeEvent } from '../../test/makeEvent';
 
 function event(fields: Record<string, string> = {}): SplunkEvent {
-  return {
-    _raw: 'raw',
-    _time: null,
-    _meta: {},
-    fields,
-    metadata: { index: 'main', host: 'h', source: 's', sourcetype: 'st' },
-    lineNumbers: { start: 1, end: 1 },
-    processingTrace: [],
-  };
+  return makeEvent('raw', { fields });
 }
 
 const evalDir = (className: string, value: string): ConfDirective =>
@@ -31,7 +24,7 @@ const evalDir = (className: string, value: string): ConfDirective =>
 
 // Read through if(): a field cannot be assigned a boolean result.
 const cidr = (range: string, ip: string) =>
-  applyEvalExpressions([event({ ip })], [evalDir('r', `if(cidrmatch("${range}", ip), "true", "false")`)], runCtx())[0]!.fields['r'];
+  applyEvalExpressions([event({ ip })], [evalDir('r', `if(cidrmatch("${range}", ip), "true", "false")`)], runCtx(FIXED_NOW))[0]!.fields['r'];
 
 describe('cidrmatch() (#291)', () => {
   it.each([
@@ -88,15 +81,15 @@ describe('cidrmatch() (#291)', () => {
   // and an if() guard still takes its else branch. Doc-derived (NULL is falsy
   // in a condition), not captured.
   it('yields NULL for an absent address, as the comparison operators do (#343)', () => {
-    const r = applyEvalExpressions([event()], [evalDir('r', 'cidrmatch("10.0.0.0/8", nope)')], runCtx())[0]!;
+    const r = applyEvalExpressions([event()], [evalDir('r', 'cidrmatch("10.0.0.0/8", nope)')], runCtx(FIXED_NOW))[0]!;
     expect(r.fields['r']).toBeUndefined();
-    const guarded = applyEvalExpressions([event()], [evalDir('r', 'if(cidrmatch("10.0.0.0/8", nope), "in", "out")')], runCtx())[0]!;
+    const guarded = applyEvalExpressions([event()], [evalDir('r', 'if(cidrmatch("10.0.0.0/8", nope), "in", "out")')], runCtx(FIXED_NOW))[0]!;
     expect(guarded.fields['r']).toBe('out');
   });
 
   it('no longer warns that it is not simulated', () => {
     const diagnostics: ValidationDiagnostic[] = [];
-    applyEvalExpressions([event({ ip: '10.0.0.1' })], [evalDir('r', 'if(cidrmatch("10.0.0.0/8", ip), 1, 0)')], runCtx(diagnostics));
+    applyEvalExpressions([event({ ip: '10.0.0.1' })], [evalDir('r', 'if(cidrmatch("10.0.0.0/8", ip), 1, 0)')], runCtx(FIXED_NOW, diagnostics));
     expect(diagnostics).toEqual([]);
   });
 });
@@ -104,7 +97,7 @@ describe('cidrmatch() (#291)', () => {
 describe('eval regex arguments that do not compile (#291)', () => {
   const run = (expr: string, events = [event({ s: 'abc' })]) => {
     const diagnostics: ValidationDiagnostic[] = [];
-    const out = applyEvalExpressions(events, [evalDir('r', expr)], runCtx(diagnostics));
+    const out = applyEvalExpressions(events, [evalDir('r', expr)], runCtx(FIXED_NOW, diagnostics));
     return { out, diagnostics };
   };
 

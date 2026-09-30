@@ -24,17 +24,10 @@ import {
 } from '../processors/eval/values';
 import { evaluateExpression } from '../processors/eval/evaluator';
 import type { SplunkEvent } from '../types';
+import { makeEvent } from '../../test/makeEvent';
 
 function event(fields: Record<string, string | string[]> = {}): SplunkEvent {
-  return {
-    _raw: 'raw',
-    _time: null,
-    _meta: {},
-    fields,
-    metadata: { index: 'main', host: 'h', source: 's', sourcetype: 'st' },
-    lineNumbers: { start: 1, end: 1 },
-    processingTrace: [],
-  };
+  return makeEvent('raw', { fields });
 }
 
 const value = (expr: string, fields: Record<string, string | string[]> = {}) =>

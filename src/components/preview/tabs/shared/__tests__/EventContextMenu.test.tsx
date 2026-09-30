@@ -4,19 +4,14 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { EventContextMenu } from '../EventContextMenu';
 import { useAppStore } from '../../../../../store/useAppStore';
 import type { SplunkEvent } from '../../../../../engine/types';
+import { makeEvent } from '../../../../../test/makeEvent';
 
 const initial = useAppStore.getState();
 
 function event(): SplunkEvent {
-  return {
-    _raw: 'status=200 user=alice',
-    _time: null,
-    _meta: {},
-    fields: {},
+  return makeEvent('status=200 user=alice', {
     metadata: { index: 'main', host: 'h', source: 's', sourcetype: '' },
-    lineNumbers: { start: 1, end: 1 },
-    processingTrace: [],
-  };
+  });
 }
 
 // With a blank sourcetype the menu falls back to a placeholder stanza name.

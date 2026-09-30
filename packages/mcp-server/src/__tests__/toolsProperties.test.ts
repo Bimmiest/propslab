@@ -44,6 +44,7 @@ import type {
   ValidationDiagnostic,
 } from '../../../../src/engine/types';
 import { fcSeed } from './fcSeed';
+import { makeEvent } from '../../../../src/test/makeEvent';
 
 fc.configureGlobal({ seed: fcSeed(371), numRuns: 100 });
 
@@ -199,13 +200,9 @@ describe('serializeSimulation — the response stays under MAX_PAYLOAD_BYTES', (
   const raw = (n: number) => 'r'.repeat(n);
   const event = (rawLength: number, steps: number): SplunkEvent => {
     const r = raw(rawLength);
-    return {
-      _raw: r,
+    return makeEvent(r, {
       _time: new Date(0),
-      _meta: {},
       fields: { f: r.slice(0, 100) },
-      metadata: { index: 'main', host: 'h', source: 's', sourcetype: 'st' },
-      lineNumbers: { start: 1, end: 1 },
       processingTrace: Array.from({ length: steps }, () => ({
         processor: 'SEDCMD-x',
         phase: 'index-time' as const,
@@ -213,7 +210,7 @@ describe('serializeSimulation — the response stays under MAX_PAYLOAD_BYTES', (
         inputSnapshot: r,
         outputSnapshot: r,
       })),
-    };
+    });
   };
 
   it('whatever the events, traces, diagnostics, max_events and include_snapshots', () => {

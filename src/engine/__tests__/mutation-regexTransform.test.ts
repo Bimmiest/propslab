@@ -4,17 +4,10 @@
 import { describe, it, expect, vi } from 'vitest';
 import { applyRegexTransform } from '../transforms/regexTransform';
 import type { SplunkEvent, ConfStanza } from '../types';
+import { makeEvent } from '../../test/makeEvent';
 
 function event(raw: string, fields: Record<string, string | string[]> = {}): SplunkEvent {
-  return {
-    _raw: raw,
-    _time: null,
-    _meta: {},
-    fields,
-    metadata: { index: 'main', host: 'h', source: 's', sourcetype: 'st' },
-    lineNumbers: { start: 1, end: 1 },
-    processingTrace: [],
-  };
+  return makeEvent(raw, { fields });
 }
 
 function stanza(directives: Record<string, string>, name = 't'): ConfStanza {

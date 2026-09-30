@@ -5,21 +5,14 @@ import { HighlightedTab } from '../HighlightedTab';
 import { useAppStore } from '../../../../store/useAppStore';
 import type { EnrichedEvent } from '../../enrichEvents';
 import type { SplunkEvent, ProcessingStep } from '../../../../engine/types';
+import { makeEvent } from '../../../../test/makeEvent';
 
-function makeEvent(
+function eventWithTrace(
   raw: string,
   fields: Record<string, string | string[]>,
   traces: ProcessingStep[],
 ): SplunkEvent {
-  return {
-    _raw: raw,
-    _time: null,
-    _meta: {},
-    fields,
-    metadata: { index: 'main', host: 'h', source: 's', sourcetype: 'st' },
-    lineNumbers: { start: 1, end: 1 },
-    processingTrace: traces,
-  };
+  return makeEvent(raw, { fields, processingTrace: traces });
 }
 
 function toItem(event: SplunkEvent): EnrichedEvent {
@@ -33,19 +26,19 @@ function toItem(event: SplunkEvent): EnrichedEvent {
   };
 }
 
-const eventWithAuto = makeEvent(
+const eventWithAuto = eventWithTrace(
   '{"user":"alice","status":"ok"}',
   { user: 'alice', status: 'ok' },
   [{ processor: 'KV_MODE', phase: 'search-time', description: '', fieldsAdded: ['user', 'status'] }],
 );
 
-const eventWithManual = makeEvent(
+const eventWithManual = eventWithTrace(
   'admin logged in',
   { username: 'admin' },
   [{ processor: 'EXTRACT-user', phase: 'search-time', description: '', fieldsAdded: ['username'] }],
 );
 
-const eventWithBoth = makeEvent(
+const eventWithBoth = eventWithTrace(
   'login: bob',
   { user: 'bob', action: 'login' },
   [
@@ -138,7 +131,7 @@ describe('HighlightedTab', () => {
   // event would otherwise lock the UI.
   it('caps the rendered rows when a pin matches more than the window', () => {
     const many = Array.from({ length: 150 }, (_, i) =>
-      toItem(makeEvent(`line ${i}`, { username: `u${i}` }, [
+      toItem(eventWithTrace(`line ${i}`, { username: `u${i}` }, [
         { processor: 'EXTRACT-user', phase: 'search-time', description: '', fieldsAdded: ['username'] },
       ])),
     );

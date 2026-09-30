@@ -30,6 +30,7 @@ import { extractTimestamps } from '../processors/timestampExtractor';
 import type { SplunkEvent } from '../types';
 import { runCtx } from './runCtx';
 import { fcSeed } from '../../test/fcSeed';
+import { makeEvent } from '../../test/makeEvent';
 
 fc.configureGlobal({ seed: fcSeed(371), numRuns: 200 });
 
@@ -272,15 +273,7 @@ describe('recognizeTimestamp — reads an ISO stamp of any fraction width and zo
 });
 
 describe('extractTimestamps — places _time at the instant TIME_FORMAT reads', () => {
-  const event = (raw: string): SplunkEvent => ({
-    _raw: raw,
-    _time: null,
-    _meta: {},
-    fields: {},
-    metadata: { index: 'main', host: 'h', source: 's', sourcetype: 'st' },
-    lineNumbers: { start: 1, end: 1 },
-    processingTrace: [],
-  });
+  const event = (raw: string): SplunkEvent => makeEvent(raw);
   const dir = (key: string, value: string) => ({ key, value, line: 1, directiveType: key });
 
   it('with or without TIME_PREFIX, for a now inside the sanity bounds', () => {
@@ -295,7 +288,7 @@ describe('extractTimestamps — places _time at the instant TIME_FORMAT reads', 
         ({ format, text, expected }, withPrefix, sinceStamp, host) => {
           const directives = [dir('TIME_FORMAT', format), ...(withPrefix ? [dir('TIME_PREFIX', 'ts=')] : [])];
           const [out] = inHostZone(host, () =>
-            extractTimestamps([event(`id=7 ts=${text} done`)], directives, runCtx([], { now: new Date(expected + sinceStamp) })),
+            extractTimestamps([event(`id=7 ts=${text} done`)], directives, runCtx(new Date(expected + sinceStamp), [])),
           );
           expect(out!._time?.getTime()).toBe(expected);
         },

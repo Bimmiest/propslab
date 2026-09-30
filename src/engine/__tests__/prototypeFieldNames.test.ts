@@ -6,7 +6,8 @@ import { applyIngestEval } from '../transforms/ingestEval';
 import { applyIndexedExtractions } from '../processors/indexedExtractions';
 import { hasField } from '../utils/fieldBag';
 import type { ConfDirective, SplunkEvent } from '../types';
-import { runCtx } from './runCtx';
+import { runCtx, FIXED_NOW } from './runCtx';
+import { makeEvent } from '../../test/makeEvent';
 
 // A plain object inherits every Object.prototype member, so `fields[name]`
 // reads back a FUNCTION for names like `toString` / `constructor`. Every
@@ -16,15 +17,7 @@ import { runCtx } from './runCtx';
 // correct behaviour is "treated as any other field", not "rejected".
 const PROTO_NAMES = ['toString', 'constructor', 'valueOf', 'hasOwnProperty', '__proto__'];
 
-const ev = (raw: string, fields: Record<string, string | string[]> = {}): SplunkEvent => ({
-  _raw: raw,
-  _time: null,
-  _meta: {},
-  fields,
-  metadata: { index: 'main', host: 'h', source: 's', sourcetype: 'st' },
-  lineNumbers: { start: 1, end: 1 },
-  processingTrace: [],
-});
+const ev = (raw: string, fields: Record<string, string | string[]> = {}): SplunkEvent => makeEvent(raw, { fields });
 
 const dir = (key: string, value: string, directiveType: string, className?: string): ConfDirective =>
   ({ key, value, line: 1, directiveType, ...(className ? { className } : {}) });
@@ -34,7 +27,7 @@ describe('EXTRACT — a capture group named after an Object.prototype member (#1
     const r = extractFields(
       [ev('v=hello')],
       [dir('EXTRACT-a', `v=(?<${name}>\\w+)`, 'EXTRACT', 'a')],
-      runCtx(),
+      runCtx(FIXED_NOW),
     )[0]!;
     expect(hasField(r.fields, name)).toBe(true);
     expect(r.fields[name]).toBe('hello');
@@ -44,7 +37,7 @@ describe('EXTRACT — a capture group named after an Object.prototype member (#1
     const r = extractFields(
       [ev('v=hello')],
       [dir('EXTRACT-a', 'v=(?<toString>\\w+)', 'EXTRACT', 'a')],
-      runCtx(),
+      runCtx(FIXED_NOW),
     )[0]!;
     expect(r.fieldOffsets?.toString).toEqual([[2, 7]]);
   });
@@ -55,7 +48,7 @@ describe('FIELDALIAS — never binds an inherited member (#120)', () => {
     const r = applyFieldAliases(
       [ev('hello')],
       [dir('FIELDALIAS-x', 'toString AS dvc', 'FIELDALIAS', 'x')],
-      runCtx(),
+      runCtx(FIXED_NOW),
     )[0]!;
     // Previously `dvc` was set to Object.prototype.toString — a JS function in
     // the field bag, which then fails to structured-clone out of the worker.
@@ -66,7 +59,7 @@ describe('FIELDALIAS — never binds an inherited member (#120)', () => {
     const r = applyFieldAliases(
       [ev('hello', { toString: 'real-value' })],
       [dir('FIELDALIAS-x', 'toString AS dvc', 'FIELDALIAS', 'x')],
-      runCtx(),
+      runCtx(FIXED_NOW),
     )[0]!;
     expect(r.fields['dvc']).toBe('real-value');
   });
@@ -75,7 +68,7 @@ describe('FIELDALIAS — never binds an inherited member (#120)', () => {
     const r = applyFieldAliases(
       [ev('hello', { src: 'v' })],
       [dir('FIELDALIAS-x', 'src ASNEW toString', 'FIELDALIAS', 'x')],
-      runCtx(),
+      runCtx(FIXED_NOW),
     )[0]!;
     expect(r.fields.toString).toBe('v');
   });
@@ -86,7 +79,7 @@ describe('EVAL — reads and writes such names as fields (#120)', () => {
     const r = applyEvalExpressions(
       [ev('x')],
       [dir('EVAL-out', 'if(isnull(toString), "absent", "present")', 'EVAL', 'out')],
-      runCtx(),
+      runCtx(FIXED_NOW),
     )[0]!;
     expect(r.fields['out']).toBe('absent');
   });
@@ -95,7 +88,7 @@ describe('EVAL — reads and writes such names as fields (#120)', () => {
     const r = applyEvalExpressions(
       [ev('x')],
       [dir('EVAL-constructor', '"computed"', 'EVAL', 'constructor')],
-      runCtx(),
+      runCtx(FIXED_NOW),
     )[0]!;
     expect(r.fields.constructor).toBe('computed');
   });
@@ -103,7 +96,7 @@ describe('EVAL — reads and writes such names as fields (#120)', () => {
 
 describe('INGEST_EVAL / INDEXED_EXTRACTIONS — same names, same treatment (#120)', () => {
   it('INGEST_EVAL assigns a prototype-colliding field', () => {
-    const r = applyIngestEval([ev('x')], [dir('INGEST_EVAL', 'valueOf="v"', 'INGEST_EVAL')], runCtx())[0]!;
+    const r = applyIngestEval([ev('x')], [dir('INGEST_EVAL', 'valueOf="v"', 'INGEST_EVAL')], runCtx(FIXED_NOW))[0]!;
     expect(r.fields.valueOf).toBe('v');
   });
 
@@ -111,7 +104,7 @@ describe('INGEST_EVAL / INDEXED_EXTRACTIONS — same names, same treatment (#120
     const events = [ev('toString,b'), ev('1,2')];
     const r = applyIndexedExtractions(events, [
       dir('INDEXED_EXTRACTIONS', 'csv', 'INDEXED_EXTRACTIONS'),
-    ], runCtx())[0]!;
+    ], runCtx(FIXED_NOW))[0]!;
     expect(r.fields.toString).toBe('1');
     expect(r.fields['b']).toBe('2');
   });

@@ -1,19 +1,16 @@
 import { describe, it, expect } from 'vitest';
 import { applySedCommands } from '../processors/sedCmd';
 import type { ConfDirective, SplunkEvent, ValidationDiagnostic } from '../types';
-import { runCtx } from './runCtx';
+import { runCtx, FIXED_NOW } from './runCtx';
+import { makeEvent } from '../../test/makeEvent';
 
-const ev = (raw: string): SplunkEvent => ({
-  _raw: raw, _time: null, _meta: {}, fields: {},
-  metadata: { index: 'main', host: 'h', source: 's', sourcetype: 'st' },
-  lineNumbers: { start: 1, end: 1 }, processingTrace: [],
-});
+const ev = (raw: string): SplunkEvent => makeEvent(raw);
 const sed = (value: string, className = 'x'): ConfDirective =>
   ({ key: `SEDCMD-${className}`, value, line: 1, directiveType: 'SEDCMD', className });
 
 function run(value: string, raw: string) {
   const diagnostics: ValidationDiagnostic[] = [];
-  const event = applySedCommands([ev(raw)], [sed(value)], runCtx(diagnostics))[0]!;
+  const event = applySedCommands([ev(raw)], [sed(value)], runCtx(FIXED_NOW, diagnostics))[0]!;
   return { raw: event._raw, diagnostics };
 }
 

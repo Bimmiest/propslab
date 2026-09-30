@@ -2,18 +2,11 @@ import { describe, it, expect } from 'vitest';
 import { applyIndexedExtractions } from '../processors/indexedExtractions';
 import { runPipeline } from '../pipeline';
 import type { SplunkEvent, ConfDirective, ValidationDiagnostic } from '../types';
-import { runCtx } from './runCtx';
+import { runCtx, FIXED_NOW } from './runCtx';
+import { makeEvent } from '../../test/makeEvent';
 
 function event(raw: string): SplunkEvent {
-  return {
-    _raw: raw,
-    _time: null,
-    _meta: {},
-    fields: {},
-    metadata: { index: 'main', host: 'h', source: 's', sourcetype: 'st' },
-    lineNumbers: { start: 1, end: 1 },
-    processingTrace: [],
-  };
+  return makeEvent(raw);
 }
 
 function dir(value: string): ConfDirective {
@@ -25,7 +18,7 @@ describe('applyIndexedExtractions — JSON', () => {
     const events = applyIndexedExtractions(
       [event('{"action":"login","user":"alice","status":200}')],
       [dir('json')],
-      runCtx());
+      runCtx(FIXED_NOW));
     expect(events[0]!.fields['action']).toBe('login');
     expect(events[0]!.fields['user']).toBe('alice');
     // Numeric JSON values are stringified when stored in SplunkEvent.fields
@@ -36,7 +29,7 @@ describe('applyIndexedExtractions — JSON', () => {
     const events = applyIndexedExtractions(
       [event('{"request":{"method":"GET","path":"/api"}}')],
       [dir('json')],
-      runCtx());
+      runCtx(FIXED_NOW));
     expect(events[0]!.fields['request.method']).toBe('GET');
     expect(events[0]!.fields['request.path']).toBe('/api');
   });
@@ -46,14 +39,14 @@ describe('applyIndexedExtractions — JSON', () => {
     // cost only the subtree past it, not the keys that follow.
     let deep = '"bottom"';
     for (let i = 0; i < 12; i++) deep = `{"n":${deep}}`;
-    const events = applyIndexedExtractions([event(`{"a":"first","deep":${deep},"status":"ok"}`)], [dir('json')], runCtx());
+    const events = applyIndexedExtractions([event(`{"a":"first","deep":${deep},"status":"ok"}`)], [dir('json')], runCtx(FIXED_NOW));
     expect(events[0]!.fields['a']).toBe('first');
     expect(events[0]!.fields['status']).toBe('ok');
     expect(events[0]!.processingTrace.at(-1)?.description).toMatch(/depth limit reached/);
   });
 
   it('returns event unchanged for invalid JSON', () => {
-    const events = applyIndexedExtractions([event('not json')], [dir('json')], runCtx());
+    const events = applyIndexedExtractions([event('not json')], [dir('json')], runCtx(FIXED_NOW));
     expect(events[0]!.fields).toEqual({});
   });
 
@@ -64,7 +57,7 @@ describe('applyIndexedExtractions — JSON', () => {
     const events = applyIndexedExtractions(
       [event('﻿{"a":1}'), event('  {"b":2}\n')],
       [dir('json')],
-      runCtx());
+      runCtx(FIXED_NOW));
     expect(events[0]!.fields['a']).toBe('1');
     expect(events[1]!.fields['b']).toBe('2');
   });
@@ -76,7 +69,7 @@ describe('applyIndexedExtractions — JSON', () => {
     const events = applyIndexedExtractions(
       [event('{"ok":1}'), bad, event('not json')],
       [dir('json')],
-      runCtx(diagnostics));
+      runCtx(FIXED_NOW, diagnostics));
     expect(events[0]!.fields['ok']).toBe('1');
     expect(events[1]!.fields).toEqual({});
     expect(diagnostics).toHaveLength(1);
@@ -86,12 +79,12 @@ describe('applyIndexedExtractions — JSON', () => {
 
   it('reports nothing for valid JSON, including a scalar', () => {
     const diagnostics: ValidationDiagnostic[] = [];
-    applyIndexedExtractions([event('{"a":1}'), event('42')], [dir('json')], runCtx(diagnostics));
+    applyIndexedExtractions([event('{"a":1}'), event('42')], [dir('json')], runCtx(FIXED_NOW, diagnostics));
     expect(diagnostics).toEqual([]);
   });
 
   it('extracts a key named after a prototype member instead of mangling it', () => {
-    const events = applyIndexedExtractions([event('{"toString":"v"}')], [dir('json')], runCtx());
+    const events = applyIndexedExtractions([event('{"toString":"v"}')], [dir('json')], runCtx(FIXED_NOW));
     expect(events[0]!.fields['toString']).toBe('v');
   });
 
@@ -102,7 +95,7 @@ describe('applyIndexedExtractions — JSON', () => {
     const events = applyIndexedExtractions(
       [event('{"_constructor":"good","keep":"ok"}')],
       [dir('json')],
-      runCtx());
+      runCtx(FIXED_NOW));
     expect(Object.prototype.hasOwnProperty.call(events[0]!.fields, 'constructor')).toBe(true);
     expect(events[0]!.fields['constructor']).toBe('good');
     expect(events[0]!.fields['keep']).toBe('ok');
@@ -112,7 +105,7 @@ describe('applyIndexedExtractions — JSON', () => {
     const events = applyIndexedExtractions(
       [event('{"items":[{"id":1,"n":"a"},{"id":2,"n":"b"}]}')],
       [dir('json')],
-      runCtx());
+      runCtx(FIXED_NOW));
     expect(events[0]!.fields['items{}.id']).toEqual(['1', '2']);
     expect(events[0]!.fields['items{}.n']).toEqual(['a', 'b']);
     // Positional and stringified-parent forms must NOT appear.
@@ -121,7 +114,7 @@ describe('applyIndexedExtractions — JSON', () => {
   });
 
   it('names primitive arrays with {} as a multivalue field', () => {
-    const events = applyIndexedExtractions([event('{"tags":["x","y","z"]}')], [dir('json')], runCtx());
+    const events = applyIndexedExtractions([event('{"tags":["x","y","z"]}')], [dir('json')], runCtx(FIXED_NOW));
     expect(events[0]!.fields['tags{}']).toEqual(['x', 'y', 'z']);
     expect(events[0]!.fields['tags']).toBeUndefined();
   });
@@ -130,7 +123,7 @@ describe('applyIndexedExtractions — JSON', () => {
     const events = applyIndexedExtractions(
       [event('{"user":{"name":"alice","id":5}}')],
       [dir('json')],
-      runCtx());
+      runCtx(FIXED_NOW));
     expect(events[0]!.fields['user.name']).toBe('alice');
     expect(events[0]!.fields['user.id']).toBe('5');
     expect(events[0]!.fields['user']).toBeUndefined();
@@ -140,7 +133,7 @@ describe('applyIndexedExtractions — JSON', () => {
     const events = applyIndexedExtractions(
       [event('{"msg":"line1\\nline2","q":"say \\"hi\\"","path":"C:\\\\tmp"}')],
       [dir('json')],
-      runCtx());
+      runCtx(FIXED_NOW));
     expect(events[0]!.fields['msg']).toBe('line1\nline2');
     expect(events[0]!.fields['q']).toBe('say "hi"');
     expect(events[0]!.fields['path']).toBe('C:\\tmp');
@@ -150,7 +143,7 @@ describe('applyIndexedExtractions — JSON', () => {
     const events = applyIndexedExtractions(
       [event('[{"id":1},{"id":2}]')],
       [dir('json')],
-      runCtx());
+      runCtx(FIXED_NOW));
     expect(events[0]!.fields['{}.id']).toEqual(['1', '2']);
   });
 
@@ -158,7 +151,7 @@ describe('applyIndexedExtractions — JSON', () => {
     const events = applyIndexedExtractions(
       [event('{"_GID":"100","_UID":"1000","normalKey":"value"}')],
       [dir('json')],
-      runCtx());
+      runCtx(FIXED_NOW));
     const sourceKeys = events[0]!.fieldSourceKeys ?? {};
     expect(sourceKeys['GID']).toBe('_GID');
     expect(sourceKeys['UID']).toBe('_UID');
@@ -170,7 +163,7 @@ describe('applyIndexedExtractions — JSON', () => {
     const events = applyIndexedExtractions(
       [event('{"_AUDIT_SESSION":"3","_AUDIT_FIELD_EXIT":"0","_AUDIT_TYPE_NAME":"SYSCALL"}')],
       [dir('json')],
-      runCtx());
+      runCtx(FIXED_NOW));
     const sourceKeys = events[0]!.fieldSourceKeys ?? {};
     expect(sourceKeys['AUDIT_SESSION']).toBe('_AUDIT_SESSION');
     expect(sourceKeys['AUDIT_FIELD_EXIT']).toBe('_AUDIT_FIELD_EXIT');
@@ -185,7 +178,7 @@ describe('applyIndexedExtractions — CSV', () => {
     const row1 = event('2024-01-15,login,alice');
     const row2 = event('2024-01-16,logout,bob');
 
-    const events = applyIndexedExtractions([header, row1, row2], [dir('csv')], runCtx());
+    const events = applyIndexedExtractions([header, row1, row2], [dir('csv')], runCtx(FIXED_NOW));
 
     // The header line is consumed as metadata — only the two data rows remain.
     expect(events).toHaveLength(2);
@@ -200,7 +193,7 @@ describe('applyIndexedExtractions — CSV', () => {
   it('handles quoted CSV fields', () => {
     const header = event('name,description');
     const row = event('"Smith, John","A ""quoted"" value"');
-    const events = applyIndexedExtractions([header, row], [dir('csv')], runCtx());
+    const events = applyIndexedExtractions([header, row], [dir('csv')], runCtx(FIXED_NOW));
     expect(events[0]!.fields['name']).toBe('Smith, John');
     expect(events[0]!.fields['description']).toBe('A "quoted" value');
   });
@@ -210,7 +203,7 @@ describe('applyIndexedExtractions — CSV quoting', () => {
   it('preserves interior whitespace of quoted fields but trims unquoted ones', () => {
     const header = event('name,note');
     const row = event('  bob  ,"  spaced value  "');
-    const events = applyIndexedExtractions([header, row], [dir('csv')], runCtx());
+    const events = applyIndexedExtractions([header, row], [dir('csv')], runCtx(FIXED_NOW));
     expect(events[0]!.fields['name']).toBe('bob');
     expect(events[0]!.fields['note']).toBe('  spaced value  ');
   });
@@ -220,7 +213,7 @@ describe('applyIndexedExtractions — W3C quoting', () => {
   it('keeps a quoted field containing spaces as a single value', () => {
     const header = event('#Fields: cs-method cs(User-Agent) sc-status');
     const row = event('GET "Mozilla/5.0 (Windows NT 10.0)" 200');
-    const events = applyIndexedExtractions([header, row], [dir('w3c')], runCtx());
+    const events = applyIndexedExtractions([header, row], [dir('w3c')], runCtx(FIXED_NOW));
     // Header tokens are sanitized to the names Splunk indexes: the IIS
     // user-agent column really does surface as `cs_User_Agent_`.
     expect(events[0]!.fields['cs_method']).toBe('GET');
@@ -233,7 +226,7 @@ describe('applyIndexedExtractions — TSV', () => {
   it('splits on tabs', () => {
     const header = event('ts\thost\tsource');
     const row = event('2024-01-15\tmyhost\t/var/log/app');
-    const events = applyIndexedExtractions([header, row], [dir('tsv')], runCtx());
+    const events = applyIndexedExtractions([header, row], [dir('tsv')], runCtx(FIXED_NOW));
     expect(events[0]!.fields['host']).toBe('myhost');
     expect(events[0]!.fields['source']).toBe('/var/log/app');
   });
@@ -244,7 +237,7 @@ describe('applyIndexedExtractions — leading underscore stripping', () => {
     const events = applyIndexedExtractions(
       [event('{"_AUDIT_TYPE_NAME":"SYSCALL","user":"alice"}')],
       [dir('json')],
-      runCtx());
+      runCtx(FIXED_NOW));
     expect(events[0]!.fields['AUDIT_TYPE_NAME']).toBe('SYSCALL');
     expect(events[0]!.fields['_AUDIT_TYPE_NAME']).toBeUndefined();
     expect(events[0]!.fields['user']).toBe('alice');
@@ -254,7 +247,7 @@ describe('applyIndexedExtractions — leading underscore stripping', () => {
     const events = applyIndexedExtractions(
       [event('{"outer":{"_inner":"value","normal":"v2"}}')],
       [dir('json')],
-      runCtx());
+      runCtx(FIXED_NOW));
     expect(events[0]!.fields['outer.inner']).toBe('value');
     expect(events[0]!.fields['outer.normal']).toBe('v2');
     expect(events[0]!.fields['outer._inner']).toBeUndefined();
@@ -264,14 +257,14 @@ describe('applyIndexedExtractions — leading underscore stripping', () => {
     const events = applyIndexedExtractions(
       [event('{"__double":"v"}')],
       [dir('json')],
-      runCtx());
+      runCtx(FIXED_NOW));
     expect(events[0]!.fields['double']).toBe('v');
   });
 
   it('strips leading _ from CSV headers', () => {
     const header = event('_ts,_user,action');
     const row = event('2024-01-15,alice,login');
-    const events = applyIndexedExtractions([header, row], [dir('csv')], runCtx());
+    const events = applyIndexedExtractions([header, row], [dir('csv')], runCtx(FIXED_NOW));
     expect(events[0]!.fields['ts']).toBe('2024-01-15');
     expect(events[0]!.fields['user']).toBe('alice');
     expect(events[0]!.fields['action']).toBe('login');
@@ -281,7 +274,7 @@ describe('applyIndexedExtractions — leading underscore stripping', () => {
   it('strips leading _ from W3C #Fields headers', () => {
     const header = event('#Fields: _cs-method uri status');
     const row = event('GET /api 200');
-    const events = applyIndexedExtractions([header, row], [dir('w3c')], runCtx());
+    const events = applyIndexedExtractions([header, row], [dir('w3c')], runCtx(FIXED_NOW));
     expect(events[0]!.fields['cs_method']).toBe('GET');
     expect(events[0]!.fields['uri']).toBe('/api');
     expect(events[0]!.fields['status']).toBe('200');
@@ -292,7 +285,7 @@ describe('applyIndexedExtractions — leading underscore stripping', () => {
 describe('applyIndexedExtractions — no directive', () => {
   it('returns events unchanged when no INDEXED_EXTRACTIONS directive', () => {
     const ev = event('some raw data');
-    const events = applyIndexedExtractions([ev], [], runCtx());
+    const events = applyIndexedExtractions([ev], [], runCtx(FIXED_NOW));
     expect(events[0]!.fields).toEqual({});
   });
 });
@@ -302,7 +295,7 @@ describe('applyIndexedExtractions — header is the first content line (#14)', (
     const events = applyIndexedExtractions(
       [event(''), event('ts,host'), event('2024-01-15,myhost')],
       [dir('csv')],
-      runCtx(),
+      runCtx(FIXED_NOW),
     );
     expect(events).toHaveLength(1);
     expect(events[0]!.fields['host']).toBe('myhost');
@@ -312,7 +305,7 @@ describe('applyIndexedExtractions — header is the first content line (#14)', (
     const events = applyIndexedExtractions(
       [event('# exported 2024-01-15'), event('ts,host'), event('2024-01-15,myhost')],
       [dir('csv')],
-      runCtx(),
+      runCtx(FIXED_NOW),
     );
     expect(events).toHaveLength(1);
     expect(events[0]!.fields['host']).toBe('myhost');
@@ -320,7 +313,7 @@ describe('applyIndexedExtractions — header is the first content line (#14)', (
   });
 
   it('returns events unchanged when there is no content line at all', () => {
-    const events = applyIndexedExtractions([event(''), event('   ')], [dir('csv')], runCtx());
+    const events = applyIndexedExtractions([event(''), event('   ')], [dir('csv')], runCtx(FIXED_NOW));
     expect(events).toHaveLength(2);
   });
 });
@@ -330,7 +323,7 @@ describe('applyIndexedExtractions — header names are sanitized (#68)', () => {
     const events = applyIndexedExtractions(
       [event('#Fields: date time c-ip cs-uri-stem sc-status'), event('2024-01-15 10:00:00 10.0.0.1 /index.html 200')],
       [dir('w3c')],
-      runCtx(),
+      runCtx(FIXED_NOW),
     );
     expect(events[0]!.fields['c_ip']).toBe('10.0.0.1');
     expect(events[0]!.fields['cs_uri_stem']).toBe('/index.html');
@@ -342,7 +335,7 @@ describe('applyIndexedExtractions — header names are sanitized (#68)', () => {
     const events = applyIndexedExtractions(
       [event('req-id,user.name,status'), event('abc,alice,200')],
       [dir('csv')],
-      runCtx(),
+      runCtx(FIXED_NOW),
     );
     expect(events[0]!.fields['req_id']).toBe('abc');
     expect(events[0]!.fields['user_name']).toBe('alice');
@@ -352,7 +345,7 @@ describe('applyIndexedExtractions — header names are sanitized (#68)', () => {
     const events = applyIndexedExtractions(
       [event('#Software: IIS'), event('#Fields: cs-method sc-status'), event('GET 200')],
       [dir('w3c')],
-      runCtx(),
+      runCtx(FIXED_NOW),
     );
     expect(events).toHaveLength(1);
     expect(events[0]!.fields['cs_method']).toBe('GET');
@@ -402,7 +395,7 @@ describe('applyIndexedExtractions — FIELD_DELIMITER (#184)', () => {
     const events = applyIndexedExtractions(
       [event('a;b;c'), event('1;2;3')],
       [dir('csv'), dirOf('FIELD_DELIMITER', ';')],
-      runCtx(),
+      runCtx(FIXED_NOW),
     );
     expect(events).toHaveLength(1);
     expect(events[0]!.fields).toMatchObject({ a: '1', b: '2', c: '3' });
@@ -412,7 +405,7 @@ describe('applyIndexedExtractions — FIELD_DELIMITER (#184)', () => {
     const events = applyIndexedExtractions(
       [event('a b'), event('1 2')],
       [dir('csv'), dirOf('FIELD_DELIMITER', 'space')],
-      runCtx(),
+      runCtx(FIXED_NOW),
     );
     expect(events[0]!.fields).toMatchObject({ a: '1', b: '2' });
   });
@@ -421,7 +414,7 @@ describe('applyIndexedExtractions — FIELD_DELIMITER (#184)', () => {
     const events = applyIndexedExtractions(
       [event('a  b\tc'), event('1   2\t\t3')],
       [dir('csv'), dirOf('FIELD_DELIMITER', 'whitespace')],
-      runCtx(),
+      runCtx(FIXED_NOW),
     );
     expect(events[0]!.fields).toMatchObject({ a: '1', b: '2', c: '3' });
   });
@@ -432,7 +425,7 @@ describe('applyIndexedExtractions — FIELD_QUOTE (#184)', () => {
     const events = applyIndexedExtractions(
       [event('a,b'), event("'1,5',2")],
       [dir('csv'), dirOf('FIELD_QUOTE', "'")],
-      runCtx(),
+      runCtx(FIXED_NOW),
     );
     expect(events[0]!.fields).toMatchObject({ a: '1,5', b: '2' });
   });
@@ -441,7 +434,7 @@ describe('applyIndexedExtractions — FIELD_QUOTE (#184)', () => {
     const events = applyIndexedExtractions(
       [event('a,b'), event('"1,2')],
       [dir('csv'), dirOf('FIELD_QUOTE', 'none')],
-      runCtx(),
+      runCtx(FIXED_NOW),
     );
     expect(events[0]!.fields).toMatchObject({ a: '"1', b: '2' });
   });
@@ -452,7 +445,7 @@ describe('applyIndexedExtractions — FIELD_NAMES (#184)', () => {
     const events = applyIndexedExtractions(
       [event('2026-01-15T10:00:00Z,alice,200'), event('2026-01-15T10:00:01Z,bob,404')],
       [dir('csv'), dirOf('FIELD_NAMES', 'ts, user, status')],
-      runCtx(),
+      runCtx(FIXED_NOW),
     );
     expect(events).toHaveLength(2);
     expect(events[0]!.fields).toMatchObject({ user: 'alice', status: '200' });
@@ -463,7 +456,7 @@ describe('applyIndexedExtractions — FIELD_NAMES (#184)', () => {
     const events = applyIndexedExtractions(
       [event('1,2')],
       [dir('csv'), dirOf('FIELD_NAMES', '"col a", "col-b"')],
-      runCtx(),
+      runCtx(FIXED_NOW),
     );
     expect(events[0]!.fields).toMatchObject({ col_a: '1', 'col_b': '2' });
   });
@@ -474,7 +467,7 @@ describe('applyIndexedExtractions — HEADER_FIELD_LINE_NUMBER (#184)', () => {
     const events = applyIndexedExtractions(
       [event('Report for January'), event('a,b'), event('1,2')],
       [dir('csv'), dirOf('HEADER_FIELD_LINE_NUMBER', '2')],
-      runCtx(),
+      runCtx(FIXED_NOW),
     );
     expect(events).toHaveLength(1);
     expect(events[0]!.fields).toMatchObject({ a: '1', b: '2' });
@@ -486,7 +479,7 @@ describe('applyIndexedExtractions — PREAMBLE_REGEX (#184)', () => {
     const events = applyIndexedExtractions(
       [event('; generated by tool'), event('; do not edit'), event('a,b'), event('1,2')],
       [dir('csv'), dirOf('PREAMBLE_REGEX', '^;')],
-      runCtx(),
+      runCtx(FIXED_NOW),
     );
     expect(events).toHaveLength(1);
     expect(events[0]!.fields).toMatchObject({ a: '1', b: '2' });
@@ -497,7 +490,7 @@ describe('applyIndexedExtractions — PREAMBLE_REGEX (#184)', () => {
     applyIndexedExtractions(
       [event('a,b'), event('1,2')],
       [dir('csv'), dirOf('PREAMBLE_REGEX', '(')],
-      runCtx(diagnostics),
+      runCtx(FIXED_NOW, diagnostics),
     );
     expect(diagnostics.some((d) => d.message.includes('PREAMBLE_REGEX'))).toBe(true);
   });
@@ -513,7 +506,7 @@ describe('applyIndexedExtractions — TIMESTAMP_FIELDS (#184)', () => {
         dirOf('TIME_FORMAT', '%Y-%m-%d %H:%M:%S'),
         dirOf('TZ', 'UTC'),
       ],
-      runCtx(),
+      runCtx(FIXED_NOW),
     );
     expect(events[0]!._time?.toISOString()).toBe('2026-01-15T10:00:00.000Z');
   });
@@ -522,7 +515,7 @@ describe('applyIndexedExtractions — TIMESTAMP_FIELDS (#184)', () => {
     const events = applyIndexedExtractions(
       [event('a,b'), event('1,2')],
       [dir('csv'), dirOf('TIMESTAMP_FIELDS', 'nope'), dirOf('TIME_FORMAT', '%Y-%m-%d')],
-      runCtx(),
+      runCtx(FIXED_NOW),
     );
     expect(events[0]!._time).toBeNull();
   });
@@ -533,7 +526,7 @@ describe('applyIndexedExtractions — TIMESTAMP_FIELDS (#184)', () => {
     const [e] = applyIndexedExtractions(
       [event('ts,user'), { ...event('not-a-time,alice'), _time: prior }],
       [dir('csv'), dirOf('TIMESTAMP_FIELDS', 'ts'), dirOf('TIME_FORMAT', '%Y-%m-%d'), dirOf('TZ', 'UTC')],
-      runCtx(undefined, { now: new Date('2020-05-02T00:00:00Z') }),
+      runCtx(new Date('2020-05-02T00:00:00Z')),
     );
     expect(e!._time).toBe(prior);
     expect(e!.processingTrace.some((s) => s.description.includes('parsed from'))).toBe(false);
@@ -557,7 +550,7 @@ describe('applyIndexedExtractions — TIMESTAMP_FIELDS (#184)', () => {
     applyIndexedExtractions(
       [event('ts'), event('2010-01-01'), event('2010-01-02')],
       [dir('csv'), dirOf('TIMESTAMP_FIELDS', 'ts'), dirOf('TIME_FORMAT', '%Y-%m-%d'), dirOf('TZ', 'UTC')],
-      runCtx(diagnostics, { now: new Date('2020-01-01T00:00:00Z') }),
+      runCtx(new Date('2020-01-01T00:00:00Z'), diagnostics),
     );
     expect(diagnostics.filter((d) => d.message.includes('so it was not used'))).toHaveLength(1);
   });
@@ -577,7 +570,7 @@ describe('applyIndexedExtractions — FIELD_HEADER_REGEX (#272)', () => {
     const events = applyIndexedExtractions(
       [event('#Version: 1'), event('#Fields: a,b'), event('1,2')],
       [dir('csv'), dirOf('FIELD_HEADER_REGEX', '^#Fields:\\s')],
-      runCtx(),
+      runCtx(FIXED_NOW),
     );
     expect(events).toHaveLength(1);
     expect(events[0]!.fields).toMatchObject({ a: '1', b: '2' });
@@ -588,14 +581,14 @@ describe('applyIndexedExtractions — FIELD_HEADER_REGEX (#272)', () => {
     const events = applyIndexedExtractions(
       [event('banner'), event('>> a,b'), event('1,2')],
       [dir('csv'), dirOf('HEADER_FIELD_LINE_NUMBER', '2'), dirOf('FIELD_HEADER_REGEX', '^>>\\s*')],
-      runCtx(),
+      runCtx(FIXED_NOW),
     );
     expect(events[0]!.fields).toMatchObject({ a: '1', b: '2' });
   });
 
   it('extracts nothing when no line matches', () => {
     const input = [event('a,b'), event('1,2')];
-    const events = applyIndexedExtractions(input, [dir('csv'), dirOf('FIELD_HEADER_REGEX', '^#Fields:')], runCtx());
+    const events = applyIndexedExtractions(input, [dir('csv'), dirOf('FIELD_HEADER_REGEX', '^#Fields:')], runCtx(FIXED_NOW));
     expect(events).toBe(input);
   });
 
@@ -604,7 +597,7 @@ describe('applyIndexedExtractions — FIELD_HEADER_REGEX (#272)', () => {
     const events = applyIndexedExtractions(
       [event('a,b'), event('1,2')],
       [dir('csv'), dirOf('FIELD_HEADER_REGEX', '(')],
-      runCtx(diagnostics),
+      runCtx(FIXED_NOW, diagnostics),
     );
     expect(diagnostics.some((d) => d.directiveKey === 'FIELD_HEADER_REGEX')).toBe(true);
     // …and falls back to locating the header as though it were unset.
@@ -617,7 +610,7 @@ describe('applyIndexedExtractions — HEADER_FIELD_DELIMITER / HEADER_FIELD_QUOT
     const events = applyIndexedExtractions(
       [event('a\tb\tc'), event('1,2,3')],
       [dir('csv'), dirOf('HEADER_FIELD_DELIMITER', 'tab')],
-      runCtx(),
+      runCtx(FIXED_NOW),
     );
     expect(events[0]!.fields).toMatchObject({ a: '1', b: '2', c: '3' });
   });
@@ -626,7 +619,7 @@ describe('applyIndexedExtractions — HEADER_FIELD_DELIMITER / HEADER_FIELD_QUOT
     const events = applyIndexedExtractions(
       [event('a;b'), event('1;2')],
       [dir('csv'), dirOf('FIELD_DELIMITER', ';')],
-      runCtx(),
+      runCtx(FIXED_NOW),
     );
     expect(events[0]!.fields).toMatchObject({ a: '1', b: '2' });
   });
@@ -635,7 +628,7 @@ describe('applyIndexedExtractions — HEADER_FIELD_DELIMITER / HEADER_FIELD_QUOT
     const events = applyIndexedExtractions(
       [event("'x,y',z"), event('1,2')],
       [dir('csv'), dirOf('HEADER_FIELD_QUOTE', "'")],
-      runCtx(),
+      runCtx(FIXED_NOW),
     );
     expect(events[0]!.fields).toMatchObject({ x_y: '1', z: '2' });
   });
@@ -644,7 +637,7 @@ describe('applyIndexedExtractions — HEADER_FIELD_DELIMITER / HEADER_FIELD_QUOT
     const events = applyIndexedExtractions(
       [event('"a,b'), event('"1,5",2')],
       [dir('csv'), dirOf('HEADER_FIELD_QUOTE', 'none')],
-      runCtx(),
+      runCtx(FIXED_NOW),
     );
     // The header's `"a` cleans to `a`; the body still reads `"1,5"` as one value.
     expect(events[0]!.fields).toMatchObject({ a: '1,5', b: '2' });
@@ -654,7 +647,7 @@ describe('applyIndexedExtractions — HEADER_FIELD_DELIMITER / HEADER_FIELD_QUOT
     const events = applyIndexedExtractions(
       [event('a   b'), event('1,2')],
       [dir('csv'), dirOf('HEADER_FIELD_DELIMITER', 'whitespace')],
-      runCtx(),
+      runCtx(FIXED_NOW),
     );
     expect(events[0]!.fields).toMatchObject({ a: '1', b: '2' });
   });
@@ -662,7 +655,7 @@ describe('applyIndexedExtractions — HEADER_FIELD_DELIMITER / HEADER_FIELD_QUOT
 
 describe('applyIndexedExtractions — HEADER_FIELD_ACCEPTABLE_SPECIAL_CHARACTERS (#272)', () => {
   it('cleans field.name to field_name by default, as the spec example says', () => {
-    const events = applyIndexedExtractions([event('field.name'), event('v')], [dir('csv')], runCtx());
+    const events = applyIndexedExtractions([event('field.name'), event('v')], [dir('csv')], runCtx(FIXED_NOW));
     expect(events[0]!.fields['field_name']).toBe('v');
   });
 
@@ -670,7 +663,7 @@ describe('applyIndexedExtractions — HEADER_FIELD_ACCEPTABLE_SPECIAL_CHARACTERS
     const events = applyIndexedExtractions(
       [event('field.name,a-b'), event('v,w')],
       [dir('csv'), dirOf('HEADER_FIELD_ACCEPTABLE_SPECIAL_CHARACTERS', '.')],
-      runCtx(),
+      runCtx(FIXED_NOW),
     );
     expect(events[0]!.fields['field.name']).toBe('v');
     // Only the named characters are exempt.
@@ -681,7 +674,7 @@ describe('applyIndexedExtractions — HEADER_FIELD_ACCEPTABLE_SPECIAL_CHARACTERS
     const events = applyIndexedExtractions(
       [event('v')],
       [dir('csv'), dirOf('FIELD_NAMES', 'x.y'), dirOf('HEADER_FIELD_ACCEPTABLE_SPECIAL_CHARACTERS', '.')],
-      runCtx(),
+      runCtx(FIXED_NOW),
     );
     expect(events[0]!.fields['x.y']).toBe('v');
   });
@@ -690,7 +683,7 @@ describe('applyIndexedExtractions — HEADER_FIELD_ACCEPTABLE_SPECIAL_CHARACTERS
     const events = applyIndexedExtractions(
       [event('café'), event('v')],
       [dir('csv'), dirOf('HEADER_FIELD_ACCEPTABLE_SPECIAL_CHARACTERS', 'é')],
-      runCtx(),
+      runCtx(FIXED_NOW),
     );
     expect(events[0]!.fields['caf_']).toBe('v');
   });
@@ -701,7 +694,7 @@ describe('applyIndexedExtractions — MISSING_VALUE_REGEX (#272)', () => {
     const events = applyIndexedExtractions(
       [event('a,b,c'), event('1,-,NULL')],
       [dir('csv'), dirOf('MISSING_VALUE_REGEX', '^(-|NULL)$')],
-      runCtx(),
+      runCtx(FIXED_NOW),
     );
     expect(events[0]!.fields['a']).toBe('1');
     expect(events[0]!.fields['b']).toBeUndefined();
@@ -709,7 +702,7 @@ describe('applyIndexedExtractions — MISSING_VALUE_REGEX (#272)', () => {
   });
 
   it('keeps a literal dash when unset', () => {
-    const events = applyIndexedExtractions([event('a'), event('-')], [dir('csv')], runCtx());
+    const events = applyIndexedExtractions([event('a'), event('-')], [dir('csv')], runCtx(FIXED_NOW));
     expect(events[0]!.fields['a']).toBe('-');
   });
 });
@@ -721,7 +714,7 @@ describe('applyIndexedExtractions — JSON_TRIM_BRACES_IN_ARRAY_NAMES (#274)', (
   const raw = '{"data":{"mount_point":["/","/home"]}}';
 
   it('keeps the {} marker by default', () => {
-    const events = applyIndexedExtractions([event(raw)], [dir('json')], runCtx());
+    const events = applyIndexedExtractions([event(raw)], [dir('json')], runCtx(FIXED_NOW));
     expect(events[0]!.fields['data.mount_point{}']).toEqual(['/', '/home']);
     expect(events[0]!.fields['data.mount_point']).toBeUndefined();
   });
@@ -730,7 +723,7 @@ describe('applyIndexedExtractions — JSON_TRIM_BRACES_IN_ARRAY_NAMES (#274)', (
     const events = applyIndexedExtractions(
       [event(raw)],
       [dir('json'), dirOf('JSON_TRIM_BRACES_IN_ARRAY_NAMES', 'true')],
-      runCtx(),
+      runCtx(FIXED_NOW),
     );
     expect(events[0]!.fields['data.mount_point']).toEqual(['/', '/home']);
     expect(events[0]!.fields['data.mount_point{}']).toBeUndefined();
@@ -742,7 +735,7 @@ describe('applyIndexedExtractions — JSON_TRIM_BRACES_IN_ARRAY_NAMES (#274)', (
     const events = applyIndexedExtractions(
       [event('{"items":[{"id":1},{"id":2}]}')],
       [dir('json'), dirOf('JSON_TRIM_BRACES_IN_ARRAY_NAMES', 'true')],
-      runCtx(),
+      runCtx(FIXED_NOW),
     );
     expect(events[0]!.fields['items.id']).toEqual(['1', '2']);
   });
@@ -751,7 +744,7 @@ describe('applyIndexedExtractions — JSON_TRIM_BRACES_IN_ARRAY_NAMES (#274)', (
     const events = applyIndexedExtractions(
       [event('["a","b"]')],
       [dir('json'), dirOf('JSON_TRIM_BRACES_IN_ARRAY_NAMES', 'true')],
-      runCtx(),
+      runCtx(FIXED_NOW),
     );
     expect(events[0]!.fields['{}']).toEqual(['a', 'b']);
   });

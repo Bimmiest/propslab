@@ -3,17 +3,12 @@ import { applyDestKey } from '../transforms/destKeyRouter';
 import { runPipeline } from '../pipeline';
 import type { SplunkEvent } from '../types';
 import type { TransformResult } from '../transforms/regexTransform';
+import { makeEvent } from '../../test/makeEvent';
 
 function baseEvent(): SplunkEvent {
-  return {
-    _raw: 'raw log line',
-    _time: null,
-    _meta: {},
-    fields: {},
+  return makeEvent('raw log line', {
     metadata: { index: 'main', host: 'original-host', source: '/log', sourcetype: 'syslog' },
-    lineNumbers: { start: 1, end: 1 },
-    processingTrace: [],
-  };
+  });
 }
 
 function result(destKey: string, destValue: string): TransformResult {

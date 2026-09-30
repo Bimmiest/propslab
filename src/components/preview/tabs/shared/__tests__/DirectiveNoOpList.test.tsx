@@ -4,18 +4,10 @@ import { render, fireEvent, within } from '@testing-library/react';
 import { DirectiveNoOpList } from '../DirectiveNoOpList';
 import { groupNoOps } from '../../../../../engine/groupNoOps';
 import type { DirectiveNoOp, SplunkEvent } from '../../../../../engine/types';
+import { makeEvent } from '../../../../../test/makeEvent';
 
 function event(noOps: DirectiveNoOp[]): SplunkEvent {
-  return {
-    _raw: 'raw',
-    _time: null,
-    _meta: {},
-    fields: {},
-    metadata: { index: 'main', host: 'h', source: 's', sourcetype: 'st' },
-    lineNumbers: { start: 1, end: 1 },
-    processingTrace: [],
-    noOps,
-  };
+  return makeEvent('raw', { noOps });
 }
 
 const noMatch: DirectiveNoOp = {

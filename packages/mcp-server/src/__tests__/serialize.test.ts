@@ -6,6 +6,7 @@ import type {
 } from '../../../../src/engine/types';
 import { serializeSimulation } from '../serialize';
 import { MAX_PAYLOAD_BYTES, MAX_RESPONSE_BYTES, responseBytes } from '../responseBudget';
+import { makeEvent } from '../../../../src/test/makeEvent';
 
 // Everything in a simulate response that grows with the sample is bounded.
 
@@ -13,11 +14,7 @@ const metadata = { index: 'main', host: 'h', source: 's', sourcetype: 'st' };
 
 function event(i: number, rawChars: number, steps: number): SplunkEvent {
   const raw = `${i}:${'x'.repeat(rawChars)}`;
-  return {
-    _raw: raw,
-    _time: null,
-    _meta: {},
-    fields: {},
+  return makeEvent(raw, {
     metadata,
     lineNumbers: { start: i + 1, end: i + 1 },
     processingTrace: Array.from({ length: steps }, (_, s) => ({
@@ -27,7 +24,7 @@ function event(i: number, rawChars: number, steps: number): SplunkEvent {
       inputSnapshot: raw,
       outputSnapshot: raw,
     })),
-  };
+  });
 }
 
 function result(events: SplunkEvent[]): ProcessingResult {

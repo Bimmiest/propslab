@@ -7,17 +7,10 @@ import { useAppStore } from '../../../store/useAppStore';
 import type { ValidationDiagnostic, SplunkEvent } from '../../../engine/types';
 import { toViewResult, type ViewResult } from '../../../utils/viewResult';
 import { EMPTY_FIELD_STATS } from '../../../utils/fieldStats';
+import { makeEvent } from '../../../test/makeEvent';
 
-function makeEvent(fields: Record<string, string>): SplunkEvent {
-  return {
-    _raw: '',
-    _time: null,
-    _meta: {},
-    fields,
-    metadata: { index: 'main', host: 'h', source: 's', sourcetype: 'st' },
-    lineNumbers: { start: 1, end: 1 },
-    processingTrace: [],
-  };
+function eventWithFields(fields: Record<string, string>): SplunkEvent {
+  return makeEvent('', { fields });
 }
 
 function renderStatusBar() {
@@ -75,7 +68,7 @@ describe('StatusBar', () => {
 
   it('shows event count, distinct field count, and "Valid" when result has no diagnostics', () => {
     const result = toViewResult({
-      events: [makeEvent({ a: '1', b: '2' }), makeEvent({ a: '3', c: '4' })],
+      events: [eventWithFields({ a: '1', b: '2' }), eventWithFields({ a: '3', c: '4' })],
       originalRaw: '',
       eventCount: 2,
       processingSteps: [],

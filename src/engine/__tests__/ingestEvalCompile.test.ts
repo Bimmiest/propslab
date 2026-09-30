@@ -20,17 +20,10 @@ vi.mock('../processors/eval/parser', async (importOriginal) => {
 import { applyIngestEval } from '../transforms/ingestEval';
 import { runPipeline } from '../pipeline';
 import type { ConfDirective, EventMetadata, SplunkEvent } from '../types';
-import { runCtx } from './runCtx';
+import { runCtx, FIXED_NOW } from './runCtx';
+import { makeEvent } from '../../test/makeEvent';
 
-const event = (raw: string): SplunkEvent => ({
-  _raw: raw,
-  _time: null,
-  _meta: {},
-  fields: {},
-  metadata: { index: 'main', host: 'h', source: 's', sourcetype: 'st' },
-  lineNumbers: { start: 1, end: 1 },
-  processingTrace: [],
-});
+const event = (raw: string): SplunkEvent => makeEvent(raw);
 const ingest = (value: string, line = 1): ConfDirective =>
   ({ key: 'INGEST_EVAL', value, line, directiveType: 'INGEST_EVAL' });
 
@@ -41,7 +34,7 @@ beforeEach(() => {
 describe('INGEST_EVAL compiles once per run (#486)', () => {
   it('parses each assignment once however many events it evaluates', () => {
     const dirs = [ingest('a=len(_raw), b="k" . _raw, c=upper(_raw)')];
-    const out = applyIngestEval(['x', 'yy', 'zzz', 'w'].map(event), dirs, runCtx());
+    const out = applyIngestEval(['x', 'yy', 'zzz', 'w'].map(event), dirs, runCtx(FIXED_NOW));
     expect(parses.count).toBe(3);
     // The compiled tree is evaluated against each event.
     expect(out.map((e) => e.fields['a'])).toEqual(['1', '2', '3', '1']);
@@ -50,7 +43,7 @@ describe('INGEST_EVAL compiles once per run (#486)', () => {
   });
 
   it('keeps parsing once across separate calls in one run, one event at a time', () => {
-    const ctx = runCtx();
+    const ctx = runCtx(FIXED_NOW);
     const dirs = [ingest('a=len(_raw)')];
     for (const raw of ['x', 'yy', 'zzz']) applyIngestEval([event(raw)], dirs, ctx);
     expect(parses.count).toBe(1);
@@ -58,20 +51,20 @@ describe('INGEST_EVAL compiles once per run (#486)', () => {
 
   it('parses again in a new run, so an edited config is never served from the last one', () => {
     const dirs = [ingest('a=len(_raw)')];
-    applyIngestEval([event('x')], dirs, runCtx());
-    applyIngestEval([event('x')], dirs, runCtx());
+    applyIngestEval([event('x')], dirs, runCtx(FIXED_NOW));
+    applyIngestEval([event('x')], dirs, runCtx(FIXED_NOW));
     expect(parses.count).toBe(2);
   });
 
   it('parses the directive that applies (the last one), not the ones it replaced', () => {
     const dirs = [ingest('a=1', 1), ingest('b=2', 2)];
-    const [out] = applyIngestEval([event('x')], dirs, runCtx());
+    const [out] = applyIngestEval([event('x')], dirs, runCtx(FIXED_NOW));
     expect(parses.count).toBe(1);
     expect(out!.fields).toEqual({ b: '2' });
   });
 
   it('a malformed assignment fails on every event without stopping the others', () => {
-    const ctx = runCtx();
+    const ctx = runCtx(FIXED_NOW);
     const out = applyIngestEval([event('x'), event('yy')], [ingest('a=1+, b=len(_raw)')], ctx);
     expect(parses.count).toBe(2);
     expect(out.map((e) => e.fields['b'])).toEqual(['1', '2']);

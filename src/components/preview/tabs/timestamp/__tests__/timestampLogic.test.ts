@@ -4,11 +4,12 @@ import { STRPTIME_REFERENCE } from '../data';
 import { supportedSpecifiers } from '../../../../../utils/strftime';
 import { probeTimestamp, type TimeConfig } from '../../../../../engine/timestampMatch';
 import type { SplunkEvent } from '../../../../../engine/types';
+import { makeEvent } from '../../../../../test/makeEvent';
 
 const metadata = { index: 'main', host: 'h', source: 's', sourcetype: 'st' };
 
-function makeEvent(over: Partial<SplunkEvent> = {}): SplunkEvent {
-  return { _raw: 'raw', _time: null, _meta: {}, fields: {}, metadata, lineNumbers: { start: 1, end: 1 }, processingTrace: [], ...over };
+function eventWith(over: Partial<SplunkEvent> = {}): SplunkEvent {
+  return makeEvent('raw', { metadata, ...over });
 }
 
 describe('parseTimeConfig', () => {
@@ -33,12 +34,12 @@ describe('parseTimeConfig', () => {
 
 describe('timestampTextOf and resolvedTimeSource', () => {
   it('prefers the text the extractor read over the final _raw', () => {
-    expect(timestampTextOf(makeEvent({ timestampText: 'before' }))).toBe('before');
-    expect(timestampTextOf(makeEvent())).toBe('raw');
+    expect(timestampTextOf(eventWith({ timestampText: 'before' }))).toBe('before');
+    expect(timestampTextOf(eventWith())).toBe('raw');
   });
 
   it('reports the last timestamp step\'s time source', () => {
-    const event = makeEvent({
+    const event = eventWith({
       processingTrace: [
         { processor: 'timestampExtractor', phase: 'index-time', description: '', timeSource: 'current-time' },
         { processor: 'EXTRACT-x', phase: 'search-time', description: '' },
@@ -46,7 +47,7 @@ describe('timestampTextOf and resolvedTimeSource', () => {
       ],
     });
     expect(resolvedTimeSource(event)).toBe('previous-event');
-    expect(resolvedTimeSource(makeEvent())).toBeUndefined();
+    expect(resolvedTimeSource(eventWith())).toBeUndefined();
   });
 });
 

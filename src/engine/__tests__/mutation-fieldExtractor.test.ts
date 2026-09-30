@@ -4,18 +4,11 @@
 import { describe, it, expect } from 'vitest';
 import { extractFields, parseExtractValue } from '../processors/fieldExtractor';
 import type { SplunkEvent, ConfDirective, ValidationDiagnostic } from '../types';
-import { runCtx } from './runCtx';
+import { runCtx, FIXED_NOW } from './runCtx';
+import { makeEvent } from '../../test/makeEvent';
 
 function event(raw: string, fields: Record<string, string | string[]> = {}): SplunkEvent {
-  return {
-    _raw: raw,
-    _time: null,
-    _meta: {},
-    fields,
-    metadata: { index: 'main', host: 'h', source: 's', sourcetype: 'st' },
-    lineNumbers: { start: 1, end: 1 },
-    processingTrace: [],
-  };
+  return makeEvent(raw, { fields });
 }
 
 function dir(className: string, value: string, line = 1): ConfDirective {
@@ -25,7 +18,7 @@ function dir(className: string, value: string, line = 1): ConfDirective {
 describe('EXTRACT — a pattern that cannot be compiled', () => {
   it('warns once, names the class, and records a regex-invalid no-op on every event', () => {
     const diagnostics: ValidationDiagnostic[] = [];
-    const out = extractFields([event('a'), event('b')], [dir('broken', '(?<x>unclosed', 7)], runCtx(diagnostics));
+    const out = extractFields([event('a'), event('b')], [dir('broken', '(?<x>unclosed', 7)], runCtx(FIXED_NOW, diagnostics));
 
     expect(diagnostics).toHaveLength(1);
     expect(diagnostics[0]).toMatchObject({ level: 'warning', file: 'props.conf', line: 7, directiveKey: 'EXTRACT-broken' });
@@ -42,7 +35,7 @@ describe('EXTRACT — a pattern that cannot be compiled', () => {
 
   it('does not warn about a pattern that compiled', () => {
     const diagnostics: ValidationDiagnostic[] = [];
-    extractFields([event('a=1')], [dir('ok', 'a=(?<a>\\d)')], runCtx(diagnostics));
+    extractFields([event('a=1')], [dir('ok', 'a=(?<a>\\d)')], runCtx(FIXED_NOW, diagnostics));
     expect(diagnostics).toEqual([]);
   });
 });
@@ -51,7 +44,7 @@ describe('EXTRACT — "in <field>" naming an underscore-prefixed source', () => 
   it('warns once that the leading underscore will be stripped, and suggests the fix', () => {
     const diagnostics: ValidationDiagnostic[] = [];
     const events = [event('x', { user: 'alice' }), event('y', { user: 'bob' })];
-    const out = extractFields(events, [dir('u', '(?<first>\\w) in _user', 4)], runCtx(diagnostics));
+    const out = extractFields(events, [dir('u', '(?<first>\\w) in _user', 4)], runCtx(FIXED_NOW, diagnostics));
 
     expect(diagnostics).toHaveLength(1);
     expect(diagnostics[0]).toMatchObject({ level: 'warning', line: 4, directiveKey: 'EXTRACT-u' });
@@ -65,27 +58,27 @@ describe('EXTRACT — "in <field>" naming an underscore-prefixed source', () => 
 
   it('strips every leading underscore when naming the field Splunk will resolve', () => {
     const diagnostics: ValidationDiagnostic[] = [];
-    extractFields([event('x', { user: 'a' })], [dir('u', '(?<f>\\w) in __user')], runCtx(diagnostics));
+    extractFields([event('x', { user: 'a' })], [dir('u', '(?<f>\\w) in __user')], runCtx(FIXED_NOW, diagnostics));
     expect(diagnostics[0]!.suggestion).toBe('Replace "in __user" with "in user"');
   });
 
   it('stays quiet when the stripped name is not a field either', () => {
     const diagnostics: ValidationDiagnostic[] = [];
-    extractFields([event('x', { other: 'a' })], [dir('u', '(?<f>\\w) in _user')], runCtx(diagnostics));
+    extractFields([event('x', { other: 'a' })], [dir('u', '(?<f>\\w) in _user')], runCtx(FIXED_NOW, diagnostics));
     expect(diagnostics).toEqual([]);
   });
 
   it('stays quiet for a name without a leading underscore', () => {
     const diagnostics: ValidationDiagnostic[] = [];
     // `user_` ends with one — that is not the case the warning is about.
-    extractFields([event('x', { user: 'a' })], [dir('u', '(?<f>\\w) in user_')], runCtx(diagnostics));
+    extractFields([event('x', { user: 'a' })], [dir('u', '(?<f>\\w) in user_')], runCtx(FIXED_NOW, diagnostics));
     expect(diagnostics).toEqual([]);
   });
 });
 
 describe('EXTRACT — what a match leaves behind', () => {
   it('records a trace step naming the class and the fields it added', () => {
-    const e = extractFields([event('a=1 b=2')], [dir('ab', 'a=(?<a>\\d) b=(?<b>\\d)')], runCtx())[0]!;
+    const e = extractFields([event('a=1 b=2')], [dir('ab', 'a=(?<a>\\d) b=(?<b>\\d)')], runCtx(FIXED_NOW))[0]!;
     expect(e.processingTrace).toEqual([
       {
         processor: 'EXTRACT-ab',
@@ -98,14 +91,14 @@ describe('EXTRACT — what a match leaves behind', () => {
   });
 
   it('skips an optional group that did not participate rather than writing it', () => {
-    const e = extractFields([event('a=1')], [dir('opt', 'a=(?<a>\\d)(?: b=(?<b>\\d))?')], runCtx())[0]!;
+    const e = extractFields([event('a=1')], [dir('opt', 'a=(?<a>\\d)(?: b=(?<b>\\d))?')], runCtx(FIXED_NOW))[0]!;
     expect(e.fields).toEqual({ a: '1' });
     expect('b' in e.fields).toBe(false);
     expect(e.processingTrace[0]!.fieldsAdded).toEqual(['a']);
   });
 
   it('explains a match that added nothing because every field was already set', () => {
-    const e = extractFields([event('status=500', { status: '200' })], [dir('s', 'status=(?<status>\\d+)')], runCtx())[0]!;
+    const e = extractFields([event('status=500', { status: '200' })], [dir('s', 'status=(?<status>\\d+)')], runCtx(FIXED_NOW))[0]!;
     expect(e.processingTrace).toEqual([]);
     expect(e.noOps).toEqual([
       {
@@ -119,7 +112,7 @@ describe('EXTRACT — what a match leaves behind', () => {
   });
 
   it('reports only the fields that collided when some were new', () => {
-    const e = extractFields([event('a=1 b=2', { a: 'x' })], [dir('ab', 'a=(?<a>\\d) b=(?<b>\\d)')], runCtx())[0]!;
+    const e = extractFields([event('a=1 b=2', { a: 'x' })], [dir('ab', 'a=(?<a>\\d) b=(?<b>\\d)')], runCtx(FIXED_NOW))[0]!;
     expect(e.fields).toEqual({ a: 'x', b: '2' });
     // A match that added something is not a no-op, even if part of it collided.
     expect(e.noOps).toBeUndefined();
@@ -127,55 +120,55 @@ describe('EXTRACT — what a match leaves behind', () => {
   });
 
   it('records a plain no-match when nothing of the pattern matched', () => {
-    const e = extractFields([event('zzz')], [dir('n', 'q=(?<q>\\d)')], runCtx())[0]!;
+    const e = extractFields([event('zzz')], [dir('n', 'q=(?<q>\\d)')], runCtx(FIXED_NOW))[0]!;
     expect(e.noOps![0]!.reason.kind).toBe('no-match');
   });
 
   it('appends to no-ops already on the event rather than replacing them', () => {
     const prior = { directive: 'X', file: 'props.conf' as const, line: 9, phase: 'search-time' as const, reason: { kind: 'no-match' as const } };
     const ev = { ...event('zzz'), noOps: [prior] };
-    const e = extractFields([ev], [dir('n', 'q=(?<q>\\d)')], runCtx())[0]!;
+    const e = extractFields([ev], [dir('n', 'q=(?<q>\\d)')], runCtx(FIXED_NOW))[0]!;
     expect(e.noOps).toHaveLength(2);
     expect(e.noOps![0]).toBe(prior);
   });
 
   it('keeps offsets recorded earlier when it adds its own', () => {
     const ev = { ...event('a=1'), fieldOffsets: { earlier: [[0, 1]] as Array<[number, number]> } };
-    const e = extractFields([ev], [dir('a', 'a=(?<a>\\d)')], runCtx())[0]!;
+    const e = extractFields([ev], [dir('a', 'a=(?<a>\\d)')], runCtx(FIXED_NOW))[0]!;
     expect(e.fieldOffsets).toEqual({ earlier: [[0, 1]], a: [[2, 3]] });
   });
 
   it('leaves fieldOffsets absent when nothing positional was captured', () => {
-    const e = extractFields([event('zzz')], [dir('n', 'q=(?<q>\\d)')], runCtx())[0]!;
+    const e = extractFields([event('zzz')], [dir('n', 'q=(?<q>\\d)')], runCtx(FIXED_NOW))[0]!;
     expect(e.fieldOffsets).toBeUndefined();
   });
 
   it('returns the input untouched when there is no EXTRACT at all', () => {
     const events = [event('a=1')];
     const other: ConfDirective = { key: 'KV_MODE', value: 'none', line: 1, directiveType: 'KV_MODE' };
-    expect(extractFields(events, [other], runCtx())).toBe(events);
+    expect(extractFields(events, [other], runCtx(FIXED_NOW))).toBe(events);
   });
 
   it('ignores directives that are not EXTRACT', () => {
     const report: ConfDirective = { key: 'REPORT-a', value: 'a=(?<a>\\d)', line: 1, directiveType: 'REPORT', className: 'a' };
-    const e = extractFields([event('a=1')], [report, dir('b', 'a=(?<b>\\d)')], runCtx())[0]!;
+    const e = extractFields([event('a=1')], [report, dir('b', 'a=(?<b>\\d)')], runCtx(FIXED_NOW))[0]!;
     expect(e.fields).toEqual({ b: '1' });
   });
 });
 
 describe('EXTRACT — reading from a named source field', () => {
   it('reads the first value of a multivalue source field', () => {
-    const e = extractFields([event('', { tags: ['id-7', 'id-9'] })], [dir('t', 'id-(?<n>\\d) in tags')], runCtx())[0]!;
+    const e = extractFields([event('', { tags: ['id-7', 'id-9'] })], [dir('t', 'id-(?<n>\\d) in tags')], runCtx(FIXED_NOW))[0]!;
     expect(e.fields['n']).toBe('7');
   });
 
   it('treats "in _raw" as the event text', () => {
-    const e = extractFields([event('k=v')], [dir('r', 'k=(?<k>\\w) in _raw')], runCtx())[0]!;
+    const e = extractFields([event('k=v')], [dir('r', 'k=(?<k>\\w) in _raw')], runCtx(FIXED_NOW))[0]!;
     expect(e.fields['k']).toBe('v');
   });
 
   it('records no offsets for a value read from a field, whose positions are not _raw positions', () => {
-    const e = extractFields([event('zzz', { src: 'k=v' })], [dir('r', 'k=(?<k>\\w) in src')], runCtx())[0]!;
+    const e = extractFields([event('zzz', { src: 'k=v' })], [dir('r', 'k=(?<k>\\w) in src')], runCtx(FIXED_NOW))[0]!;
     expect(e.fields['k']).toBe('v');
     expect(e.fieldOffsets).toBeUndefined();
   });

@@ -12,7 +12,8 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import * as splunkRegex from '../../utils/splunkRegex';
 import { applyEvalExpressions } from '../processors/evalProcessor';
 import type { SplunkEvent, ConfDirective, ValidationDiagnostic } from '../types';
-import { runCtx } from './runCtx';
+import { runCtx, FIXED_NOW } from './runCtx';
+import { makeEvent } from '../../test/makeEvent';
 
 // Replaced per test by `refuse` below; otherwise the real guard.
 vi.mock('../../utils/splunkRegex', async (importOriginal) => {
@@ -21,15 +22,7 @@ vi.mock('../../utils/splunkRegex', async (importOriginal) => {
 });
 
 function event(fields: Record<string, string>): SplunkEvent {
-  return {
-    _raw: 'raw',
-    _time: null,
-    _meta: {},
-    fields,
-    metadata: { index: 'main', host: 'h', source: 's', sourcetype: 'st' },
-    lineNumbers: { start: 1, end: 1 },
-    processingTrace: [],
-  };
+  return makeEvent('raw', { fields });
 }
 
 const evalDir = (className: string, value: string): ConfDirective =>
@@ -40,7 +33,7 @@ function like(s: string, pattern: string) {
   const out = applyEvalExpressions(
     [event({ s })],
     [evalDir('r', `if(like(s, "${pattern}"), "y", "n")`)],
-    runCtx(diagnostics),
+    runCtx(FIXED_NOW, diagnostics),
   );
   return { result: out[0]!.fields['r'], diagnostics };
 }
@@ -78,7 +71,7 @@ describe('like() reports a pattern the guard refuses (#303)', () => {
     vi.mocked(splunkRegex.safeRegex).mockReturnValue(null);
     const diagnostics: ValidationDiagnostic[] = [];
     const events = Array.from({ length: 5 }, () => event({ s: 'abc' }));
-    const out = applyEvalExpressions(events, [evalDir('r', 'if(like(s, "a%"), "true", "false")')], runCtx(diagnostics));
+    const out = applyEvalExpressions(events, [evalDir('r', 'if(like(s, "a%"), "true", "false")')], runCtx(FIXED_NOW, diagnostics));
 
     expect(out[0]!.fields['r']).toBe('false');
     expect(diagnostics).toHaveLength(1);
