@@ -116,7 +116,11 @@ reviewed. `docs/engine.md`'s closing section is the spec this implements:
   in the conf (file / stanza / key / line / layer), and which of them a
   structural ReDoS heuristic flags — so the agent can repair the pattern rather
   than retry blind. The heuristic is advisory and cannot see every form
-  (e.g. `(a|aa)+`), and the error text says so.
+  (e.g. `(a|aa)+`), and the error text says so. The list is built inside
+  the worker, which posts it before the pipeline runs; the server never
+  parses the caller's conf on its own thread, so a timeout cannot stall it
+  (#468). A run that times out before posting the list, and a validate or
+  explain run, which execute no directive's regex, report none.
 - **Each worker has a heap limit** (V8 `resourceLimits`: 512 MB old
   generation, 64 MB young). A run that exceeds it kills only its own worker
   and comes back as `{"error": "out_of_memory", "heap_limit_mb": …}` with
@@ -132,9 +136,7 @@ reviewed. `docs/engine.md`'s closing section is the spec this implements:
   `props_conf` and `transforms_conf` together may carry at most 2M
   characters across all their layers. More comes back as
   `{"error": "input_too_large", "conf_chars": …, "max_conf_chars": …}`
-  before any worker starts. The bound also caps what a timeout re-parses
-  on the server's own thread to list regex suspects — a few hundred
-  milliseconds at the limit. Measured: a 1 MB sample of one-character lines
+  before any worker starts. Measured: a 1 MB sample of one-character lines
   (500k events) beside 1.9M characters of conf (33,000 stanzas), with an
   EXTRACT, SEDCMD, FIELDALIAS and EVAL applying to every event and
   `include_snapshots` on, completes within 512 MB — in about 12 s, so it

@@ -10,6 +10,7 @@
  */
 import type { ConfInput, EventMetadata, ValidationDiagnostic } from '../../../src/engine/types';
 import type { SerializedSimulation } from './serialize';
+import type { SuspectList } from './suspects';
 import type { RegexEngineModule } from '../../../src/utils/splunkRegex';
 
 export interface SimulateRequest {
@@ -98,6 +99,20 @@ export interface ExplainResponse {
   };
 }
 
+/** The worker's answer: the last message it posts. */
 export type WorkerResponse =
   | { ok: true; data: SimulateResponse | ValidateResponse | ExplainResponse }
   | { ok: false; error: string };
+
+/**
+ * Posted by a simulate worker before its pipeline runs: the conf's regex
+ * directives, for the timeout error should the run not finish. Computed
+ * there so that the server never parses caller input on its own thread.
+ */
+export interface SuspectsMessage {
+  kind: 'suspects';
+  list: SuspectList;
+}
+
+/** Everything a worker posts: messages about the run so far, then its answer. */
+export type WorkerMessage = SuspectsMessage | WorkerResponse;

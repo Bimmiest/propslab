@@ -46,6 +46,17 @@ describe('computeDiagnostics — continued values are validated as a whole (#70.
     expect(markers.some((m) => /Invalid regex/.test(m.message))).toBe(true);
   });
 
+  it('joins a long run of continuation lines in linear time (#468)', () => {
+    // Re-concatenating the whole value per line made this quadratic. Every
+    // continuation line belongs to the one value, so none is read as a
+    // directive or reported as malformed.
+    const text = `[st]\nTIME_FORMAT = %Y\\\n${'a\\\n'.repeat(200_000)}`;
+    const start = performance.now();
+    const markers = computeDiagnostics(fakeModel(text), 'props.conf');
+    expect(performance.now() - start).toBeLessThan(3_000);
+    expect(markers).toEqual([]);
+  });
+
   it('treats an even backslash run as a literal, not a continuation', () => {
     // `C:\\` is a Windows path ending in one escaped backslash, not a continuation.
     const text = '[st]\nEXTRACT-p = path=(?<path>C:\\\\)\n';

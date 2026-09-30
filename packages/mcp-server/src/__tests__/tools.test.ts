@@ -345,8 +345,7 @@ describe('lookup_directive', () => {
 });
 
 // The per-field limits admit 20 layers of 1M characters per file; the
-// combined bound keeps a call inside what the worker heap and the timeout
-// path's main-thread re-parse were sized for.
+// combined bound keeps a call inside what the worker heap was sized for.
 describe('conf size bound', () => {
   // Half the limit plus one in each file: each alone is under the combined
   // limit, together over. (As one flat string it exceeds the 1M per-field
@@ -406,6 +405,70 @@ describe('conf size bound', () => {
     );
     expect(result.isError).toBeUndefined();
   }, 20_000);
+});
+
+describe('the timeout path (#468)', () => {
+  // Just under MAX_TOTAL_CONF_CHARS: one EXTRACT continued over 660,000
+  // lines. Parsing it used to be quadratic, and a timeout parsed it again on
+  // the server's own thread — 1.98M characters stalled the event loop for
+  // about two minutes, with no responses, cancellations or new calls.
+  const pathological = `[st]\nEXTRACT-a = x\\\n${'a\\\n'.repeat(660_000)}`;
+  const HANG_WORKER = fileURLToPath(new URL('./fixtures/hangWorker.cjs', import.meta.url));
+
+  /** Runs `call` while measuring the longest the event loop went without a turn. */
+  async function withLoopWatch<T>(call: () => Promise<T>): Promise<{ result: T; maxGapMs: number; elapsedMs: number }> {
+    let last = performance.now();
+    let maxGapMs = 0;
+    const ticker = setInterval(() => {
+      const now = performance.now();
+      maxGapMs = Math.max(maxGapMs, now - last);
+      last = now;
+    }, 10);
+    const start = performance.now();
+    try {
+      const result = await call();
+      return { result, maxGapMs, elapsedMs: performance.now() - start };
+    } finally {
+      clearInterval(ticker);
+    }
+  }
+
+  it('never parses the conf on the server thread when a run times out', async () => {
+    // The fixture spins without posting anything, so the error has only
+    // what the server itself knows; anything more would have to come from
+    // parsing the conf here.
+    for (const call of [
+      () => handleSimulate(simulateArgs({ props_conf: pathological, timeout_ms: 200 }), HANG_WORKER),
+      () => handleValidate({ props_conf: pathological, transforms_conf: '', timeout_ms: 200 }, HANG_WORKER),
+    ]) {
+      const { result, maxGapMs, elapsedMs } = await withLoopWatch(call);
+      const out = payload(result);
+      expect(out.error).toBe('timeout');
+      expect(out).not.toHaveProperty('regex_directives');
+      expect(out.message).not.toMatch(/backtrack/);
+      expect(elapsedMs).toBeLessThan(5_000);
+      expect(maxGapMs).toBeLessThan(1_000);
+    }
+  }, 30_000);
+
+  it('answers within a bound on a pathological conf through the real worker', async () => {
+    for (const call of [
+      () => handleSimulate(simulateArgs({ props_conf: pathological, timeout_ms: 100 }), WORKER_PATH),
+      () => handleValidate({ props_conf: pathological, transforms_conf: '', timeout_ms: 100 }, WORKER_PATH),
+      () =>
+        handleExplainPrecedence(
+          { file: 'props.conf', conf: pathological, index: 'main', host: 'h', source: 's', timeout_ms: 100 },
+          WORKER_PATH,
+        ),
+    ]) {
+      const { result, maxGapMs, elapsedMs } = await withLoopWatch(call);
+      // Linear now, so the run may well finish inside its budget; either way
+      // the answer comes promptly and the server's loop keeps turning.
+      expect(['timeout', undefined]).toContain(payload(result).error);
+      expect(elapsedMs).toBeLessThan(10_000);
+      expect(maxGapMs).toBeLessThan(1_000);
+    }
+  }, 60_000);
 });
 
 describe('collectRegexSuspects', () => {

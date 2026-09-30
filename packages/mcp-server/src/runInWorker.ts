@@ -47,15 +47,23 @@
 import { Worker, type ResourceLimits } from 'node:worker_threads';
 import os from 'node:os';
 import path from 'node:path';
-import type { WorkerData, WorkerRequest, WorkerResponse } from './protocol';
+import type { WorkerData, WorkerMessage, WorkerRequest } from './protocol';
+import type { SuspectList } from './suspects';
 import { regexEngineModule } from './regexEngine';
 
 export class WorkerTimeoutError extends Error {
   readonly budgetMs: number;
-  constructor(budgetMs: number) {
+  /**
+   * The regex-suspect list the worker posted before its run, if it got that
+   * far (only simulate posts one). The server never builds this itself: that
+   * would mean parsing the caller's conf on its own thread.
+   */
+  readonly suspects: SuspectList | undefined;
+  constructor(budgetMs: number, suspects?: SuspectList) {
     super(`Worker exceeded its ${budgetMs}ms wall-clock budget and was terminated`);
     this.name = 'WorkerTimeoutError';
     this.budgetMs = budgetMs;
+    this.suspects = suspects;
   }
 }
 
@@ -312,13 +320,14 @@ function spawnAndWait<T>(
 
   const result = new Promise<T>((resolve, reject) => {
     let settled = false;
+    let suspects: SuspectList | undefined;
 
     const timer = setTimeout(() => {
       if (settled) return;
       settled = true;
       signal?.removeEventListener('abort', onAbort);
       void worker.terminate();
-      reject(new WorkerTimeoutError(timeoutMs));
+      reject(new WorkerTimeoutError(timeoutMs, suspects));
     }, timeoutMs);
 
     const settle = (fn: () => void) => {
@@ -337,10 +346,14 @@ function spawnAndWait<T>(
     const onAbort = () => settle(() => reject(new WorkerCancelledError(true, signal?.reason)));
     signal?.addEventListener('abort', onAbort, { once: true });
 
-    worker.once('message', (response: WorkerResponse) => {
+    worker.on('message', (message: WorkerMessage) => {
+      if ('kind' in message) {
+        suspects = message.list;
+        return;
+      }
       settle(() => {
-        if (response.ok) resolve(response.data as T);
-        else reject(new Error(response.error));
+        if (message.ok) resolve(message.data as T);
+        else reject(new Error(message.error));
       });
     });
     worker.once('error', (err) =>

@@ -245,6 +245,55 @@ export function parseConf(
 }
 
 /**
+ * The directive the next line may continue, and its value so far as one part
+ * per physical line. The parts are joined once, when the value ends: appending
+ * each line to the whole value re-copied it every time, which is quadratic in
+ * its length.
+ */
+function createContinuation() {
+  let directive: ConfDirective | null = null;
+  let parts: string[] = [];
+
+  /** Settle the value: no later line can continue it. */
+  const end = (): void => {
+    if (directive && parts.length > 1) directive.value = parts.join('');
+    directive = null;
+    parts = [];
+  };
+
+  return {
+    start(next: ConfDirective): void {
+      directive = next;
+      parts = [next.value];
+    },
+    /**
+     * Append `line` to the value if the value continues onto it, and say
+     * whether it did; otherwise the value is over.
+     *
+     * Only the last part is inspected. Every earlier part gave up its final
+     * backslash to the continuation it made, leaving an even run, so the
+     * parity of the whole value's trailing backslashes is the last part's.
+     */
+    take(line: string): boolean {
+      if (!directive) return false;
+      const last = parts.length - 1;
+      const tail = parts[last] ?? '';
+      if (!endsWithContinuation(tail)) {
+        end();
+        return false;
+      }
+      // Drop the continuation backslash and append the next line verbatim — Splunk
+      // preserves the continuation line's leading whitespace (no trimStart). A
+      // blank line appends nothing, so the continuation simply ends there.
+      parts[last] = tail.slice(0, -1);
+      parts.push(line);
+      return true;
+    },
+    end,
+  };
+}
+
+/**
  * Parse one conf file. `layer`, when given, is stamped onto every stanza,
  * directive and diagnostic produced from this text, because once the layers are
  * concatenated a line number alone no longer says which file it is in.
@@ -263,9 +312,7 @@ function parseLayer(
   // explicit stanza header are implicitly in a virtual [default] stanza.
   let currentStanza: ConfStanza | null = null;
 
-  // Reference to the most recently parsed directive so we can handle
-  // continuation lines.
-  let lastDirective: ConfDirective | null = null;
+  const continuation = createContinuation();
 
   /**
    * Flush the current stanza into the results array and reset tracking state.
@@ -286,13 +333,7 @@ function parseLayer(
     // it. Classifying the line first skipped a `#` line and appended the NEXT
     // directive instead, and left a value followed by a blank line with its
     // backslash still on.
-    if (lastDirective && endsWithContinuation(lastDirective.value)) {
-      // Drop the continuation backslash and append the next line verbatim — Splunk
-      // preserves the continuation line's leading whitespace (no trimStart). A
-      // blank line appends nothing, so the continuation simply ends there.
-      lastDirective.value = lastDirective.value.slice(0, -1) + line;
-      continue;
-    }
+    if (continuation.take(line)) continue;
 
     // --- Comments ---
     if (COMMENT_RE.test(line)) {
@@ -320,7 +361,6 @@ function parseLayer(
         lineRange: { start: lineNumber, end: lineNumber },
         ...from,
       };
-      lastDirective = null;
       continue;
     }
 
@@ -371,7 +411,7 @@ function parseLayer(
       }
 
       currentStanza.directives.push(directive);
-      lastDirective = directive;
+      continuation.start(directive);
       continue;
     }
 
@@ -385,10 +425,10 @@ function parseLayer(
       ...from,
       line: lineNumber,
     });
-    lastDirective = null;
   }
 
-  // Flush the last stanza.
+  // Flush the last directive and stanza.
+  continuation.end();
   flushStanza(lines.length);
 
   return { stanzas, errors };

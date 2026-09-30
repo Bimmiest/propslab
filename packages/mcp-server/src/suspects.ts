@@ -1,9 +1,14 @@
 /**
  * Static analysis used to make a simulate timeout repairable instead of a
  * blind retry: enumerate every regex-valued directive in the conf inputs and
- * flag the structurally ReDoS-prone ones. Runs in the server process — it
- * parses conf text and inspects patterns but never EXECUTES them, so it is
- * safe outside the worker sandbox.
+ * flag the structurally ReDoS-prone ones.
+ *
+ * Runs in the sandbox worker, before the pipeline, and the list is posted to
+ * the server ahead of the run (simulateWorker.ts). The server keeps the last
+ * list it was sent and reports it if the run then times out; it never parses
+ * the caller's conf on its own thread, where nothing bounds how long that
+ * takes. A run that times out before the list is posted — still parsing the
+ * conf — reports no list, and says so.
  *
  * Patterns run on PCRE2, whose match limits bound each match, so a timeout is
  * the sum of many bounded matches rather than one runaway. `hasReDoSRisk` is a
@@ -16,6 +21,7 @@ import { parseConf } from '../../../src/engine/parser/confParser';
 import { getDirectiveInfo } from '../../../src/engine/directiveRegistry';
 import { hasReDoSRisk } from '../../../src/utils/redosHeuristic';
 import type { ConfDirective, ConfInput, ConfStanza } from '../../../src/engine/types';
+import { elementBytes, fitting, MAX_PAYLOAD_BYTES } from './responseBudget';
 
 export interface RegexSuspect {
   file: 'props.conf' | 'transforms.conf';
@@ -26,6 +32,15 @@ export interface RegexSuspect {
   pattern: string;
   /** True when the engine's structural ReDoS heuristic flags the pattern. */
   redos_risk: boolean;
+}
+
+/**
+ * The suspect list as the worker posts it: flagged patterns first, cut to
+ * what one response can carry, with the length before the cut.
+ */
+export interface SuspectList {
+  suspects: RegexSuspect[];
+  total: number;
 }
 
 /**
@@ -77,4 +92,17 @@ export function collectRegexSuspects(
 
   // Flagged patterns first — they are what the agent should repair.
   return suspects.sort((a, b) => Number(b.redos_risk) - Number(a.redos_risk));
+}
+
+/**
+ * `collectRegexSuspects`, cut to the response budget in the worker, so what
+ * crosses to the server's thread is bounded however many patterns the conf
+ * holds. The timeout error cuts it again, exactly, around its other fields.
+ */
+export function boundedRegexSuspects(propsConf: ConfInput, transformsConf: ConfInput): SuspectList {
+  const all = collectRegexSuspects(propsConf, transformsConf);
+  return {
+    suspects: all.slice(0, fitting(all, elementBytes, MAX_PAYLOAD_BYTES)),
+    total: all.length,
+  };
 }

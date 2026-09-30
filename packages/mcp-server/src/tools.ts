@@ -35,7 +35,6 @@ import {
   simulateOutputShape,
   validateOutputShape,
 } from './outputSchemas';
-import { collectRegexSuspects } from './suspects';
 
 // ---------------------------------------------------------------------------
 // Input schemas
@@ -50,8 +49,8 @@ const MAX_CONF_LAYERS = 20;
  * transforms.conf together. The per-field limits alone admit twenty
  * layers of a million characters for each file — forty million characters —
  * which the worker's heap limit is not sized for (runInWorker.ts sizes it
- * from the sample), and which a timeout then re-parses on the server's own
- * thread to list regex suspects. Two million is still several times the
+ * from the sample), and which simulate's worker parses twice (once for the
+ * timeout error's regex suspects). Two million is still several times the
  * largest real props.conf + transforms.conf pair, default and local together.
  *
  * Enforced in two places: `confInputSchema` refuses one conf over it during
@@ -69,7 +68,7 @@ export function confChars(conf: ConfInput): number {
 /**
  * The structured refusal for conf text over `MAX_TOTAL_CONF_CHARS`, or null
  * when it fits. Checked before a worker slot is taken, so an oversized call
- * neither queues nor reaches the timeout path's main-thread re-parse.
+ * neither queues nor reaches a worker.
  */
 function confTooLarge(...confs: ConfInput[]): ToolText | null {
   const total = confs.reduce((n, c) => n + confChars(c), 0);
@@ -271,21 +270,35 @@ function json(payload: object, isError = false): ToolText {
 }
 
 /**
- * The timeout error, with the regex-suspect list cut to the response budget:
- * one suspect per regex directive, so a conf of many large patterns lists
- * megabytes of them. Flagged patterns sort first and survive the cut.
+ * The timeout error, with the regex-suspect list the worker posted before its
+ * run, cut to the response budget: one suspect per regex directive, so a conf
+ * of many large patterns lists megabytes of them. Flagged patterns sort first
+ * and survive the cut. Only a simulate run posts a list, and only once it has
+ * parsed the conf; without one the error names no regex.
  */
-function timeoutFailure(
-  err: WorkerTimeoutError,
-  propsConf: ConfInput,
-  transformsConf: ConfInput,
-): ToolText {
-  const suspects = collectRegexSuspects(propsConf, transformsConf);
-  const total = suspects.length;
+function timeoutFailure(err: WorkerTimeoutError): ToolText {
+  const base = {
+    error: 'timeout',
+    budget_ms: err.budgetMs,
+  };
+  if (!err.suspects) {
+    return json(
+      {
+        ...base,
+        message:
+          `The run exceeded its ${err.budgetMs}ms wall-clock budget and was hard-terminated ` +
+          'before it ran any regex directive.',
+        guidance:
+          'Send less conf text — only the stanzas that matter for this question — or a larger ' +
+          'timeout_ms.',
+      },
+      true,
+    );
+  }
+  const { suspects, total } = err.suspects;
   return json(
     cutToFit(suspects, (kept) => ({
-      error: 'timeout',
-      budget_ms: err.budgetMs,
+      ...base,
       message:
         `The run exceeded its ${err.budgetMs}ms wall-clock budget and was hard-terminated. ` +
         'The usual cause is a regex backtracking heavily on every event, or one whose stanza ' +
@@ -313,13 +326,9 @@ function timeoutFailure(
  * of the worker's heap gets its own error, so it reads as "too big" rather
  * than as an engine crash.
  */
-function workerFailure(
-  err: unknown,
-  propsConf: ConfInput,
-  transformsConf: ConfInput,
-): ToolText {
+function workerFailure(err: unknown): ToolText {
   if (err instanceof WorkerTimeoutError) {
-    return timeoutFailure(err, propsConf, transformsConf);
+    return timeoutFailure(err);
   }
   if (err instanceof WorkerOutOfMemoryError) {
     // No regex-suspect list here: memory is exhausted by volume — how much
@@ -408,7 +417,7 @@ export async function handleSimulate(args: SimulateArgs, worker?: string | RunIn
     );
     return json(response);
   } catch (err) {
-    return workerFailure(err, args.props_conf, args.transforms_conf);
+    return workerFailure(err);
   }
 }
 
@@ -423,7 +432,7 @@ export async function handleValidate(args: ValidateArgs, worker?: string | RunIn
     );
     return json(response);
   } catch (err) {
-    return workerFailure(err, args.props_conf, args.transforms_conf);
+    return workerFailure(err);
   }
 }
 
@@ -447,12 +456,7 @@ export async function handleExplainPrecedence(
     );
     return json(response);
   } catch (err) {
-    const empty: ConfInput = '';
-    return workerFailure(
-      err,
-      args.file === 'props.conf' ? args.conf : empty,
-      args.file === 'transforms.conf' ? args.conf : empty,
-    );
+    return workerFailure(err);
   }
 }
 

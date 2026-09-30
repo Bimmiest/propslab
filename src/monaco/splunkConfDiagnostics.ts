@@ -342,7 +342,11 @@ export function computeDiagnostics(
 /**
  * Join a backslash-continued value into the single logical value Splunk parses,
  * so validation sees the whole thing. Drops the continuation backslash and
- * appends the next line verbatim, exactly as `confParser` does.
+ * appends the next line verbatim, exactly as `confParser` does — and, like it,
+ * joins the parts once at the end, since re-concatenating the whole value per
+ * line is quadratic in its length. Only the last part decides whether the value
+ * continues: each earlier one lost its final backslash to the continuation it
+ * made, so the parity of the value's trailing backslashes is the last part's.
  */
 function joinContinuedValue(
   model: editor.ITextModel,
@@ -350,11 +354,15 @@ function joinContinuedValue(
   firstFragment: string,
   lineCount: number,
 ): string {
-  let joined = firstFragment;
-  for (let line = startLine + 1; line <= lineCount && endsWithContinuation(joined); line++) {
-    joined = joined.slice(0, -1) + model.getLineContent(line);
+  const parts = [firstFragment];
+  for (let line = startLine + 1; line <= lineCount; line++) {
+    const last = parts.length - 1;
+    const tail = parts[last] ?? '';
+    if (!endsWithContinuation(tail)) break;
+    parts[last] = tail.slice(0, -1);
+    parts.push(model.getLineContent(line));
   }
-  return joined.trim();
+  return parts.join('').trim();
 }
 
 /**

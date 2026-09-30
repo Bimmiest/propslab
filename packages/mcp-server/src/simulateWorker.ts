@@ -9,7 +9,7 @@
  * fallback, for the engine's own JS regexes, before the engine's modules load.
  */
 import './v8Flags';
-import { parentPort, workerData } from 'node:worker_threads';
+import { parentPort, workerData, type MessagePort } from 'node:worker_threads';
 import { lintConfigs } from '../../../src/engine/configLint';
 import { runPipeline } from '../../../src/engine/pipeline';
 import { parseConf } from '../../../src/engine/parser/confParser';
@@ -23,6 +23,7 @@ import type {
   ExplainStanza,
   SimulateRequest,
   SimulateResponse,
+  SuspectsMessage,
   ValidateRequest,
   WorkerData,
   ValidateResponse,
@@ -32,14 +33,26 @@ import type {
 import { lintRegexDirectives } from './regexLint';
 import { boundExplain, boundValidate } from './responseBudget';
 import { serializeSimulation } from './serialize';
+import { boundedRegexSuspects } from './suspects';
 
 /**
  * Serialized here rather than on the server's thread: the raw ProcessingResult
  * grows with the event count, and posting it whole would put all of it on the
  * main thread, which has no heap limit, before anything was trimmed. Validate
  * and explain are cut to the same response budget here for the same reason.
+ *
+ * The regex-suspect list is posted first, for the timeout error should the
+ * run not finish (suspects.ts). It costs a second parse of the conf, linear
+ * and a small share of any run long enough to time out; in exchange the
+ * server's thread never parses caller input. Validate and explain post none:
+ * neither runs a directive's regex, so a regex is not what makes them slow.
  */
-function handleSimulate(request: SimulateRequest): SimulateResponse {
+function handleSimulate(request: SimulateRequest, port: MessagePort): SimulateResponse {
+  const suspects: SuspectsMessage = {
+    kind: 'suspects',
+    list: boundedRegexSuspects(request.propsConf, request.transformsConf),
+  };
+  port.postMessage(suspects);
   const { result, diagnostics } = runPipeline(
     request.raw,
     request.metadata,
@@ -124,10 +137,10 @@ function handleExplain(request: ExplainRequest): ExplainResponse {
   return boundExplain(response);
 }
 
-function handle(request: WorkerRequest) {
+function handle(request: WorkerRequest, port: MessagePort) {
   switch (request.op) {
     case 'simulate':
-      return handleSimulate(request);
+      return handleSimulate(request, port);
     case 'validate':
       return handleValidate(request);
     case 'explain':
@@ -141,7 +154,7 @@ if (port) {
   try {
     const { regexEngine, ...request } = workerData as WorkerData;
     initRegexEngineSync(regexEngine);
-    response = { ok: true, data: handle(request) };
+    response = { ok: true, data: handle(request, port) };
   } catch (err) {
     response = { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
