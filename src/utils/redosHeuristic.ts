@@ -33,6 +33,12 @@ const REDOS_ADJACENT_QUANTIFIER = /(?<!\\)(?:\\\\)*(\\?[A-Za-z0-9.])[*+]\1[*+]/;
  * only bounds the scanner's worst-case cost on pathological input.
  */
 const REDOS_ANALYSIS_MAX_LENGTH = 2000;
+/**
+ * Above this source length even the presence-only check is skipped, and the
+ * pattern is assumed risky: `REDOS_NESTED_GROUP` backtracks quadratically on a
+ * long unclosed group (`(` followed by 30,000 `*` took about 0.8 s).
+ */
+const REDOS_PRESENCE_CHECK_MAX_LENGTH = 5000;
 /** Nesting depth beyond which the analysis gives up and assumes the worst. */
 const REDOS_ANALYSIS_MAX_DEPTH = 20;
 
@@ -340,6 +346,7 @@ export function hasReDoSRisk(pattern: string): boolean {
 
 function computeReDoSRisk(pattern: string): boolean {
   if (REDOS_ADJACENT_QUANTIFIER.test(pattern)) return true;
+  if (pattern.length > REDOS_PRESENCE_CHECK_MAX_LENGTH) return true;
   if (pattern.length > REDOS_ANALYSIS_MAX_LENGTH) return REDOS_NESTED_GROUP.test(pattern);
   return hasAmbiguousRepetition(pattern, 0);
 }

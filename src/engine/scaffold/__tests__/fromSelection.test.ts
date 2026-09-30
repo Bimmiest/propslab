@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { generalize, buildExtractFromSelection, timePrefixFromSelection, toCaptureGroupName } from '../fromSelection';
 import { upsertDirectiveInStanza } from '../serialize';
+import { parseConf } from '../../parser/confParser';
 
 describe('generalize', () => {
   it('generalises by shape', () => {
@@ -111,5 +112,76 @@ describe('upsertDirectiveInStanza', () => {
     expect(upsertDirectiveInStanza(text, 'web', 'TIME_PREFIX', 'b')).toBe(
       '[web]\nTIME_PREFIX = a\n\n[db]\nKV_MODE = json\n\n[web]\nKV_MODE = none\nTIME_PREFIX = b\n',
     );
+  });
+  // #484. A line ending in an ODD number of backslashes continues onto the next
+  // (props.conf.spec: "A backslash at the end of a line continues the value"), so
+  // replacing a directive replaces every physical line it spans.
+  describe('a directive continued with backslashes (#484)', () => {
+    const valueOf = (text: string, key: string): string | undefined =>
+      parseConf(text, 'props.conf').stanzas.flatMap((st) => st.directives).find((d) => d.key === key)?.value;
+
+    it('replaces the whole continued REGEX, not just its first line', () => {
+      const text = '[web]\nREGEX = a\\\n  b\\\n  c\nKV_MODE = none';
+      const out = upsertDirectiveInStanza(text, 'web', 'REGEX', 'z');
+      expect(out).toBe('[web]\nREGEX = z\nKV_MODE = none');
+      expect(parseConf(out, 'props.conf').errors).toEqual([]);
+    });
+
+    it('replaces a continued EXTRACT at the end of the file', () => {
+      const text = '[web]\nEXTRACT-u = user=(?<user>\\w+)\\\n  \\s+id=(?<id>\\d+)';
+      const out = upsertDirectiveInStanza(text, 'web', 'EXTRACT-u', 'x=(?<x>\\d+)');
+      expect(out).toBe('[web]\nEXTRACT-u = x=(?<x>\\d+)');
+      expect(valueOf(out, 'EXTRACT-u')).toBe('x=(?<x>\\d+)');
+    });
+
+    it('replaces a continued value whose continuation line looks like a header or a comment', () => {
+      const text = '[web]\nREGEX = a\\\n[not-a-stanza]\\\n# not a comment\nKV_MODE = none\n\n[db]\nKV_MODE = json';
+      expect(upsertDirectiveInStanza(text, 'web', 'REGEX', 'z')).toBe('[web]\nREGEX = z\nKV_MODE = none\n\n[db]\nKV_MODE = json');
+    });
+
+    it('does not treat a value ending in an even number of backslashes as continued', () => {
+      // `C:\\dir\\` is escaped backslashes, so the next line is a directive of its own.
+      const text = '[web]\nSEDCMD-p = s/C:\\\\dir\\\\\nKV_MODE = none';
+      expect(upsertDirectiveInStanza(text, 'web', 'SEDCMD-p', 'x')).toBe('[web]\nSEDCMD-p = x\nKV_MODE = none');
+    });
+
+    it('still treats three trailing backslashes as a continuation', () => {
+      const text = '[web]\nREGEX = a\\\\\\\nb\nKV_MODE = none';
+      expect(upsertDirectiveInStanza(text, 'web', 'REGEX', 'z')).toBe('[web]\nREGEX = z\nKV_MODE = none');
+    });
+
+    it('ends a continuation at a blank line, which belongs to the directive', () => {
+      const text = '[web]\nREGEX = a\\\n\nKV_MODE = none';
+      expect(upsertDirectiveInStanza(text, 'web', 'REGEX', 'z')).toBe('[web]\nREGEX = z\nKV_MODE = none');
+    });
+
+    it('edits the last definition when an earlier one is continued', () => {
+      const text = '[web]\nREGEX = a\\\n  b\nREGEX = c\\\n  d';
+      expect(upsertDirectiveInStanza(text, 'web', 'REGEX', 'z')).toBe('[web]\nREGEX = a\\\n  b\nREGEX = z');
+    });
+
+    it('does not mistake a continuation line that reads `KEY =` for the definition', () => {
+      const text = '[web]\nKV_MODE = none\nEXTRACT-a = x\\\n  REGEX = inner';
+      const out = upsertDirectiveInStanza(text, 'web', 'REGEX', 'z');
+      expect(out).toBe('[web]\nKV_MODE = none\nEXTRACT-a = x\\\n  REGEX = inner\nREGEX = z');
+      expect(valueOf(out, 'EXTRACT-a')).toBe('x  REGEX = inner');
+    });
+
+    it('keeps a continued directive whole when appending after it', () => {
+      const text = '[web]\nREGEX = a\\\n  b\\\n\n[db]\nKV_MODE = json';
+      const out = upsertDirectiveInStanza(text, 'web', 'KV_MODE', 'none');
+      expect(out).toBe('[web]\nREGEX = a\\\n  b\\\n\nKV_MODE = none\n[db]\nKV_MODE = json');
+      expect(valueOf(out, 'REGEX')).toBe('a  b');
+    });
+
+    it('recognises the continuation in a CRLF file and keeps its line endings', () => {
+      const text = '[web]\r\nREGEX = a\\\r\n  b\r\nKV_MODE = none\r\n';
+      expect(upsertDirectiveInStanza(text, 'web', 'REGEX', 'z')).toBe('[web]\r\nREGEX = z\r\nKV_MODE = none\r\n');
+    });
+
+    it('does not let a stanza header that is continued text end the stanza', () => {
+      const text = '[web]\nREGEX = a\\\n[x]\nKV_MODE = none';
+      expect(upsertDirectiveInStanza(text, 'web', 'KV_MODE', 'json')).toBe('[web]\nREGEX = a\\\n[x]\nKV_MODE = json');
+    });
   });
 });

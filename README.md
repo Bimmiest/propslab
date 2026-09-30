@@ -25,6 +25,7 @@ npm run test:watch   # vitest watch mode
 npm run test:e2e     # Playwright smoke tests (builds, then serves dist/)
 npm run test:e2e:ui  # …in Playwright's interactive runner
 npm run test:mutation # Stryker mutation testing
+npm run test:mutation:canary # 40-second check that Stryker still kills mutants (the vitest shim)
 npm run check:overrides # Verify the @radix-ui overrides match what the Radix packages pin
 ```
 
@@ -156,7 +157,9 @@ e2e/                           # Playwright tests (production build, Chromium)
 ├── fixtures.ts                # Console/CSP error collection + readiness helpers
 ├── smoke.spec.ts
 ├── a11y.spec.ts               # axe-core over every main view, both themes
-└── perf.spec.ts               # 20k-event pipeline and tab-switch budgets
+├── perf.spec.ts               # 20k-event, regex-heavy and 3,000-field budgets
+├── perf-vitals.spec.ts        # LCP, TBT and transferred bytes on first load
+└── perfSummary.ts             # Writes the perf numbers to the job summary
 ```
 
 ## Output tabs
@@ -248,7 +251,7 @@ It exists for the things vitest structurally cannot reach, each of which has fai
 - **The regex engine.** PCRE2 is a WebAssembly asset the page and each worker load from the one same-origin URL the build fixed. The suite checks that it loads under the CSP (`'wasm-unsafe-eval'`), that every load is of that one asset, that it answers in all three workers, and that fetch, compile and instantiate stay inside a 2 s budget (about 80 ms measured).
 - **The Monaco chunk split.** `MonacoEditor.tsx` imports the slim `monaco-editor/editor` entry and `vite.config.ts` hand-rolls a `codeSplitting` group around it. A bad split type-checks, builds, and then fails to mount an editor. Each hand-picked editor contribution (suggest, code actions, folding, find, hover) has a test, since a missing one fails silently too.
 - **Accessibility.** `a11y.spec.ts` runs axe-core over every main view — simulator, each output tab, dictionary, command palette, settings, pipeline reference, mobile layout — in both themes, and fails on any WCAG 2.2 AA or best-practice violation. Nothing is excluded, Monaco included: its colours come from our own themes.
-- **Performance.** `perf.spec.ts` pastes 20k events into the raw log and holds the pipeline and every tab switch to a budget several times what a local run measures.
+- **Performance.** `perf.spec.ts` pastes 20k events into the raw log, runs a regex-heavy config over large events and renders a 3,000-field event, and holds the pipeline and every tab switch to a budget several times what a local run measures. `perf-vitals.spec.ts` loads the production build cold and holds LCP, total blocking time and transferred bytes to budgets set from measurement; per-chunk sizes alone once let the entry preload all of Monaco. These run in the `perf` Playwright project, which has no retries, and write their numbers, with the budget beside each, to the job summary.
 
 One note if you extend it: the app runs the pipeline once on mount with an empty raw log, and `runPipeline` returns a real result for empty input (`eventCount: 0`). So the status bar reads "Worker idle · 0 events" *before* anything is loaded — wait on a non-zero event count, as `loadExample` does, not on the idle state.
 
@@ -266,7 +269,7 @@ A rollback only sticks while the automatic path is paused. Unpaused, the next gr
 
 The Azure action is pinned to a commit, but that pins only its wrapper: its Dockerfile builds on `mcr.microsoft.com/appsvc/staticappsclient:stable`, a movable tag, so the client that receives the deployment token is whatever Microsoft currently publishes there. The workflow file explains why that is left as it is.
 
-Node is pinned once, in `.nvmrc`, which both workflows and `package.json`'s `engines` follow.
+Node is pinned once, in `.nvmrc`, which both workflows and `package.json`'s `engines` follow. `supply-chain.yml` checks the Radix overrides and, monthly, that `.nvmrc` is the newest patch of its line, and the deploy attests the bundle it uploads and verifies the attestation before handing it to Azure (see CONTRIBUTING.md).
 
 ## Simulation fidelity
 
@@ -332,7 +335,7 @@ The directive levels above do not cover eval *functions*, which have their own b
 ### Other
 
 - **Regexes run on PCRE2, bounded by its limits and by worker watchdogs.** Every user pattern runs on PCRE2 compiled to WebAssembly, so the preview matches what Splunk's PCRE matches — `$` before a final newline, `.` matching `\r`, possessive quantifiers, recursion, `\K` — instead of a JavaScript translation of it, and no pattern is refused for looking prone to catastrophic backtracking. `MATCH_LIMIT` and `DEPTH_LIMIT` bound each field-extraction match, as in Splunk (see [docs/engine.md](docs/engine.md#the-regex-engine), including where PCRE2 differs from the PCRE1 those limits were named for). The limits bound each match, not a whole run, so no user-supplied regex is matched on the main thread either: the main processing pipeline (5 s watchdog), the **Regex tab's live tester** and the **Create-EXTRACT dialog's** live capture (both through the same regex-match worker, 2 s watchdog), the **Timestamp tab** (2 s) and the editor's `TIME_FORMAT` hover preview, whose `TIME_PREFIX` match shares the Timestamp tab's worker (1 s of the match itself — a worker still loading the engine is waited for, not blamed; the hover says "preview timed out" when it fires, and has no inline fallback), all run it inside a Web Worker, which is terminated and restarted rather than freezing the UI. The main thread only *compiles* user patterns, to report syntax errors, and compiling cannot backtrack. The one regex the hover still matches on the main thread is the `TIME_FORMAT` side: a pattern the app builds from strptime specifiers, not one the user wrote, run over at most 4 KB of the sample line.
-- **Raw data capped at 1 MB.** The cap is applied inside the pipeline, not at the store: a larger input is accepted, stored and sent to the worker in full, then *truncated* for processing — cut back to the last complete line, so the trailing partial event is dropped rather than mis-broken, with a warning saying so. Nothing rejects the input, and the editor still holds all of it.
+- **Raw data capped at 1 MB.** The cap is applied inside the pipeline, not at the store: a larger input is accepted, stored and sent to the worker in full, then *truncated* for processing — cut back to the last complete line, so the trailing partial event is dropped rather than mis-broken, with a warning saying so. Nothing rejects the input, and the editor still holds all of it. Line breaking likewise stops at 25,000 events (a `LINE_BREAKER` that breaks on every character would otherwise make a million), and warns from which line the input was dropped.
 - **Sourcetype stanzas match by strict equality.** This matches real Splunk — sourcetype names are literal, no wildcards — noted here so contributors don't add wildcard support by analogy with `source::` / `host::`.
 - **Monaco find-widget tooltip flicker.** Upstream bug in Monaco's hover service ([microsoft/monaco-editor#5208](https://github.com/microsoft/monaco-editor/issues/5208)); no local fix.
 

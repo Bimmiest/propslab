@@ -48,8 +48,9 @@ export default defineConfig({
   plugins: [...(base.plugins ?? []), strykerTestNamePattern],
   test: {
     ...base.test,
-    // The engine's tests, those of the two utils the engine runs on, and
-    // those of the MCP server modules in stryker.config.mjs's `mutate`. The
+    // The engine's tests, those of the two utils the engine runs on, those of
+    // the MCP server modules in stryker.config.mjs's `mutate`, and those of the
+    // two app modules it names. The
     // package's tests import its SDK from packages/mcp-server/node_modules,
     // so a run needs that install too.
     include: [
@@ -59,6 +60,11 @@ export default defineConfig({
       'packages/mcp-server/src/__tests__/requestId.test.ts',
       'packages/mcp-server/src/__tests__/messageLimit.test.ts',
       'packages/mcp-server/src/__tests__/serialize.test.ts',
+      // The worker lifecycle and the store (#508), the two non-engine modules
+      // whose logic the app's correctness leans on. Both are plain modules; the
+      // store's test opts into jsdom itself, once, for a file.
+      'src/hooks/__tests__/workerLifecycle*.test.ts',
+      'src/store/__tests__/*.test.ts',
     ],
     exclude: [
       ...(base.test?.exclude ?? []),

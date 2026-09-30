@@ -80,17 +80,19 @@ function safeProcessor(
 }
 
 /**
- * Guard against excessively large inputs (> 1MB). Cut back to the last line
- * break inside the cap rather than at an arbitrary character: slicing
- * mid-line hands the pipeline a half-event, which then mis-breaks,
+ * Guard against excessively large inputs (`RunLimits.maxRawChars`). Cut back
+ * to the last line break inside the cap rather than at an arbitrary character:
+ * slicing mid-line hands the pipeline a half-event, which then mis-breaks,
  * mis-timestamps, or extracts a truncated final field — a corrupt result
  * presented as a real one. Losing the partial trailing line is the honest
- * outcome, and the warning says so.
+ * outcome, and the warning says so. A line whose newline falls just past the
+ * cap is complete, and is kept.
  */
 function capInput(rawData: string, limits: RunLimits, diagnostics: ValidationDiagnostic[]): string {
-  if (rawData.length <= limits.maxRawChars) return rawData;
-  const capped = rawData.slice(0, limits.maxRawChars);
-  const lastBreak = capped.lastIndexOf('\n');
+  const max = limits.maxRawChars;
+  if (rawData.length <= max) return rawData;
+  const capped = rawData.slice(0, max);
+  const lastBreak = rawData[max] === '\n' ? max : capped.lastIndexOf('\n');
   const truncatedRaw = lastBreak > 0 ? capped.slice(0, lastBreak) : capped;
   diagnostics.push({
     level: 'warning',
@@ -254,13 +256,17 @@ function runSearchTimePerEvent(events: SplunkEvent[], run: PipelineRun, original
     const key = metaKey(event.metadata);
     const cached = directivesCache.get(key);
     if (cached !== undefined) return cached;
-    // Same resolution the batch path uses: an input-time `sourcetype`
-    // assignment first, then `rename` for the search-time set.
-    const perEvent = resolveStanzasForEvent(propsConf.stanzas, event.metadata);
-    const renamed = getRenamedSourcetype(perEvent.stanzas);
+    // Metadata that differs from the batch's was rewritten at index time
+    // (DEST_KEY = MetaData:*, INGEST_EVAL) or given to a CLONE_SOURCETYPE
+    // copy. The input-time `sourcetype =` assignment already ran, before
+    // either: applying it again would put back the sourcetype the rewrite
+    // replaced. So match the metadata as it stands, as the clone pass does,
+    // then take `rename` for the search-time set.
+    const matched = matchStanzas(propsConf.stanzas, event.metadata);
+    const renamed = getRenamedSourcetype(matched);
     const stanzas = renamed
-      ? matchStanzas(propsConf.stanzas, { ...perEvent.metadata, sourcetype: renamed })
-      : perEvent.stanzas;
+      ? matchStanzas(propsConf.stanzas, { ...event.metadata, sourcetype: renamed })
+      : matched;
     const resolvedDirs = mergeDirectives(stanzas);
     directivesCache.set(key, resolvedDirs);
     return resolvedDirs;
@@ -370,6 +376,7 @@ export function runPipeline(
     // fields, so declining them has to be an explicit choice by a caller that does not.
     captureOffsets: options?.captureOffsets ?? true,
     diagnostics,
+    limits: options?.limits,
   });
 
   if (!rawData.trim()) {

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import * as RadixTooltip from '@radix-ui/react-tooltip';
 import { DictionaryView } from '../DictionaryView';
@@ -267,5 +267,82 @@ describe('DictionaryDetail — Runs at', () => {
     const panel = screen.getByRole('dialog', { name: 'Pipeline reference' });
     // The stage's description only renders inside an expanded card.
     expect(within(panel).getByText(/TIME_PREFIX anchors the search position/)).toBeInTheDocument();
+  });
+});
+
+describe('DictionaryView on a phone (#494)', () => {
+  beforeEach(() => {
+    useAppStore.setState(initial, true);
+    // jsdom has no matchMedia; report every query as matching so the
+    // (max-width: 767px) branch renders.
+    vi.stubGlobal(
+      'matchMedia',
+      (query: string) => ({
+        matches: true,
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      }),
+    );
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('walks the list with the arrow keys without drilling into the detail', () => {
+    renderDictionary();
+    const listbox = screen.getByRole('listbox');
+    listbox.focus();
+    const options = within(listbox).getAllByRole('option');
+    const first = options[0]?.getAttribute('data-entry-id');
+    const second = options[1]?.getAttribute('data-entry-id');
+
+    fireEvent.keyDown(listbox, { key: 'ArrowDown' });
+
+    // Still the list, still the same focused element, and the store selection
+    // (which means "drilled in" on a phone) is untouched.
+    expect(screen.getByRole('listbox')).toBe(listbox);
+    expect(document.activeElement).toBe(listbox);
+    expect(useAppStore.getState().dictionarySelection).toBeNull();
+    expect(listbox.getAttribute('aria-activedescendant')).toBe(
+      document.querySelector(`[data-entry-id="${CSS.escape(second!)}"]`)?.id,
+    );
+    expect(first).not.toBe(second);
+  });
+
+  it('drills in on Enter and moves focus to the back control', () => {
+    renderDictionary();
+    const listbox = screen.getByRole('listbox');
+    listbox.focus();
+    fireEvent.keyDown(listbox, { key: 'ArrowDown' });
+    fireEvent.keyDown(listbox, { key: 'ArrowDown' });
+    const target = within(listbox).getAllByRole('option')[2]?.getAttribute('data-entry-id');
+
+    fireEvent.keyDown(listbox, { key: 'Enter' });
+
+    expect(useAppStore.getState().dictionarySelection).toBe(target);
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    const back = screen.getByRole('button', { name: /All directives/ });
+    expect(document.activeElement).toBe(back);
+  });
+
+  it('returns to the list with focus and the cursor on the entry that was open', () => {
+    useAppStore.setState({ dictionarySelection: 'TRUNCATE' });
+    renderDictionary();
+
+    fireEvent.click(screen.getByRole('button', { name: /All directives/ }));
+
+    const listbox = screen.getByRole('listbox');
+    expect(document.activeElement).toBe(listbox);
+    expect(useAppStore.getState().dictionarySelection).toBeNull();
+    const active = listbox.getAttribute('aria-activedescendant');
+    expect(document.getElementById(active!)).toHaveAttribute('data-entry-id', 'TRUNCATE');
+  });
+
+  it('still drills in when a row is clicked', () => {
+    renderDictionary();
+    fireEvent.click(within(screen.getByRole('listbox')).getByText('TRUNCATE'));
+    expect(useAppStore.getState().dictionarySelection).toBe('TRUNCATE');
+    expect(screen.getByRole('heading', { level: 2, name: 'TRUNCATE' })).toBeInTheDocument();
   });
 });

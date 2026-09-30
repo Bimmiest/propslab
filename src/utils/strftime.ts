@@ -170,29 +170,51 @@ interface TokenisedFormat {
 }
 
 /**
+ * A string-keyed cache of at most `limit` entries, least recently used evicted
+ * first. See docs/adr/0004-bounded-time-format-cache.md.
+ */
+class BoundedLru<V> {
+  private readonly map = new Map<string, V>();
+  private readonly limit: number;
+
+  constructor(limit: number) {
+    this.limit = limit;
+  }
+
+  get size(): number {
+    return this.map.size;
+  }
+
+  /** The cached value, or `compute(key)` cached. */
+  getOrCompute(key: string, compute: (key: string) => V): V {
+    if (this.map.has(key)) {
+      const hit = this.map.get(key) as V;
+      // Re-inserted so the Map's order is least-recently-used first.
+      this.map.delete(key);
+      this.map.set(key, hit);
+      return hit;
+    }
+    const value = compute(key);
+    if (this.map.size >= this.limit) {
+      const oldest = this.map.keys().next();
+      if (!oldest.done) this.map.delete(oldest.value);
+    }
+    this.map.set(key, value);
+    return value;
+  }
+}
+
+/**
  * Tokenised formats, keyed on the format string. Auto-recognition parses each
  * candidate format once per event, so the same few formats recur constantly.
- * A bounded LRU, so formats typed in the editor or sent by an MCP client do not
- * accumulate. See docs/adr/0004-bounded-time-format-cache.md.
+ * Bounded, so formats typed in the editor or sent by an MCP client do not
+ * accumulate.
  */
 const TOKENISE_CACHE_LIMIT = 256;
-const tokeniseCache = new Map<string, TokenisedFormat>();
+const tokeniseCache = new BoundedLru<TokenisedFormat>(TOKENISE_CACHE_LIMIT);
 
 function tokenise(format: string): TokenisedFormat {
-  const cached = tokeniseCache.get(format);
-  if (cached) {
-    // Re-inserted so the Map's order is least-recently-used first.
-    tokeniseCache.delete(format);
-    tokeniseCache.set(format, cached);
-    return cached;
-  }
-  const result = tokeniseUncached(format);
-  if (tokeniseCache.size >= TOKENISE_CACHE_LIMIT) {
-    const oldest = tokeniseCache.keys().next();
-    if (!oldest.done) tokeniseCache.delete(oldest.value);
-  }
-  tokeniseCache.set(format, result);
-  return result;
+  return tokeniseCache.getOrCompute(format, tokeniseUncached);
 }
 
 /** How many tokenised formats the cache holds; for the cache-bound test. */
@@ -288,25 +310,39 @@ const TZ_OFFSETS: Record<string, number> = {
   NZST: 720, NZDT: 780,
 };
 
+/**
+ * tzdata zone names that read like abbreviations. As a stanza's `TZ` (a zoneinfo
+ * name) they are zones, and CET, EET, WET and MET observe DST; only as an
+ * event's `%Z` is CET the fixed standard-time abbreviation of the table above.
+ * Kept to names tzdata itself defines: ICU also accepts legacy aliases such as
+ * `PST`, which zoneinfo has no zone for.
+ */
+const TZDATA_ABBREVIATION_ZONES: ReadonlySet<string> = new Set(['CET', 'EET', 'WET', 'MET', 'EST', 'MST', 'HST', 'UTC', 'GMT']);
+
 /** The zone abbreviations `%Z` resolves without TZ_ALIAS, for recognition to look for. */
 export const KNOWN_ZONE_ABBREVIATIONS: readonly string[] = Object.keys(TZ_OFFSETS);
 
 /**
  * Formatters for IANA zone names, cached because constructing one is expensive
  * and a batch of events shares a single `TZ`. A name the runtime rejects caches
- * as `null` so it is not retried per event.
+ * as `null` so it is not retried per event. Bounded, because the names come
+ * from the data too (`%Z` captures, TZ_ALIAS targets).
  */
-const ianaFormatters = new Map<string, Intl.DateTimeFormat | null>();
+const ZONE_CACHE_LIMIT = 64;
+const ianaFormatters = new BoundedLru<Intl.DateTimeFormat | null>(ZONE_CACHE_LIMIT);
+
+/** How many zone names the formatter cache holds; for the cache-bound test. */
+export function cachedZoneCount(): number {
+  return ianaFormatters.size;
+}
 
 function ianaFormatter(tz: string): Intl.DateTimeFormat | null {
-  const cached = ianaFormatters.get(tz);
-  if (cached !== undefined) return cached;
+  return ianaFormatters.getOrCompute(tz, buildIanaFormatter);
+}
 
-  // Deliberately uninitialized: both branches below assign, so a seed value
-  // would be dead (no-useless-assignment).
-  let formatter: Intl.DateTimeFormat | null;
+function buildIanaFormatter(tz: string): Intl.DateTimeFormat | null {
   try {
-    formatter = new Intl.DateTimeFormat('en-US', {
+    return new Intl.DateTimeFormat('en-US', {
       timeZone: tz,
       hour12: false,
       era: 'short',
@@ -319,10 +355,8 @@ function ianaFormatter(tz: string): Intl.DateTimeFormat | null {
     });
   } catch {
     // RangeError for a name this runtime does not know.
-    formatter = null;
+    return null;
   }
-  ianaFormatters.set(tz, formatter);
-  return formatter;
 }
 
 /**
@@ -766,19 +800,26 @@ function resolveZone(
   }
 
   if (zoneName) {
+    // An IANA name's offset depends on the date -- which is exactly why the
+    // abbreviation table cannot answer it. Take the instant as resolved rather
+    // than rebuilding it from a rounded offset: a historical zone can sit a few
+    // seconds off a whole minute.
+    const inZone = (formatter: Intl.DateTimeFormat): ParsedTimestamp => {
+      const epoch = ianaWallClockToEpoch(formatter, wallAsUtcMs);
+      return { date: new Date(epoch), wallAsUtcMs, offsetMinutes: Math.round((wallAsUtcMs - epoch) / 60_000), hasDate };
+    };
+
+    // The stanza's TZ is a zoneinfo name first: `TZ = CET` is the zone, with
+    // its summer time, not the abbreviation.
+    const stanzaZone = bag.tzName === undefined && TZDATA_ABBREVIATION_ZONES.has(zoneName.toUpperCase()) ? ianaFormatter(zoneName) : null;
+    if (stanzaZone) return inZone(stanzaZone);
+
     // A fixed offset or a known abbreviation is a constant, so answer directly.
     const fixed = resolveTzOffsetMinutes(zoneName);
     if (fixed !== null) return zoned(fixed);
 
-    // Otherwise it may be an IANA name, whose offset depends on the date --
-    // which is exactly why the abbreviation table cannot answer it.
     const formatter = ianaFormatter(zoneName);
-    if (formatter) {
-      // Take the instant as resolved rather than rebuilding it from a rounded
-      // offset: a historical zone can sit a few seconds off a whole minute.
-      const epoch = ianaWallClockToEpoch(formatter, wallAsUtcMs);
-      return { date: new Date(epoch), wallAsUtcMs, offsetMinutes: Math.round((wallAsUtcMs - epoch) / 60_000), hasDate };
-    }
+    if (formatter) return inZone(formatter);
 
     // Genuinely unresolvable: a typo, or a zone this runtime has no data for.
     // When an alias was applied, name both halves: the abbreviation the event

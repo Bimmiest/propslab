@@ -111,6 +111,103 @@ for (const theme of ['dark', 'light'] as const) {
 }
 
 /**
+ * States the example-driven scans above never reach (#493): a dropped and a
+ * routed event, a nested JSON parent, a diff with added and removed lines, and
+ * CIM models that match nothing. Each one was a contrast failure that no scan
+ * saw because nothing put the page in that state.
+ */
+for (const theme of ['dark', 'light'] as const) {
+  test.describe(`accessibility of de-emphasised states (${theme})`, () => {
+    test.beforeEach(async ({ page }) => {
+      await page.addInitScript((t) => {
+        try {
+          localStorage.setItem('propslab:theme', t);
+        } catch {
+          /* ignore */
+        }
+      }, theme);
+    });
+
+    async function openDroppedAndRouted(page: Page): Promise<void> {
+      await openApp(page);
+      await loadExample(page, APACHE);
+      await pasteInto(
+        page,
+        1,
+        [
+          '[access_combined]',
+          'SHOULD_LINEMERGE = false',
+          'KV_MODE = json',
+          'SEDCMD-rename = s/keep/kept/',
+          'TRANSFORMS-queues = drop_it, route_it',
+        ].join('\n'),
+      );
+      await pasteInto(
+        page,
+        2,
+        [
+          '[drop_it]',
+          'REGEX = drop me',
+          'DEST_KEY = queue',
+          'FORMAT = nullQueue',
+          '',
+          '[route_it]',
+          'REGEX = route me',
+          'DEST_KEY = queue',
+          'FORMAT = parsingQueue',
+        ].join('\n'),
+      );
+      await pasteInto(
+        page,
+        0,
+        [
+          '{"src":"10.0.0.1","user":"alice","user.id":1,"user.dept":"ops","msg":"keep"}',
+          '{"src":"10.0.0.2","user":"bob","user.id":2,"user.dept":"ops","msg":"drop me"}',
+          '{"src":"10.0.0.3","user":"carol","user.id":3,"user.dept":"ops","msg":"route me"}',
+        ].join('\n'),
+      );
+      await expect(page.getByText('3 events', { exact: true })).toBeVisible({ timeout: 30_000 });
+    }
+
+    test('Raw: a dropped row and a routed badge', async ({ page }) => {
+      await openDroppedAndRouted(page);
+      await page.getByRole('tab', { name: /^Raw$/ }).click();
+      await expect(page.getByText('Dropped', { exact: true })).toBeVisible();
+      await expect(page.getByText(/^Routed \(parsingQueue\)$/)).toBeVisible();
+      await expectNoViolations(page, 'Raw (dropped, routed)');
+    });
+
+    test('Fields: nested JSON parent chips', async ({ page }) => {
+      await openDroppedAndRouted(page);
+      await page.getByRole('tab', { name: /^Fields$/ }).click();
+      await page.getByRole('button', { name: 'Expand all' }).click();
+      await expect(page.getByText('JSON', { exact: true }).first()).toBeVisible();
+      await expect(page.getByText('.id').first()).toBeVisible();
+      await expectNoViolations(page, 'Fields (nested JSON)');
+    });
+
+    test('Diff: added and removed lines', async ({ page }) => {
+      await openDroppedAndRouted(page);
+      await page.getByRole('tab', { name: /^Diff$/ }).click();
+      await expectNoViolations(page, 'Diff (added, removed)');
+    });
+
+    test('CIM Models: models with no matching field', async ({ page }) => {
+      await openDroppedAndRouted(page);
+      await page.getByRole('tab', { name: /^CIM Models$/ }).click();
+      await expect(page.getByRole('button', { name: 'Show matching only' })).toBeVisible();
+      await expectNoViolations(page, 'CIM Models (non-matching)');
+    });
+
+    test('Architecture: nothing configured, every box inactive', async ({ page }) => {
+      await openApp(page);
+      await page.getByRole('tab', { name: /^Architecture$/ }).click();
+      await expectNoViolations(page, 'Architecture (inactive)');
+    });
+  });
+}
+
+/**
  * A nested JSON event wide enough that the Fields table and the Extractions
  * sidebar are windowed (#454).
  */
@@ -151,13 +248,17 @@ test.describe('windowed field lists', () => {
     let previous = await rowIndex();
     for (let i = 1; i < 60; i++) {
       await page.keyboard.press('Tab');
-      const current = await rowIndex();
-      expect(current, `row focused after ${i} Tabs`).toBeGreaterThan(previous);
-      previous = current;
+      // Polled: the window re-renders around the newly focused row, and a read
+      // taken in that gap (focus momentarily on <body>) failed this on a
+      // loaded CI runner. The row must still be reached, and in order.
+      await expect.poll(rowIndex, { message: `row focused after ${i} Tabs` }).toBeGreaterThan(previous);
+      previous = await rowIndex();
     }
   });
 
-  test('the Extractions sidebar is windowed and walkable by keyboard', async ({ page }) => {
+  // The tree is ONE tab stop (roving tabindex, #495): Tab enters and leaves it,
+  // the arrow keys walk the rows. The walk used to be 44 Tabs, one per row.
+  test('the Extractions sidebar is windowed, one Tab stop, and walkable by arrow keys', async ({ page }) => {
     test.setTimeout(60_000);
     await openWideFields(page);
     await page.getByRole('tab', { name: /^Extractions$/ }).click();
@@ -170,14 +271,24 @@ test.describe('windowed field lists', () => {
 
     // The walk ends on a row that was not rendered when it began.
     await expect(sidebar.locator('[data-window-index="44"]')).toHaveCount(0);
+    // Exactly one rendered row is in the tab order.
+    await expect(sidebar.locator('[data-field-row][tabindex="0"]')).toHaveCount(1);
+
     await rows.first().getByRole('button').focus();
     const focusedIndex = () => page.evaluate(() => Number(document.activeElement?.closest<HTMLElement>('[data-window-index]')?.dataset.windowIndex));
     let previous = await focusedIndex();
     for (let i = 1; i < 45; i++) {
-      await page.keyboard.press('Tab');
+      await page.keyboard.press('ArrowDown');
       const current = await focusedIndex();
-      expect(current, `sidebar row focused after ${i} Tabs`).toBe(previous + 1);
+      expect(current, `sidebar row focused after ${i} ArrowDowns`).toBe(previous + 1);
       previous = current;
     }
+    // The roving stop followed the focus, and is still the only one.
+    await expect(sidebar.locator('[data-field-row][tabindex="0"]')).toHaveCount(1);
+    await expect(sidebar.locator(`[data-window-index="${previous}"] [data-field-row]`)).toHaveAttribute('tabindex', '0');
+
+    // Tab leaves the tree rather than stepping to the next row.
+    await page.keyboard.press('Tab');
+    expect(await page.evaluate(() => document.activeElement?.closest('[data-window-index]') != null)).toBe(false);
   });
 });

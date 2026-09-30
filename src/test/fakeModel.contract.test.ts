@@ -13,6 +13,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import fc from 'fast-check';
 import type { editor } from 'monaco-editor';
 import { fakeModel } from './fakeModel';
+import { fcSeed } from './fcSeed';
 
 type Monaco = typeof import('monaco-editor/editor');
 let monaco: Monaco;
@@ -98,7 +99,7 @@ describe('fakeModel matches a real Monaco text model', () => {
         const text = parts.join('');
         if (text !== '\r') expectSameModel(text);
       }),
-      { numRuns: 60, seed: 516 },
+      { numRuns: 60, seed: fcSeed(516) },
     );
   }, 60_000);
 });

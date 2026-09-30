@@ -2,7 +2,7 @@
 
 `src/engine/**` is pure logic with no React imports, and it runs unchanged in the browser, in a Web Worker, and under Node. Its one runtime dependency is the PCRE2 WebAssembly module every user pattern runs on ([below](#the-regex-engine)), which has to be initialised once before the first run. `runPipeline` is the entry point:
 
-```ts
+```text
 runPipeline(rawData, metadata, propsConfInput, transformsConfInput, options?)
 ```
 
@@ -13,6 +13,7 @@ runPipeline(rawData, metadata, propsConfInput, transformsConfInput, options?)
 | `perEventPipeline` | — | Resolve stanzas per event rather than once for the batch, so metadata rewritten mid-pipeline takes effect downstream. |
 | `captureOffsets` | `true` | Record capture spans for positional EXTRACTs into `fieldOffsets`. |
 | `now` | `Date.now()` | The current time, in epoch milliseconds, for everything Splunk measures against the clock: the `MAX_DAYS_AGO` / `MAX_DAYS_HENCE` timestamp bounds, the year given to a yearless `TIME_FORMAT`, the index-time `_time` an event with no usable timestamp falls back to, and eval's `now()` / `time()` (in `EVAL-` and `INGEST_EVAL`). |
+| `limits` | `DEFAULT_LIMITS` | Bounds on the run's work (`RunLimits` in `runContext.ts`), any subset of: `maxRawChars` (1,000,000; longer input is cut back to the last complete line), `maxEvents` (25,000; line breaking stops there and the rest of the input is dropped), `explanationsPerDirective` (50; missed events a directive's no-match is analysed for). Each cut is reported as a warning diagnostic. |
 
 **Pass `now` when replaying recorded data.** A sample captured today carries absolute timestamps; replayed against the real clock years later, `MAX_DAYS_AGO` (2000 days by default) starts rejecting them and the output changes for no reason but the date. Pinning `now` to the moment of capture keeps the verdict fixed — the fidelity suite passes each fixture's `capturedAt` for exactly this reason.
 
@@ -27,6 +28,8 @@ runPipeline(rawData, metadata, propsConfInput, transformsConfInput, options?)
 `parseConf`, and therefore `runPipeline`, accept either the text of one flat conf or an ordered list of layers, **lowest precedence first** — which is how a caller reading an app off disk (or out of a Git worktree) hands over `$APP/default/props.conf` and `$APP/local/props.conf`:
 
 ```ts
+import { runPipeline } from './src/engine/pipeline';
+
 runPipeline(raw, metadata,
   [{ layer: 'default', text: defaultProps }, { layer: 'local', text: localProps }],
   [{ layer: 'default', text: defaultTransforms }, { layer: 'local', text: localTransforms }]);
@@ -49,7 +52,7 @@ This is within-stanza only — a directive that wins its stanza can still lose t
 
 Every pattern a user writes — `LINE_BREAKER`, `BREAK_ONLY_BEFORE`, `MUST_BREAK_AFTER`, `TIME_PREFIX`, `EXTRACT`, transforms `REGEX`, `SEDCMD`, `FIELD_HEADER_REGEX` and the other `INDEXED_EXTRACTIONS` patterns, eval's `match()`, `replace()`, `like()` and `mvfind()` — runs on **PCRE2 compiled to WebAssembly**, through `src/utils/splunkRegex.ts`. Splunk's regexes are PCRE, so this is the engine Splunk runs rather than a translation of it into JavaScript, and the pipeline, the editor's diagnostics, the Regex and Timestamp tabs and the MCP server all compile through that one module, so they cannot disagree about what a pattern means. The engine's own internal patterns (wildcard stanza matching, strftime formats, date recognition) stay JavaScript regexes.
 
-The WebAssembly module is [`pcre2-wasm-utf16`](https://github.com/Bimmiest/pcre2-wasm-utf16), a dependency pinned to a release tag: PCRE2 10.48, the 16-bit library in UTF mode, built reproducibly from the pinned release by its `build/build.sh` with plain clang and `wasm-ld`. Its offsets are UTF-16 code units, so they are JS string indices with nothing to transcode. See its README for the API and build.
+The WebAssembly module is [`pcre2-wasm-utf16`](https://github.com/Bimmiest/pcre2-wasm-utf16), a dependency pinned to a commit: PCRE2 10.48, the 16-bit library in UTF mode, built reproducibly from the pinned release by its `build/build.sh` with plain clang and `wasm-ld`. Its offsets are UTF-16 code units, so they are JS string indices with nothing to transcode. See its README for the API and build.
 
 ### Initialising it
 
