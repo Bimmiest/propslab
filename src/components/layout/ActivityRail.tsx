@@ -28,7 +28,7 @@ const ITEMS: RailItem[] = [
  * segmented control. Hover is unavailable on touch, so an icon-only rail would
  * strand the labels there.
  */
-export function ActivityRail() {
+export function ActivityRail({ dictionaryMounted = false }: { dictionaryMounted?: boolean }) {
   const activeView = useAppStore((s) => s.activeView);
   const setActiveView = useAppStore((s) => s.setActiveView);
   const railRef = useRef<HTMLDivElement>(null);
@@ -69,6 +69,9 @@ export function ActivityRail() {
       >
         {ITEMS.map((item) => {
           const isActive = item.id === activeView;
+          // The dictionary panel is not in the DOM until it is first opened
+          // (AppShell), and aria-controls must name an element that exists.
+          const panelMounted = item.id !== 'dictionary' || dictionaryMounted;
           return (
             <Tooltip key={item.id} content={item.label} side="right">
               <button
@@ -77,7 +80,7 @@ export function ActivityRail() {
                 id={`view-tab-${item.id}`}
                 aria-label={item.label}
                 aria-selected={isActive}
-                aria-controls={`view-panel-${item.id}`}
+                aria-controls={panelMounted ? `view-panel-${item.id}` : undefined}
                 tabIndex={isActive ? 0 : -1}
                 onClick={() => setActiveView(item.id)}
                 className={[

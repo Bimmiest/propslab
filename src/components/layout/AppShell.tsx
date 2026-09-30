@@ -56,8 +56,10 @@ export function AppShell() {
         </ErrorBoundary>
       )}
       <div className="flex-1 min-h-0 flex">
-        {!isMobile && <ActivityRail />}
-        <main id="main-content" className="flex-1 min-w-0">
+        {!isMobile && <ActivityRail dictionaryMounted={dictionaryMounted} />}
+        {/* tabIndex -1: the skip link targets it, and the first-run banner hands
+            focus here when it dismisses itself. */}
+        <main id="main-content" tabIndex={-1} className="flex-1 min-w-0 outline-none">
           {isMobile ? (
             <MobileShell />
           ) : (

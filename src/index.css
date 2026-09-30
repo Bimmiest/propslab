@@ -77,11 +77,18 @@ body {
   transition: background-color 0.2s, color 0.2s;
 }
 
-/* Unified theme transition for all surfaces */
-*, *::before, *::after {
-  transition-property: background-color, border-color, color;
-  transition-duration: 0.15s;
-  transition-timing-function: ease;
+/* Unified theme transition for all surfaces.
+ *
+ * In the base layer, not unlayered: an unlayered rule outranks every layered
+ * one whatever its specificity, so it silently overrode Tailwind's
+ * `transition-opacity`, `transition-transform` and `transition-all` (all in
+ * @layer utilities). Here a utility wins, as it should. */
+@layer base {
+  *, *::before, *::after {
+    transition-property: background-color, border-color, color;
+    transition-duration: 0.15s;
+    transition-timing-function: ease;
+  }
 }
 
 /* Keyboard focus indicator for anything that does not draw its own.
@@ -105,6 +112,12 @@ body {
   100% { transform: translateX(300%); }
 }
 
+/* Same shape as the indeterminate keyframes above, as a class so the
+   reduced-motion block below can replace it (an inline animation cannot be). */
+.progress-indeterminate {
+  animation: indeterminate 1.4s ease-in-out infinite;
+}
+
 /* Slide-out drawer (pipeline reference). Keyframes on Radix's data-state, not
    a transition: Presence keeps a closing dialog mounted only while an exit
    animation runs. */
@@ -118,8 +131,21 @@ body {
 }
 .drawer-slide[data-state='open']   { animation: drawer-in 250ms ease-in-out; }
 .drawer-slide[data-state='closed'] { animation: drawer-out 250ms ease-in-out; }
+
+/* Reduced motion, for everything: transitions and animations collapse to an
+   instant change rather than being removed, so anything waiting on an
+   `animationend`/`transitionend` (Radix Presence) still finishes. The drawer
+   drops its animation outright, and the indeterminate bar, whose keyframes
+   end off-screen, becomes a still segment. */
 @media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
   .drawer-slide[data-state] { animation: none; }
+  .progress-indeterminate { animation: none; }
 }
 
 /* Resizable panel handle styles */

@@ -7,7 +7,11 @@ import { useAppStore } from '../store/useAppStore';
  * dark-default page light for as long as the wasm took to load.
  */
 export function applyTheme(theme: 'light' | 'dark') {
-  document.documentElement.classList.toggle('dark', theme === 'dark');
+  const root = document.documentElement;
+  root.classList.toggle('dark', theme === 'dark');
+  // Tells the browser which scheme the page is in, so native chrome it draws
+  // itself (select popups, checkboxes, search fields, scrollbars) matches.
+  root.style.colorScheme = theme;
 }
 
 export function useTheme() {

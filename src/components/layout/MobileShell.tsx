@@ -85,7 +85,8 @@ export function MobileShell() {
               role="tab"
               id={`mobile-tab-${v.id}`}
               aria-selected={isActive}
-              aria-controls={`mobile-tabpanel-${v.id}`}
+              // Only the active panel is mounted, so only its tab can point at it.
+              aria-controls={isActive ? `mobile-tabpanel-${v.id}` : undefined}
               tabIndex={isActive ? 0 : -1}
               onClick={() => setView(v.id)}
               className={[

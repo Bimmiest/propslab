@@ -126,3 +126,32 @@ describe('RootErrorBoundary', () => {
     }
   });
 });
+
+describe('ErrorBoundary accessibility (#495)', () => {
+  it('announces the panel fallback as an alert', () => {
+    render(
+      <ErrorBoundary panelName="Output">
+        <Boom />
+      </ErrorBoundary>,
+    );
+    expect(screen.getByRole('alert')).toHaveTextContent('Output Error');
+  });
+
+  it('gives every fallback button type="button", so none can submit a form', () => {
+    const { unmount } = render(
+      <ErrorBoundary panelName="Output">
+        <Boom />
+      </ErrorBoundary>,
+    );
+    expect(screen.getByRole('button', { name: 'Try Again' })).toHaveAttribute('type', 'button');
+    unmount();
+
+    render(
+      <ErrorBoundary panelName="Scaffold" variant="inline" onDismiss={() => {}}>
+        <Boom />
+      </ErrorBoundary>,
+    );
+    expect(screen.getByRole('button', { name: 'Try Again' })).toHaveAttribute('type', 'button');
+    expect(screen.getByRole('button', { name: 'Close' })).toHaveAttribute('type', 'button');
+  });
+});

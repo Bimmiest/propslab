@@ -200,10 +200,14 @@ export function DictionaryList({
   entries,
   selectedId,
   onSelect,
+  onMove,
 }: {
   entries: DictionaryEntry[];
   selectedId: string | null;
   onSelect: (id: string) => void;
+  /** Arrow-key navigation. Defaults to `onSelect`; a caller where selecting
+   *  navigates away (the phone layout) passes its own to only move the cursor. */
+  onMove?: (id: string) => void;
 }) {
   const listRef = useRef<HTMLDivElement>(null);
   const groups = groupEntries(entries);
@@ -212,6 +216,11 @@ export function DictionaryList({
   const activeRendered = selectedId !== null && entries.some((entry) => entry.id === selectedId);
 
   const handleKeyDown = (e: KeyboardEvent) => {
+    if ((e.key === 'Enter' || e.key === ' ') && activeRendered) {
+      e.preventDefault();
+      onSelect(selectedId);
+      return;
+    }
     const current = entries.findIndex((entry) => entry.id === selectedId);
     let next = -1;
     if (e.key === 'ArrowDown') next = Math.min(current + 1, entries.length - 1);
@@ -222,7 +231,7 @@ export function DictionaryList({
     e.preventDefault();
     const target = entries[next];
     if (!target) return;
-    onSelect(target.id);
+    (onMove ?? onSelect)(target.id);
     listRef.current
       ?.querySelector<HTMLElement>(`[data-entry-id="${CSS.escape(target.id)}"]`)
       ?.scrollIntoView({ block: 'nearest' });
