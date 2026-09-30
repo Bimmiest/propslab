@@ -128,7 +128,7 @@ Add a `case` to the `evalBuiltin` switch in `src/engine/processors/eval/builtins
 ### Add a preview sub-tab
 1. Create the component in `src/components/preview/tabs/`.
 2. Add the ID to `PreviewSubTabId` in `src/engine/types.ts`.
-3. Add the entry to `PREVIEW_SUB_TABS` and render it in `PreviewPanel.tsx`.
+3. Add the entry to `PREVIEW_SUB_TABS` and render it in `PreviewSubTab.tsx`.
 
 ### Add or update a CIM model
 `CIM_MODELS` in `src/engine/cim/cimModelsData.ts` is generated, not hand-maintained.

@@ -3,7 +3,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { useAppStore } from '../../../../store/useAppStore';
 import { RawTab } from '../RawTab';
-import type { EnrichedEvent } from '../../PreviewPanel';
+import type { EnrichedEvent } from '../../enrichEvents';
 import type { SplunkEvent } from '../../../../engine/types';
 import { EMPTY_FIELD_STATS } from '../../../../utils/fieldStats';
 

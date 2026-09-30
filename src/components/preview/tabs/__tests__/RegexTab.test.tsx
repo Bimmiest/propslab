@@ -3,7 +3,7 @@ import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { render, screen, fireEvent, within, act, waitFor } from '@testing-library/react';
 import { useAppStore } from '../../../../store/useAppStore';
 import { RegexTab } from '../regex';
-import type { EnrichedEvent } from '../../PreviewPanel';
+import type { EnrichedEvent } from '../../enrichEvents';
 import { makeEvent } from '../../../../test/makeEvent';
 import { matchInputs } from '../../../../engine/regexMatch';
 import type { RegexMatchRequest, RegexMatchResponse } from '../../../../engine/regexMatchWorker';

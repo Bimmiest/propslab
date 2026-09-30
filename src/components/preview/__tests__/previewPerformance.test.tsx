@@ -8,7 +8,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, render, renderHook, screen, within } from '@testing-library/react';
 import { Profiler } from 'react';
-import { PreviewPanel, PROCESSING_OVERLAY_DELAY_MS, type EnrichedEvent } from '../PreviewPanel';
+import { PreviewPanel, PROCESSING_OVERLAY_DELAY_MS } from '../PreviewPanel';
+import type { EnrichedEvent } from '../enrichEvents';
 import { EffectiveConfigTab } from '../tabs/EffectiveConfigTab';
 import { HighlightedTab } from '../tabs/HighlightedTab';
 import { useApplyDirective } from '../tabs/shared/useApplyDirective';

@@ -8,7 +8,8 @@
 
 import { beforeEach, describe, expect, it } from 'vitest';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
-import { PreviewPanel, type EnrichedEvent } from '../PreviewPanel';
+import { PreviewPanel } from '../PreviewPanel';
+import type { EnrichedEvent } from '../enrichEvents';
 import { HighlightedTab } from '../tabs/HighlightedTab';
 import { useAppStore } from '../../../store/useAppStore';
 import { toViewResult, type ViewResult } from '../../../utils/viewResult';

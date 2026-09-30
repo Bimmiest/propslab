@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import { HighlightedTab } from '../HighlightedTab';
 import { useAppStore } from '../../../../store/useAppStore';
-import type { EnrichedEvent } from '../../PreviewPanel';
+import type { EnrichedEvent } from '../../enrichEvents';
 import type { SplunkEvent, ProcessingStep } from '../../../../engine/types';
 
 function makeEvent(

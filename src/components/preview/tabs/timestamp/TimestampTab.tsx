@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useTimestampMatch } from '../../../../hooks/useTimestampMatch';
 import { usePipelineInputs, type PipelineInputs } from '../shared/usePipelineInputs';
-import type { EnrichedEvent } from '../../PreviewPanel';
+import type { EnrichedEvent } from '../../enrichEvents';
 import { extractDirectives, parseTimeConfig, resolvedTimeSource, timestampTextOf } from './timestampLogic';
 import { ConfigSummary, TimestampLegend } from './ConfigSummary';
 import { StrptimeReference } from './StrptimeReference';
