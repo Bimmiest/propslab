@@ -502,14 +502,16 @@ describe('the timeout path (#468)', () => {
 describe('timeout budget and advice (#488)', () => {
   it('does not charge worker start-up to a small budget', async () => {
     // Start-up measured 60ms warm and 118ms cold against the 100ms minimum,
-    // so a correct conf could time out before its run began. Several calls
-    // at once make start-up slower still.
-    const results = await Promise.all(
-      Array.from({ length: 4 }, () =>
-        handleValidate({ props_conf: ACCESS_PROPS, transforms_conf: '', timeout_ms: 100 }, WORKER_PATH),
-      ),
-    );
-    for (const result of results) expect(result.isError).toBeUndefined();
+    // so a correct conf could time out before its run began. The run itself
+    // takes a few milliseconds. (runInWorker.test.ts pins the rule with a
+    // fixture whose start-up alone outlasts its budget.)
+    for (let i = 0; i < 3; i++) {
+      const result = await handleValidate(
+        { props_conf: ACCESS_PROPS, transforms_conf: '', timeout_ms: 100 },
+        WORKER_PATH,
+      );
+      expect(payload(result)).not.toHaveProperty('error');
+    }
   }, 20_000);
 
   it('says the run was still parsing, and lists no regex, when the conf itself is the cost', async () => {

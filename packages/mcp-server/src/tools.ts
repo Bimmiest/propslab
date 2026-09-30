@@ -479,8 +479,21 @@ export function workerFailure(err: unknown, context: TimeoutContext): ToolText {
       true,
     );
   }
+  // The raw error stays on the server's stderr. For a worker that failed to
+  // load or was refused by the permission model it names absolute paths
+  // (\`Cannot find module '/…/dist/simulateWorker.js'\`, ERR_ACCESS_DENIED),
+  // which are the server's business, not the agent's.
+  console.error('propslab MCP server: engine failure:', err);
   return json(
-    { error: 'engine_failure', message: err instanceof Error ? err.message : String(err) },
+    {
+      error: 'engine_failure',
+      message:
+        'The engine failed on this input without producing a result. The details are in the ' +
+        "server's log.",
+      guidance:
+        'This is a fault in the server or the simulator, not a problem the conf can fix. ' +
+        'Please report it with the input if you can.',
+    },
     true,
   );
 }

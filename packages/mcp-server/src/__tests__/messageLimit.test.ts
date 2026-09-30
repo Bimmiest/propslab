@@ -162,6 +162,20 @@ describe('size-limited stdio transport', () => {
     await transport.close();
   });
 
+  it('closes the transport when stdin fails (#490)', async () => {
+    // A stdin error destroys the limiter, which emits `close` but never
+    // `end`: listening for `end` alone left in-flight calls running and
+    // queued ones starting for a client that could no longer read them.
+    const stdin = new PassThrough();
+    const transport = createStdioTransport(stdin, new PassThrough(), 64);
+    let closed = 0;
+    transport.onclose = () => closed++;
+    transport.onerror = () => {};
+    await transport.start();
+    stdin.emit('error', new Error('stdin failed'));
+    await vi.waitFor(() => expect(closed).toBe(1));
+  });
+
   it('closes the transport when stdin ends', async () => {
     const stdin = new PassThrough();
     const transport = createStdioTransport(stdin, new PassThrough(), 64);

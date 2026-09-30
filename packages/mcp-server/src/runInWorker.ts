@@ -372,11 +372,18 @@ function spawnAndWait<T>(
     let timer = setTimeout(() => {
       settle(() => reject(new WorkerStartTimeoutError(startupLimitMs)));
     }, startupLimitMs);
+    //
+    // The verdict waits one turn of the event loop: after a stall on this
+    // thread, an expired timer runs before the answer that arrived meanwhile
+    // is read, and a run that finished in time would be reported as timed
+    // out. setImmediate runs after pending messages are delivered.
     const startBudget = () => {
       clearTimeout(timer);
       timer = setTimeout(() => {
-        const at = readProgress(progress);
-        settle(() => reject(new WorkerTimeoutError(timeoutMs, suspects, at)));
+        setImmediate(() => {
+          const at = readProgress(progress);
+          settle(() => reject(new WorkerTimeoutError(timeoutMs, suspects, at)));
+        });
       }, timeoutMs);
     };
 

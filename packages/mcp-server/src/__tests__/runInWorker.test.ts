@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { readFileSync, readlinkSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readlinkSync } from 'node:fs';
+import os from 'node:os';
 import { execFileSync, spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -16,9 +17,9 @@ import {
 } from '../runInWorker';
 import type { WorkerRequest } from '../protocol';
 import { handleSimulate } from '../tools';
-import { stripHeapSizeFlags, stripHeapSizeFlagsFromNodeOptions } from '../heapFlags';
+import { stripHeapSizeFlags, stripHeapSizeFlagsFromNodeOptions, tokenizeNodeOptions } from '../heapFlags';
 import { REGEXP_FALLBACK_FLAGS } from '../v8Flags';
-import { permissionFlags } from '../permissionFlags';
+import { adoptPresetPermission, permissionFlags } from '../permissionFlags';
 import { resultText } from './resultText';
 
 /**
@@ -250,6 +251,45 @@ describe('start-up (#488)', () => {
   }, 20_000);
 });
 
+describe('a worker that fails (#490)', () => {
+  const simulateArgs = {
+    raw: 'x\n',
+    sourcetype: 'st',
+    index: 'main',
+    host: 'localhost',
+    source: '/var/log/x',
+    props_conf: '',
+    transforms_conf: '',
+    per_event_pipeline: false,
+    capture_offsets: false,
+    include_snapshots: false,
+    max_events: 20,
+    timeout_ms: 10_000,
+  };
+
+  it('rejects, and frees its slot, when the worker dies before it answers', async () => {
+    const limiter = new Semaphore(1);
+    const run = runInWorker(sleep(0), 10_000, { workerPath: fixture('exitWorker.cjs'), limiter });
+    await expect(run).rejects.toThrow(/exited with code 3 before responding/);
+    await vi.waitFor(() => expect(limiter.active).toBe(0));
+  });
+
+  it('reports an engine failure without the paths in the error, which go to stderr', async () => {
+    const stderr = vi.spyOn(console, 'error').mockImplementation(() => {});
+    for (const workerPath of [fixture('exitWorker.cjs'), fixture('does-not-exist.cjs')]) {
+      const result = await handleSimulate(simulateArgs, { workerPath, limiter: new Semaphore(1) });
+      expect(result.isError).toBe(true);
+      const text = resultText(result);
+      expect(JSON.parse(text).error).toBe('engine_failure');
+      expect(text).not.toContain(path.dirname(workerPath));
+      expect(text).not.toMatch(/exited with code|Cannot find module/);
+    }
+    const logged = stderr.mock.calls.map((c) => c.map(String).join(' ')).join('\n');
+    expect(logged).toMatch(/exited with code 3/);
+    expect(logged).toContain('does-not-exist.cjs');
+  });
+});
+
 describe('cancellation', () => {
   // A worker that fails the moment it is spawned. Pointed at by calls the
   // test cancels before they start: had one started anyway, it would reject
@@ -412,6 +452,34 @@ describe('heap-size flag stripping', () => {
     const untouched = '--require  "/a  path/x.js"   --enable-source-maps';
     expect(stripHeapSizeFlagsFromNodeOptions(untouched)).toBe(untouched);
   });
+
+  it('finds a flag however node would read it, quoted included (#490)', () => {
+    // Node drops the quotes, so each of these is the flag, and each used to
+    // survive and lift every worker's heap limit.
+    for (const options of [
+      '"--max-old-space-size=8192"',
+      '--max-old-space-size="8192"',
+      '"--max-old-space-size" 8192',
+      '--enable-source-maps "--max-heap-size=1"',
+      '--max_semi_space_size=64',
+    ]) {
+      expect(stripHeapSizeFlagsFromNodeOptions(options), options).not.toMatch(/max.old.space|max.heap|semi.space/);
+    }
+    // A flag inside a quoted argument is part of that argument, not a flag.
+    const inside = '--title="x --max-old-space-size=8192"';
+    expect(stripHeapSizeFlagsFromNodeOptions(inside)).toBe(inside);
+  });
+
+  it('splits NODE_OPTIONS as node does', () => {
+    expect(tokenizeNodeOptions('--a  "--b c" --d="e \\" f" ""').map((o) => o.value)).toEqual([
+      '--a',
+      '--b c',
+      '--d=e " f',
+      '',
+    ]);
+    // A tab is not a separator to node.
+    expect(tokenizeNodeOptions('--a\t--b').map((o) => o.value)).toEqual(['--a\t--b']);
+  });
 });
 
 describe('permission model', () => {
@@ -426,6 +494,72 @@ describe('permission model', () => {
     );
     const denied = { inside: 'ok', outside: 'ERR_ACCESS_DENIED' };
     expect(JSON.parse(out)).toEqual({ main: denied, worker: denied });
+  });
+
+  it('refuses writes, child processes and native addons, in the process and its workers (#490)', () => {
+    const fixtures = path.dirname(LOG_WORKER);
+    const target = path.join(mkdtempSync(path.join(os.tmpdir(), 'propslab-perm-')), 'written');
+    const run = (flags: string[]) =>
+      JSON.parse(
+        execFileSync(process.execPath, [...flags, path.join(fixtures, 'permissionDenials.cjs'), target], {
+          encoding: 'utf8',
+          cwd: fixtures,
+        }),
+      ) as Record<'main' | 'worker', Record<'write' | 'spawn' | 'addon', string>>;
+    const refused = { write: 'ERR_ACCESS_DENIED', spawn: 'ERR_ACCESS_DENIED', addon: 'ERR_DLOPEN_DISABLED' };
+    expect(run(permissionFlags(fixtures))).toEqual({ main: refused, worker: refused });
+    expect(existsSync(target)).toBe(false);
+    // The same attempts without the flags: the write and spawn succeed, and
+    // the addon fails only because there is no such file.
+    const out = run([]);
+    for (const thread of [out.main, out.worker]) {
+      expect(thread.write).toBe('ok');
+      expect(thread.spawn).toBe('ok');
+      expect(thread.addon).not.toBe('ERR_DLOPEN_DISABLED');
+    }
+  });
+
+  describe('when node was started under --permission already (#490)', () => {
+    const DIST = '/opt/propslab/dist';
+    const adopt = (execArgv: string[], nodeOptions = '', cwd = '/home/me') => {
+      const moves: string[] = [];
+      const warnings = adoptPresetPermission(DIST, {
+        execArgv,
+        nodeOptions,
+        cwd: () => cwd,
+        chdir: (dir) => moves.push(dir),
+      });
+      return { warnings, moves };
+    };
+
+    it("moves to the bundle directory and is quiet about the launcher's own grants", () => {
+      expect(adopt(permissionFlags(DIST))).toEqual({ warnings: [], moves: [DIST] });
+      expect(adopt(permissionFlags(DIST), '', DIST)).toEqual({ warnings: [], moves: [] });
+    });
+
+    it('names every grant beyond its own, from the command line and NODE_OPTIONS', () => {
+      const { warnings, moves } = adopt(
+        ['--permission', '--allow-fs-read=*', '--allow-worker'],
+        '"--allow-child-process" --max-old-space-size=64',
+      );
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toMatch(/--allow-fs-read=\* --allow-child-process; those grants apply/);
+      expect(moves).toEqual([DIST]);
+    });
+
+    it('says so when it cannot leave the working directory', () => {
+      const warnings = adoptPresetPermission('refuse', {
+        execArgv: [],
+        nodeOptions: '',
+        cwd: () => '/home/me',
+        chdir: () => {
+          throw Object.assign(new Error('no'), { code: 'ERR_ACCESS_DENIED' });
+        },
+      });
+      expect(warnings).toEqual([
+        expect.stringMatching(/cannot change to refuse \(ERR_ACCESS_DENIED\); sandbox workers can read anything below \/home\/me/),
+      ]);
+    });
   });
 
   it('is not what makes the probe fail: without the flags, both reads succeed', () => {
@@ -520,6 +654,20 @@ describe.skipIf(process.platform !== 'linux')('launcher', () => {
     }
   }, 20_000);
 
+  it('strips a quoted heap-size flag, which node reads as the flag (#490)', async () => {
+    const { launcher, serverPid } = await startLauncher({
+      NODE_OPTIONS: '"--max-old-space-size=8192"',
+    });
+    try {
+      const environ = readFileSync(`/proc/${serverPid}/environ`, 'utf8').split('\0');
+      const nodeOptions = environ.find((e) => e.startsWith('NODE_OPTIONS='));
+      expect(nodeOptions ?? '').not.toMatch(/max-old-space-size/);
+    } finally {
+      launcher.kill('SIGTERM');
+      await exitOf(launcher);
+    }
+  }, 20_000);
+
   it('strips heap-size flags even when the regex flags are already on the command line', async () => {
     // Before, the launcher skipped its re-exec whenever the regex flags were
     // present, so the heap flags stayed in effect.
@@ -593,6 +741,55 @@ describe.skipIf(process.platform !== 'linux')('launcher', () => {
       expect(out.events[0].fields.n).toBe('1');
     } finally {
       launcher.stdin?.end();
+      await exited;
+    }
+  }, 20_000);
+
+  /** Runs the launcher as given until it is listening; returns its stderr so far. */
+  const listening = async (args: string[], cwd: string) => {
+    const env = { ...process.env };
+    delete env.PROPSLAB_MCP_NO_REEXEC;
+    const server = spawn(process.execPath, args, { stdio: ['pipe', 'pipe', 'pipe'], env, cwd });
+    let stderr = '';
+    server.stderr.on('data', (chunk: Buffer) => (stderr += chunk.toString()));
+    const exited = exitOf(server);
+    await vi.waitFor(() => expect(stderr).toContain('listening on stdio'), { timeout: 15_000 });
+    return { server, stderr, exited };
+  };
+
+  it('warns about grants of its own when node was started under --permission (#490)', async () => {
+    // Regex flags present and no heap flags: nothing to re-exec for, so the
+    // server starts in this very process, under the caller's grants.
+    const { server, stderr, exited } = await listening(
+      [
+        '--permission',
+        '--allow-fs-read=*',
+        '--allow-worker',
+        '--disable-warning=SecurityWarning',
+        ...REGEXP_FALLBACK_FLAGS,
+        LAUNCHER,
+      ],
+      os.tmpdir(),
+    );
+    try {
+      expect(stderr).toMatch(/started under --permission with --allow-fs-read=\*; those grants apply/);
+      // It left the caller's working directory for the bundle's all the same.
+      expect(readlinkSync(`/proc/${server.pid}/cwd`)).toBe(path.dirname(LAUNCHER));
+    } finally {
+      server.stdin.end();
+      await exited;
+    }
+  }, 20_000);
+
+  it('starts without re-exec when --permission forbids a child process (#490)', async () => {
+    const { server, stderr, exited } = await listening(
+      ['--permission', '--allow-fs-read=*', '--allow-worker', '--disable-warning=SecurityWarning', LAUNCHER],
+      os.tmpdir(),
+    );
+    try {
+      expect(stderr).toMatch(/without --allow-child-process, so it cannot re-exec/);
+    } finally {
+      server.stdin.end();
       await exited;
     }
   }, 20_000);

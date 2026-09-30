@@ -7,7 +7,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { AjvJsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/ajv';
 import type { JsonSchemaType } from '@modelcontextprotocol/sdk/validation';
 import { createServer } from '../server';
-import { DEFAULT_MAX_CONCURRENT_WORKERS } from '../runInWorker';
+import { DEFAULT_MAX_CONCURRENT_WORKERS, DEFAULT_MAX_QUEUED_CALLS } from '../runInWorker';
 import { resultText } from './resultText';
 
 /**
@@ -229,6 +229,55 @@ describe('MCP server end to end', () => {
     expect(result.isError).toBeFalsy();
     expect(Date.now() - startedAt).toBeLessThan(5_000);
   }, 20_000);
+});
+
+describe('a flood of calls (#490)', () => {
+  it('refuses what the queue cannot hold with `busy`, at once, and serves the rest', async () => {
+    const evilProps = [
+      '[evil]',
+      'SHOULD_LINEMERGE = false',
+      'MATCH_LIMIT = 0',
+      'DEPTH_LIMIT = 0',
+      'EXTRACT-boom = ^(?<boom>(a|aa)+)(?=b)$',
+    ].join('\n');
+    const held = DEFAULT_MAX_CONCURRENT_WORKERS + DEFAULT_MAX_QUEUED_CALLS;
+    const extra = 3;
+    const controller = new AbortController();
+    const startedAt = Date.now();
+    const calls = Array.from({ length: held + extra }, () =>
+      client.callTool(
+        {
+          name: 'simulate',
+          arguments: { raw: `${'a'.repeat(200)}\n`, sourcetype: 'evil', props_conf: evilProps, timeout_ms: 30_000 },
+        },
+        undefined,
+        { signal: controller.signal, timeout: 60_000 },
+      ),
+    );
+    try {
+      // The calls past the queue's bound come back as soon as they arrive,
+      // while the others hold every slot and queue position.
+      const settled = await Promise.race([
+        Promise.all(calls.slice(held)),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('no busy refusal')), 5_000)),
+      ]);
+      expect(Date.now() - startedAt).toBeLessThan(5_000);
+      for (const result of settled) {
+        expect(result.isError).toBe(true);
+        expect(payload(result)).toMatchObject({
+          error: 'busy',
+          max_concurrent: DEFAULT_MAX_CONCURRENT_WORKERS,
+          max_queued: DEFAULT_MAX_QUEUED_CALLS,
+        });
+      }
+    } finally {
+      controller.abort();
+      await Promise.allSettled(calls);
+    }
+    // Cancelling the held calls freed every slot: the server still answers.
+    const result = await client.callTool({ name: 'validate', arguments: { props_conf: '[st]\n' } });
+    expect(result.isError).toBeFalsy();
+  }, 30_000);
 });
 
 describe('client disconnect', () => {

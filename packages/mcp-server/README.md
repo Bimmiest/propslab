@@ -111,7 +111,11 @@ reviewed. `docs/engine.md`'s closing section is the spec this implements:
   processes or load native addons. The working directory matters because a
   worker thread can read below it whatever `--allow-fs-read` says (measured
   on Node 22 and 24). `PROPSLAB_MCP_NO_REEXEC=1` turns this off along with
-  the rest of the re-exec.
+  the rest of the re-exec. If node was started under `--permission` already
+  (on the command line or in `NODE_OPTIONS`), its grants stand and the
+  launcher adds none: it still moves to `dist/`, and names on stderr every
+  `--allow-…` grant beyond its own, so a broader one does not apply
+  silently. Without `--allow-child-process` it cannot re-exec, and says so.
 - **A timeout comes back structured**: the budget, how far the run got
   (`progress`: `parsing`, `running` with the pipeline stage and the events
   it was given, or `finishing`), and advice that follows from that (#488).
@@ -153,12 +157,28 @@ reviewed. `docs/engine.md`'s closing section is the spec this implements:
   about 12 s, so it needed a `timeout_ms` above the 5 s default. Large
   legitimate inputs can still need more than the default, which is why a
   timeout over many events does not blame a regex.
+  **The limit covers the V8 heap only.** PCRE2's WebAssembly memory is
+  outside it: each worker's instance may grow its linear memory up to the
+  1 GiB maximum the module is built with (`--max-memory` in
+  pcre2-wasm-utf16's `build/build.sh`), so four workers could in principle
+  hold 4 GiB of it beside their heaps. The module caps one match's
+  backtracking memory at 64 MiB, which keeps real runs far below that, but
+  the same memory holds every compiled pattern and the subject too, and
+  nothing here bounds their total; a smaller `--max-memory` in that build
+  would be the place to (#490).
   Process-wide V8 heap flags override worker limits, so the launcher strips
   `--max-old-space-size` / `--max-semi-space-size` / `--max-heap-size` from
   its own arguments and from `NODE_OPTIONS` before re-exec'ing, and says so
-  on stderr. It re-execs to do so even when the regex flags above are
+  on stderr. `NODE_OPTIONS` is split the way node splits it, so a quoted
+  `"--max-old-space-size=8192"`, which node reads as the flag, is found too
+  (#490). It re-execs to do so even when the regex flags above are
   already on its command line. With `PROPSLAB_MCP_NO_REEXEC=1` nothing is
   stripped, and the launcher warns on stderr that the flags are in effect.
+- **An engine failure says nothing about the server's files.** An error
+  that is not a timeout, an out-of-memory, `busy` or a cancellation comes
+  back as `{"error": "engine_failure"}` with a fixed message; the error
+  itself, which for a worker that failed to load names absolute paths, goes
+  to the server's stderr (#490).
 - **Every response is bounded** (#351, #414), at 8 MiB
   (`MAX_RESPONSE_BYTES`, `src/responseBudget.ts`) counted as UTF-8 bytes of
   the whole JSON-RPC line the server writes: both copies of the payload,
