@@ -54,7 +54,9 @@ export const LOAD_WAIT_FACTOR = 6;
 // posted request has no watchdog, and the load timer (LOAD_WAIT_FACTOR run
 // budgets, counted as a load failure) bounds the wait instead. A run budget
 // against a worker still downloading would terminate it, and every new
-// request would restart the download (#420).
+// request would restart the download (#420). The load timer bounds a wait, so
+// when it fires with every waiting request forgotten, nobody is waiting: the
+// worker may only be slow, and it is left to load, uncounted (#523).
 // ---------------------------------------------------------------------------
 
 export interface ManagedWorkerConfig<TReq extends { id: number }, TRes extends { id: number }> {
@@ -150,7 +152,9 @@ class ManagedWorkerImpl<TReq extends { id: number }, TRes extends { id: number }
    * Bounds the wait for that signal, for everything posted or deferred: a
    * worker whose fetch hangs neither loads nor errors, and nothing else would
    * ever settle what waits on it. Generous next to the run budget, since a
-   * slow load is not the request's fault.
+   * slow load is not the request's fault. Armed by the first request to wait
+   * and not restarted by later ones; if everything waiting has been forgotten
+   * when it fires, it does nothing, and the next request arms it again.
    */
   private loadTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -185,10 +189,17 @@ class ManagedWorkerImpl<TReq extends { id: number }, TRes extends { id: number }
     head.timer = setTimeout(() => this.expire(head), this.config.timeoutMs);
   }
 
+  /** Whether any request the caller still wants is waiting on the worker. */
+  private anyWaiting(): boolean {
+    if (this.deferred.length > 0) return true;
+    for (const t of this.inFlight.values()) if (!t.superseded) return true;
+    return false;
+  }
+
   private armLoadTimer(): void {
     this.loadTimer ??= setTimeout(() => {
       this.loadTimer = null;
-      if (this.ready) return;
+      if (this.ready || !this.anyWaiting()) return;
       const requests = this.takeAll();
       this.discard();
       this.loadFailures += 1;
