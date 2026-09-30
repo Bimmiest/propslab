@@ -128,3 +128,29 @@ describe('sedPattern', () => {
     expect(out?._raw).toBe('year #### here');
   });
 });
+
+// Each command is attributed under its own class name (#511: the parsed command
+// used to carry an empty className that the caller then overwrote).
+describe('applySedCommands — trace attribution', () => {
+  it('names each trace step after the SEDCMD class that changed the event', () => {
+    const e = applySedCommands(
+      [event('card 1234 user bob')],
+      [sedDir('mask', 's/\\d{4}/XXXX/'), sedDir('scrub', 'y/bob/BOB/')],
+      runCtx(),
+    )[0]!;
+    expect(e._raw).toBe('card XXXX user BOB');
+    expect(e.processingTrace.map((t) => t.processor)).toEqual(['SEDCMD-mask', 'SEDCMD-scrub']);
+  });
+
+  it('records no step for a command that changed nothing', () => {
+    const e = applySedCommands([event('abc')], [sedDir('miss', 's/zzz/y/')], runCtx())[0]!;
+    expect(e.processingTrace).toEqual([]);
+  });
+
+  it('runs classes in name order and labels a class-less SEDCMD with the bare prefix', () => {
+    const noClass: ConfDirective = { key: 'SEDCMD', value: 's/a/b/', line: 1, directiveType: 'SEDCMD' };
+    const e = applySedCommands([event('a')], [sedDir('z', 's/b/c/'), noClass], runCtx())[0]!;
+    expect(e._raw).toBe('c');
+    expect(e.processingTrace.map((t) => t.processor)).toEqual(['SEDCMD-', 'SEDCMD-z']);
+  });
+});

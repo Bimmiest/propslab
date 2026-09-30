@@ -656,7 +656,7 @@ export const PROPS_ADDITIONAL: DirectiveDefinition[] = [
     appliesTo: 'props.conf',
     valueType: 'string',
     isClassBased: false,
-    phase: 'index-time',
+    phase: 'search-time',
   },
   {
     key: 'priority',

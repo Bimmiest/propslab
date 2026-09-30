@@ -12,6 +12,7 @@ import { getSourceKeyValue } from '../utils/metadataFields';
 import { effectiveDirective, effectiveValue, parseSplunkBool } from '../utils/directiveValues';
 import { expandFormat, parseFormatPairs } from './format';
 import { keyCleaner } from './keyCleaning';
+import { normaliseDestKey } from './destKeys';
 import { applyDelimsExtraction } from './delims';
 
 // kvMode applies the same key cleaning, and has always imported it from here.
@@ -84,8 +85,7 @@ function getCompiledRegex(transformStanza: ConfStanza, pattern: string): SplunkR
 function resolvePriorDestValue(event: SplunkEvent, destKey: string | undefined): string | undefined {
   if (!destKey) return undefined;
   if (destKey === '_raw') return event._raw;
-  const norm = destKey.replace(/^_(?=MetaData:)/i, '');
-  switch (norm) {
+  switch (normaliseDestKey(destKey)) {
     case 'MetaData:Host': return event.metadata.host;
     case 'MetaData:Index': return event.metadata.index;
     case 'MetaData:Source': return event.metadata.source;
@@ -238,9 +238,8 @@ interface MatchedRun {
  */
 function writeDestKey(run: MatchedRun, format: string, destKey: string, priorDestValue: string | undefined): void {
   const { result, firstMatch } = run;
-  // Normalise _MetaData:X alias so lookup works for both forms.
-  const normalisedDestKey = destKey.replace(/^_(?=MetaData:)/i, '');
-  if (destKey === '_raw' || SINGLE_VALUE_DEST_KEYS.has(normalisedDestKey)) {
+  // normaliseDestKey folds the _MetaData:X alias, so both forms look up alike.
+  if (destKey === '_raw' || SINGLE_VALUE_DEST_KEYS.has(normaliseDestKey(destKey))) {
     // Single-valued slot: FORMAT applies to the first match only.
     result.destKey = destKey;
     result.destValue = expandFormat(format, firstMatch, priorDestValue);

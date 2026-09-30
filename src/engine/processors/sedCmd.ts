@@ -7,7 +7,6 @@ import { atDirective } from '../parser/provenance';
 import type { RunContext, DiagnosticSink } from '../runContext';
 
 interface SedCommand {
-  className: string;
   /** The `s///` pattern; absent for `y///`. */
   pattern?: SplunkRegex;
   /** The `s///` replacement, expanded per match. */
@@ -155,7 +154,6 @@ function parseTransliterate(
   });
 
   return {
-    className: '',
     replacement: () => '',
     global: true,
     translate,
@@ -291,7 +289,6 @@ export function parseSedExpression(
   }
 
   return {
-    className: '',
     pattern: regex,
     replacement,
     global: isGlobal,
@@ -325,7 +322,6 @@ export function applySedCommands(
   for (const dir of sedDirectives) {
     const cmd = parseSedExpression(dir.value, dir, parseSink);
     if (cmd) {
-      cmd.className = dir.className ?? '';
       commands.push({ ...cmd, directive: dir });
     }
   }
@@ -362,7 +358,7 @@ export function applySedCommands(
           rawAfter: raw,
         });
         traces.push({
-          processor: `SEDCMD-${cmd.className}`,
+          processor: `SEDCMD-${cmd.directive.className ?? ''}`,
           phase: 'index-time',
           description: `Applied sed substitution`,
           ...changeWindow(before, raw),

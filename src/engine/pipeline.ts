@@ -168,35 +168,39 @@ function resolveDirectives(
   return { directives, searchTimeDirectives: mergeDirectives(searchTimeStanzas), effectiveMetadata };
 }
 
-/** The index-time stages, in Splunk's order. */
+/**
+ * The index-time stages, in Splunk's order. The stage numbers in the comments
+ * are the `step`s of PIPELINE_STAGES (pipelineStages.ts), which the help drawer
+ * and the dictionary show.
+ */
 function runIndexTime(rawData: string, run: PipelineRun): SplunkEvent[] {
   const { directives, propsConf, transformsConf, ctx } = run;
-  // Step 1-2: Line breaking and merging. breakLines alone decides the
+  // Stage 1: Line breaking and merging. breakLines alone decides the
   // SHOULD_LINEMERGE default INDEXED_EXTRACTIONS implies (see
   // docs/adr/0008-structured-formats-default-line-merging-off.md). With nothing
   // broken there are no events to carry forward, so the fallback is empty.
   let events = safeProcessor('LINE_BREAKER', [], (_, c) => breakLines(rawData, directives, run.effectiveMetadata, c), ctx, 'props.conf', 'batch');
 
-  // Step 3: Truncation
+  // Stage 2: Truncation
   events = safeProcessor('TRUNCATE', events, (batch, c) => truncateEvents(batch, directives, c), ctx);
 
-  // Step 4: Timestamp extraction. Batch-shaped: an event with no timestamp
+  // Stage 3: Timestamp extraction. Batch-shaped: an event with no timestamp
   // inherits the previous event's.
   events = safeProcessor('Timestamp', events, (batch, c) => extractTimestamps(batch, directives, c), ctx, 'props.conf', 'batch');
 
-  // Step 4b: ROUTE_EVENTS_OLDER_THAN — the spec runs the age test "after
+  // Stage 3, continued: ROUTE_EVENTS_OLDER_THAN — the spec runs the age test "after
   // timestamp extraction", so it reads the extracted _time, before any
   // index-time transform can rewrite it.
   events = safeProcessor('ROUTE_EVENTS_OLDER_THAN', events, (batch, c) => routeEventsByAge(batch, directives, c), ctx);
 
-  // Step 5: Indexed extractions. Batch-shaped: CSV's header row names the
+  // Stage 4: Indexed extractions. Batch-shaped: CSV's header row names the
   // fields of every row after it. The XML modes catch per event themselves.
   events = safeProcessor('INDEXED_EXTRACTIONS', events, (batch, c) => applyIndexedExtractions(batch, directives, c), ctx, 'props.conf', 'batch');
 
-  // Step 6: SEDCMD
+  // Stage 5: SEDCMD
   events = safeProcessor('SEDCMD', events, (batch, c) => applySedCommands(batch, directives, c), ctx);
 
-  // Step 7: Index-time TRANSFORMS — regex transforms, DEST_KEY routing, and
+  // Stage 6: Index-time TRANSFORMS — regex transforms, DEST_KEY routing, and
   // INGEST_EVAL / STOP_PROCESSING_IF stanzas are all applied here, interleaved
   // in TRANSFORMS-<class> list order, then every RULESET-<class> after them
   // (only when a props.conf stanza references them).
@@ -204,11 +208,11 @@ function runIndexTime(rawData: string, run: PipelineRun): SplunkEvent[] {
   // report against the run's one warning ledger.
   events = safeProcessor('TRANSFORMS', events, (batch, c) => applyTransforms(batch, directives, transformsConf, 'index-time', c), ctx, 'transforms.conf');
 
-  // Step 7b: CLONE_SOURCETYPE copies get the SEDCMD and TRANSFORMS of the
+  // Stage 7: CLONE_SOURCETYPE copies get the SEDCMD and TRANSFORMS of the
   // sourcetype they were cloned to.
   events = safeProcessor('CLONE_SOURCETYPE', events, (batch, c) => applyCloneIndexTime(batch, propsConf, transformsConf, c), ctx, 'transforms.conf');
 
-  // Step 8: ANNOTATE_PUNCT — the annotation processor runs after regex
+  // Stage 8: ANNOTATE_PUNCT — the annotation processor runs after regex
   // replacement, so the punct signature reflects _raw as indexed (post-SEDCMD,
   // post-transforms), not as ingested.
   return safeProcessor('ANNOTATE_PUNCT', events, (batch, c) => annotatePunct(batch, directives, c), ctx);
@@ -217,6 +221,8 @@ function runIndexTime(rawData: string, run: PipelineRun): SplunkEvent[] {
 /**
  * The search-time stages over `events`, all read from `directives`. Splunk's
  * search-time order is EXTRACT → REPORT → automatic KV (KV_MODE) → FIELDALIAS → EVAL.
+ * Stage 9, the `rename` of the sourcetype, is settled before this runs: it
+ * decides which stanzas `directives` were read from (see `resolveDirectives`).
  */
 function runSearchTimeStages(
   events: SplunkEvent[],
@@ -225,20 +231,21 @@ function runSearchTimeStages(
   ctx: RunContext,
 ): SplunkEvent[] {
   const { transformsConf } = run;
-  // Step 8: EXTRACT (inline field extraction)
+  // Stage 10: EXTRACT (inline field extraction)
   let ev = safeProcessor('EXTRACT', events, (batch, c) => extractFields(batch, directives, c), ctx);
-  // Step 9: Search-time REPORT transforms (run BEFORE automatic KV — Splunk's
+  // Stage 11: Search-time REPORT transforms (run BEFORE automatic KV — Splunk's
   // documented order is inline EXTRACT → REPORT field transforms → automatic KV).
   ev = safeProcessor('REPORT', ev, (batch, c) => applyTransforms(batch, directives, transformsConf, 'search-time', c), ctx, 'transforms.conf');
-  // Step 10: KV_MODE (automatic key-value extraction)
+  // Stage 12: KV_MODE (automatic key-value extraction)
   ev = safeProcessor('KV_MODE', ev, (batch, c) => applyKvMode(batch, directives, c), ctx);
-  // Step 11: FIELDALIAS
+  // Stage 13: FIELDALIAS
   ev = safeProcessor('FIELDALIAS', ev, (batch, c) => applyFieldAliases(batch, directives, c), ctx);
-  // Step 12: EVAL (calculated fields)
+  // Stage 14: EVAL (calculated fields)
   ev = safeProcessor('EVAL', ev, (batch, c) => applyEvalExpressions(batch, directives, c), ctx);
-  // Step 13: attribute index-time `_raw` rewrites (SEDCMD, DEST_KEY = _raw) to
-  // the fields whose extracted value they changed or destroyed. Runs last
-  // because it replays search-time extraction against the pre-rewrite text.
+  // Not a Splunk stage, so it has no number: attribute index-time `_raw`
+  // rewrites (SEDCMD, DEST_KEY = _raw) to the fields whose extracted value they
+  // changed or destroyed. Runs last because it replays search-time extraction
+  // against the pre-rewrite text.
   // See docs/adr/0011-raw-rewrites-attributed-by-replay.md.
   return safeProcessor('SEDCMD attribution', ev, (batch, c) => attributeRawMutations(batch, () => directives, transformsConf, c), ctx);
 }
