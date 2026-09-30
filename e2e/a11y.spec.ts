@@ -248,9 +248,11 @@ test.describe('windowed field lists', () => {
     let previous = await rowIndex();
     for (let i = 1; i < 60; i++) {
       await page.keyboard.press('Tab');
-      const current = await rowIndex();
-      expect(current, `row focused after ${i} Tabs`).toBeGreaterThan(previous);
-      previous = current;
+      // Polled: the window re-renders around the newly focused row, and a read
+      // taken in that gap (focus momentarily on <body>) failed this on a
+      // loaded CI runner. The row must still be reached, and in order.
+      await expect.poll(rowIndex, { message: `row focused after ${i} Tabs` }).toBeGreaterThan(previous);
+      previous = await rowIndex();
     }
   });
 
