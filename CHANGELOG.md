@@ -100,6 +100,10 @@ All notable changes to Propslab are documented here, newest first. Entries say w
 
 ### Fixed
 
+- **First load is held to Web Vitals budgets** ([#514](https://github.com/Bimmiest/propslab/issues/514)): a non-retried perf spec loads the production build cold and checks LCP, total blocking time and transferred bytes, and every perf spec writes its numbers to the job summary.
+- **The deploy bundle is attested and verified before upload** ([#518](https://github.com/Bimmiest/propslab/issues/518)). A job holding only the signing permissions attests a manifest of `dist/`; the deploy job checks the attestation and that `dist/` is exactly that manifest.
+- **A `supply-chain` workflow checks the Radix overrides and reminds when `.nvmrc` falls behind its Node line** ([#518](https://github.com/Bimmiest/propslab/issues/518)); the override check had been inspecting only one of its three packages. Node moves to 24.21.0.
+- **The CIM generator is unit-tested and must reproduce the committed data file** ([#518](https://github.com/Bimmiest/propslab/issues/518)), which caught it dropping the licence header.
 - **Applying a suggestion over a backslash-continued directive replaces the whole directive** ([#484](https://github.com/Bimmiest/propslab/issues/484)). Only its first line was replaced before, leaving the continuation lines behind as a corrupt props.conf.
 - **The weekly production-environment check reads `main`'s rulesets as well as classic branch protection** ([#509](https://github.com/Bimmiest/propslab/issues/509), [#520](https://github.com/Bimmiest/propslab/issues/520)). Either source can meet each requirement, an empty required-checks list no longer counts as configured, and an unreadable classic protection is a warning instead of a failure. The logic is unit-tested.
 - **The `docs/engine.md` examples are type-checked in the test suite** and the layered-conf example is run, and CONTRIBUTING's release section describes the process as it works ([#519](https://github.com/Bimmiest/propslab/issues/519)).
