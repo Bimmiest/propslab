@@ -292,7 +292,8 @@ describe('DETERMINE_TIMESTAMP_DATE_WITH_SYSTEM_TIME (#273)', () => {
         '',
         { perEventPipeline: false, now: NOW.getTime() },
       ).result.events.map((e) => e._time?.toISOString());
-    expect(at('true')).toEqual(['2026-08-03T23:00:00.000Z', '2026-08-04T01:00:00.000Z']);
-    expect(at('false')).toEqual(['2026-08-03T23:00:00.000Z', '2026-08-03T01:00:00.000Z']);
+    // The third line tells the strategies apart (see RAWS above).
+    expect(at('true')).toEqual(['2026-08-03T23:00:00.000Z', '2026-08-04T01:00:00.000Z', '2026-08-03T13:00:00.000Z']);
+    expect(at('false')).toEqual(['2026-08-03T23:00:00.000Z', '2026-08-04T01:00:00.000Z', '2026-08-04T13:00:00.000Z']);
   });
 });
