@@ -21,6 +21,13 @@ export interface RunLimits {
   /** Input past this many characters is cut back to the last line break. */
   readonly maxRawChars: number;
   /**
+   * The most events line breaking produces. It stops at this many, and the
+   * rest of the input is dropped with a warning: a `LINE_BREAKER` that breaks
+   * on every character turns a megabyte into a million events, which no caller
+   * can hold, clone or render. CLONE_SOURCETYPE copies come on top of it.
+   */
+  readonly maxEvents: number;
+  /**
    * Missed events a directive's no-match is analysed for (the partial-match
    * probe), per run. Later misses record `{ kind: 'not-explained' }`: each
    * analysis costs about log(atoms) regex runs, and events × non-matching
@@ -31,6 +38,7 @@ export interface RunLimits {
 
 export const DEFAULT_LIMITS: RunLimits = Object.freeze({
   maxRawChars: 1_000_000,
+  maxEvents: 25_000,
   explanationsPerDirective: 50,
 });
 

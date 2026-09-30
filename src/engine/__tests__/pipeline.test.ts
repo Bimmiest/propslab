@@ -286,3 +286,49 @@ describe('runPipeline — CLONE_SOURCETYPE copies are not reported as MetaData:*
     expect(step?.description).toMatch(/^Cloned by CLONE_SOURCETYPE \("st" → "cloned"\)/);
   });
 });
+
+describe('runPipeline — per-event search time keeps an index-time sourcetype (#466)', () => {
+  // Doc-derived: props.conf.spec describes `sourcetype =` in a [source::]
+  // stanza as an input-time assignment, and transforms.conf.spec has
+  // DEST_KEY = MetaData:Sourcetype and CLONE_SOURCETYPE give the event a new
+  // sourcetype at index time, after it. Search time then reads the new
+  // sourcetype's stanza; the input-time assignment must not be applied again.
+  const meta: EventMetadata = { index: 'main', host: 'h', source: '/var/log/app.log', sourcetype: 'orig' };
+  const searchTime = '[other]\nEXTRACT-foo = (?<foo>\\w+)\n\n[renamed_to]\nEXTRACT-bar = (?<bar>\\w+)\n';
+  const props = (appRules: string) =>
+    `[source::/var/log/app.log]\nsourcetype = app\n\n[app]\nSHOULD_LINEMERGE = false\nEXTRACT-app = (?<appfield>\\w+)\n${appRules}\n${searchTime}`;
+  // The fields EXTRACT wrote, without the default `punct` and `timestamp`.
+  const extracted = (e: { fields: Record<string, unknown> } | undefined) =>
+    Object.fromEntries(Object.entries(e?.fields ?? {}).filter(([k]) => k !== 'punct' && k !== 'timestamp'));
+  const rematch = (e: { processingTrace: { processor: string; description: string }[] }) =>
+    e.processingTrace.find((s) => s.processor === 'StanzaRematch')?.description;
+
+  it('reads [other]\'s search-time config after DEST_KEY = MetaData:Sourcetype rewrote app → other', () => {
+    const transforms = '[setst]\nREGEX = .\nDEST_KEY = MetaData:Sourcetype\nFORMAT = sourcetype::other\n';
+    const { result } = runPipeline('hello', meta, props('TRANSFORMS-a = setst'), transforms, { perEventPipeline: true });
+    const [event] = result.events;
+    expect(event?.metadata.sourcetype).toBe('other');
+    expect(event?.fields.foo).toBe('hello');
+    expect(event?.fields.appfield).toBeUndefined();
+    expect(event && rematch(event)).toMatch(/^Metadata rewritten at index-time \(sourcetype → "other"\); stanzas re-matched for search-time using 2 directives$/);
+  });
+
+  it('gives a CLONE_SOURCETYPE copy its target\'s search-time config', () => {
+    const transforms = '[copy]\nREGEX = .\nCLONE_SOURCETYPE = other\n';
+    const { result } = runPipeline('hello', meta, props('TRANSFORMS-c = copy'), transforms, { perEventPipeline: true });
+    const original = result.events.find((e) => e.clonedFrom === undefined);
+    const clone = result.events.find((e) => e.clonedFrom !== undefined);
+    expect(original?.metadata.sourcetype).toBe('app');
+    expect(extracted(original)).toEqual({ appfield: 'hello' });
+    expect(clone?.metadata.sourcetype).toBe('other');
+    expect(extracted(clone)).toEqual({ foo: 'hello' });
+  });
+
+  it('still applies `rename` on the rewritten sourcetype\'s stanza', () => {
+    const transforms = '[setst]\nREGEX = .\nDEST_KEY = MetaData:Sourcetype\nFORMAT = sourcetype::other\n';
+    const renaming = props('TRANSFORMS-a = setst').replace('[other]\n', '[other]\nrename = renamed_to\n');
+    const { result } = runPipeline('hello', meta, renaming, transforms, { perEventPipeline: true });
+    expect(result.events[0]?.metadata.sourcetype).toBe('other');
+    expect(extracted(result.events[0])).toEqual({ bar: 'hello' });
+  });
+});
