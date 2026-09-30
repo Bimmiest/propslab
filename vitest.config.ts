@@ -86,13 +86,13 @@ export default defineConfig({
         },
         'src/components/**': {
           statements: 80,
-          branches: 71,
-          functions: 76,
+          branches: 73,
+          functions: 78,
           lines: 82,
         },
         'src/hooks/**': {
           statements: 92,
-          branches: 80,
+          branches: 82,
           functions: 95,
           lines: 94,
         },
