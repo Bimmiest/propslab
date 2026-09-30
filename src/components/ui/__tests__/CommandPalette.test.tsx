@@ -4,6 +4,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { CommandPalette } from '../CommandPalette';
+import { Overlay } from '../Overlay';
 import { useAppStore } from '../../../store/useAppStore';
 import { SAMPLE_CONFIGS } from '../../../engine/sampleData';
 
@@ -82,5 +83,68 @@ describe('CommandPalette — replacing the inputs', () => {
     fireEvent.keyDown(screen.getByRole('alertdialog'), { key: 'Escape' });
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
     expect(useAppStore.getState().rawData).toBe('my events');
+  });
+});
+
+describe('CommandPalette — Ctrl+K and panel commands (#495)', () => {
+  beforeEach(() => {
+    useAppStore.setState(initial, true);
+  });
+
+  const ctrlK = () => {
+    act(() => {
+      fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
+    });
+  };
+
+  it('opens and closes on Ctrl+K', () => {
+    render(<CommandPalette />);
+    ctrlK();
+    expect(useAppStore.getState().commandPaletteOpen).toBe(true);
+    ctrlK();
+    expect(useAppStore.getState().commandPaletteOpen).toBe(false);
+  });
+
+  it('does not open over another modal', () => {
+    render(
+      <>
+        <Overlay open onClose={() => {}} label="Scaffold">
+          <button>Inside</button>
+        </Overlay>
+        <CommandPalette />
+      </>,
+    );
+    ctrlK();
+    expect(useAppStore.getState().commandPaletteOpen).toBe(false);
+    expect(screen.queryByRole('dialog', { name: 'Command palette' })).not.toBeInTheDocument();
+  });
+
+  it('does not open over the confirmation dialog', () => {
+    useAppStore.getState().setRawData('my events');
+    openPalette();
+    choose('Clear all editors');
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument();
+    ctrlK();
+    expect(useAppStore.getState().commandPaletteOpen).toBe(false);
+  });
+
+  it('"Open pipeline reference" opens the panel, and leaves it open if it already was', () => {
+    openPalette();
+    choose('Open pipeline reference');
+    expect(useAppStore.getState().helpOpen).toBe(true);
+
+    act(() => useAppStore.getState().toggleCommandPalette());
+    choose('Open pipeline reference');
+    expect(useAppStore.getState().helpOpen).toBe(true);
+  });
+
+  it('the scaffold command opens the modal, and leaves it open if it already was', () => {
+    openPalette();
+    choose('Scaffold config from sample data');
+    expect(useAppStore.getState().scaffoldOpen).toBe(true);
+
+    act(() => useAppStore.getState().toggleCommandPalette());
+    choose('Scaffold config from sample data');
+    expect(useAppStore.getState().scaffoldOpen).toBe(true);
   });
 });

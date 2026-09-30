@@ -3,15 +3,15 @@ import type { computeDiff } from '../../utils/diffEngine';
 type DiffKind = 'added' | 'removed' | 'ctx';
 
 const SIGN: Record<DiffKind, string> = { added: '+', removed: '-', ctx: ' ' };
-const ROW_BG: Record<DiffKind, string> = { added: ' bg-green-500/15', removed: ' bg-red-500/15', ctx: '' };
+const ROW_BG: Record<DiffKind, string> = { added: ' bg-[var(--color-success)]/10', removed: ' bg-[var(--color-error)]/10', ctx: '' };
 const SIGN_COLOR: Record<DiffKind, string> = {
-  added: 'text-green-600 dark:text-green-400',
-  removed: 'text-red-600 dark:text-red-400',
+  added: 'text-[var(--color-success)]',
+  removed: 'text-[var(--color-error)]',
   ctx: 'text-[var(--color-text-muted)]',
 };
 const TEXT_COLOR: Record<DiffKind, string> = {
-  added: 'text-green-700 dark:text-green-300',
-  removed: 'text-red-700 dark:text-red-300',
+  added: 'text-[var(--color-success)]',
+  removed: 'text-[var(--color-error)]',
   ctx: 'text-[var(--color-text-primary)]',
 };
 

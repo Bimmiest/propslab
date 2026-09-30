@@ -104,6 +104,16 @@ All notable changes to Propslab are documented here, newest first. Entries say w
 - **The deploy bundle is attested and verified before upload** ([#518](https://github.com/Bimmiest/propslab/issues/518)). A job holding only the signing permissions attests a manifest of `dist/`; the deploy job checks the attestation and that `dist/` is exactly that manifest.
 - **A `supply-chain` workflow checks the Radix overrides and reminds when `.nvmrc` falls behind its Node line** ([#518](https://github.com/Bimmiest/propslab/issues/518)); the override check had been inspecting only one of its three packages. Node moves to 24.21.0.
 - **The CIM generator is unit-tested and must reproduce the committed data file** ([#518](https://github.com/Bimmiest/propslab/issues/518)), which caught it dropping the licence header.
+- **The phone-width Dictionary can be browsed with the arrow keys** ([#494](https://github.com/Bimmiest/propslab/issues/494)); Enter opens an entry, and focus returns to the list on going back instead of being lost.
+- **Status badges, diff lines, JSON chips, dimmed rows, inactive Architecture boxes and the Settings switch meet the 4.5:1 contrast policy in both themes** ([#493](https://github.com/Bimmiest/propslab/issues/493)), with new axe checks for those states.
+- **Accessibility follow-ups** ([#495](https://github.com/Bimmiest/propslab/issues/495)):
+  - toggle buttons expose `aria-pressed`, and `aria-controls` points only at mounted panels;
+  - the Fields sidebar tree is one Tab stop, navigated with the arrow keys, Home and End;
+  - tooltips can be hovered, and the Regex input is named by its visible label;
+  - confirmation dialogs announce their consequence text and ignore outside clicks, and error panels announce as alerts;
+  - dismissing the welcome banner keeps focus in the workspace;
+  - Ctrl+K no longer opens the palette over another dialog, and its "Open pipeline reference" and Scaffold commands no longer close a panel that is already open.
+- **Tailwind transition utilities take effect again, reduced motion is honoured everywhere, and native controls follow the dark theme** ([#498](https://github.com/Bimmiest/propslab/issues/498)).
 - **Applying a suggestion over a backslash-continued directive replaces the whole directive** ([#484](https://github.com/Bimmiest/propslab/issues/484)). Only its first line was replaced before, leaving the continuation lines behind as a corrupt props.conf.
 - **The weekly production-environment check reads `main`'s rulesets as well as classic branch protection** ([#509](https://github.com/Bimmiest/propslab/issues/509), [#520](https://github.com/Bimmiest/propslab/issues/520)). Either source can meet each requirement, an empty required-checks list no longer counts as configured, and an unreadable classic protection is a warning instead of a failure. The logic is unit-tested.
 - **The `docs/engine.md` examples are type-checked in the test suite** and the layered-conf example is run, and CONTRIBUTING's release section describes the process as it works ([#519](https://github.com/Bimmiest/propslab/issues/519)).

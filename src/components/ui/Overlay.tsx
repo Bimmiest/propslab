@@ -15,7 +15,11 @@ import * as Dialog from '@radix-ui/react-dialog';
 
 export interface OverlayProps {
   open: boolean;
-  /** Called when Escape is pressed, the backdrop is clicked, or focus escapes. */
+  /**
+   * Called when Escape is pressed, the backdrop is clicked, or focus escapes.
+   * An `alertdialog` ignores the backdrop click: a confirmation is answered
+   * with one of its buttons (or Escape), not dismissed by a stray click.
+   */
   onClose: () => void;
   /** Accessible name for the dialog. */
   label: string;
@@ -30,6 +34,12 @@ export interface OverlayProps {
   onKeyDown?: (event: React.KeyboardEvent) => void;
   /** `alertdialog` for a confirmation that interrupts the user's flow. */
   role?: 'dialog' | 'alertdialog';
+  /**
+   * Text for the dialog's accessible description, read after its name. Rendered
+   * visually hidden and linked with `aria-describedby`; leave it out when the
+   * name says everything, rather than inventing a sentence for the reader.
+   */
+  description?: ReactNode;
 }
 
 export function Overlay({
@@ -42,6 +52,7 @@ export function Overlay({
   containerClassName = 'fixed inset-0 z-50 flex items-start justify-center pt-[20vh]',
   onKeyDown,
   role,
+  description,
 }: OverlayProps) {
   return (
     <Dialog.Root
@@ -68,11 +79,11 @@ export function Overlay({
             style={style}
             onKeyDown={onKeyDown}
             {...(role ? { role } : {})}
-            // These overlays carry no separate descriptive text, and Radix
-            // requires either a description or an explicit opt-out. Opting out
-            // is the accurate answer rather than inventing a sentence for a
-            // screen reader to read out.
-            aria-describedby={undefined}
+            {...(role === 'alertdialog' ? { onPointerDownOutside: (e: Event) => e.preventDefault() } : {})}
+            // Radix requires either a description or an explicit opt-out.
+            // Without a `description`, opting out is the accurate answer
+            // rather than inventing a sentence for a screen reader to read.
+            {...(description === undefined ? { 'aria-describedby': undefined } : {})}
           >
             {/*
               The accessible name. A bare `aria-label` would name the dialog
@@ -80,6 +91,9 @@ export function Overlay({
               console error on every overlay is a real cost, not a lint nit.
             */}
             <Dialog.Title className="sr-only">{label}</Dialog.Title>
+            {description !== undefined && (
+              <Dialog.Description className="sr-only">{description}</Dialog.Description>
+            )}
             {children}
           </Dialog.Content>
         </div>

@@ -151,11 +151,12 @@ function ComponentBox({
           ? highlight
             ? 'border-[var(--color-accent)] bg-[var(--color-accent)]/10 shadow-sm'
             : 'border-[var(--color-border-hover)] bg-[var(--color-bg-secondary)]'
-          : 'border-[var(--color-border)] bg-[var(--color-bg-tertiary)] opacity-40'
+          : 'border-[var(--color-border)] bg-[var(--color-bg-tertiary)]'
         }
       `}
     >
-      <div className="text-xs font-semibold text-[var(--color-text-primary)]">{label}</div>
+      {/* An inactive box is dimmed with the muted token, not opacity. */}
+      <div className={`text-xs font-semibold ${active ? 'text-[var(--color-text-primary)]' : 'text-[var(--color-text-muted)]'}`}>{label}</div>
       <div className="text-xs text-[var(--color-text-muted)] font-mono">{sublabel}</div>
       {active && <div className="text-xs text-[var(--color-text-secondary)] mt-1">{description}</div>}
     </div>
@@ -164,7 +165,7 @@ function ComponentBox({
 
 function Arrow({ active }: { active: boolean }) {
   return (
-    <div className={`flex flex-col items-center ${active ? 'text-[var(--color-accent)]' : 'text-[var(--color-border)] opacity-40'}`}>
+    <div className={`flex flex-col items-center ${active ? 'text-[var(--color-accent)]' : 'text-[var(--color-border-hover)]'}`}>
       <div className="w-0.5 h-3 bg-current" />
       <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
         <path d="M12 16l-6-6h12l-6 6z" />

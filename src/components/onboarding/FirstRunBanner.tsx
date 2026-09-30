@@ -51,6 +51,9 @@ export function FirstRunBanner() {
   const dismiss = () => {
     markIntroSeen();
     setVisible(false);
+    // The focused button unmounts with the banner, which would drop focus to
+    // <body>; the skip link's target is the next sensible place.
+    document.getElementById('main-content')?.focus();
   };
 
   return (
@@ -88,6 +91,7 @@ export function FirstRunBanner() {
 
       {/* Dismiss */}
       <button
+        type="button"
         onClick={dismiss}
         className="shrink-0 flex items-center gap-1 px-2.5 py-1 text-xs rounded-md border-none cursor-pointer transition-colors text-[var(--color-text-muted)] hover:bg-[var(--color-bg-tertiary)] hover:text-[var(--color-text-primary)]"
         aria-label="Dismiss welcome banner"

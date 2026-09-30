@@ -160,3 +160,20 @@ describe('HighlightedTab', () => {
     expect(screen.queryByText(/Showing the first/i)).not.toBeInTheDocument();
   });
 });
+
+describe('HighlightedTab filter pills (#495)', () => {
+  beforeEach(() => {
+    useAppStore.setState(initial, true);
+  });
+
+  it('report the chosen filter with aria-pressed, not by colour alone', () => {
+    render(<HighlightedTab items={items} allEvents={items} currentPage={1} eventsPerPage={10} />);
+    const pill = (label: string) => screen.getByRole('button', { name: new RegExp(`^${label}`) });
+    const pressed = ['Auto', 'Manual', 'Calculated', 'All'].filter((l) => pill(l).getAttribute('aria-pressed') === 'true');
+    expect(pressed).toHaveLength(1);
+
+    fireEvent.click(pill('Manual'));
+    expect(pill('Manual')).toHaveAttribute('aria-pressed', 'true');
+    expect(pill(pressed[0]!)).toHaveAttribute('aria-pressed', 'false');
+  });
+});

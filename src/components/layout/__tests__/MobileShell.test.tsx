@@ -28,3 +28,22 @@ describe('MobileShell', () => {
     expect(screen.getByText('props editor')).toBeInTheDocument();
   });
 });
+
+describe('MobileShell aria-controls (#495)', () => {
+  beforeEach(() => useAppStore.setState(initial, true));
+
+  it('only the active tab points at a panel, since only that panel is mounted', () => {
+    render(<MobileShell />);
+    const tabs = screen.getAllByRole('tab');
+    for (const tab of tabs) {
+      const selected = tab.getAttribute('aria-selected') === 'true';
+      if (selected) {
+        const id = tab.getAttribute('aria-controls');
+        expect(id).toBeTruthy();
+        expect(document.getElementById(id!)).toHaveAttribute('role', 'tabpanel');
+      } else {
+        expect(tab).not.toHaveAttribute('aria-controls');
+      }
+    }
+  });
+});
