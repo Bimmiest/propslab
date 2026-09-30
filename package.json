@@ -16,6 +16,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
+    "format": "prettier --write \"**/*.{ts,tsx,js,mjs,mts}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,mjs,mts}\"",
     "preview": "vite preview",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",

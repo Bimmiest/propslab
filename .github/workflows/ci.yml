@@ -91,6 +91,12 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Format check
+        # Prettier over the TypeScript and JavaScript sources (.prettierrc.json,
+        # .prettierignore). It fails on a file that `npm run format` would change,
+        # so a review never spends its attention on layout (#510).
+        run: npm run format:check
+
       - name: Build
         # `npm run build` is `tsc -b && vite build`, so this type-checks (a bare
         # `tsc --noEmit` against the solution-style root tsconfig — "files": [] —

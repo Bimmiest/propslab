@@ -25,6 +25,7 @@ The `npm ci --prefix packages/mcp-server` is not optional if you intend to lint.
 
 ```bash
 npm run lint          # ESLint, including type-aware rules (needs the MCP server's deps, above)
+npm run format:check  # Prettier over the TypeScript and JavaScript sources; `npm run format` fixes what it reports
 npm run build         # tsc -b && vite build — this is the type-check
 npm run test:coverage # vitest, with the coverage floor enforced
 npm run test:e2e      # Playwright, against a production build
@@ -46,6 +47,7 @@ npm run test:coverage # typecheck + esbuild bundle first, then vitest with the p
 
 A few things worth knowing:
 
+- **Formatting is Prettier's, and not discussed in review.** `.prettierrc.json` is the style the code already had: single quotes, semicolons, two-space indents and trailing commas, with a line width of 120. That width fits 98.6% of the existing code lines and changes about 40% fewer lines than a width of 100 would. It covers `.ts`, `.tsx`, `.js`, `.mjs` and `.mts` (not Markdown, JSON, CSS or the lockfile), and `.prettierignore` leaves out the generated `cimModelsData.ts`. `npm run format` rewrites the files. The commit that applied it to the whole tree is listed in `.git-blame-ignore-revs`, so `git blame` looks through it: run `git config blame.ignoreRevsFile .git-blame-ignore-revs` once to get the same locally (GitHub reads the file by itself).
 - **Lint is typescript-eslint's `strictTypeChecked`**, with two rules tuned in `eslint.config.js`, each beside its reason: `no-confusing-void-expression` allows arrow shorthand, and `restrict-template-expressions` allows numbers. A deliberate use of a deprecated browser API, or a guard for something jsdom lacks, gets an inline disable saying so.
 - **No `!` in shipped code.** `no-non-null-assertion` is on everywhere except tests and their support files (`__tests__`, `*.test.*`, `src/test`, `e2e`), where `result[0]!` follows an assertion that it exists. In `src/` narrow instead: destructure, iterate rather than index, or check for `undefined`.
 - **The engine's imports are checked.** `src/engine` (tests aside) may not import from `components`, `hooks`, `store` or `monaco`, nor React, zustand or Monaco. It is a `no-restricted-imports` rule with glob `patterns`, and `src/__tests__/eslintBoundary.test.ts` lints real import lines against the rule as configured, so a change to the config cannot quietly stop it matching.
