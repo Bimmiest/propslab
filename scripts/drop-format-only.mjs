@@ -6,7 +6,7 @@
 // engine for a change that cannot move the score.
 //
 // Usage: node scripts/drop-format-only.mjs <base-ref> <file,file,...>
-// Each dropped file is named on stderr.
+// Each dropped file is named on stderr, as a Markdown line for the job summary.
 
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -28,7 +28,7 @@ for (const file of list.split(',').filter(Boolean)) {
     continue;
   }
   if (await isFormattingOnly(file, before, readFileSync(file, 'utf8'))) {
-    console.error(`Formatting-only change, not mutated: ${file}`);
+    console.error(`Formatting-only change, not mutated: \`${file}\``);
   } else {
     kept.push(file);
   }

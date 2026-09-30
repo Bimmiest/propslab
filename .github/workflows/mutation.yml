@@ -124,8 +124,7 @@ jobs:
           # test: the files whose change Prettier prints identically on both
           # sides are dropped, each named in the summary.
           if [ -n "$files" ]; then
-            files=$(node scripts/drop-format-only.mjs "origin/$BASE_REF" "$files" 2> dropped.txt)
-            sed 's/.*: \(.*\)/Formatting-only change, not mutated: `\1`/' dropped.txt >> "$GITHUB_STEP_SUMMARY"
+            files=$(node scripts/drop-format-only.mjs "origin/$BASE_REF" "$files" 2>> "$GITHUB_STEP_SUMMARY")
           fi
           # A PR that only touches the mutation setup (Stryker or vitest config,
           # this workflow) still proves it works: one small, well-tested file.
