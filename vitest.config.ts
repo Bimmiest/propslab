@@ -109,7 +109,7 @@ export default defineConfig({
       // worker tests do instantiate them, so they are measured like the rest.
       thresholds: {
         statements: 90,
-        branches: 82,
+        branches: 84,
         functions: 89,
         lines: 92,
         // The engine is held to a much higher bar than the app as a whole. It
@@ -126,16 +126,16 @@ export default defineConfig({
           lines: 97,
         },
         'src/components/**': {
-          statements: 82,
-          branches: 73,
-          functions: 78,
+          statements: 83,
+          branches: 75,
+          functions: 80,
           lines: 85,
         },
         'src/hooks/**': {
           statements: 92,
           branches: 82,
           functions: 95,
-          lines: 94,
+          lines: 96,
         },
         'src/monaco/**': {
           statements: 91,
