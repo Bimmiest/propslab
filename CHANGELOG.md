@@ -100,6 +100,15 @@ All notable changes to Propslab are documented here, newest first. Entries say w
 
 ### Fixed
 
+- **An invalid `LINE_BREAKER` reports its compile error** ([#472](https://github.com/Bimmiest/propslab/issues/472)) instead of advising parentheses for a pattern that already has them.
+- **A malformed `SEDCMD` on a `CLONE_SOURCETYPE` target is reported once per run** ([#476](https://github.com/Bimmiest/propslab/issues/476)), not once per cloned event.
+- **Diagnostics** ([#477](https://github.com/Bimmiest/propslab/issues/477)):
+  - two stanzas failing on the same `INGEST_EVAL` field both report their error;
+  - the JSON double-extraction warning reads `KV_MODE` and `AUTO_KV_JSON` from the `rename` target;
+  - an unknown `DEST_KEY` gets one warning and no longer invents a field;
+  - `s/foo/bar` with no closing delimiter is rejected.
+- **`INGEST_EVAL` parses its assignments once per run** ([#486](https://github.com/Bimmiest/propslab/issues/486)), as `EVAL-` does.
+- **`mvsort` is confirmed lexicographic for numbers** ([#524](https://github.com/Bimmiest/propslab/issues/524)), as Splunk documents ("10, 9, 70, 100 are sorted lexicographically as 10, 100, 70, 9"); the fidelity table now asserts it.
 - **A run stops at 25,000 events** ([#479](https://github.com/Bimmiest/propslab/issues/479)), with a warning naming the first line not processed, so a `LINE_BREAKER` that breaks on every character can no longer turn a megabyte into a million events. Library callers can set their own bounds through `PipelineOptions.limits`.
 - **A line whose newline falls exactly at the input cap is kept**, and a `DEST_KEY = _meta` FORMAT containing `_queue::…` no longer turns the event's queue into a list ([#478](https://github.com/Bimmiest/propslab/issues/478)).
 - **The time-zone formatter cache is bounded** to 64 names, and the ReDoS heuristic flags patterns over 5,000 characters instead of scanning them ([#480](https://github.com/Bimmiest/propslab/issues/480)).
