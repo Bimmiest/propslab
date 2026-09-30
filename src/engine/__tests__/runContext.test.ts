@@ -116,4 +116,26 @@ describe('the run ledger through runPipeline', () => {
     const errors = diagnostics.filter((d) => d.message.startsWith('INGEST_EVAL x:'));
     expect(errors).toHaveLength(1);
   });
+
+  it('reports a malformed SEDCMD on the clone sourcetype once, not once per clone (#476)', () => {
+    const props = '[st]\nSHOULD_LINEMERGE = false\nTRANSFORMS-a = clone\n[copy]\nSEDCMD-mask = s/[unclosed/X/\n';
+    const transforms = '[clone]\nREGEX = .\nCLONE_SOURCETYPE = copy\n';
+    for (const perEventPipeline of [false, true]) {
+      const { result, diagnostics } = runPipeline('one\ntwo\nthree\nfour', metadata, props, transforms, { perEventPipeline });
+      // Four events were cloned, so the SEDCMD set was parsed four times.
+      expect(result.events.filter((e) => e.metadata.sourcetype === 'copy')).toHaveLength(4);
+      const bad = diagnostics.filter((d) => d.directiveKey === 'SEDCMD-mask');
+      expect(bad).toHaveLength(1);
+      expect(bad[0]!.message).toMatch(/does not compile/);
+    }
+  });
+
+  it('still reports two different malformed SEDCMDs on the clone sourcetype', () => {
+    const props =
+      '[st]\nSHOULD_LINEMERGE = false\nTRANSFORMS-a = clone\n[copy]\nSEDCMD-one = s/[unclosed/X/\nSEDCMD-two = nonsense\n';
+    const transforms = '[clone]\nREGEX = .\nCLONE_SOURCETYPE = copy\n';
+    const { diagnostics } = runPipeline('one\ntwo\nthree', metadata, props, transforms, { perEventPipeline: false });
+    expect(diagnostics.filter((d) => d.directiveKey === 'SEDCMD-one')).toHaveLength(1);
+    expect(diagnostics.filter((d) => d.directiveKey === 'SEDCMD-two')).toHaveLength(1);
+  });
 });
