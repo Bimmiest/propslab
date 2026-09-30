@@ -403,7 +403,7 @@ export function runPipeline(
     ...resolveDirectives(propsConf, metadata, diagnostics),
     ctx,
   };
-  lintMatchedDirectives(run.directives, diagnostics);
+  lintMatchedDirectives(run.directives, diagnostics, run.searchTimeDirectives);
 
   let events = runIndexTime(truncatedRaw, run);
 

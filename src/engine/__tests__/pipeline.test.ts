@@ -51,6 +51,16 @@ describe('runPipeline — DEST_KEY validation (SEM-11)', () => {
     expect(diagnostics.some((d) => d.message.includes('not a recognised Splunk DEST_KEY'))).toBe(true);
   });
 
+  it('an unknown DEST_KEY is warned about once, and writes no field (#477)', () => {
+    const transforms = '[route]\nREGEX = (.*)\nDEST_KEY = made_up_key\nFORMAT = $1';
+    const { result, diagnostics } = runPipeline('a log line', PLAIN_META, props, transforms);
+    const about = diagnostics.filter((d) => d.message.includes('made_up_key'));
+    expect(about).toHaveLength(1);
+    expect(about[0]!.message).toMatch(/no routing effect/);
+    expect(about[0]!.message).not.toMatch(/field name/);
+    expect(result.events[0]!.fields.made_up_key).toBeUndefined();
+  });
+
   it('warns that _TCP_ROUTING is valid but not simulated', () => {
     const transforms = '[route]\nREGEX = (.*)\nDEST_KEY = _TCP_ROUTING\nFORMAT = group1';
     const { diagnostics } = runPipeline('a log line', PLAIN_META, props, transforms);

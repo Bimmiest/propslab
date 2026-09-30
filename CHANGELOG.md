@@ -100,6 +100,15 @@ All notable changes to Propslab are documented here, newest first. Entries say w
 
 ### Fixed
 
+- **An invalid `LINE_BREAKER` reports its compile error** ([#472](https://github.com/Bimmiest/propslab/issues/472)) instead of advising parentheses for a pattern that already has them.
+- **A malformed `SEDCMD` on a `CLONE_SOURCETYPE` target is reported once per run** ([#476](https://github.com/Bimmiest/propslab/issues/476)), not once per cloned event.
+- **Diagnostics** ([#477](https://github.com/Bimmiest/propslab/issues/477)):
+  - two stanzas failing on the same `INGEST_EVAL` field both report their error;
+  - the JSON double-extraction warning reads `KV_MODE` and `AUTO_KV_JSON` from the `rename` target;
+  - an unknown `DEST_KEY` gets one warning and no longer invents a field;
+  - `s/foo/bar` with no closing delimiter is rejected.
+- **`INGEST_EVAL` parses its assignments once per run** ([#486](https://github.com/Bimmiest/propslab/issues/486)), as `EVAL-` does.
+- **`mvsort` is confirmed lexicographic for numbers** ([#524](https://github.com/Bimmiest/propslab/issues/524)), as Splunk documents ("10, 9, 70, 100 are sorted lexicographically as 10, 100, 70, 9"); the fidelity table now asserts it.
 - **"Every simulated directive is exercised" is measured, not searched for** ([#505](https://github.com/Bimmiest/propslab/issues/505)): the check records the directives tests actually pass to `runPipeline`, and each simulated directive needs a Splunk fixture or a spec-citing test. Twenty-two directives tested only at processor level now run end to end.
 - **The Monaco editor is tested against the real editor** ([#516](https://github.com/Bimmiest/propslab/issues/516)): mount and dispose leave nothing behind, each language provider is registered once across mounts, CRLF and LF survive `onChange`, and `SplunkEditor` has its first unit test.
 - **A run stops at 25,000 events** ([#479](https://github.com/Bimmiest/propslab/issues/479)), with a warning naming the first line not processed, so a `LINE_BREAKER` that breaks on every character can no longer turn a megabyte into a million events. Library callers can set their own bounds through `PipelineOptions.limits`.
