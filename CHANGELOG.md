@@ -100,6 +100,10 @@ All notable changes to Propslab are documented here, newest first. Entries say w
 
 ### Fixed
 
+- **Coverage floors sit one point under the measured figures** ([#506](https://github.com/Bimmiest/propslab/issues/506)), with per-directory floors for components, hooks, monaco, store and utils, and a CI step fails when any floor falls more than 3 points behind. `main.tsx` and the worker entry points are measured rather than excluded.
+- **The weekly randomised run is random** ([#513](https://github.com/Bimmiest/propslab/issues/513)): it draws a fresh property-test seed, uses it for test order too, and prints it with a replay command. Unset, every property test had run on its fixed default.
+- **Tests no longer assert wall-clock time** in the wildcard matcher or the MCP server's end-to-end cancellation tests; a shared `makeEvent` helper is introduced and Playwright pins `colorScheme` ([#507](https://github.com/Bimmiest/propslab/issues/507), in part).
+- **The mutation gate has a warning band (82 over a break of 78), a canary that fails if the test-name shim breaks, and a monthly report-only run with static mutants** ([#508](https://github.com/Bimmiest/propslab/issues/508)). The worker lifecycle and the store are now mutation-tested.
 - **Dev-dependency advisories are resolved, and `main`'s workflow lint is green again.** `brace-expansion` moves to 5.0.12 and `qs` (under Stryker) to 6.16.0, clearing three high and three moderate `npm audit` findings; an unused loop variable in the post-deploy header check no longer fails `actionlint`.
 - **The entry-graph and bundle-size gates parse `dist/index.html` instead of matching tags with a regex.** The regex missed upper-case tags, single-quoted or unquoted attributes and a `>` inside an attribute value, so a startup reference written that way escaped both checks (CodeQL `js/bad-tag-filter`).
 - **Directive completion pops up again while a key is being typed.** A key with no `=` yet was coloured as a string, and the editor's quick suggestions are off inside strings, so completion appeared only on Ctrl+Space (a regression from [#501](https://github.com/Bimmiest/propslab/issues/501)).
