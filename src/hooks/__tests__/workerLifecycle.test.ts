@@ -555,6 +555,65 @@ describe('createManagedWorker (#339)', () => {
       expect(calls.load).toHaveBeenCalledWith([req(1)], false);
     });
 
+    it('does not count or act on a load timer whose held request was forgotten (#523)', () => {
+      const { managed, calls } = setup();
+      managed.ensure();
+      const slow = latest();
+      managed.postWhenReady(req(1));
+      managed.forget();
+      // The worker is only slow: nobody waits on it, so the timer changes nothing.
+      vi.advanceTimersByTime(1000 * LOAD_WAIT_FACTOR);
+      expect(slow.terminated).toBe(false);
+      expect(FakeWorker.instances).toHaveLength(1);
+      expect(calls.load).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(0);
+
+      // It loads, and the next request is served normally.
+      slow.ready();
+      expect(managed.post(req(2))).toBe(true);
+      expect(slow.posted).toEqual([req(2)]);
+      slow.respond(2);
+      expect(calls.response).toHaveBeenCalledWith({ id: 2, echo: 'ok' }, req(2));
+      expect(calls.timeout).not.toHaveBeenCalled();
+    });
+
+    it('spends no load failure on requests nobody waits for, so the cap is kept for real ones (#523)', () => {
+      const { managed, calls } = setup();
+      for (let round = 0; round < MAX_WORKER_LOAD_FAILURES + 1; round++) {
+        managed.postWhenReady(req(round));
+        managed.forget();
+        vi.advanceTimersByTime(1000 * LOAD_WAIT_FACTOR);
+      }
+      expect(calls.load).not.toHaveBeenCalled();
+      expect(FakeWorker.instances).toHaveLength(1);
+      // A request that is waiting still has the full bound, from its own post.
+      managed.postWhenReady(req(9));
+      vi.advanceTimersByTime(1000 * LOAD_WAIT_FACTOR - 1);
+      expect(calls.load).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(1);
+      expect(calls.load).toHaveBeenCalledWith([req(9)], false);
+    });
+
+    it('still fails the load for a request posted after the forget, on the original timer', () => {
+      const { managed, calls } = setup();
+      managed.postWhenReady(req(1));
+      vi.advanceTimersByTime(1000);
+      managed.forget();
+      managed.postWhenReady(req(2));
+      vi.advanceTimersByTime(1000 * LOAD_WAIT_FACTOR - 1000);
+      expect(calls.load).toHaveBeenCalledWith([req(2)], false);
+    });
+
+    it('does not count a load timer whose posted requests were all forgotten', () => {
+      const { managed, calls } = setup();
+      managed.post(req(1));
+      const slow = latest();
+      managed.forget();
+      vi.advanceTimersByTime(1000 * LOAD_WAIT_FACTOR);
+      expect(slow.terminated).toBe(false);
+      expect(calls.load).not.toHaveBeenCalled();
+    });
+
     it('drops a held request on forget', () => {
       const { managed } = setup();
       managed.ensure();

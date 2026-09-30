@@ -98,6 +98,18 @@ function wallDate(parsed: ParsedTimestamp): CalendarDate {
 const DATELESS_TODAY_WINDOW_MS = 3 * 3_600_000;
 
 /**
+ * How far back of the previous timestamp a carried date may put a dateless
+ * stamp before the time of day is taken to have passed midnight instead.
+ */
+const DATELESS_ROLLOVER_MS = 12 * 3_600_000;
+
+/** The calendar day after `date`. */
+function nextDay(date: CalendarDate): CalendarDate {
+  const d = new Date(Date.UTC(date.year, date.month, date.day + 1));
+  return { year: d.getUTCFullYear(), month: d.getUTCMonth(), day: d.getUTCDate() };
+}
+
+/**
  * props.conf.spec defaults for the timestamp sanity bounds. A timestamp outside
  * these is not trusted: Splunk keeps the event and falls back down the chain
  * rather than placing it years away from its neighbours.
@@ -414,6 +426,12 @@ class TimestampBatch {
    * With no earlier timestamp to carry from, the default path uses the clock
    * rule too. The spec does not say what happens then; the clock is the only
    * other date the indexer has.
+   *
+   * A carried date advances a day when it would put the stamp more than 12
+   * hours before the previous one: the time of day went back across midnight
+   * (`23:59:59` then `00:00:01`), which Splunk documents as the next day
+   * (doc-derived; the 12-hour threshold is the simulator's). A smaller step
+   * back is an out-of-order line on the same day.
    */
   private supplyDate(
     parsed: ParsedTimestamp,
@@ -422,6 +440,13 @@ class TimestampBatch {
     const { now, datelessFromSystem } = this;
     if (!datelessFromSystem && this.lastWallDate !== null) {
       const carried = reparse(this.lastWallDate);
+      const previous = this.lastResolved;
+      if (carried && previous && previous.getTime() - carried.date.getTime() > DATELESS_ROLLOVER_MS) {
+        const advanced = reparse(nextDay(this.lastWallDate));
+        if (advanced) {
+          return { parsed: advanced, how: 'date carried from the previous timestamp, advanced a day past midnight' };
+        }
+      }
       return carried && { parsed: carried, how: 'date carried from the previous timestamp' };
     }
     const offsetMs = (parsed.offsetMinutes ?? 0) * 60_000;

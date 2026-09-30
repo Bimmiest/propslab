@@ -1,3 +1,5 @@
+import type { RunLimits } from './runContext';
+
 export interface EventMetadata {
   index: string;
   host: string;
@@ -331,6 +333,13 @@ export interface PipelineOptions {
    * does not change as the real clock moves on.
    */
   now?: number;
+  /**
+   * Bounds on the run's work, each defaulting to `DEFAULT_LIMITS` in
+   * `runContext.ts`: the input size, the number of events, the no-match
+   * explanations per directive. A library caller with tighter budgets than the
+   * browser's lowers them here.
+   */
+  limits?: Partial<RunLimits>;
 }
 
 export type OutputTabId = 'preview' | 'cim' | 'fields' | 'transforms' | 'effective' | 'architecture';

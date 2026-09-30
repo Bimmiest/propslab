@@ -78,8 +78,9 @@ describe('simulate', () => {
   });
 
   it('keeps the response bounded however many events the sample breaks into (#351)', async () => {
-    // 100k one-character events: processingSteps must follow max_events, not
-    // carry every event's trace steps (some 80 MB).
+    // 100k one-character lines, which break into as many events as the
+    // engine's cap allows (RunLimits.maxEvents, #479): processingSteps must
+    // follow max_events, not carry every event's trace steps.
     const result = await handleSimulate(
       simulateArgs({
         raw: 'a\n'.repeat(100_000),
@@ -90,7 +91,10 @@ describe('simulate', () => {
     );
     expect(resultText(result).length).toBeLessThan(10_000);
     const out = payload(result);
-    expect(out.eventCount).toBe(100_000);
+    expect(out.eventCount).toBe(25_000);
+    expect(out.diagnostics.map((d: { message: string }) => d.message)).toEqual([
+      expect.stringMatching(/^Line breaking stopped at 25,000 events/),
+    ]);
     expect(out.returnedEvents).toBe(1);
     expect(out.processingSteps).toEqual(out.events[0].processingTrace);
     expect(out.truncationNote).toMatch(/processingSteps/);

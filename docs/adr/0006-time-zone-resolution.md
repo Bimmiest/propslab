@@ -1,7 +1,7 @@
 # 0006. How a timestamp's zone is chosen and resolved
 
 - **Status:** Accepted
-- **Code:** `resolveZone`, `resolveTzOffsetMinutes`, `ianaOffsetAt`, `ianaWallClockToEpoch` and `parseTzAlias` in `src/utils/strftime.ts`
+- **Code:** `resolveZone`, `resolveTzOffsetMinutes`, `ianaOffsetAt`, `ianaWallClockToEpoch`, `parseTzAlias` and `TZDATA_ABBREVIATION_ZONES` in `src/utils/strftime.ts`
 
 ## Context
 
@@ -16,6 +16,7 @@
 - **`TZ_ALIAS` rewrites only the zone read from the event,** never the stanza's `TZ`. The user named `TZ` explicitly, and letting an alias redirect it would make an unambiguous setting ambiguous again. The spec doesn't say either way; this is the reading its wording supports. A malformed pair is reported and skipped. An alias whose target doesn't resolve is reported with both halves (`EST (TZ_ALIAS → Middle/Earth)`), because the target alone is a string that appears in nobody's events.
 - **GMT-relative offsets use plain arithmetic.** `GMT-5` and `UTC-5:00` mean UTC−5, which is what the spec's example needs. This differs on purpose from the IANA `Etc/GMT-5`, which is UTC+5 under POSIX's inverted sign. A test places the two on opposite sides of UTC.
 - **IANA names resolve through `Intl.DateTimeFormat`.** The resolver formats an instant into the zone and measures the wall-clock gap back to UTC. The zone's offsets one day either side of the wall clock bracket any transition, since no offset exceeds 14 hours. Each offset is a candidate that holds if the zone really is at that offset at the instant it gives. A wall clock in a spring-forward gap resolves forward, using the offset before the gap (New York `02:30` → `03:30 EDT`). One in a fall-back overlap resolves to its first occurrence, as most strptime implementations do. Neither rule depends on which side of UTC the zone is.
+- **A stanza `TZ` that tzdata names is that zone, not the abbreviation** ([#470](https://github.com/Bimmiest/propslab/issues/470)). `CET` is in the abbreviation table (+01:00) and is also a zoneinfo zone with summer time, like `EET`, `WET` and `MET`; `TZ = CET` read through the table put every summer stamp an hour off Splunk, which takes `TZ` from zoneinfo. For the stanza's `TZ` only, a name tzdata itself defines as a zone is resolved as that zone first. The same word from the event's `%Z` stays the fixed abbreviation: an event that writes `CET` says standard time. The list is tzdata's own names, not whatever the runtime accepts, because ICU also takes legacy aliases such as `PST` for Los Angeles that zoneinfo has no zone for.
 - **The instant is kept as resolved.** It is not rebuilt from a rounded offset, because historical zones can sit a few seconds off a whole minute.
 
 ## Consequences
