@@ -448,7 +448,7 @@ describe('applyRegexTransform — FORMAT is tokenized before capture substitutio
       stanza('extract_msg', { REGEX: 'msg=(.*)$', FORMAT: 'message::$1' }),
     );
     expect(r.matched).toBe(true);
-    expect(r.fields.message).toBe('disk full');
+    expect(r.fields['message']).toBe('disk full');
   });
 
   it('does not synthesize a phantom field from a captured "::"', () => {
@@ -464,7 +464,7 @@ describe('applyRegexTransform — FORMAT is tokenized before capture substitutio
       event('color=blue'),
       stanza('t', { REGEX: '(\\w+)=(\\w+)', FORMAT: '$1::$2' }),
     );
-    expect(r.fields.color).toBe('blue');
+    expect(r.fields['color']).toBe('blue');
   });
 
   it('parses several pairs and expands each independently', () => {
@@ -472,8 +472,8 @@ describe('applyRegexTransform — FORMAT is tokenized before capture substitutio
       event('a=one two b=three'),
       stanza('t', { REGEX: 'a=(.*) b=(.*)$', FORMAT: 'first::$1 second::$2' }),
     );
-    expect(r.fields.first).toBe('one two');
-    expect(r.fields.second).toBe('three');
+    expect(r.fields['first']).toBe('one two');
+    expect(r.fields['second']).toBe('three');
   });
 
   it('keeps quoted literal values intact', () => {
@@ -481,8 +481,8 @@ describe('applyRegexTransform — FORMAT is tokenized before capture substitutio
       event('x=1'),
       stanza('t', { REGEX: 'x=(\\d)', FORMAT: 'tag::"a b" num::$1' }),
     );
-    expect(r.fields.tag).toBe('a b');
-    expect(r.fields.num).toBe('1');
+    expect(r.fields['tag']).toBe('a b');
+    expect(r.fields['num']).toBe('1');
   });
 
   it('still accumulates one value per match across repeated matches', () => {
@@ -490,7 +490,7 @@ describe('applyRegexTransform — FORMAT is tokenized before capture substitutio
       event('k=a b; k=c d;'),
       stanza('t', { REGEX: 'k=([^;]*);', FORMAT: 'k::$1', REPEAT_MATCH: 'true' }),
     );
-    expect(r.fields.k).toEqual(['a b', 'c d']);
+    expect(r.fields['k']).toEqual(['a b', 'c d']);
   });
 });
 
@@ -569,8 +569,8 @@ describe('#175 — $0 in a FORMAT pair names nothing', () => {
       undefined,
       'search-time',
     );
-    expect(r.fields.whole).toBeUndefined();
-    expect(r.fields.first).toBe('503');
+    expect(r.fields['whole']).toBeUndefined();
+    expect(r.fields['first']).toBe('503');
   });
 
   it('does not mistake $01 or $10 for a $0 reference', () => {
@@ -581,7 +581,7 @@ describe('#175 — $0 in a FORMAT pair names nothing', () => {
       'search-time',
     );
     // $10 is group 1 followed by a literal 0, and must survive the $0 filter.
-    expect(r.fields.a).toBe('5030');
+    expect(r.fields['a']).toBe('5030');
   });
 });
 
@@ -593,7 +593,7 @@ describe('#174 — MV_ADD in the FORMAT-pairs path', () => {
       undefined,
       'search-time',
     );
-    expect(r.fields.label).toBe('a');
+    expect(r.fields['label']).toBe('a');
   });
 
   it('accumulates when MV_ADD is true', () => {
@@ -603,7 +603,7 @@ describe('#174 — MV_ADD in the FORMAT-pairs path', () => {
       undefined,
       'search-time',
     );
-    expect(r.fields.label).toEqual(['a', 'b']);
+    expect(r.fields['label']).toEqual(['a', 'b']);
   });
 
   it('still accumulates at index time, where MV_ADD is inert', () => {
@@ -613,7 +613,7 @@ describe('#174 — MV_ADD in the FORMAT-pairs path', () => {
       event('label=a label=b'),
       stanza('t', { REGEX: 'label=(\\w+)', FORMAT: 'label::$1', MV_ADD: 'false', REPEAT_MATCH: 'true' }),
     );
-    expect(r.fields.label).toEqual(['a', 'b']);
+    expect(r.fields['label']).toEqual(['a', 'b']);
   });
 });
 
@@ -628,7 +628,7 @@ describe('#285 — REPEAT_MATCH gates repeated matching at index time only', () 
       event('label=a label=b'),
       stanza('t', { REGEX: 'label=(\\w+)', FORMAT: 'label::$1', WRITE_META: 'true' }),
     );
-    expect(r.fields.label).toBe('a');
+    expect(r.fields['label']).toBe('a');
   });
 
   it('runs a DEST_KEY = <field> REGEX once at index time without REPEAT_MATCH', () => {
@@ -644,7 +644,7 @@ describe('#285 — REPEAT_MATCH gates repeated matching at index time only', () 
       event('label=a label=b'),
       stanza('t', { REGEX: 'label=(\\w+)', FORMAT: 'label::$1', MV_ADD: 'true' }),
     );
-    expect(r.fields.label).toEqual(['a', 'b']);
+    expect(r.fields['label']).toEqual(['a', 'b']);
   });
 });
 
@@ -675,8 +675,8 @@ describe('#285 — MV_ADD agrees between named groups and FORMAT', () => {
       event('n=1 n=2'),
       stanza('t', { REGEX: 'n=(\\d+)', FORMAT: 'n::$1', MV_ADD: 'true' }),
     );
-    expect(named.fields.n).toEqual(['1', '2']);
-    expect(format.fields.n).toEqual(named.fields.n);
+    expect(named.fields['n']).toEqual(['1', '2']);
+    expect(format.fields['n']).toEqual(named.fields['n']);
   });
 });
 
@@ -691,20 +691,20 @@ describe('#303 — index-time REPEAT_MATCH agrees between named groups and FORMA
     const format = indexTime(
       stanza('t', { REGEX: 'n=(\\d+)', FORMAT: 'n::$1', WRITE_META: 'true', REPEAT_MATCH: 'true' }),
     );
-    expect(named.fields.n).toEqual(['1', '2', '3']);
-    expect(format.fields.n).toEqual(named.fields.n);
+    expect(named.fields['n']).toEqual(['1', '2', '3']);
+    expect(format.fields['n']).toEqual(named.fields['n']);
   });
 
   it('collects every _KEY_/_VAL_ value too', () => {
     const r = indexTime(
       stanza('t', { REGEX: '(?<_KEY_1>n)=(?<_VAL_1>\\d+)', WRITE_META: 'true', REPEAT_MATCH: 'true' }),
     );
-    expect(r.fields.n).toEqual(['1', '2', '3']);
+    expect(r.fields['n']).toEqual(['1', '2', '3']);
   });
 
   it('still takes the first match only without REPEAT_MATCH', () => {
     const r = indexTime(stanza('t', { REGEX: 'n=(?<n>\\d+)', WRITE_META: 'true' }));
-    expect(r.fields.n).toBe('1');
+    expect(r.fields['n']).toBe('1');
   });
 });
 
@@ -728,7 +728,7 @@ describe('applyRegexTransform — LOOKAHEAD (#183)', () => {
   it('is ignored at search time, where the whole source is scanned', () => {
     const s = stanza('t', { REGEX: 'user=(?<user>\\w+)', LOOKAHEAD: '5' });
     const r = searchTime(event('x'.repeat(50) + ' user=alice'), s);
-    expect(r.fields.user).toBe('alice');
+    expect(r.fields['user']).toBe('alice');
   });
 });
 

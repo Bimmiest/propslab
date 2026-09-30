@@ -2,6 +2,7 @@ import type { SplunkEvent } from '../types';
 import type { TransformResult } from './regexTransform';
 import { addFieldValue } from '../utils/fieldBag';
 import { dateFromEpochSeconds } from '../utils/epochTime';
+import { normaliseDestKey } from './destKeys';
 
 /**
  * `meta` with the `key::value` pairs of a DEST_KEY = _meta FORMAT added.
@@ -42,10 +43,9 @@ export function applyDestKey(
     };
   }
 
-  // Normalise _MetaData:X → MetaData:X (Splunk alias).
-  // Only strip the leading _ when followed by "MetaData:" — never strip from
-  // built-in keys like _raw, _meta, _time.
-  const destKey = result.destKey.replace(/^_(?=MetaData:)/i, '');
+  // _MetaData:X → MetaData:X (Splunk alias); built-in keys like _raw, _meta
+  // and _time keep their underscore.
+  const destKey = normaliseDestKey(result.destKey);
   const destValue = result.destValue;
 
   switch (destKey) {

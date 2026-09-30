@@ -5,24 +5,17 @@ import { FieldsTab } from '../fields';
 import { useAppStore } from '../../../../store/useAppStore';
 import type { SplunkEvent, ProcessingStep } from '../../../../engine/types';
 import { toViewResult } from '../../../../utils/viewResult';
+import { makeEvent } from '../../../../test/makeEvent';
 
-function makeEvent(
+function eventWithTrace(
   fields: Record<string, string>,
   traces: ProcessingStep[],
 ): SplunkEvent {
-  return {
-    _raw: '',
-    _time: null,
-    _meta: {},
-    fields,
-    metadata: { index: 'main', host: 'h', source: 's', sourcetype: 'st' },
-    lineNumbers: { start: 1, end: 1 },
-    processingTrace: traces,
-  };
+  return makeEvent('', { fields, processingTrace: traces });
 }
 
 // An event with fields from both index-time and search-time phases.
-const event = makeEvent(
+const event = eventWithTrace(
   { idx_field: 'a', ext_field: 'b', evaled: '1' },
   [
     { processor: 'INDEXED_EXTRACTIONS', phase: 'index-time', description: '', fieldsAdded: ['idx_field'] },
@@ -118,7 +111,7 @@ describe('FieldsTab — accessibility (#320)', () => {
 describe('FieldsTab — nested field counts (#316)', () => {
   it('counts each collapsed parent\'s immediate children', () => {
     useAppStore.setState(initial, true);
-    const json = makeEvent(
+    const json = eventWithTrace(
       { a: '{}', 'a.b': '{}', 'a.b.c': '1', 'a.b.d': '2', 'a.e': '3', z: 'x' },
       [],
     );
@@ -142,7 +135,7 @@ describe('FieldsTab — nested field counts (#316)', () => {
   // would announce the change twice.
   it('names each toggle for its field and announces its state once', () => {
     useAppStore.setState(initial, true);
-    const json = makeEvent({ a: '{}', 'a.b': '{}', 'a.b.c': '1' }, []);
+    const json = eventWithTrace({ a: '{}', 'a.b': '{}', 'a.b.c': '1' }, []);
     useAppStore.setState({
       processingResult: toViewResult({ events: [json], originalRaw: '', eventCount: 1, processingSteps: [], inputMetadata: { index: 'main', host: '', source: '', sourcetype: '' } }),
     });
@@ -163,7 +156,7 @@ describe('FieldsTab — nested field counts (#316)', () => {
 
   it('points an expanded toggle at the child rows it shows (#347)', () => {
     useAppStore.setState(initial, true);
-    const json = makeEvent({ a: '{}', 'a.b': '{}', 'a.b.c': '1', 'a.e': '2' }, []);
+    const json = eventWithTrace({ a: '{}', 'a.b': '{}', 'a.b.c': '1', 'a.e': '2' }, []);
     useAppStore.setState({
       processingResult: toViewResult({ events: [json], originalRaw: '', eventCount: 1, processingSteps: [], inputMetadata: { index: 'main', host: '', source: '', sourcetype: '' } }),
     });
@@ -212,7 +205,7 @@ describe('FieldsTab — column resize teardown (#322)', () => {
 
 describe('FieldsTab — windowed for wide events (#454)', () => {
   // 2,000 flat fields: every row used to be in the DOM.
-  const wide = makeEvent(
+  const wide = eventWithTrace(
     Object.fromEntries(Array.from({ length: 2000 }, (_, i) => [`f${String(i).padStart(4, '0')}`, String(i)])),
     [],
   );

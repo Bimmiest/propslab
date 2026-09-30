@@ -7,19 +7,12 @@ import { render, screen, fireEvent, act } from '@testing-library/react';
 import { TimestampTab } from '../timestamp';
 import { useAppStore } from '../../../../store/useAppStore';
 import type { EnrichedEvent } from '../../enrichEvents';
+import { makeEvent } from '../../../../test/makeEvent';
 
 const initial = useAppStore.getState();
 
 const item: EnrichedEvent = {
-  event: {
-    _raw: 'ts=2026-01-15 msg',
-    _time: new Date('2026-01-15T00:00:00.000Z'),
-    _meta: {},
-    fields: {},
-    metadata: { index: 'main', host: 'h', source: 's', sourcetype: 'st' },
-    lineNumbers: { start: 1, end: 1 },
-    processingTrace: [],
-  },
+  event: makeEvent('ts=2026-01-15 msg', { _time: new Date('2026-01-15T00:00:00.000Z') }),
   searchText: 'ts=2026-01-15 msg',
   originalRaw: 'ts=2026-01-15 msg',
   hasChanges: false,

@@ -18,18 +18,11 @@ import { describe, it, expect } from 'vitest';
 import { applyIndexedExtractions } from '../processors/indexedExtractions';
 import { runPipeline } from '../pipeline';
 import type { SplunkEvent, ConfDirective, ValidationDiagnostic } from '../types';
-import { runCtx } from './runCtx';
+import { runCtx, FIXED_NOW } from './runCtx';
+import { makeEvent } from '../../test/makeEvent';
 
 function event(raw: string): SplunkEvent {
-  return {
-    _raw: raw,
-    _time: null,
-    _meta: {},
-    fields: {},
-    metadata: { index: 'main', host: 'h', source: 's', sourcetype: 'st' },
-    lineNumbers: { start: 1, end: 1 },
-    processingTrace: [],
-  };
+  return makeEvent(raw);
 }
 
 function d(key: string, value: string): ConfDirective {
@@ -42,7 +35,7 @@ function xmlDirs(mode: string, ...rest: ConfDirective[]): ConfDirective[] {
 }
 
 function fieldsOf(raw: string, directives: ConfDirective[]) {
-  return applyIndexedExtractions([event(raw)], directives, runCtx())[0]!.fields;
+  return applyIndexedExtractions([event(raw)], directives, runCtx(FIXED_NOW))[0]!.fields;
 }
 
 const WINEVT =
@@ -119,7 +112,7 @@ describe('XML_INDEXED_EXTRACTIONS_PIPELINE (#271)', () => {
     const out = applyIndexedExtractions(
       [event('<a><b>1</b></a>')],
       [d('INDEXED_EXTRACTIONS', 'xml')],
-      runCtx(diagnostics),
+      runCtx(FIXED_NOW, diagnostics),
     );
     expect(out[0]!.fields).toEqual({});
     expect(diagnostics.some((x) => x.directiveKey === 'XML_INDEXED_EXTRACTIONS_PIPELINE')).toBe(true);
@@ -262,6 +255,24 @@ describe('XML_IE_MAX_EXTRACTED_VALUE_SIZE (#271)', () => {
     );
     expect(f['a']).toBe('abcde');
     expect(f['b']).toBeUndefined();
+  });
+
+  // The size is UTF-8 bytes: one for U+007F and below, two up to U+07FF, three
+  // up to U+FFFF, four above (a surrogate pair in JavaScript's UTF-16).
+  it.each([
+    ['a', 1],
+    ['\u007f', 1],
+    ['\u0080', 2],
+    ['é', 2],
+    ['߿', 2],
+    ['ࠀ', 3],
+    ['€', 3],
+    ['😀', 4],
+  ])('counts %j as %i bytes', (ch, bytes) => {
+    const at = (limit: number) =>
+      fieldsOf(`<r><v>${ch}</v></r>`, xmlDirs('xmlkv', d('XML_IE_MAX_EXTRACTED_VALUE_SIZE', String(limit))))['v'];
+    expect(at(bytes)).toBe(ch);
+    expect(at(bytes - 1)).toBeUndefined();
   });
 });
 

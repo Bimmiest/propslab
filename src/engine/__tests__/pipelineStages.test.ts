@@ -59,3 +59,38 @@ describe('getStagesForDirective', () => {
     expect(getStagesForDirective('-LEADING')).toEqual([]);
   });
 });
+
+// ArchitecturePanel derives its routing directives from the stage that holds
+// TRANSFORMS, so a directive added to that stage changes what counts as routing
+// there. The stages added for #511 each get their own stage instead.
+describe('stages for directives the pipeline runs but the reference once omitted (#511)', () => {
+  it.each([
+    ['ANNOTATE_PUNCT', 'Punctuation Annotation', 'index-time'],
+    ['CLONE_SOURCETYPE', 'Clone Sourcetype', 'index-time'],
+    ['rename', 'Sourcetype Rename', 'search-time'],
+  ])('%s configures %s', (key, name, phase) => {
+    const stages = getStagesForDirective(key);
+    expect(stages.map((s) => s.name)).toEqual([name]);
+    expect(stages[0]?.phase).toBe(phase);
+  });
+
+  it('keeps the routing stage to the directives that route', () => {
+    expect(getStagesForDirective('TRANSFORMS').flatMap((s) => s.directives)).toEqual([
+      'TRANSFORMS',
+      'RULESET',
+      'INGEST_EVAL',
+      'STOP_PROCESSING_IF',
+    ]);
+  });
+
+  it('lists the index-time stages in the order the pipeline runs them', () => {
+    const names = PIPELINE_STAGES.filter((s) => s.phase === 'index-time').map((s) => s.name);
+    expect(names.indexOf('Index-Time Transforms')).toBeLessThan(names.indexOf('Clone Sourcetype'));
+    expect(names.indexOf('Clone Sourcetype')).toBeLessThan(names.indexOf('Punctuation Annotation'));
+  });
+
+  it('puts the rename ahead of the search-time extractions that it redirects', () => {
+    const names = PIPELINE_STAGES.filter((s) => s.phase === 'search-time').map((s) => s.name);
+    expect(names[0]).toBe('Sourcetype Rename');
+  });
+});

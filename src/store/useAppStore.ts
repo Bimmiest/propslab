@@ -202,10 +202,10 @@ function loadSettings(): { perEventPipeline: boolean; manualApply: boolean } {
     const parsed = JSON.parse(saved) as unknown;
     if (!parsed || typeof parsed !== 'object') return fallback;
     const o = parsed as Record<string, unknown>;
-    const perEventPipeline = o.perEventPipeline === true;
+    const perEventPipeline = o['perEventPipeline'] === true;
     return {
       perEventPipeline,
-      manualApply: perEventPipeline || o.manualApply === true,
+      manualApply: perEventPipeline || o['manualApply'] === true,
     };
   } catch {
     return fallback;
@@ -234,6 +234,36 @@ function outputTabState(set: StoreApi<AppState>['setState']): OutputTabState {
         previewFilters: { ...state.previewFilters, ...patch },
         ...(keepPage ? {} : { currentPage: 1 }),
       })),
+  };
+}
+
+type SettingsState = Pick<AppState, 'settings' | 'togglePerEventPipeline' | 'toggleManualApply'>;
+
+/** The persisted settings and the two toggles that write them back. */
+function settingsState(set: StoreApi<AppState>['setState']): SettingsState {
+  return {
+    settings: loadSettings(),
+    togglePerEventPipeline: () =>
+      set((state) => {
+        const perEventPipeline = !state.settings.perEventPipeline;
+        const manualApply = perEventPipeline ? true : state.settings.manualApply;
+        const next = { ...state.settings, perEventPipeline, manualApply };
+        try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+        return { settings: next };
+      }),
+    toggleManualApply: () =>
+      set((state) => {
+        // Per-event mode implies manual-apply (see the invariant above, enforced in
+        // loadSettings and togglePerEventPipeline). Without this guard the toggle
+        // could clear manualApply while perEventPipeline was still on, reaching a
+        // state the invariant says cannot exist — and one that loadSettings would
+        // silently "correct" on the next reload, so live and persisted state
+        // disagreed until then.
+        if (state.settings.perEventPipeline && state.settings.manualApply) return {};
+        const next = { ...state.settings, manualApply: !state.settings.manualApply };
+        try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+        return { settings: next };
+      }),
   };
 }
 
@@ -334,28 +364,7 @@ export const useAppStore = create<AppState>((set) => ({
   lastProcessingMs: null,
   setLastProcessingMs: (ms) => set({ lastProcessingMs: ms }),
 
-  settings: loadSettings(),
-  togglePerEventPipeline: () =>
-    set((state) => {
-      const perEventPipeline = !state.settings.perEventPipeline;
-      const manualApply = perEventPipeline ? true : state.settings.manualApply;
-      const next = { ...state.settings, perEventPipeline, manualApply };
-      try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(next)); } catch { /* ignore */ }
-      return { settings: next };
-    }),
-  toggleManualApply: () =>
-    set((state) => {
-      // Per-event mode implies manual-apply (see the invariant above, enforced in
-      // loadSettings and togglePerEventPipeline). Without this guard the toggle
-      // could clear manualApply while perEventPipeline was still on, reaching a
-      // state the invariant says cannot exist — and one that loadSettings would
-      // silently "correct" on the next reload, so live and persisted state
-      // disagreed until then.
-      if (state.settings.perEventPipeline && state.settings.manualApply) return {};
-      const next = { ...state.settings, manualApply: !state.settings.manualApply };
-      try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(next)); } catch { /* ignore */ }
-      return { settings: next };
-    }),
+  ...settingsState(set),
 
   pipelineDirty: false,
   setPipelineDirty: (v) => set({ pipelineDirty: v }),

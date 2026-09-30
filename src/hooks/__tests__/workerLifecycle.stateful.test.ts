@@ -472,7 +472,7 @@ describe('workerLifecycle as a state machine (#513)', () => {
         fc.modelRun(() => ({ model: sim, real: undefined }), cmds);
         sim.finish(drain);
       }),
-      { seed: parseSeed(env?.FC_SEED), numRuns: 500 },
+      { seed: parseSeed(env?.['FC_SEED']), numRuns: 500 },
     );
   });
 

@@ -25,6 +25,7 @@ import { evalNode } from '../processors/eval/evaluator';
 import type { EvalValue } from '../processors/eval/values';
 import type { SplunkEvent } from '../types';
 import { fcSeed } from '../../test/fcSeed';
+import { makeEvent } from '../../test/makeEvent';
 
 fc.configureGlobal({ seed: fcSeed(340), numRuns: 300 });
 
@@ -233,15 +234,7 @@ const { expr } = fc.letrec<{ expr: Gen; compound: Gen }>((tie) => ({
 
 // ── Evaluation ──────────────────────────────────────────
 
-const EVENT: SplunkEvent = {
-  _raw: 'raw',
-  _time: null,
-  _meta: {},
-  fields: EVENT_FIELDS,
-  metadata: { index: 'main', host: 'h', source: 's', sourcetype: 'st' },
-  lineNumbers: { start: 1, end: 1 },
-  processingTrace: [],
-};
+const EVENT: SplunkEvent = makeEvent('raw', { fields: EVENT_FIELDS });
 
 function evaluate(node: Node): EvalValue {
   return evalNode(node, { event: EVENT, now: 0 });

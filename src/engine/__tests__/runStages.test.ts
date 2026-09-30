@@ -42,7 +42,7 @@ describe('PipelineOptions.onStage', () => {
 
   it('is optional', () => {
     const { result } = runPipeline(RAW, META, PROPS, '', { perEventPipeline: false });
-    expect(result.events.map((e) => e.fields.k)).toEqual(['a', 'b', 'c']);
+    expect(result.events.map((e) => e.fields['k'])).toEqual(['a', 'b', 'c']);
   });
 
   it('reports nothing for an empty sample, which runs no stage', () => {

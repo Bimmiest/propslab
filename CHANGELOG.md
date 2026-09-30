@@ -100,17 +100,15 @@ All notable changes to Propslab are documented here, newest first. Entries say w
 
 ### Fixed
 
-- **An MCP timeout no longer re-parses the caller's conf on the server thread** ([#468](https://github.com/Bimmiest/propslab/issues/468)). The simulate worker builds the regex-suspect list before the pipeline runs. The conf parser is now linear on continuation lines (a 2M-character continued value parses in about 150 ms instead of minutes), and so are the editor's diagnostics.
-- **The ReDoS verdict cache no longer keeps each caller's whole conf alive** ([#487](https://github.com/Bimmiest/propslab/issues/487)).
-- **The MCP `timeout_ms` budget starts once the sandbox worker is ready** ([#488](https://github.com/Bimmiest/propslab/issues/488)), with its own start-up cap (`start_timeout`). A timeout reports how far the run got and blames a regex only when the run stalled on one event ([ADR 0015](docs/adr/0015-mcp-timeouts-start-on-ready-and-report-progress.md)).
-- **MCP hardening** ([#490](https://github.com/Bimmiest/propslab/issues/490)):
-  - a stdin error closes the transport;
-  - a quoted heap flag in `NODE_OPTIONS` is stripped;
-  - `engine_failure` no longer exposes server paths;
-  - a server started under `--permission` still moves to `dist/` and warns about wider grants;
-  - the README notes that PCRE2's WebAssembly memory sits outside the heap limit.
-- **`simulate` returns `fieldOffsets`, `noOps` and `clonedFrom`** ([#489](https://github.com/Bimmiest/propslab/issues/489)). **Breaking:** the duplicate `processingSteps` list is removed. The output schemas are checked against the serializer's types at build time.
-- **The regex-suspect list and `validate` read directive patterns one way** ([#517](https://github.com/Bimmiest/propslab/issues/517), in part), including literal regexes in `match()`, `replace()` and `mvfind()`. A new adversarial wall-clock suite exercises every tool at the input limits, and caught a stack overflow on confs of hundreds of thousands of one-line stanzas, which is fixed.
+- **Engine internals have one source each** ([#511](https://github.com/Bimmiest/propslab/issues/511)): the `_MetaData:` alias is folded in one place and stanza headers are classified by one function, so the engine and the editor cannot disagree. The pipeline reference lists Clone Sourcetype, Punctuation Annotation and Sourcetype Rename with their directives, and the dictionary shows `rename` as search-time.
+- **Lint and types are stricter** ([#510](https://github.com/Bimmiest/propslab/issues/510), in part):
+  - non-null assertions are an error in shipped code;
+  - the engine's import boundary now rejects imports from components, hooks, the store and the editor code (it had only caught bare package names);
+  - tests are checked for missing assertions and malformed `expect`s;
+  - index-signature properties are read with brackets.
+
+  A Prettier config and `npm run format` / `format:check` are added; the reformat and its CI check follow separately.
+- **Test scaffolding** ([#507](https://github.com/Bimmiest/propslab/issues/507), in part): `runCtx` requires the clock, and the remaining hand-written event literals use the shared `makeEvent`.
 - **An MCP timeout no longer re-parses the caller's conf on the server thread** ([#468](https://github.com/Bimmiest/propslab/issues/468)). The simulate worker builds the regex-suspect list before the pipeline runs. The conf parser is now linear on continuation lines (a 2M-character continued value parses in about 150 ms instead of minutes), and so are the editor's diagnostics.
 - **The ReDoS verdict cache no longer keeps each caller's whole conf alive** ([#487](https://github.com/Bimmiest/propslab/issues/487)).
 - **The MCP `timeout_ms` budget starts once the sandbox worker is ready** ([#488](https://github.com/Bimmiest/propslab/issues/488)), with its own start-up cap (`start_timeout`). A timeout reports how far the run got and blames a regex only when the run stalled on one event ([ADR 0015](docs/adr/0015-mcp-timeouts-start-on-ready-and-report-progress.md)).

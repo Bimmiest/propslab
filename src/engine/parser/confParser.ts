@@ -22,6 +22,7 @@ import type {
   ValidationDiagnostic,
 } from '../types';
 import { getCanonicalDirectiveKey } from '../directiveRegistry';
+import { classifyStanza } from '../stanzaRegistry';
 
 // ---------------------------------------------------------------------------
 // Regex patterns
@@ -160,31 +161,24 @@ export const MISCASED_SUGGESTION = (rawKey: string, canonical: string): string =
 // ---------------------------------------------------------------------------
 
 /**
- * Determine the stanza type and extract the relevant pattern if applicable.
+ * The `type` and pattern fields of a stanza, read from the one classifier the
+ * editor's hover and the dictionary use (`stanzaRegistry.classifyStanza`), so
+ * the engine and the editor cannot disagree about what a header is.
  */
-function classifyStanza(
+function stanzaTypeFields(
   name: string,
 ): Pick<ConfStanza, 'type' | 'sourcePattern' | 'hostPattern'> {
-  if (name === 'default') {
-    return { type: 'default' };
+  const { kind, pattern } = classifyStanza(name);
+  switch (kind.id) {
+    case 'source':
+      return { type: 'source', sourcePattern: pattern ?? '' };
+    case 'host':
+      return { type: 'host', hostPattern: pattern ?? '' };
+    case 'default':
+      return { type: 'default' };
+    case 'sourcetype':
+      return { type: 'sourcetype' };
   }
-
-  if (name.startsWith('source::')) {
-    return {
-      type: 'source',
-      sourcePattern: name.slice('source::'.length),
-    };
-  }
-
-  if (name.startsWith('host::')) {
-    return {
-      type: 'host',
-      hostPattern: name.slice('host::'.length),
-    };
-  }
-
-  // Everything else is a sourcetype stanza.
-  return { type: 'sourcetype' };
 }
 
 // ---------------------------------------------------------------------------
@@ -355,7 +349,7 @@ function parseLayer(
       flushStanza(lineNumber - 1);
 
       const rawName = (stanzaMatch[1] ?? '').trim();
-      const classification = classifyStanza(rawName);
+      const classification = stanzaTypeFields(rawName);
 
       currentStanza = {
         name: rawName,

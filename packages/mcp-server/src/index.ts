@@ -40,14 +40,14 @@ async function main(): Promise<void> {
   // see heapFlags.ts.
   const execArgv = stripHeapSizeFlags(process.execArgv);
   const env = { ...process.env };
-  if (env.NODE_OPTIONS !== undefined) {
-    env.NODE_OPTIONS = stripHeapSizeFlagsFromNodeOptions(env.NODE_OPTIONS);
+  if (env['NODE_OPTIONS'] !== undefined) {
+    env['NODE_OPTIONS'] = stripHeapSizeFlagsFromNodeOptions(env['NODE_OPTIONS']);
   }
   const heapFlagsSet =
-    execArgv.length !== process.execArgv.length || env.NODE_OPTIONS !== process.env.NODE_OPTIONS;
+    execArgv.length !== process.execArgv.length || env['NODE_OPTIONS'] !== process.env['NODE_OPTIONS'];
 
   const reexecWanted = !flagsAlreadySet() || heapFlagsSet || !permissionEnabled();
-  if (process.env.PROPSLAB_MCP_NO_REEXEC === '1') {
+  if (process.env['PROPSLAB_MCP_NO_REEXEC'] === '1') {
     if (heapFlagsSet) {
       // stderr: stdout belongs to the protocol.
       console.error(

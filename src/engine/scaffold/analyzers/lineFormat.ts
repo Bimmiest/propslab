@@ -20,18 +20,7 @@ export function detectLineFormat(rawData: string, lines: string[]): ScaffoldSugg
   if (nonBlank.length === 0) return [];
 
   // XML — declaration or a leading element.
-  if (/<\?xml/i.test(rawData) || /^\s*<[a-zA-Z!]/.test(rawData)) {
-    const kvMode: ScaffoldSuggestion = { key: 'KV_MODE', value: 'xml', confidence: 'high', evidence: 'Input looks like XML', enabledByDefault: true };
-    // Without an explicit breaker the default line merge (BREAK_ONLY_BEFORE_DATE)
-    // splits a multi-line document at any line holding a date.
-    const breaker = xmlDocumentBreaker(rawData);
-    if (!breaker) return [kvMode];
-    return [
-      { key: 'LINE_BREAKER', value: breaker.regex, confidence: 'medium', evidence: breaker.evidence, enabledByDefault: true },
-      { key: 'SHOULD_LINEMERGE', value: 'false', confidence: 'medium', evidence: 'Events are delimited by the LINE_BREAKER, not merged', enabledByDefault: true },
-      kvMode,
-    ];
-  }
+  if (/<\?xml/i.test(rawData) || /^\s*<[a-zA-Z!]/.test(rawData)) return xmlSuggestions(rawData);
 
   // JSON, one object per line.
   const jsonLines = nonBlank.filter(isJsonLine).length;
@@ -51,19 +40,7 @@ export function detectLineFormat(rawData: string, lines: string[]): ScaffoldSugg
   const trimmed = rawData.trim();
   const several = /\}\s*[\r\n]+\s*\{/.test(rawData);
   if (trimmed.startsWith('{') && (several || (nonBlank.length > 1 && tryParse(trimmed)))) {
-    return [
-      {
-        key: 'LINE_BREAKER',
-        value: '([\\r\\n]+)(?=\\{)',
-        confidence: 'medium',
-        evidence: several
-          ? 'Multiple newline-separated JSON objects — break before each one'
-          : 'Multi-line JSON object — break only before a top-level `{`, so the object stays whole',
-        enabledByDefault: true,
-      },
-      { key: 'SHOULD_LINEMERGE', value: 'false', confidence: 'medium', evidence: 'Events are delimited by the LINE_BREAKER, not merged', enabledByDefault: true },
-      { key: 'KV_MODE', value: 'json', confidence: 'medium', evidence: 'JSON payload', enabledByDefault: true },
-    ];
+    return multiLineJsonSuggestions(several);
   }
 
   // Delimited (CSV / TSV / PSV).
@@ -82,6 +59,37 @@ export function detectLineFormat(rawData: string, lines: string[]): ScaffoldSugg
   }
 
   return [];
+}
+
+/** KV_MODE = xml, and a LINE_BREAKER when the documents in the sample can be told apart. */
+function xmlSuggestions(rawData: string): ScaffoldSuggestion[] {
+  const kvMode: ScaffoldSuggestion = { key: 'KV_MODE', value: 'xml', confidence: 'high', evidence: 'Input looks like XML', enabledByDefault: true };
+  // Without an explicit breaker the default line merge (BREAK_ONLY_BEFORE_DATE)
+  // splits a multi-line document at any line holding a date.
+  const breaker = xmlDocumentBreaker(rawData);
+  if (!breaker) return [kvMode];
+  return [
+    { key: 'LINE_BREAKER', value: breaker.regex, confidence: 'medium', evidence: breaker.evidence, enabledByDefault: true },
+    { key: 'SHOULD_LINEMERGE', value: 'false', confidence: 'medium', evidence: 'Events are delimited by the LINE_BREAKER, not merged', enabledByDefault: true },
+    kvMode,
+  ];
+}
+
+/** Break before each top-level `{`, whether the sample holds several objects or one spread over lines. */
+function multiLineJsonSuggestions(several: boolean): ScaffoldSuggestion[] {
+  return [
+    {
+      key: 'LINE_BREAKER',
+      value: '([\\r\\n]+)(?=\\{)',
+      confidence: 'medium',
+      evidence: several
+        ? 'Multiple newline-separated JSON objects — break before each one'
+        : 'Multi-line JSON object — break only before a top-level `{`, so the object stays whole',
+      enabledByDefault: true,
+    },
+    { key: 'SHOULD_LINEMERGE', value: 'false', confidence: 'medium', evidence: 'Events are delimited by the LINE_BREAKER, not merged', enabledByDefault: true },
+    { key: 'KV_MODE', value: 'json', confidence: 'medium', evidence: 'JSON payload', enabledByDefault: true },
+  ];
 }
 
 /**

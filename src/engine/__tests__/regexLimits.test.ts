@@ -16,20 +16,13 @@ import { extractFields } from '../processors/fieldExtractor';
 import { runPipeline } from '../pipeline';
 import { describeNoOp } from '../noOpExplainer';
 import type { ConfDirective, EventMetadata, SplunkEvent } from '../types';
-import { runCtx } from './runCtx';
+import { runCtx, FIXED_NOW } from './runCtx';
+import { makeEvent } from '../../test/makeEvent';
 
 const META: EventMetadata = { index: 'main', host: 'h', source: 's', sourcetype: 'st' };
 
 function event(raw: string): SplunkEvent {
-  return {
-    _raw: raw,
-    _time: null,
-    _meta: {},
-    fields: {},
-    metadata: META,
-    lineNumbers: { start: 1, end: 1 },
-    processingTrace: [],
-  };
+  return makeEvent(raw);
 }
 
 const extract = (value: string): ConfDirective => ({
@@ -48,7 +41,7 @@ const ALTERNATING = '^(?<v>(?:a|b)*)$';
 
 describe('EXTRACT under MATCH_LIMIT and DEPTH_LIMIT', () => {
   it('fails a match that nests past the default DEPTH_LIMIT, and says why', () => {
-    const [e] = extractFields([event(DEEP)], [extract(ALTERNATING)], runCtx());
+    const [e] = extractFields([event(DEEP)], [extract(ALTERNATING)], runCtx(FIXED_NOW));
     expect(e!.fields['v']).toBeUndefined();
     const reason = e!.noOps?.[0]?.reason;
     expect(reason?.kind).toBe('regex-limit');
@@ -56,27 +49,27 @@ describe('EXTRACT under MATCH_LIMIT and DEPTH_LIMIT', () => {
   });
 
   it('lets the same match through with a higher DEPTH_LIMIT', () => {
-    const [e] = extractFields([event(DEEP)], [extract(ALTERNATING), setting('DEPTH_LIMIT', '5000')], runCtx());
+    const [e] = extractFields([event(DEEP)], [extract(ALTERNATING), setting('DEPTH_LIMIT', '5000')], runCtx(FIXED_NOW));
     expect(e!.fields['v']).toBe(DEEP);
   });
 
   it('fails a match past MATCH_LIMIT even when depth is unlimited', () => {
     const long = 'ab'.repeat(60000);
     const unlimitedDepth = setting('DEPTH_LIMIT', '0');
-    const [limited] = extractFields([event(long)], [extract(ALTERNATING), unlimitedDepth], runCtx());
+    const [limited] = extractFields([event(long)], [extract(ALTERNATING), unlimitedDepth], runCtx(FIXED_NOW));
     const reason = limited!.noOps?.[0]?.reason;
     expect(reason?.kind).toBe('regex-limit');
     expect(reason?.kind === 'regex-limit' ? reason.error : '').toMatch(/match limit/);
     const [raised] = extractFields(
       [event(long)],
       [extract(ALTERNATING), unlimitedDepth, setting('MATCH_LIMIT', '10000000')],
-      runCtx(),
+      runCtx(FIXED_NOW),
     );
     expect(raised!.fields['v']).toBe(long);
   });
 
   it('leaves an ordinary extraction alone at the defaults', () => {
-    const [e] = extractFields([event('user=admin')], [extract('user=(?<v>\\w+)')], runCtx());
+    const [e] = extractFields([event('user=admin')], [extract('user=(?<v>\\w+)')], runCtx(FIXED_NOW));
     expect(e!.fields['v']).toBe('admin');
   });
 });

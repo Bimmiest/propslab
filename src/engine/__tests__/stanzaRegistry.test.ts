@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { parseConf } from '../parser/confParser';
 import { STANZA_KINDS, classifyStanza, getStanzaKind } from '../stanzaRegistry';
 
 describe('classifyStanza', () => {
@@ -59,5 +60,25 @@ describe('STANZA_KINDS', () => {
   it('looks kinds up by id', () => {
     expect(getStanzaKind('source')?.label).toBe('[source::<pattern>]');
     expect(getStanzaKind('nope' as never)).toBeUndefined();
+  });
+});
+
+// The parser reads the stanza type and its pattern from classifyStanza, so the
+// engine and the editor's hover cannot disagree about what a header is (#511).
+describe('parseConf classifies headers through classifyStanza', () => {
+  it.each([
+    ['default', 'default', undefined, undefined],
+    ['source::/var/log/app.log', 'source', '/var/log/app.log', undefined],
+    ['host::web-01', 'host', undefined, 'web-01'],
+    ['apache:access', 'sourcetype', undefined, undefined],
+    ['HOST::web-1', 'sourcetype', undefined, undefined],
+    ['host::', 'host', undefined, ''],
+    ['source::', 'source', '', undefined],
+  ])('[%s] is a %s stanza', (header, type, sourcePattern, hostPattern) => {
+    const [stanza] = parseConf(`[${header}]\nSHOULD_LINEMERGE = false\n`, 'props.conf').stanzas;
+    expect(stanza?.type).toBe(type);
+    expect(stanza?.sourcePattern).toBe(sourcePattern);
+    expect(stanza?.hostPattern).toBe(hostPattern);
+    expect(stanza?.type).toBe(classifyStanza(header).kind.id);
   });
 });

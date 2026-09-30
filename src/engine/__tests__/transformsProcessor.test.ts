@@ -2,18 +2,11 @@ import { describe, it, expect } from 'vitest';
 import { applyTransforms } from '../processors/transformsProcessor';
 import { runPipeline } from '../pipeline';
 import type { SplunkEvent, ConfDirective, ConfStanza, ParsedConf, ValidationDiagnostic } from '../types';
-import { runCtx } from './runCtx';
+import { runCtx, FIXED_NOW } from './runCtx';
+import { makeEvent } from '../../test/makeEvent';
 
 function event(raw: string): SplunkEvent {
-  return {
-    _raw: raw,
-    _time: null,
-    _meta: {},
-    fields: {},
-    metadata: { index: 'main', host: 'h', source: 's', sourcetype: 'st' },
-    lineNumbers: { start: 1, end: 1 },
-    processingTrace: [],
-  };
+  return makeEvent(raw);
 }
 
 function stanza(name: string, directives: Record<string, string>): ConfStanza {
@@ -52,7 +45,7 @@ describe('applyTransforms — DEST_KEY=_raw data-loss warning', () => {
       FORMAT: '$1',
       DEST_KEY: '_raw',
     });
-    const e = applyTransforms([event('connect from 10.0.0.1 port 443 with details')], transformsDir('mask'), conf, 'index-time', runCtx(diags))[0]!;
+    const e = applyTransforms([event('connect from 10.0.0.1 port 443 with details')], transformsDir('mask'), conf, 'index-time', runCtx(FIXED_NOW, diags))[0]!;
     expect(e._raw).toBe('10.0.0.1'); // whole event replaced by the capture
     expect(diags.some(lossMsg)).toBe(true);
   });
@@ -64,7 +57,7 @@ describe('applyTransforms — DEST_KEY=_raw data-loss warning', () => {
       FORMAT: '$1REDACTED$3',
       DEST_KEY: '_raw',
     });
-    const e = applyTransforms([event('connect from 10.0.0.1 port 443')], transformsDir('mask'), conf, 'index-time', runCtx(diags))[0]!;
+    const e = applyTransforms([event('connect from 10.0.0.1 port 443')], transformsDir('mask'), conf, 'index-time', runCtx(FIXED_NOW, diags))[0]!;
     expect(e._raw).toBe('connect from REDACTED port 443');
     expect(diags.some(lossMsg)).toBe(false);
   });
@@ -77,7 +70,7 @@ describe('applyTransforms — DEST_KEY=_raw data-loss warning', () => {
       event('eeee 2 ffff gggg hhhh'),
       event('iiii 3 jjjj kkkk llll'),
     ];
-    applyTransforms(events, transformsDir('mask'), conf, 'index-time', runCtx(diags));
+    applyTransforms(events, transformsDir('mask'), conf, 'index-time', runCtx(FIXED_NOW, diags));
     expect(diags.filter(lossMsg)).toHaveLength(1);
   });
 });
@@ -91,7 +84,7 @@ describe('applyTransforms — unknown DEST_KEY warning (SEM-11)', () => {
   it('does not warn at run time for a key outside the documented set, and writes no field', () => {
     const diags: ValidationDiagnostic[] = [];
     const conf = transformsConf('route', { REGEX: '(.*)', FORMAT: '$1', DEST_KEY: 'MetaData:Bogus' });
-    const out = applyTransforms([event('hello')], transformsDir('route'), conf, 'index-time', runCtx(diags))[0]!;
+    const out = applyTransforms([event('hello')], transformsDir('route'), conf, 'index-time', runCtx(FIXED_NOW, diags))[0]!;
     expect(diags).toEqual([]);
     expect(out.fields['MetaData:Bogus']).toBeUndefined();
   });
@@ -99,14 +92,14 @@ describe('applyTransforms — unknown DEST_KEY warning (SEM-11)', () => {
   it('does not warn for a documented key', () => {
     const diags: ValidationDiagnostic[] = [];
     const conf = transformsConf('route', { REGEX: '(.*)', FORMAT: 'host::web01', DEST_KEY: 'MetaData:Host' });
-    applyTransforms([event('hello')], transformsDir('route'), conf, 'index-time', runCtx(diags));
+    applyTransforms([event('hello')], transformsDir('route'), conf, 'index-time', runCtx(FIXED_NOW, diags));
     expect(diags.some(unknownMsg)).toBe(false);
   });
 
   it('emits an informational note for a valid-but-unsimulated routing key', () => {
     const diags: ValidationDiagnostic[] = [];
     const conf = transformsConf('route', { REGEX: '(.*)', FORMAT: 'my_group', DEST_KEY: '_TCP_ROUTING' });
-    applyTransforms([event('hello')], transformsDir('route'), conf, 'index-time', runCtx(diags));
+    applyTransforms([event('hello')], transformsDir('route'), conf, 'index-time', runCtx(FIXED_NOW, diags));
     expect(diags.some((d) => d.level === 'info' && d.message.includes('not simulated'))).toBe(true);
     expect(diags.some(unknownMsg)).toBe(false);
   });
@@ -121,17 +114,17 @@ describe('applyTransforms — queue routing is last-wins (SEM-1)', () => {
   const dir = transformsDir('setnull, setparsing');
 
   it('a later indexQueue overrides an earlier nullQueue for matching events', () => {
-    const e = applyTransforms([event('KEEP-ME please')], dir, conf, 'index-time', runCtx())[0]!;
+    const e = applyTransforms([event('KEEP-ME please')], dir, conf, 'index-time', runCtx(FIXED_NOW))[0]!;
     expect(e._meta._queue).toBe('indexQueue'); // survives — setparsing ran after setnull
   });
 
   it('events that do not match the later rule stay nullQueue', () => {
-    const e = applyTransforms([event('drop this line')], dir, conf, 'index-time', runCtx())[0]!;
+    const e = applyTransforms([event('drop this line')], dir, conf, 'index-time', runCtx(FIXED_NOW))[0]!;
     expect(e._meta._queue).toBe('nullQueue');
   });
 
   it('keeps (does not remove) nullQueue events so they can be shown as dropped', () => {
-    const out = applyTransforms([event('drop this line')], dir, conf, 'index-time', runCtx());
+    const out = applyTransforms([event('drop this line')], dir, conf, 'index-time', runCtx(FIXED_NOW));
     expect(out).toHaveLength(1);
   });
 });
@@ -145,7 +138,7 @@ describe('applyTransforms — classes applied in ASCII order (SEM-4)', () => {
     // File order puts class "z" before class "a"; ASCII order runs a then z, so
     // z's nullQueue is the last write and wins.
     const dirs = [classDir('z', 'setnull'), classDir('a', 'setindex')];
-    const e = applyTransforms([event('anything')], dirs, conf, 'index-time', runCtx())[0]!;
+    const e = applyTransforms([event('anything')], dirs, conf, 'index-time', runCtx(FIXED_NOW))[0]!;
     expect(e._meta._queue).toBe('nullQueue');
   });
 });
@@ -154,14 +147,14 @@ describe('applyTransforms — index-time extraction without WRITE_META (SEM-7)',
   it('warns when an index-time transform extracts fields with no WRITE_META/DEST_KEY', () => {
     const diags: ValidationDiagnostic[] = [];
     const conf = transformsConf('grab', { REGEX: '(?<user>\\w+)' });
-    applyTransforms([event('alice')], transformsDir('grab'), conf, 'index-time', runCtx(diags));
+    applyTransforms([event('alice')], transformsDir('grab'), conf, 'index-time', runCtx(FIXED_NOW, diags));
     expect(diags.some((d) => d.message.includes('no effect'))).toBe(true);
   });
 
   it('does NOT warn when WRITE_META = true is set', () => {
     const diags: ValidationDiagnostic[] = [];
     const conf = transformsConf('grab', { REGEX: '(?<user>\\w+)', WRITE_META: 'true' });
-    applyTransforms([event('alice')], transformsDir('grab'), conf, 'index-time', runCtx(diags));
+    applyTransforms([event('alice')], transformsDir('grab'), conf, 'index-time', runCtx(FIXED_NOW, diags));
     expect(diags.some((d) => d.message.includes('no effect'))).toBe(false);
   });
 
@@ -169,7 +162,7 @@ describe('applyTransforms — index-time extraction without WRITE_META (SEM-7)',
     const diags: ValidationDiagnostic[] = [];
     const conf = transformsConf('grab', { REGEX: '(?<user>\\w+)' });
     const reportDir: ConfDirective[] = [{ key: 'REPORT-x', value: 'grab', line: 1, directiveType: 'REPORT', className: 'x' }];
-    applyTransforms([event('alice')], reportDir, conf, 'search-time', runCtx(diags));
+    applyTransforms([event('alice')], reportDir, conf, 'search-time', runCtx(FIXED_NOW, diags));
     expect(diags.some((d) => d.message.includes('no effect'))).toBe(false);
   });
 
@@ -179,8 +172,8 @@ describe('applyTransforms — index-time extraction without WRITE_META (SEM-7)',
   it('does not add the fields to the event, while still warning and tracing them', () => {
     const diags: ValidationDiagnostic[] = [];
     const conf = transformsConf('grab', { REGEX: '(?<user>\\w+)' });
-    const e = applyTransforms([event('alice')], transformsDir('grab'), conf, 'index-time', runCtx(diags))[0]!;
-    expect(e.fields.user).toBeUndefined();
+    const e = applyTransforms([event('alice')], transformsDir('grab'), conf, 'index-time', runCtx(FIXED_NOW, diags))[0]!;
+    expect(e.fields['user']).toBeUndefined();
     expect(diags.some((d) => d.message.includes('no effect'))).toBe(true);
     const step = e.processingTrace.at(-1);
     expect(step?.fieldsAdded).toEqual([]);
@@ -194,8 +187,8 @@ describe('applyTransforms — index-time extraction without WRITE_META (SEM-7)',
       { key: 'WRITE_META', value: 'false', line: 2, directiveType: 'WRITE_META' },
       { key: 'WRITE_META', value: 'true', line: 3, directiveType: 'WRITE_META' },
     );
-    const e = applyTransforms([event('alice')], transformsDir('grab'), conf, 'index-time', runCtx())[0]!;
-    expect(e.fields.user).toBe('alice');
+    const e = applyTransforms([event('alice')], transformsDir('grab'), conf, 'index-time', runCtx(FIXED_NOW))[0]!;
+    expect(e.fields['user']).toBe('alice');
   });
 
   // Doc-derived (transforms.conf.spec, FORMAT): the `<stanza>::$1` default is
@@ -204,29 +197,29 @@ describe('applyTransforms — index-time extraction without WRITE_META (SEM-7)',
     const diags: ValidationDiagnostic[] = [];
     const conf = transformsConf('word', { REGEX: '(\\w+)' });
     const reportDir: ConfDirective[] = [{ key: 'REPORT-x', value: 'word', line: 1, directiveType: 'REPORT', className: 'x' }];
-    const e = applyTransforms([event('alice')], reportDir, conf, 'search-time', runCtx(diags))[0]!;
+    const e = applyTransforms([event('alice')], reportDir, conf, 'search-time', runCtx(FIXED_NOW, diags))[0]!;
     expect(e.fields).toEqual({});
     expect(diags.some((d) => d.message.includes('At search time FORMAT has no default'))).toBe(true);
   });
 
   it('keeps the index-time default FORMAT for the same stanza under TRANSFORMS-', () => {
     const conf = transformsConf('word', { REGEX: '(\\w+)', WRITE_META: 'true' });
-    const e = applyTransforms([event('alice')], transformsDir('word'), conf, 'index-time', runCtx())[0]!;
-    expect(e.fields.word).toBe('alice');
+    const e = applyTransforms([event('alice')], transformsDir('word'), conf, 'index-time', runCtx(FIXED_NOW))[0]!;
+    expect(e.fields['word']).toBe('alice');
   });
 
   it('does not warn about a named-group REPORT whose group did not participate', () => {
     const diags: ValidationDiagnostic[] = [];
     const conf = transformsConf('opt', { REGEX: 'x(?<y>y)?' });
     const reportDir: ConfDirective[] = [{ key: 'REPORT-x', value: 'opt', line: 1, directiveType: 'REPORT', className: 'x' }];
-    applyTransforms([event('x')], reportDir, conf, 'search-time', runCtx(diags));
+    applyTransforms([event('x')], reportDir, conf, 'search-time', runCtx(FIXED_NOW, diags));
     expect(diags.some((d) => d.message.includes('FORMAT has no default'))).toBe(false);
   });
 
   it('still stores what DEST_KEY = _meta writes', () => {
     const conf = transformsConf('grab', { REGEX: '(\\w+)', DEST_KEY: '_meta', FORMAT: 'user::$1' });
-    const e = applyTransforms([event('alice')], transformsDir('grab'), conf, 'index-time', runCtx())[0]!;
-    expect(e._meta.user).toBe('alice');
+    const e = applyTransforms([event('alice')], transformsDir('grab'), conf, 'index-time', runCtx(FIXED_NOW))[0]!;
+    expect(e._meta['user']).toBe('alice');
   });
 });
 
@@ -239,15 +232,15 @@ describe('applyTransforms — INGEST_EVAL interleaving (SEM-2)', () => {
       stanza('extract', { REGEX: '(?<word>HELLO)', WRITE_META: 'true' }),
     );
     // List order: eval rewrites _raw, then the regex extracts from the new _raw.
-    const e = applyTransforms([event('original text')], transformsDir('rewrite, extract'), conf, 'index-time', runCtx())[0]!;
+    const e = applyTransforms([event('original text')], transformsDir('rewrite, extract'), conf, 'index-time', runCtx(FIXED_NOW))[0]!;
     expect(e._raw).toBe('HELLO');
-    expect(e.fields.word).toBe('HELLO');
+    expect(e.fields['word']).toBe('HELLO');
   });
 
   it('does not run INGEST_EVAL on the search-time (REPORT) pass', () => {
     const conf = multiTransformsConf(stanza('rewrite', { INGEST_EVAL: '_raw="HELLO"' }));
     const reportDir: ConfDirective[] = [{ key: 'REPORT-x', value: 'rewrite', line: 1, directiveType: 'REPORT', className: 'x' }];
-    const e = applyTransforms([event('original text')], reportDir, conf, 'search-time', runCtx())[0]!;
+    const e = applyTransforms([event('original text')], reportDir, conf, 'search-time', runCtx(FIXED_NOW))[0]!;
     expect(e._raw).toBe('original text');
   });
 });
@@ -259,7 +252,7 @@ describe('applyTransforms — DEST_KEY is index-time only (#57)', () => {
 
   it('does not route a search-time REPORT to nullQueue', () => {
     const conf = transformsConf('drop', { REGEX: 'DEBUG', DEST_KEY: 'queue', FORMAT: 'nullQueue' });
-    const out = applyTransforms([event('DEBUG something')], reportDir('drop'), conf, 'search-time', runCtx())[0]!;
+    const out = applyTransforms([event('DEBUG something')], reportDir('drop'), conf, 'search-time', runCtx(FIXED_NOW))[0]!;
     expect(out._meta._queue).toBeUndefined();
   });
 
@@ -269,13 +262,13 @@ describe('applyTransforms — DEST_KEY is index-time only (#57)', () => {
       DEST_KEY: 'MetaData:Sourcetype',
       FORMAT: 'sourcetype::other',
     });
-    const out = applyTransforms([event('anything')], reportDir('force'), conf, 'search-time', runCtx())[0]!;
+    const out = applyTransforms([event('anything')], reportDir('force'), conf, 'search-time', runCtx(FIXED_NOW))[0]!;
     expect(out.metadata.sourcetype).toBe('st');
   });
 
   it('does not replace _raw from a search-time REPORT', () => {
     const conf = transformsConf('mask', { REGEX: '(\\w+)', DEST_KEY: '_raw', FORMAT: '$1' });
-    const out = applyTransforms([event('keep all of this')], reportDir('mask'), conf, 'search-time', runCtx())[0]!;
+    const out = applyTransforms([event('keep all of this')], reportDir('mask'), conf, 'search-time', runCtx(FIXED_NOW))[0]!;
     expect(out._raw).toBe('keep all of this');
   });
 
@@ -286,15 +279,15 @@ describe('applyTransforms — DEST_KEY is index-time only (#57)', () => {
       FORMAT: 'user::$1',
       DEST_KEY: 'queue',
     });
-    const out = applyTransforms([event('user=alice')], reportDir('r'), conf, 'search-time', runCtx(diags))[0]!;
-    expect(out.fields.user).toBe('alice');
+    const out = applyTransforms([event('user=alice')], reportDir('r'), conf, 'search-time', runCtx(FIXED_NOW, diags))[0]!;
+    expect(out.fields['user']).toBe('alice');
     expect(out._meta._queue).toBeUndefined();
     expect(diags.some((d) => d.message.includes('DEST_KEY is index-time only'))).toBe(true);
   });
 
   it('still routes at index time', () => {
     const conf = transformsConf('drop', { REGEX: 'DEBUG', DEST_KEY: 'queue', FORMAT: 'nullQueue' });
-    const out = applyTransforms([event('DEBUG something')], transformsDir('drop'), conf, 'index-time', runCtx())[0]!;
+    const out = applyTransforms([event('DEBUG something')], transformsDir('drop'), conf, 'index-time', runCtx(FIXED_NOW))[0]!;
     expect(out._meta._queue).toBe('nullQueue');
   });
 });
@@ -307,7 +300,7 @@ describe('applyTransforms — SOURCE_KEY reads pipeline metadata (#53)', () => {
       DEST_KEY: 'MetaData:Sourcetype',
       FORMAT: 'sourcetype::forced',
     });
-    const out = applyTransforms([event('anything')], transformsDir('force_sourcetype'), conf, 'index-time', runCtx())[0]!;
+    const out = applyTransforms([event('anything')], transformsDir('force_sourcetype'), conf, 'index-time', runCtx(FIXED_NOW))[0]!;
     expect(out.metadata.sourcetype).toBe('forced');
   });
 
@@ -318,8 +311,8 @@ describe('applyTransforms — SOURCE_KEY reads pipeline metadata (#53)', () => {
       FORMAT: 'captured_host::$1',
       WRITE_META: 'true',
     });
-    const out = applyTransforms([event('x')], transformsDir('t'), conf, 'index-time', runCtx())[0]!;
-    expect(out.fields.captured_host).toBe('h');
+    const out = applyTransforms([event('x')], transformsDir('t'), conf, 'index-time', runCtx(FIXED_NOW))[0]!;
+    expect(out.fields['captured_host']).toBe('h');
   });
 
   // Doc-derived: the index key is written bare (`FORMAT = my_index`), so
@@ -332,8 +325,8 @@ describe('applyTransforms — SOURCE_KEY reads pipeline metadata (#53)', () => {
       WRITE_META: 'true',
     });
     const ev = { ...event('x'), metadata: { ...event('x').metadata, index: 'main' } };
-    const out = applyTransforms([ev], transformsDir('t'), conf, 'index-time', runCtx())[0]!;
-    expect(out.fields.captured_index).toBe('main');
+    const out = applyTransforms([ev], transformsDir('t'), conf, 'index-time', runCtx(FIXED_NOW))[0]!;
+    expect(out.fields['captured_index']).toBe('main');
   });
 
   it('reads an unrerouted queue as indexQueue', () => {
@@ -343,8 +336,8 @@ describe('applyTransforms — SOURCE_KEY reads pipeline metadata (#53)', () => {
       FORMAT: 'q::$1',
       WRITE_META: 'true',
     });
-    const out = applyTransforms([event('x')], transformsDir('t'), conf, 'index-time', runCtx())[0]!;
-    expect(out.fields.q).toBe('indexQueue');
+    const out = applyTransforms([event('x')], transformsDir('t'), conf, 'index-time', runCtx(FIXED_NOW))[0]!;
+    expect(out.fields['q']).toBe('indexQueue');
   });
 
   it('reads _meta as space-separated key::value pairs', () => {
@@ -355,8 +348,8 @@ describe('applyTransforms — SOURCE_KEY reads pipeline metadata (#53)', () => {
       FORMAT: 'tier_copy::$1',
       WRITE_META: 'true',
     });
-    const out = applyTransforms([ev], transformsDir('t'), conf, 'index-time', runCtx())[0]!;
-    expect(out.fields.tier_copy).toBe('gold');
+    const out = applyTransforms([ev], transformsDir('t'), conf, 'index-time', runCtx(FIXED_NOW))[0]!;
+    expect(out.fields['tier_copy']).toBe('gold');
   });
 
   // #437: the simulator keeps queue routing in _meta._queue; that is not text
@@ -369,15 +362,15 @@ describe('applyTransforms — SOURCE_KEY reads pipeline metadata (#53)', () => {
       FORMAT: 'meta_copy::$1',
       WRITE_META: 'true',
     });
-    const out = applyTransforms([ev], transformsDir('t'), conf, 'index-time', runCtx())[0]!;
-    expect(out.fields.meta_copy).toBe('tier::gold');
+    const out = applyTransforms([ev], transformsDir('t'), conf, 'index-time', runCtx(FIXED_NOW))[0]!;
+    expect(out.fields['meta_copy']).toBe('tier::gold');
   });
 
   it('still reads the queue through SOURCE_KEY = queue after a reroute', () => {
     const conf = transformsConf('t', { SOURCE_KEY: 'queue', REGEX: '(\\w+)', FORMAT: 'q::$1', WRITE_META: 'true' });
     const ev = { ...event('x'), _meta: { _queue: 'nullQueue' } };
-    const out = applyTransforms([ev], transformsDir('t'), conf, 'index-time', runCtx())[0]!;
-    expect(out.fields.q).toBe('nullQueue');
+    const out = applyTransforms([ev], transformsDir('t'), conf, 'index-time', runCtx(FIXED_NOW))[0]!;
+    expect(out.fields['q']).toBe('nullQueue');
   });
 });
 
@@ -393,7 +386,7 @@ describe('applyTransforms — search-time-only attributes reached index-time', (
   it('warns when a DELIMS stanza is referenced by TRANSFORMS-', () => {
     const diags: ValidationDiagnostic[] = [];
     const conf = transformsConf('pairs', { DELIMS: '"|", "="' });
-    applyTransforms([event('a=1|b=2')], transformsDir('pairs'), conf, 'index-time', runCtx(diags));
+    applyTransforms([event('a=1|b=2')], transformsDir('pairs'), conf, 'index-time', runCtx(FIXED_NOW, diags));
 
     const warning = diags.find(warnMsg);
     expect(warning).toBeDefined();
@@ -409,7 +402,7 @@ describe('applyTransforms — search-time-only attributes reached index-time', (
     const conf = transformsConf('pairs', { DELIMS: '"|", "="' });
     applyTransforms(
       [event('a=1|b=2'), event('c=3|d=4'), event('e=5|f=6')],
-      transformsDir('pairs'), conf, 'index-time', runCtx(diags),
+      transformsDir('pairs'), conf, 'index-time', runCtx(FIXED_NOW, diags),
     );
     expect(diags.filter(warnMsg)).toHaveLength(1);
   });
@@ -419,7 +412,7 @@ describe('applyTransforms — search-time-only attributes reached index-time', (
     const conf = transformsConf('kv', {
       REGEX: '(\\w+)=(\\w+)', FORMAT: '$1::$2', MV_ADD: 'true', CLEAN_KEYS: 'false',
     });
-    applyTransforms([event('a=1')], transformsDir('kv'), conf, 'index-time', runCtx(diags));
+    applyTransforms([event('a=1')], transformsDir('kv'), conf, 'index-time', runCtx(FIXED_NOW, diags));
 
     const warning = diags.find(warnMsg);
     expect(warning?.message).toContain('MV_ADD');
@@ -431,14 +424,14 @@ describe('applyTransforms — search-time-only attributes reached index-time', (
   it('stays quiet on the search-time pass, where the attributes are valid', () => {
     const diags: ValidationDiagnostic[] = [];
     const conf = transformsConf('pairs', { DELIMS: '"|", "="' });
-    applyTransforms([event('a=1|b=2')], reportDir('pairs'), conf, 'search-time', runCtx(diags));
+    applyTransforms([event('a=1|b=2')], reportDir('pairs'), conf, 'search-time', runCtx(FIXED_NOW, diags));
     expect(diags.filter(warnMsg)).toHaveLength(0);
   });
 
   it('stays quiet for a stanza that uses none of them', () => {
     const diags: ValidationDiagnostic[] = [];
     const conf = transformsConf('route', { REGEX: '(\\w+)', DEST_KEY: 'MetaData:Index', FORMAT: 'main' });
-    applyTransforms([event('hello')], transformsDir('route'), conf, 'index-time', runCtx(diags));
+    applyTransforms([event('hello')], transformsDir('route'), conf, 'index-time', runCtx(FIXED_NOW, diags));
     expect(diags.filter(warnMsg)).toHaveLength(0);
   });
 });
@@ -554,7 +547,7 @@ describe('applyTransforms — the step describes what the transform did (#346)',
 
   it('does not claim "extracted fields" over an empty list for a CLONE_SOURCETYPE-only stanza', () => {
     const conf = transformsConf('cloner', { REGEX: '.', CLONE_SOURCETYPE: 'copy' });
-    const [original] = applyTransforms([event('x')], transformsDir('cloner'), conf, 'index-time', runCtx());
+    const [original] = applyTransforms([event('x')], transformsDir('cloner'), conf, 'index-time', runCtx(FIXED_NOW));
     const step = lastStep(original);
     expect(step?.description).not.toContain('extracted fields');
     expect(step?.description).toContain('CLONE_SOURCETYPE = copy');
@@ -563,25 +556,25 @@ describe('applyTransforms — the step describes what the transform did (#346)',
 
   it('says a match with nothing to capture extracted nothing', () => {
     const conf = transformsConf('noop', { REGEX: '.', FORMAT: '' });
-    const [out] = applyTransforms([event('x')], reportDir('noop'), conf, 'search-time', runCtx());
+    const [out] = applyTransforms([event('x')], reportDir('noop'), conf, 'search-time', runCtx(FIXED_NOW));
     expect(lastStep(out)?.description).toBe('Transform matched; it extracted no fields');
   });
 
   it('still lists the fields a transform did extract', () => {
     const conf = transformsConf('ex', { REGEX: 'user=(?<user>\\w+)' });
-    const [out] = applyTransforms([event('user=alice')], reportDir('ex'), conf, 'search-time', runCtx());
+    const [out] = applyTransforms([event('user=alice')], reportDir('ex'), conf, 'search-time', runCtx(FIXED_NOW));
     expect(lastStep(out)?.description).toBe('Transform extracted fields: user');
   });
 
   it('records a DEST_KEY = MetaData:* rewrite old → new, as INGEST_EVAL does', () => {
     const conf = transformsConf('route', { REGEX: '.', FORMAT: 'host::web01', DEST_KEY: 'MetaData:Host' });
-    const [out] = applyTransforms([event('x')], transformsDir('route'), conf, 'index-time', runCtx());
+    const [out] = applyTransforms([event('x')], transformsDir('route'), conf, 'index-time', runCtx(FIXED_NOW));
     expect(lastStep(out)?.metadataChanges).toEqual([{ key: 'host', from: 'h', to: 'web01' }]);
   });
 
   it('records no metadata change for a transform that routes elsewhere', () => {
     const conf = transformsConf('q', { REGEX: '.', FORMAT: 'nullQueue', DEST_KEY: 'queue' });
-    const [out] = applyTransforms([event('x')], transformsDir('q'), conf, 'index-time', runCtx());
+    const [out] = applyTransforms([event('x')], transformsDir('q'), conf, 'index-time', runCtx(FIXED_NOW));
     expect(lastStep(out)?.metadataChanges).toBeUndefined();
   });
 });
@@ -597,14 +590,14 @@ describe('applyTransforms — DEST_KEY=_meta keeps every match and value (#359)'
       REPEAT_MATCH: 'true',
       WRITE_META: 'true',
     });
-    const e = applyTransforms([event('n=1 n=2 n=3')], transformsDir('nums'), conf, 'index-time', runCtx())[0]!;
-    expect(e._meta.num).toEqual(['1', '2', '3']);
+    const e = applyTransforms([event('n=1 n=2 n=3')], transformsDir('nums'), conf, 'index-time', runCtx(FIXED_NOW))[0]!;
+    expect(e._meta['num']).toEqual(['1', '2', '3']);
   });
 
   it('writes the first match only without REPEAT_MATCH', () => {
     const conf = transformsConf('nums', { REGEX: 'n=(\\d+)', FORMAT: 'num::$1', DEST_KEY: '_meta' });
-    const e = applyTransforms([event('n=1 n=2 n=3')], transformsDir('nums'), conf, 'index-time', runCtx())[0]!;
-    expect(e._meta.num).toBe('1');
+    const e = applyTransforms([event('n=1 n=2 n=3')], transformsDir('nums'), conf, 'index-time', runCtx(FIXED_NOW))[0]!;
+    expect(e._meta['num']).toBe('1');
   });
 });
 
@@ -613,13 +606,13 @@ describe('applyTransforms — DEST_KEY=_meta keeps every match and value (#359)'
 describe('applyTransforms — FORMAT is expanded in one pass (#365)', () => {
   it('does not re-expand ${name} text that came from a capture', () => {
     const conf = transformsConf('f', { REGEX: '(?<a>\\S+) (\\S+)', FORMAT: 'f::$2', WRITE_META: 'true' });
-    const e = applyTransforms([event('x ${a}')], transformsDir('f'), conf, 'index-time', runCtx())[0]!;
-    expect(e.fields.f).toBe('${a}');
+    const e = applyTransforms([event('x ${a}')], transformsDir('f'), conf, 'index-time', runCtx(FIXED_NOW))[0]!;
+    expect(e.fields['f']).toBe('${a}');
   });
 
   it('still expands a written ${name} reference', () => {
     const conf = transformsConf('f', { REGEX: '(?<a>\\S+) (\\S+)', FORMAT: 'f::${a}-$2', WRITE_META: 'true' });
-    const e = applyTransforms([event('x y')], transformsDir('f'), conf, 'index-time', runCtx())[0]!;
-    expect(e.fields.f).toBe('x-y');
+    const e = applyTransforms([event('x y')], transformsDir('f'), conf, 'index-time', runCtx(FIXED_NOW))[0]!;
+    expect(e.fields['f']).toBe('x-y');
   });
 });

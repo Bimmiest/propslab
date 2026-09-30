@@ -8,6 +8,7 @@ import { useAppStore, selectSessionDirty } from '../../../store/useAppStore';
 import { SAMPLE_CONFIGS } from '../../../engine/sampleData';
 import type { EventMetadata } from '../../../engine/types';
 import { toViewResult, type ViewResult } from '../../../utils/viewResult';
+import { makeEvent } from '../../../test/makeEvent';
 
 const initial = useAppStore.getState();
 
@@ -90,15 +91,7 @@ describe('PreviewPanel — metadata changes are relative to the run (#316)', () 
 
   function resultWith(host: string): ViewResult {
     return toViewResult({
-      events: [{
-        _raw: 'GET /index.html 200',
-        _time: null,
-        _meta: {},
-        fields: {},
-        metadata: { ...runMeta, host },
-        lineNumbers: { start: 1, end: 1 },
-        processingTrace: [],
-      }],
+      events: [makeEvent('GET /index.html 200', { metadata: { ...runMeta, host } })],
       originalRaw: 'GET /index.html 200',
       eventCount: 1,
       processingSteps: [],

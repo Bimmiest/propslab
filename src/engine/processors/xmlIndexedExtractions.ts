@@ -97,7 +97,8 @@ export function extractXmlIndexed(
     // eligible and EXCLUDE removes from that; the value filters then drop
     // individual values, so one bad value in a multivalue field does not take
     // the good ones with it.
-    const kept = new Map<string, string[]>();
+    // Every entry starts with the value that created it, so `values[0]` exists.
+    const kept = new Map<string, [string, ...string[]]>();
     for (const c of candidates) {
       if (!matchesAny(opts.include, c.name) || matchesAny(opts.exclude, c.name)) continue;
       if (matchesAny(opts.excludeVals, c.value)) continue;
@@ -112,7 +113,7 @@ export function extractXmlIndexed(
     const added: string[] = [];
     for (const [name, values] of kept) {
       const mv = matchesAny(opts.includeMv, name) && !matchesAny(opts.excludeMv, name);
-      const first = values[0]!;
+      const [first] = values;
       setField(fields, name, mv && values.length > 1 ? values : first);
       added.push(name);
     }
@@ -189,8 +190,13 @@ function matchesAny(patterns: WildcardMatcher[], s: string): boolean {
 function utf8Length(s: string): number {
   let n = 0;
   for (const ch of s) {
-    const cp = ch.codePointAt(0)!;
-    n += cp < 0x80 ? 1 : cp < 0x800 ? 2 : cp < 0x10000 ? 3 : 4;
+    // A code point above U+FFFF is a surrogate pair, two code units long.
+    if (ch.length > 1) {
+      n += 4;
+      continue;
+    }
+    const unit = ch.charCodeAt(0);
+    n += unit < 0x80 ? 1 : unit < 0x800 ? 2 : 3;
   }
   return n;
 }

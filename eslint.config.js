@@ -2,6 +2,7 @@ import js from '@eslint/js'
 import globals from 'globals'
 import reactHooks from 'eslint-plugin-react-hooks'
 import reactRefresh from 'eslint-plugin-react-refresh'
+import vitest from '@vitest/eslint-plugin'
 import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
@@ -50,10 +51,11 @@ export default defineConfig([
       // as handling a union member, since it is where the new one would
       // silently land.
       '@typescript-eslint/switch-exhaustiveness-check': 'error',
-      // With noUncheckedIndexedAccess on, `arr[i]!` after a bounds check is
-      // how an index the code has already proven is read; this rule would ask
-      // for a runtime guard restating that check at more than 1,100 sites.
-      '@typescript-eslint/no-non-null-assertion': 'off',
+      // Shipped code narrows or guards instead of asserting: a `!` is a claim
+      // the compiler cannot check, and in code that runs on users' configs a
+      // wrong claim is a crash. The test override below turns it off, where
+      // `arr[i]!` after a length assertion is how a case reads its subject.
+      '@typescript-eslint/no-non-null-assertion': 'error',
       // `onClick={() => setOpen(false)}` returns the setter's void; the rule's
       // own option exempts that shorthand, and still reports a void value used
       // anywhere it could be mistaken for a result.
@@ -61,6 +63,44 @@ export default defineConfig([
       // Counts and offsets go into messages everywhere. Numbers stringify
       // predictably; objects, nullish values and the rest stay reported.
       '@typescript-eslint/restrict-template-expressions': ['error', { allowNumber: true }],
+    },
+  },
+  {
+    // Test code and its support files. With noUncheckedIndexedAccess on,
+    // `result[0]!` after `expect(result).toHaveLength(1)` is how a case reads
+    // the thing it just asserted exists; the rule would ask for a runtime guard
+    // restating the expect() beside it, at about a thousand sites.
+    files: [
+      '**/__tests__/**/*.{ts,tsx,mts}',
+      '**/*.test.{ts,tsx,mts}',
+      'src/test/**/*.{ts,tsx}',
+      'e2e/**/*.ts',
+      'packages/*/test/**/*.ts',
+    ],
+    rules: {
+      '@typescript-eslint/no-non-null-assertion': 'off',
+    },
+  },
+  {
+    // What makes a test a test. `expect-expect` fails a case that asserts
+    // nothing (it passes whatever the code does), `no-identical-title` a case
+    // whose name repeats a sibling's (one of the two is then unfindable in a
+    // report, and often a copy that was never edited), and `valid-expect` an
+    // `expect(...)` that is never finished or an async one that is not awaited
+    // (it asserts nothing, and passes). Playwright's specs are not vitest and
+    // stay out.
+    files: ['**/__tests__/**/*.{ts,tsx,mts}', '**/*.test.{ts,tsx,mts}'],
+    plugins: { vitest },
+    rules: {
+      // A helper that asserts on the test's behalf is named `expect…`, which
+      // the pattern covers, so a new one takes that name rather than an entry.
+      // `fc.assert` is the one other assertion: it throws with the shrunk
+      // counterexample when a property is false, whether the property asserts
+      // with `expect` or returns a boolean.
+      'vitest/expect-expect': ['error', { assertFunctionNames: ['expect', 'expect*', 'fc.assert'] }],
+      'vitest/no-identical-title': 'error',
+      // Vitest's expect takes a failure message as its second argument.
+      'vitest/valid-expect': ['error', { maxArgs: 2 }],
     },
   },
   {
@@ -188,23 +228,31 @@ export default defineConfig([
     // The engine layer must remain UI-free: no React, no DOM globals, no
     // UI-specific utilities. Enforce this boundary to keep the engine
     // portable and testable in isolation.
+    //
+    // `patterns`, not `name`: a `name` entry is an exact module specifier, so
+    // '**/components/**' never matched `../components/x` and the rule caught
+    // nothing (#510). `group` entries are gitignore-style globs tested against
+    // the import string, which is what reaches a relative path however many
+    // levels it climbs. src/__tests__/eslintBoundary.test.ts holds the rule to
+    // the imports it must catch.
+    //
+    // Tests are exempt: one asserts parity with the editor's diagnostics, which
+    // is a check on the boundary rather than a crossing of it.
     files: ['src/engine/**/*.{ts,tsx}'],
+    ignores: ['src/engine/**/__tests__/**', 'src/engine/**/*.test.{ts,tsx}'],
     rules: {
-      'no-restricted-imports': ['error',
-        ...[
-          '**/components/**',
-          '**/hooks/**',
-          '**/store/**',
-          '**/monaco/**',
-          'react',
-          'react-dom',
-          'zustand',
-          'monaco-editor*',
-        ].map(pattern => ({
-          name: pattern,
-          message: 'The engine must stay UI-free. Do not import UI components, hooks, or state management from outside the engine, or React/DOM directly.',
-        })),
-      ],
+      'no-restricted-imports': ['error', {
+        patterns: [
+          {
+            group: ['**/components', '**/components/**', '**/hooks', '**/hooks/**', '**/store', '**/store/**', '**/monaco', '**/monaco/**'],
+            message: 'The engine must stay UI-free. Do not import UI components, hooks, the store or the editor integration.',
+          },
+          {
+            group: ['react', 'react/*', 'react-dom', 'react-dom/*', 'zustand', 'zustand/*', 'monaco-editor', 'monaco-editor/*'],
+            message: 'The engine must stay UI-free. Do not import React, zustand or Monaco.',
+          },
+        ],
+      }],
     },
   },
 ])

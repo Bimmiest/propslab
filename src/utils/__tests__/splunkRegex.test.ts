@@ -38,8 +38,8 @@ describe('PCRE syntax compiles and means what it means in PCRE', () => {
   });
 
   it('exposes Python and Perl named groups', () => {
-    expect(safeRegex('(?P<num>\\d+)')!.exec('id 42')?.groups?.num).toBe('42');
-    expect(safeRegex("(?'n'\\d+)")!.exec('id 42')?.groups?.n).toBe('42');
+    expect(safeRegex('(?P<num>\\d+)')!.exec('id 42')?.groups?.['num']).toBe('42');
+    expect(safeRegex("(?'n'\\d+)")!.exec('id 42')?.groups?.['n']).toBe('42');
     expect(matches('^(?P<q>["\'])x(?P=q)$', '"x"')).toBe(true);
     expect(matches("^(?'n'a)\\k'n'\\g{n}\\g1$", 'aaaa')).toBe(true);
   });
@@ -140,7 +140,7 @@ describe('PCRE syntax compiles and means what it means in PCRE', () => {
   it('reports offsets as JS string indices', () => {
     const m = safeRegex('(?<v>x+)')!.exec('😀é xx')!;
     expect(m.index).toBe(4);
-    expect(m.indices.groups?.v).toEqual([4, 6]);
+    expect(m.indices.groups?.['v']).toEqual([4, 6]);
   });
 });
 

@@ -15,6 +15,7 @@ import { HighlightedTab } from '../tabs/HighlightedTab';
 import { useAppStore } from '../../../store/useAppStore';
 import type { SplunkEvent } from '../../../engine/types';
 import { toViewResult } from '../../../utils/viewResult';
+import { makeEvent } from '../../../test/makeEvent';
 
 const renders = vi.hoisted(() => ({ cim: 0, card: 0 }));
 
@@ -37,18 +38,13 @@ vi.mock('../tabs/shared/FieldEventCard', async (importOriginal) => {
 
 const initial = useAppStore.getState();
 
-function makeEvent(raw: string, fields: Record<string, string>): SplunkEvent {
-  return {
-    _raw: raw,
-    _time: null,
-    _meta: {},
+function eventWithFields(raw: string, fields: Record<string, string>): SplunkEvent {
+  return makeEvent(raw, {
     fields,
-    metadata: { index: 'main', host: 'h', source: 's', sourcetype: 'st' },
-    lineNumbers: { start: 1, end: 1 },
     processingTrace: [
       { processor: 'EXTRACT-kv', phase: 'search-time', description: '', fieldsAdded: Object.keys(fields) },
     ],
-  };
+  });
 }
 
 beforeEach(() => {
@@ -63,7 +59,7 @@ afterEach(() => {
 describe('PreviewPanel render isolation', () => {
   it('does not re-render the active tab while the inputs are typed into or a run is in flight', () => {
     const result = toViewResult({
-      events: [makeEvent('a=1', { a: '1' })],
+      events: [eventWithFields('a=1', { a: '1' })],
       originalRaw: 'a=1',
       eventCount: 1,
       processingSteps: [],
@@ -90,8 +86,8 @@ describe('PreviewPanel render isolation', () => {
 describe('HighlightedTab hover', () => {
   it('restyles the spans without re-rendering any card', () => {
     const items: EnrichedEvent[] = [
-      makeEvent('user=alice action=login', { user: 'alice', action: 'login' }),
-      makeEvent('user=bob action=logout', { user: 'bob', action: 'logout' }),
+      eventWithFields('user=alice action=login', { user: 'alice', action: 'login' }),
+      eventWithFields('user=bob action=logout', { user: 'bob', action: 'logout' }),
     ].map((event) => ({ event, searchText: event._raw.toLowerCase(), originalRaw: event._raw, hasChanges: false, hasMetadataChanges: false, isDropped: false }));
 
     render(<HighlightedTab items={items} allEvents={items} currentPage={1} eventsPerPage={10} />);

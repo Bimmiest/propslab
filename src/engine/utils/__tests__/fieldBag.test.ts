@@ -53,7 +53,7 @@ describe('addFieldValue — never mutates a caller-shared array (#63)', () => {
 
     addFieldValue(copy, 'f', 'two');
 
-    expect(copy.f).toEqual(['one', 'two']);
+    expect(copy['f']).toEqual(['one', 'two']);
     // The shallow copy shares the array with `source`; pushing would have
     // rewritten the original event's field from a pure processor.
     expect(shared).toEqual(['one']);
@@ -63,12 +63,12 @@ describe('addFieldValue — never mutates a caller-shared array (#63)', () => {
   it('promotes a scalar to a two-value array', () => {
     const fields: Record<string, string | string[]> = { f: 'one' };
     expect(addFieldValue(fields, 'f', 'two')).toBe(false);
-    expect(fields.f).toEqual(['one', 'two']);
+    expect(fields['f']).toEqual(['one', 'two']);
   });
 
   it('reports true only when the field is newly created', () => {
     const fields: Record<string, string | string[]> = {};
     expect(addFieldValue(fields, 'f', 'one')).toBe(true);
-    expect(fields.f).toBe('one');
+    expect(fields['f']).toBe('one');
   });
 });

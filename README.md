@@ -19,6 +19,8 @@ npm run dev          # Dev server on http://localhost:5173
 npm run build        # tsc -b && vite build → dist/
 npm run preview      # Serve production build
 npm run lint         # ESLint
+npm run format       # Prettier: rewrite the TypeScript and JavaScript sources
+npm run format:check # …or only report what it would change, as CI does
 npm test             # vitest (one-shot)
 npm run test:coverage # …with the coverage floor enforced, as CI runs it
 npm run test:watch   # vitest watch mode

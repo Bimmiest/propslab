@@ -13,18 +13,11 @@
 import { describe, it, expect } from 'vitest';
 import { applyEvalExpressions } from '../processors/evalProcessor';
 import type { SplunkEvent, ConfDirective, ValidationDiagnostic } from '../types';
-import { runCtx } from './runCtx';
+import { runCtx, FIXED_NOW } from './runCtx';
+import { makeEvent } from '../../test/makeEvent';
 
 function event(fields: Record<string, string> = {}): SplunkEvent {
-  return {
-    _raw: 'raw',
-    _time: null,
-    _meta: {},
-    fields,
-    metadata: { index: 'main', host: 'h', source: 's', sourcetype: 'st' },
-    lineNumbers: { start: 1, end: 1 },
-    processingTrace: [],
-  };
+  return makeEvent('raw', { fields });
 }
 
 const evalDir = (className: string, value: string): ConfDirective =>
@@ -32,7 +25,7 @@ const evalDir = (className: string, value: string): ConfDirective =>
 
 function run(expr: string, fields: Record<string, string> = {}) {
   const diagnostics: ValidationDiagnostic[] = [];
-  const out = applyEvalExpressions([event(fields)], [evalDir('out', expr)], runCtx(diagnostics))[0]!;
+  const out = applyEvalExpressions([event(fields)], [evalDir('out', expr)], runCtx(FIXED_NOW, diagnostics))[0]!;
   return { value: out.fields['out'], diagnostics };
 }
 

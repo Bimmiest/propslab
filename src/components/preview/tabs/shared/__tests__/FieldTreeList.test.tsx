@@ -44,7 +44,7 @@ function Sidebar({ search = '' }: { search?: string }) {
 }
 
 function renderedIndexes(container: HTMLElement): number[] {
-  return [...container.querySelectorAll<HTMLElement>('[data-window-index]')].map((e) => Number(e.dataset.windowIndex));
+  return [...container.querySelectorAll<HTMLElement>('[data-window-index]')].map((e) => Number(e.dataset['windowIndex']));
 }
 
 describe('FieldTreeList windowing (#469)', () => {
@@ -82,7 +82,7 @@ describe('FieldTreeList keyboard model (#495)', () => {
     const { container } = render(<Sidebar />);
     expect(rowsIn(container).length).toBeGreaterThan(1);
     expect(tabStops(container)).toHaveLength(1);
-    expect(tabStops(container)[0]?.dataset.fieldRow).toBe('field0');
+    expect(tabStops(container)[0]?.dataset['fieldRow']).toBe('field0');
   });
 
   it('moves the focus and the tab stop with the arrow keys', () => {
@@ -91,7 +91,7 @@ describe('FieldTreeList keyboard model (#495)', () => {
 
     fireEvent.keyDown(document.activeElement!, { key: 'ArrowDown' });
     expect(document.activeElement).toHaveAttribute('data-field-row', 'field1');
-    expect(tabStops(container).map((el) => el.dataset.fieldRow)).toEqual(['field1']);
+    expect(tabStops(container).map((el) => el.dataset['fieldRow'])).toEqual(['field1']);
 
     fireEvent.keyDown(document.activeElement!, { key: 'ArrowUp' });
     expect(document.activeElement).toHaveAttribute('data-field-row', 'field0');
@@ -103,7 +103,7 @@ describe('FieldTreeList keyboard model (#495)', () => {
   it('makes the row that took focus by other means the tab stop', () => {
     const { container } = render(<Sidebar />);
     act(() => rowsIn(container)[3]?.focus());
-    expect(tabStops(container).map((el) => el.dataset.fieldRow)).toEqual(['field3']);
+    expect(tabStops(container).map((el) => el.dataset['fieldRow'])).toEqual(['field3']);
   });
 
   it('reaches a row that is not rendered with End and Home', () => {
@@ -116,7 +116,7 @@ describe('FieldTreeList keyboard model (#495)', () => {
       scroller.dispatchEvent(new Event('scroll'));
     });
     expect(document.activeElement).toHaveAttribute('data-field-row', `field${ROWS - 1}`);
-    expect(tabStops(container).map((el) => el.dataset.fieldRow)).toEqual([`field${ROWS - 1}`]);
+    expect(tabStops(container).map((el) => el.dataset['fieldRow'])).toEqual([`field${ROWS - 1}`]);
 
     fireEvent.keyDown(document.activeElement!, { key: 'Home' });
     act(() => {
@@ -128,11 +128,11 @@ describe('FieldTreeList keyboard model (#495)', () => {
   it('keeps a tab stop when the roving row leaves the list', () => {
     const { container, rerender } = render(<Sidebar />);
     act(() => rowsIn(container)[3]?.focus());
-    expect(tabStops(container).map((el) => el.dataset.fieldRow)).toEqual(['field3']);
+    expect(tabStops(container).map((el) => el.dataset['fieldRow'])).toEqual(['field3']);
 
     // A filter that no longer matches field3.
     rerender(<Sidebar search="field1" />);
-    expect(rowsIn(container).some((el) => el.dataset.fieldRow === 'field3')).toBe(false);
+    expect(rowsIn(container).some((el) => el.dataset['fieldRow'] === 'field3')).toBe(false);
     expect(tabStops(container)).toHaveLength(1);
   });
 });

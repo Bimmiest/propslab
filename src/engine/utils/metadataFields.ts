@@ -1,4 +1,5 @@
 import type { SplunkEvent } from '../types';
+import { normaliseDestKey } from '../transforms/destKeys';
 
 /**
  * Resolution of an event's routing metadata (host / source / sourcetype /
@@ -67,7 +68,7 @@ function serialiseMeta(meta: SplunkEvent['_meta']): string {
  * DEST_KEY side.
  */
 export function getSourceKeyValue(event: SplunkEvent, sourceKey: string): string | undefined {
-  switch (sourceKey.replace(/^_(?=MetaData:)/i, '')) {
+  switch (normaliseDestKey(sourceKey)) {
     case '_raw':
       return event._raw;
     case '_time':

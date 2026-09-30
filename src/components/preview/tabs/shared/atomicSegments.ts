@@ -12,6 +12,12 @@ export interface Highlight {
   color: string;
 }
 
+/** A highlight and its position in the list the caller passed. */
+interface OpenHighlight {
+  h: Highlight;
+  index: number;
+}
+
 export interface AtomicSegment {
   start: number;
   end: number;
@@ -38,36 +44,41 @@ export function atomicSegments(raw: string, highlights: Highlight[]): AtomicSegm
     if (h.end >= 0 && h.end <= raw.length) bounds.add(h.end);
   }
   const cuts = [...bounds].sort((a, b) => a - b);
-  const byStart = highlights.map((_, i) => i).sort((a, b) => highlights[a]!.start - highlights[b]!.start || a - b);
+  // Each highlight travels with its position in `highlights`, which breaks a
+  // tie between equally small owners in favour of the earlier one.
+  const byStart: OpenHighlight[] = highlights
+    .map((h, index) => ({ h, index }))
+    .sort((a, b) => a.h.start - b.h.start || a.index - b.index);
 
   // Build atomic segments (owner = innermost covering highlight, or null for plain text),
-  // merging contiguous runs that share the same owning field.
+  // merging contiguous runs that share the same owning field. The cuts include 0,
+  // the smallest, so starting `s` there makes the first cut an empty segment to skip.
   const out: AtomicSegment[] = [];
-  const open: number[] = [];
+  const open: OpenHighlight[] = [];
   let next = 0;
-  for (let i = 0; i < cuts.length - 1; i++) {
-    const s = cuts[i]!;
-    const e = cuts[i + 1]!;
-    while (next < byStart.length && highlights[byStart[next]!]!.start <= s) open.push(byStart[next++]!);
+  let s = 0;
+  for (const e of cuts) {
+    if (e === s) continue;
+    for (let entry = byStart[next]; entry !== undefined && entry.h.start <= s; entry = byStart[++next]) open.push(entry);
     // Segments only move right, so a highlight that ends before this one never covers another.
     let kept = 0;
-    let ownerIdx = -1;
-    for (const idx of open) {
-      const h = highlights[idx]!;
+    let owner: OpenHighlight | null = null;
+    for (const entry of open) {
+      const { h } = entry;
       if (h.end < e) continue;
-      open[kept++] = idx;
-      const owner = ownerIdx < 0 ? null : highlights[ownerIdx]!;
+      open[kept++] = entry;
       const len = h.end - h.start;
-      if (owner === null || len < owner.end - owner.start || (len === owner.end - owner.start && idx < ownerIdx)) ownerIdx = idx;
+      if (owner === null || len < owner.h.end - owner.h.start || (len === owner.h.end - owner.h.start && entry.index < owner.index)) owner = entry;
     }
     open.length = kept;
-    const owner = ownerIdx < 0 ? null : highlights[ownerIdx]!;
+    const hl = owner === null ? null : owner.h;
     const prev = out[out.length - 1];
-    if (prev && prev.end === s && (prev.hl?.field ?? null) === (owner?.field ?? null)) {
+    if (prev && prev.end === s && (prev.hl?.field ?? null) === (hl?.field ?? null)) {
       prev.end = e;
     } else {
-      out.push({ start: s, end: e, hl: owner });
+      out.push({ start: s, end: e, hl });
     }
+    s = e;
   }
   return out;
 }

@@ -275,7 +275,7 @@ test.describe('windowed field lists', () => {
     await expect(sidebar.locator('[data-field-row][tabindex="0"]')).toHaveCount(1);
 
     await rows.first().getByRole('button').focus();
-    const focusedIndex = () => page.evaluate(() => Number(document.activeElement?.closest<HTMLElement>('[data-window-index]')?.dataset.windowIndex));
+    const focusedIndex = () => page.evaluate(() => Number(document.activeElement?.closest<HTMLElement>('[data-window-index]')?.dataset['windowIndex']));
     let previous = await focusedIndex();
     for (let i = 1; i < 45; i++) {
       await page.keyboard.press('ArrowDown');

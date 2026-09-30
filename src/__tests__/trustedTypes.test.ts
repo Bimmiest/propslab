@@ -39,8 +39,8 @@ describe('installDefaultTrustedTypesPolicy', () => {
     const [name, rules] = createPolicy.mock.calls[0] as [string, Record<string, (s: string) => string | null>];
     expect(name).toBe('default');
     expect(Object.keys(rules)).toEqual(['createScriptURL']);
-    expect(rules.createScriptURL!('/assets/w.js')).toBe('/assets/w.js');
-    expect(rules.createScriptURL!('https://evil.example/w.js')).toBeNull();
+    expect(rules['createScriptURL']!('/assets/w.js')).toBe('/assets/w.js');
+    expect(rules['createScriptURL']!('https://evil.example/w.js')).toBeNull();
   });
 
   it('survives a refusal (a policy already installed, or not allowed)', () => {

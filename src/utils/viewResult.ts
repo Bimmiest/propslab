@@ -57,6 +57,8 @@ const stripDetail = (d: string) => d.replace(/\s*\([^)]*\)\s*$/, '');
 interface StepAccumulator {
   processor: string;
   phase: StepSummary['phase'];
+  /** The first description seen, which heads the summary when the rest differ in more than detail. */
+  firstDescription: string;
   descriptions: Set<string>;
   fieldsAdded: Set<string>;
   fieldsModified: Set<string>;
@@ -80,6 +82,7 @@ export function summarizeSteps(events: readonly SplunkEvent[]): StepSummary[] {
         entry = {
           processor: step.processor,
           phase: step.phase,
+          firstDescription: step.description,
           descriptions: new Set(),
           fieldsAdded: new Set(),
           fieldsModified: new Set(),
@@ -105,7 +108,7 @@ export function summarizeSteps(events: readonly SplunkEvent[]): StepSummary[] {
       processor: entry.processor,
       phase: entry.phase,
       descriptions,
-      summaryText: reps.size === 1 ? reps.values().next().value! : descriptions[0]!,
+      summaryText: reps.size === 1 ? stripDetail(entry.firstDescription) : entry.firstDescription,
       eventsAffected: entry.eventsAffected,
       totalEvents: events.length,
       fieldsAdded: [...entry.fieldsAdded],

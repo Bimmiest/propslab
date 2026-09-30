@@ -9,17 +9,10 @@ import { describe, it, expect } from 'vitest';
 import { extractTimestamps } from '../processors/timestampExtractor';
 import type { SplunkEvent, ConfDirective, ValidationDiagnostic } from '../types';
 import { runCtx } from './runCtx';
+import { makeEvent } from '../../test/makeEvent';
 
 function event(raw: string): SplunkEvent {
-  return {
-    _raw: raw,
-    _time: null,
-    _meta: {},
-    fields: {},
-    metadata: { index: 'main', host: 'h', source: 's', sourcetype: 'st' },
-    lineNumbers: { start: 1, end: 1 },
-    processingTrace: [],
-  };
+  return makeEvent(raw);
 }
 
 function dir(key: string, value: string, line = 1): ConfDirective {
@@ -32,7 +25,7 @@ const step = (e: SplunkEvent) => e.processingTrace.filter((s) => s.processor ===
 const iso = (e: SplunkEvent) => e._time?.toISOString() ?? null;
 
 const run = (raws: string[], directives: ConfDirective[], diagnostics?: ValidationDiagnostic[]) =>
-  extractTimestamps(raws.map(event), directives, runCtx(diagnostics, { now: NOW }));
+  extractTimestamps(raws.map(event), directives, runCtx(NOW, diagnostics));
 
 describe('MAX_DAYS_AGO and MAX_DAYS_HENCE', () => {
   it('accept a timestamp exactly on the bound and reject one a second past it', () => {
@@ -192,7 +185,7 @@ describe('a dateless timestamp read off the clock', () => {
     const [e] = extractTimestamps(
       [event('00:30:00 +0500 x')],
       [dir('TIME_FORMAT', '%H:%M:%S %z'), dir('DETERMINE_TIMESTAMP_DATE_WITH_SYSTEM_TIME', 'true')],
-      runCtx(undefined, { now: now }),
+      runCtx(now),
     );
     expect(iso(e!)).toBe('2026-01-15T19:30:00.000Z');
     expect(step(e!).description).toBe(

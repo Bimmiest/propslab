@@ -47,7 +47,7 @@ const strykerTestNamePattern: Plugin = {
 //    across two projects. A mutant run is neither, so the recorder is dropped,
 //    the projects are collapsed to the single `include` below, and that test is
 //    excluded.
-delete process.env.PROPSLAB_EVIDENCE_DIR;
+delete process.env['PROPSLAB_EVIDENCE_DIR'];
 
 // Spread rather than mergeConfig, which concatenates arrays and would ADD this
 // include to the base one instead of replacing it.

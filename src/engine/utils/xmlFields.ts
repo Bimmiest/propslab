@@ -71,8 +71,7 @@ export function walkXmlFields(root: XmlElement, mode: XmlNaming, out: XmlCandida
       });
     }
 
-    for (let i = children.length - 1; i >= 0; i--) {
-      const child = children[i]!;
+    for (const child of [...children].reverse()) {
       stack.push({ el: child, path: `${path}.${child.localName}` });
     }
     if (!value) continue;

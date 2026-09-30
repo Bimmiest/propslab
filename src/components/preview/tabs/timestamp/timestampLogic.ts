@@ -41,7 +41,8 @@ export function parseTimeConfig(propsConf: string, metadata: EventMetadata): Tim
  */
 export function isSimulated(specifier: string): boolean {
   const tokens = formatSpecifiers(specifier);
-  return tokens.length === 1 && tokens[0]!.specifier === specifier && tokens[0]!.supported;
+  const [only, ...rest] = tokens;
+  return only !== undefined && rest.length === 0 && only.specifier === specifier && only.supported;
 }
 
 const DESCRIPTIONS = new Map(

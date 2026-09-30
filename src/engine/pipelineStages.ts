@@ -69,6 +69,30 @@ export const PIPELINE_STAGES: PipelineStage[] = [
   },
   {
     step: 7,
+    name: 'Clone Sourcetype',
+    phase: 'index-time',
+    description:
+      'A transforms.conf stanza with CLONE_SOURCETYPE copies each event it matches and gives the copy the named sourcetype. The copy then receives the SEDCMD and TRANSFORMS of that sourcetype, so a clone can be masked or rerouted while the original is left alone.',
+    directives: ['CLONE_SOURCETYPE'],
+  },
+  {
+    step: 8,
+    name: 'Punctuation Annotation',
+    phase: 'index-time',
+    description:
+      'Indexes a punct field holding the event’s punctuation signature, computed from _raw as it is indexed (after SEDCMD and index-time transforms have rewritten it). ANNOTATE_PUNCT = false turns it off.',
+    directives: ['ANNOTATE_PUNCT'],
+  },
+  {
+    step: 9,
+    name: 'Sourcetype Rename',
+    phase: 'search-time',
+    description:
+      'A rename setting makes search time treat the events as another sourcetype. The events stay indexed under their original sourcetype, and search-time settings come from the target stanza alone, so the original stanza’s EXTRACT, REPORT, FIELDALIAS and EVAL stop applying.',
+    directives: ['rename'],
+  },
+  {
+    step: 10,
     name: 'Field Extraction',
     phase: 'search-time',
     description:
@@ -76,7 +100,7 @@ export const PIPELINE_STAGES: PipelineStage[] = [
     directives: ['EXTRACT'],
   },
   {
-    step: 8,
+    step: 11,
     name: 'Search-Time Transforms',
     phase: 'search-time',
     description:
@@ -84,7 +108,7 @@ export const PIPELINE_STAGES: PipelineStage[] = [
     directives: ['REPORT'],
   },
   {
-    step: 9,
+    step: 12,
     name: 'KV Mode',
     phase: 'search-time',
     description:
@@ -92,7 +116,7 @@ export const PIPELINE_STAGES: PipelineStage[] = [
     directives: ['KV_MODE', 'AUTO_KV_JSON'],
   },
   {
-    step: 10,
+    step: 13,
     name: 'Field Aliases',
     phase: 'search-time',
     description:
@@ -100,7 +124,7 @@ export const PIPELINE_STAGES: PipelineStage[] = [
     directives: ['FIELDALIAS'],
   },
   {
-    step: 11,
+    step: 14,
     name: 'Eval Expressions',
     phase: 'search-time',
     description:

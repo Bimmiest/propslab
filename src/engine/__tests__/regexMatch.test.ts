@@ -13,7 +13,7 @@ describe('matchInputs', () => {
     expect(r).not.toBeNull();
     expect(r!.groups).toEqual({ user: 'alice' });
     // "alice" starts at index 5.
-    expect(r!.groupSpans.user).toEqual([5, 10]);
+    expect(r!.groupSpans['user']).toEqual([5, 10]);
     expect(r!.index).toBe(0);
     expect(r!.match).toBe('user=alice');
   });
@@ -37,7 +37,7 @@ describe('matchInputs', () => {
   it('omits groups that did not participate in the match', () => {
     const [r] = matchInputs('(?<a>x)|(?<b>y)', ['y'])!;
     expect(r!.groups).toEqual({ b: 'y' });
-    expect(r!.groupSpans.a).toBeUndefined();
+    expect(r!.groupSpans['a']).toBeUndefined();
   });
 
   it('keeps a group named __proto__ (#430)', () => {

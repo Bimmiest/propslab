@@ -67,7 +67,7 @@ afterEach(async () => {
 });
 
 /** Calls a tool and checks it is answered acceptably within the bound. */
-async function answered(
+async function expectAnswered(
   name: string,
   args: Record<string, unknown>,
   budgetMs = BUDGET_MS,
@@ -97,21 +97,21 @@ const layers = (text: string) => [
 describe('adversarial input at the schema limits (#517)', () => {
   it('a maximum-length conf of continuation lines, for every conf-taking tool', async () => {
     const conf = `[st]\nEXTRACT-a = x\\\n${fill('a\\\n', half - 20)}`;
-    await answered('validate', { props_conf: layers(conf), timeout_ms: BUDGET_MS });
-    await answered('explain_precedence', { conf: layers(conf), sourcetype: 'st', timeout_ms: BUDGET_MS });
-    await answered('simulate', { raw: 'x\n', sourcetype: 'st', props_conf: layers(conf), timeout_ms: BUDGET_MS });
+    await expectAnswered('validate', { props_conf: layers(conf), timeout_ms: BUDGET_MS });
+    await expectAnswered('explain_precedence', { conf: layers(conf), sourcetype: 'st', timeout_ms: BUDGET_MS });
+    await expectAnswered('simulate', { raw: 'x\n', sourcetype: 'st', props_conf: layers(conf), timeout_ms: BUDGET_MS });
   }, 60_000);
 
   it('a maximum-length conf of tiny stanzas and of malformed lines', async () => {
     for (const unit of ['[s]\n', 'x\n', 'EXTRACT-a=(\n']) {
       const conf = layers(fill(unit, half));
-      await answered('validate', { props_conf: conf, transforms_conf: '', timeout_ms: BUDGET_MS });
-      await answered('explain_precedence', { conf, sourcetype: 's', timeout_ms: BUDGET_MS });
+      await expectAnswered('validate', { props_conf: conf, transforms_conf: '', timeout_ms: BUDGET_MS });
+      await expectAnswered('explain_precedence', { conf, sourcetype: 's', timeout_ms: BUDGET_MS });
     }
   }, 120_000);
 
   it('the maximum sample with an empty LINE_BREAKER group, breaking between every character', async () => {
-    await answered('simulate', {
+    await expectAnswered('simulate', {
       raw: fill('ab', 1_000_000),
       sourcetype: 'st',
       props_conf: '[st]\nSHOULD_LINEMERGE = false\nLINE_BREAKER = ()\nTRUNCATE = 0',
@@ -140,7 +140,7 @@ describe('adversarial input at the schema limits (#517)', () => {
       ['xml', samples.xml],
       ['xmlkv', samples.xml],
     ] as const) {
-      await answered('simulate', { raw, sourcetype, props_conf: props, timeout_ms: BUDGET_MS });
+      await expectAnswered('simulate', { raw, sourcetype, props_conf: props, timeout_ms: BUDGET_MS });
     }
   }, 120_000);
 
@@ -156,14 +156,14 @@ describe('adversarial input at the schema limits (#517)', () => {
     const outs = await Promise.all(
       Array.from({ length: 20 }, (_, i) =>
         i % 2 === 0
-          ? answered(
+          ? expectAnswered(
               'simulate',
               { raw: `${'a'.repeat(200)}\n`, sourcetype: 'evil', props_conf: evil, timeout_ms: 500 },
               // Queued calls wait for the ones ahead: at most four budgets
               // (and start-ups) per slot, bounded by the queue.
               5 * (500 + 1_000),
             )
-          : answered('lookup_directive', { key: '-'.repeat(200) }, BUDGET_MS, ['unknown_directive']),
+          : expectAnswered('lookup_directive', { key: '-'.repeat(200) }, BUDGET_MS, ['unknown_directive']),
       ),
     );
     expect(performance.now() - started).toBeLessThan(5 * 1_500 + SLACK_MS);

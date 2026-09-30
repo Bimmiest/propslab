@@ -13,6 +13,7 @@
     "types": ["node"],
     "strict": true,
     "noImplicitOverride": true,
+    "noPropertyAccessFromIndexSignature": true,
     "noEmit": true,
     "esModuleInterop": true,
     // server.ts imports its version from package.json (#319), which esbuild

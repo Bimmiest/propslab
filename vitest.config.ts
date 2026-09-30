@@ -12,7 +12,7 @@ import react from '@vitejs/plugin-react';
 // main process does, whichever projects that run reached: a run of a single
 // test file writes into it too, and has no project to clean up after it.
 const evidenceDir = join(tmpdir(), `propslab-directive-evidence-${String(process.pid)}-${String(Date.now())}`);
-process.env.PROPSLAB_EVIDENCE_DIR = evidenceDir;
+process.env['PROPSLAB_EVIDENCE_DIR'] = evidenceDir;
 process.once('exit', () => {
   rmSync(evidenceDir, { recursive: true, force: true });
 });

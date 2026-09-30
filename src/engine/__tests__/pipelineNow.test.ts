@@ -48,21 +48,21 @@ describe('PipelineOptions.now (#293)', () => {
   it('is what EVAL now() and time() return', () => {
     const props = '[st]\nSHOULD_LINEMERGE = false\nEVAL-a = now()\nEVAL-b = time()\n';
     const { result } = runPipeline('x', META, props, '', opts(1_700_000_000_500));
-    expect(result.events[0]?.fields.a).toBe('1700000000');
-    expect(result.events[0]?.fields.b).toBe('1700000000');
+    expect(result.events[0]?.fields['a']).toBe('1700000000');
+    expect(result.events[0]?.fields['b']).toBe('1700000000');
   });
 
   it('is what INGEST_EVAL now() returns', () => {
     const props = '[st]\nSHOULD_LINEMERGE = false\nTRANSFORMS-t = stamp\n';
     const transforms = '[stamp]\nINGEST_EVAL = stamped=now()\n';
     const { result } = runPipeline('x', META, props, transforms, opts(1_700_000_000_000));
-    expect(result.events[0]?.fields.stamped).toBe('1700000000');
+    expect(result.events[0]?.fields['stamped']).toBe('1700000000');
   });
   it('reaches the TRANSFORMS a CLONE_SOURCETYPE copy is given', () => {
     const props = '[st]\nSHOULD_LINEMERGE = false\nTRANSFORMS-c = copy\n[cloned]\nTRANSFORMS-t = stamp\n';
     const transforms = '[copy]\nREGEX = .\nCLONE_SOURCETYPE = cloned\n[stamp]\nINGEST_EVAL = stamped=now()\n';
     const { result } = runPipeline('x', META, props, transforms, opts(1_700_000_000_000));
     const clone = result.events.find((e) => e.metadata.sourcetype === 'cloned');
-    expect(clone?.fields.stamped).toBe('1700000000');
+    expect(clone?.fields['stamped']).toBe('1700000000');
   });
 });

@@ -53,14 +53,14 @@ describe('RULESET-<class> (#275)', () => {
     // RULESET-a sorts before TRANSFORMS-z by name; the spec orders by kind first.
     const props = '[st]\nRULESET-a = tag_b\nTRANSFORMS-z = tag_a\n';
     const r = run('x', props, TAGGERS);
-    expect(r.result.events[0]?.fields.tag).toBe('b');
+    expect(r.result.events[0]?.fields['tag']).toBe('b');
   });
 
   it('orders rulesets by class name, then by position within one', () => {
     const props = '[st]\nRULESET-b = tag_a\nRULESET-a = tag_c, tag_b\n';
     const r = run('x', props, TAGGERS);
     // a: c then b; then b: a. The last write is from RULESET-b.
-    expect(r.result.events[0]?.fields.tag).toBe('a');
+    expect(r.result.events[0]?.fields['tag']).toBe('a');
   });
 
   it('routes to nullQueue like TRANSFORMS does', () => {
@@ -73,13 +73,13 @@ describe('RULESET-<class> (#275)', () => {
     const transforms = '[kv]\nREGEX = user:(?<user>\\w+)\n';
     const r = run('user:bob', '[st]\nRULESET-kv = kv\n', transforms);
     // Index time without WRITE_META stores nothing, and no REPORT- runs it.
-    expect(r.result.events[0]?.fields.user).toBeUndefined();
+    expect(r.result.events[0]?.fields['user']).toBeUndefined();
   });
 
   it('treats RULESET_DESC as description only', () => {
     const r = run('x', '[st]\nRULESET-t = tag_a\nRULESET_DESC-t = stamps a tag\n', TAGGERS);
-    expect(r.result.events[0]?.fields.tag).toBe('a');
-    expect(DIRECTIVE_SUPPORT.RULESET_DESC?.support).toBe('documented');
+    expect(r.result.events[0]?.fields['tag']).toBe('a');
+    expect(DIRECTIVE_SUPPORT['RULESET_DESC']?.support).toBe('documented');
   });
 });
 
@@ -89,14 +89,14 @@ describe('STOP_PROCESSING_IF (#275)', () => {
   it('skips every rule after it in the same ruleset when true', () => {
     const r = run('please halt', '[st]\nRULESET-r = tag_a, stop, tag_b, tag_c\n', `${TAGGERS}\n\n${STOPPER}`);
     const ev = r.result.events[0];
-    expect(ev?.fields.tag).toBe('a');
+    expect(ev?.fields['tag']).toBe('a');
     const step = ev?.processingTrace.find((s) => s.processor === 'RULESET-r:stop');
     expect(step?.description).toContain('skipped the rest of RULESET-r: tag_b, tag_c');
   });
 
   it('lets the rest of the list run when false', () => {
     const r = run('carry on', '[st]\nRULESET-r = tag_a, stop, tag_b\n', `${TAGGERS}\n\n${STOPPER}`);
-    expect(r.result.events[0]?.fields.tag).toBe('b');
+    expect(r.result.events[0]?.fields['tag']).toBe('b');
     expect(processors(r)).toContain('RULESET-r:stop');
   });
 
@@ -104,22 +104,22 @@ describe('STOP_PROCESSING_IF (#275)', () => {
     // The spec scopes the skip to "that ruleset"; the next class still runs.
     const props = '[st]\nRULESET-a = stop, tag_a\nRULESET-b = tag_b\n';
     const r = run('halt', props, `${TAGGERS}\n\n${STOPPER}`);
-    expect(r.result.events[0]?.fields.tag).toBe('b');
+    expect(r.result.events[0]?.fields['tag']).toBe('b');
   });
 
   it('applies the same skip within a TRANSFORMS- list, and RULESETs still follow', () => {
     const props = '[st]\nTRANSFORMS-t = stop, tag_a\nRULESET-r = tag_c\n';
     const r = run('halt', props, `${TAGGERS}\n\n${STOPPER}`);
     const ev = r.result.events[0];
-    expect(ev?.fields.tag).toBe('c');
+    expect(ev?.fields['tag']).toBe('c');
     expect(processors(r)).toContain('TRANSFORMS-t:stop');
   });
 
   it('runs after the INGEST_EVAL in its own stanza, and sees its result', () => {
     const transforms = `${TAGGERS}\n\n[eval_then_stop]\nINGEST_EVAL = sev="high"\nSTOP_PROCESSING_IF = sev == "high"\n`;
     const r = run('x', '[st]\nRULESET-r = eval_then_stop, tag_a\n', transforms);
-    expect(r.result.events[0]?.fields.sev).toBe('high');
-    expect(r.result.events[0]?.fields.tag).toBeUndefined();
+    expect(r.result.events[0]?.fields['sev']).toBe('high');
+    expect(r.result.events[0]?.fields['tag']).toBeUndefined();
   });
 
   it('overrides the stanza’s other index-time settings, as INGEST_EVAL does', () => {
@@ -131,7 +131,7 @@ describe('STOP_PROCESSING_IF (#275)', () => {
   it('keeps processing and reports an expression that will not evaluate', () => {
     const transforms = `${TAGGERS}\n\n[bad]\nSTOP_PROCESSING_IF = (((\n`;
     const r = run('x', '[st]\nRULESET-r = bad, tag_a\n', transforms);
-    expect(r.result.events[0]?.fields.tag).toBe('a');
+    expect(r.result.events[0]?.fields['tag']).toBe('a');
     expect(r.diagnostics.some((d) => d.directiveKey === 'STOP_PROCESSING_IF' && d.level === 'error')).toBe(true);
   });
 

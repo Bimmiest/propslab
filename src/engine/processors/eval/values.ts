@@ -69,7 +69,9 @@ export function toStr(v: EvalArg): string {
  */
 export function addOrConcat(l: EvalArg, r: EvalArg): EvalValue {
   if (l === null || l === undefined || r === null || r === undefined) return null;
-  if (isNumericValue(l) && isNumericValue(r)) return numArg(l)! + numArg(r)!;
+  const a = numericValue(l);
+  const b = numericValue(r);
+  if (a !== null && b !== null) return a + b;
   return toStr(l) + toStr(r);
 }
 
@@ -126,8 +128,13 @@ export function toMv(v: EvalArg): string[] {
  * non-numeric input to 0 (which made isnum("abc") wrongly return true).
  */
 export function isNumericValue(v: EvalArg): boolean {
-  if (typeof v === 'number') return Number.isFinite(v);
-  return typeof v === 'string' && parseDecimal(v) !== null;
+  return numericValue(v) !== null;
+}
+
+/** The number a genuinely numeric value (see {@link isNumericValue}) stands for, or null. */
+function numericValue(v: EvalArg): number | null {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+  return typeof v === 'string' ? parseDecimal(v) : null;
 }
 
 /**
@@ -136,8 +143,8 @@ export function isNumericValue(v: EvalArg): boolean {
  * Returns <0 if a<b, >0 if a>b, 0 if equal.
  */
 function compareEvalValues(a: EvalArg, b: EvalArg): number {
-  const aNum = isNumericValue(a) ? numArg(a) : null;
-  const bNum = isNumericValue(b) ? numArg(b) : null;
+  const aNum = numericValue(a);
+  const bNum = numericValue(b);
   if (aNum !== null && bNum !== null) return aNum - bNum;
   if (aNum !== null) return -1; // number < string
   if (bNum !== null) return 1;
@@ -175,10 +182,12 @@ export function toTri(v: EvalArg): boolean | null {
  * coercing a non-numeric operand to 0 — `"abc" == 0` must be false.
  */
 function compareScalars(left: EvalValue, right: EvalValue, op: string): boolean {
-  const bothNumeric = isNumericValue(left) && isNumericValue(right);
+  const leftNum = numericValue(left);
+  const rightNum = numericValue(right);
+  const bothNumeric = leftNum !== null && rightNum !== null;
 
-  const l = bothNumeric ? numArg(left)! : toStr(left);
-  const r = bothNumeric ? numArg(right)! : toStr(right);
+  const l = bothNumeric ? leftNum : toStr(left);
+  const r = bothNumeric ? rightNum : toStr(right);
 
   switch (op) {
     case '==': case '=': return l === r;

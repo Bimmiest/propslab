@@ -18,7 +18,7 @@ export interface SummaryRow {
 }
 
 export function writeJobSummary(title: string, rows: SummaryRow[]): void {
-  const file = process.env.GITHUB_STEP_SUMMARY;
+  const file = process.env['GITHUB_STEP_SUMMARY'];
   if (!file) return;
   const cell = (value: number | string, unit?: string) =>
     `${typeof value === 'number' ? Math.round(value).toLocaleString('en-GB') : value}${unit ? ` ${unit}` : ''}`;

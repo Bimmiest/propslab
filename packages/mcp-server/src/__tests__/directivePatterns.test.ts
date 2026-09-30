@@ -88,7 +88,7 @@ describe('the suspect list and validate agree on the patterns (#517)', () => {
     expect(byKey['EXTRACT-in']?.pattern).toBe('(?<a>(');
     expect(byKey['SEDCMD-s']?.pattern).toBe('[');
     expect(byKey['EVAL-e']).toMatchObject({ pattern: '(unclosed', via: 'replace()' });
-    expect(byKey.INGEST_EVAL).toMatchObject({ pattern: '[z', via: 'match()', file: 'transforms.conf' });
+    expect(byKey['INGEST_EVAL']).toMatchObject({ pattern: '[z', via: 'match()', file: 'transforms.conf' });
 
     const lint = lintRegexDirectives(parseConf(props, 'props.conf'), parseConf(transforms, 'transforms.conf'));
     const linted = new Map(lint.map((d) => [d.directiveKey, d.message]));

@@ -4,7 +4,8 @@ import { extractTimestamps } from '../processors/timestampExtractor';
 import { breakLines } from '../processors/lineBreaker';
 import { detectTimestamp } from '../scaffold/analyzers/timestamp';
 import type { ConfDirective, EventMetadata, SplunkEvent } from '../types';
-import { runCtx } from './runCtx';
+import { runCtx, FIXED_NOW } from './runCtx';
+import { makeEvent } from '../../test/makeEvent';
 
 // Doc- and convention-derived, not captured: the Splunk 10.4.0 fixtures only
 // pin ISO 8601 with a Z zone, at the start of a line. What these tests pin is
@@ -19,20 +20,12 @@ function dir(key: string, value: string): ConfDirective {
 }
 
 function event(raw: string): SplunkEvent {
-  return {
-    _raw: raw,
-    _time: null,
-    _meta: {},
-    fields: {},
-    metadata: META,
-    lineNumbers: { start: 1, end: 1 },
-    processingTrace: [],
-  };
+  return makeEvent(raw);
 }
 
 /** What extraction read from `line`: the source, format and instant, or null. */
 function extracted(line: string, directives: ConfDirective[] = []) {
-  const e = extractTimestamps([event(line)], directives, runCtx(undefined, { now: NOW }))[0]!;
+  const e = extractTimestamps([event(line)], directives, runCtx(NOW))[0]!;
   const step = e.processingTrace.at(-1)!;
   if (step.timeSource !== 'auto-recognition' && step.timeSource !== 'TIME_FORMAT') return null;
   const format = /^Auto-recognized timestamp \((.*)\): /.exec(step.description)?.[1];
@@ -41,7 +34,7 @@ function extracted(line: string, directives: ConfDirective[] = []) {
 
 /** Whether BREAK_ONLY_BEFORE_DATE starts an event at `line`. */
 function startsEvent(line: string, directives: ConfDirective[] = []): boolean {
-  return breakLines(`no date here\n${line}`, directives, META, runCtx()).length === 2;
+  return breakLines(`no date here\n${line}`, directives, META, runCtx(FIXED_NOW)).length === 2;
 }
 
 interface Case {
@@ -227,6 +220,6 @@ describe('line breaking, extraction and the scaffold agree', () => {
 
   it('breaks nowhere when TIME_PREFIX will not compile, as extraction reads no timestamp', () => {
     const raw = '2026-01-15T10:00:00Z a\n2026-01-15T10:00:01Z b';
-    expect(breakLines(raw, [dir('TIME_PREFIX', '(')], META, runCtx())).toHaveLength(1);
+    expect(breakLines(raw, [dir('TIME_PREFIX', '(')], META, runCtx(FIXED_NOW))).toHaveLength(1);
   });
 });

@@ -347,8 +347,8 @@ describe('explain_precedence', () => {
       ]),
     );
     // local/ wins the contested key; the default/-only key survives the merge.
-    expect(effective.TIME_FORMAT).toBe('%Y-%m-%d');
-    expect(effective.CHARSET).toBe('UTF-8');
+    expect(effective['TIME_FORMAT']).toBe('%Y-%m-%d');
+    expect(effective['CHARSET']).toBe('UTF-8');
   });
 });
 

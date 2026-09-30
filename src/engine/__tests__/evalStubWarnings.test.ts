@@ -1,19 +1,16 @@
 import { describe, it, expect } from 'vitest';
 import { applyEvalExpressions } from '../processors/evalProcessor';
 import type { ConfDirective, SplunkEvent, ValidationDiagnostic } from '../types';
-import { runCtx } from './runCtx';
+import { runCtx, FIXED_NOW } from './runCtx';
+import { makeEvent } from '../../test/makeEvent';
 
-const ev = (): SplunkEvent => ({
-  _raw: 'x', _time: null, _meta: {}, fields: { n: '3.14159' },
-  metadata: { index: 'main', host: 'h', source: 's', sourcetype: 'st' },
-  lineNumbers: { start: 1, end: 1 }, processingTrace: [],
-});
+const ev = (): SplunkEvent => makeEvent('x', { fields: { n: '3.14159' } });
 const evalDir = (expr: string): ConfDirective =>
   ({ key: 'EVAL-out', value: expr, line: 1, directiveType: 'EVAL', className: 'out' });
 
 function warningsFor(expr: string): ValidationDiagnostic[] {
   const diagnostics: ValidationDiagnostic[] = [];
-  applyEvalExpressions([ev()], [evalDir(expr)], runCtx(diagnostics));
+  applyEvalExpressions([ev()], [evalDir(expr)], runCtx(FIXED_NOW, diagnostics));
   return diagnostics;
 }
 
@@ -40,7 +37,7 @@ describe('eval — every unsimulated builtin warns (#127)', () => {
   });
 
   it('sigfig still returns a usable value alongside the warning', () => {
-    const r = applyEvalExpressions([ev()], [evalDir('sigfig(n)')], runCtx())[0]!;
-    expect(r.fields.out).toBe('3.14159');
+    const r = applyEvalExpressions([ev()], [evalDir('sigfig(n)')], runCtx(FIXED_NOW))[0]!;
+    expect(r.fields['out']).toBe('3.14159');
   });
 });

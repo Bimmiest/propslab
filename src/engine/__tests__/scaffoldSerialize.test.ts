@@ -48,7 +48,7 @@ describe('generalize — quoted values (#35.2)', () => {
     const raw = '{"email":"x@y.com"}';
     const directive = buildExtractFromSelection(raw, 'x@y.com', 'email', raw.indexOf('x@y.com'));
     const match = new RegExp(directive!.value).exec(raw);
-    expect(match?.groups?.email).toBe('x@y.com');
+    expect(match?.groups?.['email']).toBe('x@y.com');
   });
 
   it('still uses \\S+ for an unquoted token', () => {

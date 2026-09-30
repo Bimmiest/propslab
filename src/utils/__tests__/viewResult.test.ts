@@ -2,20 +2,12 @@ import { describe, it, expect } from 'vitest';
 import { runPipeline } from '../../engine/pipeline';
 import type { ProcessingResult, ProcessingStep, SplunkEvent } from '../../engine/types';
 import { summarizeSteps, toViewResult } from '../viewResult';
+import { makeEvent } from '../../test/makeEvent';
 
 const meta = { index: 'main', host: 'h', source: 's', sourcetype: 'st' };
 
 function event(raw: string, trace: ProcessingStep[], extra: Partial<SplunkEvent> = {}): SplunkEvent {
-  return {
-    _raw: raw,
-    _time: null,
-    _meta: {},
-    fields: {},
-    metadata: { ...meta },
-    lineNumbers: { start: 1, end: 1 },
-    processingTrace: trace,
-    ...extra,
-  };
+  return makeEvent(raw, { metadata: { ...meta }, processingTrace: trace, ...extra });
 }
 
 function resultOf(events: SplunkEvent[]): ProcessingResult {

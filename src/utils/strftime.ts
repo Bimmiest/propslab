@@ -29,6 +29,11 @@ const WEEKDAY_NAMES_ABBR = [
   'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat',
 ] as const;
 
+/** The name at `index` of a table indexed by a valid Date's month or weekday. */
+function nameAt(names: readonly string[], index: number): string {
+  return names.slice(index, index + 1).join('');
+}
+
 const MONTH_NAME_REGEX = `(${[...MONTH_NAMES_FULL, ...MONTH_NAMES_ABBR].join('|')})`;
 const WEEKDAY_NAME_REGEX = `(${[...WEEKDAY_NAMES_FULL, ...WEEKDAY_NAMES_ABBR].join('|')})`;
 
@@ -37,11 +42,20 @@ const WEEKDAY_NAME_REGEX = `(${[...WEEKDAY_NAMES_FULL, ...WEEKDAY_NAMES_ABBR].jo
 // symbolic capture-group name.
 // ---------------------------------------------------------------------------
 
+/** The symbolic names a directive's capture group can take (the `capture:` of each directive). */
+type CaptureName =
+  | 'ampm' | 'day' | 'dayOfYear' | 'epoch' | 'hour12' | 'hour24' | 'microseconds'
+  | 'microsecondsFull' | 'milliseconds' | 'minute' | 'month' | 'monthName' | 'nanoseconds'
+  | 'second' | 'subseconds' | 'tzName' | 'tzOffset' | 'weekdayName' | 'year2' | 'year4';
+
+/** The text each capture read from a timestamp; a capture the format lacks is absent. */
+type CaptureBag = Partial<Record<CaptureName, string>>;
+
 interface DirectiveMeta {
   /** Regex fragment (no surrounding parentheses -- they are added by the builder). */
   regex: string;
   /** Symbolic capture name used during timestamp assembly. */
-  capture: string;
+  capture: CaptureName;
   /**
    * The directive rendered for a Date, in local time: what `regex` reads back.
    * Kept beside the regex so parsing and formatting cannot drift apart.
@@ -78,12 +92,12 @@ function buildDirectiveMap(): Record<string, DirectiveMeta> {
     // POSIX strptime treats %b/%B (and %a/%A) as synonyms: each accepts the
     // full or the abbreviated name, so `%b` reads `September` and `%B` reads
     // `Sep`. Full names are listed first so the longer spelling is consumed.
-    // The name lookups are asserted: getMonth() is 0-11 and getDay() 0-6 for
-    // any valid Date, and formatStrftime rejects an invalid one up front.
-    '%b': { regex: MONTH_NAME_REGEX, capture: 'monthName', format: (d) => MONTH_NAMES_ABBR[d.getMonth()]! },
-    '%B': { regex: MONTH_NAME_REGEX, capture: 'monthName', format: (d) => MONTH_NAMES_FULL[d.getMonth()]! },
-    '%a': { regex: WEEKDAY_NAME_REGEX, capture: 'weekdayName', format: (d) => WEEKDAY_NAMES_ABBR[d.getDay()]! },
-    '%A': { regex: WEEKDAY_NAME_REGEX, capture: 'weekdayName', format: (d) => WEEKDAY_NAMES_FULL[d.getDay()]! },
+    // getMonth() is 0-11 and getDay() 0-6 for any valid Date, and
+    // formatStrftime rejects an invalid one up front, so `nameAt` always finds one.
+    '%b': { regex: MONTH_NAME_REGEX, capture: 'monthName', format: (d) => nameAt(MONTH_NAMES_ABBR, d.getMonth()) },
+    '%B': { regex: MONTH_NAME_REGEX, capture: 'monthName', format: (d) => nameAt(MONTH_NAMES_FULL, d.getMonth()) },
+    '%a': { regex: WEEKDAY_NAME_REGEX, capture: 'weekdayName', format: (d) => nameAt(WEEKDAY_NAMES_ABBR, d.getDay()) },
+    '%A': { regex: WEEKDAY_NAME_REGEX, capture: 'weekdayName', format: (d) => nameAt(WEEKDAY_NAMES_FULL, d.getDay()) },
     // A trailing `:MM` belongs to a GMT-relative name (`GMT+05:30`); a colon
     // alone does not, so `PST: msg` still reads PST.
     '%Z': { regex: '([A-Za-z][A-Za-z0-9_/+-]*(?::\\d{2})?)', capture: 'tzName', format: timeZoneAbbreviation },
@@ -149,11 +163,11 @@ function expandComposites(format: string): string {
         i += 2;
         continue;
       }
-      result += format[i]!;
+      result += format.charAt(i);
       i += 1;
       continue;
     }
-    result += format[i]!;
+    result += format.charAt(i);
     i += 1;
   }
   return result;
@@ -166,7 +180,7 @@ function expandComposites(format: string): string {
 
 interface TokenisedFormat {
   regex: RegExp;
-  captures: string[];
+  captures: CaptureName[];
 }
 
 /**
@@ -238,7 +252,7 @@ function directiveAt(format: string, i: number): { spec: string; meta: Directive
 
 function tokeniseUncached(format: string): TokenisedFormat {
   const expanded = expandComposites(format);
-  const captures: string[] = [];
+  const captures: CaptureName[] = [];
   let regexStr = '';
   let i = 0;
 
@@ -472,7 +486,7 @@ function resolveTzOffsetMinutes(tz: string): number | null {
  * microseconds/nanoseconds captures), the other %<n>N widths, and %f.
  * Returns 0 when none are present.
  */
-function computeSubMilliseconds(bag: Record<string, string>): number {
+function computeSubMilliseconds(bag: CaptureBag): number {
   if (bag.milliseconds) {
     return parseInt(bag.milliseconds, 10);
   }
@@ -667,13 +681,13 @@ const YEARLESS_FUTURE_TOLERANCE_MS = 2 * 86_400_000;
  * The components a format captured from `text`, by capture name, or null
  * when the format does not match.
  */
-function captureBag(text: string, format: string): Record<string, string> | null {
+function captureBag(text: string, format: string): CaptureBag | null {
   const { regex, captures } = tokenise(format);
   const match = text.match(regex);
   if (!match) {
     return null;
   }
-  const bag: Record<string, string> = {};
+  const bag: CaptureBag = {};
   for (const [i, captureName] of captures.entries()) {
     const value = match[i + 1];
     if (value !== undefined) {
@@ -691,7 +705,7 @@ function monthLengths(year: number): number[] {
   return [31, isLeap(year) ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 }
 
-function resolveYear(bag: Record<string, string>, supplied: CalendarDate | undefined, yearForYearless: number): number {
+function resolveYear(bag: CaptureBag, supplied: CalendarDate | undefined, yearForYearless: number): number {
   if (supplied) return supplied.year;
   if (bag.year4) return parseInt(bag.year4, 10);
   if (bag.year2) {
@@ -704,7 +718,7 @@ function resolveYear(bag: Record<string, string>, supplied: CalendarDate | undef
 }
 
 /** The 0-indexed month. */
-function resolveMonth(bag: Record<string, string>, supplied: CalendarDate | undefined): number {
+function resolveMonth(bag: CaptureBag, supplied: CalendarDate | undefined): number {
   if (supplied) return supplied.month;
   if (bag.month) return parseInt(bag.month, 10) - 1;
   if (bag.monthName) {
@@ -718,7 +732,7 @@ function resolveMonth(bag: Record<string, string>, supplied: CalendarDate | unde
 
 /** The month (0-indexed) and day of the month. */
 function resolveMonthDay(
-  bag: Record<string, string>,
+  bag: CaptureBag,
   year: number,
   supplied: CalendarDate | undefined,
 ): { month: number; day: number } {
@@ -741,7 +755,7 @@ function resolveMonthDay(
   };
 }
 
-function resolveHour(bag: Record<string, string>): number {
+function resolveHour(bag: CaptureBag): number {
   if (bag.hour24) return parseInt(bag.hour24, 10);
   if (!bag.hour12) return 0;
   const hour = parseInt(bag.hour12, 10);
@@ -774,7 +788,7 @@ function componentsInRange(year: number, month: number, day: number, hour: numbe
  * Every branch below is a question about how far the real instant is from it.
  */
 function resolveZone(
-  bag: Record<string, string>,
+  bag: CaptureBag,
   wallAsUtcMs: number,
   hasDate: boolean,
   options: ParseTimestampOptions,

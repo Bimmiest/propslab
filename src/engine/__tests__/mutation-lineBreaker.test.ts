@@ -6,7 +6,7 @@
 import { describe, it, expect } from 'vitest';
 import { breakLines } from '../processors/lineBreaker';
 import type { ConfDirective, EventMetadata } from '../types';
-import { runCtx } from './runCtx';
+import { runCtx, FIXED_NOW } from './runCtx';
 
 const META: EventMetadata = { index: 'main', host: 'h', source: 's', sourcetype: 'st' };
 
@@ -14,28 +14,28 @@ function dir(key: string, value: string): ConfDirective {
   return { key, value, line: 3, directiveType: key };
 }
 
-const raws = (raw: string, directives: ConfDirective[]) => breakLines(raw, directives, META, runCtx()).map((e) => e._raw);
+const raws = (raw: string, directives: ConfDirective[]) => breakLines(raw, directives, META, runCtx(FIXED_NOW)).map((e) => e._raw);
 
 describe('input with nothing in it', () => {
   it('yields no events for an empty string', () => {
-    expect(breakLines('', [], META, runCtx())).toEqual([]);
+    expect(breakLines('', [], META, runCtx(FIXED_NOW))).toEqual([]);
   });
 
   it('yields no events for input that is only line breaks', () => {
-    expect(breakLines('\n\r\n\n', [], META, runCtx())).toEqual([]);
+    expect(breakLines('\n\r\n\n', [], META, runCtx(FIXED_NOW))).toEqual([]);
   });
 });
 
 describe('line numbers', () => {
   it('gives each unmerged event its own line', () => {
-    const events = breakLines('a\nb\nc', [dir('SHOULD_LINEMERGE', 'false')], META, runCtx());
+    const events = breakLines('a\nb\nc', [dir('SHOULD_LINEMERGE', 'false')], META, runCtx(FIXED_NOW));
     expect(events.map((e) => e.lineNumbers)).toEqual([
       { start: 1, end: 1 }, { start: 2, end: 2 }, { start: 3, end: 3 },
     ]);
   });
 
   it('spans the lines a merged event covers', () => {
-    const events = breakLines('2024-01-01 10:00:00 a\nx\ny\n2024-01-02 10:00:00 b', [], META, runCtx());
+    const events = breakLines('2024-01-01 10:00:00 a\nx\ny\n2024-01-02 10:00:00 b', [], META, runCtx(FIXED_NOW));
     expect(events.map((e) => e.lineNumbers)).toEqual([{ start: 1, end: 3 }, { start: 4, end: 4 }]);
   });
 });
@@ -100,7 +100,7 @@ describe('INDEXED_EXTRACTIONS and the merge default', () => {
 describe('the trace', () => {
   it('opens each event with its segment, snapshotting at most 200 characters', () => {
     const long = 'x'.repeat(250);
-    const [e] = breakLines(long, [], META, runCtx());
+    const [e] = breakLines(long, [], META, runCtx(FIXED_NOW));
     expect(e!.processingTrace[0]).toEqual({
       processor: 'lineBreaker',
       phase: 'index-time',
@@ -117,7 +117,7 @@ describe('the trace', () => {
       raw,
       [dir('BREAK_ONLY_BEFORE', 'START'), dir('BREAK_ONLY_BEFORE_DATE', 'false'), dir('MUST_NOT_BREAK_AFTER', 'NEVER'), dir('MUST_BREAK_AFTER', 'NEVER'), dir('MAX_EVENTS', '1')],
       META,
-      runCtx(),
+      runCtx(FIXED_NOW),
     );
     expect(events.map((e) => e._raw)).toEqual(['START a\nb', 'c', 'START d']);
     for (const e of events) {
@@ -135,7 +135,7 @@ describe('the trace', () => {
 
   it('names MAX_EVENTS\' default when the default cap forced the break', () => {
     const raw = Array.from({ length: 258 }, (_, i) => `l${i}`).join('\n');
-    const events = breakLines(raw, [], META, runCtx());
+    const events = breakLines(raw, [], META, runCtx(FIXED_NOW));
     expect(events).toHaveLength(2);
     expect(events[0]!.processingTrace[1]!.description).toBe(
       'SHOULD_LINEMERGE=true merged 258 segments into 2 events (MAX_EVENTS=256 (line cap forced a break))',
@@ -143,15 +143,15 @@ describe('the trace', () => {
   });
 
   it('adds a bare summary when no rule is set explicitly', () => {
-    const events = breakLines('a\nb', [], META, runCtx());
+    const events = breakLines('a\nb', [], META, runCtx(FIXED_NOW));
     expect(events[0]!.processingTrace[1]!.description).toBe('SHOULD_LINEMERGE=true merged 2 segments into 1 events');
   });
 
   it('adds no summary when nothing merged', () => {
     const date = '2024-01-01 10:00:00';
     for (const events of [
-      breakLines(`${date} a\n${date} b`, [], META, runCtx()),
-      breakLines('a\nb', [dir('SHOULD_LINEMERGE', 'false')], META, runCtx()),
+      breakLines(`${date} a\n${date} b`, [], META, runCtx(FIXED_NOW)),
+      breakLines('a\nb', [dir('SHOULD_LINEMERGE', 'false')], META, runCtx(FIXED_NOW)),
     ]) {
       for (const e of events) expect(e.processingTrace).toHaveLength(1);
     }

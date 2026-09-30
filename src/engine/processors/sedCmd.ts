@@ -7,7 +7,6 @@ import { atDirective } from '../parser/provenance';
 import type { RunContext, DiagnosticSink } from '../runContext';
 
 interface SedCommand {
-  className: string;
   /** The `s///` pattern; absent for `y///`. */
   pattern?: SplunkRegex;
   /** The `s///` replacement, expanded per match. */
@@ -104,11 +103,12 @@ function sedWarning(
 function unescapeTranslateSet(set: string, delimiter: string): string {
   let out = '';
   for (let i = 0; i < set.length; i++) {
-    if (set[i] !== '\\' || i === set.length - 1) {
-      out += set[i]!;
+    const ch = set.charAt(i);
+    if (ch !== '\\' || i === set.length - 1) {
+      out += ch;
       continue;
     }
-    const next = set[++i]!;
+    const next = set.charAt(++i);
     out +=
       next === 'n' ? '\n' : next === 't' ? '\t' : next === 'r' ? '\r' : next === delimiter ? delimiter : next;
   }
@@ -155,7 +155,6 @@ function parseTransliterate(
   });
 
   return {
-    className: '',
     replacement: () => '',
     global: true,
     translate,
@@ -178,22 +177,23 @@ function splitSedFields(trimmed: string, delimiter: string): { parts: string[]; 
   let escaped = false;
 
   for (let i = 2; i < trimmed.length; i++) {
+    const ch = trimmed.charAt(i);
     if (escaped) {
-      current += trimmed[i]!;
+      current += ch;
       escaped = false;
       continue;
     }
-    if (trimmed[i] === '\\') {
+    if (ch === '\\') {
       escaped = true;
       current += '\\';
       continue;
     }
-    if (trimmed[i] === delimiter) {
+    if (ch === delimiter) {
       parts.push(current);
       current = '';
       continue;
     }
-    current += trimmed[i]!;
+    current += ch;
   }
   const closed = parts.length;
   if (current) parts.push(current);
@@ -291,7 +291,6 @@ export function parseSedExpression(
   }
 
   return {
-    className: '',
     pattern: regex,
     replacement,
     global: isGlobal,
@@ -325,7 +324,6 @@ export function applySedCommands(
   for (const dir of sedDirectives) {
     const cmd = parseSedExpression(dir.value, dir, parseSink);
     if (cmd) {
-      cmd.className = dir.className ?? '';
       commands.push({ ...cmd, directive: dir });
     }
   }
@@ -362,7 +360,7 @@ export function applySedCommands(
           rawAfter: raw,
         });
         traces.push({
-          processor: `SEDCMD-${cmd.className}`,
+          processor: `SEDCMD-${cmd.directive.className ?? ''}`,
           phase: 'index-time',
           description: `Applied sed substitution`,
           ...changeWindow(before, raw),

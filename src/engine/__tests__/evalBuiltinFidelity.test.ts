@@ -16,19 +16,12 @@ import { evaluateExpression } from '../processors/eval/evaluator';
 import { builtinNames } from '../processors/eval/builtins';
 import type { EvalValue } from '../processors/eval/values';
 import type { SplunkEvent } from '../types';
+import { makeEvent } from '../../test/makeEvent';
 
 type Fields = Record<string, string | string[]>;
 
 function event(fields: Fields): SplunkEvent {
-  return {
-    _raw: 'raw',
-    _time: null,
-    _meta: {},
-    fields,
-    metadata: { index: 'main', host: 'h', source: 's', sourcetype: 'st' },
-    lineNumbers: { start: 1, end: 1 },
-    processingTrace: [],
-  };
+  return makeEvent('raw', { fields });
 }
 
 const run = (expr: string, fields: Fields = {}) =>

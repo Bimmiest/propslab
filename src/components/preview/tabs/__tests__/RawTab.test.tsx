@@ -6,17 +6,10 @@ import { RawTab } from '../RawTab';
 import type { EnrichedEvent } from '../../enrichEvents';
 import type { SplunkEvent } from '../../../../engine/types';
 import { EMPTY_FIELD_STATS } from '../../../../utils/fieldStats';
+import { makeEvent } from '../../../../test/makeEvent';
 
 function makeItem(raw: string, line: number): EnrichedEvent {
-  const event: SplunkEvent = {
-    _raw: raw,
-    _time: null,
-    _meta: {},
-    fields: {},
-    metadata: { index: 'main', host: 'h', source: 's', sourcetype: 'st' },
-    lineNumbers: { start: line, end: line },
-    processingTrace: [],
-  };
+  const event = makeEvent(raw, { lineNumbers: { start: line, end: line } });
   return { event, searchText: raw.toLowerCase(), originalRaw: raw, hasChanges: false, hasMetadataChanges: false, isDropped: false };
 }
 

@@ -1,0 +1,5 @@
+# Commits that only reformatted code, so blame looks through them.
+# GitHub reads this file by itself; locally run:
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+#
+# One commit hash per line, oldest first, each under a comment naming the commit.

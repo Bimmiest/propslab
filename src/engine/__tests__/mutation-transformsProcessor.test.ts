@@ -6,18 +6,11 @@
 import { describe, it, expect } from 'vitest';
 import { applyTransforms } from '../processors/transformsProcessor';
 import type { SplunkEvent, ConfDirective, ConfStanza, ParsedConf, ValidationDiagnostic } from '../types';
-import { runCtx } from './runCtx';
+import { runCtx, FIXED_NOW } from './runCtx';
+import { makeEvent } from '../../test/makeEvent';
 
 function event(raw: string): SplunkEvent {
-  return {
-    _raw: raw,
-    _time: null,
-    _meta: {},
-    fields: {},
-    metadata: { index: 'main', host: 'h', source: 's', sourcetype: 'st' },
-    lineNumbers: { start: 1, end: 1 },
-    processingTrace: [],
-  };
+  return makeEvent(raw);
 }
 
 function stanza(name: string, directives: Record<string, string>): ConfStanza {
@@ -40,20 +33,20 @@ const twoEvents = () => [event('a=1 b=2'), event('a=3 b=4')];
 describe('transform diagnostics fire once per stanza, and per stanza', () => {
   it('an uncompilable REGEX', () => {
     const d: ValidationDiagnostic[] = [];
-    applyTransforms(twoEvents(), [transforms('bad1, bad2')], conf(stanza('bad1', { REGEX: '(x' }), stanza('bad2', { REGEX: '(y' })), 'index-time', runCtx(d));
+    applyTransforms(twoEvents(), [transforms('bad1, bad2')], conf(stanza('bad1', { REGEX: '(x' }), stanza('bad2', { REGEX: '(y' })), 'index-time', runCtx(FIXED_NOW, d));
     expect(d.map((x) => x.message.match(/^Transform "(\w+)" was skipped/)?.[1])).toEqual(['bad1', 'bad2']);
   });
 
   it('an index-time extraction that stores nothing', () => {
     const d: ValidationDiagnostic[] = [];
-    applyTransforms(twoEvents(), [transforms('t1,t2')], conf(stanza('t1', { REGEX: 'a=(?<a>\\d)' }), stanza('t2', { REGEX: 'b=(?<b>\\d)' })), 'index-time', runCtx(d));
+    applyTransforms(twoEvents(), [transforms('t1,t2')], conf(stanza('t1', { REGEX: 'a=(?<a>\\d)' }), stanza('t2', { REGEX: 'b=(?<b>\\d)' })), 'index-time', runCtx(FIXED_NOW, d));
     const hits = d.filter((x) => x.message.includes('has no WRITE_META = true and no DEST_KEY'));
     expect(hits.map((x) => x.message.match(/"(\w+)"/)?.[1])).toEqual(['t1', 't2']);
   });
 
   it('search-time-only attributes on an index-time stanza', () => {
     const d: ValidationDiagnostic[] = [];
-    applyTransforms(twoEvents(), [transforms('t')], conf(stanza('t', { REGEX: 'a=(?<a>\\d)', WRITE_META: 'true', MV_ADD: 'true' })), 'index-time', runCtx(d));
+    applyTransforms(twoEvents(), [transforms('t')], conf(stanza('t', { REGEX: 'a=(?<a>\\d)', WRITE_META: 'true', MV_ADD: 'true' })), 'index-time', runCtx(FIXED_NOW, d));
     const hits = d.filter((x) => x.message.includes('valid only for search-time'));
     expect(hits).toHaveLength(1);
     expect(hits[0]!.message).toContain('sets MV_ADD,');
@@ -66,7 +59,7 @@ describe('transform diagnostics fire once per stanza, and per stanza', () => {
 
   it('search-time-only attributes, in the plural', () => {
     const d: ValidationDiagnostic[] = [];
-    applyTransforms([event('a=1')], [transforms('t')], conf(stanza('t', { DELIMS: '=', FIELDS: 'a' })), 'index-time', runCtx(d));
+    applyTransforms([event('a=1')], [transforms('t')], conf(stanza('t', { DELIMS: '=', FIELDS: 'a' })), 'index-time', runCtx(FIXED_NOW, d));
     const hit = d.find((x) => x.message.includes('valid only for search-time'))!;
     expect(hit.message).toContain('sets DELIMS, FIELDS,');
     expect(hit.message).toContain('Those attributes are valid only');
@@ -76,7 +69,7 @@ describe('transform diagnostics fire once per stanza, and per stanza', () => {
 
   it('a DEST_KEY reached through REPORT-', () => {
     const d: ValidationDiagnostic[] = [];
-    applyTransforms(twoEvents(), [report('t')], conf(stanza('t', { REGEX: 'a=(?<a>\\d)', DEST_KEY: '  _meta  ' })), 'search-time', runCtx(d));
+    applyTransforms(twoEvents(), [report('t')], conf(stanza('t', { REGEX: 'a=(?<a>\\d)', DEST_KEY: '  _meta  ' })), 'search-time', runCtx(FIXED_NOW, d));
     const hits = d.filter((x) => x.message.includes('referenced by a search-time REPORT-'));
     expect(hits).toHaveLength(1);
     expect(hits[0]!.message).toMatch(/sets DEST_KEY = _meta, but/);
@@ -84,14 +77,14 @@ describe('transform diagnostics fire once per stanza, and per stanza', () => {
 
   it('a REPORT- that matched but has no FORMAT and no named groups', () => {
     const d: ValidationDiagnostic[] = [];
-    applyTransforms(twoEvents(), [report('t1,t2')], conf(stanza('t1', { REGEX: 'a=(\\d)' }), stanza('t2', { REGEX: 'b=(\\d)' })), 'search-time', runCtx(d));
+    applyTransforms(twoEvents(), [report('t1,t2')], conf(stanza('t1', { REGEX: 'a=(\\d)' }), stanza('t2', { REGEX: 'b=(\\d)' })), 'search-time', runCtx(FIXED_NOW, d));
     const hits = d.filter((x) => x.message.includes('extracts nothing. At search time FORMAT has no default'));
     expect(hits.map((x) => x.message.match(/"(\w+)"/)?.[1])).toEqual(['t1', 't2']);
   });
 
   it('a valid but unsimulated DEST_KEY, located at its line', () => {
     const d: ValidationDiagnostic[] = [];
-    applyTransforms(twoEvents(), [transforms('t')], conf(stanza('t', { REGEX: 'a=(\\d)', FORMAT: '$1', DEST_KEY: '_TCP_ROUTING' })), 'index-time', runCtx(d));
+    applyTransforms(twoEvents(), [transforms('t')], conf(stanza('t', { REGEX: 'a=(\\d)', FORMAT: '$1', DEST_KEY: '_TCP_ROUTING' })), 'index-time', runCtx(FIXED_NOW, d));
     const hits = d.filter((x) => x.message.includes('is a valid Splunk routing key but is not simulated'));
     expect(hits).toHaveLength(1);
     expect(hits[0]!.line).toBe(12);
@@ -101,7 +94,7 @@ describe('transform diagnostics fire once per stanza, and per stanza', () => {
 describe('the no-FORMAT warning at search time stays quiet when', () => {
   const quiet = (directives: Record<string, string>) => {
     const d: ValidationDiagnostic[] = [];
-    applyTransforms([event('a=1')], [report('t')], conf(stanza('t', directives)), 'search-time', runCtx(d));
+    applyTransforms([event('a=1')], [report('t')], conf(stanza('t', directives)), 'search-time', runCtx(FIXED_NOW, d));
     return d.filter((x) => x.message.includes('At search time FORMAT has no default'));
   };
 
@@ -119,7 +112,7 @@ describe('the DEST_KEY = _raw data-loss warning', () => {
       [transforms('m')],
       conf(stanza('m', { REGEX: regex, FORMAT: format, DEST_KEY: '_raw' })),
       'index-time',
-      runCtx(d),
+      runCtx(FIXED_NOW, d),
     );
     return d.filter((x) => x.message.includes('replaced the event and dropped'));
   };
@@ -147,34 +140,34 @@ describe('the DEST_KEY = _raw data-loss warning', () => {
 describe('what applyTransforms leaves on the event', () => {
   it('returns the input untouched when no directive applies to the phase', () => {
     const events = [event('a=1')];
-    expect(applyTransforms(events, [report('t')], conf(stanza('t', { REGEX: 'a' })), 'index-time', runCtx())).toBe(events);
+    expect(applyTransforms(events, [report('t')], conf(stanza('t', { REGEX: 'a' })), 'index-time', runCtx(FIXED_NOW))).toBe(events);
   });
 
   it('skips blank entries in a comma-separated list rather than reporting a missing stanza', () => {
-    const [e] = applyTransforms([event('zzz')], [transforms(' , t ,,')], conf(stanza('t', { REGEX: 'a=(\\d)', FORMAT: 'a::$1', WRITE_META: 'true' })), 'index-time', runCtx());
+    const [e] = applyTransforms([event('zzz')], [transforms(' , t ,,')], conf(stanza('t', { REGEX: 'a=(\\d)', FORMAT: 'a::$1', WRITE_META: 'true' })), 'index-time', runCtx(FIXED_NOW));
     expect(e!.noOps).toHaveLength(1);
     expect(e!.noOps![0]!.directive).toBe('TRANSFORMS-x → [t]');
   });
 
   it('carries no noOps key when every transform had an effect', () => {
-    const [e] = applyTransforms([event('a=1')], [transforms('t')], conf(stanza('t', { REGEX: 'a=(\\d)', FORMAT: 'a::$1', WRITE_META: 'true' })), 'index-time', runCtx());
+    const [e] = applyTransforms([event('a=1')], [transforms('t')], conf(stanza('t', { REGEX: 'a=(\\d)', FORMAT: 'a::$1', WRITE_META: 'true' })), 'index-time', runCtx(FIXED_NOW));
     expect(e).not.toHaveProperty('noOps');
   });
 
   it('describes a matched transform that extracted nothing', () => {
-    const [e] = applyTransforms([event('a=1')], [transforms('t')], conf(stanza('t', { REGEX: 'a=\\d', WRITE_META: 'true' })), 'index-time', runCtx());
+    const [e] = applyTransforms([event('a=1')], [transforms('t')], conf(stanza('t', { REGEX: 'a=\\d', WRITE_META: 'true' })), 'index-time', runCtx(FIXED_NOW));
     expect(e!.processingTrace.at(-1)!.description).toBe('Transform matched; it extracted no fields');
   });
 
   it('describes a CLONE_SOURCETYPE stanza by what it does, with the name trimmed', () => {
-    const out = applyTransforms([event('a=1')], [transforms('t')], conf(stanza('t', { REGEX: 'a=\\d', CLONE_SOURCETYPE: '  copy  ' })), 'index-time', runCtx());
+    const out = applyTransforms([event('a=1')], [transforms('t')], conf(stanza('t', { REGEX: 'a=\\d', CLONE_SOURCETYPE: '  copy  ' })), 'index-time', runCtx(FIXED_NOW));
     expect(out).toHaveLength(2);
     expect(out[0]!.processingTrace.at(-1)!.description).toBe('Transform matched; it extracts no fields, and CLONE_SOURCETYPE = copy copies the event');
     expect(out[1]!.metadata.sourcetype).toBe('copy');
   });
 
   it('emits exactly one event when nothing was cloned', () => {
-    const out = applyTransforms([event('a=1'), event('a=2')], [transforms('t')], conf(stanza('t', { REGEX: 'a=(\\d)', FORMAT: 'a::$1', WRITE_META: 'true' })), 'index-time', runCtx());
+    const out = applyTransforms([event('a=1'), event('a=2')], [transforms('t')], conf(stanza('t', { REGEX: 'a=(\\d)', FORMAT: 'a::$1', WRITE_META: 'true' })), 'index-time', runCtx(FIXED_NOW));
     expect(out).toHaveLength(2);
   });
 });
@@ -186,7 +179,7 @@ describe('STOP_PROCESSING_IF trace wording', () => {
       [transforms('a, stop')],
       conf(stanza('a', { REGEX: 'a', WRITE_META: 'true' }), stanza('stop', { STOP_PROCESSING_IF: 'true()' })),
       'index-time',
-      runCtx(),
+      runCtx(FIXED_NOW),
     );
     expect(e!.processingTrace.at(-1)!.description).toBe('STOP_PROCESSING_IF (true()) was true — no rules follow it in TRANSFORMS-x');
   });
@@ -197,13 +190,13 @@ describe('STOP_PROCESSING_IF trace wording', () => {
       [transforms('stop, a')],
       conf(stanza('a', { REGEX: 'a', WRITE_META: 'true' }), stanza('stop', { STOP_PROCESSING_IF: 'true()' })),
       'index-time',
-      runCtx(),
+      runCtx(FIXED_NOW),
     );
     expect(e!.processingTrace.at(-1)!.description).toBe('STOP_PROCESSING_IF (true()) was true — skipped the rest of TRANSFORMS-x: a');
   });
 
   it('does not treat a plain regex stanza as an INGEST_EVAL one', () => {
-    const [e] = applyTransforms([event('a=1')], [transforms('t')], conf(stanza('t', { REGEX: 'a=(\\d)', FORMAT: 'a::$1', WRITE_META: 'true' })), 'index-time', runCtx());
+    const [e] = applyTransforms([event('a=1')], [transforms('t')], conf(stanza('t', { REGEX: 'a=(\\d)', FORMAT: 'a::$1', WRITE_META: 'true' })), 'index-time', runCtx(FIXED_NOW));
     expect(e!.fields).toEqual({ a: '1' });
   });
 });

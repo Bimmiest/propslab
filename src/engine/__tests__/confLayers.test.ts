@@ -261,7 +261,7 @@ describe('runPipeline — accepts layered confs (#115)', () => {
       ],
       '',
     );
-    expect(result.events[0]!.fields.user).toBe('alice');
+    expect(result.events[0]!.fields['user']).toBe('alice');
   });
 
   it('applies the default when local does not redefine the attribute', () => {
@@ -274,7 +274,7 @@ describe('runPipeline — accepts layered confs (#115)', () => {
       ],
       '',
     );
-    expect(result.events[0]!.fields.user).toBeUndefined();
+    expect(result.events[0]!.fields['user']).toBeUndefined();
   });
 
   it('reports which layer a config diagnostic came from', () => {
@@ -304,13 +304,13 @@ describe('runPipeline — accepts layered confs (#115)', () => {
       ],
     );
     // local replaces the REGEX attribute outright, so only `action` extracts.
-    expect(result.events[0]!.fields.action).toBe('login');
-    expect(result.events[0]!.fields.user).toBeUndefined();
+    expect(result.events[0]!.fields['action']).toBe('login');
+    expect(result.events[0]!.fields['user']).toBeUndefined();
   });
 
   it('still accepts plain strings', () => {
     const { result } = runPipeline(RAW, META, '[st]\nKV_MODE = auto', '');
-    expect(result.events[0]!.fields.user).toBe('alice');
+    expect(result.events[0]!.fields['user']).toBe('alice');
   });
 });
 

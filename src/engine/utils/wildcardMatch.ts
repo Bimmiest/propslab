@@ -18,13 +18,14 @@
 export type WildcardMatcher = (s: string) => boolean;
 
 export function compileWildcard(pattern: string): WildcardMatcher {
-  const parts = pattern.split('*');
-  if (parts.length === 1) return (s) => s === pattern;
+  const firstStar = pattern.indexOf('*');
+  if (firstStar === -1) return (s) => s === pattern;
 
-  const head = parts[0]!;
-  const tail = parts[parts.length - 1]!;
+  const lastStar = pattern.lastIndexOf('*');
+  const head = pattern.slice(0, firstStar);
+  const tail = pattern.slice(lastStar + 1);
   // Adjacent stars leave empty segments, which match anywhere.
-  const middle = parts.slice(1, -1).filter(Boolean);
+  const middle = pattern.slice(firstStar + 1, lastStar).split('*').filter(Boolean);
   const fixed = head.length + tail.length;
 
   return (s) => {
