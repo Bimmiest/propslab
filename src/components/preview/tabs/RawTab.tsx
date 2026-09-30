@@ -136,13 +136,15 @@ function EventRow({ item, globalIdx, originalMetadata, search }: { item: Enriche
   return (
     <EventContextMenu event={event} selectionText={selectedText} selectionStart={selectionStart}>
     <div
-      className={`border rounded ${isDropped ? 'border-red-500/40 opacity-60' : 'border-[var(--color-border)]'} bg-[var(--color-bg-secondary)]`}
+      className={`border rounded ${isDropped ? 'border-[var(--color-error)]/40' : 'border-[var(--color-border)]'} bg-[var(--color-bg-secondary)]`}
     >
       <EventRowHeader event={event} globalIdx={globalIdx} isDropped={isDropped} hasMetadataChanges={hasMetadataChanges} />
 
       <pre
         ref={preRef}
-        className="p-3 text-xs font-mono whitespace-pre-wrap break-all text-[var(--color-text-primary)] overflow-x-auto"
+        // A dropped event is dimmed with the muted token, not opacity, which
+        // would take the text below 4.5:1.
+        className={`p-3 text-xs font-mono whitespace-pre-wrap break-all ${isDropped ? 'text-[var(--color-text-muted)]' : 'text-[var(--color-text-primary)]'} overflow-x-auto`}
         style={{ maxHeight: expanded ? undefined : MAX_COLLAPSED_HEIGHT }}
       >
         {searching
@@ -367,11 +369,11 @@ function EventRowHeader({ event, globalIdx, isDropped, hasMetadataChanges }: { e
           </span>
         )}
         {isDropped ? (
-          <span className="text-xs px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 font-medium">
+          <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-error)]/10 text-[var(--color-error)] font-medium">
             Dropped
           </span>
         ) : event._meta._queue ? (
-          <span className="text-xs px-1.5 py-0.5 rounded bg-green-500/20 text-green-400 font-medium">
+          <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-success)]/10 text-[var(--color-success)] font-medium">
             Routed ({event._meta._queue})
           </span>
         ) : null}

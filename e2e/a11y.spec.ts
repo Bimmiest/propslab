@@ -111,6 +111,103 @@ for (const theme of ['dark', 'light'] as const) {
 }
 
 /**
+ * States the example-driven scans above never reach (#493): a dropped and a
+ * routed event, a nested JSON parent, a diff with added and removed lines, and
+ * CIM models that match nothing. Each one was a contrast failure that no scan
+ * saw because nothing put the page in that state.
+ */
+for (const theme of ['dark', 'light'] as const) {
+  test.describe(`accessibility of de-emphasised states (${theme})`, () => {
+    test.beforeEach(async ({ page }) => {
+      await page.addInitScript((t) => {
+        try {
+          localStorage.setItem('propslab:theme', t);
+        } catch {
+          /* ignore */
+        }
+      }, theme);
+    });
+
+    async function openDroppedAndRouted(page: Page): Promise<void> {
+      await openApp(page);
+      await loadExample(page, APACHE);
+      await pasteInto(
+        page,
+        1,
+        [
+          '[access_combined]',
+          'SHOULD_LINEMERGE = false',
+          'KV_MODE = json',
+          'SEDCMD-rename = s/keep/kept/',
+          'TRANSFORMS-queues = drop_it, route_it',
+        ].join('\n'),
+      );
+      await pasteInto(
+        page,
+        2,
+        [
+          '[drop_it]',
+          'REGEX = drop me',
+          'DEST_KEY = queue',
+          'FORMAT = nullQueue',
+          '',
+          '[route_it]',
+          'REGEX = route me',
+          'DEST_KEY = queue',
+          'FORMAT = parsingQueue',
+        ].join('\n'),
+      );
+      await pasteInto(
+        page,
+        0,
+        [
+          '{"src":"10.0.0.1","user":"alice","user.id":1,"user.dept":"ops","msg":"keep"}',
+          '{"src":"10.0.0.2","user":"bob","user.id":2,"user.dept":"ops","msg":"drop me"}',
+          '{"src":"10.0.0.3","user":"carol","user.id":3,"user.dept":"ops","msg":"route me"}',
+        ].join('\n'),
+      );
+      await expect(page.getByText('3 events', { exact: true })).toBeVisible({ timeout: 30_000 });
+    }
+
+    test('Raw: a dropped row and a routed badge', async ({ page }) => {
+      await openDroppedAndRouted(page);
+      await page.getByRole('tab', { name: /^Raw$/ }).click();
+      await expect(page.getByText('Dropped', { exact: true })).toBeVisible();
+      await expect(page.getByText(/^Routed \(parsingQueue\)$/)).toBeVisible();
+      await expectNoViolations(page, 'Raw (dropped, routed)');
+    });
+
+    test('Fields: nested JSON parent chips', async ({ page }) => {
+      await openDroppedAndRouted(page);
+      await page.getByRole('tab', { name: /^Fields$/ }).click();
+      await page.getByRole('button', { name: 'Expand all' }).click();
+      await expect(page.getByText('JSON', { exact: true }).first()).toBeVisible();
+      await expect(page.getByText('.id').first()).toBeVisible();
+      await expectNoViolations(page, 'Fields (nested JSON)');
+    });
+
+    test('Diff: added and removed lines', async ({ page }) => {
+      await openDroppedAndRouted(page);
+      await page.getByRole('tab', { name: /^Diff$/ }).click();
+      await expectNoViolations(page, 'Diff (added, removed)');
+    });
+
+    test('CIM Models: models with no matching field', async ({ page }) => {
+      await openDroppedAndRouted(page);
+      await page.getByRole('tab', { name: /^CIM Models$/ }).click();
+      await expect(page.getByRole('button', { name: 'Show matching only' })).toBeVisible();
+      await expectNoViolations(page, 'CIM Models (non-matching)');
+    });
+
+    test('Architecture: nothing configured, every box inactive', async ({ page }) => {
+      await openApp(page);
+      await page.getByRole('tab', { name: /^Architecture$/ }).click();
+      await expectNoViolations(page, 'Architecture (inactive)');
+    });
+  });
+}
+
+/**
  * A nested JSON event wide enough that the Fields table and the Extractions
  * sidebar are windowed (#454).
  */

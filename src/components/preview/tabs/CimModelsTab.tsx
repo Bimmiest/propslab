@@ -67,7 +67,6 @@ function CimModelCard({ result }: { result: ReturnType<typeof validateCimComplia
   return (
     <div
       className="border border-[var(--color-border)] rounded bg-[var(--color-bg-secondary)]"
-      style={{ opacity: hasMatches ? 1 : 0.6 }}
     >
       <button
         onClick={() => setExpanded(!expanded)}
@@ -75,7 +74,9 @@ function CimModelCard({ result }: { result: ReturnType<typeof validateCimComplia
         className="w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-[var(--color-bg-tertiary)] transition-colors cursor-pointer"
       >
         <div className="flex-1">
-          <div className="text-sm font-medium text-[var(--color-text-primary)]">
+          {/* A model with no matching field is dimmed with the muted token, not
+              opacity, which would take the muted description below 4.5:1. */}
+          <div className={`text-sm font-medium ${hasMatches ? 'text-[var(--color-text-primary)]' : 'text-[var(--color-text-muted)]'}`}>
             {result.model.displayName}
           </div>
           <div className="text-xs text-[var(--color-text-muted)]">
