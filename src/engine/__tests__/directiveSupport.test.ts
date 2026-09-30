@@ -4,9 +4,11 @@
 //
 // A classification table is only worth having if it cannot drift from the code
 // it describes. Three things are asserted here: every registry key is
-// classified, every non-simulated key explains itself, and every `simulated`
-// key is actually exercised by a test. The third is the one with teeth --
-// without it, "simulated" degrades into "we meant to".
+// classified, every non-simulated key explains itself, and every ignored key
+// has a tracking issue. That every `simulated` key is actually exercised by a
+// test -- the check with teeth, without which "simulated" degrades into "we
+// meant to" -- is in directiveEvidence.test.ts, which measures what reaches
+// `runPipeline` instead of searching test source for the key's name.
 // ---------------------------------------------------------------------------
 
 import { describe, it, expect } from 'vitest';
@@ -15,77 +17,6 @@ import { DIRECTIVE_SUPPORT, UNDOCUMENTED_ATTRIBUTES } from '../directiveSupport'
 import type { SupportEntry } from '../directiveSupport';
 import { runPipeline } from '../pipeline';
 import type { EventMetadata } from '../types';
-
-const SELF = 'directiveSupport.test.ts';
-
-/**
- * Every test source in the repo, as text. Read through Vite's raw glob so the
- * suite needs no filesystem access and runs wherever the engine runs.
- */
-const TEST_SOURCES = Object.entries(
-  import.meta.glob<string>('../../**/*.test.{ts,tsx}', { eager: true, query: '?raw', import: 'default' }),
-).filter(([path]) => !path.endsWith(SELF));
-
-/** The corpus is ground truth from Splunk, so count it too. */
-const CORPUS_SOURCE = Object.values(
-  import.meta.glob<string>('../__tests__/fixtures/corpus.ts', {
-    eager: true,
-    query: '?raw',
-    import: 'default',
-  }),
-);
-
-const ALL_TEST_TEXT = [...TEST_SOURCES.map(([, text]) => text), ...CORPUS_SOURCE].join('\n');
-
-/**
- * Simulated directives that appear in test comments or prose but not in
- * any exercised form. These are documented as known gaps so the count can
- * only decrease.
- */
-const UNEXERCISED_SIMULATED: string[] = [
-  // TODO: These directives are simulated but have no documented test exercises.
-  // They should appear in one of these forms:
-  // - KEY = value (in conf text)
-  // - KEY: value (in object literals)
-  // - ('KEY' or ("KEY" (as function argument)
-  // Add test exercises in one of these forms to remove them from this list.
-  // The count can only decrease.
-];
-
-/**
- * Check if a directive key is exercised in test source code.
- * Matches multiple patterns:
- * - Conf text: KEY = value or KEY-subname = value
- * - Object literals: KEY: / 'KEY': / "KEY":
- * - Function arguments: ('KEY' or ("KEY" as first argument
- * Excludes pure prose mentions (need to match one of these specific patterns).
- */
-function isExercisedInTest(key: string): boolean {
-  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-  // Pattern 1: Conf text - KEY = value or KEY-subname = value
-  const confPattern = new RegExp(
-    `(^|[\\n"'` + '`' + `\\\\n])\\s*${escapedKey}(-[A-Za-z0-9_]+)?\\s*=`,
-    'm'
-  );
-  if (confPattern.test(ALL_TEST_TEXT)) return true;
-
-  // Pattern 2: Object literal keys - KEY: or 'KEY': or "KEY":
-  const objectKeyPattern = new RegExp(
-    `[{\\n\\s]${escapedKey}\\s*:|[{\\n\\s]['"]${escapedKey}['"]\\s*:`,
-    'm'
-  );
-  if (objectKeyPattern.test(ALL_TEST_TEXT)) return true;
-
-  // Pattern 3: Function arguments - ('KEY' or ("KEY"
-  const funcArgPattern = new RegExp(
-    `\\(\\s*['"]${escapedKey}['"]`,
-    'm'
-  );
-  if (funcArgPattern.test(ALL_TEST_TEXT)) return true;
-
-  return false;
-}
 
 describe('directive support classification (#153)', () => {
   it('classifies every directive in the registry', () => {
@@ -120,23 +51,6 @@ describe('directive support classification (#153)', () => {
       untracked,
       'an `ignored` directive is a known wrong answer, so it needs an issue or it will not be fixed',
     ).toEqual([]);
-  });
-
-  it('exercises every simulated directive in at least one test', () => {
-    const untested = Object.entries(DIRECTIVE_SUPPORT)
-      .filter(([, e]) => e.support === 'simulated')
-      .map(([key]) => key)
-      .filter((key) => !isExercisedInTest(key) && !UNEXERCISED_SIMULATED.includes(key));
-    expect(
-      untested,
-      'these are declared simulated but no test exercises them in any form (conf text, object literal, or function argument) -- ' +
-        'either they are not really simulated, or the behaviour is unasserted. If this is expected, ' +
-        'add the key to UNEXERCISED_SIMULATED with a TODO comment.',
-    ).toEqual([]);
-  });
-
-  it('does not grow the unexercised simulated directives list', () => {
-    expect(UNEXERCISED_SIMULATED.length).toBeLessThanOrEqual(0);
   });
 
   it('keeps the README counts in step with the table', () => {

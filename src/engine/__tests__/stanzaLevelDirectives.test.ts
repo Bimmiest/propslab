@@ -7,6 +7,10 @@
 // changes every downstream result rather than one field — which is why they are
 // tested here against the whole pipeline rather than against matchStanzas
 // alone.
+//
+// Doc-derived (props.conf.spec): `disabled` switches a stanza off, and `rename`
+// gives a sourcetype another name at search time. No fixture covers either, so
+// what they do is read from the spec text and asserted narrowly.
 // ---------------------------------------------------------------------------
 
 import { describe, it, expect } from 'vitest';
