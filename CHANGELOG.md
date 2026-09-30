@@ -100,6 +100,8 @@ All notable changes to Propslab are documented here, newest first. Entries say w
 
 ### Fixed
 
+- **"Every simulated directive is exercised" is measured, not searched for** ([#505](https://github.com/Bimmiest/propslab/issues/505)): the check records the directives tests actually pass to `runPipeline`, and each simulated directive needs a Splunk fixture or a spec-citing test. Twenty-two directives tested only at processor level now run end to end.
+- **The Monaco editor is tested against the real editor** ([#516](https://github.com/Bimmiest/propslab/issues/516)): mount and dispose leave nothing behind, each language provider is registered once across mounts, CRLF and LF survive `onChange`, and `SplunkEditor` has its first unit test.
 - **Coverage floors sit one point under the measured figures** ([#506](https://github.com/Bimmiest/propslab/issues/506)), with per-directory floors for components, hooks, monaco, store and utils, and a CI step fails when any floor falls more than 3 points behind. `main.tsx` and the worker entry points are measured rather than excluded.
 - **The weekly randomised run is random** ([#513](https://github.com/Bimmiest/propslab/issues/513)): it draws a fresh property-test seed, uses it for test order too, and prints it with a replay command. Unset, every property test had run on its fixed default.
 - **Tests no longer assert wall-clock time** in the wildcard matcher or the MCP server's end-to-end cancellation tests; a shared `makeEvent` helper is introduced and Playwright pins `colorScheme` ([#507](https://github.com/Bimmiest/propslab/issues/507), in part).
