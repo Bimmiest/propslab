@@ -107,6 +107,9 @@ describe('sedPattern', () => {
     expect(sedPattern(' s/\\d{4}/xxxx/g ')).toBe('\\d{4}');
     expect(sedPattern('s#a\\#b#c#')).toBe('a\\#b');
     expect(sedPattern('s/a/b/')).toBe('a');
+    // An empty regex is still a closed field: the delimiter right after `s/`
+    // ends it rather than being read as part of it.
+    expect(sedPattern('s//x/')).toBe('');
   });
 
   it('returns null where there is no regex to compile', () => {
