@@ -199,6 +199,10 @@ const MONARCH_GRAMMAR: languages.IMonarchLanguage = {
       // at column 0 with something other than whitespace, `=` or `[`. An indented
       // `key = value` is malformed to the parser, so it starts no value here either.
       [/^([^\s=[][^=]*?)(\s*=\s*)/, ['identifier', { token: 'delimiter', next: '@value' }]],
+      // A key still being typed, before its `=`. Not a string: the editor's
+      // quickSuggestions are off in strings, so painting it as one would stop
+      // completion from offering the directive the user is typing.
+      [/^[^\s=[#][^=]*$/, 'identifier'],
       [/./, 'string'],
     ],
     stanza: [
