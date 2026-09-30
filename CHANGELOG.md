@@ -100,6 +100,7 @@ All notable changes to Propslab are documented here, newest first. Entries say w
 
 ### Fixed
 
+- **The sources are formatted with Prettier, and CI checks it** ([#510](https://github.com/Bimmiest/propslab/issues/510), in part). The reformat is one commit listed in `.git-blame-ignore-revs`, so `git blame` looks through it.
 - **Engine internals have one source each** ([#511](https://github.com/Bimmiest/propslab/issues/511)): the `_MetaData:` alias is folded in one place and stanza headers are classified by one function, so the engine and the editor cannot disagree. The pipeline reference lists Clone Sourcetype, Punctuation Annotation and Sourcetype Rename with their directives, and the dictionary shows `rename` as search-time.
 - **Lint and types are stricter** ([#510](https://github.com/Bimmiest/propslab/issues/510), in part):
   - non-null assertions are an error in shipped code;
