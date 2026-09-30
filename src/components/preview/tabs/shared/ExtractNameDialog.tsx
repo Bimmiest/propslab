@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import { buildExtractFromSelection, toCaptureGroupName } from '../../../../engine/scaffold/fromSelection';
 import { DirectiveDialog } from './DirectiveDialog';
 import { useLiveCapture, isSettledCapture, type Capture } from './useLiveCapture';
@@ -72,25 +72,12 @@ export function ExtractNameDialog({
       onApply={() => { if (valid) { onApply(`EXTRACT-${cleanName}`, trimmed); onClose(); } }}
       onClose={onClose}
     >
-      <div>
-        <label htmlFor="extract-field-name" className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-secondary)' }}>
-          Field name
-        </label>
-        <input
-          id="extract-field-name"
-          ref={inputRef}
-          type="text"
-          value={name}
-          onChange={(e) => onNameChange(e.target.value)}
-          spellCheck={false}
-          className="mt-1 w-full px-2.5 py-1.5 rounded-md text-sm font-mono outline-none bg-[var(--color-bg-secondary)] text-[var(--color-text-primary)] border border-[var(--color-border)] focus:border-[var(--color-accent)]"
-        />
-        {nameAdjusted && (
-          <div className="mt-1 text-xs" style={{ color: 'var(--color-warning)' }}>
-            Field will be named <code className="font-mono">{cleanName}</code> — capture groups allow only letters, digits, and <code className="font-mono">_</code>.
-          </div>
-        )}
-      </div>
+      <NameField
+        name={name}
+        onChange={onNameChange}
+        inputRef={inputRef}
+        adjustedTo={nameAdjusted ? cleanName : null}
+      />
 
       <div>
         <label htmlFor="extract-pattern" className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-secondary)' }}>
@@ -108,18 +95,61 @@ export function ExtractNameDialog({
 
       <CapturePreview capture={capture} />
 
-      <div>
-        <div className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--color-text-secondary)' }}>
-          Adds to <code className="font-mono">[{stanza}]</code>
-        </div>
-        <pre
-          className="text-xs font-mono rounded border p-2 overflow-x-auto whitespace-pre-wrap break-all"
-          style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-primary)', backgroundColor: 'var(--color-bg-secondary)' }}
-        >
-          {trimmed ? `EXTRACT-${cleanName} = ${trimmed}` : 'Enter a regex…'}
-        </pre>
-      </div>
+      <AddedLine stanza={stanza} line={trimmed ? `EXTRACT-${cleanName} = ${trimmed}` : 'Enter a regex…'} />
     </DirectiveDialog>
+  );
+}
+
+/** The field-name input, with a note when the name will be sanitised into a capture-group name. */
+function NameField({
+  name,
+  onChange,
+  inputRef,
+  adjustedTo,
+}: {
+  name: string;
+  onChange: (name: string) => void;
+  inputRef: RefObject<HTMLInputElement | null>;
+  /** The capture-group name the field will get, when it differs from what was typed. */
+  adjustedTo: string | null;
+}) {
+  return (
+    <div>
+      <label htmlFor="extract-field-name" className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-secondary)' }}>
+        Field name
+      </label>
+      <input
+        id="extract-field-name"
+        ref={inputRef}
+        type="text"
+        value={name}
+        onChange={(e) => onChange(e.target.value)}
+        spellCheck={false}
+        className="mt-1 w-full px-2.5 py-1.5 rounded-md text-sm font-mono outline-none bg-[var(--color-bg-secondary)] text-[var(--color-text-primary)] border border-[var(--color-border)] focus:border-[var(--color-accent)]"
+      />
+      {adjustedTo !== null && (
+        <div className="mt-1 text-xs" style={{ color: 'var(--color-warning)' }}>
+          Field will be named <code className="font-mono">{adjustedTo}</code> — capture groups allow only letters, digits, and <code className="font-mono">_</code>.
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** The line the dialog will add, under the stanza it adds it to. */
+function AddedLine({ stanza, line }: { stanza: string; line: string }) {
+  return (
+    <div>
+      <div className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--color-text-secondary)' }}>
+        Adds to <code className="font-mono">[{stanza}]</code>
+      </div>
+      <pre
+        className="text-xs font-mono rounded border p-2 overflow-x-auto whitespace-pre-wrap break-all"
+        style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-primary)', backgroundColor: 'var(--color-bg-secondary)' }}
+      >
+        {line}
+      </pre>
+    </div>
   );
 }
 

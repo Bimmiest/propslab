@@ -49,19 +49,7 @@ export function FieldTableRow({
         </div>
       </td>
       <td className="py-1.5 px-3" style={{ width: columnWidths['aliases'] }}>
-        {field.aliases.length > 0 && (
-          <div className="flex flex-wrap gap-1">
-            {field.aliases.map((alias) => (
-              <span
-                key={alias}
-                className="inline-block px-1.5 py-0.5 rounded bg-[var(--color-bg-tertiary)] text-[var(--color-text-secondary)] font-mono text-xs"
-                title={`FIELDALIAS: ${field.name} AS ${alias}`}
-              >
-                {alias}
-              </span>
-            ))}
-          </div>
-        )}
+        <AliasChips name={field.name} aliases={field.aliases} />
       </td>
       <td className="py-1.5 px-3 text-[var(--color-text-secondary)]" style={{ width: columnWidths['count'] }}>
         {field.count}/{eventCount}
@@ -70,22 +58,7 @@ export function FieldTableRow({
         {field.values.size}
       </td>
       <td className="py-1.5 px-3" style={{ width: columnWidths['source'] }}>
-        <div className="flex flex-wrap gap-1">
-          {Array.from(field.phases).map((phase) => (
-            <span
-              key={phase}
-              className="inline-block px-1.5 py-0.5 rounded text-[10px] font-medium"
-              style={
-                phase === 'index-time'
-                  ? { backgroundColor: 'var(--color-accent)', color: 'var(--color-text-on-accent)' }
-                  : { backgroundColor: 'var(--color-bg-tertiary)', color: 'var(--color-text-secondary)' }
-              }
-              title={Array.from(field.sources).join(', ')}
-            >
-              {phase}
-            </span>
-          ))}
-        </div>
+        <PhaseChips phases={field.phases} sources={field.sources} />
       </td>
       <td className="py-1.5 px-3 font-mono text-[var(--color-text-secondary)] truncate" style={{ width: columnWidths['values'], maxWidth: columnWidths['values'] }}>
         {Array.from(field.values).slice(0, 3).join(', ')}
@@ -98,6 +71,46 @@ export function FieldTableRow({
       <ContextMenuItem onSelect={() => copyQuietly(Array.from(field.values).join(', '))}>Copy sample values</ContextMenuItem>
     </ContextMenuContent>
     </ContextMenu>
+  );
+}
+
+/** The FIELDALIASes that also name a field. */
+function AliasChips({ name, aliases }: { name: string; aliases: FieldRow['aliases'] }) {
+  if (aliases.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-1">
+      {aliases.map((alias) => (
+        <span
+          key={alias}
+          className="inline-block px-1.5 py-0.5 rounded bg-[var(--color-bg-tertiary)] text-[var(--color-text-secondary)] font-mono text-xs"
+          title={`FIELDALIAS: ${name} AS ${alias}`}
+        >
+          {alias}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** The phases (index-time, search-time) that extracted a field, each titled with the processors behind it. */
+function PhaseChips({ phases, sources }: Pick<FieldRow, 'phases' | 'sources'>) {
+  return (
+    <div className="flex flex-wrap gap-1">
+      {Array.from(phases).map((phase) => (
+        <span
+          key={phase}
+          className="inline-block px-1.5 py-0.5 rounded text-[10px] font-medium"
+          style={
+            phase === 'index-time'
+              ? { backgroundColor: 'var(--color-accent)', color: 'var(--color-text-on-accent)' }
+              : { backgroundColor: 'var(--color-bg-tertiary)', color: 'var(--color-text-secondary)' }
+          }
+          title={Array.from(sources).join(', ')}
+        >
+          {phase}
+        </span>
+      ))}
+    </div>
   );
 }
 

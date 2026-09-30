@@ -5,6 +5,7 @@
 // ---------------------------------------------------------------------------
 
 import { memo, useEffect, useId, useMemo } from 'react';
+import type { ReactNode } from 'react';
 import { useAppStore } from '../../store/useAppStore';
 import { Tabs } from '../ui/Tabs';
 import { tabId, tabPanelId } from '../ui/tabIds';
@@ -19,7 +20,8 @@ import { EventPagination, MIN_PAGE_SIZE } from './EventPagination';
 import { usePagination } from '../../hooks/usePagination';
 import { useDebounce } from '../../hooks/useDebounce';
 import type { PipelineInputs } from './tabs/shared/usePipelineInputs';
-import { enrichEvents } from './enrichEvents';
+import { enrichEvents, type EnrichedEvent } from './enrichEvents';
+import type { FieldStats } from '../../utils/fieldStats';
 import { anyFilter, matchesFilters, pruneSelection } from './previewFilters';
 
 /** How long the preview search waits for typing to pause before filtering. */
@@ -35,6 +37,33 @@ const PREVIEW_SUB_TABS: { id: PreviewSubTabId; label: string }[] = [
 
 /** What the preview's sub-tabs read of the pipeline inputs: the Timestamp tab's config. */
 export type PreviewInputs = Pick<PipelineInputs, 'propsConf' | 'metadata'>;
+
+/** What the sub-tabs read between them; each takes the part it needs. */
+interface SubTabData {
+  items: EnrichedEvent[];
+  allEvents: EnrichedEvent[];
+  currentPage: number;
+  eventsPerPage: number;
+  search: string;
+  fieldStats: FieldStats | undefined;
+  inputs: PreviewInputs;
+}
+
+/** The active sub-tab. Called in place, not rendered as a component, so the tab is the panel's direct child. */
+function subTabContent(subTab: PreviewSubTabId, d: SubTabData): ReactNode {
+  switch (subTab) {
+    case 'raw':
+      return <RawTab items={d.items} currentPage={d.currentPage} eventsPerPage={d.eventsPerPage} search={d.search} />;
+    case 'highlighted':
+      return <HighlightedTab items={d.items} allEvents={d.allEvents} currentPage={d.currentPage} eventsPerPage={d.eventsPerPage} fieldStats={d.fieldStats} />;
+    case 'diff':
+      return <DiffTab items={d.items} currentPage={d.currentPage} eventsPerPage={d.eventsPerPage} />;
+    case 'timestamp':
+      return <TimestampTab items={d.items} currentPage={d.currentPage} eventsPerPage={d.eventsPerPage} inputs={d.inputs} />;
+    case 'regex':
+      return <RegexTab items={d.items} allEvents={d.allEvents} currentPage={d.currentPage} eventsPerPage={d.eventsPerPage} />;
+  }
+}
 
 export const PreviewSubTab = memo(function PreviewSubTab({ pipelineInputs }: { pipelineInputs: PreviewInputs }) {
   const result = useAppStore((s) => s.processingResult);
@@ -131,11 +160,15 @@ export const PreviewSubTab = memo(function PreviewSubTab({ pipelineInputs }: { p
         id={tabPanelId(subTabsId, subTab)}
         aria-labelledby={tabId(subTabsId, subTab)}
       >
-        {subTab === 'raw' && <RawTab items={paginatedItems} currentPage={currentPage} eventsPerPage={eventsPerPage} search={debouncedSearch} />}
-        {subTab === 'highlighted' && <HighlightedTab items={paginatedItems} allEvents={filteredEvents} currentPage={currentPage} eventsPerPage={eventsPerPage} fieldStats={fieldStats} />}
-        {subTab === 'diff' && <DiffTab items={paginatedItems} currentPage={currentPage} eventsPerPage={eventsPerPage} />}
-        {subTab === 'timestamp' && <TimestampTab items={paginatedItems} currentPage={currentPage} eventsPerPage={eventsPerPage} inputs={pipelineInputs} />}
-        {subTab === 'regex' && <RegexTab items={paginatedItems} allEvents={filteredEvents} currentPage={currentPage} eventsPerPage={eventsPerPage} />}
+        {subTabContent(subTab, {
+          items: paginatedItems,
+          allEvents: filteredEvents,
+          currentPage,
+          eventsPerPage,
+          search: debouncedSearch,
+          fieldStats,
+          inputs: pipelineInputs,
+        })}
       </div>
 
       {/* Shared pagination */}
