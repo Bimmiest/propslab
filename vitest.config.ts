@@ -109,7 +109,7 @@ export default defineConfig({
       // worker tests do instantiate them, so they are measured like the rest.
       thresholds: {
         statements: 90,
-        branches: 82,
+        branches: 84,
         functions: 89,
         lines: 92,
         // The engine is held to a much higher bar than the app as a whole. It
