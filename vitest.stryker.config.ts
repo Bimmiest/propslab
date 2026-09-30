@@ -2,7 +2,7 @@ import { defineConfig, type Plugin } from 'vitest/config';
 import base from './vitest.config';
 
 // The vitest config Stryker runs (`npm run test:mutation`, stryker.config.mjs).
-// It is the normal one with three changes.
+// It is the normal one with four changes.
 //
 // 1. Only the engine's own tests. Mutants live in src/engine/**, and the
 //    component tests that also import the engine start jsdom per file — most
@@ -41,6 +41,14 @@ const strykerTestNamePattern: Plugin = {
   },
 };
 
+// 4. None of the directive-evidence machinery. The base config records what
+//    tests feed `runPipeline` (src/test/recordDirectiveEvidence.ts) for the one
+//    test that reads it back, which needs the whole suite in one invocation
+//    across two projects. A mutant run is neither, so the recorder is dropped,
+//    the projects are collapsed to the single `include` below, and that test is
+//    excluded.
+delete process.env.PROPSLAB_EVIDENCE_DIR;
+
 // Spread rather than mergeConfig, which concatenates arrays and would ADD this
 // include to the base one instead of replacing it.
 export default defineConfig({
@@ -48,6 +56,8 @@ export default defineConfig({
   plugins: [...(base.plugins ?? []), strykerTestNamePattern],
   test: {
     ...base.test,
+    projects: undefined,
+    setupFiles: (base.test?.setupFiles as string[] | undefined)?.filter((f) => !f.includes('recordDirectiveEvidence')),
     // The engine's tests, those of the two utils the engine runs on, and
     // those of the MCP server modules in stryker.config.mjs's `mutate`. The
     // package's tests import its SDK from packages/mcp-server/node_modules,
@@ -64,6 +74,7 @@ export default defineConfig({
       ...(base.test?.exclude ?? []),
       'src/engine/__tests__/workerReady.test.ts',
       'src/engine/__tests__/timestampMatchWorker.test.ts',
+      'src/engine/__tests__/directiveEvidence.test.ts',
     ],
   },
 });
