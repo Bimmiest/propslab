@@ -9,8 +9,9 @@
 //   2. AZURE_STATIC_WEB_APPS_API_TOKEN is an environment secret of
 //      `production` and not a repository secret, which any workflow on any
 //      branch could read.
-//   3. `main` is protected: a required status check, at least one required
-//      review, force-pushes blocked and deletion blocked, from repository
+//   3. `main` is protected: changes only through a pull request, the core CI
+//      checks required by name, force-pushes and deletion blocked, and no
+//      bypass actors on its rulesets (GET /rulesets/{id}), from repository
 //      rulesets (GET /rules/branches/main) or classic branch protection
 //      (GET /branches/main/protection), either source counting. The decision
 //      is scripts/lib/branchProtection.mjs, unit-tested with mocked responses.
@@ -102,11 +103,14 @@ async function checkBranchProtection(token) {
   const result = await evaluateMainProtection({
     getRules: () => get('/rules/branches/main', token),
     getClassic: () => get('/branches/main/protection', token),
+    getRuleset: (id) => get(`/rulesets/${id}`, token),
   });
   const via = result.sources.join(' and ') || 'no readable source';
 
   if (result.status === 'ok') {
-    console.log(`  ok  main is protected (${via}): required reviews and status checks, no force-push, no deletion`);
+    console.log(
+      `  ok  main is protected (${via}): pull request required, CI checks required, no force-push, no deletion, no bypass`,
+    );
   } else if (result.status === 'skipped') {
     // The rulesets do not provide everything and the classic rules, which may,
     // need "Administration: read", which no GITHUB_TOKEN holds. Say so loudly

@@ -16,8 +16,10 @@
 //     GitHub requires the "Administration: read" permission for it, which no
 //     GITHUB_TOKEN can hold, so under the workflow token it answers HTTP 403.
 //
-// The requirements: a required status check, at least one required approving
-// review, force-pushes blocked and deletion blocked.
+// The requirements: changes arrive through a pull request (no approval count is
+// required: a sole maintainer cannot approve their own PRs), the core CI checks
+// are required by name, force-pushes and deletion are blocked, and nobody can
+// bypass the rulesets that say so.
 // ---------------------------------------------------------------------------
 
 /** An HTTP failure from the GitHub API, carrying the status so callers never parse messages. */
@@ -39,42 +41,60 @@ function hasStatus(error, ...statuses) {
   return error instanceof ApiError && statuses.includes(error.status);
 }
 
-/** What classic protection (or its absence) guarantees, as booleans. */
+/** The CI checks `main` must require by name: the jobs of ci.yml that run on every pull request. */
+export const REQUIRED_CHECKS = ['ci', 'audit', 'mcp-server', 'workflow-lint'];
+
+/** The required checks among `names` that are missing. */
+function missingChecks(names) {
+  return REQUIRED_CHECKS.filter((name) => !names.includes(name));
+}
+
+/** What classic protection (or its absence) guarantees. */
 function fromClassic(protection) {
   const statusChecks = protection.required_status_checks;
-  // `checks` supersedes the deprecated `contexts`; either being non-empty means
-  // something is required. An empty array is truthy but requires nothing.
-  const configured = (statusChecks?.checks?.length ?? 0) + (statusChecks?.contexts?.length ?? 0);
+  // `checks` supersedes the deprecated `contexts`; read both.
+  const names = [...(statusChecks?.checks ?? []).map((c) => c.context), ...(statusChecks?.contexts ?? [])];
   return {
-    statusChecks: configured > 0,
-    reviews: (protection.required_pull_request_reviews?.required_approving_review_count ?? 0) >= 1,
+    // Classic protection expresses "require a pull request" as the presence of
+    // required_pull_request_reviews, whatever its approval count.
+    pullRequest: protection.required_pull_request_reviews != null,
+    checksMissing: missingChecks(names),
     noForcePush: protection.allow_force_pushes?.enabled === false,
     noDeletion: protection.allow_deletions?.enabled === false,
+    noBypass: protection.enforce_admins?.enabled === true,
   };
 }
 
-/** What the active rulesets guarantee, as booleans. `rules` is the endpoint's array. */
+/** What the active rulesets guarantee. `rules` is the endpoint's array. */
 function fromRulesets(rules) {
   const ofType = (type) => rules.filter((rule) => rule.type === type);
+  const names = ofType('required_status_checks').flatMap((rule) =>
+    (rule.parameters?.required_status_checks ?? []).map((c) => c.context),
+  );
   return {
-    statusChecks: ofType('required_status_checks').some(
-      (rule) => (rule.parameters?.required_status_checks?.length ?? 0) > 0,
-    ),
-    reviews: ofType('pull_request').some((rule) => (rule.parameters?.required_approving_review_count ?? 0) >= 1),
+    pullRequest: ofType('pull_request').length > 0,
+    checksMissing: missingChecks(names),
     // `non_fast_forward` forbids force-pushes; `deletion` forbids deleting the branch.
     noForcePush: ofType('non_fast_forward').length > 0,
     noDeletion: ofType('deletion').length > 0,
+    noBypass: false, // decided from the rulesets themselves, below
   };
 }
 
 const LABELS = {
-  statusChecks: 'required status checks',
-  reviews: 'at least one required pull request review',
+  pullRequest: 'changes only through a pull request',
   noForcePush: 'force-pushes blocked',
   noDeletion: 'deletion blocked',
+  noBypass: 'no bypass actors',
 };
 
-const NONE = { statusChecks: false, reviews: false, noForcePush: false, noDeletion: false };
+const NONE = {
+  pullRequest: false,
+  checksMissing: REQUIRED_CHECKS,
+  noForcePush: false,
+  noDeletion: false,
+  noBypass: false,
+};
 
 /**
  * Decide whether `main` is protected.
@@ -82,6 +102,7 @@ const NONE = { statusChecks: false, reviews: false, noForcePush: false, noDeleti
  * @param {object} readers
  * @param {() => Promise<object[]>} readers.getRules   The rulesets endpoint's array; rejects with ApiError.
  * @param {() => Promise<object>}   readers.getClassic The classic protection object; rejects with ApiError.
+ * @param {(id: number) => Promise<object>} [readers.getRuleset] One ruleset by id, for its `bypass_actors`.
  * @returns {Promise<{
  *   status: 'ok' | 'incomplete' | 'skipped',
  *   missing: string[],
@@ -94,7 +115,7 @@ const NONE = { statusChecks: false, reviews: false, noForcePush: false, noDeleti
  *   (HTTP 403), so it may be what provides it. A warning, not a verdict.
  *   Any other API failure is rethrown for the caller to report.
  */
-export async function evaluateMainProtection({ getRules, getClassic }) {
+export async function evaluateMainProtection({ getRules, getClassic, getRuleset }) {
   const notes = [];
   const sources = [];
   let fromRules = NONE;
@@ -102,7 +123,9 @@ export async function evaluateMainProtection({ getRules, getClassic }) {
   let classicUnreadable = false;
 
   try {
-    fromRules = fromRulesets(await getRules());
+    const rules = await getRules();
+    fromRules = fromRulesets(rules);
+    fromRules.noBypass = await rulesetsHaveNoBypass(rules, getRuleset, notes);
     sources.push('rulesets');
   } catch (error) {
     // No visible rules (404) or no access to them (403): fall back to classic protection.
@@ -127,7 +150,32 @@ export async function evaluateMainProtection({ getRules, getClassic }) {
   const missing = Object.keys(LABELS)
     .filter((key) => !fromRules[key] && !fromProtection[key])
     .map((key) => LABELS[key]);
+  // A check counts if either source requires it.
+  const checks = fromRules.checksMissing.filter((name) => fromProtection.checksMissing.includes(name));
+  if (checks.length > 0) missing.push(`required status checks: ${checks.join(', ')}`);
 
   if (missing.length === 0) return { status: 'ok', missing, sources, notes };
   return { status: classicUnreadable ? 'skipped' : 'incomplete', missing, sources, notes };
+}
+
+/**
+ * Whether no ruleset that applies to `main` has bypass actors. The rules
+ * endpoint names each rule's ruleset; each is read for its `bypass_actors`.
+ * A ruleset whose list is not visible to the token is noted and not counted.
+ */
+async function rulesetsHaveNoBypass(rules, getRuleset, notes) {
+  const ids = [...new Set(rules.map((rule) => rule.ruleset_id).filter((id) => id !== undefined))];
+  if (ids.length === 0 || !getRuleset) return false;
+  for (const id of ids) {
+    const ruleset = await getRuleset(id);
+    if (!Array.isArray(ruleset.bypass_actors)) {
+      notes.push(`ruleset ${id}'s bypass list is not visible to this token`);
+      return false;
+    }
+    if (ruleset.bypass_actors.length > 0) {
+      notes.push(`ruleset ${id} lets ${ruleset.bypass_actors.length} actor(s) bypass it`);
+      return false;
+    }
+  }
+  return true;
 }
