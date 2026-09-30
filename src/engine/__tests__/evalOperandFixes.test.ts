@@ -100,6 +100,27 @@ describe('expression size limit (#484)', () => {
     expect(() => value(expr)).toThrow(/too long or deeply nested/);
   });
 
+  // The limit is 1000 chained operations: the deepest tree accepted must also
+  // evaluate without exhausting the stack, and one operation more is rejected.
+  it.each([
+    ['arithmetic', (n: number) => Array.from({ length: n + 1 }, () => '1').join('+')],
+    ['concat', (n: number) => Array.from({ length: n + 1 }, () => '"a"').join('.')],
+    ['OR', (n: number) => Array.from({ length: n + 1 }, () => 'false').join(' OR ')],
+    ['NOT', (n: number) => `${'NOT '.repeat(n)}true`],
+    ['unary minus', (n: number) => `${'- '.repeat(n)}1`],
+  ])('%s: 1000 chained operations evaluate, 1001 are rejected', (_name, build) => {
+    expect(() => value(build(1000))).not.toThrow();
+    expect(() => value(build(1001))).toThrow(/more than 1000 chained operations/);
+  });
+
+  it('counts nesting through parentheses and calls, not just flat chains', () => {
+    const wrapped = (n: number) => `${'abs('.repeat(n)}1${')'.repeat(n)}`;
+    expect(value(wrapped(40))).toBe(1);
+    const chain = (n: number) => Array.from({ length: n + 1 }, () => '1').join('+');
+    // 990 additions inside 20 nested calls is 1010 levels in all.
+    expect(() => value(`${'abs('.repeat(20)}${chain(990)}${')'.repeat(20)}`)).toThrow(/chained operations/);
+  });
+
   it('still evaluates a chain of a few hundred terms', () => {
     const chain = Array.from({ length: 500 }, () => '1').join('+');
     expect(value(chain)).toBe(500);
