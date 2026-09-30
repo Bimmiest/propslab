@@ -306,6 +306,15 @@ const TZ_OFFSETS: Record<string, number> = {
   NZST: 720, NZDT: 780,
 };
 
+/**
+ * tzdata zone names that read like abbreviations. As a stanza's `TZ` (a zoneinfo
+ * name) they are zones, and CET, EET, WET and MET observe DST; only as an
+ * event's `%Z` is CET the fixed standard-time abbreviation of the table above.
+ * Kept to names tzdata itself defines: ICU also accepts legacy aliases such as
+ * `PST`, which zoneinfo has no zone for.
+ */
+const TZDATA_ABBREVIATION_ZONES: ReadonlySet<string> = new Set(['CET', 'EET', 'WET', 'MET', 'EST', 'MST', 'HST', 'UTC', 'GMT']);
+
 /** The zone abbreviations `%Z` resolves without TZ_ALIAS, for recognition to look for. */
 export const KNOWN_ZONE_ABBREVIATIONS: readonly string[] = Object.keys(TZ_OFFSETS);
 
@@ -787,19 +796,26 @@ function resolveZone(
   }
 
   if (zoneName) {
+    // An IANA name's offset depends on the date -- which is exactly why the
+    // abbreviation table cannot answer it. Take the instant as resolved rather
+    // than rebuilding it from a rounded offset: a historical zone can sit a few
+    // seconds off a whole minute.
+    const inZone = (formatter: Intl.DateTimeFormat): ParsedTimestamp => {
+      const epoch = ianaWallClockToEpoch(formatter, wallAsUtcMs);
+      return { date: new Date(epoch), wallAsUtcMs, offsetMinutes: Math.round((wallAsUtcMs - epoch) / 60_000), hasDate };
+    };
+
+    // The stanza's TZ is a zoneinfo name first: `TZ = CET` is the zone, with
+    // its summer time, not the abbreviation.
+    const stanzaZone = bag.tzName === undefined && TZDATA_ABBREVIATION_ZONES.has(zoneName.toUpperCase()) ? ianaFormatter(zoneName) : null;
+    if (stanzaZone) return inZone(stanzaZone);
+
     // A fixed offset or a known abbreviation is a constant, so answer directly.
     const fixed = resolveTzOffsetMinutes(zoneName);
     if (fixed !== null) return zoned(fixed);
 
-    // Otherwise it may be an IANA name, whose offset depends on the date --
-    // which is exactly why the abbreviation table cannot answer it.
     const formatter = ianaFormatter(zoneName);
-    if (formatter) {
-      // Take the instant as resolved rather than rebuilding it from a rounded
-      // offset: a historical zone can sit a few seconds off a whole minute.
-      const epoch = ianaWallClockToEpoch(formatter, wallAsUtcMs);
-      return { date: new Date(epoch), wallAsUtcMs, offsetMinutes: Math.round((wallAsUtcMs - epoch) / 60_000), hasDate };
-    }
+    if (formatter) return inZone(formatter);
 
     // Genuinely unresolvable: a typo, or a zone this runtime has no data for.
     // When an alias was applied, name both halves: the abbreviation the event

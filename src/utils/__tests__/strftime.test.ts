@@ -190,6 +190,31 @@ describe('#159 — IANA zone names resolve against real zone data', () => {
     parseTimestamp('2026-01-15 10:00:00', FMT, 'Europe/London', (v) => seen.push(v));
     expect(seen).toEqual([]);
   });
+
+  it('reads a stanza TZ that tzdata names as that zone, summer time included (#470)', () => {
+    // Doc-derived: props.conf.spec takes TZ from the zoneinfo database, where
+    // CET, EET, WET and MET are zones with DST, like Europe/Paris.
+    expect(iso('2026-07-01 10:00:00', FMT, 'CET')).toBe('2026-07-01T08:00:00.000Z');
+    expect(iso('2026-07-01 10:00:00', FMT, 'cet')).toBe('2026-07-01T08:00:00.000Z');
+    expect(iso('2026-01-15 10:00:00', FMT, 'CET')).toBe('2026-01-15T09:00:00.000Z');
+    expect(iso('2026-07-01 10:00:00', FMT, 'EET')).toBe('2026-07-01T07:00:00.000Z');
+    expect(iso('2026-07-01 10:00:00', FMT, 'WET')).toBe('2026-07-01T09:00:00.000Z');
+    expect(iso('2026-07-01 10:00:00', FMT, 'MET')).toBe('2026-07-01T08:00:00.000Z');
+    // Fixed in tzdata as in the table, so either reading agrees.
+    expect(iso('2026-07-01 10:00:00', FMT, 'EST')).toBe('2026-07-01T15:00:00.000Z');
+  });
+
+  it('keeps a %Z abbreviation fixed, and a stanza abbreviation tzdata has no zone for (#470)', () => {
+    // An event that writes CET says standard time, whatever the date.
+    expect(iso('2026-07-01 10:00:00 CET', `${FMT} %Z`)).toBe('2026-07-01T09:00:00.000Z');
+    expect(iso('2026-07-01 10:00:00 CET', `${FMT} %Z`, 'CET')).toBe('2026-07-01T09:00:00.000Z');
+    // ICU accepts PST as a legacy alias of Los Angeles; zoneinfo does not, so
+    // the table's fixed -08:00 stands.
+    expect(iso('2026-07-01 10:00:00', FMT, 'PST')).toBe('2026-07-01T18:00:00.000Z');
+    // A TZ_ALIAS target is a zone read from the event too.
+    const aliased = parseTimestamp('2026-07-01 10:00:00 XYZ', `${FMT} %Z`, undefined, undefined, new Map([['XYZ', 'CET']]));
+    expect(aliased?.toISOString()).toBe('2026-07-01T09:00:00.000Z');
+  });
 });
 
 // The zone-spec forms TZ_ALIAS targets are written in, and the table that
