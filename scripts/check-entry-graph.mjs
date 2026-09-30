@@ -19,6 +19,7 @@
 
 import { readFileSync } from 'node:fs';
 import { dirname, join, posix } from 'node:path';
+import { documentAssets } from './lib/htmlAssets.mjs';
 
 const distDir = process.argv[2] ?? 'dist';
 const FORBIDDEN = /(^|\/)monaco-editor-[\w-]+\.(js|css)$/;
@@ -32,13 +33,7 @@ try {
 }
 
 // Every asset the document references, with what refers to it.
-const referenced = [...html.matchAll(/<(script|link)\b([^>]*)>/g)]
-  .map(([, tag, attrs]) => {
-    const url = /\b(?:src|href)="([^"]+)"/.exec(attrs)?.[1];
-    const rel = /\brel="([^"]+)"/.exec(attrs)?.[1];
-    return url?.startsWith('/assets/') ? { via: tag === 'script' ? 'script' : rel, url } : undefined;
-  })
-  .filter((r) => r !== undefined);
+const referenced = documentAssets(html).filter((r) => r.url.startsWith('/assets/'));
 
 const problems = [];
 for (const { via, url } of referenced) {

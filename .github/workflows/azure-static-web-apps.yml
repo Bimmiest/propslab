@@ -488,8 +488,8 @@ jobs:
           # A new deployment takes a moment to reach every edge, and the
           # hashed script does not exist on the old one: retry until it does.
           fetch() {
-            local code='' i
-            for i in 1 2 3 4 5 6 7 8 9 10; do
+            local code='' _
+            for _ in 1 2 3 4 5 6 7 8 9 10; do
               code=$(curl -sS -o /dev/null -D "$hdrs" -w '%{http_code}' --max-time 20 "$base/$1" || true)
               if [ "$code" = 200 ]; then
                 tr -d '\r' < "$hdrs" > "$hdrs.clean"
