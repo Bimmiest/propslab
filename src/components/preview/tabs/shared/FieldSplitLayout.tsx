@@ -56,35 +56,39 @@ interface FieldSplitLayoutProps {
 }
 
 export function FieldSplitLayout({ storageKey, collapsed, sidebar, children }: FieldSplitLayoutProps) {
-  const [initialLayout] = useState(() => getSavedLayout(storageKey));
+  // The split to show when the sidebar is (re-)shown: the saved one at mount,
+  // then each one the user drags to. The group lays a re-added panel out from
+  // its current `defaultLayout`, so this is what that prop carries, rather
+  // than the mount-time value, which is what hiding and showing restored.
+  const [layout, setLayout] = useState(() => getSavedLayout(storageKey));
 
-  const saveLayout = (layout: Layout) => {
-    try { localStorage.setItem(storageKey, JSON.stringify(layout)); } catch { /* ignore */ }
+  const saveLayout = (next: Layout) => {
+    // With the sidebar hidden the group holds the events pane alone: not a split to keep.
+    if (!isLayout(next, storageKey)) return;
+    setLayout(next);
+    try { localStorage.setItem(storageKey, JSON.stringify(next)); } catch { /* ignore */ }
   };
 
-  if (collapsed) {
-    return (
-      <div className="flex-1 min-w-0 h-full overflow-auto p-3 space-y-3" {...SCROLL_REGION}>
-        {children}
-      </div>
-    );
-  }
-
-  // Preview the drag and apply on release: the events pane can hold thousands
-  // of rows, which otherwise re-wrap on every pointer move.
+  // One tree whether or not the sidebar shows: the events pane stays the
+  // group's first panel, so hiding the sidebar does not remount every event
+  // card beneath it or lose its scroll position.
   return (
-    <Group orientation="horizontal" id={storageKey} defaultLayout={initialLayout} onLayoutChanged={saveLayout} resizePreviewMode="separator">
+    <Group orientation="horizontal" id={storageKey} defaultLayout={layout} onLayoutChanged={saveLayout} resizePreviewMode="separator">
       <Panel defaultSize="85" minSize="40" id={eventsId(storageKey)}>
         <div className="h-full overflow-auto p-3 space-y-3" {...SCROLL_REGION}>
           {children}
         </div>
       </Panel>
-      <Separator className="w-1.5 cursor-col-resize bg-[var(--color-border)] hover:bg-[var(--color-accent)] transition-colors group relative flex items-center justify-center">
-        <div className="w-0.5 h-8 rounded-full bg-[var(--color-text-muted)] group-hover:bg-white transition-colors" />
-      </Separator>
-      <Panel defaultSize="15" minSize="10" id={sidebarId(storageKey)}>
-        {sidebar}
-      </Panel>
+      {!collapsed && (
+        <Separator className="w-1.5 cursor-col-resize bg-[var(--color-border)] hover:bg-[var(--color-accent)] transition-colors group relative flex items-center justify-center">
+          <div className="w-0.5 h-8 rounded-full bg-[var(--color-text-muted)] group-hover:bg-white transition-colors" />
+        </Separator>
+      )}
+      {!collapsed && (
+        <Panel defaultSize="15" minSize="10" id={sidebarId(storageKey)}>
+          {sidebar}
+        </Panel>
+      )}
     </Group>
   );
 }

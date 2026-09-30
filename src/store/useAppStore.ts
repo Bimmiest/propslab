@@ -1,5 +1,5 @@
-import { create } from 'zustand';
-import type { EventMetadata, OutputTabId, ValidationDiagnostic } from '../engine/types';
+import { create, type StoreApi } from 'zustand';
+import type { EventMetadata, OutputTabId, PreviewSubTabId, ValidationDiagnostic } from '../engine/types';
 import type { ViewResult } from '../utils/viewResult';
 
 /** Top-level workspace the activity rail switches between. */
@@ -15,6 +15,21 @@ export interface SessionInputs {
   transformsConf: string;
   metadata: EventMetadata;
 }
+
+/** What the Preview tab's filter bar narrows the events to. */
+export interface PreviewFilters {
+  search: string;
+  fields: ReadonlySet<string>;
+  status: ReadonlySet<string>;
+  changeState: ReadonlySet<string>;
+}
+
+export const NO_PREVIEW_FILTERS: PreviewFilters = {
+  search: '',
+  fields: new Set(),
+  status: new Set(),
+  changeState: new Set(),
+};
 
 export const EMPTY_INPUTS: SessionInputs = {
   rawData: '',
@@ -81,6 +96,21 @@ interface AppState {
   setRegexPattern: (pattern: string) => void;
   regexClassName: string;
   setRegexClassName: (name: string) => void;
+
+  /**
+   * The Preview tab's sub-tab and filters, held here for the same reason: the
+   * tab unmounts on every output-tab switch and on every phone tab switch,
+   * and the whole simulator remounts across the phone breakpoint.
+   */
+  previewSubTab: PreviewSubTabId;
+  setPreviewSubTab: (tab: PreviewSubTabId) => void;
+  previewFilters: PreviewFilters;
+  /**
+   * Change some filters, and go back to the first page, which the narrower
+   * set may not reach. `keepPage` is for a correction nobody asked for, such
+   * as dropping a field the latest run no longer extracts.
+   */
+  setPreviewFilters: (patch: Partial<PreviewFilters>, keepPage?: boolean) => void;
 
   /**
    * Directive key the dictionary should show, set when something outside the
@@ -182,6 +212,31 @@ function loadSettings(): { perEventPipeline: boolean; manualApply: boolean } {
   }
 }
 
+type OutputTabState = Pick<
+  AppState,
+  | 'regexPattern' | 'setRegexPattern' | 'regexClassName' | 'setRegexClassName'
+  | 'previewSubTab' | 'setPreviewSubTab' | 'previewFilters' | 'setPreviewFilters'
+>;
+
+/** What the output tabs keep across unmounting: the Regex tab's input, the Preview tab's sub-tab and filters. */
+function outputTabState(set: StoreApi<AppState>['setState']): OutputTabState {
+  return {
+    regexPattern: '',
+    setRegexPattern: (pattern) => set({ regexPattern: pattern }),
+    regexClassName: 'custom',
+    setRegexClassName: (name) => set({ regexClassName: name }),
+
+    previewSubTab: 'raw',
+    setPreviewSubTab: (tab) => set({ previewSubTab: tab }),
+    previewFilters: NO_PREVIEW_FILTERS,
+    setPreviewFilters: (patch, keepPage = false) =>
+      set((state) => ({
+        previewFilters: { ...state.previewFilters, ...patch },
+        ...(keepPage ? {} : { currentPage: 1 }),
+      })),
+  };
+}
+
 export const useAppStore = create<AppState>((set) => ({
   rawData: '',
   setRawData: (data) => set({ rawData: data, currentPage: 1 }),
@@ -246,10 +301,7 @@ export const useAppStore = create<AppState>((set) => ({
   mobileView: 'raw',
   setMobileView: (view) => set({ mobileView: view }),
 
-  regexPattern: '',
-  setRegexPattern: (pattern) => set({ regexPattern: pattern }),
-  regexClassName: 'custom',
-  setRegexClassName: (name) => set({ regexClassName: name }),
+  ...outputTabState(set),
 
   dictionarySelection: null,
   openDictionaryAt: (key) => set({ dictionarySelection: key, activeView: 'dictionary' }),

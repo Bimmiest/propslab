@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo, useState } from 'react';
+import { memo, useCallback, useLayoutEffect, useMemo, useState } from 'react';
 import { getField, hasField } from '../../../engine/utils/fieldBag';
 import type { EnrichedEvent } from '../PreviewPanel';
 import {
@@ -284,6 +284,15 @@ export function HighlightedTab({ items, allEvents, currentPage, eventsPerPage, f
   const { store: focusStore, pinnedFields, togglePin, setHoveredField } = useFieldFocus();
 
   const { categories, containerFields, fieldColorMap, highlightColorMap } = useFieldColoring(allEvents, fieldFilter, fieldStats);
+
+  // Pins follow the run: a pinned field the latest run no longer extracts is
+  // unpinned before the rows are chosen by it. Every field of the run, not
+  // just of the events a search leaves, so a search does not drop a pin.
+  const runFields = useMemo(
+    () => new Set(fieldStats?.names ?? fieldNamesInView(allEvents, undefined)),
+    [fieldStats, allEvents],
+  );
+  useLayoutEffect(() => focusStore.retainPins(runFields), [focusStore, runFields]);
 
   const pinMatches = useMemo(
     () => selectRows({ items, allEvents, currentPage, eventsPerPage }, pinnedFields),

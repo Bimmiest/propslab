@@ -1,4 +1,4 @@
-import { createContext, memo, useContext, useId, useState, useMemo, type ReactNode } from 'react';
+import { createContext, memo, useContext, useEffect, useId, useMemo, type ReactNode } from 'react';
 
 // trimEnd, not /\s+$/: the regex backtracks quadratically over a long inner
 // run of whitespace, and this runs on the main thread for every event.
@@ -22,7 +22,7 @@ import { FieldsTab } from './tabs/fields';
 import { TransformsTab } from './tabs/TransformsTab';
 import { ArchitecturePanel } from '../architecture/ArchitecturePanel';
 import { PreviewFilterBar } from './PreviewFilterBar';
-import { EventPagination } from './EventPagination';
+import { EventPagination, MIN_PAGE_SIZE } from './EventPagination';
 import { usePagination } from '../../hooks/usePagination';
 import { useDebounce } from '../../hooks/useDebounce';
 import { usePipelineInputs, type PipelineInputs } from './tabs/shared/usePipelineInputs';
@@ -311,15 +311,15 @@ function enrichEvents(
   });
 }
 
-interface PreviewFilters {
+interface ActiveFilters {
   search: string;
-  selectedFields: Set<string>;
-  selectedStatus: Set<string>;
-  selectedChangeState: Set<string>;
+  selectedFields: ReadonlySet<string>;
+  selectedStatus: ReadonlySet<string>;
+  selectedChangeState: ReadonlySet<string>;
 }
 
 /** `selected` without the entries `options` lacks; the same set when none are missing. */
-function pruneSelection(selected: Set<string>, options: string[]): Set<string> {
+function pruneSelection(selected: ReadonlySet<string>, options: string[]): ReadonlySet<string> {
   if (selected.size === 0) return selected;
   const available = new Set(options);
   const kept = [...selected].filter((s) => available.has(s));
@@ -327,12 +327,12 @@ function pruneSelection(selected: Set<string>, options: string[]): Set<string> {
 }
 
 /** Whether any filter would remove an event. */
-function anyFilter({ search, selectedFields, selectedStatus, selectedChangeState }: PreviewFilters): boolean {
+function anyFilter({ search, selectedFields, selectedStatus, selectedChangeState }: ActiveFilters): boolean {
   return search !== '' || selectedFields.size > 0 || selectedStatus.size > 0 || selectedChangeState.size > 0;
 }
 
 /** `filters.search` is lower-cased by the caller, once for the whole pass. */
-function matchesFilters(item: EnrichedEvent, filters: PreviewFilters): boolean {
+function matchesFilters(item: EnrichedEvent, filters: ActiveFilters): boolean {
   const { search, selectedFields, selectedStatus, selectedChangeState } = filters;
   if (search && !item.searchText.includes(search)) return false;
   if (selectedFields.size > 0) {
@@ -364,17 +364,20 @@ const PreviewSubTab = memo(function PreviewSubTab({ pipelineInputs }: { pipeline
   const events = useMemo(() => result?.events ?? [], [result]);
   const originalRaw = result?.originalRaw ?? '';
 
-  const [subTab, setSubTab] = useState<PreviewSubTabId>('raw');
+  // In the store, not local state: this component unmounts on every output
+  // tab switch, on a switch to the phone's other panels and across the phone
+  // breakpoint, and the sub-tab and filters are expected to outlive all three.
+  const subTab = useAppStore((s) => s.previewSubTab);
+  const setSubTab = useAppStore((s) => s.setPreviewSubTab);
+  const filters = useAppStore((s) => s.previewFilters);
+  const setFilters = useAppStore((s) => s.setPreviewFilters);
+  const { search, fields: selectedFields, status: selectedStatus, changeState: selectedChangeState } = filters;
   const subTabsId = useId();
-  const [search, setSearch] = useState('');
   // The input stays bound to `search`, so typing is immediate; everything the
   // filter drives reads this settled copy, so a keystroke does not rebuild
   // `filteredEvents`, which re-scans every event, re-runs the Extractions tab's
   // JSON scan and re-posts the whole dataset to the Regex tab's matcher.
   const debouncedSearch = useDebounce(search, SEARCH_DEBOUNCE_MS);
-  const [selectedFields, setSelectedFields] = useState<Set<string>>(new Set());
-  const [selectedStatus, setSelectedStatus] = useState<Set<string>>(new Set());
-  const [selectedChangeState, setSelectedChangeState] = useState<Set<string>>(new Set());
 
   // The metadata of the run that produced these events, not the live fields:
   // compared with the live fields, every event would read as modified while the
@@ -393,12 +396,13 @@ const PreviewSubTab = memo(function PreviewSubTab({ pipelineInputs }: { pipeline
 
   // A field a later run no longer extracts has no checkbox to untick, yet
   // would keep filtering (to "0 / N" if it was the only one), so it is dropped
-  // from the selection. Set during render, React's pattern for state derived
-  // from props; the pruned set is stable, so this settles in one pass.
+  // from the selection: filtered by the pruned set at once, and the store
+  // corrected after the commit, without moving the page.
   const liveSelectedFields = useMemo(() => pruneSelection(selectedFields, allFields), [selectedFields, allFields]);
-  if (liveSelectedFields !== selectedFields) setSelectedFields(liveSelectedFields);
+  useEffect(() => {
+    if (liveSelectedFields !== selectedFields) setFilters({ fields: liveSelectedFields }, true);
+  }, [liveSelectedFields, selectedFields, setFilters]);
 
-  // Apply filters
   // With no filter set, the very same array: the tabs below read that as
   // "every event" and use the run's precomputed statistics.
   const filteredEvents = useMemo(() => {
@@ -409,6 +413,9 @@ const PreviewSubTab = memo(function PreviewSubTab({ pipelineInputs }: { pipeline
 
   const { paginatedItems, currentPage, totalPages, eventsPerPage, totalItems, setCurrentPage, setEventsPerPage } =
     usePagination(filteredEvents);
+  // Present while there is a choice of page size to make: with more events
+  // than the smallest page. Shown only past the current page size, choosing a
+  // larger size hid the control, and it could not be set back down.
 
   return (
     <div className="flex flex-col h-full">
@@ -428,14 +435,14 @@ const PreviewSubTab = memo(function PreviewSubTab({ pipelineInputs }: { pipeline
       {/* Shared filter bar */}
       <PreviewFilterBar
         search={search}
-        onSearchChange={(v) => { setSearch(v); setCurrentPage(1); }}
+        onSearchChange={(v) => setFilters({ search: v })}
         allFields={allFields}
         selectedFields={liveSelectedFields}
-        onFieldsChange={(f) => { setSelectedFields(f); setCurrentPage(1); }}
+        onFieldsChange={(f) => setFilters({ fields: f })}
         selectedStatus={selectedStatus}
-        onStatusChange={(s) => { setSelectedStatus(s); setCurrentPage(1); }}
+        onStatusChange={(s) => setFilters({ status: s })}
         selectedChangeState={selectedChangeState}
-        onChangeStateChange={(m) => { setSelectedChangeState(m); setCurrentPage(1); }}
+        onChangeStateChange={(m) => setFilters({ changeState: m })}
         filteredCount={filteredEvents.length}
         totalCount={enrichedEvents.length}
       />
@@ -455,7 +462,7 @@ const PreviewSubTab = memo(function PreviewSubTab({ pipelineInputs }: { pipeline
       </div>
 
       {/* Shared pagination */}
-      {totalItems > eventsPerPage && (
+      {totalItems > MIN_PAGE_SIZE && (
         <EventPagination
           currentPage={currentPage}
           totalPages={totalPages}

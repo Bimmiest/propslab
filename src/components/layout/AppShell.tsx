@@ -66,10 +66,13 @@ export function AppShell() {
             <>
               {/*
                 Both views stay mounted and switch with `hidden`, rather than
-                rendering conditionally. Unmounting the simulator would throw
-                away Monaco's undo history, cursor and folding state along with
-                every preview filter held in PreviewPanel's local state, and
-                would pay full Monaco re-init on the way back. Monaco
+                rendering conditionally. Unmounting the simulator would pay a
+                full Monaco re-init on the way back and lose what lives only in
+                the mounted tree: folding, scroll positions, the Extractions
+                tab's pins. Undo history and cursors survive a remount anyway
+                (modelRegistry), as do the preview's sub-tab and filters, which
+                are in the store because the phone layout and the breakpoint
+                between the two layouts do remount it. Monaco
                 (automaticLayout) and react-resizable-panels both observe their
                 container, so they re-measure correctly when shown again.
 

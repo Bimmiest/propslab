@@ -8,7 +8,7 @@
 // ---------------------------------------------------------------------------
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { useAppStore, selectSessionDirty, EMPTY_INPUTS } from '../useAppStore';
+import { useAppStore, selectSessionDirty, EMPTY_INPUTS, NO_PREVIEW_FILTERS } from '../useAppStore';
 
 const THEME_KEY = 'propslab:theme';
 const SETTINGS_KEY = 'propslab:settings';
@@ -46,6 +46,8 @@ describe('defaults', () => {
       mobileView: 'raw',
       regexPattern: '',
       regexClassName: 'custom',
+      previewSubTab: 'raw',
+      previewFilters: NO_PREVIEW_FILTERS,
       dictionarySelection: null,
       currentPage: 1,
       eventsPerPage: 10,
@@ -86,6 +88,7 @@ describe('setters', () => {
     ['setMobileView', () => state().setMobileView('output'), { mobileView: 'output' }],
     ['setRegexPattern', () => state().setRegexPattern('(?<a>x)'), { regexPattern: '(?<a>x)' }],
     ['setRegexClassName', () => state().setRegexClassName('mine'), { regexClassName: 'mine' }],
+    ['setPreviewSubTab', () => state().setPreviewSubTab('regex'), { previewSubTab: 'regex' }],
     ['setDictionarySelection', () => state().setDictionarySelection('KV_MODE'), { dictionarySelection: 'KV_MODE' }],
     ['setCurrentPage', () => state().setCurrentPage(4), { currentPage: 4 }],
     ['setHelpStage', () => state().setHelpStage(3), { helpStage: 3 }],
@@ -116,6 +119,18 @@ describe('setters', () => {
     state().setCurrentPage(5);
     state().setEventsPerPage(50);
     expect(state()).toMatchObject({ eventsPerPage: 50, currentPage: 1 });
+  });
+
+  it('setPreviewFilters changes only what it is given and goes back to page one, unless told not to', () => {
+    state().setCurrentPage(5);
+    state().setPreviewFilters({ search: 'GET' });
+    expect(state()).toMatchObject({ previewFilters: { ...NO_PREVIEW_FILTERS, search: 'GET' }, currentPage: 1 });
+    state().setCurrentPage(5);
+    const fields = new Set(['user']);
+    state().setPreviewFilters({ fields }, true);
+    expect(state().previewFilters).toEqual({ ...NO_PREVIEW_FILTERS, search: 'GET', fields });
+    expect(state().currentPage).toBe(5);
+    expect(NO_PREVIEW_FILTERS.search).toBe('');
   });
 
   it('setMetadataField changes one field and keeps the others; setMetadata replaces all', () => {
