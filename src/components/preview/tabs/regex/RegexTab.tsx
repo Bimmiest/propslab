@@ -57,7 +57,6 @@ export function RegexTab(props: RegexTabProps) {
         <input
           id={patternId}
           type="text"
-          aria-label="Regular expression pattern"
           placeholder="(?P<field_name>\d+\.\d+\.\d+\.\d+)..."
           value={pattern}
           onChange={(e) => setPattern(e.target.value)}
