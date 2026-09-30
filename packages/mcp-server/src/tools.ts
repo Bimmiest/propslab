@@ -305,6 +305,7 @@ const REPAIR =
  * blamed on a regex outright: a large legitimate input can need more than the
  * default budget, and telling the agent to rewrite a correct conf is worse
  * than telling it to wait longer.
+ * See docs/adr/0015-mcp-timeouts-start-on-ready-and-report-progress.md.
  */
 function timeoutAdvice(
   err: WorkerTimeoutError,

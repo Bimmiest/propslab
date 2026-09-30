@@ -9,6 +9,7 @@
  * the server never reads a stage from one write beside an event count from
  * another: phase in bits 28–29, stage in bits 23–27 (its index in
  * `RUN_STAGES` plus one, zero for none), events in bits 0–22.
+ * See docs/adr/0015-mcp-timeouts-start-on-ready-and-report-progress.md.
  */
 import { RUN_STAGES, type RunStage } from '../../../src/engine/runStages';
 

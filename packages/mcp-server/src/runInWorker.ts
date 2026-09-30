@@ -47,6 +47,7 @@
  * it holds a slot for at most its own start-up cap and budget (≤30s), and with
  * the queue bounded at four calls per slot no call waits behind more than four
  * of those — and the MCP client's request timeout remains the outer limit.
+ * See docs/adr/0015-mcp-timeouts-start-on-ready-and-report-progress.md.
  */
 import { Worker, type ResourceLimits } from 'node:worker_threads';
 import os from 'node:os';

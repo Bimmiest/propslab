@@ -1,14 +1,15 @@
 /**
  * Static analysis used to make a simulate timeout repairable instead of a
- * blind retry: enumerate every regex-valued directive in the conf inputs and
- * flag the structurally ReDoS-prone ones.
+ * blind retry: enumerate every regex the conf's directives run
+ * (directivePatterns.ts) and flag the structurally ReDoS-prone ones.
  *
  * Runs in the sandbox worker, before the pipeline, and the list is posted to
  * the server ahead of the run (simulateWorker.ts). The server keeps the last
  * list it was sent and reports it if the run then times out; it never parses
  * the caller's conf on its own thread, where nothing bounds how long that
  * takes. A run that times out before the list is posted — still parsing the
- * conf — reports no list, and says so.
+ * conf — reports no list, and says so. See
+ * docs/adr/0015-mcp-timeouts-start-on-ready-and-report-progress.md.
  *
  * Patterns run on PCRE2, whose match limits bound each match, so a timeout is
  * the sum of many bounded matches rather than one runaway. `hasReDoSRisk` is a

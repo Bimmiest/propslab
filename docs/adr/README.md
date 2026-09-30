@@ -51,3 +51,4 @@ What follows, good and bad: what the rule costs, what it rules out, and what to 
 | [0012](0012-layered-conf-input.md) | Conf files can be parsed as ordered layers, with provenance | `src/engine/types.ts`, `src/engine/pipeline.ts` |
 | [0013](0013-the-preview-receives-a-reduced-result.md) | The pipeline worker sends the preview a reduced, interned result | `src/utils/viewResult.ts`, `src/engine/pipelineWorker.ts` |
 | [0014](0014-pipeline-worker-failure-policy.md) | A crashed input never runs inline, and the retry budget spans requests | `src/hooks/useProcessingPipeline.ts` |
+| [0015](0015-mcp-timeouts-start-on-ready-and-report-progress.md) | MCP timeouts start on worker ready, report progress, and never touch caller input on the server thread | `packages/mcp-server/src/runInWorker.ts`, `packages/mcp-server/src/tools.ts` |
