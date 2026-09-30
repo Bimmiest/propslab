@@ -105,11 +105,6 @@ describe('applyDestKey — _raw replacement', () => {
 // An empty FORMAT expansion (destValue === '') must still route, rather
 // than being treated as "no routing" by a falsy check.
 describe('applyDestKey — empty destValue still routes', () => {
-  it('sets a target field to an empty string', () => {
-    const event = applyDestKey(baseEvent(), result('anon_field', ''));
-    expect(event.fields.anon_field).toBe('');
-  });
-
   it('blanks _raw when FORMAT expands to empty', () => {
     const event = applyDestKey(baseEvent(), result('_raw', ''));
     expect(event._raw).toBe('');
@@ -170,9 +165,22 @@ describe('applyDestKey — unsimulated routing keys are not written as fields (#
     expect(out.fields._INDEX_AND_FORWARD_ROUTING).toBeUndefined();
   });
 
-  it('still treats a genuinely unknown key as a field name', () => {
-    const out = applyDestKey(baseEvent(), result('my_custom_field', 'v'));
-    expect(out.fields.my_custom_field).toBe('v');
+  // Doc-derived: transforms.conf.spec lists the DEST_KEY values Splunk accepts,
+  // and gives an unlisted key no effect. Writing the value into a field named
+  // after the key would show a field Splunk never creates (#477). The extracted
+  // fields of the transform still apply.
+  it('leaves the event alone for a key outside the documented set', () => {
+    const before = baseEvent();
+    const out = applyDestKey(before, { ...result('my_custom_field', 'v'), fields: { kept: 'k' } });
+    expect(out.fields.my_custom_field).toBeUndefined();
+    expect(out.fields.kept).toBe('k');
+    expect(out._raw).toBe(before._raw);
+    expect(out.metadata).toEqual(before.metadata);
+    expect(out._meta).toEqual(before._meta);
+  });
+
+  it('leaves the event alone for an empty value under an unknown key too', () => {
+    expect(applyDestKey(baseEvent(), result('anon_field', '')).fields.anon_field).toBeUndefined();
   });
 });
 

@@ -85,11 +85,15 @@ describe('applyTransforms — DEST_KEY=_raw data-loss warning', () => {
 describe('applyTransforms — unknown DEST_KEY warning (SEM-11)', () => {
   const unknownMsg = (d: ValidationDiagnostic) => d.message.includes('is not a recognized Splunk DEST_KEY');
 
-  it('warns when DEST_KEY is not a documented key', () => {
+  // The one warning about an unknown key is the config-time lint's ("has no
+  // routing effect"); the run-time stage used to add a second that said the
+  // preview treats it as a field name (#477).
+  it('does not warn at run time for a key outside the documented set, and writes no field', () => {
     const diags: ValidationDiagnostic[] = [];
     const conf = transformsConf('route', { REGEX: '(.*)', FORMAT: '$1', DEST_KEY: 'MetaData:Bogus' });
-    applyTransforms([event('hello')], transformsDir('route'), conf, 'index-time', runCtx(diags));
-    expect(diags.some(unknownMsg)).toBe(true);
+    const out = applyTransforms([event('hello')], transformsDir('route'), conf, 'index-time', runCtx(diags))[0]!;
+    expect(diags).toEqual([]);
+    expect(out.fields['MetaData:Bogus']).toBeUndefined();
   });
 
   it('does not warn for a documented key', () => {

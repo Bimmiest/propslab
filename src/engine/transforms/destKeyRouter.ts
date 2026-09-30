@@ -1,6 +1,5 @@
 import type { SplunkEvent } from '../types';
 import type { TransformResult } from './regexTransform';
-import { VALID_UNSIMULATED_DEST_KEYS } from './destKeys';
 import { addFieldValue } from '../utils/fieldBag';
 import { dateFromEpochSeconds } from '../utils/epochTime';
 
@@ -124,17 +123,11 @@ export function applyDestKey(
       };
 
     default:
-      // A documented routing key this tool does not model (_TCP_ROUTING and
-      // friends) must not be written out as an event field — the config-time
-      // diagnostic already says the routing is unsimulated, and inventing a
-      // field named after the key would contradict it.
-      if (VALID_UNSIMULATED_DEST_KEYS.has(destKey)) {
-        return { ...event, fields: { ...event.fields, ...result.fields } };
-      }
-      // Treat as a field name
-      return {
-        ...event,
-        fields: { ...event.fields, ...result.fields, [destKey]: destValue },
-      };
+      // A key this tool does not model changes nothing on the event. That is
+      // true of a documented routing key (_TCP_ROUTING and friends) and of a
+      // key outside the documented set, which Splunk ignores: writing either
+      // out as a field named after the key would invent a field Splunk never
+      // creates. The config-time lint says which of the two it is.
+      return { ...event, fields: { ...event.fields, ...result.fields } };
   }
 }

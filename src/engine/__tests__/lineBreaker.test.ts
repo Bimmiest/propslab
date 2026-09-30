@@ -304,6 +304,35 @@ describe('#172 — a LINE_BREAKER with no capture group', () => {
   });
 });
 
+describe('#472 — a LINE_BREAKER that does not compile', () => {
+  // Doc-derived: props.conf.spec says LINE_BREAKER is a regular expression, and
+  // a regular expression that is not valid PCRE cannot name a break. The
+  // simulator breaks on newlines then; the point of these tests is the message.
+  it('reports its compile error, not a missing capture group', () => {
+    const diags: ValidationDiagnostic[] = [];
+    const events = breakLines('a\nb\n', [
+      dir('SHOULD_LINEMERGE', 'false'),
+      dir('LINE_BREAKER', '([\\r\\n]+'),
+    ], META, runCtx(diags));
+    const lb = diags.filter((d) => d.directiveKey === 'LINE_BREAKER');
+    expect(lb).toHaveLength(1);
+    expect(lb[0]!.message).toContain('does not compile (missing closing parenthesis');
+    expect(lb[0]!.message).not.toContain('no capturing group');
+    expect(lb[0]!.message).not.toContain('Wrap the delimiter');
+    // Events are still broken, on newlines.
+    expect(events.map((e) => e._raw)).toEqual(['a', 'b']);
+  });
+
+  it('still reports a compiling pattern with no group as having no group', () => {
+    const diags: ValidationDiagnostic[] = [];
+    breakLines('a\nb\n', [dir('LINE_BREAKER', '-----')], META, runCtx(diags));
+    const lb = diags.filter((d) => d.directiveKey === 'LINE_BREAKER');
+    expect(lb).toHaveLength(1);
+    expect(lb[0]!.message).toContain('no capturing group');
+    expect(lb[0]!.message).not.toContain('does not compile');
+  });
+});
+
 describe('#161 — MUST_BREAK_AFTER does not license merging', () => {
   it('breaks every line when it is the only rule in force', () => {
     const raw = '2026-01-15T10:00:00Z alpha\nmiddle\nEND\n2026-01-15T10:00:01Z beta\nmiddle\nEND\n';

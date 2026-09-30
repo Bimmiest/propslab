@@ -128,6 +128,31 @@ function createBudget(limit: number): ExplanationBudget {
   };
 }
 
+/**
+ * Work derived from a config object that every event of the run would
+ * otherwise redo, kept for the run's length (a parsed expression, say). The
+ * config objects are the same ones for every event, so they are the key; a
+ * different run gets a fresh cache, so nothing outlives the config it came from.
+ */
+export interface RunMemo {
+  /** The value `make` built for `owner` under `namespace`, built on first use. */
+  get<T>(namespace: string, owner: object, make: () => T): T;
+}
+
+function createMemo(): RunMemo {
+  const spaces = new Map<string, WeakMap<object, unknown>>();
+  return {
+    get<T>(namespace: string, owner: object, make: () => T): T {
+      let space = spaces.get(namespace);
+      if (!space) spaces.set(namespace, (space = new WeakMap()));
+      if (space.has(owner)) return space.get(owner) as T;
+      const made = make();
+      space.set(owner, made);
+      return made;
+    },
+  };
+}
+
 export interface RunContext {
   /**
    * The run's clock, in epoch ms, read once so every stage agrees on it. See
@@ -139,6 +164,8 @@ export interface RunContext {
   readonly diagnostics: DiagnosticsCollector;
   readonly limits: RunLimits;
   readonly explanations: ExplanationBudget;
+  /** Per-run cache of compiled config; see {@link RunMemo}. */
+  readonly memo: RunMemo;
 }
 
 export interface RunContextInit {
@@ -157,6 +184,7 @@ export function createRunContext(init: RunContextInit): RunContext {
     diagnostics: createCollector(init.diagnostics),
     limits,
     explanations: createBudget(limits.explanationsPerDirective),
+    memo: createMemo(),
   });
 }
 

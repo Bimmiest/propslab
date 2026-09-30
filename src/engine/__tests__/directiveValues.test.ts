@@ -196,6 +196,35 @@ describe('default-true settings accept every false spelling (was: exactly "false
     lintMatchedDirectives([d('INDEXED_EXTRACTIONS', 'json'), d('AUTO_KV_JSON', 'no')], diagnostics);
     expect(diagnostics).toEqual([]);
   });
+
+  // Doc-derived: props.conf.spec says `rename` makes an event use the target
+  // sourcetype's SEARCH-TIME settings. KV_MODE and AUTO_KV_JSON are read there;
+  // INDEXED_EXTRACTIONS is an index-time setting of the original stanza (#477).
+  describe('the INDEXED_EXTRACTIONS = json duplicate warning under rename', () => {
+    const props = (renamed: string) => `[raw]\nINDEXED_EXTRACTIONS = json\nrename = r2\n[r2]\n${renamed}\n`;
+    const dup = (conf: string) =>
+      runPipeline('{"a":1}', { ...META, sourcetype: 'raw' }, conf, '').diagnostics.filter((x) =>
+        x.message.includes('extracts them again at search time'),
+      );
+
+    it('is silent when the rename target turns KV_MODE off', () => {
+      expect(dup(props('KV_MODE = none'))).toEqual([]);
+    });
+
+    it('is silent when the rename target turns AUTO_KV_JSON off', () => {
+      expect(dup(props('AUTO_KV_JSON = false'))).toEqual([]);
+    });
+
+    it('warns when the rename target leaves search-time JSON on', () => {
+      expect(dup(props('KV_MODE = json'))).toHaveLength(1);
+      expect(dup(props('SHOULD_LINEMERGE = false'))).toHaveLength(1);
+    });
+
+    it('ignores a KV_MODE = none on the original stanza, which search time no longer reads', () => {
+      const conf = '[raw]\nINDEXED_EXTRACTIONS = json\nKV_MODE = none\nrename = r2\n[r2]\nSHOULD_LINEMERGE = false\n';
+      expect(dup(conf)).toHaveLength(1);
+    });
+  });
 });
 
 // ── Behaviour changes: diagnostics that pointed at a shadowed definition ────
@@ -208,12 +237,12 @@ describe('transforms diagnostics point at the definition that took effect (was: 
     }).diagnostics;
 
   it('an unknown DEST_KEY is reported on the line that set it', () => {
-    // The router's own warning, not configLint's (which already read the last).
-    const diag = run('[t1]\nREGEX = (\\w+)\nDEST_KEY = queue\nDEST_KEY = not_a_key\nFORMAT = x\n').find((x) =>
-      x.message.includes('in transform "t1" is not a recognized'),
+    // The config-time lint is the one report: the router no longer adds its own (#477).
+    const diags = run('[t1]\nREGEX = (\\w+)\nDEST_KEY = queue\nDEST_KEY = not_a_key\nFORMAT = x\n').filter((x) =>
+      /not a recogni[sz]ed Splunk DEST_KEY/.test(x.message),
     );
-    expect(diag).toBeDefined();
-    expect(diag?.line).toBe(4);
+    expect(diags).toHaveLength(1);
+    expect(diags[0]?.line).toBe(4);
   });
 
   it('REPEAT_MATCH beside DEST_KEY = _raw is reported on the effective REPEAT_MATCH', () => {

@@ -89,10 +89,10 @@ describe('transform diagnostics fire once per stanza, and per stanza', () => {
     expect(hits.map((x) => x.message.match(/"(\w+)"/)?.[1])).toEqual(['t1', 't2']);
   });
 
-  it('an unknown DEST_KEY, located at its line', () => {
+  it('a valid but unsimulated DEST_KEY, located at its line', () => {
     const d: ValidationDiagnostic[] = [];
-    applyTransforms(twoEvents(), [transforms('t')], conf(stanza('t', { REGEX: 'a=(\\d)', FORMAT: '$1', DEST_KEY: 'Bogus' })), 'index-time', runCtx(d));
-    const hits = d.filter((x) => x.message.includes('is not a recognized Splunk DEST_KEY'));
+    applyTransforms(twoEvents(), [transforms('t')], conf(stanza('t', { REGEX: 'a=(\\d)', FORMAT: '$1', DEST_KEY: '_TCP_ROUTING' })), 'index-time', runCtx(d));
+    const hits = d.filter((x) => x.message.includes('is a valid Splunk routing key but is not simulated'));
     expect(hits).toHaveLength(1);
     expect(hits[0]!.line).toBe(12);
   });

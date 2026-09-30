@@ -211,9 +211,13 @@ export function parseSedExpression(
     }
     current += trimmed[i]!;
   }
+  // The expression is `s<d>regex<d>replacement<d>flags`: the regex and the
+  // replacement each end at a delimiter. Text after the last delimiter is the
+  // flags, so it does not count towards the two that must be closed.
+  const closed = parts.length;
   if (current) parts.push(current);
 
-  if (parts.length < 2) {
+  if (closed < 2) {
     diagnostics?.push(
       sedWarning(
         dir,
@@ -281,9 +285,20 @@ export function applySedCommands(
 
   if (sedDirectives.length === 0) return events;
 
+  // The expressions are parsed on every call, and a call is made per clone
+  // (applyCloneIndexTime), so a malformed one would warn once per event. Route
+  // its parse warnings through the run's ledger, keyed by where the directive
+  // is and what it says, so each is reported once per run.
+  const parseSink: DiagnosticSink = {
+    push: (...found) => {
+      for (const d of found) {
+        diagnostics.report(`SEDCMD parse|${d.file}|${d.layer ?? ''}|${d.line ?? ''}|${d.message}`, d);
+      }
+    },
+  };
   const commands: (SedCommand & { directive: ConfDirective })[] = [];
   for (const dir of sedDirectives) {
-    const cmd = parseSedExpression(dir.value, dir, diagnostics);
+    const cmd = parseSedExpression(dir.value, dir, parseSink);
     if (cmd) {
       cmd.className = dir.className ?? '';
       commands.push({ ...cmd, directive: dir });
