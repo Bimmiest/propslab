@@ -100,6 +100,10 @@ All notable changes to Propslab are documented here, newest first. Entries say w
 
 ### Fixed
 
+- **Coverage floors sit one point under the measured figures** ([#506](https://github.com/Bimmiest/propslab/issues/506)), with per-directory floors for components, hooks, monaco, store and utils, and a CI step fails when any floor falls more than 3 points behind. `main.tsx` and the worker entry points are measured rather than excluded.
+- **The weekly randomised run is random** ([#513](https://github.com/Bimmiest/propslab/issues/513)): it draws a fresh property-test seed, uses it for test order too, and prints it with a replay command. Unset, every property test had run on its fixed default.
+- **Tests no longer assert wall-clock time** in the wildcard matcher or the MCP server's end-to-end cancellation tests; a shared `makeEvent` helper is introduced and Playwright pins `colorScheme` ([#507](https://github.com/Bimmiest/propslab/issues/507), in part).
+- **The mutation gate has a warning band (82 over a break of 78), a canary that fails if the test-name shim breaks, and a monthly report-only run with static mutants** ([#508](https://github.com/Bimmiest/propslab/issues/508)). The worker lifecycle and the store are now mutation-tested.
 - **The phone-width Dictionary can be browsed with the arrow keys** ([#494](https://github.com/Bimmiest/propslab/issues/494)); Enter opens an entry, and focus returns to the list on going back instead of being lost.
 - **Status badges, diff lines, JSON chips, dimmed rows, inactive Architecture boxes and the Settings switch meet the 4.5:1 contrast policy in both themes** ([#493](https://github.com/Bimmiest/propslab/issues/493)), with new axe checks for those states.
 - **Accessibility follow-ups** ([#495](https://github.com/Bimmiest/propslab/issues/495)):

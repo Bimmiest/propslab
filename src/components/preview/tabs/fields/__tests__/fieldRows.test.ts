@@ -4,17 +4,10 @@ import {
   findParentFields, immediateParent, nestFields, renderedRowIds, type AggregatedField,
 } from '../fieldRows';
 import type { ProcessingStep, SplunkEvent } from '../../../../../engine/types';
+import { makeEvent } from '../../../../../test/makeEvent';
 
-function makeEvent(fields: SplunkEvent['fields'], processingTrace: ProcessingStep[] = []): SplunkEvent {
-  return {
-    _raw: '',
-    _time: null,
-    _meta: {},
-    fields,
-    metadata: { index: 'main', host: 'h', source: 's', sourcetype: 'st' },
-    lineNumbers: { start: 1, end: 1 },
-    processingTrace,
-  };
+function eventWith(fields: SplunkEvent['fields'], processingTrace: ProcessingStep[] = []): SplunkEvent {
+  return makeEvent('', { fields, processingTrace });
 }
 
 function field(name: string, over: Partial<AggregatedField> = {}): AggregatedField {
@@ -23,13 +16,13 @@ function field(name: string, over: Partial<AggregatedField> = {}): AggregatedFie
 
 describe('aggregateFields', () => {
   const events = [
-    makeEvent({ a: '1', b: ['x', 'y'], al: '1' }, [
+    eventWith({ a: '1', b: ['x', 'y'], al: '1' }, [
       { processor: 'EXTRACT-a', phase: 'search-time', description: '', fieldsAdded: ['a', 'not_on_event'] },
       { processor: 'INDEXED_EXTRACTIONS', phase: 'index-time', description: '', fieldsAdded: ['b'] },
       { processor: 'SEDCMD-mask', phase: 'index-time', description: '', fieldsModified: ['a'] },
       { processor: 'FIELDALIAS-x', phase: 'search-time', description: '', fieldsAdded: ['al'], fieldAliases: [{ source: 'a', target: 'al' }] },
     ]),
-    makeEvent({ a: '1', b: 'z' }, [{ processor: 'EXTRACT-b', phase: 'search-time', description: '', fieldsAdded: ['b'] }]),
+    eventWith({ a: '1', b: 'z' }, [{ processor: 'EXTRACT-b', phase: 'search-time', description: '', fieldsAdded: ['b'] }]),
   ];
   const byName = new Map(aggregateFields(events, buildAliasMap(events)).map((f) => [f.name, f]));
 

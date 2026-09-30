@@ -3,10 +3,10 @@
 // `toString` finds the inherited Object.prototype member and its source text
 // leaks into a diagnostic (#426).
 import { describe, it, expect } from 'vitest';
-import type { editor } from 'monaco-editor';
 import { runPipeline } from '../pipeline';
 import { computeDiagnostics } from '../../monaco/splunkConfDiagnostics';
 import type { EventMetadata } from '../types';
+import { fakeModel } from '../../test/fakeModel';
 
 const PROTO_NAMES = Object.getOwnPropertyNames(Object.prototype);
 
@@ -20,13 +20,7 @@ function engineMessages(props: string, transforms: string): string[] {
 }
 
 function editorMessages(text: string, fileType: 'props.conf' | 'transforms.conf'): string[] {
-  const lines = text.split('\n');
-  const model = {
-    getLineCount: () => lines.length,
-    getLineContent: (n: number) => lines[n - 1] ?? '',
-    getValue: () => text,
-  } as unknown as editor.ITextModel;
-  return computeDiagnostics(model, fileType).map((m) => m.message);
+  return computeDiagnostics(fakeModel(text), fileType).map((m) => m.message);
 }
 
 function expectClean(messages: string[], name: string): void {

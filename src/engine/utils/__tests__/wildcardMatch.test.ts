@@ -8,7 +8,7 @@
 // them to that reference.
 // ---------------------------------------------------------------------------
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import fc from 'fast-check';
 import { compileWildcard } from '../wildcardMatch';
 import { fcSeed } from '../../../test/fcSeed';
@@ -73,25 +73,45 @@ describe('compileWildcard', () => {
     );
   });
 
-  it('stays fast on patterns that made the regex backtrack exponentially (#344)', () => {
-    const patterns = ['*a*a*a*a*b', '*a*a*a*a*a*a*b', '*a*a*a*a*a*a*ab*', '*aa*aa*aa*aa*aa*aa*c*'];
-    // Measure with base input size, then verify time stays sub-linear with larger input
-    const value1 = 'a'.repeat(5_000);
-    const started1 = performance.now();
-    for (const p of patterns) expect(m(p, value1)).toBe(false);
-    const time1 = performance.now() - started1;
-
-    const value2 = 'a'.repeat(10_000);
-    const started2 = performance.now();
-    for (const p of patterns) expect(m(p, value2)).toBe(false);
-    const time2 = performance.now() - started2;
-
-    // Verify roughly linear scaling: 2x input should be < 4x time
-    // (wall clock is generous to account for system variance)
-    if (time1 > 0) {
-      expect(time2).toBeLessThan(time1 * 4);
+  it('does a bounded amount of work on patterns that made the regex backtrack exponentially (#344)', () => {
+    // Operations, not milliseconds (#507): a stopwatch assertion is a coin flip
+    // on a loaded runner. The linear-time claim is that each middle segment is
+    // searched for once, leftmost, after the previous one — so the matcher makes
+    // at most one indexOf per segment, however long the input is. A backtracking
+    // implementation retries segments and its count grows with the input.
+    // Each pattern is tried on `a…a` (never matches) and `a…ab` (matches the
+    // ones that end in b), so both the failing and the succeeding scan are counted.
+    const cases: { pattern: string; segments: number; onAs: boolean; onAsThenB: boolean }[] = [
+      { pattern: '*a*a*a*a*b', segments: 4, onAs: false, onAsThenB: true },
+      { pattern: '*a*a*a*a*a*a*b', segments: 6, onAs: false, onAsThenB: true },
+      { pattern: '*a*a*a*a*a*a*ab*', segments: 7, onAs: false, onAsThenB: true },
+      { pattern: '*aa*aa*aa*aa*aa*aa*c*', segments: 7, onAs: false, onAsThenB: false },
+    ];
+    const indexOf = vi.spyOn(String.prototype, 'indexOf');
+    const runs: { calls: number; result: boolean }[][] = [];
+    try {
+      for (const { pattern } of cases) {
+        const match = compileWildcard(pattern);
+        const row: { calls: number; result: boolean }[] = [];
+        for (const n of [5_000, 10_000]) {
+          for (const value of ['a'.repeat(n), `${'a'.repeat(n)}b`]) {
+            indexOf.mockClear();
+            const result = match(value);
+            row.push({ calls: indexOf.mock.calls.length, result });
+          }
+        }
+        runs.push(row);
+      }
+    } finally {
+      indexOf.mockRestore();
     }
-    // Ensure it doesn't timeout completely even on slow machines
-    expect(time2).toBeLessThan(1000);
+    cases.forEach(({ segments, onAs, onAsThenB }, i) => {
+      const [as5, asB5, as10, asB10] = runs[i]!;
+      expect([as5!.result, asB5!.result, as10!.result, asB10!.result]).toEqual([onAs, onAsThenB, onAs, onAsThenB]);
+      for (const r of runs[i]!) expect(r.calls).toBeLessThanOrEqual(segments);
+      // Doubling the input does not add work.
+      expect(as10!.calls).toBe(as5!.calls);
+      expect(asB10!.calls).toBe(asB5!.calls);
+    });
   });
 });
