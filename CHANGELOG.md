@@ -100,6 +100,13 @@ All notable changes to Propslab are documented here, newest first. Entries say w
 
 ### Fixed
 
+- **The preview stops repeating whole-dataset work** ([#496](https://github.com/Bimmiest/propslab/issues/496)):
+  - the worker counts fields once per run, instead of five components each re-scanning every event;
+  - the Regex and Timestamp testers send their events to the worker once rather than with every keystroke, and a pattern already typed past is skipped;
+  - Architecture follows the last run instead of re-parsing both confs per keystroke;
+  - the "Processing…" overlay no longer flashes on short runs.
+- **The Preview tab keeps its sub-tab, search and filters** across output-tab switches, phone tabs and the phone breakpoint ([#497](https://github.com/Bimmiest/propslab/issues/497)). Pins on fields a run no longer extracts are dropped, the per-page selector stays available, and hiding the Extractions sidebar keeps the event list and restores the last dragged split.
+- **The confirmation, directive and scaffold dialogs share one frame, and the Extractions, Preview and Raw components are split into smaller modules** ([#511](https://github.com/Bimmiest/propslab/issues/511), in part); groups that appear later in the field tree start collapsed.
 - **An invalid `LINE_BREAKER` reports its compile error** ([#472](https://github.com/Bimmiest/propslab/issues/472)) instead of advising parentheses for a pattern that already has them.
 - **A malformed `SEDCMD` on a `CLONE_SOURCETYPE` target is reported once per run** ([#476](https://github.com/Bimmiest/propslab/issues/476)), not once per cloned event.
 - **Diagnostics** ([#477](https://github.com/Bimmiest/propslab/issues/477)):

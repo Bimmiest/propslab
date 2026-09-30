@@ -1,8 +1,8 @@
 // ---------------------------------------------------------------------------
 // usePipelineInputs.ts
-// The props.conf and metadata the pipeline last ran with, for the views that
-// describe a run rather than the editor: the Timestamp tab and the Effective
-// config tab.
+// The props.conf, transforms.conf and metadata the pipeline last ran with, for
+// the views that describe a run rather than the editor: the Timestamp,
+// Effective config and Architecture tabs.
 // ---------------------------------------------------------------------------
 
 import { useMemo, useState } from 'react';
@@ -13,6 +13,7 @@ import type { EventMetadata } from '../../../../engine/types';
 
 export interface PipelineInputs {
   propsConf: string;
+  transformsConf: string;
   metadata: EventMetadata;
 }
 
@@ -33,11 +34,12 @@ export interface PipelineInputs {
  */
 export function usePipelineInputs(): PipelineInputs {
   const propsConf = useAppStore((s) => s.propsConf);
+  const transformsConf = useAppStore((s) => s.transformsConf);
   const metadata = useAppStore((s) => s.metadata);
   const manualApply = useAppStore((s) => s.settings.manualApply);
   const manualRunTick = useAppStore((s) => s.manualRunTick);
 
-  const live = useMemo(() => ({ propsConf, metadata }), [propsConf, metadata]);
+  const live = useMemo(() => ({ propsConf, transformsConf, metadata }), [propsConf, transformsConf, metadata]);
   const debounced = useDebounce(live, PIPELINE_DEBOUNCE_MS);
 
   // Adjusted during render rather than in an effect, as React recommends for

@@ -9,7 +9,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { createElement, type ComponentProps } from 'react';
-import { PreviewPanel, type EnrichedEvent } from '../PreviewPanel';
+import { PreviewPanel } from '../PreviewPanel';
+import type { EnrichedEvent } from '../enrichEvents';
 import { HighlightedTab } from '../tabs/HighlightedTab';
 import { useAppStore } from '../../../store/useAppStore';
 import type { SplunkEvent } from '../../../engine/types';
@@ -91,7 +92,7 @@ describe('HighlightedTab hover', () => {
     const items: EnrichedEvent[] = [
       makeEvent('user=alice action=login', { user: 'alice', action: 'login' }),
       makeEvent('user=bob action=logout', { user: 'bob', action: 'logout' }),
-    ].map((event) => ({ event, originalRaw: event._raw, hasChanges: false, hasMetadataChanges: false, isDropped: false }));
+    ].map((event) => ({ event, searchText: event._raw.toLowerCase(), originalRaw: event._raw, hasChanges: false, hasMetadataChanges: false, isDropped: false }));
 
     render(<HighlightedTab items={items} allEvents={items} currentPage={1} eventsPerPage={10} />);
     const before = renders.card;

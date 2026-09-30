@@ -466,4 +466,63 @@ describe('useWorkerRequest', () => {
       expect(latest().posted).toEqual([{ value: 'b', id: 2 }]);
     });
   });
+
+  describe('sendAhead and latestOnly (#496)', () => {
+    interface Big { key: string; inputs: string[] }
+    function setupBig() {
+      const interpreted: Big[] = [];
+      const hook = renderHook(() =>
+        useWorkerRequest<Big, Res, string>({
+          createWorker: () => new FakeWorker() as unknown as Worker,
+          timeoutMs: 1000,
+          empty: '',
+          interpret: (response, request) => {
+            interpreted.push(request);
+            return { status: 'ok', data: `${response.echo}:${request.key}` };
+          },
+          runInline: (request) => ({ status: 'ok', data: `inline:${request.key}` }),
+          isIdle: (request) => request.key === '',
+          sendAhead: { inputs: (r) => r.inputs, rest: ({ key }) => ({ key }) },
+          latestOnly: true,
+        }),
+      );
+      return { ...hook, interpreted };
+    }
+
+    it('sends each set of inputs once, and requests that name them', () => {
+      const { result } = setupBig();
+      const one = ['a', 'b'];
+      const two = ['c'];
+      act(() => result.current.run({ key: 'k1', inputs: one }));
+      act(() => result.current.run({ key: 'k2', inputs: one }));
+      act(() => result.current.run({ key: 'k3', inputs: two }));
+      expect(latest().posted as unknown[]).toEqual([
+        { type: 'inputs', inputsId: 1, inputs: one },
+        { key: 'k1', inputsId: 1, id: 1, latestOnly: true },
+        { key: 'k2', inputsId: 1, id: 2, latestOnly: true },
+        { type: 'inputs', inputsId: 2, inputs: two },
+        { key: 'k3', inputsId: 2, id: 3, latestOnly: true },
+      ]);
+    });
+
+    it('hands interpret the request the response answers, inputs and all', () => {
+      const { result, interpreted } = setupBig();
+      const inputs = ['a'];
+      act(() => result.current.run({ key: 'k1', inputs }));
+      act(() => latest().respond(1, 'A'));
+      expect(result.current.data).toBe('A:k1');
+      expect(interpreted[0]).toEqual({ key: 'k1', inputs });
+      expect(interpreted[0]!.inputs).toBe(inputs);
+    });
+
+    it('ignores a skipped answer', () => {
+      const { result } = setupBig();
+      act(() => result.current.run({ key: 'k1', inputs: ['a'] }));
+      act(() => {
+        latest().ready();
+        latest().onmessage?.({ data: { id: 1, skipped: true } } as unknown as MessageEvent<Res>);
+      });
+      expect(result.current.status).toBe('pending');
+    });
+  });
 });

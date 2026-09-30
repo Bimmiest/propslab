@@ -4,13 +4,7 @@ import { useFieldFocusState } from './useFieldFocus';
 import { copyQuietly } from '../../../../utils/clipboard';
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuLabel } from '../../../ui/ContextMenu';
 import { tint } from '../../../../utils/tint';
-
-interface Highlight {
-  start: number;
-  end: number;
-  field: string;
-  color: string;
-}
+import { atomicSegments, type Highlight } from './atomicSegments';
 
 interface HighlightedRawProps {
   raw: string;
@@ -29,12 +23,6 @@ interface HighlightedRawProps {
    * When present for a field, these offsets are used directly and context matching is skipped.
    */
   fieldOffsets?: Record<string, Array<[number, number]>>;
-}
-
-interface AtomicSegment {
-  start: number;
-  end: number;
-  hl: Highlight | null;
 }
 
 /** Every span of `raw` a field's value occupies, coloured by field. */
@@ -79,45 +67,6 @@ function collectHighlights(
     }
   }
   return highlights;
-}
-
-/**
- * Split the raw text at every highlight boundary, then for each atomic sub-range
- * render the INNERMOST (smallest) field that covers it. This keeps overlapping /
- * nested field highlights additive — a field captured inside another still shows
- * its own colour — instead of the larger span swallowing the smaller one.
- */
-function atomicSegments(raw: string, highlights: Highlight[]): AtomicSegment[] {
-  if (highlights.length === 0) return [];
-
-  const bounds = new Set<number>([0, raw.length]);
-  for (const h of highlights) {
-    if (h.start >= 0 && h.start <= raw.length) bounds.add(h.start);
-    if (h.end >= 0 && h.end <= raw.length) bounds.add(h.end);
-  }
-  const cuts = [...bounds].sort((a, b) => a - b);
-
-  // Build atomic segments (owner = innermost covering highlight, or null for plain text),
-  // merging contiguous runs that share the same owning field.
-  const out: AtomicSegment[] = [];
-  for (let i = 0; i < cuts.length - 1; i++) {
-    const s = cuts[i];
-    const e = cuts[i + 1];
-    if (s === undefined || e === undefined || s >= e) continue;
-    let owner: Highlight | null = null;
-    for (const h of highlights) {
-      if (h.start <= s && h.end >= e && (owner === null || h.end - h.start < owner.end - owner.start)) {
-        owner = h;
-      }
-    }
-    const prev = out[out.length - 1];
-    if (prev && prev.end === s && (prev.hl?.field ?? null) === (owner?.field ?? null)) {
-      prev.end = e;
-    } else {
-      out.push({ start: s, end: e, hl: owner });
-    }
-  }
-  return out;
 }
 
 /** Unhighlighted text, dimmed while any field is focused. */

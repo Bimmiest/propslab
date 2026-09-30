@@ -21,14 +21,14 @@ class FakeWorker {
   static throwOnConstruct = false;
   onmessage: ((e: MessageEvent) => void) | null = null;
   onerror: ((e: Event) => void) | null = null;
-  posted: Req[] = [];
+  posted: unknown[] = [];
   terminated = false;
 
   constructor() {
     if (FakeWorker.throwOnConstruct) throw new Error('blocked by CSP');
     FakeWorker.instances.push(this);
   }
-  postMessage(message: Req) {
+  postMessage(message: unknown) {
     this.posted.push(message);
   }
   terminate() {
@@ -627,6 +627,43 @@ describe('createManagedWorker (#339)', () => {
       vi.stubGlobal('Worker', undefined);
       const { managed } = setup();
       expect(managed.postWhenReady(req(1))).toBe(false);
+    });
+  });
+
+  describe('inputs sent ahead (#496)', () => {
+    const inputs = { type: 'inputs', inputsId: 1, inputs: ['a'] };
+
+    it('are posted to the current worker and first to every replacement, untracked', () => {
+      const { managed, calls } = setup();
+      managed.ensure();
+      const first = latest();
+      managed.setInputs(inputs);
+      expect(first.posted).toEqual([inputs]);
+
+      first.ready();
+      managed.post(req(1));
+      // The watchdog replaces the worker: the new one gets the inputs before the retry.
+      vi.advanceTimersByTime(1000);
+      expect(calls.timeout).toHaveBeenCalledTimes(1);
+      expect(latest()).not.toBe(first);
+      managed.post(req(2));
+      expect(latest().posted).toEqual([inputs, req(2)]);
+      // Nothing waits on the inputs themselves: no timer, no callback.
+      latest().ready();
+      latest().respond(2);
+      expect(calls.response).toHaveBeenCalledTimes(1);
+    });
+
+    it('are replaced by later inputs, and cleared by dispose', () => {
+      const { managed } = setup();
+      managed.setInputs(inputs);
+      const next = { ...inputs, inputsId: 2 };
+      managed.setInputs(next);
+      managed.ensure();
+      expect(latest().posted).toEqual([next]);
+      managed.dispose();
+      managed.ensure();
+      expect(latest().posted).toEqual([]);
     });
   });
 

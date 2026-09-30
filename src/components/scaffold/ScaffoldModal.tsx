@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Overlay } from '../ui/Overlay';
+import { DialogButton, DialogFooter, DialogFrame, DialogHeader } from '../ui/DialogFrame';
 import { useAppStore } from '../../store/useAppStore';
 import { scaffoldConfig } from '../../engine/scaffold/scaffoldConfig';
 import { renderStanza, appendStanza, stanzaNameError } from '../../engine/scaffold/serialize';
@@ -63,69 +63,49 @@ export function ScaffoldModal() {
   };
 
   return (
-    <Overlay
-      open
+    <DialogFrame
       onClose={toggleScaffold}
       label="Scaffold configuration"
-      containerClassName="fixed inset-0 z-50 flex items-start justify-center pt-[10vh] px-4"
-      className="w-full max-w-3xl max-h-[80vh] flex flex-col rounded-xl overflow-hidden shadow-2xl"
-      style={{ backgroundColor: 'var(--color-bg-elevated)', border: '1px solid var(--color-border)' }}
+      size="lg"
+      header={<ScaffoldHeader onClose={toggleScaffold} />}
+      footer={
+        <DialogFooter>
+          <DialogButton variant="cancel" onClick={toggleScaffold}>Cancel</DialogButton>
+          <DialogButton variant="accent" onClick={apply} disabled={!canApply}>Append to props.conf</DialogButton>
+        </DialogFooter>
+      }
     >
-      <div className="contents">
-        {/* Header */}
-        <ScaffoldHeader onClose={toggleScaffold} />
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {noData ? (
+          <EmptyState text="Paste raw log data first, then reopen Scaffold." />
+        ) : result.suggestions.length === 0 ? (
+          <EmptyState text="No confident suggestions for this sample. Try a larger or more representative sample." />
+        ) : (
+          <>
+            {/* Sourcetype / stanza name (editable; written to metadata on apply) */}
+            <StanzaNameField sourcetype={sourcetype} setSourcetype={setSourcetype} nameError={nameError} suggestion={result.sourcetypeSuggestion} />
 
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {noData ? (
-            <EmptyState text="Paste raw log data first, then reopen Scaffold." />
-          ) : result.suggestions.length === 0 ? (
-            <EmptyState text="No confident suggestions for this sample. Try a larger or more representative sample." />
-          ) : (
-            <>
-              {/* Sourcetype / stanza name (editable; written to metadata on apply) */}
-              <StanzaNameField sourcetype={sourcetype} setSourcetype={setSourcetype} nameError={nameError} suggestion={result.sourcetypeSuggestion} />
+            <div className="space-y-1.5">
+              {result.suggestions.map((s) => (
+                <SuggestionRow
+                  key={s.key}
+                  suggestion={s}
+                  checked={!!selected[s.key]}
+                  onToggle={() => setSelected((prev) => ({ ...prev, [s.key]: !prev[s.key] }))}
+                />
+              ))}
+            </div>
 
-              <div className="space-y-1.5">
-                {result.suggestions.map((s) => (
-                  <SuggestionRow
-                    key={s.key}
-                    suggestion={s}
-                    checked={!!selected[s.key]}
-                    onToggle={() => setSelected((prev) => ({ ...prev, [s.key]: !prev[s.key] }))}
-                  />
-                ))}
-              </div>
+            {stanzaExists && chosen.length > 0 && (
+              <ExistingStanzaWarning stanzaName={stanzaName} />
+            )}
 
-              {stanzaExists && chosen.length > 0 && (
-                <ExistingStanzaWarning stanzaName={stanzaName} />
-              )}
-
-              {/* Diff preview */}
-              <ScaffoldDiffPreview stanzaName={stanzaName} diff={diff} />
-            </>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="flex items-center justify-end gap-2 px-4 py-3 shrink-0" style={{ borderTop: '1px solid var(--color-border)' }}>
-          <button
-            onClick={toggleScaffold}
-            className="px-3 py-1.5 text-sm rounded-md cursor-pointer border-none text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-tertiary)]"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={apply}
-            disabled={!canApply}
-            className="px-3 py-1.5 text-sm rounded-md cursor-pointer border-none font-medium text-[var(--color-text-on-accent)] disabled:opacity-40 disabled:cursor-not-allowed"
-            style={{ backgroundColor: 'var(--color-accent)' }}
-          >
-            Append to props.conf
-          </button>
-        </div>
+            {/* Diff preview */}
+            <ScaffoldDiffPreview stanzaName={stanzaName} diff={diff} />
+          </>
+        )}
       </div>
-    </Overlay>
+    </DialogFrame>
   );
 }
 
@@ -224,11 +204,7 @@ function StanzaNameField({ sourcetype, setSourcetype, nameError, suggestion }: {
 
 function ScaffoldHeader({ onClose }: { onClose: () => void }) {
   return (
-    <div className="flex items-center gap-2 px-4 h-12 shrink-0" style={{ borderBottom: '1px solid var(--color-border)' }}>
-      <Icon name="sparkles" className="w-4 h-4 text-[var(--color-accent)]" />
-      <span className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-        Scaffold props.conf
-      </span>
+    <DialogHeader icon="sparkles" iconClassName="text-[var(--color-accent)]" title="Scaffold props.conf">
       <span className="text-xs ml-1" style={{ color: 'var(--color-text-muted)' }}>
         suggestions from your sample data — review and apply
       </span>
@@ -239,7 +215,7 @@ function ScaffoldHeader({ onClose }: { onClose: () => void }) {
       >
         <Icon name="x" className="w-4 h-4" />
       </button>
-    </div>
+    </DialogHeader>
   );
 }
 

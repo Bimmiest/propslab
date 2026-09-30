@@ -3,8 +3,10 @@
 // The request lifecycle shared by the live-matching hooks, `useRegexMatch` and
 // `useTimestampMatch`.
 //
-// Post a request, match the response by monotonic id, discard stale ones, and
-// tear down on unmount.
+// Post a request, match the response by monotonic id, discard stale ones, hand
+// the answer back with the request it answers, and tear down on unmount.
+// Optionally, send the request's large inputs ahead once per identity and mark
+// each request as superseding the last (`sendAhead`, `latestOnly`).
 //
 // NOT an RPC proxy. `useProcessingPipeline` replays a crashed request once and
 // re-runs its input inline in cases this hook never does; a uniform
@@ -14,6 +16,10 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createManagedWorker } from './workerLifecycle';
+import { isWorkerSkippedResponse, type WorkerInputsMessage } from '../engine/workerProtocol';
+
+/** What is posted: the request, or what `sendAhead` leaves of it, with the id this hook assigns. */
+type Posted = object & { id: number };
 
 // The worker itself — construction, ready tracking, the watchdog, telling a
 // crash from a load failure, and the load-failure cap — is
@@ -50,8 +56,12 @@ export interface WorkerRequestConfig<TReq, TRes, TData> {
   timeoutMs: number;
   /** Returned for `idle`, `timeout` and `invalid`. */
   empty: TData;
-  /** Turn a worker response into state. */
-  interpret: (response: TRes) => WorkerOutcome<TData>;
+  /**
+   * Turn a worker response into state. `request` is the request it answers,
+   * as the caller made it: a response carries only its id, and only the
+   * latest request's response reaches here.
+   */
+  interpret: (response: TRes, request: TReq) => WorkerOutcome<TData>;
   /**
    * Run the same work on the calling thread, for environments with no `Worker`
    * (tests, SSR), or once MAX_WORKER_LOAD_FAILURES workers in a row failed to
@@ -62,6 +72,22 @@ export interface WorkerRequestConfig<TReq, TRes, TData> {
   runInline: (request: TReq) => WorkerOutcome<TData>;
   /** True when there is nothing to do, e.g. an empty pattern. Reports `idle`. */
   isIdle: (request: TReq) => boolean;
+  /**
+   * Send the large part of a request ahead, once per identity, instead of in
+   * every request (`WorkerInputsMessage`): `inputs` picks it out, compared by
+   * identity, and `rest` is what each request then carries. The worker must
+   * serve with `createRequestQueue`.
+   */
+  sendAhead?: {
+    inputs: (request: TReq) => unknown;
+    rest: (request: TReq) => object;
+  };
+  /**
+   * Mark each request `latestOnly`, so a worker serving with
+   * `createRequestQueue` skips one a newer request has superseded rather than
+   * run it. Right for a caller whose every request replaces the last.
+   */
+  latestOnly?: boolean;
 }
 
 export interface WorkerRequestHandle<TReq, TData> {
@@ -74,7 +100,7 @@ export interface WorkerRequestHandle<TReq, TData> {
 /**
  * `TReq` is the message posted to the worker minus its `id`, which this hook
  * assigns — a caller that set its own would be racing the staleness check that
- * id exists for.
+ * id exists for — or, with `sendAhead`, the request before it is split.
  */
 export function useWorkerRequest<TReq extends object, TRes, TData>(
   config: WorkerRequestConfig<TReq, TRes, TData>,
@@ -105,6 +131,8 @@ export function useWorkerRequest<TReq extends object, TRes, TData>(
     // it inline past the cap rather than drop it. The worker is posted
     // the same request with its id attached.
     let latest: { request: TReq; id: number } | null = null;
+    // The inputs last sent ahead (see `sendAhead`), and the id they went under.
+    let sentInputs: { inputs: unknown; inputsId: number } | null = null;
 
     function reportTimeout() {
       setStatus('timeout');
@@ -121,14 +149,17 @@ export function useWorkerRequest<TReq extends object, TRes, TData>(
     // Earlier requests are forgotten whenever a new one is made, so whatever
     // these callbacks are handed is the latest request; the id checks are the
     // staleness rule stated where it matters, not a case expected to occur.
-    const managed = createManagedWorker<TReq & { id: number }, TRes & { id: number }>({
+    const managed = createManagedWorker<Posted, TRes & { id: number }>({
       create: () => configRef.current.createWorker(),
       get timeoutMs() {
         return configRef.current.timeoutMs;
       },
       onResponse(response) {
-        if (response.id !== idRef.current) return;
-        const outcome = configRef.current.interpret(response);
+        if (response.id !== idRef.current || latest?.id !== response.id) return;
+        // Only a request something newer superseded is skipped, and that one
+        // failed the id check above; this is the rule, not an expected case.
+        if (isWorkerSkippedResponse(response)) return;
+        const outcome = configRef.current.interpret(response, latest.request);
         setStatus(outcome.status);
         setData(outcome.status === 'ok' ? outcome.data : configRef.current.empty);
       },
@@ -158,6 +189,22 @@ export function useWorkerRequest<TReq extends object, TRes, TData>(
       },
     });
 
+    // The request as posted: whole, or with its inputs sent ahead when they
+    // are not the ones the worker already has.
+    function toMessage(request: TReq): object {
+      const split = configRef.current.sendAhead;
+      if (!split) return request;
+      const inputs = split.inputs(request);
+      let sent = sentInputs;
+      if (sent === null || sent.inputs !== inputs) {
+        sent = { inputs, inputsId: (sent?.inputsId ?? 0) + 1 };
+        sentInputs = sent;
+        const message: WorkerInputsMessage<unknown> = { type: 'inputs', inputsId: sent.inputsId, inputs };
+        managed.setInputs(message);
+      }
+      return { ...split.rest(request), inputsId: sent.inputsId };
+    }
+
     runRef.current = (request: TReq) => {
       managed.forget();
       const current = configRef.current;
@@ -177,7 +224,7 @@ export function useWorkerRequest<TReq extends object, TRes, TData>(
       }
 
       latest = { request, id };
-      if (managed.post({ ...request, id })) {
+      if (managed.post({ ...toMessage(request), id, ...(current.latestOnly ? { latestOnly: true } : {}) })) {
         setStatus('pending');
         return;
       }

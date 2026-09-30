@@ -5,11 +5,11 @@ interface PreviewFilterBarProps {
   search: string;
   onSearchChange: (value: string) => void;
   allFields: string[];
-  selectedFields: Set<string>;
+  selectedFields: ReadonlySet<string>;
   onFieldsChange: (fields: Set<string>) => void;
-  selectedStatus: Set<string>;
+  selectedStatus: ReadonlySet<string>;
   onStatusChange: (status: Set<string>) => void;
-  selectedChangeState: Set<string>;
+  selectedChangeState: ReadonlySet<string>;
   onChangeStateChange: (mod: Set<string>) => void;
   filteredCount: number;
   totalCount: number;

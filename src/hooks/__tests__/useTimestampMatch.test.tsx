@@ -11,16 +11,17 @@ import { renderHook, act } from '@testing-library/react';
 import { useTimestampMatch } from '../useTimestampMatch';
 import type { TimeConfig, TimestampProbe } from '../../engine/timestampMatch';
 import type { TimestampMatchRequest, TimestampMatchResponse } from '../../engine/timestampMatchWorker';
+import { requestsIn } from '../../test/workerInputs';
 
 class FakeWorker {
   static instances: FakeWorker[] = [];
   onmessage: ((e: MessageEvent<TimestampMatchResponse>) => void) | null = null;
   onerror: ((e: ErrorEvent) => void) | null = null;
-  posted: TimestampMatchRequest[] = [];
+  posted: unknown[] = [];
   constructor() {
     FakeWorker.instances.push(this);
   }
-  postMessage(message: TimestampMatchRequest) {
+  postMessage(message: unknown) {
     this.posted.push(message);
   }
   terminate() {}
@@ -30,7 +31,7 @@ class FakeWorker {
 }
 
 const worker = () => FakeWorker.instances[FakeWorker.instances.length - 1]!;
-const lastPosted = () => worker().posted[worker().posted.length - 1]!;
+const lastPosted = () => requestsIn<TimestampMatchRequest>(worker().posted).at(-1)!;
 
 const config = (overrides: Partial<TimeConfig> = {}): TimeConfig => ({
   timePrefix: null,
@@ -66,13 +67,37 @@ describe('useTimestampMatch', () => {
     const { rerender } = renderHook(({ c }) => useTimestampMatch(raws, c), {
       initialProps: { c: config() },
     });
-    expect(worker().posted).toHaveLength(1);
+    expect(requestsIn(worker().posted)).toHaveLength(1);
     // What the tab produces on a keystroke outside the time directives: a new
     // object with the same contents.
     rerender({ c: config() });
-    expect(worker().posted).toHaveLength(1);
+    expect(requestsIn(worker().posted)).toHaveLength(1);
     rerender({ c: config({ timeFormat: '%Y' }) });
-    expect(worker().posted).toHaveLength(2);
+    expect(requestsIn(worker().posted)).toHaveLength(2);
+  });
+
+  it('sends the page once, and each new config without it (#496)', () => {
+    const raws = ['2026-01-01'];
+    const { rerender } = renderHook(({ r, c }) => useTimestampMatch(r, c), {
+      initialProps: { r: raws, c: config() },
+    });
+    rerender({ r: raws, c: config({ timeFormat: '%Y' }) });
+    rerender({ r: raws, c: config({ timeFormat: '%d' }) });
+    const [inputs, ...requests] = worker().posted;
+    expect(inputs).toEqual({ type: 'inputs', inputsId: 1, inputs: raws });
+    expect(requests).toHaveLength(3);
+    for (const request of requests as TimestampMatchRequest[]) {
+      expect(request.raws).toBeUndefined();
+      expect(request).toMatchObject({ inputsId: 1, latestOnly: true });
+    }
+
+    // A new page is sent once, ahead of the request that probes it.
+    const page2 = ['2026-02-02'];
+    rerender({ r: page2, c: config({ timeFormat: '%d' }) });
+    expect(worker().posted.slice(4)).toEqual([
+      { type: 'inputs', inputsId: 2, inputs: page2 },
+      expect.objectContaining({ inputsId: 2 }),
+    ]);
   });
 
   it("never returns one page's probes for another page (#316)", () => {

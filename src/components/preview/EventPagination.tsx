@@ -9,7 +9,10 @@ interface EventPaginationProps {
   onEventsPerPageChange: (count: number) => void;
 }
 
-const PAGE_SIZE_OPTIONS = [5, 10, 25, 50];
+/** The smallest page size: with no more events than this, there is nothing to choose. */
+export const MIN_PAGE_SIZE = 5;
+
+const PAGE_SIZE_OPTIONS = [MIN_PAGE_SIZE, 10, 25, 50];
 
 export function EventPagination({
   currentPage,

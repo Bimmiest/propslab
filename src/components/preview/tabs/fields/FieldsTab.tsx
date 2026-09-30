@@ -36,7 +36,10 @@ export function FieldsTab() {
 
   // The events × fields × trace walk depends on the events alone, so it has its
   // own memo rather than re-running on every search keystroke and header click.
-  const aggregatedFields = useMemo(() => aggregateFields(events, aliasMap), [events, aliasMap]);
+  const aggregatedFields = useMemo(
+    () => aggregateFields(events, aliasMap, result?.fieldStats),
+    [events, aliasMap, result],
+  );
 
   const fieldSummary = useMemo(
     () => buildFieldRows(aggregatedFields, search, phaseFilter, sortKey, sortDir),

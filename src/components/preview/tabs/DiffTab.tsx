@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { computeDiff } from '../../../utils/diffEngine';
-import type { EnrichedEvent } from '../PreviewPanel';
+import type { EnrichedEvent } from '../enrichEvents';
 import { DiffLines } from '../../ui/DiffLines';
 
 interface DiffTabProps {

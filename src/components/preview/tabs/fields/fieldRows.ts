@@ -1,4 +1,5 @@
-import type { ViewEvent } from '../../../../utils/viewResult';
+import type { TraceStep, ViewEvent } from '../../../../utils/viewResult';
+import { fieldCollator, type FieldStats } from '../../../../utils/fieldStats';
 import type { WindowSegment } from '../../../../hooks/useWindowedRows';
 import type { PhaseFilter, SortDir, SortKey } from './data';
 
@@ -33,43 +34,80 @@ export function buildAliasMap(events: readonly ViewEvent[]): Map<string, string>
   return map;
 }
 
-export function aggregateFields(events: readonly ViewEvent[], aliasMap: Map<string, string>): AggregatedField[] {
+/** One (field, step) pair of a trace: the step added the field, or devalued it. */
+interface Credit {
+  name: string;
+  step: TraceStep;
+  masked: boolean;
+}
+
+function creditsOf(trace: readonly TraceStep[]): Credit[] {
+  const credits: Credit[] = [];
+  for (const step of trace) {
+    for (const name of step.fieldsAdded ?? []) credits.push({ name, step, masked: false });
+    // The field extracts fine but an index-time rewrite destroyed its
+    // value. Without this the row looks like a working extraction, and a
+    // blank-looking value reads as "the extraction is wrong".
+    for (const name of step.fieldsModified ?? []) credits.push({ name, step, masked: true });
+  }
+  return credits;
+}
+
+/**
+ * Every field, summarised across `events`. `stats`, the run's field
+ * statistics, supplies the rows and their counts when it covers these events.
+ *
+ * A step credits a field only in an event that has it. Events that share a
+ * trace share its array (see `toViewResult`), so each trace's credits are
+ * given once, by the first event that has the field, and later events with
+ * that trace check only the credits still outstanding — usually none — rather
+ * than walking the whole trace again.
+ */
+export function aggregateFields(
+  events: readonly ViewEvent[],
+  aliasMap: Map<string, string>,
+  stats?: FieldStats,
+): AggregatedField[] {
   const fields = new Map<string, AggregatedField>();
+  const counted = stats !== undefined && stats.eventCount === events.length;
+  const entryFor = (key: string): AggregatedField => {
+    let entry = fields.get(key);
+    if (!entry) {
+      const count = counted ? stats.counts.get(key) ?? 0 : 0;
+      entry = { name: key, values: new Set(), count, sources: new Set(), phases: new Set(), aliases: [], maskedBy: new Set() };
+      fields.set(key, entry);
+    }
+    return entry;
+  };
+  if (counted) for (const name of stats.names) entryFor(name);
 
+  const outstanding = new Map<readonly TraceStep[], Credit[]>();
   for (const event of events) {
-    // Entries this event contributed to, so the trace can be walked ONCE and
-    // indexed into. Nesting the trace loop inside the field loop made this
-    // O(fields × traces × fieldsAdded) per event — for a few hundred events
-    // with a wide KV sourcetype, millions of `includes()` scans on every
-    // re-render of the tab.
-    const thisEvent = new Map<string, AggregatedField>();
-
     for (const [key, value] of Object.entries(event.fields)) {
-      let entry = fields.get(key);
-      if (!entry) {
-        entry = { name: key, values: new Set(), count: 0, sources: new Set(), phases: new Set(), aliases: [], maskedBy: new Set() };
-        fields.set(key, entry);
-      }
-      entry.count++;
-      const vals = Array.isArray(value) ? value : [value];
-      for (const v of vals) entry.values.add(v);
-      thisEvent.set(key, entry);
+      const entry = entryFor(key);
+      if (!counted) entry.count++;
+      if (Array.isArray(value)) for (const v of value) entry.values.add(v);
+      else entry.values.add(value);
     }
 
-    for (const trace of event.processingTrace) {
-      for (const name of trace.fieldsAdded ?? []) {
-        const entry = thisEvent.get(name);
-        if (!entry) continue;
-        entry.sources.add(trace.processor);
-        entry.phases.add(trace.phase);
+    const trace = event.processingTrace;
+    const credits = outstanding.get(trace) ?? creditsOf(trace);
+    if (credits.length === 0) continue;
+    const left: Credit[] = [];
+    for (const credit of credits) {
+      if (!Object.hasOwn(event.fields, credit.name)) {
+        left.push(credit);
+        continue;
       }
-      // The field extracts fine but an index-time rewrite destroyed its
-      // value. Without this the row looks like a working extraction, and a
-      // blank-looking value reads as "the extraction is wrong".
-      for (const name of trace.fieldsModified ?? []) {
-        thisEvent.get(name)?.maskedBy.add(trace.processor);
+      const entry = entryFor(credit.name);
+      if (credit.masked) {
+        entry.maskedBy.add(credit.step.processor);
+      } else {
+        entry.sources.add(credit.step.processor);
+        entry.phases.add(credit.step.phase);
       }
     }
+    outstanding.set(trace, left);
   }
 
   // Attach alias names to their source fields and remove alias entries as standalone rows
@@ -84,25 +122,24 @@ export function aggregateFields(events: readonly ViewEvent[], aliasMap: Map<stri
   return Array.from(fields.values());
 }
 
+/** The first distinct value, without copying the whole set. */
+const firstValue = (f: AggregatedField): string => f.values.values().next().value ?? '';
+
 /** Sort comparator based on current sort settings. */
 export function fieldComparator(sortKey: SortKey, sortDir: SortDir): (a: AggregatedField, b: AggregatedField) => number {
   const dir = sortDir === 'asc' ? 1 : -1;
   return (a, b) => {
     switch (sortKey) {
-      case 'name': return dir * a.name.localeCompare(b.name);
+      case 'name': return dir * fieldCollator.compare(a.name, b.name);
       case 'count': return dir * (a.count - b.count);
       case 'distinct': return dir * (a.values.size - b.values.size);
       case 'source': {
         const aS = Array.from(a.sources).join(',');
         const bS = Array.from(b.sources).join(',');
-        return dir * aS.localeCompare(bS);
+        return dir * fieldCollator.compare(aS, bS);
       }
       case 'aliases': return dir * (a.aliases.length - b.aliases.length);
-      case 'values': {
-        const aV = Array.from(a.values).slice(0, 1).join('');
-        const bV = Array.from(b.values).slice(0, 1).join('');
-        return dir * aV.localeCompare(bV);
-      }
+      case 'values': return dir * fieldCollator.compare(firstValue(a), firstValue(b));
       default: return 0;
     }
   };
@@ -160,7 +197,7 @@ export function nestFields(entries: AggregatedField[], compare: (a: AggregatedFi
 
   topLevel.sort(compare);
   for (const children of childrenByParent.values()) {
-    children.sort((a, b) => a.name.localeCompare(b.name));
+    children.sort((a, b) => fieldCollator.compare(a.name, b.name));
   }
 
   // Flatten tree: recursively insert children after their parent
