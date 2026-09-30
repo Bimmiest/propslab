@@ -175,7 +175,11 @@ interface TokenisedFormat {
  */
 class BoundedLru<V> {
   private readonly map = new Map<string, V>();
-  constructor(private readonly limit: number) {}
+  private readonly limit: number;
+
+  constructor(limit: number) {
+    this.limit = limit;
+  }
 
   get size(): number {
     return this.map.size;
