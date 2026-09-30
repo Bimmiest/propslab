@@ -94,6 +94,8 @@ The module lives in its own repository, [`Bimmiest/pcre2-wasm-utf16`](https://gi
 
 The exact `@radix-ui/*` pins in `package.json`'s `overrides` dedupe the Radix primitives ([#147](https://github.com/Bimmiest/propslab/issues/147), [#152](https://github.com/Bimmiest/propslab/pull/152)). `cmdk` asks for older ranges of them than `react-dialog`, `react-tooltip` and `react-context-menu` resolve to, and without the overrides npm hoisted cmdk's copies and nested a second copy of each primitive under every current Radix package — both shipped, since they are distinct files (about 12 kB gzip at the time). The pinned versions are the ones `@radix-ui/react-dialog` pins exactly, directly or through its own dependencies. When you bump a Radix package, move the overrides to the versions it pins, and check with `npm ls @radix-ui/react-primitive` that there is still one copy.
 
+One override is not Radix: `typed-rest-client` → `qs`. `@stryker-mutator/core` 10 asks for `typed-rest-client ~2.3.0`, which pins `qs` 6.15.1 exactly, and that version carries denial-of-service advisories (GHSA-q8mj-m7cp-5q26, GHSA-x5fp-wj9c-mxmx, GHSA-4mjr-xmp4-gh2g). The override lifts it to a fixed release; drop it once Stryker depends on a `typed-rest-client` whose own `qs` is fixed.
+
 ## Adding or changing a simulated directive
 
 This is the part with rules of its own, because the project's whole claim is that its output matches Splunk.
@@ -176,13 +178,15 @@ header first — the fields must come from the model JSON, not from memory or do
 
 **Gate:** All open fidelity questions (issues labeled `question`) must be resolved or closed before a release. A fidelity question represents an outstanding discrepancy with Splunk that needs investigation or clarification.
 
+**What a release is here.** There is no release workflow. Every commit that lands on `main` with a passing CI run is deployed to production by `azure-static-web-apps.yml` (it runs when CI finishes, builds that commit, then checks the served headers), and nothing is triggered by a tag. A release is therefore a marker: a version number in `package.json` (shown in the status bar), a dated heading in `CHANGELOG.md`, and optionally a tag on the merge commit.
+
 **Release checklist:**
 
-1. Move `CHANGELOG.md` `Unreleased` section to a new version heading with today's date (e.g., `## [1.2.3] - 2026-09-29`)
-2. Update `package.json` `version` field to the new version
-3. Create a signed tag: `git tag -s vX.Y.Z -m "Release X.Y.Z"` (signing requires GPG setup)
-4. Push the tag: `git push origin vX.Y.Z`
-5. Verify the release workflow succeeds and the environment check is green
-6. Confirm the deployment to the production environment is complete
+1. Check the fidelity gate above: no open issue labeled `question`.
+2. On a branch, rename the `## Unreleased` heading in `CHANGELOG.md` to `## x.y.z — YYYY-MM-DD` (an em dash, as in the existing headings, e.g. `## 1.2.0 — 2026-09-19`) and put a fresh, empty `## Unreleased` above it.
+3. Set the version in `package.json` and `package-lock.json` to `x.y.z` (`npm version x.y.z --no-git-tag-version` does both).
+4. Open a pull request and merge it once CI is green. Merging is what deploys: watch the "Azure Static Web Apps CI/CD" run on `main` until "Verify the deployed headers" passes.
+5. Optionally tag the merge commit, `git tag -s vx.y.z <sha> -m "Release x.y.z"` then `git push origin vx.y.z` (`-s` needs a GPG or SSH signing key; without one use `-a`). The tag is a bookmark for people; no workflow reads it.
+6. The `production` environment and `main`'s protection are verified by `environment.yml`, weekly. It has no per-release trigger; if the release touched repository settings, run it from the Actions tab (`workflow_dispatch`) and expect it to pass.
 
-**Note:** `packages/mcp-server` is versioned independently. Update its `package.json` and tag releases separately as `mcp-server-vX.Y.Z` if needed.
+**Note:** `packages/mcp-server` is versioned independently and is not published anywhere (its `package.json` is `private`). Its version, which the server reports in the MCP `initialize` handshake, changes in `packages/mcp-server/package.json` and needs no separate release; if you want a bookmark for it, tag `mcp-server-vx.y.z` the same way.
