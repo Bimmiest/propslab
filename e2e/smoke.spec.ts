@@ -401,6 +401,54 @@ test.describe('accessibility affordances', () => {
   });
 });
 
+test.describe('global styles (#498)', () => {
+  test('a Tailwind transition utility beats the global colour transition', async ({ page }) => {
+    await openApp(page);
+    // `transition-transform` is in the built CSS (the editor panel chevrons use
+    // it). The theme transition used to be unlayered, so it outranked it.
+    const property = await page.evaluate(() => {
+      const el = document.createElement('div');
+      el.className = 'transition-transform';
+      document.body.append(el);
+      const value = getComputedStyle(el).transitionProperty;
+      el.remove();
+      return value;
+    });
+    expect(property).toContain('transform');
+    expect(property).not.toContain('background-color');
+  });
+
+  for (const theme of ['light', 'dark'] as const) {
+    test(`declares color-scheme ${theme} so native controls follow the theme`, async ({ page }) => {
+      await page.addInitScript((t) => {
+        try {
+          localStorage.setItem('propslab:theme', t);
+        } catch {
+          /* ignore */
+        }
+      }, theme);
+      await openApp(page);
+      expect(await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme)).toBe(theme);
+    });
+  }
+
+  test('collapses transitions and animations under prefers-reduced-motion', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await openApp(page);
+    const seconds = await page.evaluate(() => {
+      const bar = document.createElement('div');
+      bar.className = 'progress-indeterminate';
+      document.body.append(bar);
+      const cs = getComputedStyle(bar);
+      const out = { transition: parseFloat(getComputedStyle(document.body).transitionDuration), animation: cs.animationName };
+      bar.remove();
+      return out;
+    });
+    expect(seconds.transition).toBeLessThan(0.001);
+    expect(seconds.animation).toBe('none');
+  });
+});
+
 test.describe('dictionary', () => {
   test('switches views from the rail and keeps the simulator alive behind it', async ({ page, complaints }) => {
     await openApp(page);
