@@ -1,0 +1,33 @@
+{
+  "modelName": "Widgets",
+  "objects": [
+    {
+      "objectName": "All_Widgets",
+      "parentName": "BaseEvent",
+      "fields": [
+        { "fieldName": "id", "comment": { "recommended": true } },
+        { "fieldName": "colour", "comment": {} },
+        { "fieldName": "internal_flag", "hidden": true, "comment": { "recommended": true } },
+        { "fieldName": "widget_priority", "comment": { "ta_relevant": false } }
+      ],
+      "calculations": [
+        { "outputFields": [{ "fieldName": "action", "comment": { "recommended": true } }] }
+      ]
+    },
+    {
+      "objectName": "Big_Widgets",
+      "parentName": "All_Widgets",
+      "fields": [{ "fieldName": "weight_kg", "comment": {} }]
+    },
+    {
+      "objectName": "Tiny_Widgets",
+      "parentName": "Big_Widgets",
+      "fields": [{ "fieldName": "id", "comment": {} }, { "fieldName": "length_mm", "comment": {} }]
+    },
+    {
+      "objectName": "Unlisted_Root",
+      "parentName": "BaseEvent",
+      "fields": [{ "fieldName": "never_emitted", "comment": {} }]
+    }
+  ]
+}

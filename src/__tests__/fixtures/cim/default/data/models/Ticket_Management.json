@@ -1,0 +1,10 @@
+{
+  "modelName": "Ticket_Management",
+  "objects": [
+    {
+      "objectName": "All_Ticket_Management",
+      "parentName": "BaseEvent",
+      "fields": [{ "fieldName": "ticket_id", "comment": {} }, { "fieldName": "dest", "comment": {} }]
+    }
+  ]
+}

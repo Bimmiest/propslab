@@ -15,8 +15,8 @@ const overrides = packageJson.overrides;
 // Packages to check dependencies from
 const checkPackages = [
   '@radix-ui/react-dialog',
-  'react-context-menu',
-  'react-tooltip'
+  '@radix-ui/react-context-menu',
+  '@radix-ui/react-tooltip'
 ];
 
 // Get all dependencies for the packages to check

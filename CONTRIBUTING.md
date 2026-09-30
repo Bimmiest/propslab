@@ -88,7 +88,11 @@ Open `reports/mutation/mutation.html` for the survivors, line by line. The engin
 
 ### The regex engine's binary
 
-The module lives in its own repository, [`Bimmiest/pcre2-wasm-utf16`](https://github.com/Bimmiest/pcre2-wasm-utf16), and this one depends on a release tag of it (`package.json`). That repository commits `pcre2.wasm`, built from a pinned PCRE2 release with clang 18 and `wasm-ld`, and its CI rebuilds it and fails unless the result is byte-identical, so the binary is known to come from the source. To change it — a PCRE2 upgrade, a bridge change — make the change there, tag a release, and move the tag in `package.json` here and in `packages/mcp-server/package.json`, which declares it too (a test in the package fails while the two differ).
+The module lives in its own repository, [`Bimmiest/pcre2-wasm-utf16`](https://github.com/Bimmiest/pcre2-wasm-utf16), and this one depends on it by commit (`package.json`), not by tag: a tag can be moved, a commit hash cannot. That repository commits `pcre2.wasm`, built from a pinned PCRE2 release with clang 18 and `wasm-ld`, and its CI rebuilds it and fails unless the result is byte-identical, so the binary is known to come from the source. To change it — a PCRE2 upgrade, a bridge change — make the change there, tag a release, and move the commit in `package.json` here and in `packages/mcp-server/package.json`, which declares it too (a test in the package fails while the two differ). Both lockfiles record the dependency as `git+ssh://git@github.com/...#<commit>`, with no integrity hash. That is how npm writes every GitHub dependency, and no `package.json` spelling changes it (tried: the `git+https://` form resolves to the same line). It is not what an install does: npm fetches such a dependency over https first (the commit's tarball, then a clone) and tries ssh only after that fails, so CI needs no ssh key; checked by running `npm ci` with ssh unavailable. With no hash in the lockfile, what vouches for the binary is `pcre2.wasm.sha256`, which `scripts/check-wasm-checksum.mjs` verifies in every job that installs it.
+
+### Supply-chain checks
+
+`supply-chain.yml` watches what Dependabot cannot. It runs `npm run check:overrides` (the `overrides` below against what the lockfile resolves) on pull requests that touch `package.json`, the lockfile or `.nvmrc`, and monthly. Monthly it also compares `.nvmrc` with the newest release on its Node line (`scripts/check-node-patch.mjs`) and fails when it is behind; on a pull request that check only annotates. The deploy attests the `dist/` it uploads, in a job with the signing permissions and nothing else, and refuses to upload anything the attestation does not cover; the comments in `azure-static-web-apps.yml` say what that proves and what it does not. To check a deployed bundle later, `gh attestation verify` the `dist.sha256` manifest from that run's `dist-attestation` artifact (kept a day) with `--signer-workflow`.
 
 ### The Radix overrides
 
@@ -142,6 +146,14 @@ everything else — fields, the required/recommended split, constraint tags — 
 out of the add-on, and a dataset that Splunk has renamed or removed fails the run
 rather than disappearing quietly. Nothing here runs at build or install time, and
 the add-on is not vendored.
+
+CI cannot run the generator: the add-on is behind a Splunkbase login and under
+Splunk's licence, so it is not vendored. `src/__tests__/generateCimModels.test.ts`
+covers what does not need it: the transformation, on a small synthetic add-on in
+`src/__tests__/fixtures/cim` (invented models, no Splunk content), and the output
+format, by requiring that `render()` writes the committed `cimModelsData.ts`
+byte for byte from its own contents. What still needs a person is checking the
+field lists against a newer add-on, by running the script and reading the diff.
 
 To add a dataset by hand instead, read the derivation rules in the generated file's
 header first — the fields must come from the model JSON, not from memory or docs prose:

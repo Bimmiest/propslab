@@ -1,5 +1,6 @@
 import type { Page } from '@playwright/test';
 import { test, expect, openApp, loadExample, pasteInto } from './fixtures';
+import { writeJobSummary, type SummaryRow } from './perfSummary';
 
 /**
  * Performance budget for a large input: 20k events pasted into the raw
@@ -71,6 +72,11 @@ async function timeTabSwitch(page: Page, tabName: string): Promise<number> {
   }, tabName);
 }
 
+/** Tab timings as job-summary rows, each against the tab budget. */
+function tabRows(timings: Record<string, number>): SummaryRow[] {
+  return Object.entries(timings).map(([name, ms]) => ({ name: `${name} (tab switch)`, value: ms, unit: 'ms', budget: TAB_BUDGET_MS }));
+}
+
 test('a 20k-event paste stays within the pipeline and tab-switch budgets', async ({ page, complaints }) => {
   test.setTimeout(180_000);
   await openApp(page);
@@ -101,6 +107,10 @@ test('a 20k-event paste stays within the pipeline and tab-switch budgets', async
   const report = { pipelineMs, ...timings };
   console.log(`perf (${EVENTS} events): ${JSON.stringify(report)}`);
   test.info().annotations.push({ type: 'perf', description: JSON.stringify(report) });
+  writeJobSummary(`Pipeline and tab switches, ${EVENTS} events`, [
+    { name: 'Paste to status bar', value: pipelineMs, unit: 'ms', budget: PIPELINE_BUDGET_MS },
+    ...tabRows(timings),
+  ]);
 
   for (const [name, ms] of Object.entries(timings)) {
     expect.soft(ms, `${name} tab switch (ms)`).toBeLessThan(TAB_BUDGET_MS);
@@ -206,6 +216,10 @@ test('a regex-heavy config over large events stays within its budget', async ({ 
   const report = { pipelineMs, ...timings };
   console.log(`perf (regex-heavy, ${REGEX_EVENTS} events): ${JSON.stringify(report)}`);
   test.info().annotations.push({ type: 'perf', description: JSON.stringify(report) });
+  writeJobSummary(`Regex-heavy config, ${REGEX_EVENTS} large events`, [
+    { name: 'Paste to status bar', value: pipelineMs, unit: 'ms', budget: REGEX_PIPELINE_BUDGET_MS },
+    ...tabRows(timings),
+  ]);
   for (const [name, ms] of Object.entries(timings)) {
     expect.soft(ms, `${name} tab switch (ms)`).toBeLessThan(TAB_BUDGET_MS);
   }
@@ -250,6 +264,10 @@ test('a 3,000-field JSON event renders a window of the Fields table and sidebar'
   expect(await sidebar.locator('[data-window-row]').count()).toBeLessThan(200);
 
   console.log(`perf (${WIDE_FIELDS}-field JSON): ${JSON.stringify({ fieldsMs, extractionsMs })}`);
+  writeJobSummary(`${WIDE_FIELDS}-field JSON event`, [
+    { name: 'Fields (tab switch)', value: fieldsMs, unit: 'ms', budget: TAB_BUDGET_MS },
+    { name: 'Extractions (tab switch)', value: extractionsMs, unit: 'ms', budget: WIDE_EXTRACTIONS_BUDGET_MS },
+  ]);
   expect.soft(fieldsMs, 'Fields tab switch (ms)').toBeLessThan(TAB_BUDGET_MS);
   expect.soft(extractionsMs, 'Extractions tab switch (ms)').toBeLessThan(WIDE_EXTRACTIONS_BUDGET_MS);
   expect(complaints.all, 'browser errors under a wide event').toEqual([]);
