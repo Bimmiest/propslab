@@ -23,6 +23,7 @@
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:mutation": "stryker run",
+    "test:mutation:canary": "stryker run --mutate src/engine/utils/wildcardMatch.ts --reporters json && node scripts/check-mutation-canary.mjs",
     "check:overrides": "node scripts/check-radix-overrides.mjs"
   },
   "dependencies": {
