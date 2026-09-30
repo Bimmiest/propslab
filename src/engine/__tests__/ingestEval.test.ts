@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyIngestEval } from '../transforms/ingestEval';
+import { applyIngestEval, ingestEvalTrees } from '../transforms/ingestEval';
 import { runPipeline } from '../pipeline';
 import type { SplunkEvent, ConfDirective, EventMetadata, ValidationDiagnostic } from '../types';
 import { runCtx } from './runCtx';
@@ -347,5 +347,23 @@ describe('runPipeline — CLONE_SOURCETYPE does not repeat INGEST_EVAL problems 
     const { result, diagnostics } = runPipeline('one\ntwo\nthree', meta, props, transforms, { perEventPipeline });
     expect(result.events.filter((e) => e.clonedFrom !== undefined)).toHaveLength(3);
     expect(diagnostics.filter((d) => d.message.startsWith('INGEST_EVAL b:'))).toHaveLength(1);
+  });
+});
+
+// Not Splunk behaviour: the engine's own accessor, pinned to compile as
+// applyIngestEval does (top-level commas only; `=` and `:=`).
+describe('ingestEvalTrees', () => {
+  const trees = (value: string) => ingestEvalTrees(ingestDir(value)[0]!);
+
+  it('returns each assignment’s parsed expression, split at top-level commas only', () => {
+    expect(trees('a=upper(x), b:=if(y>1, "p,q", z) ,c = "s,t"')).toEqual([
+      { kind: 'call', name: 'upper', args: [{ kind: 'field', name: 'x' }] },
+      expect.objectContaining({ kind: 'call', name: 'if' }),
+      { kind: 'lit', value: 's,t' },
+    ]);
+  });
+
+  it('skips a part that is not an assignment, and one that does not parse', () => {
+    expect(trees('justanexpression, =x, bad=1 +, a=1')).toEqual([{ kind: 'lit', value: 1 }]);
   });
 });

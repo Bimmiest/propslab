@@ -251,7 +251,7 @@ describe('serializeSimulation — the response stays under MAX_PAYLOAD_BYTES', (
 // ── Through the handlers (one worker per call) ──────────
 
 describe('tool handlers — random input never throws out of the handler', () => {
-  it('simulate: a result under the cap for any sample, conf, max_events and include_snapshots', async () => {
+  it('simulate: a result under the cap for any sample, conf and output options', async () => {
     await fc.assert(
       fc.asyncProperty(
         sample,
@@ -260,7 +260,8 @@ describe('tool handlers — random input never throws out of the handler', () =>
         fc.integer({ min: 1, max: 500 }),
         fc.boolean(),
         fc.boolean(),
-        async (raw, props, transforms, maxEvents, includeSnapshots, perEvent) => {
+        fc.boolean(),
+        async (raw, props, transforms, maxEvents, includeSnapshots, perEvent, captureOffsets) => {
           const result = await handleSimulate(
             {
               raw,
@@ -271,7 +272,7 @@ describe('tool handlers — random input never throws out of the handler', () =>
               props_conf: props,
               transforms_conf: transforms,
               per_event_pipeline: perEvent,
-              capture_offsets: false,
+              capture_offsets: captureOffsets,
               include_snapshots: includeSnapshots,
               max_events: maxEvents,
               timeout_ms: 10_000,

@@ -22,7 +22,7 @@ schemas, in `src/outputSchemas.ts`:
 
 | Tool | `structuredContent` |
 |---|---|
-| `simulate` | `{ eventCount, returnedEvents, truncationNote?, events[], processingSteps[], diagnostics[], diagnosticCount? }`; each event is `{ _raw, _time (ISO-8601 or null), metadata, fields, indexedFields, lineNumbers, processingTrace[] }` |
+| `simulate` | `{ eventCount, returnedEvents, truncationNote?, events[], diagnostics[], diagnosticCount? }`; each event is `{ _raw, _time (ISO-8601 or null), metadata, fields, indexedFields, lineNumbers, processingTrace[], fieldOffsets?, noOps?, clonedFrom? }`: `fieldOffsets` with `capture_offsets` only, `noOps` (each directive that applied and did nothing, with a structured `reason` and a one-line `description`) and `clonedFrom` (a CLONE_SOURCETYPE copy's original sourcetype) whenever there are any. There is no separate `processingSteps` list (#489): it repeated every returned event's trace. |
 | `validate` | `{ diagnostics[], diagnosticCount?, truncationNote? }` |
 | `explain_precedence` | `{ parseErrors[], stanzas[], parseErrorCount?, stanzaCount?, truncationNote?, resolution? }`; each stanza may carry `directiveCount`; `resolution` (props.conf with a `sourcetype`) is `{ metadata, effectiveMetadata, assignedSourcetype?, matchedStanzas[], effectiveDirectives[], matchedStanzaCount?, effectiveDirectiveCount? }` |
 | `lookup_directive` | Without `key`: `{ "props.conf"?: [...], "transforms.conf"?: [...] }`, one summary per directive. With `key`: `{ matches[], classBased? }` |
@@ -98,7 +98,8 @@ reviewed. `docs/engine.md`'s closing section is the spec this implements:
   request, so no request's budget pays for compilation. `MATCH_LIMIT` and
   `DEPTH_LIMIT` stop a runaway field-extraction match, as in Splunk; the
   watchdog bounds the run as a whole.
-- **`captureOffsets` defaults to `false`** — nothing here renders highlights.
+- **`capture_offsets` defaults to `false`**; set it to get each event's
+  `fieldOffsets` back.
 - **The launcher re-execs node with
   `--enable-experimental-regexp-engine-on-excessive-backtracks`** (plus a
   backtrack threshold) before anything compiles a regex. User patterns no
@@ -111,40 +112,77 @@ reviewed. `docs/engine.md`'s closing section is the spec this implements:
   processes or load native addons. The working directory matters because a
   worker thread can read below it whatever `--allow-fs-read` says (measured
   on Node 22 and 24). `PROPSLAB_MCP_NO_REEXEC=1` turns this off along with
-  the rest of the re-exec.
-- **A timeout comes back structured**: budget, every regex-valued directive
-  in the conf (file / stanza / key / line / layer), and which of them a
-  structural ReDoS heuristic flags — so the agent can repair the pattern rather
-  than retry blind. The heuristic is advisory and cannot see every form
-  (e.g. `(a|aa)+`), and the error text says so.
+  the rest of the re-exec. If node was started under `--permission` already
+  (on the command line or in `NODE_OPTIONS`), its grants stand and the
+  launcher adds none: it still moves to `dist/`, and names on stderr every
+  `--allow-…` grant beyond its own, so a broader one does not apply
+  silently. Without `--allow-child-process` it cannot re-exec, and says so.
+- **A timeout comes back structured**: the budget, how far the run got
+  (`progress`: `parsing`, `running` with the pipeline stage and the events
+  it was given, or `finishing`), and advice that follows from that (#488).
+  Only a run that stalled on a single event, or on breaking a sample too
+  small to take that long, is blamed on a regex outright; a run stopped over
+  many events may simply need a larger `timeout_ms`, and the advice says
+  both; a run stopped while parsing the conf or shaping the response is
+  about size, not a pattern. Where a regex may be the cause, the error lists
+  every regex a directive in the conf runs (file / stanza / key / line /
+  layer, and `via` — `match()`, `replace()` or `mvfind()` — for a
+  literal regex inside an `EVAL-`, `INGEST_EVAL` or `STOP_PROCESSING_IF`
+  expression), read as validate reads it: an EXTRACT's pattern without its
+  `in <field>`, a SEDCMD's `s///` regex (#517). Each says whether a
+  structural ReDoS heuristic flags it — so the agent can repair the pattern rather than retry blind. The heuristic is
+  advisory and cannot see every form (e.g. `(a|aa)+`), and the error text
+  says so. The list is built inside the worker, which posts it before the
+  pipeline runs, and the worker records its progress in shared memory the
+  server reads when the budget runs out; the server never parses the
+  caller's conf on its own thread, so a timeout cannot stall it (#468).
+  Validate and explain run no directive's regex and list none.
 - **Each worker has a heap limit** (V8 `resourceLimits`: 512 MB old
   generation, 64 MB young). A run that exceeds it kills only its own worker
   and comes back as `{"error": "out_of_memory", "heap_limit_mb": …}` with
   guidance to shrink the input, instead of growing until the whole server
   dies. The worst sample the schemas accept is 1 MB of one-character lines
-  with `SHOULD_LINEMERGE = false`: 500,000 events, each with its own trace.
-  While the worker posted the whole result for the server to trim, that ran
-  out of 512 MB somewhere between 400k and 500k events; now that the worker
-  trims it before posting (next bullet), 500k events were measured to
+  with `SHOULD_LINEMERGE = false`, which the engine's event cap
+  (`RunLimits.maxEvents`) holds to 25,000 events, with a warning. Before
+  that cap it broke into 500,000 events, each with its own trace: while the
+  worker posted the whole result for the server to trim, that ran out of
+  512 MB somewhere between 400k and 500k events, and once the worker
+  trimmed it before posting (next bullet), 500k events were measured to
   complete within 512 MB — and within 256 MB. The limit covers the conf
   side too, which is why it has a combined bound:
   per field the schemas admit 20 layers of 1M characters, but
   `props_conf` and `transforms_conf` together may carry at most 2M
   characters across all their layers. More comes back as
   `{"error": "input_too_large", "conf_chars": …, "max_conf_chars": …}`
-  before any worker starts. The bound also caps what a timeout re-parses
-  on the server's own thread to list regex suspects — a few hundred
-  milliseconds at the limit. Measured: a 1 MB sample of one-character lines
-  (500k events) beside 1.9M characters of conf (33,000 stanzas), with an
-  EXTRACT, SEDCMD, FIELDALIAS and EVAL applying to every event and
-  `include_snapshots` on, completes within 512 MB — in about 12 s, so it
-  needs a `timeout_ms` above the 5 s default.
+  before any worker starts. Measured before the event cap: a 1 MB sample of
+  one-character lines (then 500k events) beside 1.9M characters of conf
+  (33,000 stanzas), with an EXTRACT, SEDCMD, FIELDALIAS and EVAL applying
+  to every event and `include_snapshots` on, completed within 512 MB — in
+  about 12 s, so it needed a `timeout_ms` above the 5 s default. Large
+  legitimate inputs can still need more than the default, which is why a
+  timeout over many events does not blame a regex.
+  **The limit covers the V8 heap only.** PCRE2's WebAssembly memory is
+  outside it: each worker's instance may grow its linear memory up to the
+  1 GiB maximum the module is built with (`--max-memory` in
+  pcre2-wasm-utf16's `build/build.sh`), so four workers could in principle
+  hold 4 GiB of it beside their heaps. The module caps one match's
+  backtracking memory at 64 MiB, which keeps real runs far below that, but
+  the same memory holds every compiled pattern and the subject too, and
+  nothing here bounds their total; a smaller `--max-memory` in that build
+  would be the place to (#490).
   Process-wide V8 heap flags override worker limits, so the launcher strips
   `--max-old-space-size` / `--max-semi-space-size` / `--max-heap-size` from
   its own arguments and from `NODE_OPTIONS` before re-exec'ing, and says so
-  on stderr. It re-execs to do so even when the regex flags above are
+  on stderr. `NODE_OPTIONS` is split the way node splits it, so a quoted
+  `"--max-old-space-size=8192"`, which node reads as the flag, is found too
+  (#490). It re-execs to do so even when the regex flags above are
   already on its command line. With `PROPSLAB_MCP_NO_REEXEC=1` nothing is
   stripped, and the launcher warns on stderr that the flags are in effect.
+- **An engine failure says nothing about the server's files.** An error
+  that is not a timeout, an out-of-memory, `busy` or a cancellation comes
+  back as `{"error": "engine_failure"}` with a fixed message; the error
+  itself, which for a worker that failed to load names absolute paths, goes
+  to the server's stderr (#490).
 - **Every response is bounded** (#351, #414), at 8 MiB
   (`MAX_RESPONSE_BYTES`, `src/responseBudget.ts`) counted as UTF-8 bytes of
   the whole JSON-RPC line the server writes: both copies of the payload,
@@ -155,8 +193,7 @@ reviewed. `docs/engine.md`'s closing section is the spec this implements:
   posts only that, so a full result never reaches the server's own thread,
   where no heap limit applies. What does not fit is cut, with the list's
   total in a `…Count` field and a `truncationNote` saying which cut applied:
-  - `simulate`: `max_events` bounds `events` and `processingSteps` alike
-    (the latter covers the returned events only); events that would not fit
+  - `simulate`: `max_events` bounds `events`; events that would not fit
     are left out, and diagnostics may take at most half the budget.
   - `validate`: `diagnostics` (`diagnosticCount`).
   - `explain_precedence`: parse errors take at most a quarter of the budget,
@@ -173,13 +210,17 @@ reviewed. `docs/engine.md`'s closing section is the spec this implements:
   dying on an unhandled `error` event.
 - **At most `min(4, os.availableParallelism())` workers run at once**; further
   calls queue first come, first served. The `timeout_ms` budget starts when a
-  call's worker starts, not when it is queued: a timeout is reported as "your
-  regex backtracked", and time spent waiting behind other calls says nothing
-  about this call's patterns. The trade-off is that a queued call can take
-  its wait plus its budget end to end; each call ahead of it holds a slot for
-  at most its own budget (30 s at the most), and the MCP client's request
-  timeout stays the outer limit. A slot is freed when its worker has actually
-  exited, so a terminated run still counts against the cap until it stops.
+  call's worker reports itself ready — loaded, with the regex engine
+  instantiated — not when it is queued or spawned (#488): time spent waiting
+  behind other calls, or starting a worker (about 60 ms warm and 120 ms
+  cold, against a 100 ms minimum budget), says nothing about this call's
+  input. Start-up has its own cap of 10 s, so a worker that never gets going
+  still ends, as `{"error": "start_timeout"}`. The trade-off is that a queued
+  call can take its wait plus its start-up plus its budget end to end; each
+  call ahead of it holds a slot for at most its own start-up and budget
+  (30 s at the most), and the MCP client's request timeout stays the outer
+  limit. A slot is freed when its worker has actually exited, so a
+  terminated run still counts against the cap until it stops.
 - **The queue is bounded too**, at four waiting calls per slot (16 at most).
   A queued call holds its whole input in the server's own heap, outside
   any worker's limit, so an unbounded queue only moved a burst from the
@@ -237,6 +278,15 @@ npm run typecheck   # tsc --noEmit over the package + the engine it imports
 npm run build       # typecheck + esbuild bundles (dist/index.js, dist/simulateWorker.js)
 npm test            # builds, then vitest — the worker tests run the built bundle
 ```
+
+`src/__tests__/adversarial.test.ts` is the wall-clock regression suite:
+input at the schemas' limits (a maximum-length conf of continuation lines,
+of one-line stanzas and of malformed lines; the maximum sample with an
+empty `LINE_BREAKER` group; deeply nested JSON and XML; twenty concurrent
+calls) through the real protocol, each answered or refused with `busy`
+within a fixed bound of its budget, with the server's event loop never
+stalled for a second. A change that lets agent input wedge the server
+should fail it.
 
 The engine is imported from `../../src/engine` as-is; this package makes no
 engine changes, which is the boundary #202 draws — if one ever seems needed,

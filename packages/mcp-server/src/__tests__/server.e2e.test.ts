@@ -7,7 +7,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { AjvJsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/ajv';
 import type { JsonSchemaType } from '@modelcontextprotocol/sdk/validation';
 import { createServer } from '../server';
-import { DEFAULT_MAX_CONCURRENT_WORKERS } from '../runInWorker';
+import { DEFAULT_MAX_CONCURRENT_WORKERS, DEFAULT_MAX_QUEUED_CALLS } from '../runInWorker';
 import { resultText } from './resultText';
 
 /**
@@ -126,6 +126,82 @@ describe('MCP server end to end', () => {
     }
   }, 20_000);
 
+  it('conforms to the advertised outputSchema with every optional field present (#489)', async () => {
+    const { tools } = await client.listTools();
+    const validator = new AjvJsonSchemaValidator();
+    const conforms = (name: string, result: TextResult) => {
+      expect(result.isError, `${name}: ${resultText(result).slice(0, 500)}`).toBeFalsy();
+      const schema = tools.find((t) => t.name === name)?.outputSchema;
+      const check = validator.getValidator(schema as JsonSchemaType)(result.structuredContent);
+      expect(check.errorMessage, name).toBeUndefined();
+      return payload(result) as Record<string, unknown>;
+    };
+
+    // fieldOffsets (capture_offsets), noOps (an EXTRACT that never matches),
+    // clonedFrom (CLONE_SOURCETYPE), and events cut by max_events.
+    const simulated = conforms(
+      'simulate',
+      (await client.callTool({
+        name: 'simulate',
+        arguments: {
+          raw: 'user=alice\nuser=bob\nuser=carol\n',
+          sourcetype: 'app',
+          props_conf: [
+            '[app]',
+            'SHOULD_LINEMERGE = false',
+            'TRANSFORMS-copy = copy',
+            'EXTRACT-user = user=(?<user>\\w+)',
+            'EXTRACT-never = nothing=(?<never>\\w+)',
+          ].join('\n'),
+          transforms_conf: '[copy]\nREGEX = alice\nCLONE_SOURCETYPE = app_copy',
+          capture_offsets: true,
+          max_events: 3,
+        },
+      })) as TextResult,
+    ) as { events: Record<string, unknown>[]; truncationNote?: string };
+    const events = simulated.events;
+    expect(events[0]?.fieldOffsets).toEqual({ user: [[5, 10]] });
+    expect(events.some((e) => (e.noOps as { directive: string }[] | undefined)?.some((n) => n.directive === 'EXTRACT-never'))).toBe(true);
+    expect(events.some((e) => e.clonedFrom === 'app')).toBe(true);
+    expect(simulated.truncationNote).toMatch(/max_events/);
+
+    // Every list cut to the size cap, with its count: 90,000 malformed lines,
+    // each a diagnostic, fill far more than the budget allows.
+    const malformed = Array.from({ length: 90_000 }, (_, i) => `bad ${i}`).join('\n');
+    const cutSimulate = conforms(
+      'simulate',
+      (await client.callTool({
+        name: 'simulate',
+        arguments: { raw: 'x\n', sourcetype: 'app', props_conf: malformed, timeout_ms: 30_000 },
+      })) as TextResult,
+    );
+    expect(cutSimulate.diagnosticCount).toBe(90_000);
+    const cutValidate = conforms(
+      'validate',
+      (await client.callTool({ name: 'validate', arguments: { props_conf: malformed, timeout_ms: 30_000 } })) as TextResult,
+    );
+    expect(cutValidate.diagnosticCount).toBe(90_000);
+    expect(cutValidate.truncationNote).toMatch(/diagnostics/);
+    const stanzas = Array.from({ length: 30_000 }, (_, i) => `[s${i}]\nk=${'v'.repeat(20)}`).join('\n');
+    const cutExplain = conforms(
+      'explain_precedence',
+      (await client.callTool({
+        name: 'explain_precedence',
+        arguments: {
+          conf: [
+            { layer: 'default', text: malformed },
+            { layer: 'local', text: stanzas },
+          ],
+          sourcetype: 's1',
+          timeout_ms: 30_000,
+        },
+      })) as TextResult,
+    );
+    expect(cutExplain.parseErrorCount).toBe(90_000);
+    expect(cutExplain.stanzaCount ?? (cutExplain.stanzas as { directiveCount?: number }[]).at(-1)?.directiveCount).toBeGreaterThan(0);
+    expect(cutExplain.truncationNote).toMatch(/capped at/);
+  }, 120_000);
+
   it('leaves structuredContent off an error result', async () => {
     // Its payload is an error object, which the output schema does not
     // describe; the error stays in the text.
@@ -230,6 +306,55 @@ describe('MCP server end to end', () => {
     });
     expect(result.isError).toBeFalsy();
   }, 20_000);
+});
+
+describe('a flood of calls (#490)', () => {
+  it('refuses what the queue cannot hold with `busy`, at once, and serves the rest', async () => {
+    const evilProps = [
+      '[evil]',
+      'SHOULD_LINEMERGE = false',
+      'MATCH_LIMIT = 0',
+      'DEPTH_LIMIT = 0',
+      'EXTRACT-boom = ^(?<boom>(a|aa)+)(?=b)$',
+    ].join('\n');
+    const held = DEFAULT_MAX_CONCURRENT_WORKERS + DEFAULT_MAX_QUEUED_CALLS;
+    const extra = 3;
+    const controller = new AbortController();
+    const startedAt = Date.now();
+    const calls = Array.from({ length: held + extra }, () =>
+      client.callTool(
+        {
+          name: 'simulate',
+          arguments: { raw: `${'a'.repeat(200)}\n`, sourcetype: 'evil', props_conf: evilProps, timeout_ms: 30_000 },
+        },
+        undefined,
+        { signal: controller.signal, timeout: 60_000 },
+      ),
+    );
+    try {
+      // The calls past the queue's bound come back as soon as they arrive,
+      // while the others hold every slot and queue position.
+      const settled = await Promise.race([
+        Promise.all(calls.slice(held)),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('no busy refusal')), 5_000)),
+      ]);
+      expect(Date.now() - startedAt).toBeLessThan(5_000);
+      for (const result of settled) {
+        expect(result.isError).toBe(true);
+        expect(payload(result)).toMatchObject({
+          error: 'busy',
+          max_concurrent: DEFAULT_MAX_CONCURRENT_WORKERS,
+          max_queued: DEFAULT_MAX_QUEUED_CALLS,
+        });
+      }
+    } finally {
+      controller.abort();
+      await Promise.allSettled(calls);
+    }
+    // Cancelling the held calls freed every slot: the server still answers.
+    const result = await client.callTool({ name: 'validate', arguments: { props_conf: '[st]\n' } });
+    expect(result.isError).toBeFalsy();
+  }, 30_000);
 });
 
 describe('client disconnect', () => {

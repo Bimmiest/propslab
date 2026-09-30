@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { hasReDoSRisk } from '../redosHeuristic';
+import { detached, hasReDoSRisk } from '../redosHeuristic';
 
 // The heuristic is advisory now — it ranks the MCP server's timeout suspects —
 // so these pin its verdicts only; no pattern is refused on its word.
@@ -61,6 +61,27 @@ describe('hasReDoSRisk — adjacent quantifiers compare whole atoms (#365)', () 
 
   it.each(['\\\\d+d+', '\\.+\\.+', 'x\\d+\\d+'])('still flags a repeated atom after escaped backslashes: %s', (p) => {
     expect(hasReDoSRisk(p)).toBe(true);
+  });
+});
+
+describe('hasReDoSRisk — the verdict cache (#487)', () => {
+  it('gives the same verdict for a pattern too long to cache, every time', () => {
+    // Past the full analysis's length limit the verdict is not cached; the
+    // cheap check runs on each call. (The MCP package's suspects test checks
+    // that cached keys keep no caller text alive.)
+    const long = `(a+)+${'x'.repeat(3_000)}`;
+    expect(hasReDoSRisk(long)).toBe(true);
+    expect(hasReDoSRisk(long)).toBe(true);
+    expect(hasReDoSRisk('x'.repeat(3_000))).toBe(false);
+  });
+
+  it('caches a copy of the key with the same characters', () => {
+    const text = `prefix ${'日'.repeat(100)} (?<a>(b+)+) suffix`;
+    const cut = text.slice(text.indexOf('('), text.indexOf(' suffix'));
+    expect(detached(cut)).toBe('(?<a>(b+)+)');
+    expect(detached('')).toBe('');
+    expect(hasReDoSRisk(cut)).toBe(true);
+    expect(hasReDoSRisk('(?<a>(b+)+)')).toBe(true);
   });
 });
 

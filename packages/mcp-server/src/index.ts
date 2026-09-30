@@ -18,6 +18,13 @@
  * per-worker heap limit, and the launcher says so on stderr. Nor is the
  * permission model applied.
  *
+ * Node started under `--permission` already (on its command line or in
+ * NODE_OPTIONS) keeps the grants it was given: the launcher adds none of its
+ * own. It still moves to the bundle directory before starting the server,
+ * and says on stderr which grants go beyond its own, so a broader
+ * `--allow-fs-read` does not quietly apply (#490). Without
+ * `--allow-child-process` it cannot re-exec at all, and says that instead.
+ *
  * Because the client holds the pid of this shim rather than of the server,
  * the shim forwards termination signals to the child and exits the way the
  * child did.
@@ -25,7 +32,7 @@
 import { spawn } from 'node:child_process';
 import os from 'node:os';
 import { stripHeapSizeFlags, stripHeapSizeFlagsFromNodeOptions } from './heapFlags';
-import { permissionEnabled, permissionFlags } from './permissionFlags';
+import { adoptPresetPermission, canSpawn, permissionEnabled, permissionFlags } from './permissionFlags';
 import { flagsAlreadySet, REGEXP_FALLBACK_FLAGS } from './v8Flags';
 
 async function main(): Promise<void> {
@@ -39,6 +46,7 @@ async function main(): Promise<void> {
   const heapFlagsSet =
     execArgv.length !== process.execArgv.length || env.NODE_OPTIONS !== process.env.NODE_OPTIONS;
 
+  const reexecWanted = !flagsAlreadySet() || heapFlagsSet || !permissionEnabled();
   if (process.env.PROPSLAB_MCP_NO_REEXEC === '1') {
     if (heapFlagsSet) {
       // stderr: stdout belongs to the protocol.
@@ -47,7 +55,16 @@ async function main(): Promise<void> {
           'them, so they override the sandbox heap limit',
       );
     }
-  } else if (!flagsAlreadySet() || heapFlagsSet || !permissionEnabled()) {
+  } else if (reexecWanted && !canSpawn()) {
+    // Started under --permission without --allow-child-process: a re-exec
+    // would be refused, so start here with what there is, and say what that
+    // leaves in place.
+    console.error(
+      'propslab MCP server: running under --permission without --allow-child-process, so it ' +
+        'cannot re-exec itself' +
+        (heapFlagsSet ? '; V8 heap-size flags stay in effect and override the sandbox heap limit' : ''),
+    );
+  } else if (reexecWanted) {
     if (heapFlagsSet) {
       console.error(
         'propslab MCP server: ignoring V8 heap-size flags so the sandbox heap limit applies',
@@ -105,6 +122,13 @@ async function main(): Promise<void> {
       process.exit(code ?? 1);
     });
     return;
+  }
+
+  // Under a permission model the launcher did not set (or its own, in the
+  // re-exec'd child, where this finds nothing to warn about): move to the
+  // bundle directory and say if the grants are wider than the launcher's.
+  if (permissionEnabled()) {
+    for (const warning of adoptPresetPermission(__dirname)) console.error(warning);
   }
 
   const { start } = await import('./server');

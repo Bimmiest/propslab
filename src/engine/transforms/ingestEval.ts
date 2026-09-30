@@ -176,6 +176,16 @@ function compileIngestEval(dir: ConfDirective): CompiledIngestEval {
   return { expressionCount: expressions.length, assignments };
 }
 
+/**
+ * The expression tree of each `field=expr` assignment in an INGEST_EVAL
+ * directive that parses, compiled exactly as `applyIngestEval` compiles them.
+ * For callers that read the expressions without running them (the MCP
+ * server's regex lint and suspect list).
+ */
+export function ingestEvalTrees(dir: ConfDirective): Node[] {
+  return compileIngestEval(dir).assignments.flatMap((a) => (a.tree === undefined ? [] : [a.tree]));
+}
+
 export function applyIngestEval(
   events: SplunkEvent[],
   directives: ConfDirective[],

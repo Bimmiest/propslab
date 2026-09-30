@@ -109,6 +109,39 @@ describe('parseConf — line continuation (SEM-18)', () => {
     expect(value(text, 's', 'REGEX')).toBe('foo# note');
     expect(value(text, 's', 'TRUNCATE')).toBe('5');
   });
+
+  it('counts a backslash-only continuation line with the backslashes before it', () => {
+    // `x\\\` continues (odd run) and keeps `x\\`; the next line, `\`, makes the
+    // joined run three, odd again, so the value continues onto `y` as well.
+    const text = `[s]\nK = x${'\\'.repeat(3)}\n\\\ny\nO = 1`;
+    expect(value(text, 's', 'K')).toBe(`x${'\\'.repeat(2)}y`);
+    expect(value(text, 's', 'O')).toBe('1');
+  });
+
+  it('ends a value continued to the last line of the file', () => {
+    expect(value('[s]\nK = a\\\nb\\\nc', 's', 'K')).toBe('abc');
+  });
+
+  it('takes layers of hundreds of thousands of stanzas and errors without overflowing the stack (#517)', () => {
+    // Spreading a layer's results into push() passed each as an argument.
+    const layer = (text: string) => ({ layer: 'l', text });
+    const stanzas = '[s]\nk=v\n'.repeat(300_000);
+    const malformed = 'x\n'.repeat(300_000);
+    const parsed = parseConf([layer(stanzas), layer(malformed)], 'props.conf');
+    expect(parsed.errors).toHaveLength(300_000);
+    expect(parsed.stanzas).toHaveLength(1);
+    expect(parsed.stanzas[0]?.directives).toHaveLength(300_000);
+  });
+
+  it('parses a long run of continuation lines in linear time (#468)', () => {
+    // Just under the MCP server's two-million-character conf limit. Appending
+    // each line to the whole value made this take minutes.
+    const text = `[st]\nEXTRACT-a = x\\\n${'a\\\n'.repeat(660_000)}`;
+    const start = performance.now();
+    const v = value(text, 'st', 'EXTRACT-a');
+    expect(performance.now() - start).toBeLessThan(3_000);
+    expect(v).toBe(`x${'a'.repeat(660_000)}`);
+  });
 });
 
 describe('parseConf — class-directive prefixes are case-sensitive (#60)', () => {

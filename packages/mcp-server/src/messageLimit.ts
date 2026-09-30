@@ -18,7 +18,7 @@
  * error naming the request's id when a bounded scan of the line's ends finds
  * it (requestId.ts). Lines after it are processed as normal.
  */
-import { Transform, type Readable, type TransformCallback, type Writable } from 'node:stream';
+import { finished, Transform, type Readable, type TransformCallback, type Writable } from 'node:stream';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import type { JSONRPCMessage, RequestId } from '@modelcontextprotocol/sdk/types.js';
 import { findRequestId, ID_SCAN_BYTES } from './requestId';
@@ -195,7 +195,9 @@ export function createStdioTransport(
   // The SDK transport never closes on stdin EOF by itself, and only a close
   // makes the server abort every in-flight handler's signal: without it a
   // client that disconnects leaves running workers to their budget and queued
-  // calls to start theirs, keeping the process alive for nobody.
-  limiter.once('end', () => void transport.close());
+  // calls to start theirs, keeping the process alive for nobody. `finished`
+  // fires once however the input stops: at EOF (`end`), and when a stdin
+  // error destroys the limiter, which emits `close` and never `end`.
+  finished(limiter, () => void transport.close());
   return transport;
 }

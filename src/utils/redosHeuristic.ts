@@ -327,11 +327,28 @@ function hasAmbiguousRepetition(source: string, depth: number): boolean {
  *
  * Bounded so a long session over pathological input cannot grow it without
  * limit. A Map preserves insertion order, so evicting the first key is FIFO.
+ *
+ * Bounded in bytes too. A pattern cut out of a larger text (a directive's
+ * value, trimmed) is, in V8, a view into that whole text, and a view kept
+ * as a key keeps the whole text alive: 500 keys cut from megabyte confs held
+ * gigabytes. So a key is stored as a copy of its own (`detached`), and a
+ * pattern too long for the full analysis, whose cheap check is not worth
+ * remembering, is not stored at all. At most 500 keys of 2,000 characters.
  */
 const REDOS_VERDICT_CACHE_LIMIT = 500;
 const redosVerdictCache = new Map<string, boolean>();
 
+/**
+ * `text` as a string sharing no storage with anything else. A JSON round
+ * trip builds a new string from the characters, where `slice`, `trim` and
+ * concatenation may return a view of, or a rope over, their input.
+ */
+export function detached(text: string): string {
+  return JSON.parse(JSON.stringify(text)) as string;
+}
+
 export function hasReDoSRisk(pattern: string): boolean {
+  if (pattern.length > REDOS_ANALYSIS_MAX_LENGTH) return computeReDoSRisk(pattern);
   const cached = redosVerdictCache.get(pattern);
   if (cached !== undefined) return cached;
 
@@ -340,7 +357,7 @@ export function hasReDoSRisk(pattern: string): boolean {
     const oldest = redosVerdictCache.keys().next().value;
     if (oldest !== undefined) redosVerdictCache.delete(oldest);
   }
-  redosVerdictCache.set(pattern, verdict);
+  redosVerdictCache.set(detached(pattern), verdict);
   return verdict;
 }
 

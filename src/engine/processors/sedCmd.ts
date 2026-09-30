@@ -163,6 +163,58 @@ function parseTransliterate(
 }
 
 /**
+ * The fields of a sed expression after its verb and delimiter (`trimmed`
+ * starts with both), split at each unescaped delimiter, and how many of them a
+ * delimiter closed. Backslashes are kept verbatim, so the `s///` pattern
+ * reaches the regex engine as written.
+ *
+ * The expression is `s<d>regex<d>replacement<d>flags`: the regex and the
+ * replacement each end at a delimiter. Text after the last delimiter is the
+ * flags, so it does not count towards the two that must be closed.
+ */
+function splitSedFields(trimmed: string, delimiter: string): { parts: string[]; closed: number } {
+  const parts: string[] = [];
+  let current = '';
+  let escaped = false;
+
+  for (let i = 2; i < trimmed.length; i++) {
+    if (escaped) {
+      current += trimmed[i]!;
+      escaped = false;
+      continue;
+    }
+    if (trimmed[i] === '\\') {
+      escaped = true;
+      current += '\\';
+      continue;
+    }
+    if (trimmed[i] === delimiter) {
+      parts.push(current);
+      current = '';
+      continue;
+    }
+    current += trimmed[i]!;
+  }
+  const closed = parts.length;
+  if (current) parts.push(current);
+  return { parts, closed };
+}
+
+/**
+ * The regex of an `s///` SEDCMD value, exactly as `parseSedExpression` would
+ * compile it; null for a `y///` transliteration, which has none, and for a
+ * value that is not a complete sed expression. For callers that need the
+ * pattern without compiling it (the MCP server's regex-suspect list).
+ */
+export function sedPattern(value: string): string | null {
+  const trimmed = value.trim();
+  const command = SED_COMMAND_RE.exec(trimmed);
+  if (!command || command[1] === 'y') return null;
+  const { parts, closed } = splitSedFields(trimmed, command[2] ?? '/');
+  return closed < 2 ? null : (parts[0] ?? '');
+}
+
+/**
  * Parse and compile one SEDCMD value, pushing a diagnostic for anything that
  * stops it applying. Exported for static lint (the MCP validate tool), which
  * checks every stanza's SEDCMDs whether or not a sample would reach them.
@@ -188,34 +240,7 @@ export function parseSedExpression(
   }
 
   const [, verb, delimiter] = command;
-
-  const parts: string[] = [];
-  let current = '';
-  let escaped = false;
-
-  for (let i = 2; i < trimmed.length; i++) {
-    if (escaped) {
-      current += trimmed[i]!;
-      escaped = false;
-      continue;
-    }
-    if (trimmed[i] === '\\') {
-      escaped = true;
-      current += '\\';
-      continue;
-    }
-    if (trimmed[i] === delimiter) {
-      parts.push(current);
-      current = '';
-      continue;
-    }
-    current += trimmed[i]!;
-  }
-  // The expression is `s<d>regex<d>replacement<d>flags`: the regex and the
-  // replacement each end at a delimiter. Text after the last delimiter is the
-  // flags, so it does not count towards the two that must be closed.
-  const closed = parts.length;
-  if (current) parts.push(current);
+  const { parts, closed } = splitSedFields(trimmed, delimiter ?? '/');
 
   if (closed < 2) {
     diagnostics?.push(

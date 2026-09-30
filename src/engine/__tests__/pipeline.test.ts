@@ -297,6 +297,14 @@ describe('runPipeline — CLONE_SOURCETYPE copies are not reported as MetaData:*
   });
 });
 
+describe('runPipeline — a conf of hundreds of thousands of parse errors (#517)', () => {
+  it('reports them all rather than overflowing the stack', () => {
+    // Pushing the parse errors with a spread passed each as an argument.
+    const { diagnostics } = runPipeline('x\n', META, 'x\n'.repeat(300_000), '', { perEventPipeline: false });
+    expect(diagnostics.filter((d) => d.message.startsWith('Malformed line'))).toHaveLength(300_000);
+  });
+});
+
 describe('runPipeline — per-event search time keeps an index-time sourcetype (#466)', () => {
   // Doc-derived: props.conf.spec describes `sourcetype =` in a [source::]
   // stanza as an input-time assignment, and transforms.conf.spec has

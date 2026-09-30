@@ -17,6 +17,7 @@ import { applyEvalExpressions } from './processors/evalProcessor';
 import { attributeRawMutations } from './processors/rawMutationAttribution';
 import { lintConfigs, lintMatchedDirectives } from './configLint';
 import { createRunContext, withDiagnostics, type RunContext, type RunLimits } from './runContext';
+import type { RunStage } from './runStages';
 
 type Stage = (batch: SplunkEvent[], ctx: RunContext) => SplunkEvent[];
 
@@ -38,13 +39,14 @@ const errorText = (err: unknown) => (err instanceof Error ? err.message : 'Unkno
  * See docs/adr/0001-stage-failures-degrade-to-diagnostics.md.
  */
 function safeProcessor(
-  name: string,
+  name: RunStage,
   events: SplunkEvent[],
   fn: Stage,
   ctx: RunContext,
   file: ValidationDiagnostic['file'] = 'props.conf',
   shape: 'per-event' | 'batch' = 'per-event',
 ): SplunkEvent[] {
+  ctx.onStage?.(name, events.length);
   const { diagnostics } = ctx;
   const start = diagnostics.list.length;
   try {
@@ -278,7 +280,12 @@ function runSearchTimePerEvent(events: SplunkEvent[], run: PipelineRun, original
   // 500 identical warnings. Report through a view that keeps only the distinct
   // entries. Genuinely per-event diagnostics carry their own line number, so
   // they differ and all survive.
-  const ctx = withDiagnostics(run.ctx, run.ctx.diagnostics.deduplicating());
+  //
+  // Reported as one stage over every event; the stages inside it run once per
+  // event and do not report, or a watcher would see a run of one-event stages.
+  run.ctx.onStage?.('search time per event', events.length);
+  const { onStage: _onStage, ...quiet } = withDiagnostics(run.ctx, run.ctx.diagnostics.deduplicating());
+  const ctx: RunContext = Object.freeze(quiet);
   return events.flatMap((event, i) => {
     const evDirs = eventDirectives[i] ?? [];
     return runSearchTimeStages([traceRematch(event, originalMetaKey, evDirs.length)], evDirs, run, ctx);
@@ -377,6 +384,7 @@ export function runPipeline(
     captureOffsets: options?.captureOffsets ?? true,
     diagnostics,
     limits: options?.limits,
+    ...(options?.onStage ? { onStage: options.onStage } : {}),
   });
 
   if (!rawData.trim()) {
@@ -391,7 +399,9 @@ export function runPipeline(
   // 1. Parse configurations
   const propsConf = parseConf(propsConfInput, 'props.conf');
   const transformsConf = parseConf(transformsConfInput, 'transforms.conf');
-  diagnostics.push(...propsConf.errors, ...transformsConf.errors);
+  // Not push(...errors): a conf of a few hundred thousand malformed lines
+  // would pass that many arguments and overflow the stack.
+  for (const error of [...propsConf.errors, ...transformsConf.errors]) diagnostics.push(error);
 
   // Config-level lint: everything here reads the conf files alone, not which
   // stanzas match this event, and none of it changes what the pipeline does.

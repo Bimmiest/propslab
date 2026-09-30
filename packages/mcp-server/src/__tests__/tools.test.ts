@@ -8,7 +8,10 @@ import {
   handleValidate,
   MAX_TOTAL_CONF_CHARS,
   validateInputShape,
+  workerFailure,
 } from '../tools';
+import { WorkerStartTimeoutError, WorkerTimeoutError } from '../runInWorker';
+import type { RunProgress } from '../progress';
 import { z } from 'zod';
 import { explainOutputShape, validateOutputShape } from '../outputSchemas';
 import { MAX_RESPONSE_BYTES } from '../responseBudget';
@@ -79,8 +82,8 @@ describe('simulate', () => {
 
   it('keeps the response bounded however many events the sample breaks into (#351)', async () => {
     // 100k one-character lines, which break into as many events as the
-    // engine's cap allows (RunLimits.maxEvents, #479): processingSteps must
-    // follow max_events, not carry every event's trace steps.
+    // engine's cap allows (RunLimits.maxEvents, #479): the response follows
+    // max_events, and does not carry every event's trace steps.
     const result = await handleSimulate(
       simulateArgs({
         raw: 'a\n'.repeat(100_000),
@@ -96,17 +99,22 @@ describe('simulate', () => {
       expect.stringMatching(/^Line breaking stopped at 25,000 events/),
     ]);
     expect(out.returnedEvents).toBe(1);
-    expect(out.processingSteps).toEqual(out.events[0].processingTrace);
-    expect(out.truncationNote).toMatch(/processingSteps/);
+    expect(out).not.toHaveProperty('processingSteps');
+    expect(out.truncationNote).toMatch(/max_events/);
   }, 20_000);
 
   it('holds the response under the size cap when max_events would exceed it (#351)', async () => {
     // 300 events of 3,000 CJK characters (under TRUNCATE's 10,000 bytes),
-    // each with a SEDCMD step carrying before/after snapshots of it: 900k
-    // characters in, but some 16 MB on the wire if returned whole — three
+    // each with two SEDCMD steps carrying before/after snapshots of it: 900k
+    // characters in, but some 27 MB on the wire if returned whole — three
     // bytes a character, in both copies (#414).
     const raw = `${'日'.repeat(3_000)}\n`.repeat(300);
-    const props = ['[access_log]', 'SHOULD_LINEMERGE = false', 'SEDCMD-x = s/日/本/g'].join('\n');
+    const props = [
+      '[access_log]',
+      'SHOULD_LINEMERGE = false',
+      'SEDCMD-x = s/日/本/g',
+      'SEDCMD-y = s/本/日/g',
+    ].join('\n');
     const result = await handleSimulate(
       simulateArgs({ raw, props_conf: props, max_events: 500, include_snapshots: true }),
       WORKER_PATH,
@@ -170,7 +178,32 @@ describe('simulate', () => {
     );
     expect(suspect).toBeDefined();
     expect(suspect.stanza).toBe('evil');
-    expect(out.guidance).toMatch(/retry/i);
+    // Stalled on the one event, so the pattern is blamed and a retry is not advised.
+    expect(out.progress).toEqual({ phase: 'running', stage: 'EXTRACT', events: 1 });
+    expect(out.message).toMatch(/single event/);
+    expect(out.guidance).toMatch(/Do not simply retry/);
+  }, 20_000);
+
+  it('does not blame a regex when a large sample simply needs longer (#488)', async () => {
+    // 20,000 events, each through a dozen cheap EXTRACTs and EVALs: nothing
+    // is slow about any one of them, the budget is just too small for the
+    // volume (the same run completes in well over a second).
+    const props = [
+      '[access_log]',
+      'SHOULD_LINEMERGE = false',
+      ...Array.from({ length: 6 }, (_, i) => `EXTRACT-e${i} = (?<f${i}>\\w)=`),
+      ...Array.from({ length: 6 }, (_, i) => `EVAL-v${i} = f${i} . "${i}"`),
+    ].join('\n');
+    const result = await handleSimulate(
+      simulateArgs({ raw: 'a=1\n'.repeat(20_000), props_conf: props, timeout_ms: 100 }),
+      WORKER_PATH,
+    );
+    const out = payload(result);
+    expect(out.error).toBe('timeout');
+    expect(out.progress.phase).toMatch(/running|finishing/);
+    expect(out.message).not.toMatch(/likeliest cause/);
+    expect(out.guidance).toMatch(/larger timeout_ms/);
+    expect(out.guidance).not.toMatch(/Do not simply retry/);
   }, 20_000);
 });
 
@@ -349,8 +382,7 @@ describe('lookup_directive', () => {
 });
 
 // The per-field limits admit 20 layers of 1M characters per file; the
-// combined bound keeps a call inside what the worker heap and the timeout
-// path's main-thread re-parse were sized for.
+// combined bound keeps a call inside what the worker heap was sized for.
 describe('conf size bound', () => {
   // Half the limit plus one in each file: each alone is under the combined
   // limit, together over. (As one flat string it exceeds the 1M per-field
@@ -410,6 +442,154 @@ describe('conf size bound', () => {
     );
     expect(result.isError).toBeUndefined();
   }, 20_000);
+});
+
+describe('the timeout path (#468)', () => {
+  // Just under MAX_TOTAL_CONF_CHARS: one EXTRACT continued over 660,000
+  // lines. Parsing it used to be quadratic, and a timeout parsed it again on
+  // the server's own thread — 1.98M characters stalled the event loop for
+  // about two minutes, with no responses, cancellations or new calls.
+  const pathological = `[st]\nEXTRACT-a = x\\\n${'a\\\n'.repeat(660_000)}`;
+  const HANG_WORKER = fileURLToPath(new URL('./fixtures/hangWorker.cjs', import.meta.url));
+
+  /** Runs `call` while measuring the longest the event loop went without a turn. */
+  async function withLoopWatch<T>(call: () => Promise<T>): Promise<{ result: T; maxGapMs: number; elapsedMs: number }> {
+    let last = performance.now();
+    let maxGapMs = 0;
+    const ticker = setInterval(() => {
+      const now = performance.now();
+      maxGapMs = Math.max(maxGapMs, now - last);
+      last = now;
+    }, 10);
+    const start = performance.now();
+    try {
+      const result = await call();
+      return { result, maxGapMs, elapsedMs: performance.now() - start };
+    } finally {
+      clearInterval(ticker);
+    }
+  }
+
+  it('never parses the conf on the server thread when a run times out', async () => {
+    // The fixture spins without posting anything, so the error has only
+    // what the server itself knows; anything more would have to come from
+    // parsing the conf here.
+    for (const call of [
+      () => handleSimulate(simulateArgs({ props_conf: pathological, timeout_ms: 200 }), HANG_WORKER),
+      () => handleValidate({ props_conf: pathological, transforms_conf: '', timeout_ms: 200 }, HANG_WORKER),
+    ]) {
+      const { result, maxGapMs, elapsedMs } = await withLoopWatch(call);
+      const out = payload(result);
+      expect(out.error).toBe('timeout');
+      expect(out).not.toHaveProperty('regex_directives');
+      expect(out.message).not.toMatch(/backtrack/);
+      expect(elapsedMs).toBeLessThan(5_000);
+      expect(maxGapMs).toBeLessThan(1_000);
+    }
+  }, 30_000);
+
+  it('answers within a bound on a pathological conf through the real worker', async () => {
+    for (const call of [
+      () => handleSimulate(simulateArgs({ props_conf: pathological, timeout_ms: 100 }), WORKER_PATH),
+      () => handleValidate({ props_conf: pathological, transforms_conf: '', timeout_ms: 100 }, WORKER_PATH),
+      () =>
+        handleExplainPrecedence(
+          { file: 'props.conf', conf: pathological, index: 'main', host: 'h', source: 's', timeout_ms: 100 },
+          WORKER_PATH,
+        ),
+    ]) {
+      const { result, maxGapMs, elapsedMs } = await withLoopWatch(call);
+      // Linear now, so the run may well finish inside its budget; either way
+      // the answer comes promptly and the server's loop keeps turning.
+      expect(['timeout', undefined]).toContain(payload(result).error);
+      expect(elapsedMs).toBeLessThan(10_000);
+      expect(maxGapMs).toBeLessThan(1_000);
+    }
+  }, 60_000);
+});
+
+describe('timeout budget and advice (#488)', () => {
+  it('does not charge worker start-up to a small budget', async () => {
+    // Start-up measured 60ms warm and 118ms cold against the 100ms minimum,
+    // so a correct conf could time out before its run began. The run itself
+    // takes a few milliseconds. (runInWorker.test.ts pins the rule with a
+    // fixture whose start-up alone outlasts its budget.)
+    for (let i = 0; i < 3; i++) {
+      const result = await handleValidate(
+        { props_conf: ACCESS_PROPS, transforms_conf: '', timeout_ms: 100 },
+        WORKER_PATH,
+      );
+      expect(payload(result)).not.toHaveProperty('error');
+    }
+  }, 20_000);
+
+  it('says the run was still parsing, and lists no regex, when the conf itself is the cost', async () => {
+    // About 72,000 EXTRACTs: parsing them (twice, with the suspect list) takes
+    // longer than the budget, before any pattern runs.
+    const lines = ['[access_log]'];
+    for (let i = 0, n = 0; n < MAX_TOTAL_CONF_CHARS - 100; i++) {
+      const line = `EXTRACT-${i} = (a+)+b${i}`;
+      lines.push(line);
+      n += line.length + 1;
+    }
+    const out = payload(
+      await handleSimulate(simulateArgs({ props_conf: lines.join('\n'), timeout_ms: 100 }), WORKER_PATH),
+    );
+    expect(out.error).toBe('timeout');
+    expect(out.progress).toEqual({ phase: 'parsing' });
+    expect(out.message).toMatch(/still parsing the conf/);
+    expect(out).not.toHaveProperty('regex_directives');
+  }, 20_000);
+
+  const timeout = (progress?: RunProgress, budget = 5_000) =>
+    new WorkerTimeoutError(budget, { suspects: [], total: 0 }, progress);
+  const advise = (err: unknown, context: Parameters<typeof workerFailure>[1]) =>
+    payload(workerFailure(err, context));
+
+  it('advises from where the run stopped', () => {
+    const simulate = { op: 'simulate', rawChars: 50 } as const;
+    // Shaping the response: ask for less.
+    expect(advise(timeout({ phase: 'finishing' }), simulate).guidance).toMatch(/max_events/);
+    expect(advise(timeout({ phase: 'finishing' }), { op: 'validate' }).guidance).toMatch(/less conf text/);
+    // Validate and explain run no directive's regex.
+    for (const op of ['validate', 'explain'] as const) {
+      const out = advise(timeout({ phase: 'running' }), { op });
+      expect(out.message).toMatch(/no pattern is backtracking/);
+      expect(out).not.toHaveProperty('regex_directives');
+    }
+    // Breaking a small sample: the LINE_BREAKER pattern stalled.
+    const small = advise(timeout({ phase: 'running', stage: 'LINE_BREAKER', events: 0 }), simulate);
+    expect(small.message).toMatch(/breaking a 50-character sample.*likeliest cause/);
+    expect(small.regex_directives).toEqual([]);
+    // Breaking a large one may just be volume.
+    const large = advise(timeout({ phase: 'running', stage: 'LINE_BREAKER', events: 0 }), {
+      op: 'simulate',
+      rawChars: 900_000,
+    });
+    expect(large.message).toMatch(/simply large/);
+    // Many events: either cause, so both remedies.
+    const many = advise(timeout({ phase: 'running', stage: 'EVAL', events: 5_000 }), simulate);
+    expect(many.message).toMatch(/EVAL, over 5000 events/);
+    expect(many.guidance).toMatch(/larger timeout_ms \(at most 30000\).*Repair/);
+    // A simulate run that has not reached a stage is still reading the conf.
+    expect(advise(timeout({ phase: 'running' }), simulate).message).toMatch(/still parsing/);
+    expect(advise(timeout(undefined), simulate).message).toMatch(/still parsing/);
+  });
+
+  it('does not suggest a larger budget than the schema allows', () => {
+    const out = advise(timeout({ phase: 'running', stage: 'EVAL', events: 5_000 }, 30_000), {
+      op: 'simulate',
+      rawChars: 50,
+    });
+    expect(out.guidance).not.toMatch(/timeout_ms/);
+    expect(out.budget_ms).toBe(30_000);
+  });
+
+  it('reports a worker that never started as its own error, not a timeout of the input', () => {
+    const out = advise(new WorkerStartTimeoutError(10_000), { op: 'validate' });
+    expect(out).toMatchObject({ error: 'start_timeout', limit_ms: 10_000 });
+    expect(out.guidance).toMatch(/Nothing is wrong with the input/);
+  });
 });
 
 describe('collectRegexSuspects', () => {

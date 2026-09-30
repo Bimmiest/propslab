@@ -108,7 +108,7 @@ export default defineConfig({
       // excluded as "cannot be instantiated under node"; main.test.tsx and the
       // worker tests do instantiate them, so they are measured like the rest.
       thresholds: {
-        statements: 90,
+        statements: 92,
         branches: 84,
         functions: 89,
         lines: 92,
