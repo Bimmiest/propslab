@@ -1,0 +1,15 @@
+{
+  "modelName": "Gadgets",
+  "objects": [
+    {
+      "objectName": "All_Gadgets",
+      "parentName": "BaseEvent",
+      "fields": [{ "fieldName": "model", "comment": {} }]
+    },
+    {
+      "objectName": "Gadget_Errors",
+      "parentName": "All_Gadgets",
+      "fields": [{ "fieldName": "serial", "comment": {} }, { "fieldName": "owner", "comment": {} }]
+    }
+  ]
+}

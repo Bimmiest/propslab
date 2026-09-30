@@ -22,7 +22,7 @@
 
 import { readFileSync, readdirSync, existsSync, writeFileSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const OUTPUT = resolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -220,9 +220,11 @@ const VALIDATION_OVERRIDE = {
   Ticket_Management: ['dest', 'ticket_id'],
 };
 
+// Throws rather than exiting so the transformation can be driven from a test
+// (src/__tests__/generateCimModels.test.ts); the command line below turns it
+// into a message and a non-zero exit.
 function die(message) {
-  console.error(`error: ${message}`);
-  process.exit(1);
+  throw new Error(message);
 }
 
 function locate(input) {
@@ -296,7 +298,9 @@ function validationKeys(modelsDir) {
   return keys;
 }
 
-function build(modelsDir) {
+// `include` is a parameter so the test can run the real transformation over a
+// small fixture with its own table instead of the 29 real datasets.
+function build(modelsDir, include = INCLUDE) {
   const keys = validationKeys(modelsDir);
   const entries = [];
   const seen = new Set();
@@ -307,7 +311,7 @@ function build(modelsDir) {
 
     for (const object of doc.objects) {
       const key = `${doc.modelName}/${object.objectName}`;
-      const spec = INCLUDE[key];
+      const spec = include[key];
       if (!spec) continue;
       seen.add(key);
 
@@ -338,7 +342,7 @@ function build(modelsDir) {
     }
   }
 
-  const missing = Object.keys(INCLUDE).filter((key) => !seen.has(key));
+  const missing = Object.keys(include).filter((key) => !seen.has(key));
   if (missing.length > 0) {
     die(
       `these datasets are no longer in the add-on: ${missing.join(', ')}\n` +
@@ -357,6 +361,12 @@ function render(entries, version) {
   out.push('// CIM data model definitions, derived from the Splunk Common Information Model');
   out.push(`// add-on (Splunk_SA_CIM) v${version} as shipped on Splunkbase — specifically`);
   out.push('// `default/data/models/*.json`, which is what Splunk itself runs.');
+  out.push('//');
+  out.push("// LICENCE: the add-on is Splunk Inc.'s and is distributed under Splunk's terms,");
+  out.push('// not an open-source licence. The dataset, field, and tag identifiers below are');
+  out.push("// derived from it for interoperability and are NOT covered by this project's");
+  out.push('// MIT licence — see the NOTICE file at the repository root. The add-on itself');
+  out.push('// is not vendored here and is not needed to build, test, or run the app.');
   out.push('//');
   out.push('// Regenerate with `node scripts/generate-cim-models.js <path-to-Splunk_SA_CIM>`');
   out.push('// rather than editing by hand. How each entry is derived (see #37 — hand-written');
@@ -411,10 +421,24 @@ function render(entries, version) {
   return out.join('\n');
 }
 
-const input = process.argv[2];
-if (!input) die('usage: node scripts/generate-cim-models.js <path-to-extracted-Splunk_SA_CIM>');
+export { INCLUDE, locate, build, render };
 
-const { models, version } = locate(resolve(input));
-const entries = build(models);
-writeFileSync(OUTPUT, render(entries, version));
-console.log(`CIM ${version}: wrote ${entries.length} datasets to ${OUTPUT}`);
+function main() {
+  const input = process.argv[2];
+  if (!input) die('usage: node scripts/generate-cim-models.js <path-to-extracted-Splunk_SA_CIM>');
+
+  const { models, version } = locate(resolve(input));
+  const entries = build(models);
+  writeFileSync(OUTPUT, render(entries, version));
+  console.log(`CIM ${version}: wrote ${entries.length} datasets to ${OUTPUT}`);
+}
+
+// Importing this file (the unit test does) must not write anything.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  try {
+    main();
+  } catch (error) {
+    console.error(`error: ${error instanceof Error ? error.message : String(error)}`);
+    process.exit(1);
+  }
+}
