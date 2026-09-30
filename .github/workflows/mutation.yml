@@ -120,6 +120,12 @@ jobs:
               src/hooks/workerLifecycle.ts 'src/store/*.ts' \
             | grep -vE '(/__tests__/|\.test\.ts$|^src/engine/types\.ts$|^src/engine/scaffold/types\.ts$|^src/engine/[^/]*Worker\.ts$|^src/engine/cim/cimModelsData\.ts$|^src/engine/registry/|^src/engine/directiveSupport\.ts$)' \
             | paste -sd, - || true)
+          # A reformat touches every file and changes nothing a mutant could
+          # test: the files whose change Prettier prints identically on both
+          # sides are dropped, each named in the summary.
+          if [ -n "$files" ]; then
+            files=$(node scripts/drop-format-only.mjs "origin/$BASE_REF" "$files" 2>> "$GITHUB_STEP_SUMMARY")
+          fi
           # A PR that only touches the mutation setup (Stryker or vitest config,
           # this workflow) still proves it works: one small, well-tested file.
           if [ -z "$files" ]; then
