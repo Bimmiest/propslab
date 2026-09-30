@@ -28,6 +28,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { gzipSync } from 'node:zlib';
+import { documentAssets } from './lib/htmlAssets.mjs';
 
 /**
  * Budgets in kB (1000 bytes, as Vite reports) of gzip output, keyed by
@@ -89,7 +90,9 @@ try {
 }
 const initialFiles = [
   ...new Set(
-    [...html.matchAll(/<(?:script|link)\b[^>]*\b(?:src|href)="\/assets\/([^"]+)"/g)].map((m) => m[1]),
+    documentAssets(html)
+      .filter((r) => r.url.startsWith('/assets/'))
+      .map((r) => r.url.slice('/assets/'.length)),
   ),
 ].filter((f) => /\.(js|css)$/.test(f));
 const initialKb = initialFiles.reduce((sum, f) => sum + gzipSync(readFileSync(join(dir, f))).length / 1000, 0);

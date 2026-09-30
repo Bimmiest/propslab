@@ -101,6 +101,7 @@ All notable changes to Propslab are documented here, newest first. Entries say w
 ### Fixed
 
 - **Dev-dependency advisories are resolved, and `main`'s workflow lint is green again.** `brace-expansion` moves to 5.0.12 and `qs` (under Stryker) to 6.16.0, clearing three high and three moderate `npm audit` findings; an unused loop variable in the post-deploy header check no longer fails `actionlint`.
+- **The entry-graph and bundle-size gates parse `dist/index.html` instead of matching tags with a regex.** The regex missed upper-case tags, single-quoted or unquoted attributes and a `>` inside an attribute value, so a startup reference written that way escaped both checks (CodeQL `js/bad-tag-filter`).
 - **The entry chunk statically imported the whole Monaco chunk** ([#467](https://github.com/Bimmiest/propslab/issues/467)). First load fell from 1108 kB to 232 kB gzip.
 - **The windowed field tree stopped following scroll when it mounted past the threshold** ([#469](https://github.com/Bimmiest/propslab/issues/469)).
 - **A crash of a superseded worker request was blamed on the newest queued request** ([#491](https://github.com/Bimmiest/propslab/issues/491)).
