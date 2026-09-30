@@ -4,21 +4,9 @@ import { render, screen, fireEvent, within, act, waitFor } from '@testing-librar
 import { useAppStore } from '../../../../store/useAppStore';
 import { RegexTab } from '../regex';
 import type { EnrichedEvent } from '../../PreviewPanel';
-import type { SplunkEvent } from '../../../../engine/types';
+import { makeEvent } from '../../../../test/makeEvent';
 import { matchInputs } from '../../../../engine/regexMatch';
 import type { RegexMatchRequest, RegexMatchResponse } from '../../../../engine/regexMatchWorker';
-
-function makeEvent(raw: string): SplunkEvent {
-  return {
-    _raw: raw,
-    _time: null,
-    _meta: {},
-    fields: {},
-    metadata: { index: 'main', host: 'h', source: 's', sourcetype: 'st' },
-    lineNumbers: { start: 1, end: 1 },
-    processingTrace: [],
-  };
-}
 
 function makeItem(raw: string): EnrichedEvent {
   return {

@@ -8,9 +8,19 @@ name: Mutation
 on:
   # The whole engine, from scratch, held to the floor in stryker.config.mjs.
   # Later in the morning than ci.yml's weekly run so the two do not share a queue.
+  #
+  # The second schedule is the monthly run that includes static mutants (see the
+  # "static mutants" step). The `if:` conditions below tell the two apart by this
+  # exact string, so change them together.
   schedule:
     - cron: '0 8 * * 1'
+    - cron: '0 9 1 * *'
   workflow_dispatch:
+    inputs:
+      static:
+        description: 'Include static mutants (module-level constants): about three hours, reported but not gated'
+        type: boolean
+        default: false
   # Only the engine source files the PR changes are mutated, so the check costs
   # minutes whatever else is going on. Nothing is cached between runs: a PR's
   # cost never depends on how recently something else ran.
@@ -23,7 +33,10 @@ on:
       - 'packages/mcp-server/src/requestId.ts'
       - 'packages/mcp-server/src/messageLimit.ts'
       - 'packages/mcp-server/src/serialize.ts'
+      - 'src/hooks/workerLifecycle.ts'
+      - 'src/store/**'
       - 'stryker.config.mjs'
+      - 'scripts/check-mutation-canary.mjs'
       - 'vitest.config.ts'
       - 'vitest.stryker.config.ts'
       - '.github/workflows/mutation.yml'
@@ -41,8 +54,9 @@ jobs:
     runs-on: ubuntu-latest
     # A full run measured 76 minutes on a standard 4-core runner. A PR run
     # mutates a handful of files; if one outgrows 30 minutes, the PR is
-    # changing more of the engine at once than this check was sized for.
-    timeout-minutes: ${{ github.event_name == 'pull_request' && 30 || 120 }}
+    # changing more of the engine at once than this check was sized for. The
+    # static-mutant run is past three hours (stryker.config.mjs says why).
+    timeout-minutes: ${{ github.event_name == 'pull_request' && 30 || (github.event.schedule == '0 9 1 * *' || inputs.static) && 330 || 120 }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -80,6 +94,15 @@ jobs:
           node scripts/check-wasm-checksum.mjs
           node scripts/check-wasm-checksum.mjs packages/mcp-server
 
+      # One small, well-tested file, mutated first. vitest.stryker.config.ts
+      # patches the test-name filter Stryker hands vitest; if a vitest or Stryker
+      # upgrade breaks the patch, no test runs per mutant, every mutant reads as
+      # SURVIVED, and the run only looks like a low score (#508). This fails with
+      # the cause named, before the long run starts, on every trigger. It is the
+      # check `npm run test:mutation:canary` runs locally.
+      - name: Canary (the test-name shim still filters correctly)
+        run: npm run test:mutation:canary
+
       # The same scope and exclusions as `mutate` in stryker.config.mjs: tests, type-only
       # modules, worker entry points and data tables are never mutated. Deleted
       # files have nothing to mutate, so only added and modified ones count.
@@ -94,6 +117,7 @@ jobs:
           # neighbours.
           files=$(git diff --name-only --diff-filter=AM "origin/$BASE_REF...HEAD" -- 'src/engine/*.ts' 'src/engine/**/*.ts' src/utils/strftime.ts src/utils/splunkRegex.ts \
               packages/mcp-server/src/requestId.ts packages/mcp-server/src/messageLimit.ts packages/mcp-server/src/serialize.ts \
+              src/hooks/workerLifecycle.ts 'src/store/*.ts' \
             | grep -vE '(/__tests__/|\.test\.ts$|^src/engine/types\.ts$|^src/engine/scaffold/types\.ts$|^src/engine/[^/]*Worker\.ts$|^src/engine/cim/cimModelsData\.ts$|^src/engine/registry/|^src/engine/directiveSupport\.ts$)' \
             | paste -sd, - || true)
           # A PR that only touches the mutation setup (Stryker or vitest config,
@@ -122,8 +146,22 @@ jobs:
         run: npm run test:mutation -- --mutate "$FILES"
 
       - name: Mutation test (whole engine)
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && github.event.schedule != '0 9 1 * *' && !inputs.static
         run: npm run test:mutation
+
+      # Static mutants change a module-level value (a regex, a lookup table) that
+      # is built once at import, so no single test covers them and each reruns
+      # the whole suite. There are ~900 of them, in exactly the parser tables and
+      # patterns where a wrong edit matters, and the weekly run ignores them for
+      # cost (#508). Monthly, they are run. Their score is reported, not gated:
+      # the break floor was measured without them, and nobody has yet measured
+      # what it should be with them. Once a run has, a floor for this run
+      # belongs in stryker.config.mjs.
+      - name: Mutation test (whole engine, static mutants included)
+        if: github.event.schedule == '0 9 1 * *' || inputs.static
+        env:
+          MUTATION_REPORT_ONLY: '1'
+        run: npm run test:mutation -- --ignoreStatic false
 
       - name: Upload mutation report
         if: ${{ !cancelled() && (github.event_name != 'pull_request' || steps.changed.outputs.files != '') }}

@@ -14,6 +14,7 @@ import fc from 'fast-check';
 import * as monaco from 'monaco-editor/editor';
 import { ensureSplunkMonaco, PROPS_LANGUAGE_ID } from '../splunkMonacoSetup';
 import { parseConf } from '../../../engine/parser/confParser';
+import { fcSeed } from '../../../test/fcSeed';
 
 // jsdom has no matchMedia, which Monaco's theme service reads when it is created.
 vi.hoisted(() => {
@@ -126,7 +127,7 @@ describe('an indented directive is not a directive', () => {
 
 // ── The grammar and parseConf read generated files alike (#516) ─────────────
 
-fc.configureGlobal({ seed: 516, numRuns: 300 });
+fc.configureGlobal({ seed: fcSeed(516), numRuns: 300 });
 
 const fragment = fc.constantFrom('a', 'b c', '[x]', '#', '=', '(?<n>\\d+)', 'v=1', ']', '[', ' ');
 const tail = fc.constantFrom('', '', '\\', '\\\\', '\\\\\\', '\\ ', ' ');
@@ -177,5 +178,19 @@ describe('the tokenizer and parseConf agree on the lines of a generated file', (
         });
       }),
     );
+  });
+});
+
+// SplunkEditor turns quickSuggestions off in strings, so a key painted as a
+// string gets no completion while it is being typed.
+describe('a key still being typed', () => {
+  it('is not a string token, so quick suggestions still fire', () => {
+    const [, line] = tokenize('[web]\nTIME_PRE');
+    expect(line?.map((p) => p.type)).toEqual(['identifier']);
+  });
+
+  it('stays value text on a continuation line', () => {
+    const [, line] = tokenize('REGEX = a\\\nTIME_PRE');
+    expect(line?.some((p) => p.type === 'identifier')).toBe(false);
   });
 });

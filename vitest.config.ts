@@ -80,40 +80,80 @@ export default defineConfig({
         // Type-only modules compile to nothing, so they report 0% forever.
         'src/engine/types.ts',
         'src/vite-env.d.ts',
-        'src/main.tsx',
         // A generated data table: large, literal, and asserted through the
         // modules that read it rather than directly.
         'src/engine/cim/cimModelsData.ts',
-        // Worker entry points. They are a `self.onmessage` wrapper around an
-        // engine function that IS tested; a `node` test cannot instantiate one,
-        // so they would sit at 0% and drag a floor down while saying nothing.
-        // The Playwright suite exercises them against the real build.
-        'src/engine/*Worker.ts',
         // Type-only.
         'src/engine/scaffold/types.ts',
       ],
       // The floor belongs here rather than in a CI flag, so `npm run
       // test:coverage` locally gives the same verdict CI does.
       //
-      // Measured, not chosen: these are what the suite produces today, rounded
-      // down. Raise them when real work raises coverage; never lower them to
-      // make a branch green. A round target picked in advance just produces
-      // tests written to move a number.
+      // Measured, not chosen: each floor is the suite's actual figure minus one
+      // point, rounded down, and scripts/check-coverage-floors.mjs (which CI
+      // runs after this) fails when any floor is more than 3 points under the
+      // actual figure (#506). At 14-24 points of slack coverage could fall by
+      // double digits without a red build, so the ratchet was nominal. Raise a
+      // floor in the same change that raises coverage; never lower one to make a
+      // branch green. A round target picked in advance just produces tests
+      // written to move a number.
+      //
+      // Nothing is excluded to flatter these numbers. The files only the
+      // Playwright suite exercises (App.tsx, SplunkEditor.tsx,
+      // PropsConfEditor.tsx, TransformsConfEditor.tsx, editorRuntime.tsx,
+      // SimulatorView.tsx, ScaffoldModal.tsx and the `index.ts` barrels) are
+      // deliberately still counted, at or near 0%: that is the honest figure
+      // for "covered by vitest", and it is why `src/components/**` sits well
+      // below `src/engine/**`. main.tsx and src/engine/*Worker.ts were once
+      // excluded as "cannot be instantiated under node"; main.test.tsx and the
+      // worker tests do instantiate them, so they are measured like the rest.
       thresholds: {
-        statements: 76,
-        branches: 68,
-        functions: 64,
-        lines: 78,
+        statements: 90,
+        branches: 82,
+        functions: 87,
+        lines: 92,
         // The engine is held to a much higher bar than the app as a whole. It
         // is where correctness lives — a simulator whose UI is under-tested is
         // annoying, whereas one whose pipeline is under-tested is wrong — and
         // reporting only an aggregate would let engine coverage rot behind a
-        // healthy-looking global number.
+        // healthy-looking global number. The same goes, less strictly, for the
+        // other source directories: the global figure is dominated by the
+        // engine and would hide a fall in any one of them.
         'src/engine/**': {
+          statements: 96,
+          branches: 89,
+          functions: 98,
+          lines: 97,
+        },
+        'src/components/**': {
+          statements: 80,
+          branches: 73,
+          functions: 78,
+          lines: 82,
+        },
+        'src/hooks/**': {
           statements: 92,
-          branches: 83,
-          functions: 97,
+          branches: 82,
+          functions: 95,
           lines: 94,
+        },
+        'src/monaco/**': {
+          statements: 91,
+          branches: 83,
+          functions: 95,
+          lines: 92,
+        },
+        'src/store/**': {
+          statements: 99,
+          branches: 99,
+          functions: 99,
+          lines: 99,
+        },
+        'src/utils/**': {
+          statements: 93,
+          branches: 87,
+          functions: 99,
+          lines: 96,
         },
       },
     },

@@ -49,11 +49,14 @@ A few things worth knowing:
 - **Lint is typescript-eslint's `strictTypeChecked`**, with three rules tuned in `eslint.config.js`, each beside its reason: `no-non-null-assertion` is off, `no-confusing-void-expression` allows arrow shorthand, and `restrict-template-expressions` allows numbers. A deliberate use of a deprecated browser API, or a guard for something jsdom lacks, gets an inline disable saying so.
 - **`npm run build` is the type-check.** There is no separate `tsc --noEmit` step, so a type error surfaces as a build failure.
 - **The e2e suite runs against `dist/`, not the dev server.** A change that works under `vite dev` and not in a production build will pass locally and fail in CI. On a clean checkout the first run needs the browser: `npx playwright install chromium`.
-- **Coverage is a floor, and a ratchet.** The thresholds live in `vitest.config.ts` so a local run gives the same verdict CI does. The engine is held to a higher bar than the app as a whole, because a simulator whose UI is under-tested is annoying while one whose pipeline is under-tested is wrong. Raise the floor when real work raises coverage; do not lower it to make a branch green.
+- **Coverage is a floor, and a ratchet.** The thresholds live in `vitest.config.ts` (and `packages/mcp-server/vitest.config.mts`) so a local run gives the same verdict CI does. The engine is held to a higher bar than the app as a whole, because a simulator whose UI is under-tested is annoying while one whose pipeline is under-tested is wrong; `src/components`, `hooks`, `monaco`, `store` and `utils` each have a floor too, so the engine's number cannot hide a fall elsewhere. Each floor is the measured figure minus one point, and `node scripts/check-coverage-floors.mjs` (run by CI after the tests) fails when one is more than 3 points under. So a change that raises coverage also raises the floor, in the same commit; do not lower one to make a branch green. Nothing is excluded to flatter the numbers: files only the Playwright suite exercises stay counted at or near 0%.
+
+- **Test scaffolding is shared.** `src/test/makeEvent.ts` builds a `SplunkEvent` (`makeEvent(raw, { fields })`), `src/test/fakeModel.ts` a Monaco text model, and `src/test/fcSeed.ts` every fast-check seed: a property test passes `fcSeed(<its default>)` and never a bare number, so `FC_SEED` can re-seed it. The weekly `randomised` job in `ci.yml` draws a fresh `FC_SEED`, shuffles the order, and runs under another timezone and locale; it prints the seed and the command that replays the run. A new test file uses these rather than defining its own event literal or model stand-in.
+- **A test does not time itself.** Assert the operations a linear-time claim is about (calls made, work done), or let the test's own timeout be the bound; a stopwatch assertion fails on a loaded runner and passes on a fast one. The Playwright timing budgets live in their own non-retried `perf` project.
 
 ## Mutation testing
 
-Coverage says a line ran; it does not say a test would notice the line being wrong. [Stryker](https://stryker-mutator.io/) answers that by making small edits to `src/engine/**`, the two utils it runs on (`strftime.ts`, `splunkRegex.ts`), and three pure modules of the MCP server (`requestId.ts`, `messageLimit.ts`, `serialize.ts`) — flipping a `<`, emptying a string, deleting a call — and rerunning the tests that reach each one. A mutant no test fails on has *survived*, and marks behaviour nothing asserts.
+Coverage says a line ran; it does not say a test would notice the line being wrong. [Stryker](https://stryker-mutator.io/) answers that by making small edits to `src/engine/**`, the two utils it runs on (`strftime.ts`, `splunkRegex.ts`), and three pure modules of the MCP server (`requestId.ts`, `messageLimit.ts`, `serialize.ts`), the worker lifecycle (`src/hooks/workerLifecycle.ts`) and the store (`src/store`) — flipping a `<`, emptying a string, deleting a call — and rerunning the tests that reach each one. A mutant no test fails on has *survived*, and marks behaviour nothing asserts.
 
 ```bash
 npm run test:mutation                  # full run; about 75 minutes on 4 cores
@@ -61,14 +64,15 @@ npm run test:mutation -- --mutate src/engine/processors/kvMode.ts   # one file, 
 npm run test:mutation -- --mutate packages/mcp-server/src/requestId.ts
 ```
 
-Every run includes those modules' tests, which need the MCP server installed and built (`npm ci --prefix packages/mcp-server && npm run build --prefix packages/mcp-server`): one of them talks to the built server. Those three score 90.9% together.
+Every run includes those modules' tests, which need the MCP server installed and built (`npm ci --prefix packages/mcp-server && npm run build --prefix packages/mcp-server`): one of them talks to the built server. Those three score 90.9% together; the worker lifecycle scores 91% and the store 82% (its setters have their own tests in `useAppStore.actions.test.ts`).
 
-Open `reports/mutation/mutation.html` for the survivors, line by line. The engine scores 79.6%, and `thresholds.break` in [`stryker.config.mjs`](stryker.config.mjs) holds it at 78% — a floor and a ratchet, like coverage.
+Open `reports/mutation/mutation.html` for the survivors, line by line. The engine scores 79.6%, and `thresholds.break` in [`stryker.config.mjs`](stryker.config.mjs) holds it at 78% — a floor and a ratchet, like coverage. `thresholds.low` (82) is the warning band's edge: a score between the two passes, flagged in the report, so a slide toward the floor is seen before the build goes red.
 
-- **It is not in `ci.yml`.** A full run is too slow for every PR. [`mutation.yml`](.github/workflows/mutation.yml) runs the whole engine weekly and on demand, and on a PR mutates only the engine source files the PR changes, holding those to the same floor. A PR that touches a weakly tested file adds the tests that bring it up.
+- **It is not in `ci.yml`.** A full run is too slow for every PR. [`mutation.yml`](.github/workflows/mutation.yml) runs the whole engine weekly and on demand (and, monthly, once with static mutants included, below), and on a PR mutates only the engine source files the PR changes, holding those to the same floor. A PR that touches a weakly tested file adds the tests that bring it up.
 - **Kill a survivor with a test that asserts behaviour**, not one written to move the number. Some survivors are *equivalent* — the mutant cannot change any result (a cache miss that recomputes the same value, a `??` whose left side is never nullish). Leave those.
-- **Module-level constants are skipped** (`ignoreStatic`): they cost a full suite each, and there are about 900. Pass `--ignoreStatic false` when you change one.
-- **`vitest.stryker.config.ts` carries a compatibility shim** for `@stryker-mutator/vitest-runner` 10 on vitest 5, without which every mutant inside a `describe()` is reported as surviving. When you bump either package, check that a run still kills mutants; the comment in that file says what to look for.
+- **Module-level constants are skipped** (`ignoreStatic`): they cost a full suite each, and there are about 900. Pass `--ignoreStatic false` when you change one. `mutation.yml` also runs them on the first of every month (or on demand with the `static` input): about three hours, and its score is reported rather than gated, because the `break` floor was measured without them. When that run has a baseline, give it a floor of its own.
+- **`src/monaco` is not mutated, yet.** Measured once (#508): 1,200 mutants, 18 minutes on 4 cores, and a score of 66.9% (`splunkConfHover.ts` 42%, `splunkConfCompletion.ts` 57%, `timePrefixMatcher.ts` 67%; `splunkConfFolding.ts` and `markdown.ts` are above 90%). Adding it now would fail the 78% floor on every PR that touches a provider, before it made a single one better. The way in: raise the two weakest files with tests that assert the provider's output, then add `src/monaco/*.ts` to `mutate` in `stryker.config.mjs` and `src/monaco/__tests__/*.test.ts` to `include` in `vitest.stryker.config.ts`.
+- **`vitest.stryker.config.ts` carries a compatibility shim** for `@stryker-mutator/vitest-runner` 10 on vitest 5, without which every mutant inside a `describe()` is reported as surviving. When you bump either package, check that a run still kills mutants; the comment in that file says what to look for. `npm run test:mutation:canary` does it: it mutates one small, thoroughly tested file (`wildcardMatch.ts`, about 40 seconds) and `scripts/check-mutation-canary.mjs` fails if nearly all its mutants survive, which is what a broken shim looks like. `mutation.yml` runs it before every mutation run.
 
 ## Where a change goes
 
@@ -89,6 +93,8 @@ The module lives in its own repository, [`Bimmiest/pcre2-wasm-utf16`](https://gi
 ### The Radix overrides
 
 The exact `@radix-ui/*` pins in `package.json`'s `overrides` dedupe the Radix primitives ([#147](https://github.com/Bimmiest/propslab/issues/147), [#152](https://github.com/Bimmiest/propslab/pull/152)). `cmdk` asks for older ranges of them than `react-dialog`, `react-tooltip` and `react-context-menu` resolve to, and without the overrides npm hoisted cmdk's copies and nested a second copy of each primitive under every current Radix package — both shipped, since they are distinct files (about 12 kB gzip at the time). The pinned versions are the ones `@radix-ui/react-dialog` pins exactly, directly or through its own dependencies. When you bump a Radix package, move the overrides to the versions it pins, and check with `npm ls @radix-ui/react-primitive` that there is still one copy.
+
+One override is not Radix: `typed-rest-client` → `qs`. `@stryker-mutator/core` 10 asks for `typed-rest-client ~2.3.0`, which pins `qs` 6.15.1 exactly, and that version carries denial-of-service advisories (GHSA-q8mj-m7cp-5q26, GHSA-x5fp-wj9c-mxmx, GHSA-4mjr-xmp4-gh2g). The override lifts it to a fixed release; drop it once Stryker depends on a `typed-rest-client` whose own `qs` is fixed.
 
 ## Adding or changing a simulated directive
 
@@ -164,13 +170,15 @@ header first — the fields must come from the model JSON, not from memory or do
 
 **Gate:** All open fidelity questions (issues labeled `question`) must be resolved or closed before a release. A fidelity question represents an outstanding discrepancy with Splunk that needs investigation or clarification.
 
+**What a release is here.** There is no release workflow. Every commit that lands on `main` with a passing CI run is deployed to production by `azure-static-web-apps.yml` (it runs when CI finishes, builds that commit, then checks the served headers), and nothing is triggered by a tag. A release is therefore a marker: a version number in `package.json` (shown in the status bar), a dated heading in `CHANGELOG.md`, and optionally a tag on the merge commit.
+
 **Release checklist:**
 
-1. Move `CHANGELOG.md` `Unreleased` section to a new version heading with today's date (e.g., `## [1.2.3] - 2026-09-29`)
-2. Update `package.json` `version` field to the new version
-3. Create a signed tag: `git tag -s vX.Y.Z -m "Release X.Y.Z"` (signing requires GPG setup)
-4. Push the tag: `git push origin vX.Y.Z`
-5. Verify the release workflow succeeds and the environment check is green
-6. Confirm the deployment to the production environment is complete
+1. Check the fidelity gate above: no open issue labeled `question`.
+2. On a branch, rename the `## Unreleased` heading in `CHANGELOG.md` to `## x.y.z — YYYY-MM-DD` (an em dash, as in the existing headings, e.g. `## 1.2.0 — 2026-09-19`) and put a fresh, empty `## Unreleased` above it.
+3. Set the version in `package.json` and `package-lock.json` to `x.y.z` (`npm version x.y.z --no-git-tag-version` does both).
+4. Open a pull request and merge it once CI is green. Merging is what deploys: watch the "Azure Static Web Apps CI/CD" run on `main` until "Verify the deployed headers" passes.
+5. Optionally tag the merge commit, `git tag -s vx.y.z <sha> -m "Release x.y.z"` then `git push origin vx.y.z` (`-s` needs a GPG or SSH signing key; without one use `-a`). The tag is a bookmark for people; no workflow reads it.
+6. The `production` environment and `main`'s protection are verified by `environment.yml`, weekly. It has no per-release trigger; if the release touched repository settings, run it from the Actions tab (`workflow_dispatch`) and expect it to pass.
 
-**Note:** `packages/mcp-server` is versioned independently. Update its `package.json` and tag releases separately as `mcp-server-vX.Y.Z` if needed.
+**Note:** `packages/mcp-server` is versioned independently and is not published anywhere (its `package.json` is `private`). Its version, which the server reports in the MCP `initialize` handshake, changes in `packages/mcp-server/package.json` and needs no separate release; if you want a bookmark for it, tag `mcp-server-vx.y.z` the same way.
