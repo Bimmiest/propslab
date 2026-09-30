@@ -119,6 +119,14 @@ export interface ManagedWorker<TReq> {
    * request supersedes the older ones.
    */
   forget: () => void;
+  /**
+   * A message the requests that follow rely on having been sent first — the
+   * inputs a live tester matches against (`WorkerInputsMessage`). Sent now to
+   * the current worker, if there is one, and first to every worker built
+   * after, so a request replayed on a replacement finds it there too. Not a
+   * request: nothing is tracked, timed or answered.
+   */
+  setInputs: (message: unknown) => void;
   /** Terminate the worker, forget everything and reset the cap. */
   dispose: () => void;
 }
@@ -157,6 +165,8 @@ class ManagedWorkerImpl<TReq extends { id: number }, TRes extends { id: number }
    * when it fires, it does nothing, and the next request arms it again.
    */
   private loadTimer: ReturnType<typeof setTimeout> | null = null;
+  /** See `setInputs`; posted to each worker as it is built. */
+  private inputs: { message: unknown } | null = null;
 
   constructor(config: ManagedWorkerConfig<TReq, TRes>) {
     this.config = config;
@@ -238,6 +248,7 @@ class ManagedWorkerImpl<TReq extends { id: number }, TRes extends { id: number }
     w.onerror = (e: Event) => {
       if (w === this.worker) this.fail((e as Partial<ErrorEvent>).message ?? '');
     };
+    if (this.inputs) w.postMessage(this.inputs.message);
     return w;
   }
 
@@ -348,10 +359,16 @@ class ManagedWorkerImpl<TReq extends { id: number }, TRes extends { id: number }
     this.deferred = [];
   };
 
+  setInputs = (message: unknown): void => {
+    this.inputs = { message };
+    this.worker?.postMessage(message);
+  };
+
   dispose = (): void => {
     this.takeAll();
     this.discard();
     this.loadFailures = 0;
+    this.inputs = null;
   };
 }
 

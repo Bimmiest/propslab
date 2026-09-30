@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRegexMatch } from '../../../../hooks/useRegexMatch';
 import type { RegexMatchInfo } from '../../../../engine/regexMatch';
-import type { EnrichedEvent } from '../../PreviewPanel';
+import type { EnrichedEvent } from '../../enrichEvents';
 import { NO_RESULTS, alignResults, countMatched } from './regexLogic';
 
 export interface RegexTabProps {

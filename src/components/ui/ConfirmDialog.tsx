@@ -1,11 +1,10 @@
 import type { ReactNode } from 'react';
-import { Icon } from './Icon';
-import { Overlay } from './Overlay';
+import { DialogButton, DialogFooter, DialogFrame, DialogHeader } from './DialogFrame';
 
 /**
- * A yes/no confirmation in the app's dialog style (the DirectiveDialog shell),
- * rather than window.confirm: that one blocks the page, cannot be themed, and
- * reads to a screen reader as whatever the browser chrome says.
+ * A yes/no confirmation in the app's dialog style (`DialogFrame`), rather than
+ * window.confirm: that one blocks the page, cannot be themed, and reads to a
+ * screen reader as whatever the browser chrome says.
  *
  * Radix focuses the first control on open, which is Cancel: the safe answer is
  * the one Enter or Space picks by accident.
@@ -26,7 +25,7 @@ export function ConfirmDialog({
   onCancel: () => void;
 }) {
   return (
-    <Overlay
+    <DialogFrame
       open={open}
       onClose={onCancel}
       label={title}
@@ -35,37 +34,16 @@ export function ConfirmDialog({
       // screen reader hears on open. The visible copy below is hidden from the
       // accessibility tree so it is not announced a second time.
       description={children}
-      containerClassName="fixed inset-0 z-50 flex items-start justify-center pt-[20vh] px-4"
-      className="w-full max-w-md rounded-xl overflow-hidden shadow-2xl"
-      style={{ backgroundColor: 'var(--color-bg-elevated)', border: '1px solid var(--color-border)' }}
+      // The dialog is already named by `title` (the Overlay's Title).
+      header={<DialogHeader icon="warning" iconClassName="text-[var(--color-warning)]" title={title} titleHidden />}
+      footer={
+        <DialogFooter>
+          <DialogButton variant="cancel" onClick={onCancel}>Cancel</DialogButton>
+          <DialogButton variant="danger" onClick={onConfirm}>{confirmLabel}</DialogButton>
+        </DialogFooter>
+      }
     >
-      <div>
-        <div className="flex items-center gap-2 px-4 h-11 shrink-0" style={{ borderBottom: '1px solid var(--color-border)' }}>
-          <Icon name="warning" className="w-4 h-4 text-[var(--color-warning)]" />
-          {/* The dialog is already named by `title` (the Overlay's Title). */}
-          <span aria-hidden="true" className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>{title}</span>
-        </div>
-
-        <div aria-hidden="true" className="p-4 text-sm" style={{ color: 'var(--color-text-secondary)' }}>{children}</div>
-
-        <div className="flex items-center justify-end gap-2 px-4 py-3" style={{ borderTop: '1px solid var(--color-border)' }}>
-          <button
-            type="button"
-            onClick={onCancel}
-            className="px-3 py-1.5 text-sm rounded-md cursor-pointer border-none text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-tertiary)]"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={onConfirm}
-            className="px-3 py-1.5 text-sm rounded-md cursor-pointer border-none font-medium text-[var(--color-text-on-error)]"
-            style={{ backgroundColor: 'var(--color-error)' }}
-          >
-            {confirmLabel}
-          </button>
-        </div>
-      </div>
-    </Overlay>
+      <div aria-hidden="true" className="p-4 text-sm" style={{ color: 'var(--color-text-secondary)' }}>{children}</div>
+    </DialogFrame>
   );
 }

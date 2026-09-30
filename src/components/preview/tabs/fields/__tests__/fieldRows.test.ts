@@ -5,6 +5,7 @@ import {
 } from '../fieldRows';
 import type { ProcessingStep, SplunkEvent } from '../../../../../engine/types';
 import { makeEvent } from '../../../../../test/makeEvent';
+import { toViewResult } from '../../../../../utils/viewResult';
 
 function eventWith(fields: SplunkEvent['fields'], processingTrace: ProcessingStep[] = []): SplunkEvent {
   return makeEvent('', { fields, processingTrace });
@@ -48,6 +49,48 @@ describe('aggregateFields', () => {
     expect(buildAliasMap(events)).toEqual(new Map([['al', 'a']]));
     expect(byName.get('a')!.aliases).toEqual(['al']);
     expect(byName.has('al')).toBe(false);
+  });
+});
+
+// The run's statistics supply the rows and counts (#496), and events that share
+// a trace array are credited once; neither may change what the table shows.
+describe('aggregateFields with the run\'s statistics', () => {
+  const extract = [{ processor: 'EXTRACT-a', phase: 'search-time' as const, description: '', fieldsAdded: ['a', 'b'] }];
+  const kv = [{ processor: 'KV_MODE', phase: 'search-time' as const, description: '', fieldsAdded: ['b', 'c'], fieldsModified: ['a'] }];
+  const raw = [
+    eventWith({ a: '1' }, extract),
+    eventWith({ a: '2', b: 'x' }, extract),
+    eventWith({ c: '3', a: '1' }, kv),
+    eventWith({ b: 'y' }, extract),
+  ];
+  const view = toViewResult({ events: raw, originalRaw: '', eventCount: raw.length, processingSteps: [], inputMetadata: raw[0]!.metadata });
+  const plain = (fields: AggregatedField[]) => fields.map((f) => ({ ...f, values: [...f.values], sources: [...f.sources], phases: [...f.phases], maskedBy: [...f.maskedBy] }));
+
+  it('shares trace arrays between events with the same steps, which is what the crediting relies on', () => {
+    expect(view.events[0]!.processingTrace).toBe(view.events[1]!.processingTrace);
+  });
+
+  it('gives the same rows, in the same order, as a walk of the events', () => {
+    const aliases = buildAliasMap(view.events);
+    const walked = aggregateFields(view.events, aliases);
+    expect(plain(aggregateFields(view.events, aliases, view.fieldStats))).toEqual(plain(walked));
+    expect(plain(walked).find((f) => f.name === 'b')).toMatchObject({ count: 2, sources: ['EXTRACT-a'] });
+    expect(plain(walked).find((f) => f.name === 'a')).toMatchObject({ count: 3, sources: ['EXTRACT-a'], maskedBy: ['KV_MODE'] });
+  });
+
+  it('credits a trace\'s step to a field in a later event when the first event lacked it', () => {
+    // `b` is not on the first EXTRACT-a event, only on later ones; KV_MODE's
+    // step lists `b` too, but the one event it ran on has none.
+    const b = aggregateFields(view.events, new Map()).find((f) => f.name === 'b');
+    expect(b?.sources).toEqual(new Set(['EXTRACT-a']));
+    expect(b?.phases).toEqual(new Set(['search-time']));
+  });
+
+  it('ignores statistics taken over other events', () => {
+    const fewer = view.events.slice(0, 2);
+    const rows = aggregateFields(fewer, new Map(), view.fieldStats);
+    expect(rows.find((f) => f.name === 'a')?.count).toBe(2);
+    expect(rows.some((f) => f.name === 'c')).toBe(false);
   });
 });
 
@@ -142,5 +185,14 @@ describe('the rows a windowed table renders (#454)', () => {
     expect(controlledRowIds(children, false, new Set())).toBeUndefined();
     expect(controlledRowIds(children, true, new Set(['p-row-1']))).toBeUndefined();
     expect(controlledRowIds(undefined, false, new Set(['p-row-1']))).toBeUndefined();
+  });
+});
+
+describe('fieldComparator — sample values (#496)', () => {
+  it('orders by the first distinct value, and treats no values as empty', () => {
+    const none = field('none');
+    const late = field('late', { values: new Set(['b', 'a']) });
+    const early = field('early', { values: new Set(['a', 'z']) });
+    expect([late, none, early].sort(fieldComparator('values', 'asc')).map((f) => f.name)).toEqual(['none', 'early', 'late']);
   });
 });

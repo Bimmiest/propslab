@@ -4,6 +4,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { CimModelsTab } from '../CimModelsTab';
 import { useAppStore } from '../../../../store/useAppStore';
 import type { ViewResult } from '../../../../utils/viewResult';
+import { computeFieldStats } from '../../../../utils/fieldStats';
 
 const initial = useAppStore.getState();
 
@@ -26,7 +27,11 @@ describe('CimModelsTab "Show matching only" (#495)', () => {
   beforeEach(() => {
     useAppStore.setState(initial, true);
     useAppStore.setState({
-      processingResult: { events: [{ fields: { src: '10.0.0.1', dest: '10.0.0.2' } }], eventCount: 1 } as unknown as ViewResult,
+      processingResult: {
+        events: [{ fields: { src: '10.0.0.1', dest: '10.0.0.2' } }],
+        eventCount: 1,
+        fieldStats: computeFieldStats([{ fields: { src: '10.0.0.1', dest: '10.0.0.2' } }]),
+      } as unknown as ViewResult,
     });
   });
 

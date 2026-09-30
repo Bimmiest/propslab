@@ -4,7 +4,7 @@ import { Icon } from './Icon';
 interface MultiSelectProps {
   label: string;
   options: string[];
-  selected: Set<string>;
+  selected: ReadonlySet<string>;
   onChange: (selected: Set<string>) => void;
   searchable?: boolean;
 }
@@ -148,7 +148,7 @@ function ClearAllButton({ onClear, triggerRef }: { onClear: () => void; triggerR
   );
 }
 
-function OptionList({ options, selected, toggle }: { options: string[]; selected: Set<string>; toggle: (value: string) => void }) {
+function OptionList({ options, selected, toggle }: { options: string[]; selected: ReadonlySet<string>; toggle: (value: string) => void }) {
   if (options.length === 0) {
     return <div className="px-3 py-2 text-xs text-[var(--color-text-muted)]">No matches</div>;
   }

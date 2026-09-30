@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useWorkerRequest } from './useWorkerRequest';
 import { probeTimestamps } from '../engine/timestampMatch';
 import type { TimeConfig, TimestampProbe } from '../engine/timestampMatch';
@@ -83,22 +83,16 @@ export function useTimestampMatch(raws: string[], config: TimeConfig): Timestamp
 
   const request = useMemo<Request>(() => ({ raws, config: stableConfig }), [raws, stableConfig]);
 
-  // The request in flight. The worker's response carries only its id, and
-  // `useWorkerRequest` drops every response but the latest request's, so what
-  // `interpret` sees answers the request posted last. Read in the worker's
-  // message handler, never during render.
-  const postedRef = useRef<Request | null>(null);
-
   const { status, data, run } = useWorkerRequest<Request, TimestampMatchResponse, Probed>({
     createWorker,
     timeoutMs: TIMESTAMP_TIMEOUT_MS,
     empty: EMPTY_PROBED,
-    interpret: (response) => ({
+    interpret: (response, req) => ({
       status: 'ok',
       data:
         response.error !== undefined
-          ? { request: postedRef.current, probes: EMPTY, error: response.error }
-          : { request: postedRef.current, probes: response.probes, error: null },
+          ? { request: req, probes: EMPTY, error: response.error }
+          : { request: req, probes: response.probes, error: null },
     }),
     runInline: (req) => {
       try {
@@ -111,10 +105,13 @@ export function useTimestampMatch(raws: string[], config: TimeConfig): Timestamp
       }
     },
     isIdle: ({ raws: r }) => r.length === 0,
+    // The page's events go to the worker once, not with every config edit,
+    // and a config edited past is skipped rather than probed.
+    sendAhead: { inputs: (req) => req.raws, rest: ({ config: c }) => ({ config: c }) },
+    latestOnly: true,
   });
 
   useEffect(() => {
-    postedRef.current = request;
     run(request);
   }, [request, run]);
 
