@@ -80,17 +80,19 @@ function safeProcessor(
 }
 
 /**
- * Guard against excessively large inputs (> 1MB). Cut back to the last line
- * break inside the cap rather than at an arbitrary character: slicing
- * mid-line hands the pipeline a half-event, which then mis-breaks,
+ * Guard against excessively large inputs (`RunLimits.maxRawChars`). Cut back
+ * to the last line break inside the cap rather than at an arbitrary character:
+ * slicing mid-line hands the pipeline a half-event, which then mis-breaks,
  * mis-timestamps, or extracts a truncated final field — a corrupt result
  * presented as a real one. Losing the partial trailing line is the honest
- * outcome, and the warning says so.
+ * outcome, and the warning says so. A line whose newline falls just past the
+ * cap is complete, and is kept.
  */
 function capInput(rawData: string, limits: RunLimits, diagnostics: ValidationDiagnostic[]): string {
-  if (rawData.length <= limits.maxRawChars) return rawData;
-  const capped = rawData.slice(0, limits.maxRawChars);
-  const lastBreak = capped.lastIndexOf('\n');
+  const max = limits.maxRawChars;
+  if (rawData.length <= max) return rawData;
+  const capped = rawData.slice(0, max);
+  const lastBreak = rawData[max] === '\n' ? max : capped.lastIndexOf('\n');
   const truncatedRaw = lastBreak > 0 ? capped.slice(0, lastBreak) : capped;
   diagnostics.push({
     level: 'warning',
@@ -370,6 +372,7 @@ export function runPipeline(
     // fields, so declining them has to be an explicit choice by a caller that does not.
     captureOffsets: options?.captureOffsets ?? true,
     diagnostics,
+    limits: options?.limits,
   });
 
   if (!rawData.trim()) {
