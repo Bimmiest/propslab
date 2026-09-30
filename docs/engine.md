@@ -49,7 +49,7 @@ This is within-stanza only — a directive that wins its stanza can still lose t
 
 Every pattern a user writes — `LINE_BREAKER`, `BREAK_ONLY_BEFORE`, `MUST_BREAK_AFTER`, `TIME_PREFIX`, `EXTRACT`, transforms `REGEX`, `SEDCMD`, `FIELD_HEADER_REGEX` and the other `INDEXED_EXTRACTIONS` patterns, eval's `match()`, `replace()`, `like()` and `mvfind()` — runs on **PCRE2 compiled to WebAssembly**, through `src/utils/splunkRegex.ts`. Splunk's regexes are PCRE, so this is the engine Splunk runs rather than a translation of it into JavaScript, and the pipeline, the editor's diagnostics, the Regex and Timestamp tabs and the MCP server all compile through that one module, so they cannot disagree about what a pattern means. The engine's own internal patterns (wildcard stanza matching, strftime formats, date recognition) stay JavaScript regexes.
 
-The WebAssembly module is [`pcre2-wasm-utf16`](https://github.com/Bimmiest/pcre2-wasm-utf16), a dependency pinned to a release tag: PCRE2 10.48, the 16-bit library in UTF mode, built reproducibly from the pinned release by its `build/build.sh` with plain clang and `wasm-ld`. Its offsets are UTF-16 code units, so they are JS string indices with nothing to transcode. See its README for the API and build.
+The WebAssembly module is [`pcre2-wasm-utf16`](https://github.com/Bimmiest/pcre2-wasm-utf16), a dependency pinned to a commit: PCRE2 10.48, the 16-bit library in UTF mode, built reproducibly from the pinned release by its `build/build.sh` with plain clang and `wasm-ld`. Its offsets are UTF-16 code units, so they are JS string indices with nothing to transcode. See its README for the API and build.
 
 ### Initialising it
 

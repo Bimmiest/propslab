@@ -1,0 +1,76 @@
+name: Supply chain
+
+# The checks that watch what Dependabot cannot see (#518), kept apart from
+# ci.yml so they can run on their own schedule and a red one does not read as a
+# broken build.
+#
+#   - The @radix-ui overrides in package.json are exact pins that Dependabot
+#     cannot bump. Left alone, a Radix release that changes what react-dialog
+#     requires leaves the overrides holding the old version back without any
+#     failure. The check compares them with what the lockfile resolves, on the
+#     pull requests that touch either and once a month on main.
+#   - .nvmrc is an exact Node version, which Dependabot does not read at all.
+#     Once a month the second job compares it with the newest release on its
+#     line and fails when it is behind: the red run is the reminder. On a pull
+#     request it only annotates, so an unrelated change is not blocked by a
+#     Node release that shipped this morning.
+on:
+  schedule:
+    # The 3rd of each month, off the hour. Monthly is often enough for a
+    # reminder about patch releases and rare enough not to become noise.
+    - cron: '41 5 3 * *'
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - package.json
+      - package-lock.json
+      - .nvmrc
+      - scripts/check-radix-overrides.mjs
+      - scripts/check-node-patch.mjs
+      - .github/workflows/supply-chain.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supply-chain-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  radix-overrides:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version-file: .nvmrc
+
+      # Reads package.json and package-lock.json and nothing else: no install.
+      - name: Radix overrides match what the lockfile resolves
+        run: node scripts/check-radix-overrides.mjs
+
+  node-patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version-file: .nvmrc
+
+      - name: .nvmrc is the newest patch of its Node line
+        # Annotate on a pull request; fail on the schedule and a manual run.
+        env:
+          WARN_ONLY: ${{ github.event_name == 'pull_request' && '--warn-only' || '' }}
+        run: |
+          # Unquoted on purpose: empty must expand to no argument at all.
+          # shellcheck disable=SC2086
+          node scripts/check-node-patch.mjs $WARN_ONLY

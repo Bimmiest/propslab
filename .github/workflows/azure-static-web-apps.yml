@@ -336,8 +336,89 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  deploy:
+  # A build attestation for the bundle the deploy job will upload (#518), and
+  # the reason it is a job of its own.
+  #
+  # Signing needs `id-token: write`, which lets a job mint an OIDC token that
+  # Sigstore turns into a certificate naming this workflow, and
+  # `attestations: write` to store the result. The build job runs the
+  # repository's and its dependencies' code (`npm ci`, `vite build`), so it is
+  # the last job to hand a signing identity to: whatever ran there could sign
+  # anything as this workflow. This job runs nothing but a checksum, the
+  # attest action and a copy, and checks nothing out, so the two permissions
+  # live here and only here. (The deploy job holds the deployment token and
+  # stays at `permissions: {}`.)
+  #
+  # What is attested is a manifest, `sha256sum` of every file in the bundle,
+  # not the files one by one: a single subject to verify, and the deploy job
+  # can then insist that the bundle is exactly that list, no extra file
+  # included. The bundle files themselves reach this job through the artifact
+  # store, whose download checks the digest recorded at upload (download-artifact
+  # fails on a mismatch), so what is signed is what the build job uploaded.
+  #
+  # This proves that the bytes came out of this workflow, at this commit of
+  # it, and were not swapped afterwards. It does not prove the build was
+  # honest: a compromised dependency in the build job could produce a bad
+  # bundle that is then faithfully attested. The `--ignore-scripts` install and
+  # the wasm checksum are the controls for that.
+  #
+  # Attestations on a private repository need GitHub Enterprise Cloud; the
+  # step fails on a plan without it, and so does the deploy, rather than
+  # shipping unattested.
+  attest:
     needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    name: Attest
+    permissions:
+      id-token: write
+      attestations: write
+    steps:
+      - name: Download build
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dist
+          path: dist
+
+      # Sorted in the C locale so the manifest does not depend on the runner's
+      # locale. Paths are relative to dist/, which is how the deploy job checks
+      # them from inside its own dist/. An empty list would attest nothing and
+      # verify anything, so it is refused.
+      - name: Write the manifest
+        run: |
+          set -euo pipefail
+          mkdir attestation
+          (cd dist && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum) > attestation/dist.sha256
+          if [ ! -s attestation/dist.sha256 ]; then
+            echo "::error::dist/ is empty; there is nothing to attest."
+            exit 1
+          fi
+          echo "Attesting $(wc -l < attestation/dist.sha256) files"
+
+      - name: Attest build provenance
+        id: attest
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: attestation/dist.sha256
+
+      # The attestation is also stored on GitHub for `gh attestation verify`,
+      # but the deploy job is given the bundle directly: verifying against a
+      # bundle needs no API call, so the deploy job's empty token is enough.
+      - name: Keep the bundle beside the manifest
+        env:
+          BUNDLE: ${{ steps.attest.outputs.bundle-path }}
+        run: cp "$BUNDLE" attestation/dist.sha256.jsonl
+
+      - name: Upload attestation
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: dist-attestation
+          path: attestation/
+          if-no-files-found: error
+          retention-days: 1
+
+  deploy:
+    needs: [build, attest]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     name: Deploy
@@ -365,7 +446,8 @@ jobs:
     # token, not with a GitHub federated identity — see the Build And Deploy
     # step. Nor anything else: downloading an artifact from the same run uses
     # the runner's own artifact credentials, not GITHUB_TOKEN, and this job
-    # checks nothing out.
+    # checks nothing out. Verifying the attestation (below) needs none of it
+    # either; see that step.
     permissions: {}
     steps:
       - name: Report commit
@@ -382,6 +464,57 @@ jobs:
         with:
           name: dist
           path: dist
+
+      - name: Download attestation
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dist-attestation
+          path: dist-attestation
+
+      # The attestation from the Attest job, checked before anything is handed
+      # to the Azure action. Two questions, both of which must hold:
+      #
+      #   1. Is the manifest signed by this workflow, on main? `gh attestation
+      #      verify` checks the Sigstore signature and the certificate's
+      #      identity: this repository, this workflow file, running from
+      #      main, on a GitHub-hosted runner. It is given the bundle the
+      #      Attest job saved, so it reads no attestation from the API and
+      #      needs no permission beyond an authenticated `gh`; the job's token
+      #      stays empty (`permissions: {}`) and is not broadened. The only
+      #      network it needs is the public Sigstore trust root.
+      #   2. Is the bundle exactly what the manifest lists? `sha256sum --check`
+      #      covers every listed file being present and unchanged; the file
+      #      list comparison covers the reverse, a file added since.
+      #
+      # Not bound to this run: an older bundle from the same workflow would
+      # verify. Nothing outside this run can write to its artifacts, and one
+      # that could would also be inside the workflow, so the run id adds
+      # little; the `sha256sum` check is what ties the manifest to these files.
+      #
+      # The token is passed to `gh` only because it refuses to start without
+      # one. It is the job's own, with no permissions, and this step does not
+      # reference the deployment secret.
+      - name: Verify build provenance
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh attestation verify dist-attestation/dist.sha256 \
+            --bundle dist-attestation/dist.sha256.jsonl \
+            --repo "$REPO" \
+            --signer-workflow "$REPO/.github/workflows/azure-static-web-apps.yml" \
+            --source-ref refs/heads/main \
+            --deny-self-hosted-runners
+          (cd dist && sha256sum --check --strict --quiet ../dist-attestation/dist.sha256)
+          listed=$(cut -c 67- dist-attestation/dist.sha256 | LC_ALL=C sort)
+          present=$(cd dist && find . -type f | LC_ALL=C sort)
+          if [ "$listed" != "$present" ]; then
+            echo "::error::dist/ does not hold exactly the files the attested manifest lists."
+            diff <(echo "$listed") <(echo "$present") || true
+            exit 1
+          fi
+          echo "dist/ matches the attested manifest ($(wc -l < dist-attestation/dist.sha256) files)"
 
       - name: Build And Deploy
         id: builddeploy

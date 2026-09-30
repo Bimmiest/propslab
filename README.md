@@ -156,7 +156,9 @@ e2e/                           # Playwright tests (production build, Chromium)
 ├── fixtures.ts                # Console/CSP error collection + readiness helpers
 ├── smoke.spec.ts
 ├── a11y.spec.ts               # axe-core over every main view, both themes
-└── perf.spec.ts               # 20k-event pipeline and tab-switch budgets
+├── perf.spec.ts               # 20k-event, regex-heavy and 3,000-field budgets
+├── perf-vitals.spec.ts        # LCP, TBT and transferred bytes on first load
+└── perfSummary.ts             # Writes the perf numbers to the job summary
 ```
 
 ## Output tabs
@@ -248,7 +250,7 @@ It exists for the things vitest structurally cannot reach, each of which has fai
 - **The regex engine.** PCRE2 is a WebAssembly asset the page and each worker load from the one same-origin URL the build fixed. The suite checks that it loads under the CSP (`'wasm-unsafe-eval'`), that every load is of that one asset, that it answers in all three workers, and that fetch, compile and instantiate stay inside a 2 s budget (about 80 ms measured).
 - **The Monaco chunk split.** `MonacoEditor.tsx` imports the slim `monaco-editor/editor` entry and `vite.config.ts` hand-rolls a `codeSplitting` group around it. A bad split type-checks, builds, and then fails to mount an editor. Each hand-picked editor contribution (suggest, code actions, folding, find, hover) has a test, since a missing one fails silently too.
 - **Accessibility.** `a11y.spec.ts` runs axe-core over every main view — simulator, each output tab, dictionary, command palette, settings, pipeline reference, mobile layout — in both themes, and fails on any WCAG 2.2 AA or best-practice violation. Nothing is excluded, Monaco included: its colours come from our own themes.
-- **Performance.** `perf.spec.ts` pastes 20k events into the raw log and holds the pipeline and every tab switch to a budget several times what a local run measures.
+- **Performance.** `perf.spec.ts` pastes 20k events into the raw log, runs a regex-heavy config over large events and renders a 3,000-field event, and holds the pipeline and every tab switch to a budget several times what a local run measures. `perf-vitals.spec.ts` loads the production build cold and holds LCP, total blocking time and transferred bytes to budgets set from measurement; per-chunk sizes alone once let the entry preload all of Monaco. These run in the `perf` Playwright project, which has no retries, and write their numbers, with the budget beside each, to the job summary.
 
 One note if you extend it: the app runs the pipeline once on mount with an empty raw log, and `runPipeline` returns a real result for empty input (`eventCount: 0`). So the status bar reads "Worker idle · 0 events" *before* anything is loaded — wait on a non-zero event count, as `loadExample` does, not on the idle state.
 
@@ -266,7 +268,7 @@ A rollback only sticks while the automatic path is paused. Unpaused, the next gr
 
 The Azure action is pinned to a commit, but that pins only its wrapper: its Dockerfile builds on `mcr.microsoft.com/appsvc/staticappsclient:stable`, a movable tag, so the client that receives the deployment token is whatever Microsoft currently publishes there. The workflow file explains why that is left as it is.
 
-Node is pinned once, in `.nvmrc`, which both workflows and `package.json`'s `engines` follow.
+Node is pinned once, in `.nvmrc`, which both workflows and `package.json`'s `engines` follow. `supply-chain.yml` checks the Radix overrides and, monthly, that `.nvmrc` is the newest patch of its line, and the deploy attests the bundle it uploads and verifies the attestation before handing it to Azure (see CONTRIBUTING.md).
 
 ## Simulation fidelity
 
