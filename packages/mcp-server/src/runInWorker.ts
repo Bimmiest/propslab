@@ -367,17 +367,17 @@ function spawnAndWait<T>(
     };
 
     // Start-up first, under its own cap; the budget replaces it on `ready`.
-    // Progress is read before terminate() is asked for, while the word still
-    // holds the worker's last write.
     const startupLimitMs = options.startupLimitMs ?? DEFAULT_STARTUP_LIMIT_MS;
     let timer = setTimeout(() => {
       settle(() => reject(new WorkerStartTimeoutError(startupLimitMs)));
     }, startupLimitMs);
-    //
-    // The verdict waits one turn of the event loop: after a stall on this
-    // thread, an expired timer runs before the answer that arrived meanwhile
-    // is read, and a run that finished in time would be reported as timed
-    // out. setImmediate runs after pending messages are delivered.
+
+    // When the budget runs out, the verdict waits one turn of the event loop:
+    // after a stall on this thread an expired timer runs before an answer that
+    // arrived meanwhile is read, and a run that finished in time would be
+    // reported as timed out; setImmediate runs after pending messages are
+    // delivered. Progress is read before terminate() is asked for, while the
+    // word still holds the worker's last write.
     const startBudget = () => {
       clearTimeout(timer);
       timer = setTimeout(() => {
