@@ -100,6 +100,13 @@ All notable changes to Propslab are documented here, newest first. Entries say w
 
 ### Fixed
 
+- **The preview stops repeating whole-dataset work** ([#496](https://github.com/Bimmiest/propslab/issues/496)):
+  - the worker counts fields once per run, instead of five components each re-scanning every event;
+  - the Regex and Timestamp testers send their events to the worker once rather than with every keystroke, and a pattern already typed past is skipped;
+  - Architecture follows the last run instead of re-parsing both confs per keystroke;
+  - the "Processing…" overlay no longer flashes on short runs.
+- **The Preview tab keeps its sub-tab, search and filters** across output-tab switches, phone tabs and the phone breakpoint ([#497](https://github.com/Bimmiest/propslab/issues/497)). Pins on fields a run no longer extracts are dropped, the per-page selector stays available, and hiding the Extractions sidebar keeps the event list and restores the last dragged split.
+- **The confirmation, directive and scaffold dialogs share one frame, and the Extractions, Preview and Raw components are split into smaller modules** ([#511](https://github.com/Bimmiest/propslab/issues/511), in part); groups that appear later in the field tree start collapsed.
 - **"Every simulated directive is exercised" is measured, not searched for** ([#505](https://github.com/Bimmiest/propslab/issues/505)): the check records the directives tests actually pass to `runPipeline`, and each simulated directive needs a Splunk fixture or a spec-citing test. Twenty-two directives tested only at processor level now run end to end.
 - **The Monaco editor is tested against the real editor** ([#516](https://github.com/Bimmiest/propslab/issues/516)): mount and dispose leave nothing behind, each language provider is registered once across mounts, CRLF and LF survive `onChange`, and `SplunkEditor` has its first unit test.
 - **A run stops at 25,000 events** ([#479](https://github.com/Bimmiest/propslab/issues/479)), with a warning naming the first line not processed, so a `LINE_BREAKER` that breaks on every character can no longer turn a megabyte into a million events. Library callers can set their own bounds through `PipelineOptions.limits`.
