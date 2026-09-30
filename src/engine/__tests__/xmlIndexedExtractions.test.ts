@@ -256,6 +256,24 @@ describe('XML_IE_MAX_EXTRACTED_VALUE_SIZE (#271)', () => {
     expect(f['a']).toBe('abcde');
     expect(f['b']).toBeUndefined();
   });
+
+  // The size is UTF-8 bytes: one for U+007F and below, two up to U+07FF, three
+  // up to U+FFFF, four above (a surrogate pair in JavaScript's UTF-16).
+  it.each([
+    ['a', 1],
+    ['\u007f', 1],
+    ['\u0080', 2],
+    ['é', 2],
+    ['߿', 2],
+    ['ࠀ', 3],
+    ['€', 3],
+    ['😀', 4],
+  ])('counts %j as %i bytes', (ch, bytes) => {
+    const at = (limit: number) =>
+      fieldsOf(`<r><v>${ch}</v></r>`, xmlDirs('xmlkv', d('XML_IE_MAX_EXTRACTED_VALUE_SIZE', String(limit))))['v'];
+    expect(at(bytes)).toBe(ch);
+    expect(at(bytes - 1)).toBeUndefined();
+  });
 });
 
 describe('extraction_cutoff (#271)', () => {

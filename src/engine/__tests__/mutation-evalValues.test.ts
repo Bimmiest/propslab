@@ -136,6 +136,9 @@ describe('addOrConcat and arith', () => {
   it('adds numbers and numeric strings, and concatenates otherwise', () => {
     expect(addOrConcat('2', 3)).toBe(5);
     expect(addOrConcat('a', 3)).toBe('a3');
+    // Whichever side is not numeric turns the sum into a concatenation.
+    expect(addOrConcat(3, 'a')).toBe('3a');
+    expect(addOrConcat('a', 'b')).toBe('ab');
   });
 
   it.each([
@@ -175,6 +178,10 @@ describe('compare', () => {
     expect(compare('10', '9', '>')).toBe(true);
     expect(compare('10', 'x9', '<')).toBe(true);
     expect(compare(10, 'abc', '==')).toBe(false);
+    // A non-numeric left side against a number is a string comparison too, not
+    // a comparison of 0 with the number: "abc" sorts after "10".
+    expect(compare('abc', 10, '>')).toBe(true);
+    expect(compare('abc', 10, '<')).toBe(false);
   });
 });
 
