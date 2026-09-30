@@ -2,7 +2,7 @@
 
 `src/engine/**` is pure logic with no React imports, and it runs unchanged in the browser, in a Web Worker, and under Node. Its one runtime dependency is the PCRE2 WebAssembly module every user pattern runs on ([below](#the-regex-engine)), which has to be initialised once before the first run. `runPipeline` is the entry point:
 
-```ts
+```text
 runPipeline(rawData, metadata, propsConfInput, transformsConfInput, options?)
 ```
 
@@ -28,6 +28,8 @@ runPipeline(rawData, metadata, propsConfInput, transformsConfInput, options?)
 `parseConf`, and therefore `runPipeline`, accept either the text of one flat conf or an ordered list of layers, **lowest precedence first** — which is how a caller reading an app off disk (or out of a Git worktree) hands over `$APP/default/props.conf` and `$APP/local/props.conf`:
 
 ```ts
+import { runPipeline } from './src/engine/pipeline';
+
 runPipeline(raw, metadata,
   [{ layer: 'default', text: defaultProps }, { layer: 'local', text: localProps }],
   [{ layer: 'default', text: defaultTransforms }, { layer: 'local', text: localTransforms }]);
