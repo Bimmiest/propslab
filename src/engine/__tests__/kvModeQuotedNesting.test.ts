@@ -3,6 +3,7 @@ import { applyKvMode } from '../processors/kvMode';
 import type { ConfDirective, SplunkEvent } from '../types';
 import { runCtx, FIXED_NOW } from './runCtx';
 import { makeEvent } from '../../test/makeEvent';
+import { expectLinearWork } from '../../test/scanWork';
 
 const ev = (raw: string): SplunkEvent => makeEvent(raw);
 const kv = (mode: string): ConfDirective[] => [{ key: 'KV_MODE', value: mode, line: 1, directiveType: 'KV_MODE' }];
@@ -49,11 +50,17 @@ describe('KV_MODE auto — quoted passes do not mine inside each other (#123)', 
 describe('KV_MODE auto — long events (#427)', () => {
   it('blanks quoted spans in linear time', () => {
     // 32k quoted pairs, each hiding a bare pair, about 490 KB. Rebuilding the
-    // blanked copy per pair took 7.5 s here.
-    const raw = Array.from({ length: 32_000 }, (_, i) => `k${i}="v x${i}=${i}"`).join(' ') + ' tail=end';
-    const started = performance.now();
+    // blanked copy per pair took 7.5 s here. Counted, not timed (#507): the
+    // length copied by slices and joins must not much more than double when
+    // the number of pairs does.
+    const eventOf = (pairs: number) =>
+      Array.from({ length: pairs }, (_, i) => `k${i}="v x${i}=${i}"`).join(' ') + ' tail=end';
+    expectLinearWork((pairs) => {
+      const e = ev(eventOf(pairs));
+      return () => void applyKvMode([e], kv('auto'), runCtx(FIXED_NOW));
+    }, 4_000);
+    const raw = eventOf(32_000);
     const r = applyKvMode([ev(raw)], kv('auto'), runCtx(FIXED_NOW))[0]!;
-    expect(performance.now() - started).toBeLessThan(1000);
     expect(r.fields['k31999']).toBe('v x31999=31999');
     expect(r.fields['tail']).toBe('end');
     expect(r.fields).not.toHaveProperty('x5');

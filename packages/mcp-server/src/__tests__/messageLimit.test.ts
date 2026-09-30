@@ -281,7 +281,6 @@ describe('oversize call through the SDK client', () => {
     const client = new Client({ name: 'propslab-limit-sdk', version: '0.0.0' });
     await client.connect(transport);
     try {
-      const startedAt = Date.now();
       const err: unknown = await client
         .callTool(
           { name: 'simulate', arguments: { raw: 'x'.repeat(MAX_MESSAGE_BYTES), sourcetype: 'st' } },
@@ -291,7 +290,9 @@ describe('oversize call through the SDK client', () => {
         .catch((e: unknown) => e);
       expect(err).toBeInstanceOf(McpError);
       expect(err).toMatchObject({ code: -32600, data: { error: 'message_too_large' } });
-      expect(Date.now() - startedAt).toBeLessThan(10_000);
+      // "Promptly" is not a stopwatch (#507): the request's timeout (120 s) is
+      // longer than this test's own (30 s), so a server that left the call to
+      // time out would fail the test rather than get here.
       // The server is still up and answering.
       const { tools } = await client.listTools();
       expect(tools.length).toBeGreaterThan(0);

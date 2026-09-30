@@ -42,7 +42,7 @@ function evalWith(expr: string, fields: Record<string, string> = {}) {
 
 /** The raw eval value, for asserting NULL itself rather than its effect. */
 const value = (expr: string, fields: Record<string, string> = {}) =>
-  evaluateExpression(expr, event(fields), undefined, Date.now());
+  evaluateExpression(expr, event(fields), undefined, FIXED_NOW);
 
 describe('comparison operators with a NULL operand (#343)', () => {
   it.each(['=', '==', '!=', '<', '>', '<=', '>='])('missing %s "" is NULL', (op) => {

@@ -108,6 +108,8 @@ const NAME_CHAR = `${NAME_START}\\-.0-9\\u00B7\\u0300-\\u036F\\u203F-\\u2040`;
 // character; it is a range endpoint, not a glyph sequence.
 // eslint-disable-next-line no-misleading-character-class
 const NAME_RE = new RegExp(`[${NAME_START}][${NAME_CHAR}]*`, 'uy');
+/** The end of a run of character data: the next markup or reference. Global, so `lastIndex` sets where it starts. */
+const TEXT_END_RE = /[<&]/g;
 /** A qualified name under Namespaces in XML: at most one colon, not at either end. */
 const QNAME_RE = /^[^:]+(?::[^:]+)?$/;
 /** Anything outside production [2] `Char` (lone surrogates included, via the `u` flag). */
@@ -393,8 +395,11 @@ class Reader {
         text += this.reference();
         textEncoded = true;
       } else if (ch !== '<') {
-        const next = this.src.slice(this.pos).search(/[<&]/);
-        const end = next === -1 ? this.src.length : this.pos + next;
+        // Searched from `pos` in place: slicing off the rest of the source for
+        // every run of text copies it once per run.
+        TEXT_END_RE.lastIndex = this.pos;
+        const found = TEXT_END_RE.exec(this.src);
+        const end = found === null ? this.src.length : found.index;
         const run = this.src.slice(this.pos, end);
         // `]]>` is reserved as the CDATA terminator even in ordinary text.
         if (run.includes(']]>')) this.fail();

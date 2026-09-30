@@ -40,11 +40,15 @@ describe('derivePrefix (#427)', () => {
   });
 
   it('stays linear on a long run of word characters', () => {
-    const long = 'a'.repeat(50_000);
-    const started = performance.now();
+    // No stopwatch (#507). The anchored regex this replaced retried from every
+    // start position, so its cost was quadratic and lived inside one regex
+    // call, which nothing can count. The input is sized instead so that the
+    // quadratic version cannot finish inside the test's own timeout (a million
+    // characters is about 5*10^11 steps; 50,000 took seconds), while the
+    // backward scan makes a few million single-character checks.
+    const long = 'a'.repeat(1_000_000);
     expect(derivePrefix(long)).toBe('');
     expect(derivePrefix(`${long}=`)).toBe(`${long}=`);
-    expect(derivePrefix('a '.repeat(25_000))).toBe('');
-    expect(performance.now() - started).toBeLessThan(200);
+    expect(derivePrefix('a '.repeat(500_000))).toBe('');
   });
 });

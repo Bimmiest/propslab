@@ -14,7 +14,7 @@
 // Splunk names them differently, the naming tests are the ones to correct.
 // ---------------------------------------------------------------------------
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { applyIndexedExtractions } from '../processors/indexedExtractions';
 import { runPipeline } from '../pipeline';
 import type { SplunkEvent, ConfDirective, ValidationDiagnostic } from '../types';
@@ -195,22 +195,39 @@ describe('XML_IE_EXCLUDE_VALS (#271)', () => {
     expect(f['c']).toBe('kept');
   });
 
-  it('tests a many-star entry against a long value quickly (#344)', () => {
+  it('tests a many-star entry against a long value with a bounded number of searches (#344)', () => {
     // The value comes from the event, so the matcher's cost is the event's to
     // choose. Compiled to a backtracking regex this took seconds at 200 chars.
-    const long = 'a'.repeat(10_000);
-    const started = performance.now();
-    const f = fieldsOf(
-      `<r><a>${long}</a></r>`,
-      xmlDirs(
-        'xmlkv',
-        d('XML_IE_EXCLUDE_VALS', '*a*a*a*a*b,*a*a*a*a*a*a*ab*'),
-        d('XML_IE_MAX_EXTRACTED_VALUE_SIZE', '20000'),
-        d('extraction_cutoff', '20000'),
-      ),
-    );
-    expect(performance.now() - started).toBeLessThan(200);
-    expect(f['a']).toBe(long);
+    // Operations, not milliseconds (#507). The linear matcher (wildcardMatch.ts)
+    // searches for each middle segment once, so the entries add a handful of
+    // indexOf calls however long the value is. Compared with the same event
+    // and no entries, that handful is at least one (the entries did go through
+    // the matcher, not a regex) and the same for a value twice as long.
+    const entries = '*a*a*a*a*b,*a*a*a*a*a*a*ab*';
+    const segments = 4 + 7; // the middle segments of the two entries
+    const filters = (exclude: string) => [
+      d('XML_IE_MAX_EXTRACTED_VALUE_SIZE', '40000'),
+      d('extraction_cutoff', '40000'),
+      ...(exclude ? [d('XML_IE_EXCLUDE_VALS', exclude)] : []),
+    ];
+    const indexOf = vi.spyOn(String.prototype, 'indexOf');
+    const searches = (n: number, exclude: string): { calls: number; value: string | string[] | undefined } => {
+      const long = 'a'.repeat(n);
+      indexOf.mockClear();
+      const f = fieldsOf(`<r><a>${long}</a></r>`, xmlDirs('xmlkv', ...filters(exclude)));
+      return { calls: indexOf.mock.calls.length, value: f['a'] };
+    };
+    const without = searches(5_000, '');
+    const withEntries = searches(5_000, entries);
+    const twiceAsLong = searches(10_000, entries);
+    indexOf.mockRestore();
+
+    expect(withEntries.calls - without.calls).toBeGreaterThan(0);
+    expect(withEntries.calls - without.calls).toBeLessThanOrEqual(segments);
+    expect(twiceAsLong.calls).toBe(withEntries.calls);
+    // Neither entry matches, so the value is kept.
+    expect(withEntries.value).toBe('a'.repeat(5_000));
+    expect(twiceAsLong.value).toBe('a'.repeat(10_000));
   });
 });
 

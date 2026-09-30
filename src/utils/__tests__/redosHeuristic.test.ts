@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { detached, hasReDoSRisk } from '../redosHeuristic';
 
 // The heuristic is advisory now — it ranks the MCP server's timeout suspects —
@@ -100,10 +100,17 @@ describe('hasReDoSRisk — very long patterns (#480)', () => {
 
   it('assumes a pattern past the length cap is risky, without scanning it', () => {
     expect(hasReDoSRisk(padded('(ab)', 5001))).toBe(true);
-    // Quadratic for REDOS_NESTED_GROUP: about 0.8 s when it was scanned.
-    const unclosed = '(' + '*'.repeat(30_000);
-    const start = performance.now();
+    // Quadratic for REDOS_NESTED_GROUP: about 0.8 s at 30,000 characters when it
+    // was scanned. No stopwatch (#507), two structural bounds instead. First,
+    // the only regex the overlong pattern is handed to is the one linear
+    // adjacent-quantifier check, counted rather than timed. Second, the pattern
+    // is sized so that a scan by the nested-group regex (about 10^12 steps at a
+    // million characters) could not finish inside the test's own timeout.
+    const unclosed = '(' + '*'.repeat(1_000_000);
+    const test = vi.spyOn(RegExp.prototype, 'test');
     expect(hasReDoSRisk(unclosed)).toBe(true);
-    expect(performance.now() - start).toBeLessThan(100);
+    const overlong = test.mock.calls.filter(([input]) => input.length > 5000);
+    test.mockRestore();
+    expect(overlong).toHaveLength(1);
   });
 });

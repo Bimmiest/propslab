@@ -234,7 +234,9 @@ describe('start-up (#488)', () => {
 
   it('ends a worker that never reports ready at the start-up cap', async () => {
     const limiter = new Semaphore(1);
-    const started = Date.now();
+    // No stopwatch (#507): the run's own budget and the worker's sleep are both
+    // 60 s, three times this test's timeout, so only the 300 ms start-up cap can
+    // end the run in time.
     const run = runInWorker(slowStart(0, 60_000, false), 60_000, {
       workerPath: SLEEP_WORKER,
       limiter,
@@ -242,7 +244,6 @@ describe('start-up (#488)', () => {
     });
     await expect(run).rejects.toBeInstanceOf(WorkerStartTimeoutError);
     await expect(run).rejects.toMatchObject({ limitMs: 300 });
-    expect(Date.now() - started).toBeLessThan(5_000);
     await vi.waitFor(() => expect(limiter.active).toBe(0));
   }, 20_000);
 });
@@ -327,7 +328,7 @@ describe('cancellation', () => {
   it('terminates a running call promptly and frees its slot on exit', async () => {
     const limiter = new Semaphore(1);
     const controller = new AbortController();
-    const running = runInWorker(sleep(15_000), 20_000, {
+    const running = runInWorker(sleep(60_000), 90_000, {
       workerPath: SLEEP_WORKER,
       limiter,
       signal: controller.signal,
@@ -343,10 +344,12 @@ describe('cancellation', () => {
     controller.abort();
     await expect(running).rejects.toBeInstanceOf(WorkerCancelledError);
     await expect(running).rejects.toMatchObject({ started: true });
-    // Without cancellation this call would hold its slot for 15s; the queued
-    // one getting to run at all within a few seconds shows it did not.
+    // No stopwatch (#507). Without cancellation the running call would hold its
+    // slot for 60 s, three times this test's own timeout, so the queued call
+    // getting to run at all shows it did not, and it can only have started after
+    // the abort.
     const afterNext = await next;
-    expect(afterNext.startedAt - abortedAt).toBeLessThan(3_000);
+    expect(afterNext.startedAt).toBeGreaterThanOrEqual(abortedAt);
     await vi.waitFor(() => expect(limiter.active).toBe(0));
   }, 20_000);
 

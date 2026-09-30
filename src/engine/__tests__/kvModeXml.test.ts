@@ -11,6 +11,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { runPipeline } from '../pipeline';
 import type { EventMetadata } from '../types';
+import { expectLinearWork } from '../../test/scanWork';
 
 const metadata: EventMetadata = {
   index: 'main',
@@ -150,26 +151,36 @@ describe('KV_MODE = xml — an event with very many elements (#480)', () => {
   // were checked against a growing list, which took seconds at this size.
   const props = 'SHOULD_LINEMERGE = false\nTRUNCATE = 0\nKV_MODE = xml\n';
 
-  it('extracts 40k distinct elements quickly', () => {
-    const n = 40_000;
+  // Counted, not timed (#507): the length scanned by array and string built-ins
+  // must not much more than double when the event's size does. A check of each
+  // new name against a growing list adds the whole list every time.
+  const elements = (n: number) => {
     let body = '';
     for (let i = 0; i < n; i++) body += `<e${i}>v</e${i}>`;
-    const start = performance.now();
-    const fields = fieldsOf(`<r>${body}</r>`, props);
-    const elapsed = performance.now() - start;
+    return `<r>${body}</r>`;
+  };
+  const attributes = (n: number) => {
+    let attrs = '';
+    for (let i = 0; i < n; i++) attrs += ` a${i}="v"`;
+    return `<r${attrs}/>`;
+  };
+
+  it('extracts many distinct elements in linear work', () => {
+    expectLinearWork((n) => {
+      const raw = elements(n);
+      return () => void fieldsOf(raw, props);
+    }, 5_000);
+    const fields = fieldsOf(elements(40_000), props);
     expect(fields['r.e0']).toBe('v');
-    expect(fields[`r.e${n - 1}`]).toBe('v');
-    // Generous: a regression guard for a quadratic loop, not a benchmark.
-    expect(elapsed).toBeLessThan(3000);
+    expect(fields['r.e39999']).toBe('v');
   });
 
-  it('reads an element with 40k distinct attributes quickly', () => {
-    let attrs = '';
-    for (let i = 0; i < 40_000; i++) attrs += ` a${i}="v"`;
-    const start = performance.now();
-    const fields = fieldsOf(`<r${attrs}/>`, props);
-    expect(fields['a0']).toBe('v');
-    expect(performance.now() - start).toBeLessThan(3000);
+  it('reads an element with many distinct attributes in linear work', () => {
+    expectLinearWork((n) => {
+      const raw = attributes(n);
+      return () => void fieldsOf(raw, props);
+    }, 5_000);
+    expect(fieldsOf(attributes(40_000), props)['a0']).toBe('v');
   });
 });
 

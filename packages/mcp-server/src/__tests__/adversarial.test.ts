@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
@@ -7,22 +7,39 @@ import { MAX_TOTAL_CONF_CHARS } from '../tools';
 import { resultText } from './resultText';
 
 /**
- * The adversarial wall-clock suite (#517): input at the schemas' limits, of
- * the shapes most likely to cost the server something, through the real
- * protocol. Every call must be answered — a result, or a structured
- * `timeout`, `out_of_memory` or `busy` error — within a fixed bound of its
- * budget, and the server's own event loop must keep turning throughout: a
+ * The adversarial suite (#517): input at the schemas' limits, of the shapes
+ * most likely to cost the server something, through the real protocol. Every
+ * call must be answered — a result, or a structured `timeout`, `out_of_memory`
+ * or `busy` error — and the server's own thread must stay free throughout: a
  * stall there (the #468 shape) stops every response, cancellation and new
  * call, which SECURITY.md lists as in scope. A client disconnect mid-run is
  * covered in server.e2e.test.ts.
+ *
+ * Neither bound is a stopwatch in the test (#507). "Answered" is the request
+ * timeout each call carries, which the SDK client enforces, and this file's
+ * own test timeouts. "The thread stays free" is the one thing that ever
+ * blocked it: the server parsing a caller's conf itself, where the worker
+ * should. The parser is counted on this thread, which is the server's, since
+ * createServer runs in-process; the worker has a copy of its own.
  */
 const WORKER_PATH = fileURLToPath(new URL('../../dist/simulateWorker.js', import.meta.url));
+
+// Counts the confs parsed on this thread. The parser itself still runs.
+const parseCalls = vi.hoisted(() => ({ count: 0 }));
+vi.mock('../../../../src/engine/parser/confParser', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../../src/engine/parser/confParser')>();
+  return {
+    ...actual,
+    parseConf: (...args: Parameters<typeof actual.parseConf>) => {
+      parseCalls.count++;
+      return actual.parseConf(...args);
+    },
+  };
+});
 
 /** The budget each heavy call gets, and the slack past it for start-up and shaping the answer. */
 const BUDGET_MS = 2_000;
 const SLACK_MS = 8_000;
-/** The longest the server thread may go without a turn. */
-const MAX_LOOP_GAP_MS = 1_000;
 
 const ACCEPTABLE = [undefined, 'timeout', 'out_of_memory', 'busy'];
 
@@ -30,22 +47,6 @@ type TextResult = { content: { type: string; text: string }[]; isError?: boolean
 
 let client: Client;
 let close: () => Promise<void>;
-
-// A ticker on this thread — the server's, since createServer runs in-process.
-let lastTick = 0;
-let maxGap = 0;
-let ticker: ReturnType<typeof setInterval> | undefined;
-beforeAll(() => {
-  lastTick = performance.now();
-  ticker = setInterval(() => {
-    const now = performance.now();
-    maxGap = Math.max(maxGap, now - lastTick);
-    lastTick = now;
-  }, 10);
-});
-afterAll(() => {
-  clearInterval(ticker);
-});
 
 beforeEach(async () => {
   const server = createServer({ workerPath: WORKER_PATH });
@@ -57,30 +58,29 @@ beforeEach(async () => {
     await client.close();
     await server.close();
   };
-  maxGap = 0;
-  lastTick = performance.now();
+  parseCalls.count = 0;
 });
 
 afterEach(async () => {
   await close();
-  expect(maxGap, 'server event loop stalled').toBeLessThan(MAX_LOOP_GAP_MS);
+  expect(parseCalls.count, 'the server parsed a conf on its own thread').toBe(0);
 });
 
-/** Calls a tool and checks it is answered acceptably within the bound. */
+/**
+ * Calls a tool and checks it is answered acceptably. The request timeout is the
+ * bound on when: a call not answered within its budget plus the slack rejects.
+ */
 async function expectAnswered(
   name: string,
   args: Record<string, unknown>,
   budgetMs = BUDGET_MS,
   acceptable: (string | undefined)[] = ACCEPTABLE,
 ) {
-  const started = performance.now();
   const result = (await client.callTool({ name, arguments: args }, undefined, {
-    timeout: budgetMs + SLACK_MS + 10_000,
+    timeout: budgetMs + SLACK_MS,
   })) as TextResult;
-  const elapsed = performance.now() - started;
   const out = JSON.parse(resultText(result)) as { error?: string };
   expect(acceptable, `${name}: ${resultText(result).slice(0, 300)}`).toContain(out.error);
-  expect(elapsed, `${name} took ${elapsed}ms`).toBeLessThan(budgetMs + SLACK_MS);
   return out;
 }
 
@@ -152,7 +152,6 @@ describe('adversarial input at the schema limits (#517)', () => {
       'DEPTH_LIMIT = 0',
       'EXTRACT-boom = ^(?<boom>(a|aa)+)(?=b)$',
     ].join('\n');
-    const started = performance.now();
     const outs = await Promise.all(
       Array.from({ length: 20 }, (_, i) =>
         i % 2 === 0
@@ -166,7 +165,6 @@ describe('adversarial input at the schema limits (#517)', () => {
           : expectAnswered('lookup_directive', { key: '-'.repeat(200) }, BUDGET_MS, ['unknown_directive']),
       ),
     );
-    expect(performance.now() - started).toBeLessThan(5 * 1_500 + SLACK_MS);
     expect(outs.filter((o) => o.error === 'timeout' || o.error === 'busy').length).toBe(10);
   }, 60_000);
 });
