@@ -173,16 +173,19 @@ describe('DETERMINE_TIMESTAMP_DATE_WITH_SYSTEM_TIME (#273)', () => {
   });
 
   // NOW is 00:30. A stamp of 23:00 read as today would be 22.5 hours ahead of
-  // the clock, so it is yesterday's. The next line, 01:00, is what tells the two
-  // strategies apart: carried forward it stays on yesterday's date; read off the
-  // clock it is today, half an hour ahead.
-  const RAWS = ['23:00:00 late', '01:00:00 early'];
+  // the clock, so it is yesterday's. 01:00 is past midnight either way. The
+  // third line, 13:00, is what tells the two strategies apart: carried forward
+  // it is on the date of the line before (the 4th); read off the clock it is
+  // 12.5 hours ahead, so yesterday's. (Before #471 the second line told them
+  // apart, because the carried date never rolled over midnight.)
+  const RAWS = ['23:00:00 late', '01:00:00 early', '13:00:00 afternoon'];
 
   it('by default carries the date forward from the last timestamp that parsed', () => {
     const out = run(RAWS, [TIME_ONLY]);
     expect(out.map((e) => e._time?.toISOString())).toEqual([
       '2026-08-03T23:00:00.000Z',
-      '2026-08-03T01:00:00.000Z',
+      '2026-08-04T01:00:00.000Z',
+      '2026-08-04T13:00:00.000Z',
     ]);
   });
 
@@ -191,13 +194,43 @@ describe('DETERMINE_TIMESTAMP_DATE_WITH_SYSTEM_TIME (#273)', () => {
     expect(out.map((e) => e._time?.toISOString())).toEqual([
       '2026-08-03T23:00:00.000Z',
       '2026-08-04T01:00:00.000Z',
+      '2026-08-03T13:00:00.000Z',
     ]);
   });
 
   // `on` is one of Splunk's true spellings, read through the shared parser.
   it.each(['on', 'yes', '1'])('reads %j as true, like every other boolean', (v) => {
     const out = run(RAWS, [TIME_ONLY, dir('DETERMINE_TIMESTAMP_DATE_WITH_SYSTEM_TIME', v)]);
-    expect(out[1]?._time?.toISOString()).toBe('2026-08-04T01:00:00.000Z');
+    expect(out[2]?._time?.toISOString()).toBe('2026-08-03T13:00:00.000Z');
+  });
+
+  it('advances a carried date past midnight when the time of day goes back (#471)', () => {
+    // Doc-derived: Splunk advances the date when a dateless time of day goes
+    // backwards across midnight. Only that is asserted; no capture covers it.
+    const out = run(['23:59:59 b', '00:00:01 c'], [TIME_ONLY]);
+    expect(out.map((e) => e._time?.toISOString())).toEqual(['2026-08-03T23:59:59.000Z', '2026-08-04T00:00:01.000Z']);
+    const step = out[1]?.processingTrace.find((s) => s.processor === 'timestampExtractor');
+    expect(step?.description).toBe(
+      'Extracted timestamp: 2026-08-04T00:00:01.000Z (no date in the timestamp: date carried from the previous timestamp, advanced a day past midnight)',
+    );
+  });
+
+  it('keeps the carried date for a step back of 12 hours or less, the simulator\'s threshold', () => {
+    // Not a Splunk claim: where "backwards across midnight" starts is the
+    // simulator's choice. A line 12 hours earlier is out of order on the same day.
+    expect(run(['23:00:00 a', '11:00:00 b'], [TIME_ONLY]).map((e) => e._time?.toISOString())).toEqual([
+      '2026-08-03T23:00:00.000Z',
+      '2026-08-03T11:00:00.000Z',
+    ]);
+    expect(run(['23:00:00 a', '10:59:59 b'], [TIME_ONLY]).map((e) => e._time?.toISOString())).toEqual([
+      '2026-08-03T23:00:00.000Z',
+      '2026-08-04T10:59:59.000Z',
+    ]);
+  });
+
+  it('rolls over a month and a year end', () => {
+    const out = run(['23:59:00 a', '00:01:00 b'], [TIME_ONLY], new Date('2026-12-31T23:59:30Z'));
+    expect(out.map((e) => e._time?.toISOString())).toEqual(['2026-12-31T23:59:00.000Z', '2027-01-01T00:01:00.000Z']);
   });
 
   it('treats a stamp just under three hours ahead as today', () => {
