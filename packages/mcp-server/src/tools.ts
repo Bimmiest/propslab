@@ -18,6 +18,7 @@ import {
   WorkerBusyError,
   WorkerCancelledError,
   WorkerOutOfMemoryError,
+  WorkerStartTimeoutError,
   WorkerTimeoutError,
   type RunInWorkerOptions,
 } from './runInWorker';
@@ -125,17 +126,21 @@ const metadataShape = {
     .describe('Source path — [source::…] stanzas match against it.'),
 };
 
+const MAX_TIMEOUT_MS = 30_000;
+
 const timeoutSchema = z
   .number()
   .int()
   .min(100)
-  .max(30_000)
+  .max(MAX_TIMEOUT_MS)
   .default(5_000)
   .describe(
     'Wall-clock budget in ms for the sandboxed engine run. On expiry the worker ' +
-      'thread is hard-terminated and a structured timeout error is returned. The ' +
-      'budget starts when the run starts; time spent queued behind other calls ' +
-      '(a few run at once) does not count against it.',
+      'thread is hard-terminated and a structured timeout error is returned, saying ' +
+      'how far the run got. The budget starts once the sandbox worker has started; ' +
+      'its start-up, and time spent queued behind other calls (a few run at once), ' +
+      'do not count against it. The largest inputs the limits admit can need more ' +
+      'than the default.',
   );
 
 const fileSchema = z.enum(['props.conf', 'transforms.conf']);
@@ -269,40 +274,123 @@ function json(payload: object, isError = false): ToolText {
   };
 }
 
+/** What a timeout's advice depends on besides the error itself. */
+export interface TimeoutContext {
+  op: 'simulate' | 'validate' | 'explain';
+  /** simulate only: characters of sample. */
+  rawChars?: number;
+}
+
 /**
- * The timeout error, with the regex-suspect list the worker posted before its
- * run, cut to the response budget: one suspect per regex directive, so a conf
- * of many large patterns lists megabytes of them. Flagged patterns sort first
- * and survive the cut. Only a simulate run posts a list, and only once it has
- * parsed the conf; without one the error names no regex.
+ * Sample characters per millisecond of budget below which line breaking is
+ * not the cost of volume. Breaking measures about 7µs an event, and a sample
+ * holds at most one event per two characters, so even at 10µs an event a
+ * sample under this many characters per budget millisecond breaks in under a
+ * quarter of the budget: a run stopped there was stalled by the pattern.
  */
-function timeoutFailure(err: WorkerTimeoutError): ToolText {
+const SMALL_SAMPLE_CHARS_PER_MS = 50;
+
+/** ", or a larger timeout_ms", while there is a larger one to ask for. */
+const orLarger = (budgetMs: number) =>
+  budgetMs < MAX_TIMEOUT_MS ? `, or a larger timeout_ms (at most ${MAX_TIMEOUT_MS})` : '';
+
+const REPAIR =
+  'Repair the flagged pattern(s) in regex_directives — start with redos_risk=true, but the ' +
+  'heuristic is structural and cannot see forms like (a|aa)+, so an unflagged pattern may ' +
+  'still be the cause.';
+
+/**
+ * The message and guidance for a timeout, from how far the run got. Only a
+ * run that stalled on a single event (or on breaking a small sample) is
+ * blamed on a regex outright: a large legitimate input can need more than the
+ * default budget, and telling the agent to rewrite a correct conf is worse
+ * than telling it to wait longer.
+ */
+function timeoutAdvice(
+  err: WorkerTimeoutError,
+  context: TimeoutContext,
+): { message: string; guidance: string; listSuspects: boolean } {
+  const exceeded = `The run exceeded its ${err.budgetMs}ms wall-clock budget and was hard-terminated`;
+  const { phase = 'parsing', stage, events = 0 } = err.progress ?? {};
+  const larger = orLarger(err.budgetMs);
+  // A simulate run is in the pipeline once it reports a stage; before that,
+  // it is still reading the conf.
+  if (phase === 'starting' || phase === 'parsing' || (context.op === 'simulate' && stage === undefined && phase === 'running')) {
+    return {
+      message: `${exceeded} while still parsing the conf text, before any directive ran.`,
+      guidance:
+        'Parsing takes time in proportion to the conf, so this is its size, not a pattern: send ' +
+        `only the stanzas that matter for this question${larger}.`,
+      listSuspects: false,
+    };
+  }
+  if (phase === 'finishing') {
+    return {
+      message: `${exceeded} after the run itself had finished, while shaping the response.`,
+      guidance:
+        context.op === 'simulate'
+          ? `Ask for less: a lower max_events or include_snapshots=false${larger}.`
+          : `Send less conf text${larger}.`,
+      listSuspects: false,
+    };
+  }
+  if (context.op !== 'simulate' || stage === undefined) {
+    const doing =
+      context.op === 'validate' ? 'linting the conf and compiling its regexes' : 'matching stanzas to the event';
+    return {
+      message: `${exceeded} while ${doing}. No directive's regex runs here, so no pattern is backtracking.`,
+      guidance: `Send only the stanzas that matter for this question${larger}.`,
+      listSuspects: false,
+    };
+  }
+  const rawChars = context.rawChars ?? 0;
+  const stalled =
+    stage === 'LINE_BREAKER' ? rawChars < SMALL_SAMPLE_CHARS_PER_MS * err.budgetMs : events <= 1;
+  if (stalled) {
+    const on = stage === 'LINE_BREAKER' ? `breaking a ${rawChars}-character sample into events` : `${stage} on a single event`;
+    return {
+      message:
+        `${exceeded} in ${on}. With this little input the likeliest cause is a regex ` +
+        "backtracking heavily, or one whose stanza disables PCRE's limits with MATCH_LIMIT = 0.",
+      guidance: `${REPAIR} Do not simply retry with a larger timeout.`,
+      listSuspects: true,
+    };
+  }
+  const at =
+    stage === 'LINE_BREAKER'
+      ? `breaking a ${rawChars}-character sample into events`
+      : `${stage}, over ${events} events`;
+  return {
+    message:
+      `${exceeded} in ${at}. Either a regex is slow on every event, or the input is ` +
+      'simply large for the budget.',
+    guidance:
+      `For a large sample, retry with a smaller one${larger}. If a small ` +
+      `sample times out as well, the pattern is the cause: ${REPAIR}`,
+    listSuspects: true,
+  };
+}
+
+/**
+ * The timeout error: where the run had got to (`progress`), advice that
+ * follows from it, and — where a directive's regex may be the cause — the
+ * regex-suspect list the worker posted before its run, cut to the response
+ * budget: one suspect per regex directive, so a conf of many large patterns
+ * lists megabytes of them. Flagged patterns sort first and survive the cut.
+ */
+function timeoutFailure(err: WorkerTimeoutError, context: TimeoutContext): ToolText {
+  const { message, guidance, listSuspects } = timeoutAdvice(err, context);
   const base = {
     error: 'timeout',
     budget_ms: err.budgetMs,
+    ...(err.progress ? { progress: err.progress } : {}),
+    message,
   };
-  if (!err.suspects) {
-    return json(
-      {
-        ...base,
-        message:
-          `The run exceeded its ${err.budgetMs}ms wall-clock budget and was hard-terminated ` +
-          'before it ran any regex directive.',
-        guidance:
-          'Send less conf text — only the stanzas that matter for this question — or a larger ' +
-          'timeout_ms.',
-      },
-      true,
-    );
-  }
+  if (!listSuspects || !err.suspects) return json({ ...base, guidance }, true);
   const { suspects, total } = err.suspects;
   return json(
     cutToFit(suspects, (kept) => ({
       ...base,
-      message:
-        `The run exceeded its ${err.budgetMs}ms wall-clock budget and was hard-terminated. ` +
-        'The usual cause is a regex backtracking heavily on every event, or one whose stanza ' +
-        'disables PCRE\'s limits with MATCH_LIMIT = 0.',
       regex_directives: suspects.slice(0, kept),
       ...(kept < total
         ? {
@@ -310,25 +398,37 @@ function timeoutFailure(err: WorkerTimeoutError): ToolText {
             truncation_note: `${cutNote('regex directives', kept, total)} ${CAP_NOTE}`,
           }
         : {}),
-      guidance:
-        'Repair the flagged pattern(s) — start with redos_risk=true, but the heuristic is ' +
-        'structural and cannot see forms like (a|aa)+, so an unflagged pattern may still be ' +
-        'the cause. Do not simply retry with a larger timeout.',
+      guidance,
     })),
     true,
   );
 }
 
 /**
- * Turn a worker failure into something the agent can act on. A timeout gets
- * the regex-suspect list (docs/engine.md's "repair rather than retry blind"),
- * with the caveat that the heuristic is structural and can miss. Running out
- * of the worker's heap gets its own error, so it reads as "too big" rather
- * than as an engine crash.
+ * Turn a worker failure into something the agent can act on. A timeout says
+ * where the run stopped, and gets the regex-suspect list when a regex may be
+ * the cause (docs/engine.md's "repair rather than retry blind"), with the
+ * caveat that the heuristic is structural and can miss. Running out of the
+ * worker's heap gets its own error, so it reads as "too big" rather than as
+ * an engine crash. Exported for tests, which reach every branch without
+ * having to make a run stop in each phase.
  */
-function workerFailure(err: unknown): ToolText {
+export function workerFailure(err: unknown, context: TimeoutContext): ToolText {
   if (err instanceof WorkerTimeoutError) {
-    return timeoutFailure(err);
+    return timeoutFailure(err, context);
+  }
+  if (err instanceof WorkerStartTimeoutError) {
+    return json(
+      {
+        error: 'start_timeout',
+        limit_ms: err.limitMs,
+        message:
+          `The sandbox worker did not start within ${err.limitMs}ms, so the input was never run. ` +
+          'Start-up is the same for every call; the machine is likely overloaded.',
+        guidance: 'Nothing is wrong with the input. Retry shortly, with fewer calls at once.',
+      },
+      true,
+    );
   }
   if (err instanceof WorkerOutOfMemoryError) {
     // No regex-suspect list here: memory is exhausted by volume — how much
@@ -417,7 +517,7 @@ export async function handleSimulate(args: SimulateArgs, worker?: string | RunIn
     );
     return json(response);
   } catch (err) {
-    return workerFailure(err);
+    return workerFailure(err, { op: 'simulate', rawChars: args.raw.length });
   }
 }
 
@@ -432,7 +532,7 @@ export async function handleValidate(args: ValidateArgs, worker?: string | RunIn
     );
     return json(response);
   } catch (err) {
-    return workerFailure(err);
+    return workerFailure(err, { op: 'validate' });
   }
 }
 
@@ -456,7 +556,7 @@ export async function handleExplainPrecedence(
     );
     return json(response);
   } catch (err) {
-    return workerFailure(err);
+    return workerFailure(err, { op: 'explain' });
   }
 }
 

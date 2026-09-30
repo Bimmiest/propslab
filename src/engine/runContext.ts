@@ -9,6 +9,7 @@
 // builds one of these and every stage reads its run state from it.
 // ---------------------------------------------------------------------------
 
+import type { RunStage } from './runStages';
 import type { ValidationDiagnostic } from './types';
 
 /** Anything diagnostics can be pushed into: a plain array or a collector. */
@@ -131,6 +132,8 @@ export interface RunContext {
   readonly diagnostics: DiagnosticsCollector;
   readonly limits: RunLimits;
   readonly explanations: ExplanationBudget;
+  /** Told as each stage starts. See `PipelineOptions.onStage`. */
+  readonly onStage?: (stage: RunStage, events: number) => void;
 }
 
 export interface RunContextInit {
@@ -139,6 +142,7 @@ export interface RunContextInit {
   /** Where diagnostics go; a fresh array when omitted. */
   diagnostics?: ValidationDiagnostic[];
   limits?: Partial<RunLimits>;
+  onStage?: (stage: RunStage, events: number) => void;
 }
 
 export function createRunContext(init: RunContextInit): RunContext {
@@ -149,6 +153,7 @@ export function createRunContext(init: RunContextInit): RunContext {
     diagnostics: createCollector(init.diagnostics),
     limits,
     explanations: createBudget(limits.explanationsPerDirective),
+    ...(init.onStage ? { onStage: init.onStage } : {}),
   });
 }
 

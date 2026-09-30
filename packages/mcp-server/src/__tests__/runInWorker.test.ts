@@ -11,6 +11,8 @@ import {
   WorkerBusyError,
   WorkerCancelledError,
   WorkerOutOfMemoryError,
+  WorkerStartTimeoutError,
+  WorkerTimeoutError,
 } from '../runInWorker';
 import type { WorkerRequest } from '../protocol';
 import { handleSimulate } from '../tools';
@@ -206,6 +208,46 @@ describe('concurrency cap', () => {
       release();
     }
   });
+});
+
+describe('start-up (#488)', () => {
+  const slowStart = (startMs: number, ms: number, ready = true) =>
+    ({ startMs, ms, ready }) as unknown as WorkerRequest;
+
+  it('starts the budget when the worker reports ready, not when it is spawned', async () => {
+    // 400ms of start-up against a 150ms budget: counted from the spawn, this
+    // run would time out before it began.
+    await expect(
+      runInWorker<SleepResult>(slowStart(400, 20), 150, {
+        workerPath: SLEEP_WORKER,
+        limiter: new Semaphore(1),
+      }),
+    ).resolves.toBeDefined();
+  }, 20_000);
+
+  it('still times out a run that overstays its budget after start-up', async () => {
+    const run = runInWorker(slowStart(0, 5_000), 150, {
+      workerPath: SLEEP_WORKER,
+      limiter: new Semaphore(1),
+    });
+    await expect(run).rejects.toBeInstanceOf(WorkerTimeoutError);
+    // The fixture writes no progress, so the run reads as not yet begun.
+    await expect(run).rejects.toMatchObject({ budgetMs: 150, progress: { phase: 'starting' } });
+  }, 20_000);
+
+  it('ends a worker that never reports ready at the start-up cap', async () => {
+    const limiter = new Semaphore(1);
+    const started = Date.now();
+    const run = runInWorker(slowStart(0, 60_000, false), 60_000, {
+      workerPath: SLEEP_WORKER,
+      limiter,
+      startupLimitMs: 300,
+    });
+    await expect(run).rejects.toBeInstanceOf(WorkerStartTimeoutError);
+    await expect(run).rejects.toMatchObject({ limitMs: 300 });
+    expect(Date.now() - started).toBeLessThan(5_000);
+    await vi.waitFor(() => expect(limiter.active).toBe(0));
+  }, 20_000);
 });
 
 describe('cancellation', () => {

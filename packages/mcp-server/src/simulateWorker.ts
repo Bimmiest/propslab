@@ -22,6 +22,7 @@ import type {
   ExplainResponse,
   ExplainStanza,
   SimulateRequest,
+  ReadyMessage,
   SimulateResponse,
   SuspectsMessage,
   ValidateRequest,
@@ -34,6 +35,13 @@ import { lintRegexDirectives } from './regexLint';
 import { boundExplain, boundValidate } from './responseBudget';
 import { serializeSimulation } from './serialize';
 import { boundedRegexSuspects } from './suspects';
+import { progressWriter, type ProgressWriter } from './progress';
+
+/** What a handler reports through while it runs. */
+interface Run {
+  port: MessagePort;
+  progress: ProgressWriter;
+}
 
 /**
  * Serialized here rather than on the server's thread: the raw ProcessingResult
@@ -47,19 +55,25 @@ import { boundedRegexSuspects } from './suspects';
  * server's thread never parses caller input. Validate and explain post none:
  * neither runs a directive's regex, so a regex is not what makes them slow.
  */
-function handleSimulate(request: SimulateRequest, port: MessagePort): SimulateResponse {
+function handleSimulate(request: SimulateRequest, run: Run): SimulateResponse {
+  run.progress.phase('parsing');
   const suspects: SuspectsMessage = {
     kind: 'suspects',
     list: boundedRegexSuspects(request.propsConf, request.transformsConf),
   };
-  port.postMessage(suspects);
+  run.port.postMessage(suspects);
   const { result, diagnostics } = runPipeline(
     request.raw,
     request.metadata,
     request.propsConf,
     request.transformsConf,
-    { perEventPipeline: request.perEventPipeline, captureOffsets: request.captureOffsets },
+    {
+      perEventPipeline: request.perEventPipeline,
+      captureOffsets: request.captureOffsets,
+      onStage: run.progress.stage,
+    },
   );
+  run.progress.phase('finishing');
   return serializeSimulation(result, diagnostics, {
     maxEvents: request.maxEvents,
     includeSnapshots: request.includeSnapshots,
@@ -72,12 +86,15 @@ function handleSimulate(request: SimulateRequest, port: MessagePort): SimulateRe
  * regex only in stanzas it happened to match, and diagnostics about the dummy
  * event itself would leak out through `[default]` and `[host::…]` stanzas.
  */
-function handleValidate(request: ValidateRequest): ValidateResponse {
+function handleValidate(request: ValidateRequest, run: Run): ValidateResponse {
+  run.progress.phase('parsing');
   const propsConf = parseConf(request.propsConf, 'props.conf');
   const transformsConf = parseConf(request.transformsConf, 'transforms.conf');
   const diagnostics = [...propsConf.errors, ...transformsConf.errors];
+  run.progress.phase('running');
   lintConfigs(propsConf, transformsConf, diagnostics);
   diagnostics.push(...lintRegexDirectives(propsConf, transformsConf));
+  run.progress.phase('finishing');
   return boundValidate(diagnostics);
 }
 
@@ -103,8 +120,10 @@ function toExplainStanza(s: ConfStanza): ExplainStanza {
   };
 }
 
-function handleExplain(request: ExplainRequest): ExplainResponse {
+function handleExplain(request: ExplainRequest, run: Run): ExplainResponse {
+  run.progress.phase('parsing');
   const parsed = parseConf(request.conf, request.file);
+  run.progress.phase('running');
   const response: ExplainResponse = {
     parseErrors: parsed.errors,
     stanzas: parsed.stanzas.map(toExplainStanza),
@@ -134,17 +153,18 @@ function handleExplain(request: ExplainRequest): ExplainResponse {
     };
   }
 
+  run.progress.phase('finishing');
   return boundExplain(response);
 }
 
-function handle(request: WorkerRequest, port: MessagePort) {
+function handle(request: WorkerRequest, run: Run) {
   switch (request.op) {
     case 'simulate':
-      return handleSimulate(request, port);
+      return handleSimulate(request, run);
     case 'validate':
-      return handleValidate(request);
+      return handleValidate(request, run);
     case 'explain':
-      return handleExplain(request);
+      return handleExplain(request, run);
   }
 }
 
@@ -152,9 +172,13 @@ const port = parentPort;
 if (port) {
   let response: WorkerResponse;
   try {
-    const { regexEngine, ...request } = workerData as WorkerData;
+    const { regexEngine, progress, ...request } = workerData as WorkerData;
     initRegexEngineSync(regexEngine);
-    response = { ok: true, data: handle(request, port) };
+    // Start-up is over: the modules are loaded and the regex engine is
+    // instantiated. The server starts the run's budget on this message.
+    const ready: ReadyMessage = { kind: 'ready' };
+    port.postMessage(ready);
+    response = { ok: true, data: handle(request, { port, progress: progressWriter(progress) }) };
   } catch (err) {
     response = { ok: false, error: err instanceof Error ? err.message : String(err) };
   }

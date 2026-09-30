@@ -43,10 +43,14 @@ export interface ExplainRequest {
 export type WorkerRequest = SimulateRequest | ValidateRequest | ExplainRequest;
 
 /**
- * What a sandbox worker is started with: its request, plus the regex engine
- * the server compiled once (see regexEngine.ts).
+ * What a sandbox worker is started with: its request, the regex engine the
+ * server compiled once (see regexEngine.ts), and the shared word it reports
+ * its progress in (progress.ts).
  */
-export type WorkerData = WorkerRequest & { regexEngine: RegexEngineModule };
+export type WorkerData = WorkerRequest & {
+  regexEngine: RegexEngineModule;
+  progress: SharedArrayBuffer;
+};
 
 export type SimulateResponse = SerializedSimulation;
 
@@ -114,5 +118,15 @@ export interface SuspectsMessage {
   list: SuspectList;
 }
 
+/**
+ * Posted once the worker has loaded and instantiated the regex engine, before
+ * it touches the request. The run's wall-clock budget starts here, so the
+ * worker's start-up — tens of milliseconds warm, over a hundred cold — is not
+ * charged to the caller's input.
+ */
+export interface ReadyMessage {
+  kind: 'ready';
+}
+
 /** Everything a worker posts: messages about the run so far, then its answer. */
-export type WorkerMessage = SuspectsMessage | WorkerResponse;
+export type WorkerMessage = ReadyMessage | SuspectsMessage | WorkerResponse;

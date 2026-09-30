@@ -331,6 +331,14 @@ export interface PipelineOptions {
    * does not change as the real clock moves on.
    */
   now?: number;
+  /**
+   * Called as each stage starts, with its name and how many events it is
+   * given (none for LINE_BREAKER, which makes them). For a caller watching a
+   * run from outside it: the MCP server records the last one, so a run it
+   * had to stop can say where it was. It must not throw, and should be cheap:
+   * it runs once per stage, a few dozen times a run.
+   */
+  onStage?: (stage: import('./runStages').RunStage, events: number) => void;
 }
 
 export type OutputTabId = 'preview' | 'cim' | 'fields' | 'transforms' | 'effective' | 'architecture';

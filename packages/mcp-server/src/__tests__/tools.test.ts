@@ -8,7 +8,10 @@ import {
   handleValidate,
   MAX_TOTAL_CONF_CHARS,
   validateInputShape,
+  workerFailure,
 } from '../tools';
+import { WorkerStartTimeoutError, WorkerTimeoutError } from '../runInWorker';
+import type { RunProgress } from '../progress';
 import { z } from 'zod';
 import { explainOutputShape, validateOutputShape } from '../outputSchemas';
 import { MAX_RESPONSE_BYTES } from '../responseBudget';
@@ -166,7 +169,32 @@ describe('simulate', () => {
     );
     expect(suspect).toBeDefined();
     expect(suspect.stanza).toBe('evil');
-    expect(out.guidance).toMatch(/retry/i);
+    // Stalled on the one event, so the pattern is blamed and a retry is not advised.
+    expect(out.progress).toEqual({ phase: 'running', stage: 'EXTRACT', events: 1 });
+    expect(out.message).toMatch(/single event/);
+    expect(out.guidance).toMatch(/Do not simply retry/);
+  }, 20_000);
+
+  it('does not blame a regex when a large sample simply needs longer (#488)', async () => {
+    // 20,000 events, each through a dozen cheap EXTRACTs and EVALs: nothing
+    // is slow about any one of them, the budget is just too small for the
+    // volume (the same run completes in well over a second).
+    const props = [
+      '[access_log]',
+      'SHOULD_LINEMERGE = false',
+      ...Array.from({ length: 6 }, (_, i) => `EXTRACT-e${i} = (?<f${i}>\\w)=`),
+      ...Array.from({ length: 6 }, (_, i) => `EVAL-v${i} = f${i} . "${i}"`),
+    ].join('\n');
+    const result = await handleSimulate(
+      simulateArgs({ raw: 'a=1\n'.repeat(20_000), props_conf: props, timeout_ms: 100 }),
+      WORKER_PATH,
+    );
+    const out = payload(result);
+    expect(out.error).toBe('timeout');
+    expect(out.progress.phase).toMatch(/running|finishing/);
+    expect(out.message).not.toMatch(/likeliest cause/);
+    expect(out.guidance).toMatch(/larger timeout_ms/);
+    expect(out.guidance).not.toMatch(/Do not simply retry/);
   }, 20_000);
 });
 
@@ -469,6 +497,88 @@ describe('the timeout path (#468)', () => {
       expect(maxGapMs).toBeLessThan(1_000);
     }
   }, 60_000);
+});
+
+describe('timeout budget and advice (#488)', () => {
+  it('does not charge worker start-up to a small budget', async () => {
+    // Start-up measured 60ms warm and 118ms cold against the 100ms minimum,
+    // so a correct conf could time out before its run began. Several calls
+    // at once make start-up slower still.
+    const results = await Promise.all(
+      Array.from({ length: 4 }, () =>
+        handleValidate({ props_conf: ACCESS_PROPS, transforms_conf: '', timeout_ms: 100 }, WORKER_PATH),
+      ),
+    );
+    for (const result of results) expect(result.isError).toBeUndefined();
+  }, 20_000);
+
+  it('says the run was still parsing, and lists no regex, when the conf itself is the cost', async () => {
+    // About 72,000 EXTRACTs: parsing them (twice, with the suspect list) takes
+    // longer than the budget, before any pattern runs.
+    const lines = ['[access_log]'];
+    for (let i = 0, n = 0; n < MAX_TOTAL_CONF_CHARS - 100; i++) {
+      const line = `EXTRACT-${i} = (a+)+b${i}`;
+      lines.push(line);
+      n += line.length + 1;
+    }
+    const out = payload(
+      await handleSimulate(simulateArgs({ props_conf: lines.join('\n'), timeout_ms: 100 }), WORKER_PATH),
+    );
+    expect(out.error).toBe('timeout');
+    expect(out.progress).toEqual({ phase: 'parsing' });
+    expect(out.message).toMatch(/still parsing the conf/);
+    expect(out).not.toHaveProperty('regex_directives');
+  }, 20_000);
+
+  const timeout = (progress?: RunProgress, budget = 5_000) =>
+    new WorkerTimeoutError(budget, { suspects: [], total: 0 }, progress);
+  const advise = (err: unknown, context: Parameters<typeof workerFailure>[1]) =>
+    payload(workerFailure(err, context));
+
+  it('advises from where the run stopped', () => {
+    const simulate = { op: 'simulate', rawChars: 50 } as const;
+    // Shaping the response: ask for less.
+    expect(advise(timeout({ phase: 'finishing' }), simulate).guidance).toMatch(/max_events/);
+    expect(advise(timeout({ phase: 'finishing' }), { op: 'validate' }).guidance).toMatch(/less conf text/);
+    // Validate and explain run no directive's regex.
+    for (const op of ['validate', 'explain'] as const) {
+      const out = advise(timeout({ phase: 'running' }), { op });
+      expect(out.message).toMatch(/no pattern is backtracking/);
+      expect(out).not.toHaveProperty('regex_directives');
+    }
+    // Breaking a small sample: the LINE_BREAKER pattern stalled.
+    const small = advise(timeout({ phase: 'running', stage: 'LINE_BREAKER', events: 0 }), simulate);
+    expect(small.message).toMatch(/breaking a 50-character sample.*likeliest cause/);
+    expect(small.regex_directives).toEqual([]);
+    // Breaking a large one may just be volume.
+    const large = advise(timeout({ phase: 'running', stage: 'LINE_BREAKER', events: 0 }), {
+      op: 'simulate',
+      rawChars: 900_000,
+    });
+    expect(large.message).toMatch(/simply large/);
+    // Many events: either cause, so both remedies.
+    const many = advise(timeout({ phase: 'running', stage: 'EVAL', events: 5_000 }), simulate);
+    expect(many.message).toMatch(/EVAL, over 5000 events/);
+    expect(many.guidance).toMatch(/larger timeout_ms \(at most 30000\).*Repair/);
+    // A simulate run that has not reached a stage is still reading the conf.
+    expect(advise(timeout({ phase: 'running' }), simulate).message).toMatch(/still parsing/);
+    expect(advise(timeout(undefined), simulate).message).toMatch(/still parsing/);
+  });
+
+  it('does not suggest a larger budget than the schema allows', () => {
+    const out = advise(timeout({ phase: 'running', stage: 'EVAL', events: 5_000 }, 30_000), {
+      op: 'simulate',
+      rawChars: 50,
+    });
+    expect(out.guidance).not.toMatch(/timeout_ms/);
+    expect(out.budget_ms).toBe(30_000);
+  });
+
+  it('reports a worker that never started as its own error, not a timeout of the input', () => {
+    const out = advise(new WorkerStartTimeoutError(10_000), { op: 'validate' });
+    expect(out).toMatchObject({ error: 'start_timeout', limit_ms: 10_000 });
+    expect(out.guidance).toMatch(/Nothing is wrong with the input/);
+  });
 });
 
 describe('collectRegexSuspects', () => {

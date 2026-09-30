@@ -33,22 +33,27 @@
  *   of the queue before it ever holds a slot, and terminates a running call's
  *   worker instead of letting it run to its budget.
  *
- * The wall-clock budget starts when the call's worker is spawned, NOT when the
- * call is queued. A timeout is reported as "your regex backtracked — repair it"
- * (see `workerFailure` in tools.ts), and time spent waiting behind other calls
- * says nothing about this call's patterns; counting it would send an agent to
- * rewrite a correct regex because a neighbour was slow. The cost is that a
- * queued call's end-to-end latency is its wait plus its budget. That wait is
- * itself bounded — every call ahead of it holds a slot for at most its own
- * budget (≤30s), and with the queue bounded at four calls per slot no call
- * waits behind more than four budgets — and the MCP client's request timeout
- * remains the outer limit.
+ * The wall-clock budget starts when the call's worker reports itself ready —
+ * loaded, with the regex engine instantiated — NOT when the call is queued
+ * nor when its worker is spawned. The timeout error says where the run had
+ * got to and advises from that (see `workerFailure` in tools.ts); time spent
+ * waiting behind other calls, or starting a thread and evaluating the engine
+ * bundle (tens of milliseconds warm, over a hundred cold, against a 100ms
+ * minimum budget), says nothing about this call's input, and counting it
+ * failed correct confs on a small budget. Start-up has a cap of its own
+ * (`DEFAULT_STARTUP_LIMIT_MS`), so a worker that never gets going still ends.
+ * The cost is that a queued call's end-to-end latency is its wait plus its
+ * start-up plus its budget. That wait is itself bounded — every call ahead of
+ * it holds a slot for at most its own start-up cap and budget (≤30s), and with
+ * the queue bounded at four calls per slot no call waits behind more than four
+ * of those — and the MCP client's request timeout remains the outer limit.
  */
 import { Worker, type ResourceLimits } from 'node:worker_threads';
 import os from 'node:os';
 import path from 'node:path';
 import type { WorkerData, WorkerMessage, WorkerRequest } from './protocol';
 import type { SuspectList } from './suspects';
+import { createProgressBuffer, readProgress, type RunProgress } from './progress';
 import { regexEngineModule } from './regexEngine';
 
 export class WorkerTimeoutError extends Error {
@@ -59,11 +64,29 @@ export class WorkerTimeoutError extends Error {
    * would mean parsing the caller's conf on its own thread.
    */
   readonly suspects: SuspectList | undefined;
-  constructor(budgetMs: number, suspects?: SuspectList) {
+  /** Where the run was when its budget ran out, as the worker last recorded it. */
+  readonly progress: RunProgress | undefined;
+  constructor(budgetMs: number, suspects?: SuspectList, progress?: RunProgress) {
     super(`Worker exceeded its ${budgetMs}ms wall-clock budget and was terminated`);
     this.name = 'WorkerTimeoutError';
     this.budgetMs = budgetMs;
     this.suspects = suspects;
+    this.progress = progress;
+  }
+}
+
+/**
+ * The worker did not report itself ready within the start-up cap, so it never
+ * began on the request. Nothing about the input is implicated: start-up does
+ * the same work for every call. Its own type so it is not reported as a
+ * timeout of the caller's run.
+ */
+export class WorkerStartTimeoutError extends Error {
+  readonly limitMs: number;
+  constructor(limitMs: number) {
+    super(`Worker did not start within ${limitMs}ms and was terminated`);
+    this.name = 'WorkerStartTimeoutError';
+    this.limitMs = limitMs;
   }
 }
 
@@ -246,6 +269,14 @@ export const DEFAULT_MAX_CONCURRENT_WORKERS = Math.max(1, Math.min(4, os.availab
  */
 export const DEFAULT_MAX_QUEUED_CALLS = 4 * DEFAULT_MAX_CONCURRENT_WORKERS;
 
+/**
+ * Longest a worker may take to report itself ready before it is terminated.
+ * Start-up measures about 60ms warm and 120ms cold on an idle machine; this
+ * leaves two orders of magnitude for a loaded one, and exists so a start that
+ * hangs still ends rather than holding its slot for ever.
+ */
+export const DEFAULT_STARTUP_LIMIT_MS = 10_000;
+
 const defaultLimiter = new Semaphore(DEFAULT_MAX_CONCURRENT_WORKERS, DEFAULT_MAX_QUEUED_CALLS);
 
 export interface RunInWorkerOptions {
@@ -255,6 +286,8 @@ export interface RunInWorkerOptions {
   resourceLimits?: ResourceLimits;
   /** Overrides the process-wide concurrency cap (tests use their own). */
   limiter?: Semaphore;
+  /** Overrides `DEFAULT_STARTUP_LIMIT_MS` (tests use a short one). */
+  startupLimitMs?: number;
   /**
    * The MCP request's cancellation signal (`extra.signal` in a tool handler).
    * Aborting it dequeues a waiting call, or terminates a running call's
@@ -310,7 +343,8 @@ function spawnAndWait<T>(
 
   // Compiled (once per process) before the worker exists and before its
   // budget starts, so no request pays for it.
-  const workerData: WorkerData = { ...request, regexEngine: regexEngineModule() };
+  const progress = createProgressBuffer();
+  const workerData: WorkerData = { ...request, regexEngine: regexEngineModule(), progress };
   // `stdout: true` because by default a worker's console.log lands on the
   // server's stdout, which is the JSON-RPC channel: one stray line corrupts
   // the stream. `end: false` so the worker exiting does not end stderr.
@@ -322,14 +356,6 @@ function spawnAndWait<T>(
     let settled = false;
     let suspects: SuspectList | undefined;
 
-    const timer = setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      signal?.removeEventListener('abort', onAbort);
-      void worker.terminate();
-      reject(new WorkerTimeoutError(timeoutMs, suspects));
-    }, timeoutMs);
-
     const settle = (fn: () => void) => {
       if (settled) return;
       settled = true;
@@ -337,6 +363,21 @@ function spawnAndWait<T>(
       signal?.removeEventListener('abort', onAbort);
       fn();
       void worker.terminate();
+    };
+
+    // Start-up first, under its own cap; the budget replaces it on `ready`.
+    // Progress is read before terminate() is asked for, while the word still
+    // holds the worker's last write.
+    const startupLimitMs = options.startupLimitMs ?? DEFAULT_STARTUP_LIMIT_MS;
+    let timer = setTimeout(() => {
+      settle(() => reject(new WorkerStartTimeoutError(startupLimitMs)));
+    }, startupLimitMs);
+    const startBudget = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        const at = readProgress(progress);
+        settle(() => reject(new WorkerTimeoutError(timeoutMs, suspects, at)));
+      }, timeoutMs);
     };
 
     // A cancelled call's answer will never be read (the SDK drops responses
@@ -348,7 +389,9 @@ function spawnAndWait<T>(
 
     worker.on('message', (message: WorkerMessage) => {
       if ('kind' in message) {
-        suspects = message.list;
+        if (settled) return;
+        if (message.kind === 'ready') startBudget();
+        else suspects = message.list;
         return;
       }
       settle(() => {
