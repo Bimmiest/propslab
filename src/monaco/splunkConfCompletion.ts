@@ -1,6 +1,6 @@
 import type { languages, editor, Position, CancellationToken } from 'monaco-editor';
-import { getDirectivesForFile, getDirectivesByCategory, type DirectiveInfo } from '../engine/directiveRegistry';
 import { languages as monacoLanguages } from 'monaco-editor/editor';
+import { getDirectivesForFile, getDirectivesByCategory, type DirectiveInfo } from '../engine/directiveRegistry';
 import { endsWithContinuation } from '../engine/utils/directiveValues';
 import { describeTimeFormat, renderTimeFormatPreview } from './timeFormatPreview';
 

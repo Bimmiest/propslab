@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from 'vitest';
 import type { editor, languages, Position } from 'monaco-editor';
+import { languages as monaco } from 'monaco-editor/editor';
 import { createCompletionProvider } from '../splunkConfCompletion';
 import { getDirectivesForFile } from '../../engine/directiveRegistry';
-import { languages as monaco } from 'monaco-editor/editor';
 import { fakeModel } from '../../test/fakeModel';
 
 type ConfFile = 'props.conf' | 'transforms.conf';

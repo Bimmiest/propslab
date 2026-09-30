@@ -1,10 +1,10 @@
-import { describe, expect, it, vi } from 'vitest';
 import { spawn } from 'node:child_process';
+import { PassThrough } from 'node:stream';
+import { fileURLToPath } from 'node:url';
+import { describe, expect, it, vi } from 'vitest';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { McpError } from '@modelcontextprotocol/sdk/types.js';
-import { PassThrough } from 'node:stream';
-import { fileURLToPath } from 'node:url';
 import type { JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js';
 import { createStdioTransport, MAX_MESSAGE_BYTES, MessageSizeLimiter, oversizeMessageError } from '../messageLimit';
 import { ID_SCAN_BYTES } from '../requestId';

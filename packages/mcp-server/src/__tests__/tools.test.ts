@@ -1,5 +1,6 @@
-import { describe, expect, it, vi } from 'vitest';
 import { fileURLToPath } from 'node:url';
+import { describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 import {
   explainInputShape,
   handleExplainPrecedence,
@@ -12,7 +13,6 @@ import {
 } from '../tools';
 import { WorkerStartTimeoutError, WorkerTimeoutError } from '../runInWorker';
 import type { RunProgress } from '../progress';
-import { z } from 'zod';
 import { explainOutputShape, validateOutputShape } from '../outputSchemas';
 import { MAX_RESPONSE_BYTES } from '../responseBudget';
 import { collectRegexSuspects } from '../suspects';

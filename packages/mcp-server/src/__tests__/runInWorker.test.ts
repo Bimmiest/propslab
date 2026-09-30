@@ -1,9 +1,9 @@
-import { describe, expect, it, vi } from 'vitest';
 import { existsSync, mkdtempSync, readFileSync, readlinkSync } from 'node:fs';
 import os from 'node:os';
 import { execFileSync, spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { describe, expect, it, vi } from 'vitest';
 import {
   DEFAULT_MAX_CONCURRENT_WORKERS,
   DEFAULT_MAX_QUEUED_CALLS,

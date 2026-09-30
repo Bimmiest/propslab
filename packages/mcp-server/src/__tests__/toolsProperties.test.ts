@@ -23,9 +23,9 @@
 // The seed is fixed so a run is reproducible.
 // ---------------------------------------------------------------------------
 
+import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
 import fc from 'fast-check';
-import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import { handleExplainPrecedence, handleSimulate, handleValidate } from '../tools';
 import { serializeSimulation } from '../serialize';
