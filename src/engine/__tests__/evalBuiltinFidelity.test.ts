@@ -309,8 +309,11 @@ todo('mvdedup', 'mvdedup(missing)', 'whether a NULL argument is NULL or an empty
 todo('mvdedup', 'mvdedup("")', 'the docs do not say what a single empty string gives');
 
 row('mvsort', 'mvsort(split("b,a", ","))', ['a', 'b'], `${MV} > mvsort(X): lexicographic order`);
-todo('mvsort', 'mvsort(split("10,9", ","))',
-  'documented as sorting numbers numerically before strings ("9","10"); the simulator sorts as strings');
+// The docs' own example: "Numbers are sorted based on the first digit. For
+// example, the numbers 10, 9, 70, 100 are sorted lexicographically as 10, 100,
+// 70, 9." (#524 read it the other way.)
+row('mvsort', 'mvsort(split("10,9,70,100", ","))', ['10', '100', '70', '9'],
+  `${MV} > mvsort(X): numbers are sorted based on the first digit`);
 todo('mvsort', 'mvsort(missing)', 'whether a NULL argument is NULL or an empty multivalue is open: #446 item 3');
 todo('mvsort', 'mvsort("")', 'the docs do not say what a single empty string gives');
 
