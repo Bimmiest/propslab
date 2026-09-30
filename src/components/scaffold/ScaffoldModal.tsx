@@ -70,8 +70,12 @@ export function ScaffoldModal() {
       header={<ScaffoldHeader onClose={toggleScaffold} />}
       footer={
         <DialogFooter>
-          <DialogButton variant="cancel" onClick={toggleScaffold}>Cancel</DialogButton>
-          <DialogButton variant="accent" onClick={apply} disabled={!canApply}>Append to props.conf</DialogButton>
+          <DialogButton variant="cancel" onClick={toggleScaffold}>
+            Cancel
+          </DialogButton>
+          <DialogButton variant="accent" onClick={apply} disabled={!canApply}>
+            Append to props.conf
+          </DialogButton>
         </DialogFooter>
       }
     >
@@ -83,7 +87,12 @@ export function ScaffoldModal() {
         ) : (
           <>
             {/* Sourcetype / stanza name (editable; written to metadata on apply) */}
-            <StanzaNameField sourcetype={sourcetype} setSourcetype={setSourcetype} nameError={nameError} suggestion={result.sourcetypeSuggestion} />
+            <StanzaNameField
+              sourcetype={sourcetype}
+              setSourcetype={setSourcetype}
+              nameError={nameError}
+              suggestion={result.sourcetypeSuggestion}
+            />
 
             <div className="space-y-1.5">
               {result.suggestions.map((s) => (
@@ -96,9 +105,7 @@ export function ScaffoldModal() {
               ))}
             </div>
 
-            {stanzaExists && chosen.length > 0 && (
-              <ExistingStanzaWarning stanzaName={stanzaName} />
-            )}
+            {stanzaExists && chosen.length > 0 && <ExistingStanzaWarning stanzaName={stanzaName} />}
 
             {/* Diff preview */}
             <ScaffoldDiffPreview stanzaName={stanzaName} diff={diff} />
@@ -109,13 +116,26 @@ export function ScaffoldModal() {
   );
 }
 
-function SuggestionRow({ suggestion, checked, onToggle }: { suggestion: ScaffoldSuggestion; checked: boolean; onToggle: () => void }) {
+function SuggestionRow({
+  suggestion,
+  checked,
+  onToggle,
+}: {
+  suggestion: ScaffoldSuggestion;
+  checked: boolean;
+  onToggle: () => void;
+}) {
   return (
     <label
       className="flex items-start gap-3 px-3 py-2 rounded-lg cursor-pointer"
       style={{ backgroundColor: 'var(--color-bg-secondary)', border: '1px solid var(--color-border-subtle)' }}
     >
-      <input type="checkbox" checked={checked} onChange={onToggle} className="mt-0.5 accent-[var(--color-accent)] cursor-pointer" />
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={onToggle}
+        className="mt-0.5 accent-[var(--color-accent)] cursor-pointer"
+      />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
           <code className="font-mono text-[13px]" style={{ color: 'var(--color-text-primary)' }}>
@@ -123,7 +143,9 @@ function SuggestionRow({ suggestion, checked, onToggle }: { suggestion: Scaffold
           </code>
           <Badge variant={CONFIDENCE_VARIANT[suggestion.confidence]}>{suggestion.confidence}</Badge>
         </div>
-        <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{suggestion.evidence}</p>
+        <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
+          {suggestion.evidence}
+        </p>
       </div>
     </label>
   );
@@ -133,7 +155,9 @@ function EmptyState({ text }: { text: string }) {
   return (
     <div className="flex flex-col items-center justify-center gap-2 py-12 text-center">
       <Icon name="sparkles" className="w-8 h-8 text-[var(--color-border)]" />
-      <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>{text}</p>
+      <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
+        {text}
+      </p>
     </div>
   );
 }
@@ -141,10 +165,16 @@ function EmptyState({ text }: { text: string }) {
 function ScaffoldDiffPreview({ stanzaName, diff }: { stanzaName: string; diff: ReturnType<typeof computeDiff> }) {
   return (
     <div>
-      <div className="text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
+      <div
+        className="text-xs font-semibold uppercase tracking-wider mb-1.5"
+        style={{ color: 'var(--color-text-secondary)' }}
+      >
         props.conf preview — stanza <code className="font-mono">[{stanzaName}]</code>
       </div>
-      <div className="rounded border text-xs font-mono leading-relaxed overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
+      <div
+        className="rounded border text-xs font-mono leading-relaxed overflow-x-auto"
+        style={{ borderColor: 'var(--color-border)' }}
+      >
         <DiffLines diff={diff} />
       </div>
     </div>
@@ -159,14 +189,19 @@ function ExistingStanzaWarning({ stanzaName }: { stanzaName: string }) {
     >
       <Icon name="warning" className="w-4 h-4 shrink-0 mt-0.5" />
       <span>
-        A <code className="font-mono">[{stanzaName}]</code> stanza already exists in props.conf — these directives
-        will be appended as a <strong>second</strong> stanza. Consider merging them into the existing one.
+        A <code className="font-mono">[{stanzaName}]</code> stanza already exists in props.conf — these directives will
+        be appended as a <strong>second</strong> stanza. Consider merging them into the existing one.
       </span>
     </div>
   );
 }
 
-function StanzaNameField({ sourcetype, setSourcetype, nameError, suggestion }: {
+function StanzaNameField({
+  sourcetype,
+  setSourcetype,
+  nameError,
+  suggestion,
+}: {
   sourcetype: string;
   setSourcetype: (value: string) => void;
   nameError: string | null;
@@ -174,7 +209,11 @@ function StanzaNameField({ sourcetype, setSourcetype, nameError, suggestion }: {
 }) {
   return (
     <div>
-      <label htmlFor="scaffold-sourcetype" className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-secondary)' }}>
+      <label
+        htmlFor="scaffold-sourcetype"
+        className="text-xs font-semibold uppercase tracking-wider"
+        style={{ color: 'var(--color-text-secondary)' }}
+      >
         Sourcetype (stanza name)
       </label>
       <input
@@ -185,7 +224,11 @@ function StanzaNameField({ sourcetype, setSourcetype, nameError, suggestion }: {
         spellCheck={false}
         placeholder="my:sourcetype"
         className="mt-1 w-full px-2.5 py-1.5 rounded-md text-sm font-mono outline-none focus:border-[var(--color-border-hover)]"
-        style={{ backgroundColor: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }}
+        style={{
+          backgroundColor: 'var(--color-bg-secondary)',
+          border: '1px solid var(--color-border)',
+          color: 'var(--color-text-primary)',
+        }}
       />
       {nameError ? (
         <p className="text-xs mt-1 font-medium" style={{ color: 'var(--color-error)' }}>
@@ -218,4 +261,3 @@ function ScaffoldHeader({ onClose }: { onClose: () => void }) {
     </DialogHeader>
   );
 }
-

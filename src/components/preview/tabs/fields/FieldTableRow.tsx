@@ -1,10 +1,24 @@
 import { copyQuietly } from '../../../../utils/clipboard';
-import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuLabel } from '../../../ui/ContextMenu';
+import {
+  ContextMenu,
+  ContextMenuTrigger,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuLabel,
+} from '../../../ui/ContextMenu';
 import { Icon } from '../../../ui/Icon';
 import type { FieldRow } from './fieldRows';
 
 export function FieldTableRow({
-  field, rowId, rowIndex, eventCount, columnWidths, collapsed, childCount, controls, onToggle,
+  field,
+  rowId,
+  rowIndex,
+  eventCount,
+  columnWidths,
+  collapsed,
+  childCount,
+  controls,
+  onToggle,
 }: {
   field: FieldRow;
   rowId: string | undefined;
@@ -19,57 +33,63 @@ export function FieldTableRow({
 }) {
   return (
     <ContextMenu>
-    <ContextMenuTrigger>
-    <tr
-      id={rowId}
-      aria-rowindex={rowIndex + 2}
-      data-window-row=""
-      data-window-index={rowIndex}
-      className="border-b border-[var(--color-border-subtle)] hover:bg-[var(--color-bg-secondary)] transition-colors">
-      <td className="py-1.5 px-3 font-mono font-medium" style={{ width: columnWidths['name'] }}>
-        <div className="flex items-center gap-1.5">
-          <FieldNameCell
-            name={field.name}
-            depth={field.depth}
-            isParent={field.isParent}
-            parentName={field.parentName}
-            collapsed={collapsed}
-            childCount={childCount}
-            controls={controls}
-            onToggle={onToggle}
-          />
-          {field.maskedBy.size > 0 && (
-            <span
-              className="inline-block flex-shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium font-sans bg-[var(--color-warning)]/10 text-[var(--color-warning)]"
-              title={`Value rewritten at index time by ${Array.from(field.maskedBy).join(', ')}. The extraction works — the value it finds is not the original.`}
-            >
-              masked
-            </span>
-          )}
-        </div>
-      </td>
-      <td className="py-1.5 px-3" style={{ width: columnWidths['aliases'] }}>
-        <AliasChips name={field.name} aliases={field.aliases} />
-      </td>
-      <td className="py-1.5 px-3 text-[var(--color-text-secondary)]" style={{ width: columnWidths['count'] }}>
-        {field.count}/{eventCount}
-      </td>
-      <td className="py-1.5 px-3 text-[var(--color-text-secondary)]" style={{ width: columnWidths['distinct'] }}>
-        {field.values.size}
-      </td>
-      <td className="py-1.5 px-3" style={{ width: columnWidths['source'] }}>
-        <PhaseChips phases={field.phases} sources={field.sources} />
-      </td>
-      <td className="py-1.5 px-3 font-mono text-[var(--color-text-secondary)] truncate" style={{ width: columnWidths['values'], maxWidth: columnWidths['values'] }}>
-        {Array.from(field.values).slice(0, 3).join(', ')}
-      </td>
-    </tr>
-    </ContextMenuTrigger>
-    <ContextMenuContent>
-      <ContextMenuLabel>{field.name}</ContextMenuLabel>
-      <ContextMenuItem onSelect={() => copyQuietly(field.name)}>Copy field name</ContextMenuItem>
-      <ContextMenuItem onSelect={() => copyQuietly(Array.from(field.values).join(', '))}>Copy sample values</ContextMenuItem>
-    </ContextMenuContent>
+      <ContextMenuTrigger>
+        <tr
+          id={rowId}
+          aria-rowindex={rowIndex + 2}
+          data-window-row=""
+          data-window-index={rowIndex}
+          className="border-b border-[var(--color-border-subtle)] hover:bg-[var(--color-bg-secondary)] transition-colors"
+        >
+          <td className="py-1.5 px-3 font-mono font-medium" style={{ width: columnWidths['name'] }}>
+            <div className="flex items-center gap-1.5">
+              <FieldNameCell
+                name={field.name}
+                depth={field.depth}
+                isParent={field.isParent}
+                parentName={field.parentName}
+                collapsed={collapsed}
+                childCount={childCount}
+                controls={controls}
+                onToggle={onToggle}
+              />
+              {field.maskedBy.size > 0 && (
+                <span
+                  className="inline-block flex-shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium font-sans bg-[var(--color-warning)]/10 text-[var(--color-warning)]"
+                  title={`Value rewritten at index time by ${Array.from(field.maskedBy).join(', ')}. The extraction works — the value it finds is not the original.`}
+                >
+                  masked
+                </span>
+              )}
+            </div>
+          </td>
+          <td className="py-1.5 px-3" style={{ width: columnWidths['aliases'] }}>
+            <AliasChips name={field.name} aliases={field.aliases} />
+          </td>
+          <td className="py-1.5 px-3 text-[var(--color-text-secondary)]" style={{ width: columnWidths['count'] }}>
+            {field.count}/{eventCount}
+          </td>
+          <td className="py-1.5 px-3 text-[var(--color-text-secondary)]" style={{ width: columnWidths['distinct'] }}>
+            {field.values.size}
+          </td>
+          <td className="py-1.5 px-3" style={{ width: columnWidths['source'] }}>
+            <PhaseChips phases={field.phases} sources={field.sources} />
+          </td>
+          <td
+            className="py-1.5 px-3 font-mono text-[var(--color-text-secondary)] truncate"
+            style={{ width: columnWidths['values'], maxWidth: columnWidths['values'] }}
+          >
+            {Array.from(field.values).slice(0, 3).join(', ')}
+          </td>
+        </tr>
+      </ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuLabel>{field.name}</ContextMenuLabel>
+        <ContextMenuItem onSelect={() => copyQuietly(field.name)}>Copy field name</ContextMenuItem>
+        <ContextMenuItem onSelect={() => copyQuietly(Array.from(field.values).join(', '))}>
+          Copy sample values
+        </ContextMenuItem>
+      </ContextMenuContent>
     </ContextMenu>
   );
 }
@@ -115,7 +135,12 @@ function PhaseChips({ phases, sources }: Pick<FieldRow, 'phases' | 'sources'>) {
 }
 
 /** The expand/collapse chevron on a parent field's row. */
-function ToggleChevron({ name, collapsed, controls, onToggle }: {
+function ToggleChevron({
+  name,
+  collapsed,
+  controls,
+  onToggle,
+}: {
   name: string;
   collapsed: boolean;
   controls: string | undefined;
@@ -146,7 +171,14 @@ function ToggleChevron({ name, collapsed, controls, onToggle }: {
 }
 
 function FieldNameCell({
-  name, depth, isParent, parentName, collapsed, childCount, controls, onToggle,
+  name,
+  depth,
+  isParent,
+  parentName,
+  collapsed,
+  childCount,
+  controls,
+  onToggle,
 }: {
   name: string;
   depth: number;
@@ -175,11 +207,7 @@ function FieldNameCell({
             JSON
           </span>
         )}
-        {isParent && collapsed && (
-          <span className="text-[9px] text-[var(--color-text-muted)]">
-            ({childCount})
-          </span>
-        )}
+        {isParent && collapsed && <span className="text-[9px] text-[var(--color-text-muted)]">({childCount})</span>}
       </span>
     );
   }
@@ -190,14 +218,14 @@ function FieldNameCell({
       className="flex items-center text-[var(--color-text-secondary)]"
       style={{ paddingLeft: `${Math.min(depth, 6) * 12 + (isParent ? 0 : 16)}px` }}
     >
-      {isParent ? chevron : (
+      {isParent ? (
+        chevron
+      ) : (
         <span className="text-[var(--color-text-muted)] mr-1" aria-hidden="true">
           {'└─'}
         </span>
       )}
-      <span title={name}>
-        .{leafName}
-      </span>
+      <span title={name}>.{leafName}</span>
       {isParent && (
         <span
           className="text-[9px] px-1 py-px rounded ml-1"
@@ -206,11 +234,7 @@ function FieldNameCell({
           JSON
         </span>
       )}
-      {isParent && collapsed && (
-        <span className="text-[9px] text-[var(--color-text-muted)] ml-1">
-          ({childCount})
-        </span>
-      )}
+      {isParent && collapsed && <span className="text-[9px] text-[var(--color-text-muted)] ml-1">({childCount})</span>}
     </span>
   );
 }

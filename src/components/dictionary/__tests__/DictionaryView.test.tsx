@@ -103,9 +103,7 @@ describe('DictionaryView', () => {
     fireEvent.keyDown(listbox, { key: 'ArrowDown' });
 
     expect(useAppStore.getState().dictionarySelection).not.toBe(firstId);
-    expect(useAppStore.getState().dictionarySelection).toBe(
-      options[1]?.getAttribute('data-entry-id'),
-    );
+    expect(useAppStore.getState().dictionarySelection).toBe(options[1]?.getAttribute('data-entry-id'));
   });
 
   it('points aria-activedescendant at the selected row', () => {
@@ -164,8 +162,10 @@ describe('DictionaryView list badges', () => {
       .map((el) => el.closest('[role="option"]') as HTMLElement);
     expect(rows).toHaveLength(2);
     // The key is bare in both; only the badge tells them apart.
-    expect(rows.map((r) => within(r).getByText(/^(props|transforms)$/).textContent).sort())
-      .toEqual(['props', 'transforms']);
+    expect(rows.map((r) => within(r).getByText(/^(props|transforms)$/).textContent).sort()).toEqual([
+      'props',
+      'transforms',
+    ]);
   });
 });
 
@@ -275,15 +275,12 @@ describe('DictionaryView on a phone (#494)', () => {
     useAppStore.setState(initial, true);
     // jsdom has no matchMedia; report every query as matching so the
     // (max-width: 767px) branch renders.
-    vi.stubGlobal(
-      'matchMedia',
-      (query: string) => ({
-        matches: true,
-        media: query,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-      }),
-    );
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: true,
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }));
   });
   afterEach(() => {
     vi.unstubAllGlobals();

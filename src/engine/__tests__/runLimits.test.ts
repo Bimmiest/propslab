@@ -30,8 +30,10 @@ const UNMERGED = '[st]\nSHOULD_LINEMERGE = false\n';
 const run = (raw: string, props: string, limits: Partial<RunLimits>, options: Partial<PipelineOptions> = {}) =>
   runPipeline(raw, META, props, '', { perEventPipeline: false, now: NOW, limits, ...options });
 
-const truncationWarnings = (diags: ValidationDiagnostic[]) => diags.filter((d) => d.message.startsWith('Input truncated'));
-const capWarnings = (diags: ValidationDiagnostic[]) => diags.filter((d) => d.message.startsWith('Line breaking stopped'));
+const truncationWarnings = (diags: ValidationDiagnostic[]) =>
+  diags.filter((d) => d.message.startsWith('Input truncated'));
+const capWarnings = (diags: ValidationDiagnostic[]) =>
+  diags.filter((d) => d.message.startsWith('Line breaking stopped'));
 
 describe('RunLimits defaults (#479)', () => {
   it('caps events in the low tens of thousands, above the 20,000-event perf budget', () => {
@@ -41,7 +43,10 @@ describe('RunLimits defaults (#479)', () => {
   });
 
   it('applies the default cap when the caller passes none', () => {
-    const { result, diagnostics } = runPipeline('a\n'.repeat(25_001), META, UNMERGED, '', { perEventPipeline: false, now: NOW });
+    const { result, diagnostics } = runPipeline('a\n'.repeat(25_001), META, UNMERGED, '', {
+      perEventPipeline: false,
+      now: NOW,
+    });
     expect(result.eventCount).toBe(25_000);
     expect(capWarnings(diagnostics)).toHaveLength(1);
   });
@@ -112,7 +117,10 @@ describe('maxEvents (#479)', () => {
 
   it('holds LINE_BREAKER = () to the default cap over a large input', () => {
     const props = '[st]\nSHOULD_LINEMERGE = false\nLINE_BREAKER = ()\n';
-    const { result, diagnostics } = runPipeline('y'.repeat(100_000), META, props, '', { perEventPipeline: false, now: NOW });
+    const { result, diagnostics } = runPipeline('y'.repeat(100_000), META, props, '', {
+      perEventPipeline: false,
+      now: NOW,
+    });
     expect(result.eventCount).toBe(DEFAULT_LIMITS.maxEvents);
     expect(capWarnings(diagnostics)).toHaveLength(1);
   });
@@ -133,10 +141,18 @@ describe('maxEvents (#479)', () => {
     // Line merging on: three dated events of two lines each. The cap counts
     // events, so two events keep all four of their lines.
     const raw = [
-      '2026-08-01 10:00:00 one', '  more', '2026-08-01 10:00:01 two', '  more', '2026-08-01 10:00:02 three', '  more',
+      '2026-08-01 10:00:00 one',
+      '  more',
+      '2026-08-01 10:00:01 two',
+      '  more',
+      '2026-08-01 10:00:02 three',
+      '  more',
     ].join('\n');
     const { result, diagnostics } = run(raw, '[st]\n', { maxEvents: 2 });
-    expect(result.events.map((e) => e._raw)).toEqual(['2026-08-01 10:00:00 one\n  more', '2026-08-01 10:00:01 two\n  more']);
+    expect(result.events.map((e) => e._raw)).toEqual([
+      '2026-08-01 10:00:00 one\n  more',
+      '2026-08-01 10:00:01 two\n  more',
+    ]);
     expect(capWarnings(diagnostics).map((d) => d.line)).toEqual([5]);
   });
 });
@@ -152,11 +168,14 @@ describe('splitSegments maxSegments (#479)', () => {
 });
 
 describe('explanationsPerDirective', () => {
-  it('analyses each directive\'s misses up to the limit, then records them unexplained', () => {
+  it("analyses each directive's misses up to the limit, then records them unexplained", () => {
     const props = `${UNMERGED}EXTRACT-miss = (?<never>zzz)\n`;
     const { result } = run('a\nb\nc\nd', props, { explanationsPerDirective: 1 });
     expect(result.events.map((e) => e.noOps?.find((n) => n.directive === 'EXTRACT-miss')?.reason.kind)).toEqual([
-      'no-match', 'not-explained', 'not-explained', 'not-explained',
+      'no-match',
+      'not-explained',
+      'not-explained',
+      'not-explained',
     ]);
   });
 });
@@ -196,7 +215,9 @@ describe('every RunLimits entry bounds the run (#479)', () => {
         const capped = run(raw, props, { maxEvents });
         const uncapped = run(raw, props, { maxEvents: Number.MAX_SAFE_INTEGER });
         expect(capped.result.eventCount).toBeLessThanOrEqual(maxEvents);
-        expect(capped.result.events.map((e) => e._raw)).toEqual(uncapped.result.events.slice(0, maxEvents).map((e) => e._raw));
+        expect(capped.result.events.map((e) => e._raw)).toEqual(
+          uncapped.result.events.slice(0, maxEvents).map((e) => e._raw),
+        );
         expect(capWarnings(capped.diagnostics)).toHaveLength(uncapped.result.eventCount > maxEvents ? 1 : 0);
       }),
     );

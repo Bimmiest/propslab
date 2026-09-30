@@ -39,9 +39,13 @@ describe('the Processing overlay', () => {
 
     act(() => useAppStore.getState().setIsProcessing(true));
     expect(overlay()).not.toBeInTheDocument();
-    act(() => { vi.advanceTimersByTime(PROCESSING_OVERLAY_DELAY_MS - 1); });
+    act(() => {
+      vi.advanceTimersByTime(PROCESSING_OVERLAY_DELAY_MS - 1);
+    });
     expect(overlay()).not.toBeInTheDocument();
-    act(() => { vi.advanceTimersByTime(1); });
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
     expect(overlay()).toBeInTheDocument();
 
     act(() => useAppStore.getState().setIsProcessing(false));
@@ -49,9 +53,13 @@ describe('the Processing overlay', () => {
 
     // A run shorter than the delay never shows it.
     act(() => useAppStore.getState().setIsProcessing(true));
-    act(() => { vi.advanceTimersByTime(20); });
+    act(() => {
+      vi.advanceTimersByTime(20);
+    });
     act(() => useAppStore.getState().setIsProcessing(false));
-    act(() => { vi.advanceTimersByTime(PROCESSING_OVERLAY_DELAY_MS); });
+    act(() => {
+      vi.advanceTimersByTime(PROCESSING_OVERLAY_DELAY_MS);
+    });
     expect(overlay()).not.toBeInTheDocument();
   });
 });
@@ -61,7 +69,12 @@ describe('subscriptions', () => {
     let commits = 0;
     const inputs = { propsConf: '[st]\nTRUNCATE = 5\n', transformsConf: '', metadata: meta };
     render(
-      <Profiler id="effective" onRender={() => { commits++; }}>
+      <Profiler
+        id="effective"
+        onRender={() => {
+          commits++;
+        }}
+      >
         <EffectiveConfigTab inputs={inputs} />
       </Profiler>,
     );
@@ -103,13 +116,29 @@ describe('subscriptions', () => {
 });
 
 describe('Architecture', () => {
-  it('reads each directive\'s phase from the registry', () => {
-    expect(deploymentTiers('[st]\nEXTRACT-a = (?<a>x)\n', '')).toEqual({ hasIndexTime: false, hasSearchTime: true, hasRouting: false });
-    expect(deploymentTiers('[st]\nMAX_DAYS_AGO = 10\n', '')).toEqual({ hasIndexTime: true, hasSearchTime: false, hasRouting: false });
-    expect(deploymentTiers('[st]\nTRANSFORMS-r = route\n', '')).toEqual({ hasIndexTime: true, hasSearchTime: false, hasRouting: true });
+  it("reads each directive's phase from the registry", () => {
+    expect(deploymentTiers('[st]\nEXTRACT-a = (?<a>x)\n', '')).toEqual({
+      hasIndexTime: false,
+      hasSearchTime: true,
+      hasRouting: false,
+    });
+    expect(deploymentTiers('[st]\nMAX_DAYS_AGO = 10\n', '')).toEqual({
+      hasIndexTime: true,
+      hasSearchTime: false,
+      hasRouting: false,
+    });
+    expect(deploymentTiers('[st]\nTRANSFORMS-r = route\n', '')).toEqual({
+      hasIndexTime: true,
+      hasSearchTime: false,
+      hasRouting: true,
+    });
     expect(deploymentTiers('[st]\nRULESET-r = route\n', '').hasRouting).toBe(true);
     // Settings that qualify other directives are neither tier.
-    expect(deploymentTiers('[st]\nMATCH_LIMIT = 10\n', '')).toEqual({ hasIndexTime: false, hasSearchTime: false, hasRouting: false });
+    expect(deploymentTiers('[st]\nMATCH_LIMIT = 10\n', '')).toEqual({
+      hasIndexTime: false,
+      hasSearchTime: false,
+      hasRouting: false,
+    });
   });
 
   it('counts a transforms.conf rule that writes the queue or metadata as routing', () => {
@@ -127,8 +156,10 @@ describe('Architecture', () => {
   });
 });
 
-describe('Extractions reads the run\'s field statistics', () => {
-  const trace = [{ processor: 'EXTRACT-kv', phase: 'search-time' as const, description: '', fieldsAdded: ['user', 'blob'] }];
+describe("Extractions reads the run's field statistics", () => {
+  const trace = [
+    { processor: 'EXTRACT-kv', phase: 'search-time' as const, description: '', fieldsAdded: ['user', 'blob'] },
+  ];
   const view = toViewResult({
     events: [
       makeEvent('user=alice blob={"k":1}', { fields: { user: 'alice', blob: '{"k":1}' }, processingTrace: trace }),
@@ -140,13 +171,24 @@ describe('Extractions reads the run\'s field statistics', () => {
     inputMetadata: meta,
   });
   const items: EnrichedEvent[] = view.events.map((event) => ({
-    event, searchText: event._raw.toLowerCase(), originalRaw: event._raw, hasChanges: false, hasMetadataChanges: false, isDropped: false,
+    event,
+    searchText: event._raw.toLowerCase(),
+    originalRaw: event._raw,
+    hasChanges: false,
+    hasMetadataChanges: false,
+    isDropped: false,
   }));
 
   it('does not parse field values for JSON when the statistics already say', () => {
     const parse = vi.spyOn(JSON, 'parse');
     const { container } = render(
-      <HighlightedTab items={items} allEvents={items} currentPage={1} eventsPerPage={10} fieldStats={view.fieldStats} />,
+      <HighlightedTab
+        items={items}
+        allEvents={items}
+        currentPage={1}
+        eventsPerPage={10}
+        fieldStats={view.fieldStats}
+      />,
     );
     expect(parse.mock.calls.map(([text]) => text)).not.toContain('{"k":1}');
     // `blob` is a container in the first event, so it is listed but not highlighted anywhere.

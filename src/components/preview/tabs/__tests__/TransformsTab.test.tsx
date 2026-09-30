@@ -27,8 +27,18 @@ function resultOf(events: SplunkEvent[]): ViewResult {
 function manyEvents(n: number): SplunkEvent[] {
   return Array.from({ length: n }, (_, i) =>
     eventWithTrace([
-      { processor: 'LINE_BREAKER', phase: 'index-time', description: `Broke event (lines ${i + 1}-${i + 1})`, fieldsAdded: ['f'] },
-      { processor: 'EXTRACT-x', phase: 'search-time', description: 'Extracted x', fieldsAdded: ['x', i % 2 ? 'y' : 'x'] },
+      {
+        processor: 'LINE_BREAKER',
+        phase: 'index-time',
+        description: `Broke event (lines ${i + 1}-${i + 1})`,
+        fieldsAdded: ['f'],
+      },
+      {
+        processor: 'EXTRACT-x',
+        phase: 'search-time',
+        description: 'Extracted x',
+        fieldsAdded: ['x', i % 2 ? 'y' : 'x'],
+      },
     ]),
   );
 }
@@ -101,7 +111,8 @@ describe('TransformsTab', () => {
   it('tints the step badges with a valid colour', () => {
     useAppStore.setState({ processingResult: resultOf(manyEvents(1)) });
     const { container } = render(<TransformsTab />);
-    const badge = within(container).getAllByText('1')
+    const badge = within(container)
+      .getAllByText('1')
       .find((el) => el.className.includes('rounded-full'))!;
     const style = badge.getAttribute('style') ?? '';
     expect(style).toContain('color-mix(in srgb, var(--color-warning) 13%, transparent)');

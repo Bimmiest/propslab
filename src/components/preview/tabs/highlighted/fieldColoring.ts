@@ -12,8 +12,12 @@ import { isJsonContainer, type FieldStats } from '../../../../utils/fieldStats';
 const AUTO_PROCESSORS = ['KV_MODE', 'INDEXED_EXTRACTIONS'];
 const MANUAL_PROCESSORS = ['EXTRACT', 'REPORT', 'TRANSFORMS', 'RULESET', 'SEDCMD'];
 
-function isAutoProcessor(p: string) { return AUTO_PROCESSORS.some((a) => p.startsWith(a)); }
-function isManualProcessor(p: string) { return MANUAL_PROCESSORS.some((m) => p.startsWith(m)); }
+function isAutoProcessor(p: string) {
+  return AUTO_PROCESSORS.some((a) => p.startsWith(a));
+}
+function isManualProcessor(p: string) {
+  return MANUAL_PROCESSORS.some((m) => p.startsWith(m));
+}
 
 export type FieldFilter = 'auto' | 'manual' | 'calc' | 'all';
 
@@ -108,7 +112,9 @@ export function assignFieldColors(
     // overwritten by EVAL (calc) belongs to BOTH categories, so it must show
     // under each of their filters — and stay consistent with the filter counts.
     const inSelectedFilter =
-      (includeAuto && autoFields.has(key)) || (includeManual && manualFields.has(key)) || (includeCalc && calcFields.has(key));
+      (includeAuto && autoFields.has(key)) ||
+      (includeManual && manualFields.has(key)) ||
+      (includeCalc && calcFields.has(key));
     if (inSelectedFilter) map.set(key, fieldColorAt(map.size, theme));
   }
   return map;

@@ -121,7 +121,10 @@ const lexNumber: Lexer = (expr, start, tokens) => {
 
   let i = start;
   let num = '';
-  if (c === '-') { num += '-'; i++; }
+  if (c === '-') {
+    num += '-';
+    i++;
+  }
   let seenDot = false;
   while (i < expr.length && /[\d.]/.test(expr.charAt(i))) {
     if (expr.charAt(i) === '.') {
@@ -136,7 +139,8 @@ const lexNumber: Lexer = (expr, start, tokens) => {
       }
       seenDot = true;
     }
-    num += expr.charAt(i); i++;
+    num += expr.charAt(i);
+    i++;
   }
   const exponentEnd = exponentEndIndex(expr, i);
   num += expr.slice(i, exponentEnd);
@@ -190,8 +194,7 @@ function isWordOperator(upper: string, tokens: Token[]): boolean {
   // word after it is the operator in any case. A prefix NOT (`NOT in(x,
   // "a")`, `NOT in`) does not follow a value, so the function form and a
   // field named `in` are unaffected.
-  const afterInfixNot =
-    prevTok?.type === 'op' && prevTok.value === 'NOT' && endsValue(tokens[tokens.length - 2]);
+  const afterInfixNot = prevTok?.type === 'op' && prevTok.value === 'NOT' && endsValue(tokens[tokens.length - 2]);
   return afterInfixNot && upper === 'IN';
 }
 
@@ -218,7 +221,10 @@ export function tokenize(expr: string): Token[] {
   let i = 0;
 
   while (i < expr.length) {
-    if (/\s/.test(expr.charAt(i))) { i++; continue; }
+    if (/\s/.test(expr.charAt(i))) {
+      i++;
+      continue;
+    }
     let next: number | null = null;
     for (const lex of LEXERS) {
       next = lex(expr, i, tokens);

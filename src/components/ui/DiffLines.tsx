@@ -3,7 +3,11 @@ import type { computeDiff } from '../../utils/diffEngine';
 type DiffKind = 'added' | 'removed' | 'ctx';
 
 const SIGN: Record<DiffKind, string> = { added: '+', removed: '-', ctx: ' ' };
-const ROW_BG: Record<DiffKind, string> = { added: ' bg-[var(--color-success)]/10', removed: ' bg-[var(--color-error)]/10', ctx: '' };
+const ROW_BG: Record<DiffKind, string> = {
+  added: ' bg-[var(--color-success)]/10',
+  removed: ' bg-[var(--color-error)]/10',
+  ctx: '',
+};
 const SIGN_COLOR: Record<DiffKind, string> = {
   added: 'text-[var(--color-success)]',
   removed: 'text-[var(--color-error)]',

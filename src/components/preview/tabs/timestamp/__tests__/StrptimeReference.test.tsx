@@ -8,7 +8,10 @@ describe('StrptimeReference', () => {
     render(<StrptimeReference activeDirectives={[]} />);
     fireEvent.click(screen.getByRole('button', { name: 'STRPTIME Reference' }));
     const rowOf = (spec: string) => screen.getByText(spec, { selector: 'code' }).closest('tr')!;
-    expect(within(rowOf('%c')).getByText('not simulated')).toHaveAttribute('title', expect.stringContaining('%c is not simulated'));
+    expect(within(rowOf('%c')).getByText('not simulated')).toHaveAttribute(
+      'title',
+      expect.stringContaining('%c is not simulated'),
+    );
     expect(within(rowOf('%Y')).queryByText('not simulated')).not.toBeInTheDocument();
     expect(screen.getAllByText('not simulated')).toHaveLength(18);
   });

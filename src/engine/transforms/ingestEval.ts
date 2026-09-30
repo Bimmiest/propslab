@@ -128,11 +128,7 @@ function assignTime(
 }
 
 /** A builtin that is not fully simulated, once per function per run. */
-function reportStub(
-  fn: string,
-  dir: ConfDirective,
-  diagnostics: DiagnosticsCollector,
-): void {
+function reportStub(fn: string, dir: ConfDirective, diagnostics: DiagnosticsCollector): void {
   if (!diagnostics.once(stubKey(fn))) return;
   const message = `${fn}() is not fully simulated — results may differ from real Splunk`;
   diagnostics.once(transformsMessageKey(message));
@@ -151,8 +147,7 @@ function reportStub(
  * reached (so it goes through the same ledger as an evaluation error).
  */
 type CompiledAssignment =
-  | { fieldName: string; tree: Node; error?: undefined }
-  | { fieldName: string; tree?: undefined; error: unknown };
+  { fieldName: string; tree: Node; error?: undefined } | { fieldName: string; tree?: undefined; error: unknown };
 
 interface CompiledIngestEval {
   /** How many comma-separated expressions the directive holds, malformed ones included. */
@@ -233,8 +228,7 @@ export function applyIngestEval(
         if (fieldName === '_time') {
           assignTime(currentEvent, numArg(result), ingestEvalDir, diagnostics);
         } else if (fieldName === '_raw') {
-          currentEvent._raw =
-            result === null ? '' : Array.isArray(result) ? result.join('\n') : String(result);
+          currentEvent._raw = result === null ? '' : Array.isArray(result) ? result.join('\n') : String(result);
         } else if (fieldName === 'queue') {
           // `INGEST_EVAL = queue=if(match(_raw,"DEBUG"), "nullQueue", "indexQueue")`
           // is Splunk's documented filtering idiom: assigning to `queue` routes
@@ -256,7 +250,7 @@ export function applyIngestEval(
           // to, and the event keeps the metadata it has, as it does when a
           // DEST_KEY FORMAT lacks its prefix.
           if (result !== null) {
-            const value = String(Array.isArray(result) ? result[0] ?? '' : result);
+            const value = String(Array.isArray(result) ? (result[0] ?? '') : result);
             currentEvent.metadata = { ...currentEvent.metadata, [fieldName]: value };
           }
         } else if (result === null) {

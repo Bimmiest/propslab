@@ -74,7 +74,9 @@ describe('safeProcessor', () => {
     const { events, diagnostics } = run('user=a\nuser=b boom', true);
     expect(events.map((e) => e.fields['account'])).toEqual(['a', undefined]);
     const errors = diagnostics.filter((d) => d.level === 'error');
-    expect(errors).toEqual([{ level: 'error', message: 'Processor "FIELDALIAS" failed: alias boom', file: 'props.conf' }]);
+    expect(errors).toEqual([
+      { level: 'error', message: 'Processor "FIELDALIAS" failed: alias boom', file: 'props.conf' },
+    ]);
   });
 
   it('falls back as a whole for a batch stage', () => {
@@ -83,6 +85,8 @@ describe('safeProcessor', () => {
     const { events, diagnostics } = run('2024-01-01 00:00:00 user=a\ntsfail user=b');
     expect(events.map((e) => e._time)).toEqual([null, null]);
     const errors = diagnostics.filter((d) => d.level === 'error');
-    expect(errors).toEqual([{ level: 'error', message: 'Processor "Timestamp" failed: timestamp boom', file: 'props.conf' }]);
+    expect(errors).toEqual([
+      { level: 'error', message: 'Processor "Timestamp" failed: timestamp boom', file: 'props.conf' },
+    ]);
   });
 });

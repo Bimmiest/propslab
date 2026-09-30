@@ -26,7 +26,9 @@ export function TransformsConfEditor() {
           >
             <Icon name="chevron-down" className="w-3.5 h-3.5 text-[var(--color-text-muted)] -rotate-90" />
             <Icon name="refresh" className="w-3.5 h-3.5 text-[var(--color-accent)]" />
-            <span className="text-xs font-semibold tracking-wide text-[var(--color-text-secondary)]">transforms.conf</span>
+            <span className="text-xs font-semibold tracking-wide text-[var(--color-text-secondary)]">
+              transforms.conf
+            </span>
           </button>
         </div>
         <EditorValidationList file="transforms.conf" />
@@ -45,7 +47,9 @@ export function TransformsConfEditor() {
         >
           <Icon name="chevron-down" className="w-3.5 h-3.5 text-[var(--color-text-muted)] transition-transform" />
           <Icon name="refresh" className="w-3.5 h-3.5 text-[var(--color-accent)]" />
-          <span className="text-xs font-semibold tracking-wide text-[var(--color-text-secondary)]">transforms.conf</span>
+          <span className="text-xs font-semibold tracking-wide text-[var(--color-text-secondary)]">
+            transforms.conf
+          </span>
         </button>
         <div className="flex items-center gap-1">
           <ClearButton onClear={() => setTransformsConf('')} label="Clear" />

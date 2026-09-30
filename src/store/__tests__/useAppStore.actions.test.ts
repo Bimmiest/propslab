@@ -159,7 +159,10 @@ describe('setters', () => {
 });
 
 describe('toggles', () => {
-  const toggles: [action: 'toggleHelp' | 'toggleCommandPalette' | 'toggleSettings' | 'toggleScaffold', field: string][] = [
+  const toggles: [
+    action: 'toggleHelp' | 'toggleCommandPalette' | 'toggleSettings' | 'toggleScaffold',
+    field: string,
+  ][] = [
     ['toggleHelp', 'helpOpen'],
     ['toggleCommandPalette', 'commandPaletteOpen'],
     ['toggleSettings', 'settingsOpen'],
@@ -235,15 +238,35 @@ describe('settings restore', () => {
 
   it.each([
     ['both on', json({ perEventPipeline: true, manualApply: true }), { perEventPipeline: true, manualApply: true }],
-    ['manual apply only', json({ perEventPipeline: false, manualApply: true }), { perEventPipeline: false, manualApply: true }],
-    ['per-event alone implies manual apply', json({ perEventPipeline: true }), { perEventPipeline: true, manualApply: true }],
-    ['per-event on, manual apply stored off', json({ perEventPipeline: true, manualApply: false }), { perEventPipeline: true, manualApply: true }],
-    ['non-boolean values', json({ perEventPipeline: 'yes', manualApply: 1 }), { perEventPipeline: false, manualApply: false }],
+    [
+      'manual apply only',
+      json({ perEventPipeline: false, manualApply: true }),
+      { perEventPipeline: false, manualApply: true },
+    ],
+    [
+      'per-event alone implies manual apply',
+      json({ perEventPipeline: true }),
+      { perEventPipeline: true, manualApply: true },
+    ],
+    [
+      'per-event on, manual apply stored off',
+      json({ perEventPipeline: true, manualApply: false }),
+      { perEventPipeline: true, manualApply: true },
+    ],
+    [
+      'non-boolean values',
+      json({ perEventPipeline: 'yes', manualApply: 1 }),
+      { perEventPipeline: false, manualApply: false },
+    ],
     ['a JSON null', { [SETTINGS_KEY]: 'null' }, { perEventPipeline: false, manualApply: false }],
     ['a JSON number', { [SETTINGS_KEY]: '7' }, { perEventPipeline: false, manualApply: false }],
     ['malformed JSON', { [SETTINGS_KEY]: '{' }, { perEventPipeline: false, manualApply: false }],
     ['an empty string', { [SETTINGS_KEY]: '' }, { perEventPipeline: false, manualApply: false }],
-    ['the pre-rename key', { 'splunk-toolkit:settings': JSON.stringify({ manualApply: true }) }, { perEventPipeline: false, manualApply: true }],
+    [
+      'the pre-rename key',
+      { 'splunk-toolkit:settings': JSON.stringify({ manualApply: true }) },
+      { perEventPipeline: false, manualApply: true },
+    ],
     ['nothing saved', {}, { perEventPipeline: false, manualApply: false }],
   ])('restores %s', async (_name, storage, expected) => {
     expect((await freshStore(storage)).settings).toEqual(expected);
@@ -252,14 +275,20 @@ describe('settings restore', () => {
   it('togglePerEventPipeline turns manual apply on with it, and keeps it on when turned off', () => {
     state().togglePerEventPipeline();
     expect(state().settings).toEqual({ perEventPipeline: true, manualApply: true });
-    expect(JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? '{}')).toEqual({ perEventPipeline: true, manualApply: true });
+    expect(JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? '{}')).toEqual({
+      perEventPipeline: true,
+      manualApply: true,
+    });
     state().togglePerEventPipeline();
     expect(state().settings).toEqual({ perEventPipeline: false, manualApply: true });
   });
 
   it('toggleManualApply persists, and survives a storage that refuses writes', () => {
     state().toggleManualApply();
-    expect(JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? '{}')).toEqual({ perEventPipeline: false, manualApply: true });
+    expect(JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? '{}')).toEqual({
+      perEventPipeline: false,
+      manualApply: true,
+    });
     vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
       throw new Error('quota');
     });
@@ -300,8 +329,11 @@ describe('selectSessionDirty, field by field', () => {
     expect(selectSessionDirty(state())).toBe(true);
   });
 
-  it.each(['setRawData', 'setPropsConf', 'setTransformsConf'] as const)('is dirty when only %s changed something', (setter) => {
-    state()[setter]('edit');
-    expect(selectSessionDirty(state())).toBe(true);
-  });
+  it.each(['setRawData', 'setPropsConf', 'setTransformsConf'] as const)(
+    'is dirty when only %s changed something',
+    (setter) => {
+      state()[setter]('edit');
+      expect(selectSessionDirty(state())).toBe(true);
+    },
+  );
 });

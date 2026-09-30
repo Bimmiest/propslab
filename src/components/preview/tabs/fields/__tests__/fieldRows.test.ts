@@ -1,7 +1,17 @@
 import { describe, it, expect } from 'vitest';
 import {
-  aggregateFields, buildAliasMap, buildFieldRows, buildRowIds, controlledRowIds, countChildren, fieldComparator,
-  findParentFields, immediateParent, nestFields, renderedRowIds, type AggregatedField,
+  aggregateFields,
+  buildAliasMap,
+  buildFieldRows,
+  buildRowIds,
+  controlledRowIds,
+  countChildren,
+  fieldComparator,
+  findParentFields,
+  immediateParent,
+  nestFields,
+  renderedRowIds,
+  type AggregatedField,
 } from '../fieldRows';
 import type { ProcessingStep, SplunkEvent } from '../../../../../engine/types';
 import { makeEvent } from '../../../../../test/makeEvent';
@@ -12,7 +22,16 @@ function eventWith(fields: SplunkEvent['fields'], processingTrace: ProcessingSte
 }
 
 function field(name: string, over: Partial<AggregatedField> = {}): AggregatedField {
-  return { name, values: new Set(), count: 0, sources: new Set(), phases: new Set(), aliases: [], maskedBy: new Set(), ...over };
+  return {
+    name,
+    values: new Set(),
+    count: 0,
+    sources: new Set(),
+    phases: new Set(),
+    aliases: [],
+    maskedBy: new Set(),
+    ...over,
+  };
 }
 
 describe('aggregateFields', () => {
@@ -21,9 +40,17 @@ describe('aggregateFields', () => {
       { processor: 'EXTRACT-a', phase: 'search-time', description: '', fieldsAdded: ['a', 'not_on_event'] },
       { processor: 'INDEXED_EXTRACTIONS', phase: 'index-time', description: '', fieldsAdded: ['b'] },
       { processor: 'SEDCMD-mask', phase: 'index-time', description: '', fieldsModified: ['a'] },
-      { processor: 'FIELDALIAS-x', phase: 'search-time', description: '', fieldsAdded: ['al'], fieldAliases: [{ source: 'a', target: 'al' }] },
+      {
+        processor: 'FIELDALIAS-x',
+        phase: 'search-time',
+        description: '',
+        fieldsAdded: ['al'],
+        fieldAliases: [{ source: 'a', target: 'al' }],
+      },
     ]),
-    eventWith({ a: '1', b: 'z' }, [{ processor: 'EXTRACT-b', phase: 'search-time', description: '', fieldsAdded: ['b'] }]),
+    eventWith({ a: '1', b: 'z' }, [
+      { processor: 'EXTRACT-b', phase: 'search-time', description: '', fieldsAdded: ['b'] },
+    ]),
   ];
   const byName = new Map(aggregateFields(events, buildAliasMap(events)).map((f) => [f.name, f]));
 
@@ -54,17 +81,38 @@ describe('aggregateFields', () => {
 
 // The run's statistics supply the rows and counts (#496), and events that share
 // a trace array are credited once; neither may change what the table shows.
-describe('aggregateFields with the run\'s statistics', () => {
+describe("aggregateFields with the run's statistics", () => {
   const extract = [{ processor: 'EXTRACT-a', phase: 'search-time' as const, description: '', fieldsAdded: ['a', 'b'] }];
-  const kv = [{ processor: 'KV_MODE', phase: 'search-time' as const, description: '', fieldsAdded: ['b', 'c'], fieldsModified: ['a'] }];
+  const kv = [
+    {
+      processor: 'KV_MODE',
+      phase: 'search-time' as const,
+      description: '',
+      fieldsAdded: ['b', 'c'],
+      fieldsModified: ['a'],
+    },
+  ];
   const raw = [
     eventWith({ a: '1' }, extract),
     eventWith({ a: '2', b: 'x' }, extract),
     eventWith({ c: '3', a: '1' }, kv),
     eventWith({ b: 'y' }, extract),
   ];
-  const view = toViewResult({ events: raw, originalRaw: '', eventCount: raw.length, processingSteps: [], inputMetadata: raw[0]!.metadata });
-  const plain = (fields: AggregatedField[]) => fields.map((f) => ({ ...f, values: [...f.values], sources: [...f.sources], phases: [...f.phases], maskedBy: [...f.maskedBy] }));
+  const view = toViewResult({
+    events: raw,
+    originalRaw: '',
+    eventCount: raw.length,
+    processingSteps: [],
+    inputMetadata: raw[0]!.metadata,
+  });
+  const plain = (fields: AggregatedField[]) =>
+    fields.map((f) => ({
+      ...f,
+      values: [...f.values],
+      sources: [...f.sources],
+      phases: [...f.phases],
+      maskedBy: [...f.maskedBy],
+    }));
 
   it('shares trace arrays between events with the same steps, which is what the crediting relies on', () => {
     expect(view.events[0]!.processingTrace).toBe(view.events[1]!.processingTrace);
@@ -75,10 +123,14 @@ describe('aggregateFields with the run\'s statistics', () => {
     const walked = aggregateFields(view.events, aliases);
     expect(plain(aggregateFields(view.events, aliases, view.fieldStats))).toEqual(plain(walked));
     expect(plain(walked).find((f) => f.name === 'b')).toMatchObject({ count: 2, sources: ['EXTRACT-a'] });
-    expect(plain(walked).find((f) => f.name === 'a')).toMatchObject({ count: 3, sources: ['EXTRACT-a'], maskedBy: ['KV_MODE'] });
+    expect(plain(walked).find((f) => f.name === 'a')).toMatchObject({
+      count: 3,
+      sources: ['EXTRACT-a'],
+      maskedBy: ['KV_MODE'],
+    });
   });
 
-  it('credits a trace\'s step to a field in a later event when the first event lacked it', () => {
+  it("credits a trace's step to a field in a later event when the first event lacked it", () => {
     // `b` is not on the first EXTRACT-a event, only on later ones; KV_MODE's
     // step lists `b` too, but the one event it ran on has none.
     const b = aggregateFields(view.events, new Map()).find((f) => f.name === 'b');
@@ -98,10 +150,18 @@ describe('fieldComparator', () => {
   const a = field('a', { count: 3, values: new Set(['q', 'r']), sources: new Set(['Z']), aliases: ['x'] });
   const b = field('b', { count: 1, values: new Set(['p']), sources: new Set(['Y']), aliases: [] });
   const order = (key: Parameters<typeof fieldComparator>[0], dir: 'asc' | 'desc') =>
-    [b, a].sort(fieldComparator(key, dir)).map((f) => f.name).join('');
+    [b, a]
+      .sort(fieldComparator(key, dir))
+      .map((f) => f.name)
+      .join('');
 
   it.each([
-    ['name', 'ab'], ['count', 'ba'], ['distinct', 'ba'], ['source', 'ba'], ['aliases', 'ba'], ['values', 'ba'],
+    ['name', 'ab'],
+    ['count', 'ba'],
+    ['distinct', 'ba'],
+    ['source', 'ba'],
+    ['aliases', 'ba'],
+    ['values', 'ba'],
   ] as const)('orders by %s, ascending and descending', (key, asc) => {
     expect(order(key, 'asc')).toBe(asc);
     expect(order(key, 'desc')).toBe(Array.from(asc).reverse().join(''));
@@ -132,7 +192,12 @@ describe('the dotted-name tree', () => {
       ['a.c', 1, 'a', false],
       ['z', 0, null, false],
     ]);
-    expect(countChildren(rows)).toEqual(new Map([['a', 2], ['a.b', 1]]));
+    expect(countChildren(rows)).toEqual(
+      new Map([
+        ['a', 2],
+        ['a.b', 1],
+      ]),
+    );
   });
 });
 
@@ -156,10 +221,14 @@ describe('buildFieldRows', () => {
 });
 
 describe('buildRowIds', () => {
-  it('ids rows by position, and lists each parent\'s child rows', () => {
+  it("ids rows by position, and lists each parent's child rows", () => {
     const rows = nestFields([field('a'), field('a b.c'), field('a b')], fieldComparator('name', 'asc'));
     const { rowIds, childRowIds } = buildRowIds(rows, 'p');
-    expect([...rowIds]).toEqual([['a', 'p-row-0'], ['a b', 'p-row-1'], ['a b.c', 'p-row-2']]);
+    expect([...rowIds]).toEqual([
+      ['a', 'p-row-0'],
+      ['a b', 'p-row-1'],
+      ['a b.c', 'p-row-2'],
+    ]);
     expect(childRowIds).toEqual(new Map([['a b', ['p-row-2']]]));
   });
 });
@@ -170,7 +239,12 @@ describe('the rows a windowed table renders (#454)', () => {
 
   it('collects the ids of the rendered rows, skipping spacers and indices past the end', () => {
     const rendered = renderedRowIds(
-      [{ kind: 'row', index: 0 }, { kind: 'spacer', key: 'before', height: 20 }, { kind: 'row', index: 2 }, { kind: 'row', index: 9 }],
+      [
+        { kind: 'row', index: 0 },
+        { kind: 'spacer', key: 'before', height: 20 },
+        { kind: 'row', index: 2 },
+        { kind: 'row', index: 9 },
+      ],
       rows,
       rowIds,
     );
@@ -193,6 +267,10 @@ describe('fieldComparator — sample values (#496)', () => {
     const none = field('none');
     const late = field('late', { values: new Set(['b', 'a']) });
     const early = field('early', { values: new Set(['a', 'z']) });
-    expect([late, none, early].sort(fieldComparator('values', 'asc')).map((f) => f.name)).toEqual(['none', 'early', 'late']);
+    expect([late, none, early].sort(fieldComparator('values', 'asc')).map((f) => f.name)).toEqual([
+      'none',
+      'early',
+      'late',
+    ]);
   });
 });

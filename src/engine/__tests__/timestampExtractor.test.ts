@@ -106,7 +106,11 @@ describe('extractTimestamps — auto recognition (no TIME_FORMAT)', () => {
   });
 
   it('recognises an Apache access-log timestamp', () => {
-    const e = extractTimestamps([event('10.0.0.1 - - [15/Jan/2024:10:00:00 +0000] "GET /"')], [], runCtx(FIXED_NOW))[0]!;
+    const e = extractTimestamps(
+      [event('10.0.0.1 - - [15/Jan/2024:10:00:00 +0000] "GET /"')],
+      [],
+      runCtx(FIXED_NOW),
+    )[0]!;
     expect(iso(e._time)).toBe('2024-01-15T10:00:00.000Z');
   });
 
@@ -292,7 +296,11 @@ describe('extractTimestamps — timezone resolution (#12)', () => {
     // A name no time-zone database has: IANA names resolve, so only a
     // genuinely unknown zone exercises the fallback.
     const diags: ValidationDiagnostic[] = [];
-    const e = extractTimestamps([event('2024-01-15 10:00:00 x')], [fmt, dir('TZ', 'Middle/Earth')], runCtx(FIXED_NOW, diags))[0]!;
+    const e = extractTimestamps(
+      [event('2024-01-15 10:00:00 x')],
+      [fmt, dir('TZ', 'Middle/Earth')],
+      runCtx(FIXED_NOW, diags),
+    )[0]!;
     expect(iso(e._time)).toBe('2024-01-15T10:00:00.000Z');
     expect(diags.some((d) => d.level === 'warning' && /Middle\/Earth/.test(d.message))).toBe(true);
   });
@@ -300,7 +308,11 @@ describe('extractTimestamps — timezone resolution (#12)', () => {
   it('resolves an IANA zone name against its real offset, without warning (#159)', () => {
     const diags: ValidationDiagnostic[] = [];
     // London is BST (+01:00) in July, so 10:00 local is 09:00Z.
-    const e = extractTimestamps([event('2024-07-15 10:00:00 x')], [fmt, dir('TZ', 'Europe/London')], runCtx(FIXED_NOW, diags))[0]!;
+    const e = extractTimestamps(
+      [event('2024-07-15 10:00:00 x')],
+      [fmt, dir('TZ', 'Europe/London')],
+      runCtx(FIXED_NOW, diags),
+    )[0]!;
     expect(iso(e._time)).toBe('2024-07-15T09:00:00.000Z');
     expect(diags).toHaveLength(0);
   });
@@ -309,14 +321,22 @@ describe('extractTimestamps — timezone resolution (#12)', () => {
     // Doc-derived: TZ is a zoneinfo name, and zoneinfo's CET observes DST, as
     // Europe/Paris does: 10:00 on 1 July is 08:00Z, not the fixed +01:00's 09:00Z.
     const diags: ValidationDiagnostic[] = [];
-    const e = extractTimestamps([event('2026-07-01 10:00:00 x')], [fmt, dir('TZ', 'CET')], runCtx(FIXED_NOW, diags))[0]!;
+    const e = extractTimestamps(
+      [event('2026-07-01 10:00:00 x')],
+      [fmt, dir('TZ', 'CET')],
+      runCtx(FIXED_NOW, diags),
+    )[0]!;
     expect(iso(e._time)).toBe('2026-07-01T08:00:00.000Z');
     expect(diags).toHaveLength(0);
   });
 
   it('does not warn for a resolvable numeric TZ offset', () => {
     const diags: ValidationDiagnostic[] = [];
-    const e = extractTimestamps([event('2024-01-15 10:00:00 x')], [fmt, dir('TZ', '-0500')], runCtx(FIXED_NOW, diags))[0]!;
+    const e = extractTimestamps(
+      [event('2024-01-15 10:00:00 x')],
+      [fmt, dir('TZ', '-0500')],
+      runCtx(FIXED_NOW, diags),
+    )[0]!;
     // TZ=-0500 → local 10:00 is 15:00 UTC.
     expect(iso(e._time)).toBe('2024-01-15T15:00:00.000Z');
     expect(diags).toHaveLength(0);
@@ -347,11 +367,7 @@ describe('#163 — an event with no timestamp inherits the previous one', () => 
   });
 
   it('falls back to index time when there is nothing to inherit from', () => {
-    const out = extractTimestamps(
-      [event('no date here'), event('2024-01-15 10:00:00 later')],
-      [fmt],
-      runCtx(NOW),
-    );
+    const out = extractTimestamps([event('no date here'), event('2024-01-15 10:00:00 later')], [fmt], runCtx(NOW));
     // Splunk always places an event on the timeline; the trace is what says the
     // value was not read from the event.
     expect(iso(out[0]!._time)).toBe(NOW.toISOString());
@@ -435,11 +451,7 @@ describe('#85 — timestamp sanity bounds', () => {
   });
 
   it('rejects a timestamp further back than MAX_DAYS_AGO', () => {
-    const e = extractTimestamps(
-      [event('2026-07-01 10:00:00 x')],
-      [fmt, dir('MAX_DAYS_AGO', '7')],
-      runCtx(NOW),
-    )[0]!;
+    const e = extractTimestamps([event('2026-07-01 10:00:00 x')], [fmt, dir('MAX_DAYS_AGO', '7')], runCtx(NOW))[0]!;
     expect(iso(e._time)).toBe(NOW.toISOString());
     expect(timeSource(e)).toBe('current-time');
   });
@@ -477,11 +489,7 @@ describe('#85 — timestamp sanity bounds', () => {
 
   it('keeps newest-first logs in their own times (#286)', () => {
     const out = extractTimestamps(
-      [
-        event('2026-08-03 12:00:00 c'),
-        event('2026-08-03 09:00:00 b'),
-        event('2026-08-03 06:00:00 a'),
-      ],
+      [event('2026-08-03 12:00:00 c'), event('2026-08-03 09:00:00 b'), event('2026-08-03 06:00:00 a')],
       [fmt],
       runCtx(NOW),
     );
@@ -515,7 +523,9 @@ describe('#85 — timestamp sanity bounds', () => {
     );
     expect(iso(out[2]!._time)).toBe('2026-08-03T11:59:00.000Z');
     expect(timeSource(out[2]!)).toBe('previous-event');
-    expect(diagnostics.some((d) => d.message.includes('MAX_DIFF_SECS_AGO') && d.message.includes('%m/%d/%Y'))).toBe(true);
+    expect(diagnostics.some((d) => d.message.includes('MAX_DIFF_SECS_AGO') && d.message.includes('%m/%d/%Y'))).toBe(
+      true,
+    );
   });
 
   it('allows a backwards jump within MAX_DIFF_SECS_AGO', () => {
@@ -641,7 +651,7 @@ describe('#286 — a TIME_PREFIX that does not compile', () => {
     expect(errors[0]?.message).toContain('ts=(');
   });
 
-  it('gives PCRE\'s reason, and does not refuse a pattern for backtracking (#368)', () => {
+  it("gives PCRE's reason, and does not refuse a pattern for backtracking (#368)", () => {
     const diagnostics: ValidationDiagnostic[] = [];
     extractTimestamps([event('x')], [dir('TIME_PREFIX', '(?<=a+)b')], runCtx(NOW, diagnostics));
     expect(diagnostics.find((d) => d.directiveKey === 'TIME_PREFIX')?.message).toMatch(/lookbehind/);

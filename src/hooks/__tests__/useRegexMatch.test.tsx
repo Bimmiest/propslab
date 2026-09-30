@@ -34,7 +34,9 @@ class FakeWorker {
   /** Answer the latest request as the real worker would. */
   respond() {
     const { request: req, inputs } = lastRequest<RegexMatchRequest, string[]>(this.posted, (r) => r.inputs);
-    this.onmessage?.({ data: { id: req.id, results: matchInputs(req.pattern, inputs) } } as MessageEvent<RegexMatchResponse>);
+    this.onmessage?.({
+      data: { id: req.id, results: matchInputs(req.pattern, inputs) },
+    } as MessageEvent<RegexMatchResponse>);
   }
 }
 
@@ -53,8 +55,12 @@ function setup() {
     },
     { initialProps: { pattern: '\\d', inputs: first } },
   );
-  act(() => { vi.advanceTimersByTime(250); });
-  act(() => { latest().respond(); });
+  act(() => {
+    vi.advanceTimersByTime(250);
+  });
+  act(() => {
+    latest().respond();
+  });
   return { ...hook, renders };
 }
 
@@ -103,7 +109,9 @@ describe('useRegexMatch — results carry their inputs (#329)', () => {
     expect(result.current.settled?.inputs).toBe(first);
     expect(result.current.settled?.results).toHaveLength(first.length);
 
-    act(() => { latest().respond(); });
+    act(() => {
+      latest().respond();
+    });
     expect(result.current.status).toBe('ok');
     expect(result.current.inputs).toBe(second);
     expect(result.current.settled?.inputs).toBe(second);
@@ -113,7 +121,9 @@ describe('useRegexMatch — results carry their inputs (#329)', () => {
   it('drops the settled outcome once a request times out', () => {
     const { result, rerender } = setup();
     rerender({ pattern: '\\d', inputs: second });
-    act(() => { vi.advanceTimersByTime(2_000); });
+    act(() => {
+      vi.advanceTimersByTime(2_000);
+    });
     expect(result.current.status).toBe('timeout');
     expect(result.current.settled).toBeNull();
   });
@@ -137,7 +147,9 @@ describe('useRegexMatch — posts the events once per set (#496)', () => {
     const { rerender } = setup();
     for (const pattern of ['\\d+', '[a-z]\\d', 'a']) {
       rerender({ pattern, inputs: first });
-      act(() => { vi.advanceTimersByTime(250); });
+      act(() => {
+        vi.advanceTimersByTime(250);
+      });
     }
     const posted = latest().posted;
     const inputsMessages = posted.filter(isWorkerInputsMessage);

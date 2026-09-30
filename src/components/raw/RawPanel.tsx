@@ -71,7 +71,9 @@ export function RawPanel() {
     <div className="flex flex-col h-full">
       <div className="flex items-center gap-2 px-3 py-2 border-b border-[var(--color-border-subtle)] bg-[var(--color-bg-secondary)]">
         <Icon name="document" className="w-3.5 h-3.5 text-[var(--color-accent)]" />
-        <span className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">Raw Log</span>
+        <span className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">
+          Raw Log
+        </span>
         <button
           onClick={toggleScaffold}
           disabled={!hasText}
@@ -101,17 +103,13 @@ export function RawPanel() {
             <Icon name="terminal" className="w-8 h-8 text-[var(--color-border)]" />
             <div className="text-center">
               <p className="text-sm font-medium text-[var(--color-text-muted)]">Paste raw log data here</p>
-              <p className="text-xs text-[var(--color-text-muted)] mt-1">
-                Or load an example from the Output panel →
-              </p>
+              <p className="text-xs text-[var(--color-text-muted)] mt-1">Or load an example from the Output panel →</p>
             </div>
           </div>
         )}
       </div>
 
-      <div
-        className="flex items-center justify-between px-3 py-1 text-xs shrink-0 bg-[var(--color-bg-secondary)] border-t border-[var(--color-border)]"
-      >
+      <div className="flex items-center justify-between px-3 py-1 text-xs shrink-0 bg-[var(--color-bg-secondary)] border-t border-[var(--color-border)]">
         <span className="text-[var(--color-text-muted)]">
           {lineCount > 0 ? `${lineCount} line${lineCount !== 1 ? 's' : ''} · ` : ''}
           {rawData.length.toLocaleString()} chars

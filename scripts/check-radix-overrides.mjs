@@ -13,11 +13,7 @@ const packageLock = JSON.parse(fs.readFileSync(packageLockPath, 'utf-8'));
 const overrides = packageJson.overrides;
 
 // Packages to check dependencies from
-const checkPackages = [
-  '@radix-ui/react-dialog',
-  '@radix-ui/react-context-menu',
-  '@radix-ui/react-tooltip'
-];
+const checkPackages = ['@radix-ui/react-dialog', '@radix-ui/react-context-menu', '@radix-ui/react-tooltip'];
 
 // Get all dependencies for the packages to check
 const radixDependencies = {};
@@ -32,7 +28,7 @@ for (const pkg of checkPackages) {
         }
         radixDependencies[dep].push({
           package: pkg,
-          version: version
+          version: version,
         });
       }
     }
@@ -56,7 +52,7 @@ for (const [pkg, overrideVersion] of Object.entries(overrides)) {
         package: pkg,
         override: overrideVersion,
         dependency: dep.version,
-        dependentPackage: dep.package
+        dependentPackage: dep.package,
       });
     }
   }
@@ -64,7 +60,7 @@ for (const [pkg, overrideVersion] of Object.entries(overrides)) {
   results.push({
     package: pkg,
     override: overrideVersion,
-    dependencies: deps
+    dependencies: deps,
   });
 }
 
@@ -79,13 +75,7 @@ if (issues.length > 0) {
 
   for (const issue of issues) {
     const status = issue.override !== issue.dependency ? 'MISMATCH' : 'OK';
-    table.push([
-      issue.package,
-      issue.override,
-      issue.dependentPackage,
-      issue.dependency,
-      status
-    ]);
+    table.push([issue.package, issue.override, issue.dependentPackage, issue.dependency, status]);
   }
 
   // Print formatted table

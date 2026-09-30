@@ -41,8 +41,7 @@ describe('Object.prototype member names are not table hits (#426)', () => {
   it.each(PROTO_NAMES)('%s as a props.conf and transforms.conf directive key', (name) => {
     const props = `[st]\n${name} = 1\nTRANSFORMS-i = ti\nREPORT-s = ts\n`;
     const transforms =
-      `[ti]\nREGEX = (\\w+)\nFORMAT = a::$1\n${name} = 1\n\n` +
-      `[ts]\nREGEX = (?<a>\\w+)\n${name} = 1\n`;
+      `[ti]\nREGEX = (\\w+)\nFORMAT = a::$1\n${name} = 1\n\n` + `[ts]\nREGEX = (?<a>\\w+)\n${name} = 1\n`;
     expectClean(engineMessages(props, transforms), name);
     expectClean(editorMessages(props, 'props.conf'), name);
     expectClean(editorMessages(transforms, 'transforms.conf'), name);

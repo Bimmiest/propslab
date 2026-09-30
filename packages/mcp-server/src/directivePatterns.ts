@@ -86,10 +86,7 @@ function parsedTree(expression: string): Node[] {
 }
 
 /** The regexes `dir` runs, in the order they appear in its value; none for a directive that runs none. */
-export function directivePatterns(
-  dir: ConfDirective,
-  file: 'props.conf' | 'transforms.conf',
-): DirectivePattern[] {
+export function directivePatterns(dir: ConfDirective, file: 'props.conf' | 'transforms.conf'): DirectivePattern[] {
   if (!dir.value.trim()) return [];
   const baseKey = dir.className ? dir.directiveType : dir.key;
   // SEDCMD's value embeds its regex in sed syntax rather than being typed

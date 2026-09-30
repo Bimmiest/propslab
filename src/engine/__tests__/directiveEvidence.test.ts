@@ -72,8 +72,9 @@ interface FixtureWithDirectives {
  * directive's behaviour, so what they feed it is not evidence.
  */
 const META_TESTS: Record<string, string> = {
-  'src/engine/__tests__/directiveLint.test.ts': 'asserts the linter\'s diagnostics, not the pipeline\'s output',
-  'src/engine/__tests__/directiveSupport.test.ts': 'asserts the "not simulated" diagnostics; borrows real keys as stand-ins',
+  'src/engine/__tests__/directiveLint.test.ts': "asserts the linter's diagnostics, not the pipeline's output",
+  'src/engine/__tests__/directiveSupport.test.ts':
+    'asserts the "not simulated" diagnostics; borrows real keys as stand-ins',
   'src/engine/__tests__/directiveValues.test.ts': 'asserts which values validate, not what the engine does with them',
   'src/engine/__tests__/prototypeDirectiveNames.test.ts': 'feeds Object.prototype names as directive keys',
   'src/engine/__tests__/directiveRegistry.test.ts': 'asserts registry metadata',
@@ -98,9 +99,9 @@ const FIXTURE_MODULES = import.meta.glob<{ default: FixtureWithDirectives }>('./
 
 /** Every engine test source, as text, keyed by repository path. */
 const ENGINE_TEST_SOURCES = new Map(
-  Object.entries(
-    import.meta.glob<string>('../**/*.test.ts', { eager: true, query: '?raw', import: 'default' }),
-  ).map(([path, text]) => [path.replace(/^\.\//, 'src/engine/__tests__/').replace(/^\.\.\//, 'src/engine/'), text]),
+  Object.entries(import.meta.glob<string>('../**/*.test.ts', { eager: true, query: '?raw', import: 'default' })).map(
+    ([path, text]) => [path.replace(/^\.\//, 'src/engine/__tests__/').replace(/^\.\.\//, 'src/engine/'), text],
+  ),
 );
 
 function readRecordings(): Recording[] {
@@ -129,8 +130,7 @@ function isCitedIn(testFile: string, key: string): boolean {
   const named = new RegExp(`(?<![A-Za-z0-9_])${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![A-Za-z0-9_])`);
   const blocks = source.match(/\/\*[\s\S]*?\*\/|(?:^[ \t]*\/\/.*(?:\n|$))+/gm) ?? [];
   return blocks.some(
-    (block) =>
-      /doc-derived/i.test(block) && /\b(?:props|transforms)\.conf\.spec\b/.test(block) && named.test(block),
+    (block) => /doc-derived/i.test(block) && /\b(?:props|transforms)\.conf\.spec\b/.test(block) && named.test(block),
   );
 }
 
@@ -158,9 +158,7 @@ for (const [path, mod] of Object.entries(FIXTURE_MODULES)) {
   }
 }
 
-const cited = new Set(
-  simulated.filter((key) => (exercisedBy.get(key) ?? []).some((file) => isCitedIn(file, key))),
-);
+const cited = new Set(simulated.filter((key) => (exercisedBy.get(key) ?? []).some((file) => isCitedIn(file, key))));
 
 describe('simulated directive evidence (#505)', () => {
   it('has the recordings it reads', () => {
@@ -211,7 +209,10 @@ describe('simulated directive evidence (#505)', () => {
 
   it('keeps DOC_UNCITED to directives that still lack a citation', () => {
     const stale = DOC_UNCITED.filter((key) => fixtureBacked.has(key) || cited.has(key) || !simulated.includes(key));
-    expect(stale, 'these now have a fixture or a citation, or are no longer simulated -- delete them from DOC_UNCITED').toEqual([]);
+    expect(
+      stale,
+      'these now have a fixture or a citation, or are no longer simulated -- delete them from DOC_UNCITED',
+    ).toEqual([]);
   });
 
   it('does not grow DOC_UNCITED', () => {

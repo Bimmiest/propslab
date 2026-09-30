@@ -21,7 +21,8 @@ function event(fields: Record<string, string> = {}): SplunkEvent {
   return makeEvent('raw', { fields });
 }
 
-const value = (expr: string, fields: Record<string, string> = {}) => evaluateExpression(expr, event(fields), undefined, 0);
+const value = (expr: string, fields: Record<string, string> = {}) =>
+  evaluateExpression(expr, event(fields), undefined, 0);
 
 describe('eval reads strings as decimal numbers only (#358)', () => {
   it('agrees between + and * on a hex-looking string: neither is a number', () => {
@@ -43,7 +44,14 @@ describe('eval reads strings as decimal numbers only (#358)', () => {
   });
 
   it('makes isnum() and tonumber() agree on decimal forms', () => {
-    for (const [s, n] of [['.5', 0.5], ['+5', 5], ['1e3', 1000], ['-2.5E-1', -0.25], ['5.', 5], [' 7 ', 7]] as const) {
+    for (const [s, n] of [
+      ['.5', 0.5],
+      ['+5', 5],
+      ['1e3', 1000],
+      ['-2.5E-1', -0.25],
+      ['5.', 5],
+      [' 7 ', 7],
+    ] as const) {
       expect(value(`isnum("${s}")`), s).toBe(true);
       expect(value(`tonumber("${s}")`), s).toBe(n);
       expect(value(`"${s}" * 1`), s).toBe(n);
@@ -99,12 +107,21 @@ describe('substr() start boundaries, checked against Splunk (#397)', () => {
 });
 
 describe('assigning a boolean result (#358)', () => {
-  const evalDir = (className: string, expr: string): ConfDirective =>
-    ({ key: `EVAL-${className}`, value: expr, line: 2, directiveType: 'EVAL', className });
+  const evalDir = (className: string, expr: string): ConfDirective => ({
+    key: `EVAL-${className}`,
+    value: expr,
+    line: 2,
+    directiveType: 'EVAL',
+    className,
+  });
 
   it('EVAL- writes no field and reports the error', () => {
     const diagnostics: ValidationDiagnostic[] = [];
-    const out = applyEvalExpressions([event({ a: '1', b: '1' })], [evalDir('x', 'a==b')], runCtx(FIXED_NOW, diagnostics))[0]!;
+    const out = applyEvalExpressions(
+      [event({ a: '1', b: '1' })],
+      [evalDir('x', 'a==b')],
+      runCtx(FIXED_NOW, diagnostics),
+    )[0]!;
     expect(out.fields['x']).toBeUndefined();
     expect(diagnostics).toHaveLength(1);
     expect(diagnostics[0]).toMatchObject({ level: 'error', directiveKey: 'EVAL-x' });
@@ -112,7 +129,11 @@ describe('assigning a boolean result (#358)', () => {
   });
 
   it('leaves an if() over the same test working', () => {
-    const out = applyEvalExpressions([event({ a: '1', b: '1' })], [evalDir('x', 'if(a==b, "same", "diff")')], runCtx(FIXED_NOW))[0]!;
+    const out = applyEvalExpressions(
+      [event({ a: '1', b: '1' })],
+      [evalDir('x', 'if(a==b, "same", "diff")')],
+      runCtx(FIXED_NOW),
+    )[0]!;
     expect(out.fields['x']).toBe('same');
   });
 

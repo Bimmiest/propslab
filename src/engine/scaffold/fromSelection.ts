@@ -70,11 +70,7 @@ export function buildExtractFromSelection(
  * selected timestamp. Returns null when there is no usable preceding boundary.
  * `selectionStart` (the real offset in `raw`) is preferred over `indexOf`.
  */
-export function timePrefixFromSelection(
-  raw: string,
-  selectedText: string,
-  selectionStart?: number,
-): string | null {
+export function timePrefixFromSelection(raw: string, selectedText: string, selectionStart?: number): string | null {
   const idx = selectionStart !== undefined && selectionStart >= 0 ? selectionStart : raw.indexOf(selectedText);
   if (idx <= 0) return null;
   const literal = derivePrefix(raw.slice(0, idx));

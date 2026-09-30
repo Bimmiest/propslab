@@ -26,9 +26,22 @@ window.matchMedia = (query: string) => ({
 
 vi.doMock('monaco-editor/editor/editor.worker?worker', () => ({ default: vi.fn() }));
 for (const feature of [
-  'codeEditor', 'hover', 'snippet', 'codeAction', 'gotoError', 'folding', 'find', 'bracketMatching',
-  'clipboard', 'cursorUndo', 'linesOperations', 'multicursor', 'wordHighlighter', 'wordOperations',
-  'toggleTabFocusMode', 'codicon',
+  'codeEditor',
+  'hover',
+  'snippet',
+  'codeAction',
+  'gotoError',
+  'folding',
+  'find',
+  'bracketMatching',
+  'clipboard',
+  'cursorUndo',
+  'linesOperations',
+  'multicursor',
+  'wordHighlighter',
+  'wordOperations',
+  'toggleTabFocusMode',
+  'codicon',
 ]) {
   vi.doMock(`monaco-editor/features/${feature}/register`, () => ({}));
 }

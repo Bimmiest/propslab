@@ -4,18 +4,12 @@ import { getAllDirectives } from '../directiveRegistry';
 
 describe('PIPELINE_STAGES', () => {
   it('numbers its steps consecutively from 1', () => {
-    expect(PIPELINE_STAGES.map((s) => s.step)).toEqual(
-      PIPELINE_STAGES.map((_, i) => i + 1),
-    );
+    expect(PIPELINE_STAGES.map((s) => s.step)).toEqual(PIPELINE_STAGES.map((_, i) => i + 1));
   });
 
   it('runs every index-time stage before every search-time stage', () => {
-    const lastIndex = Math.max(
-      ...PIPELINE_STAGES.filter((s) => s.phase === 'index-time').map((s) => s.step),
-    );
-    const firstSearch = Math.min(
-      ...PIPELINE_STAGES.filter((s) => s.phase === 'search-time').map((s) => s.step),
-    );
+    const lastIndex = Math.max(...PIPELINE_STAGES.filter((s) => s.phase === 'index-time').map((s) => s.step));
+    const firstSearch = Math.min(...PIPELINE_STAGES.filter((s) => s.phase === 'search-time').map((s) => s.step));
     expect(lastIndex).toBeLessThan(firstSearch);
   });
 
@@ -42,9 +36,7 @@ describe('PIPELINE_STAGES', () => {
 
 describe('getStagesForDirective', () => {
   it('finds the stage a directive configures', () => {
-    expect(getStagesForDirective('TIME_FORMAT').map((s) => s.name)).toEqual([
-      'Timestamp Extraction',
-    ]);
+    expect(getStagesForDirective('TIME_FORMAT').map((s) => s.name)).toEqual(['Timestamp Extraction']);
   });
 
   it('resolves class-based keys through their base prefix', () => {

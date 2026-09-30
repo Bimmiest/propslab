@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useState, type FocusEvent, type RefObject } from 'react';
 
 /** A rendered row, or blank space standing in for the rows not rendered. */
-export type WindowSegment =
-  | { kind: 'row'; index: number }
-  | { kind: 'spacer'; key: string; height: number };
+export type WindowSegment = { kind: 'row'; index: number } | { kind: 'spacer'; key: string; height: number };
 
 export interface WindowOptions {
   /** Row height to assume until one has been measured. */

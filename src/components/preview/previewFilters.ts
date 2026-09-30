@@ -32,7 +32,10 @@ export function matchesFilters(item: EnrichedEvent, filters: ActiveFilters): boo
   if (selectedFields.size > 0) {
     let any = false;
     for (const field of selectedFields) {
-      if (Object.hasOwn(item.event.fields, field)) { any = true; break; }
+      if (Object.hasOwn(item.event.fields, field)) {
+        any = true;
+        break;
+      }
     }
     if (!any) return false;
   }

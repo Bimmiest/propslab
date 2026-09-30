@@ -161,7 +161,11 @@ function evalCall(name: string, argNodes: Node[], ctx: EvalCtx): EvalValue {
       }
       return null;
     default:
-      return evalBuiltin(fn, argNodes.map((n) => evalNode(n, ctx)), ctx);
+      return evalBuiltin(
+        fn,
+        argNodes.map((n) => evalNode(n, ctx)),
+        ctx,
+      );
   }
 }
 

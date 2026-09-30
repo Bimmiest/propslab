@@ -69,10 +69,7 @@ export function Overlay({
         Presence waits out before unmounting.
       */}
       <Dialog.Portal>
-        <Dialog.Overlay
-          className="fixed inset-0 z-40"
-          style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
-        />
+        <Dialog.Overlay className="fixed inset-0 z-40" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }} />
         <div className={containerClassName}>
           <Dialog.Content
             className={className}
@@ -91,9 +88,7 @@ export function Overlay({
               console error on every overlay is a real cost, not a lint nit.
             */}
             <Dialog.Title className="sr-only">{label}</Dialog.Title>
-            {description !== undefined && (
-              <Dialog.Description className="sr-only">{description}</Dialog.Description>
-            )}
+            {description !== undefined && <Dialog.Description className="sr-only">{description}</Dialog.Description>}
             {children}
           </Dialog.Content>
         </div>

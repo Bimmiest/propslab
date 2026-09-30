@@ -21,8 +21,18 @@ export function ArchitecturePanel({ inputs, embedded }: { inputs: PipelineInputs
     <div className="h-full flex flex-col bg-[var(--color-bg-primary)]">
       {!embedded && (
         <div className="flex items-center gap-2 px-3 py-1.5 border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
-          <svg className="w-4 h-4 text-[var(--color-accent)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+          <svg
+            className="w-4 h-4 text-[var(--color-accent)]"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+            />
           </svg>
           <span className="text-sm font-medium text-[var(--color-text-primary)]">Architecture</span>
         </div>
@@ -88,16 +98,21 @@ function ComponentBox({
     <div
       className={`
         w-full max-w-48 px-3 py-2 rounded border text-center transition-all
-        ${active
-          ? highlight
-            ? 'border-[var(--color-accent)] bg-[var(--color-accent)]/10 shadow-sm'
-            : 'border-[var(--color-border-hover)] bg-[var(--color-bg-secondary)]'
-          : 'border-[var(--color-border)] bg-[var(--color-bg-tertiary)]'
+        ${
+          active
+            ? highlight
+              ? 'border-[var(--color-accent)] bg-[var(--color-accent)]/10 shadow-sm'
+              : 'border-[var(--color-border-hover)] bg-[var(--color-bg-secondary)]'
+            : 'border-[var(--color-border)] bg-[var(--color-bg-tertiary)]'
         }
       `}
     >
       {/* An inactive box is dimmed with the muted token, not opacity. */}
-      <div className={`text-xs font-semibold ${active ? 'text-[var(--color-text-primary)]' : 'text-[var(--color-text-muted)]'}`}>{label}</div>
+      <div
+        className={`text-xs font-semibold ${active ? 'text-[var(--color-text-primary)]' : 'text-[var(--color-text-muted)]'}`}
+      >
+        {label}
+      </div>
       <div className="text-xs text-[var(--color-text-muted)] font-mono">{sublabel}</div>
       {active && <div className="text-xs text-[var(--color-text-secondary)] mt-1">{description}</div>}
     </div>
@@ -106,7 +121,9 @@ function ComponentBox({
 
 function Arrow({ active }: { active: boolean }) {
   return (
-    <div className={`flex flex-col items-center ${active ? 'text-[var(--color-accent)]' : 'text-[var(--color-border-hover)]'}`}>
+    <div
+      className={`flex flex-col items-center ${active ? 'text-[var(--color-accent)]' : 'text-[var(--color-border-hover)]'}`}
+    >
       <div className="w-0.5 h-3 bg-current" />
       <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
         <path d="M12 16l-6-6h12l-6 6z" />

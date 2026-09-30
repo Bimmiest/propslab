@@ -49,9 +49,7 @@ function defaultPriority(stanza: ConfStanza): number {
     case 'sourcetype':
       return LITERAL_DEFAULT_PRIORITY;
     case 'host':
-      return isLiteralPattern(stanza.hostPattern ?? stanza.name)
-        ? LITERAL_DEFAULT_PRIORITY
-        : PATTERN_DEFAULT_PRIORITY;
+      return isLiteralPattern(stanza.hostPattern ?? stanza.name) ? LITERAL_DEFAULT_PRIORITY : PATTERN_DEFAULT_PRIORITY;
     case 'source':
       return isLiteralPattern(stanza.sourcePattern ?? stanza.name)
         ? LITERAL_DEFAULT_PRIORITY

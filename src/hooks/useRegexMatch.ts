@@ -5,8 +5,7 @@ import { matchInputs } from '../engine/regexMatch';
 import type { RegexMatchInfo } from '../engine/regexMatch';
 import type { RegexMatchResponse } from '../engine/regexMatchWorker';
 
-const createWorker = () =>
-  new Worker(new URL('../engine/regexMatchWorker.ts', import.meta.url), { type: 'module' });
+const createWorker = () => new Worker(new URL('../engine/regexMatchWorker.ts', import.meta.url), { type: 'module' });
 
 // Shorter than the main pipeline's 5 s: the live tester runs on every keystroke,
 // so a runaway pattern should be cut quickly. A catastrophic regex hangs the

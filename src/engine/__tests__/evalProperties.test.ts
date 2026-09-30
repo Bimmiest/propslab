@@ -64,7 +64,9 @@ function render(toks: Tok[], rand: () => number): string {
 }
 
 function randomCase(word: string, rand: () => number): string {
-  return Array.from(word).map((c) => (rand() < 0.5 ? c.toLowerCase() : c.toUpperCase())).join('');
+  return Array.from(word)
+    .map((c) => (rand() < 0.5 ? c.toLowerCase() : c.toUpperCase()))
+    .join('');
 }
 
 /** Canonical rendering: upper-case keywords, single spaces. */
@@ -178,11 +180,13 @@ const { expr } = fc.letrec<{ expr: Gen; compound: Gen }>((tie) => ({
       level: 5,
     })),
     // Comparisons are non-associative: both operands sit above level 4.
-    fc.tuple(fc.constantFrom('=', '==', '!=', '<', '>', '<=', '>='), tie('expr'), tie('expr')).map(([op, l, r]): Gen => ({
-      toks: [...operand(l, 5), raw(op), ...operand(r, 5)],
-      node: { kind: 'compare', op, left: l.node, right: r.node },
-      level: 4,
-    })),
+    fc
+      .tuple(fc.constantFrom('=', '==', '!=', '<', '>', '<=', '>='), tie('expr'), tie('expr'))
+      .map(([op, l, r]): Gen => ({
+        toks: [...operand(l, 5), raw(op), ...operand(r, 5)],
+        node: { kind: 'compare', op, left: l.node, right: r.node },
+        level: 4,
+      })),
     fc.tuple(tie('expr'), tie('expr')).map(([l, r]): Gen => ({
       toks: [...operand(l, 5), kw('LIKE'), ...operand(r, 5)],
       node: { kind: 'call', name: 'like', args: [l.node, r.node] },
@@ -223,7 +227,10 @@ const { expr } = fc.letrec<{ expr: Gen; compound: Gen }>((tie) => ({
     }),
     // Function calls whose results depend only on their arguments.
     fc
-      .tuple(fc.constantFrom('if', 'len', 'lower', 'upper', 'coalesce', 'case', 'abs', 'tostring'), fc.array(tie('expr'), { maxLength: 3 }))
+      .tuple(
+        fc.constantFrom('if', 'len', 'lower', 'upper', 'coalesce', 'case', 'abs', 'tostring'),
+        fc.array(tie('expr'), { maxLength: 3 }),
+      )
       .map(([name, args]): Gen => ({
         toks: [raw(name), raw('('), ...argList(args), raw(')')],
         node: { kind: 'call', name, args: args.map((g) => g.node) },
@@ -267,9 +274,51 @@ describe('eval parser robustness (#340)', () => {
   /** Fragments that exercise every lexer branch, glued together at random. */
   const fragment = fc.oneof(
     fc.constantFrom(
-      'a', 'in', 'IN', 'In', 'not', 'NOT', 'like', 'LIKE', 'xor', 'XOR', 'and', 'OR', 'if', 'true', 'false',
-      '(', ')', ',', '.', '-', '+', '*', '/', '%', '=', '==', '!=', '<', '>=', '!', '&&', '||',
-      '"s"', '"', "'f'", "'", '1', '.5', '-1', '1.2.3', '1.', '#', '\\', ' ', '\n',
+      'a',
+      'in',
+      'IN',
+      'In',
+      'not',
+      'NOT',
+      'like',
+      'LIKE',
+      'xor',
+      'XOR',
+      'and',
+      'OR',
+      'if',
+      'true',
+      'false',
+      '(',
+      ')',
+      ',',
+      '.',
+      '-',
+      '+',
+      '*',
+      '/',
+      '%',
+      '=',
+      '==',
+      '!=',
+      '<',
+      '>=',
+      '!',
+      '&&',
+      '||',
+      '"s"',
+      '"',
+      "'f'",
+      "'",
+      '1',
+      '.5',
+      '-1',
+      '1.2.3',
+      '1.',
+      '#',
+      '\\',
+      ' ',
+      '\n',
     ),
     fc.string({ maxLength: 3 }),
   );
@@ -290,10 +339,15 @@ describe('eval parser robustness (#340)', () => {
   it('refuses deep nesting with its depth error, not a stack overflow', () => {
     const opener = fc.constantFrom('(', 'if(', 'NOT (', '-(', 'a IN (', 'a NOT in (', 'in(a, ');
     fc.assert(
-      fc.property(fc.array(opener, { minLength: 1, maxLength: 4 }), fc.integer({ min: 1, max: 3000 }), (openers, depth) => {
-        const text = Array.from({ length: depth }, (_, i) => openers[i % openers.length]).join('') + '1' + ')'.repeat(depth);
-        expectParseErrorOnly(text);
-      }),
+      fc.property(
+        fc.array(opener, { minLength: 1, maxLength: 4 }),
+        fc.integer({ min: 1, max: 3000 }),
+        (openers, depth) => {
+          const text =
+            Array.from({ length: depth }, (_, i) => openers[i % openers.length]).join('') + '1' + ')'.repeat(depth);
+          expectParseErrorOnly(text);
+        },
+      ),
       { numRuns: 100 },
     );
   });
@@ -408,7 +462,8 @@ function print(node: Node): string {
   switch (node.kind) {
     case 'lit': {
       const v = node.value;
-      if (typeof v === 'number') return v < 0 || Object.is(v, -0) ? `(${Object.is(v, -0) ? '-0' : String(v)})` : String(v);
+      if (typeof v === 'number')
+        return v < 0 || Object.is(v, -0) ? `(${Object.is(v, -0) ? '-0' : String(v)})` : String(v);
       if (typeof v === 'string') return `"${v.replace(/[\\"]/g, '\\$&')}"`;
       if (typeof v === 'boolean') return String(v);
       throw new Error(`unprintable literal ${JSON.stringify(v)}`);

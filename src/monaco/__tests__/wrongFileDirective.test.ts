@@ -19,12 +19,7 @@ function engineDiagnostics(props: string, transforms: string): ValidationDiagnos
 }
 
 /** Every diagnostic either surface puts on `line` of `file`. */
-function onLine(
-  file: 'props.conf' | 'transforms.conf',
-  props: string,
-  transforms: string,
-  line: number,
-) {
+function onLine(file: 'props.conf' | 'transforms.conf', props: string, transforms: string, line: number) {
   const text = file === 'props.conf' ? props : transforms;
   return {
     engine: engineDiagnostics(props, transforms).filter((d) => d.file === file && d.line === line),

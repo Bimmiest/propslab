@@ -30,12 +30,7 @@ import {
   MAX_PAYLOAD_BYTES,
   MAX_RESPONSE_BYTES,
 } from './responseBudget';
-import {
-  explainOutputShape,
-  lookupOutputShape,
-  simulateOutputShape,
-  validateOutputShape,
-} from './outputSchemas';
+import { explainOutputShape, lookupOutputShape, simulateOutputShape, validateOutputShape } from './outputSchemas';
 
 // ---------------------------------------------------------------------------
 // Input schemas
@@ -91,10 +86,7 @@ function confTooLarge(...confs: ConfInput[]): ToolText | null {
 }
 
 const confLayerSchema = z.object({
-  layer: z
-    .string()
-    .max(200)
-    .describe('Free-form provenance label, e.g. "default", "local", "myapp/local".'),
+  layer: z.string().max(200).describe('Free-form provenance label, e.g. "default", "local", "myapp/local".'),
   text: z.string().max(MAX_CONF_CHARS).describe('The full text of this conf file.'),
 });
 
@@ -195,9 +187,7 @@ export const validateInputShape = {
 };
 
 export const explainInputShape = {
-  file: fileSchema
-    .default('props.conf')
-    .describe('Which conf file the input text is.'),
+  file: fileSchema.default('props.conf').describe('Which conf file the input text is.'),
   conf: confInputSchema,
   sourcetype: z
     .string()
@@ -223,9 +213,7 @@ export const lookupInputShape = {
       'Directive key, e.g. "LINE_BREAKER" or a class-based key like "EXTRACT-foo". ' +
         'Omit to list every known directive instead.',
     ),
-  file: fileSchema
-    .optional()
-    .describe('Restrict the lookup to one conf file; omitted = search both.'),
+  file: fileSchema.optional().describe('Restrict the lookup to one conf file; omitted = search both.'),
 };
 
 // ---------------------------------------------------------------------------
@@ -316,7 +304,11 @@ function timeoutAdvice(
   const larger = orLarger(err.budgetMs);
   // A simulate run is in the pipeline once it reports a stage; before that,
   // it is still reading the conf.
-  if (phase === 'starting' || phase === 'parsing' || (context.op === 'simulate' && stage === undefined && phase === 'running')) {
+  if (
+    phase === 'starting' ||
+    phase === 'parsing' ||
+    (context.op === 'simulate' && stage === undefined && phase === 'running')
+  ) {
     return {
       message: `${exceeded} while still parsing the conf text, before any directive ran.`,
       guidance:
@@ -345,10 +337,10 @@ function timeoutAdvice(
     };
   }
   const rawChars = context.rawChars ?? 0;
-  const stalled =
-    stage === 'LINE_BREAKER' ? rawChars < SMALL_SAMPLE_CHARS_PER_MS * err.budgetMs : events <= 1;
+  const stalled = stage === 'LINE_BREAKER' ? rawChars < SMALL_SAMPLE_CHARS_PER_MS * err.budgetMs : events <= 1;
   if (stalled) {
-    const on = stage === 'LINE_BREAKER' ? `breaking a ${rawChars}-character sample into events` : `${stage} on a single event`;
+    const on =
+      stage === 'LINE_BREAKER' ? `breaking a ${rawChars}-character sample into events` : `${stage} on a single event`;
     return {
       message:
         `${exceeded} in ${on}. With this little input the likeliest cause is a regex ` +
@@ -363,8 +355,7 @@ function timeoutAdvice(
       : `${stage}, over ${events} events`;
   return {
     message:
-      `${exceeded} in ${at}. Either a regex is slow on every event, or the input is ` +
-      'simply large for the budget.',
+      `${exceeded} in ${at}. Either a regex is slow on every event, or the input is ` + 'simply large for the budget.',
     guidance:
       `For a large sample, retry with a smaller one${larger}. If a small ` +
       `sample times out as well, the pattern is the cause: ${REPAIR}`,
@@ -488,9 +479,7 @@ export function workerFailure(err: unknown, context: TimeoutContext): ToolText {
   return json(
     {
       error: 'engine_failure',
-      message:
-        'The engine failed on this input without producing a result. The details are in the ' +
-        "server's log.",
+      message: 'The engine failed on this input without producing a result. The details are in the ' + "server's log.",
       guidance:
         'This is a fault in the server or the simulator, not a problem the conf can fix. ' +
         'Please report it with the input if you can.',
@@ -575,9 +564,7 @@ export async function handleExplainPrecedence(
 }
 
 export function handleLookupDirective(args: LookupArgs): ToolText {
-  const files: ('props.conf' | 'transforms.conf')[] = args.file
-    ? [args.file]
-    : ['props.conf', 'transforms.conf'];
+  const files: ('props.conf' | 'transforms.conf')[] = args.file ? [args.file] : ['props.conf', 'transforms.conf'];
 
   if (!args.key) {
     const listing = Object.fromEntries(
@@ -603,9 +590,7 @@ export function handleLookupDirective(args: LookupArgs): ToolText {
     const classBased = getClassBasedDirectiveBase(args.key);
     return json({
       matches,
-      ...(classBased
-        ? { classBased: { base: classBased.base, className: classBased.className } }
-        : {}),
+      ...(classBased ? { classBased: { base: classBased.base, className: classBased.className } } : {}),
     });
   }
 

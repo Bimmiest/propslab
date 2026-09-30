@@ -88,7 +88,14 @@ describe('HighlightedTab hover', () => {
     const items: EnrichedEvent[] = [
       eventWithFields('user=alice action=login', { user: 'alice', action: 'login' }),
       eventWithFields('user=bob action=logout', { user: 'bob', action: 'logout' }),
-    ].map((event) => ({ event, searchText: event._raw.toLowerCase(), originalRaw: event._raw, hasChanges: false, hasMetadataChanges: false, isDropped: false }));
+    ].map((event) => ({
+      event,
+      searchText: event._raw.toLowerCase(),
+      originalRaw: event._raw,
+      hasChanges: false,
+      hasMetadataChanges: false,
+      isDropped: false,
+    }));
 
     render(<HighlightedTab items={items} allEvents={items} currentPage={1} eventsPerPage={10} />);
     const before = renders.card;

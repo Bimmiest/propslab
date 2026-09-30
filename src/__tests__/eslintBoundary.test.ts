@@ -79,6 +79,8 @@ describe('the engine import boundary', () => {
   });
 
   it('exempts the engine tests', async () => {
-    expect(await restricted('src/engine/__tests__/x.test.ts', importing('../../monaco/splunkConfDiagnostics'))).toEqual([]);
+    expect(await restricted('src/engine/__tests__/x.test.ts', importing('../../monaco/splunkConfDiagnostics'))).toEqual(
+      [],
+    );
   });
 });

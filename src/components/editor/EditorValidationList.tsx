@@ -12,10 +12,7 @@ export function EditorValidationList({ file }: EditorValidationListProps) {
   const diagnostics = useAppStore((s) => s.validationDiagnostics);
   const [expanded, setExpanded] = useState(true);
 
-  const filtered = useMemo(
-    () => diagnostics.filter((d) => d.file === file),
-    [diagnostics, file]
-  );
+  const filtered = useMemo(() => diagnostics.filter((d) => d.file === file), [diagnostics, file]);
 
   const errorCount = filtered.filter((d) => d.level === 'error').length;
   const warningCount = filtered.filter((d) => d.level === 'warning').length;
@@ -48,11 +45,7 @@ export function EditorValidationList({ file }: EditorValidationListProps) {
               {warningCount} warning{warningCount !== 1 ? 's' : ''}
             </span>
           )}
-          {infoCount > 0 && (
-            <span className="text-xs font-medium text-[var(--color-info)]">
-              {infoCount} info
-            </span>
-          )}
+          {infoCount > 0 && <span className="text-xs font-medium text-[var(--color-info)]">{infoCount} info</span>}
         </div>
         <Icon
           name="chevron-down"
@@ -62,9 +55,17 @@ export function EditorValidationList({ file }: EditorValidationListProps) {
       {expanded && (
         <div className="max-h-32 overflow-auto divide-y divide-[var(--color-border)]">
           {filtered.map((diag, idx) => (
-            <DiagnosticRow key={idx} diagnostic={diag} onNavigate={diag.line !== undefined ? () => {
-              if (diag.line !== undefined) revealInEditor(file, diag.line);
-            } : undefined} />
+            <DiagnosticRow
+              key={idx}
+              diagnostic={diag}
+              onNavigate={
+                diag.line !== undefined
+                  ? () => {
+                      if (diag.line !== undefined) revealInEditor(file, diag.line);
+                    }
+                  : undefined
+              }
+            />
           ))}
         </div>
       )}
@@ -79,12 +80,19 @@ function DiagnosticRow({ diagnostic, onNavigate }: { diagnostic: ValidationDiagn
         <StatusIcon level={diagnostic.level} />
       </div>
       <div className="flex-1 min-w-0">
-        <span className="text-xs text-[var(--color-text-primary)]" style={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }}>{diagnostic.message}</span>
+        <span
+          className="text-xs text-[var(--color-text-primary)]"
+          style={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }}
+        >
+          {diagnostic.message}
+        </span>
         {diagnostic.line !== undefined && (
           <span className="ml-2 text-xs text-[var(--color-text-muted)]">line {diagnostic.line}</span>
         )}
         {diagnostic.suggestion && (
-          <div className="text-xs text-[var(--color-success)]" style={{ overflowWrap: 'anywhere' }}>{diagnostic.suggestion}</div>
+          <div className="text-xs text-[var(--color-success)]" style={{ overflowWrap: 'anywhere' }}>
+            {diagnostic.suggestion}
+          </div>
         )}
       </div>
     </>
@@ -106,16 +114,22 @@ function DiagnosticRow({ diagnostic, onNavigate }: { diagnostic: ValidationDiagn
 
 function StatusIcon({ level }: { level: 'error' | 'warning' | 'info' | 'success' }) {
   const colorClass =
-    level === 'error' ? 'text-[var(--color-error)]'
-    : level === 'warning' ? 'text-[var(--color-warning)]'
-    : level === 'success' ? 'text-[var(--color-success)]'
-    : 'text-[var(--color-info)]';
+    level === 'error'
+      ? 'text-[var(--color-error)]'
+      : level === 'warning'
+        ? 'text-[var(--color-warning)]'
+        : level === 'success'
+          ? 'text-[var(--color-success)]'
+          : 'text-[var(--color-info)]';
 
   const iconName =
-    level === 'success' ? 'check'
-    : level === 'error' ? 'error-circle'
-    : level === 'warning' ? 'warning'
-    : 'info-circle';
+    level === 'success'
+      ? 'check'
+      : level === 'error'
+        ? 'error-circle'
+        : level === 'warning'
+          ? 'warning'
+          : 'info-circle';
 
   return <Icon name={iconName} className={`w-3.5 h-3.5 ${colorClass}`} />;
 }

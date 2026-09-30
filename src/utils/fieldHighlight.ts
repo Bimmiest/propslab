@@ -14,9 +14,9 @@ function buildContextPatterns(key: string, value: string): RegExp[] {
   // offset, so we highlight the value itself even when the same text also
   // appears in the key (e.g. {"name":"name"}).
   const patterns = [
-    new RegExp(`"${escapedKey}"\\s*:\\s*"(${escapedVal})"`, 'gd'),           // "key":"value"
-    new RegExp(`"${escapedKey}"\\s*:\\s*(${escapedVal})(?=[,}\\s])`, 'gd'),  // "key":numvalue
-    new RegExp(`(?:^|[\\s,;])${escapedKey}="(${escapedVal})"`, 'gdm'),       // key="value"
+    new RegExp(`"${escapedKey}"\\s*:\\s*"(${escapedVal})"`, 'gd'), // "key":"value"
+    new RegExp(`"${escapedKey}"\\s*:\\s*(${escapedVal})(?=[,}\\s])`, 'gd'), // "key":numvalue
+    new RegExp(`(?:^|[\\s,;])${escapedKey}="(${escapedVal})"`, 'gdm'), // key="value"
     new RegExp(`(?:^|[\\s,;])${escapedKey}=(${escapedVal})(?=[,;\\s]|$)`, 'gdm'), // key=value
   ];
   if (_patternCache.size >= PATTERN_CACHE_LIMIT) {
@@ -41,19 +41,12 @@ function leafOf(path: string): string {
   return path.slice(path.lastIndexOf('.') + 1);
 }
 
-export function findFieldValuePositions(
-  raw: string,
-  field: string,
-  value: string,
-  originalKey?: string,
-): number[] {
+export function findFieldValuePositions(raw: string, field: string, value: string, originalKey?: string): number[] {
   const leafName = leafOf(field);
   const originalLeaf = originalKey ? leafOf(originalKey) : undefined;
 
   // Collect unique keys to try. Prefer original (un-stripped) key so `_GID` matches before `GID`.
-  const keysToTry = originalLeaf && originalLeaf !== leafName
-    ? [originalLeaf, leafName]
-    : [leafName];
+  const keysToTry = originalLeaf && originalLeaf !== leafName ? [originalLeaf, leafName] : [leafName];
 
   const contextPositions: number[] = [];
   for (const key of keysToTry) {

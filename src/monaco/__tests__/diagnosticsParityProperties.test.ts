@@ -45,7 +45,12 @@ const line = fc.oneof(
     .map(([indent, k, a, b, v, tail]) => `${indent}${k}${a}=${b}${v}${tail}`),
   // Stanza headers, well-formed or not.
   fc
-    .tuple(ws, fc.constantFrom('s', 'a b', 'source::x', 'x=y'), fc.constantFrom(']', '', '] ', ']x'), fc.constantFrom('', '\\'))
+    .tuple(
+      ws,
+      fc.constantFrom('s', 'a b', 'source::x', 'x=y'),
+      fc.constantFrom(']', '', '] ', ']x'),
+      fc.constantFrom('', '\\'),
+    )
     .map(([indent, name, close, tail]) => `${indent}[${name}${close}${tail}`),
   // Comments and blanks.
   fc.tuple(ws, fc.constantFrom('#', '# c', '# k = v', '# \\')).map(([indent, c]) => `${indent}${c}`),

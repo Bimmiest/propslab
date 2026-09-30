@@ -45,11 +45,12 @@ describe('FieldSplitLayout — restores the saved split (#432)', () => {
   const flexGrow = (container: HTMLElement, id: string) =>
     container.querySelector<HTMLElement>(`[id="${id}"]`)?.style.flexGrow;
 
-  const renderLayout = () => render(
-    <FieldSplitLayout storageKey={KEY} collapsed={false} sidebar={<div>side</div>}>
-      <div>body</div>
-    </FieldSplitLayout>,
-  );
+  const renderLayout = () =>
+    render(
+      <FieldSplitLayout storageKey={KEY} collapsed={false} sidebar={<div>side</div>}>
+        <div>body</div>
+      </FieldSplitLayout>,
+    );
 
   it('sizes the panels from a layout keyed by panel id', () => {
     localStorage.setItem(KEY, JSON.stringify({ [`${KEY}-events`]: 70, [`${KEY}-sidebar`]: 30 }));
@@ -81,4 +82,3 @@ describe('FieldSplitLayout — the events pane is reachable by keyboard', () => 
     });
   }
 });
-

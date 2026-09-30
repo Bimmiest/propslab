@@ -4,12 +4,7 @@ import { isInternalField } from '../utils/internalFields';
 import { byClassName } from '../utils/asciiCompare';
 import { getMetadataField } from '../utils/metadataFields';
 import { getField, hasField, setField } from '../utils/fieldBag';
-import {
-  unquoteFieldName,
-  isQuotedFieldName,
-  fieldNameNeedsQuoting,
-  fieldQuotingWarning,
-} from '../utils/fieldRef';
+import { unquoteFieldName, isQuotedFieldName, fieldNameNeedsQuoting, fieldQuotingWarning } from '../utils/fieldRef';
 import { atDirective } from '../parser/provenance';
 import type { RunContext, DiagnosticSink } from '../runContext';
 
@@ -23,15 +18,9 @@ interface CompiledAlias extends AliasMapping {
   directive: ConfDirective;
 }
 
-export function applyFieldAliases(
-  events: SplunkEvent[],
-  directives: ConfDirective[],
-  ctx: RunContext,
-): SplunkEvent[] {
+export function applyFieldAliases(events: SplunkEvent[], directives: ConfDirective[], ctx: RunContext): SplunkEvent[] {
   const { diagnostics } = ctx;
-  const aliasDirectives = directives
-    .filter((d) => d.directiveType === 'FIELDALIAS')
-    .sort(byClassName);
+  const aliasDirectives = directives.filter((d) => d.directiveType === 'FIELDALIAS').sort(byClassName);
 
   if (aliasDirectives.length === 0) return events;
 
@@ -99,10 +88,7 @@ export function applyFieldAliases(
   });
 }
 
-function compileAliases(
-  aliasDirectives: ConfDirective[],
-  diagnostics?: DiagnosticSink,
-): CompiledAlias[] {
+function compileAliases(aliasDirectives: ConfDirective[], diagnostics?: DiagnosticSink): CompiledAlias[] {
   const compiled: CompiledAlias[] = [];
   const warnedWildcard = new Set<string>();
   const warnedQuoting = new Set<string>();

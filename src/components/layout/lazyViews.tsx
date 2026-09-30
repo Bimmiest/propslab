@@ -7,9 +7,7 @@ import { retryableLazy } from '../ui/retryableLazy';
 const Dictionary = retryableLazy(() =>
   import('../dictionary/DictionaryView').then((m) => ({ default: m.DictionaryView })),
 );
-const Scaffold = retryableLazy(() =>
-  import('../scaffold/ScaffoldModal').then((m) => ({ default: m.ScaffoldModal })),
-);
+const Scaffold = retryableLazy(() => import('../scaffold/ScaffoldModal').then((m) => ({ default: m.ScaffoldModal })));
 
 export function DictionaryView() {
   return (

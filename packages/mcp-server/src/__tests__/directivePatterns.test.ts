@@ -29,21 +29,19 @@ describe('directivePatterns (#517)', () => {
   });
 
   it('finds each literal regex an eval expression passes to match(), replace() or mvfind()', () => {
-    expect(
-      patterns('EVAL-x = if(match(f, "a+b"), replace(g, "c(d)", "x"), mvfind(h, "e")) . lower(f)'),
-    ).toEqual([
+    expect(patterns('EVAL-x = if(match(f, "a+b"), replace(g, "c(d)", "x"), mvfind(h, "e")) . lower(f)')).toEqual([
       { pattern: 'a+b', fn: 'match' },
       { pattern: 'c(d)', fn: 'replace' },
       { pattern: 'e', fn: 'mvfind' },
     ]);
     // Nested anywhere: operators, not, in, case-insensitive names.
-    expect(
-      patterns('EVAL-y = NOT MATCH(f, "p1") AND -len(replace(g, "p2", "")) > 1 OR f IN (match(g, "p3"))'),
-    ).toEqual([
-      { pattern: 'p1', fn: 'match' },
-      { pattern: 'p2', fn: 'replace' },
-      { pattern: 'p3', fn: 'match' },
-    ]);
+    expect(patterns('EVAL-y = NOT MATCH(f, "p1") AND -len(replace(g, "p2", "")) > 1 OR f IN (match(g, "p3"))')).toEqual(
+      [
+        { pattern: 'p1', fn: 'match' },
+        { pattern: 'p2', fn: 'replace' },
+        { pattern: 'p3', fn: 'match' },
+      ],
+    );
     // A regex from a field is not knowable; like() builds its own; an
     // expression that does not parse runs nothing.
     expect(patterns('EVAL-z = match(f, g) . like(f, "a%")')).toEqual([]);

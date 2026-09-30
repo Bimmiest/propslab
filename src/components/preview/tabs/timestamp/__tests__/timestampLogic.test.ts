@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { extractDirectives, isSimulated, overlaySegments, parseTimeConfig, resolvedTimeSource, timestampTextOf } from '../timestampLogic';
+import {
+  extractDirectives,
+  isSimulated,
+  overlaySegments,
+  parseTimeConfig,
+  resolvedTimeSource,
+  timestampTextOf,
+} from '../timestampLogic';
 import { STRPTIME_REFERENCE } from '../data';
 import { supportedSpecifiers } from '../../../../../utils/strftime';
 import { probeTimestamp, type TimeConfig } from '../../../../../engine/timestampMatch';
@@ -14,9 +21,14 @@ function eventWith(over: Partial<SplunkEvent> = {}): SplunkEvent {
 
 describe('parseTimeConfig', () => {
   it('reads the time settings of the stanzas that apply to the event', () => {
-    const conf = '[st]\nTIME_PREFIX = ts=\nTIME_FORMAT = %Y\nMAX_TIMESTAMP_LOOKAHEAD = 20\nTZ = UTC\nTZ_ALIAS = EST=UTC\n[other]\nTIME_FORMAT = %H\n';
+    const conf =
+      '[st]\nTIME_PREFIX = ts=\nTIME_FORMAT = %Y\nMAX_TIMESTAMP_LOOKAHEAD = 20\nTZ = UTC\nTZ_ALIAS = EST=UTC\n[other]\nTIME_FORMAT = %H\n';
     expect(parseTimeConfig(conf, metadata)).toEqual({
-      timePrefix: 'ts=', timeFormat: '%Y', maxLookahead: 20, tz: 'UTC', tzAlias: 'EST=UTC',
+      timePrefix: 'ts=',
+      timeFormat: '%Y',
+      maxLookahead: 20,
+      tz: 'UTC',
+      tzAlias: 'EST=UTC',
     });
   });
 
@@ -38,7 +50,7 @@ describe('timestampTextOf and resolvedTimeSource', () => {
     expect(timestampTextOf(eventWith())).toBe('raw');
   });
 
-  it('reports the last timestamp step\'s time source', () => {
+  it("reports the last timestamp step's time source", () => {
     const event = eventWith({
       processingTrace: [
         { processor: 'timestampExtractor', phase: 'index-time', description: '', timeSource: 'current-time' },
@@ -61,7 +73,24 @@ describe('the strptime reference and the format breakdown (#457)', () => {
 
   it('marks as not simulated exactly the reference rows the parser does not implement', () => {
     expect(referenced.filter((spec) => !isSimulated(spec))).toEqual([
-      '%C', '%G', '%g', '%h', '%u', '%w', '%P', '%R', '%c', '%x', '%X', '%D', '%r', '%n', '%t', '%V', '%U', '%W',
+      '%C',
+      '%G',
+      '%g',
+      '%h',
+      '%u',
+      '%w',
+      '%P',
+      '%R',
+      '%c',
+      '%x',
+      '%X',
+      '%D',
+      '%r',
+      '%n',
+      '%t',
+      '%V',
+      '%U',
+      '%W',
     ]);
     // Whole specifiers only: a longer spelling that starts with one is not it.
     expect(isSimulated('%Y')).toBe(true);
@@ -70,7 +99,7 @@ describe('the strptime reference and the format breakdown (#457)', () => {
     expect(isSimulated('%0N')).toBe(false);
   });
 
-  it('breaks a format down as the parser tokenises it, with the reference\'s descriptions', () => {
+  it("breaks a format down as the parser tokenises it, with the reference's descriptions", () => {
     expect(extractDirectives('%Y-%m-%dT%H:%M:%S.%3N%:z')).toEqual([
       { directive: '%Y', description: '4-digit year' },
       { directive: '%m', description: 'Month as zero-padded number' },
@@ -96,9 +125,20 @@ describe('overlaySegments', () => {
     const raw = 'x ts= 2026-01-15 tail and more';
     const segments = segmentsOf(raw)!;
     expect(segments.map((s) => `${s.kind}:${s.text}`)).toEqual([
-      'outside:x ', 'prefix:ts=', 'gap: ', 'timestamp:2026-01-15', 'window: ta', 'boundary:]', 'outside:il and more',
+      'outside:x ',
+      'prefix:ts=',
+      'gap: ',
+      'timestamp:2026-01-15',
+      'window: ta',
+      'boundary:]',
+      'outside:il and more',
     ]);
-    expect(segments.filter((s) => s.kind !== 'boundary').map((s) => s.text).join('')).toBe(raw);
+    expect(
+      segments
+        .filter((s) => s.kind !== 'boundary')
+        .map((s) => s.text)
+        .join(''),
+    ).toBe(raw);
     expect(segments[1]!.title).toBe('TIME_PREFIX: ts=');
     expect(segments[3]!.title).toBe('TIME_FORMAT: %Y-%m-%d\nParsed: 2026-01-15T00:00:00.000Z');
   });
@@ -110,7 +150,11 @@ describe('overlaySegments', () => {
 
   it('draws the lookahead window when the prefix matched but the format did not', () => {
     expect(segmentsOf('a ts=garbage-and-more-text')!.map((s) => `${s.kind}:${s.text}`)).toEqual([
-      'outside:a ', 'prefix:ts=', 'window:garbage-and-mo', 'boundary:]', 'outside:re-text',
+      'outside:a ',
+      'prefix:ts=',
+      'window:garbage-and-mo',
+      'boundary:]',
+      'outside:re-text',
     ]);
   });
 

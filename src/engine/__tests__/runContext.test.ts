@@ -87,7 +87,11 @@ describe('createRunContext', () => {
 
   it('allows each directive its own explanations, up to the limit', () => {
     const ctx = createRunContext({ now: 0, limits: { explanationsPerDirective: 2 } });
-    expect([ctx.explanations.take('a'), ctx.explanations.take('a'), ctx.explanations.take('a')]).toEqual([true, true, false]);
+    expect([ctx.explanations.take('a'), ctx.explanations.take('a'), ctx.explanations.take('a')]).toEqual([
+      true,
+      true,
+      false,
+    ]);
     expect(ctx.explanations.take('b')).toBe(true);
     // A deduplicating view is the same run, so it shares the count.
     expect(withDiagnostics(ctx, ctx.diagnostics.deduplicating()).explanations.take('b')).toBe(true);
@@ -121,7 +125,9 @@ describe('the run ledger through runPipeline', () => {
     const props = '[st]\nSHOULD_LINEMERGE = false\nTRANSFORMS-a = clone\n[copy]\nSEDCMD-mask = s/[unclosed/X/\n';
     const transforms = '[clone]\nREGEX = .\nCLONE_SOURCETYPE = copy\n';
     for (const perEventPipeline of [false, true]) {
-      const { result, diagnostics } = runPipeline('one\ntwo\nthree\nfour', metadata, props, transforms, { perEventPipeline });
+      const { result, diagnostics } = runPipeline('one\ntwo\nthree\nfour', metadata, props, transforms, {
+        perEventPipeline,
+      });
       // Four events were cloned, so the SEDCMD set was parsed four times.
       expect(result.events.filter((e) => e.metadata.sourcetype === 'copy')).toHaveLength(4);
       const bad = diagnostics.filter((d) => d.directiveKey === 'SEDCMD-mask');

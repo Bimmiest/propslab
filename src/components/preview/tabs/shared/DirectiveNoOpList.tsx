@@ -93,9 +93,7 @@ export function DirectiveNoOpList({
   return (
     <div className="border border-[var(--color-border)] rounded bg-[var(--color-bg-secondary)]">
       <div className="px-3 py-1.5 border-b border-[var(--color-border)] bg-[var(--color-bg-tertiary)]">
-        <span className="text-xs font-medium text-[var(--color-text-muted)]">
-          Did not fire ({groups.length})
-        </span>
+        <span className="text-xs font-medium text-[var(--color-text-muted)]">Did not fire ({groups.length})</span>
       </div>
       {groups.map((group) => (
         <NoOpRow key={`${group.file}:${group.line}:${group.directive}`} group={group} totalEvents={events.length} />

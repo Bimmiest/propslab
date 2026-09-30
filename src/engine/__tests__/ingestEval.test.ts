@@ -174,12 +174,10 @@ describe('runPipeline — INGEST_EVAL metadata rewrites re-match stanzas (#327)'
   // Doc-derived, as above: a sourcetype rewritten at index time is a new
   // sourcetype for search-time props, whichever mechanism rewrote it.
   const meta: EventMetadata = { index: 'main', host: 'h', source: '/a.log', sourcetype: 'st' };
-  const props =
-    '[st]\nSHOULD_LINEMERGE = false\nTRANSFORMS-r = to_new\n' +
-    '[new_st]\nEVAL-seen = "new_st"\n';
+  const props = '[st]\nSHOULD_LINEMERGE = false\nTRANSFORMS-r = to_new\n' + '[new_st]\nEVAL-seen = "new_st"\n';
   const transforms = '[to_new]\nINGEST_EVAL = sourcetype="new_st", index="security"\n';
 
-  it('per-event mode applies the new sourcetype\'s search-time config', () => {
+  it("per-event mode applies the new sourcetype's search-time config", () => {
     const { result } = runPipeline('a', meta, props, transforms, { perEventPipeline: true });
     const ev = result.events[0]!;
     expect(ev.metadata.sourcetype).toBe('new_st');
@@ -201,7 +199,11 @@ describe('applyIngestEval — the trace says what was rewritten (#346)', () => {
   const step = (e: SplunkEvent) => e.processingTrace[e.processingTrace.length - 1]!;
 
   it('records each metadata rewrite old → new, structured and in the description', () => {
-    const out = applyIngestEval([event('x')], ingestDir('index="security", host="web01", tag="t"'), runCtx(FIXED_NOW))[0]!;
+    const out = applyIngestEval(
+      [event('x')],
+      ingestDir('index="security", host="web01", tag="t"'),
+      runCtx(FIXED_NOW),
+    )[0]!;
     expect(step(out).metadataChanges).toEqual([
       { key: 'index', from: 'main', to: 'security' },
       { key: 'host', from: 'h', to: 'web01' },
@@ -224,10 +226,15 @@ describe('applyIngestEval — the trace says what was rewritten (#346)', () => {
   });
 
   it('records a _raw rewrite as a mutation of its own step, with before/after text', () => {
-    const input = { ...event('user=alice secret=hunter2'), processingTrace: [{ processor: 'p', phase: 'index-time' as const, description: 'd' }] };
+    const input = {
+      ...event('user=alice secret=hunter2'),
+      processingTrace: [{ processor: 'p', phase: 'index-time' as const, description: 'd' }],
+    };
     const out = applyIngestEval([input], ingestDir('_raw=replace(_raw, "secret=\\\\S+", "")'), runCtx(FIXED_NOW))[0]!;
     expect(out._raw).toBe('user=alice ');
-    expect(out.rawMutations).toEqual([{ traceIndex: 1, rawBefore: 'user=alice secret=hunter2', rawAfter: 'user=alice ' }]);
+    expect(out.rawMutations).toEqual([
+      { traceIndex: 1, rawBefore: 'user=alice secret=hunter2', rawAfter: 'user=alice ' },
+    ]);
     expect(step(out).inputSnapshot).toContain('secret=hunter2');
     expect(step(out).outputSnapshot).toBe('user=alice ');
   });
@@ -284,8 +291,7 @@ describe('runPipeline — INGEST_EVAL reports each problem once per run (#418)',
   // reported must outlive a single call.
   const meta: EventMetadata = { index: 'main', host: 'h', source: 's', sourcetype: 'st' };
   const props = '[st]\nSHOULD_LINEMERGE = false\nTRANSFORMS-e = ev\n';
-  const transforms =
-    '[ev]\nINGEST_EVAL = h=md5(_raw), b=(1==1), r=if(match(_raw, "("), 1, 0), _time=8640000000001\n';
+  const transforms = '[ev]\nINGEST_EVAL = h=md5(_raw), b=(1==1), r=if(match(_raw, "("), 1, 0), _time=8640000000001\n';
   const raw = ['one', 'two', 'three', 'four', 'five'].join('\n');
 
   it.each([false, true])('perEventPipeline=%s: five events, one of each diagnostic', (perEventPipeline) => {
@@ -315,8 +321,9 @@ describe('INGEST_EVAL errors are keyed by where the directive is (#477)', () => 
 
   it('keeps two layers of the same line and field apart', () => {
     const ctx = runCtx(FIXED_NOW);
-    const dir = (layer: string): ConfDirective[] =>
-      [{ key: 'INGEST_EVAL', value: 'x=1+', line: 4, layer, directiveType: 'INGEST_EVAL' }];
+    const dir = (layer: string): ConfDirective[] => [
+      { key: 'INGEST_EVAL', value: 'x=1+', line: 4, layer, directiveType: 'INGEST_EVAL' },
+    ];
     applyIngestEval([event('a'), event('b')], dir('default/transforms.conf'), ctx);
     applyIngestEval([event('a'), event('b')], dir('local/transforms.conf'), ctx);
     expect(ctx.diagnostics.list.map((d) => d.layer)).toEqual(['default/transforms.conf', 'local/transforms.conf']);

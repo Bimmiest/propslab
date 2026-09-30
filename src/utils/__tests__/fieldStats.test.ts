@@ -14,14 +14,14 @@ const withFields = (fields: Record<string, string | string[]>) => ({ fields });
 
 describe('computeFieldStats', () => {
   it('lists every field once, in first-seen order, with how many events have it', () => {
-    const stats = computeFieldStats([
-      withFields({ b: '1', a: '2' }),
-      withFields({ c: '3', a: '4' }),
-      withFields({}),
-    ]);
+    const stats = computeFieldStats([withFields({ b: '1', a: '2' }), withFields({ c: '3', a: '4' }), withFields({})]);
     expect(stats.eventCount).toBe(3);
     expect(stats.names).toEqual(['b', 'a', 'c']);
-    expect([...stats.counts]).toEqual([['b', 1], ['a', 2], ['c', 1]]);
+    expect([...stats.counts]).toEqual([
+      ['b', 1],
+      ['a', 2],
+      ['c', 1],
+    ]);
   });
 
   it('marks a field a container when any event holds a whole JSON object or array in it', () => {
@@ -33,7 +33,14 @@ describe('computeFieldStats', () => {
   });
 
   it('keeps fields named like Object.prototype members as fields', () => {
-    const stats = computeFieldStats([withFields(Object.fromEntries([['constructor', 'x'], ['__proto__', 'y']]))]);
+    const stats = computeFieldStats([
+      withFields(
+        Object.fromEntries([
+          ['constructor', 'x'],
+          ['__proto__', 'y'],
+        ]),
+      ),
+    ]);
     expect(stats.counts.get('constructor')).toBe(1);
     expect(stats.names).toEqual(['constructor', '__proto__']);
   });
@@ -46,7 +53,15 @@ describe('computeFieldStats', () => {
       processingSteps: [],
       inputMetadata: { index: 'main', host: '', source: '', sourcetype: '' },
     });
-    expect(view.fieldStats).toEqual({ eventCount: 2, names: ['a', 'b'], counts: new Map([['a', 1], ['b', 1]]), containers: ['b'] });
+    expect(view.fieldStats).toEqual({
+      eventCount: 2,
+      names: ['a', 'b'],
+      counts: new Map([
+        ['a', 1],
+        ['b', 1],
+      ]),
+      containers: ['b'],
+    });
     // It crosses the worker boundary by structured clone.
     expect(structuredClone(view.fieldStats)).toEqual(view.fieldStats);
   });

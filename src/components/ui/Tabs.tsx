@@ -24,7 +24,15 @@ interface TabsProps {
   variant?: 'underline' | 'secondary';
 }
 
-export function Tabs({ idPrefix, tabs, activeTab, onTabChange, ariaLabel, size = 'md', variant = 'underline' }: TabsProps) {
+export function Tabs({
+  idPrefix,
+  tabs,
+  activeTab,
+  onTabChange,
+  ariaLabel,
+  size = 'md',
+  variant = 'underline',
+}: TabsProps) {
   const tablistRef = useRef<HTMLDivElement>(null);
 
   const handleKeyDown = useCallback(
@@ -50,7 +58,7 @@ export function Tabs({ idPrefix, tabs, activeTab, onTabChange, ariaLabel, size =
         buttons?.[nextIndex]?.focus();
       }
     },
-    [tabs, activeTab, onTabChange]
+    [tabs, activeTab, onTabChange],
   );
 
   return (
@@ -58,7 +66,9 @@ export function Tabs({ idPrefix, tabs, activeTab, onTabChange, ariaLabel, size =
       ref={tablistRef}
       role="tablist"
       aria-label={ariaLabel}
-      className={variant === 'secondary' ? 'flex gap-0.5 p-1 overflow-x-auto min-w-0' : 'flex gap-1 overflow-x-auto min-w-0'}
+      className={
+        variant === 'secondary' ? 'flex gap-0.5 p-1 overflow-x-auto min-w-0' : 'flex gap-1 overflow-x-auto min-w-0'
+      }
       onKeyDown={handleKeyDown}
     >
       {tabs.map((tab) => {
@@ -95,7 +105,12 @@ export function Tabs({ idPrefix, tabs, activeTab, onTabChange, ariaLabel, size =
               <span
                 className="ml-1 text-[10px] font-semibold rounded-full px-1.5 py-0 leading-4"
                 style={{
-                  backgroundColor: tab.badgeVariant === 'error' ? 'var(--color-error)' : tab.badgeVariant === 'warning' ? 'var(--color-warning)' : 'var(--color-accent)',
+                  backgroundColor:
+                    tab.badgeVariant === 'error'
+                      ? 'var(--color-error)'
+                      : tab.badgeVariant === 'warning'
+                        ? 'var(--color-warning)'
+                        : 'var(--color-accent)',
                   color: 'var(--color-text-on-accent)',
                 }}
               >

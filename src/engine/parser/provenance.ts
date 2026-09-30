@@ -19,9 +19,7 @@ type Position = { line?: number; layer?: string };
 /** Spread into a diagnostic to locate it at `directive`. */
 export function atDirective(directive: Pick<ConfDirective, 'line' | 'layer'> | undefined): Position {
   if (!directive) return {};
-  return directive.layer === undefined
-    ? { line: directive.line }
-    : { line: directive.line, layer: directive.layer };
+  return directive.layer === undefined ? { line: directive.line } : { line: directive.line, layer: directive.layer };
 }
 
 /** Spread into a diagnostic to locate it at the start of `stanza`. */

@@ -77,9 +77,37 @@ const keys = fc.constantFrom(
 
 const values = fc.oneof(
   fc.constantFrom(
-    'true', 'FALSE', 't', 'nope', 'on', ' yes ', '0', '1',
-    'json', 'JSON', 'auto_escaped', 'multi', 'multi:cisco', 'MULTI:x', 'multi:', 'xml:y', 'bogus',
-    '10', '+3', '-1', '-5', '-0', '1.5', '1e3', '0x10', 'Infinity', 'NaN', '', ' ', '12abc', '٣',
+    'true',
+    'FALSE',
+    't',
+    'nope',
+    'on',
+    ' yes ',
+    '0',
+    '1',
+    'json',
+    'JSON',
+    'auto_escaped',
+    'multi',
+    'multi:cisco',
+    'MULTI:x',
+    'multi:',
+    'xml:y',
+    'bogus',
+    '10',
+    '+3',
+    '-1',
+    '-5',
+    '-0',
+    '1.5',
+    '1e3',
+    '0x10',
+    'Infinity',
+    'NaN',
+    '',
+    ' ',
+    '12abc',
+    '٣',
   ),
   fc.integer({ min: -20, max: 20 }).map(String),
   fc.string({ maxLength: 5 }).filter((s) => !s.includes('\\')),
@@ -96,9 +124,7 @@ const line = fc.oneof(
   { weight: 1, arbitrary: fc.constantFrom('[st]', '[source::x]', '# c', '# TRUNCATE = abc', '', '[', 'garbage') },
 );
 
-const file = fc
-  .array(fc.tuple(line, eols), { maxLength: 12 })
-  .map((ls) => ls.map(([l, eol]) => l + eol).join(''));
+const file = fc.array(fc.tuple(line, eols), { maxLength: 12 }).map((ls) => ls.map(([l, eol]) => l + eol).join(''));
 
 describe('computeDiagnostics and lintConfigs report the same value problems', () => {
   it.each<ConfFile>(['props.conf', 'transforms.conf'])('on generated %s text', (fileType) => {
@@ -116,11 +142,7 @@ describe('computeDiagnostics and lintConfigs report the same value problems', ()
     // one giant line to the engine and several to the editor.
     const text = 'TRUNCATE = 1.5\rMAX_EVENTS = -5\rKV_MODE = multi:cisco\rSHOULD_LINEMERGE = nope\r';
     const { engine, editor: editorSet } = both(text, 'props.conf');
-    expect([...engine].sort()).toEqual([
-      '1|warning|TRUNCATE',
-      '2|warning|MAX_EVENTS',
-      '4|warning|SHOULD_LINEMERGE',
-    ]);
+    expect([...engine].sort()).toEqual(['1|warning|TRUNCATE', '2|warning|MAX_EVENTS', '4|warning|SHOULD_LINEMERGE']);
     expect([...editorSet].sort()).toEqual([...engine].sort());
   });
 

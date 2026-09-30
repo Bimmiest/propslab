@@ -162,7 +162,10 @@ describe('#452 — explanations are capped per directive per run', () => {
   const LIMIT = 50;
 
   function kindsFor(directive: string, props: string, transforms: string, perEventPipeline: boolean) {
-    const { result } = runPipeline(lines(LIMIT + 10), metadata, props, transforms, { perEventPipeline, captureOffsets: false });
+    const { result } = runPipeline(lines(LIMIT + 10), metadata, props, transforms, {
+      perEventPipeline,
+      captureOffsets: false,
+    });
     return result.events.map((e) => e.noOps?.find((n) => n.directive === directive)?.reason.kind);
   }
 
@@ -182,11 +185,14 @@ describe('#452 — explanations are capped per directive per run', () => {
   ];
 
   for (const perEventPipeline of [false, true]) {
-    it.each(cases)(`analyses the first ${LIMIT} misses of %s, then says it stopped (perEvent=${perEventPipeline})`, (directive, props, transforms) => {
-      const kinds = kindsFor(directive, props, transforms, perEventPipeline);
-      expect(kinds.slice(0, LIMIT).every((k) => k === 'no-match')).toBe(true);
-      expect(kinds.slice(LIMIT)).toEqual(Array(10).fill('not-explained'));
-    });
+    it.each(cases)(
+      `analyses the first ${LIMIT} misses of %s, then says it stopped (perEvent=${perEventPipeline})`,
+      (directive, props, transforms) => {
+        const kinds = kindsFor(directive, props, transforms, perEventPipeline);
+        expect(kinds.slice(0, LIMIT).every((k) => k === 'no-match')).toBe(true);
+        expect(kinds.slice(LIMIT)).toEqual(Array(10).fill('not-explained'));
+      },
+    );
   }
 
   it('counts each directive apart', () => {

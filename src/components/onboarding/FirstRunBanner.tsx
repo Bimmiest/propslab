@@ -8,10 +8,7 @@ const LEGACY_STORAGE_KEY = 'splunk-toolkit:seen-intro';
 
 function hasSeenIntro(): boolean {
   try {
-    return (
-      localStorage.getItem(STORAGE_KEY) === 'true' ||
-      localStorage.getItem(LEGACY_STORAGE_KEY) === 'true'
-    );
+    return localStorage.getItem(STORAGE_KEY) === 'true' || localStorage.getItem(LEGACY_STORAGE_KEY) === 'true';
   } catch {
     return true; // If storage is unavailable, don't show the banner
   }
@@ -69,7 +66,10 @@ export function FirstRunBanner() {
       <div className="flex items-center gap-1 flex-1 min-w-0 flex-wrap">
         {STEPS.map((step, idx) => (
           <div key={step.number} className="flex items-center gap-1">
-            <div className="flex items-center gap-2 px-2.5 py-1 rounded-lg" style={{ backgroundColor: 'var(--color-bg-secondary)' }}>
+            <div
+              className="flex items-center gap-2 px-2.5 py-1 rounded-lg"
+              style={{ backgroundColor: 'var(--color-bg-secondary)' }}
+            >
               <span
                 className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0"
                 style={{ backgroundColor: 'var(--color-accent)', color: 'var(--color-text-on-accent)' }}

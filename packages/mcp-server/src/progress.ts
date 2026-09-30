@@ -53,11 +53,7 @@ export interface ProgressWriter {
 export function progressWriter(buffer: SharedArrayBuffer): ProgressWriter {
   const word = new Int32Array(buffer);
   const write = (phase: number, stage: number, events: number) => {
-    Atomics.store(
-      word,
-      0,
-      (phase << PHASE_SHIFT) | (stage << STAGE_SHIFT) | Math.min(events, MAX_REPORTED_EVENTS),
-    );
+    Atomics.store(word, 0, (phase << PHASE_SHIFT) | (stage << STAGE_SHIFT) | Math.min(events, MAX_REPORTED_EVENTS));
   };
   return {
     phase: (phase) => {
@@ -73,7 +69,5 @@ export function readProgress(buffer: SharedArrayBuffer): RunProgress {
   const value = Atomics.load(new Int32Array(buffer), 0);
   const phase = RUN_PHASES[value >>> PHASE_SHIFT] ?? 'starting';
   const stage = RUN_STAGES[((value >>> STAGE_SHIFT) & STAGE_MASK) - 1];
-  return stage === undefined
-    ? { phase }
-    : { phase, stage, events: value & MAX_REPORTED_EVENTS };
+  return stage === undefined ? { phase } : { phase, stage, events: value & MAX_REPORTED_EVENTS };
 }

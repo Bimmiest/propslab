@@ -19,12 +19,21 @@ function event(fields: Record<string, string> = {}): SplunkEvent {
   return makeEvent('raw', { fields });
 }
 
-const evalDir = (className: string, value: string): ConfDirective =>
-  ({ key: `EVAL-${className}`, value, line: 3, directiveType: 'EVAL', className });
+const evalDir = (className: string, value: string): ConfDirective => ({
+  key: `EVAL-${className}`,
+  value,
+  line: 3,
+  directiveType: 'EVAL',
+  className,
+});
 
 // Read through if(): a field cannot be assigned a boolean result.
 const cidr = (range: string, ip: string) =>
-  applyEvalExpressions([event({ ip })], [evalDir('r', `if(cidrmatch("${range}", ip), "true", "false")`)], runCtx(FIXED_NOW))[0]!.fields['r'];
+  applyEvalExpressions(
+    [event({ ip })],
+    [evalDir('r', `if(cidrmatch("${range}", ip), "true", "false")`)],
+    runCtx(FIXED_NOW),
+  )[0]!.fields['r'];
 
 describe('cidrmatch() (#291)', () => {
   it.each([
@@ -83,13 +92,21 @@ describe('cidrmatch() (#291)', () => {
   it('yields NULL for an absent address, as the comparison operators do (#343)', () => {
     const r = applyEvalExpressions([event()], [evalDir('r', 'cidrmatch("10.0.0.0/8", nope)')], runCtx(FIXED_NOW))[0]!;
     expect(r.fields['r']).toBeUndefined();
-    const guarded = applyEvalExpressions([event()], [evalDir('r', 'if(cidrmatch("10.0.0.0/8", nope), "in", "out")')], runCtx(FIXED_NOW))[0]!;
+    const guarded = applyEvalExpressions(
+      [event()],
+      [evalDir('r', 'if(cidrmatch("10.0.0.0/8", nope), "in", "out")')],
+      runCtx(FIXED_NOW),
+    )[0]!;
     expect(guarded.fields['r']).toBe('out');
   });
 
   it('no longer warns that it is not simulated', () => {
     const diagnostics: ValidationDiagnostic[] = [];
-    applyEvalExpressions([event({ ip: '10.0.0.1' })], [evalDir('r', 'if(cidrmatch("10.0.0.0/8", ip), 1, 0)')], runCtx(FIXED_NOW, diagnostics));
+    applyEvalExpressions(
+      [event({ ip: '10.0.0.1' })],
+      [evalDir('r', 'if(cidrmatch("10.0.0.0/8", ip), 1, 0)')],
+      runCtx(FIXED_NOW, diagnostics),
+    );
     expect(diagnostics).toEqual([]);
   });
 });
@@ -122,7 +139,7 @@ describe('eval regex arguments that do not compile (#291)', () => {
     expect(diagnostics[0]?.message).toContain('mvfind()');
   });
 
-  it('gives PCRE\'s reason for a pattern it rejects', () => {
+  it("gives PCRE's reason for a pattern it rejects", () => {
     const { diagnostics } = run('match(s, "(?<=a+)b")');
     expect(diagnostics[0]?.message).toMatch(/lookbehind/);
   });

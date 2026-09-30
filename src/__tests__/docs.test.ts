@@ -4,13 +4,25 @@
 import { describe, it, expect } from 'vitest';
 import pkg from '../../package.json';
 
-const markdown = import.meta.glob<string>(
-  ['/README.md', '/CONTRIBUTING.md', '/SECURITY.md', '/docs/**/*.md'],
-  { query: '?raw', import: 'default', eager: true },
-);
+const markdown = import.meta.glob<string>(['/README.md', '/CONTRIBUTING.md', '/SECURITY.md', '/docs/**/*.md'], {
+  query: '?raw',
+  import: 'default',
+  eager: true,
+});
 const existing = Object.keys(
   import.meta.glob(
-    ['/*', '/.nvmrc', '/.gitignore', '/docs/**', '/src/**', '/packages/**', '/scripts/**', '/.github/**', '/e2e/**', '/public/**'],
+    [
+      '/*',
+      '/.nvmrc',
+      '/.gitignore',
+      '/docs/**',
+      '/src/**',
+      '/packages/**',
+      '/scripts/**',
+      '/.github/**',
+      '/e2e/**',
+      '/public/**',
+    ],
     { query: '?url' },
   ),
 );
@@ -56,7 +68,9 @@ describe('Documentation', () => {
         .filter((l) => l !== '' && !/^(https?:|mailto:|#)/.test(l) && !/NNNN/.test(l))
         .map((l) => l.replace(/[#?].*$/, ''))
         .filter((l) => l !== '');
-      const broken = links.filter((l) => !exists(l.startsWith('/') ? l : `${dir}/${l}`.replace(/\/\.\//g, '/').replace(/\/[^/]+\/\.\.\//g, '/')));
+      const broken = links.filter(
+        (l) => !exists(l.startsWith('/') ? l : `${dir}/${l}`.replace(/\/\.\//g, '/').replace(/\/[^/]+\/\.\.\//g, '/')),
+      );
       expect(broken, `Broken links in ${file}: ${broken.join(', ')}`).toEqual([]);
     });
   }

@@ -80,8 +80,7 @@ describe('runPipeline — DEST_KEY validation (SEM-11)', () => {
 describe('runPipeline — DEST_KEY = MetaData:Index FORMAT lint (#281)', () => {
   const PLAIN_META: EventMetadata = { index: 'main', host: '', source: '', sourcetype: 'st' };
   const props = '[st]\nTRANSFORMS-t = route';
-  const prefixWarning = (diags: ValidationDiagnostic[]) =>
-    diags.filter((d) => d.message.includes('prefix'));
+  const prefixWarning = (diags: ValidationDiagnostic[]) => diags.filter((d) => d.message.includes('prefix'));
 
   it('accepts the bare index name and routes to it', () => {
     const transforms = '[route]\nREGEX = .\nDEST_KEY = _MetaData:Index\nFORMAT = security';
@@ -215,7 +214,7 @@ describe('runPipeline — an input-time sourcetype assignment is not an index-ti
     expect(result.events.map((e) => e.fields['k'])).toEqual(['one', 'two']);
   });
 
-  it('per-event mode adds no StanzaRematch step and keeps the assigned sourcetype\'s search-time config', () => {
+  it("per-event mode adds no StanzaRematch step and keeps the assigned sourcetype's search-time config", () => {
     const { result } = runPipeline(raw, meta, props, '', { perEventPipeline: true });
     expect(result.processingSteps.some((s) => s.processor === 'StanzaRematch')).toBe(false);
     expect(result.events.map((e) => e.fields['k'])).toEqual(['one', 'two']);
@@ -248,7 +247,7 @@ describe('runPipeline — inputMetadata is the metadata the events were broken w
     expect(result.events.every((e) => e.metadata.sourcetype === result.inputMetadata.sourcetype)).toBe(true);
   });
 
-  it('is the caller\'s metadata unchanged when nothing is assigned', () => {
+  it("is the caller's metadata unchanged when nothing is assigned", () => {
     const { result } = runPipeline('a', { ...meta, source: '/other.log' }, props, '');
     expect(result.inputMetadata).toEqual({ ...meta, source: '/other.log' });
   });
@@ -321,17 +320,21 @@ describe('runPipeline — per-event search time keeps an index-time sourcetype (
   const rematch = (e: { processingTrace: { processor: string; description: string }[] }) =>
     e.processingTrace.find((s) => s.processor === 'StanzaRematch')?.description;
 
-  it('reads [other]\'s search-time config after DEST_KEY = MetaData:Sourcetype rewrote app → other', () => {
+  it("reads [other]'s search-time config after DEST_KEY = MetaData:Sourcetype rewrote app → other", () => {
     const transforms = '[setst]\nREGEX = .\nDEST_KEY = MetaData:Sourcetype\nFORMAT = sourcetype::other\n';
-    const { result } = runPipeline('hello', meta, props('TRANSFORMS-a = setst'), transforms, { perEventPipeline: true });
+    const { result } = runPipeline('hello', meta, props('TRANSFORMS-a = setst'), transforms, {
+      perEventPipeline: true,
+    });
     const [event] = result.events;
     expect(event?.metadata.sourcetype).toBe('other');
     expect(event?.fields['foo']).toBe('hello');
     expect(event?.fields['appfield']).toBeUndefined();
-    expect(event && rematch(event)).toMatch(/^Metadata rewritten at index-time \(sourcetype → "other"\); stanzas re-matched for search-time using 2 directives$/);
+    expect(event && rematch(event)).toMatch(
+      /^Metadata rewritten at index-time \(sourcetype → "other"\); stanzas re-matched for search-time using 2 directives$/,
+    );
   });
 
-  it('gives a CLONE_SOURCETYPE copy its target\'s search-time config', () => {
+  it("gives a CLONE_SOURCETYPE copy its target's search-time config", () => {
     const transforms = '[copy]\nREGEX = .\nCLONE_SOURCETYPE = other\n';
     const { result } = runPipeline('hello', meta, props('TRANSFORMS-c = copy'), transforms, { perEventPipeline: true });
     const original = result.events.find((e) => e.clonedFrom === undefined);
@@ -342,7 +345,7 @@ describe('runPipeline — per-event search time keeps an index-time sourcetype (
     expect(extracted(clone)).toEqual({ foo: 'hello' });
   });
 
-  it('still applies `rename` on the rewritten sourcetype\'s stanza', () => {
+  it("still applies `rename` on the rewritten sourcetype's stanza", () => {
     const transforms = '[setst]\nREGEX = .\nDEST_KEY = MetaData:Sourcetype\nFORMAT = sourcetype::other\n';
     const renaming = props('TRANSFORMS-a = setst').replace('[other]\n', '[other]\nrename = renamed_to\n');
     const { result } = runPipeline('hello', meta, renaming, transforms, { perEventPipeline: true });

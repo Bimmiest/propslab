@@ -15,7 +15,7 @@ import {
 } from '../../../ui/ContextMenu';
 
 function currentSelection(): string {
-  return (typeof window !== 'undefined' ? window.getSelection()?.toString() ?? '' : '').trim();
+  return (typeof window !== 'undefined' ? (window.getSelection()?.toString() ?? '') : '').trim();
 }
 
 /**
@@ -26,7 +26,17 @@ function currentSelection(): string {
  * `selectionText`, when provided (the Raw tab's React-controlled token selection),
  * takes precedence over the native window.getSelection fallback used elsewhere.
  */
-export function EventContextMenu({ event, children, selectionText, selectionStart }: { event: ViewEvent; children: ReactNode; selectionText?: string; selectionStart?: number }) {
+export function EventContextMenu({
+  event,
+  children,
+  selectionText,
+  selectionStart,
+}: {
+  event: ViewEvent;
+  children: ReactNode;
+  selectionText?: string;
+  selectionStart?: number;
+}) {
   const { stanza, apply: applyDirective } = useApplyDirective();
 
   // Capture the native selection when the menu opens — by the time an item's onSelect
@@ -52,7 +62,11 @@ export function EventContextMenu({ event, children, selectionText, selectionStar
 
   return (
     <>
-      <ContextMenu onOpenChange={(open) => { if (open) setNativeSelection(currentSelection()); }}>
+      <ContextMenu
+        onOpenChange={(open) => {
+          if (open) setNativeSelection(currentSelection());
+        }}
+      >
         <ContextMenuTrigger>{children}</ContextMenuTrigger>
         <ContextMenuContent>
           <ContextMenuItem onSelect={() => copyQuietly(event._raw)}>Copy event</ContextMenuItem>

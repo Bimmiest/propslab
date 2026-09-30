@@ -49,22 +49,34 @@ describe('ExtractNameDialog — only a settled result for this pattern enables A
     onmessage: ((e: MessageEvent<RegexMatchResponse>) => void) | null = null;
     onerror: ((e: ErrorEvent) => void) | null = null;
     posted: unknown[] = [];
-    constructor() { FakeWorker.instances.push(this); }
-    postMessage(message: unknown) { this.posted.push(message); }
+    constructor() {
+      FakeWorker.instances.push(this);
+    }
+    postMessage(message: unknown) {
+      this.posted.push(message);
+    }
     terminate() {}
     /** The module has loaded: a timeout after this is the pattern's, not the load's. */
-    ready() { this.onmessage?.({ data: { type: 'ready' } } as unknown as MessageEvent<RegexMatchResponse>); }
+    ready() {
+      this.onmessage?.({ data: { type: 'ready' } } as unknown as MessageEvent<RegexMatchResponse>);
+    }
     respond() {
       const { request: req, inputs } = lastRequest<RegexMatchRequest, string[]>(this.posted, (r) => r.inputs);
-      this.onmessage?.({ data: { id: req.id, results: matchInputs(req.pattern, inputs) } } as MessageEvent<RegexMatchResponse>);
+      this.onmessage?.({
+        data: { id: req.id, results: matchInputs(req.pattern, inputs) },
+      } as MessageEvent<RegexMatchResponse>);
     }
   }
   const worker = () => FakeWorker.instances[FakeWorker.instances.length - 1]!;
   const addButton = () => screen.getByRole('button', { name: 'Add EXTRACT' });
   const regexInput = () => screen.getByLabelText('Regex');
   const settle = () => {
-    act(() => { vi.advanceTimersByTime(250); });
-    act(() => { worker().respond(); });
+    act(() => {
+      vi.advanceTimersByTime(250);
+    });
+    act(() => {
+      worker().respond();
+    });
   };
 
   beforeEach(() => {
@@ -114,17 +126,27 @@ describe('ExtractNameDialog — only a settled result for this pattern enables A
 
     fireEvent.change(regexInput(), { target: { value: '(?<x>unbalanced' } });
     expect(addButton()).toBeDisabled();
-    act(() => { vi.advanceTimersByTime(250); });
+    act(() => {
+      vi.advanceTimersByTime(250);
+    });
     expect(addButton()).toBeDisabled();
     // Only the idle request that clears the previous pattern, never this one.
-    expect(requestsIn<RegexMatchRequest>(worker().posted.slice(posted)).map((r) => r.pattern)).not.toContain('(?<x>unbalanced');
+    expect(requestsIn<RegexMatchRequest>(worker().posted.slice(posted)).map((r) => r.pattern)).not.toContain(
+      '(?<x>unbalanced',
+    );
   });
 
   it('keeps Add disabled when the pattern times out', () => {
     const { onApply } = setup();
-    act(() => { vi.advanceTimersByTime(250); });
-    act(() => { worker().ready(); });
-    act(() => { vi.advanceTimersByTime(2_000); });
+    act(() => {
+      vi.advanceTimersByTime(250);
+    });
+    act(() => {
+      worker().ready();
+    });
+    act(() => {
+      vi.advanceTimersByTime(2_000);
+    });
     expect(screen.getByText(/took too long to run/)).toBeInTheDocument();
     expect(addButton()).toBeDisabled();
     fireEvent.click(addButton());

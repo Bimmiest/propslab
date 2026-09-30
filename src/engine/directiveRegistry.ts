@@ -87,9 +87,7 @@ for (const d of DIRECTIVES) {
 // Class-based directive prefixes -- e.g. EXTRACT, REPORT, etc.
 // ---------------------------------------------------------------------------
 
-const CLASS_BASED_PREFIXES: string[] = DIRECTIVES
-  .filter((d) => d.isClassBased)
-  .map((d) => d.key);
+const CLASS_BASED_PREFIXES: string[] = DIRECTIVES.filter((d) => d.isClassBased).map((d) => d.key);
 
 // ---------------------------------------------------------------------------
 // Exported helper functions
@@ -101,10 +99,7 @@ const CLASS_BASED_PREFIXES: string[] = DIRECTIVES
  * For class-based directives (e.g. "EXTRACT-myfield") the lookup uses the
  * base prefix ("EXTRACT").
  */
-export function getDirectiveInfo(
-  key: string,
-  file: 'props.conf' | 'transforms.conf',
-): DirectiveInfo | undefined {
+export function getDirectiveInfo(key: string, file: 'props.conf' | 'transforms.conf'): DirectiveInfo | undefined {
   // Try an exact match first.
   const exact = directivesByKey.get(key);
   if (exact) {
@@ -145,9 +140,7 @@ export function wrongFileCanonical(
   file: 'props.conf' | 'transforms.conf',
 ): 'props.conf' | 'transforms.conf' | undefined {
   if (getDirectiveInfo(key, file)) return undefined;
-  const entries =
-    directivesByKey.get(key) ??
-    directivesByKey.get(getClassBasedDirectiveBase(key)?.base ?? '');
+  const entries = directivesByKey.get(key) ?? directivesByKey.get(getClassBasedDirectiveBase(key)?.base ?? '');
   if (!entries || entries.length === 0) return undefined;
   // Anything registered for 'both' would have been found above, so every
   // remaining entry names the other file.
@@ -164,18 +157,14 @@ export const WRONG_FILE_MESSAGE = (
 /**
  * Return all directives that apply to the given configuration file.
  */
-export function getDirectivesForFile(
-  file: 'props.conf' | 'transforms.conf',
-): DirectiveInfo[] {
+export function getDirectivesForFile(file: 'props.conf' | 'transforms.conf'): DirectiveInfo[] {
   return DIRECTIVES.filter((d) => d.appliesTo === file || d.appliesTo === 'both');
 }
 
 /**
  * Return directives grouped by category for the given configuration file.
  */
-export function getDirectivesByCategory(
-  file: 'props.conf' | 'transforms.conf',
-): Map<string, DirectiveInfo[]> {
+export function getDirectivesByCategory(file: 'props.conf' | 'transforms.conf'): Map<string, DirectiveInfo[]> {
   const result = new Map<string, DirectiveInfo[]>();
   for (const d of DIRECTIVES) {
     if (d.appliesTo !== file && d.appliesTo !== 'both') {
@@ -195,9 +184,7 @@ export function getDirectivesByCategory(
  * Parse a class-based directive key like "EXTRACT-myfield" into its base
  * prefix and class name.  Returns null if the key is not class-based.
  */
-export function getClassBasedDirectiveBase(
-  key: string,
-): { base: string; className: string } | null {
+export function getClassBasedDirectiveBase(key: string): { base: string; className: string } | null {
   const dashIndex = key.indexOf('-');
   if (dashIndex === -1) {
     return null;
@@ -227,10 +214,7 @@ export function getAllDirectives(): DirectiveInfo[] {
  * Used to detect case typos: Splunk attribute names are case-sensitive, so a
  * mis-cased name (e.g. `kv_mode`) is silently ignored and the default applies.
  */
-export function getCanonicalDirectiveKey(
-  key: string,
-  file: 'props.conf' | 'transforms.conf',
-): string | undefined {
+export function getCanonicalDirectiveKey(key: string, file: 'props.conf' | 'transforms.conf'): string | undefined {
   const matches = directivesByLowerKey.get(key.toLowerCase());
   return matches?.find((d) => d.appliesTo === file || d.appliesTo === 'both')?.key;
 }

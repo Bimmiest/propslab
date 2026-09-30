@@ -68,7 +68,10 @@ function findClassEnd(source: string, start: number): number {
   if (source[i] === '^') i++;
   if (source[i] === ']') i++; // a leading `]` is a literal in PCRE
   for (; i < source.length; i++) {
-    if (source[i] === '\\') { i++; continue; }
+    if (source[i] === '\\') {
+      i++;
+      continue;
+    }
     if (source[i] === ']') return i;
   }
   return -1;
@@ -79,7 +82,10 @@ function findGroupEnd(source: string, start: number): number {
   let depth = 0;
   for (let i = start; i < source.length; i++) {
     const c = source.charAt(i);
-    if (c === '\\') { i++; continue; }
+    if (c === '\\') {
+      i++;
+      continue;
+    }
     if (c === '[') {
       const end = findClassEnd(source, i);
       if (end < 0) return -1;
@@ -104,7 +110,10 @@ function splitTopLevelAlternatives(source: string): string[] {
   let start = 0;
   for (let i = 0; i < source.length; i++) {
     const c = source.charAt(i);
-    if (c === '\\') { i++; continue; }
+    if (c === '\\') {
+      i++;
+      continue;
+    }
     if (c === '[') {
       const end = findClassEnd(source, i);
       if (end < 0) break;
@@ -197,7 +206,9 @@ function groupBody(groupSource: string): string | null {
   const inner = groupSource.slice(1, -1);
   // `?ims-x:` is a PCRE scoped modifier group. It has a body like any other
   // group; treating it as body-less would let `a(?i:(x+)+)` past the check.
-  const prefix = /^\?(?::|[a-zA-Z]*(?:-[a-zA-Z]+)?:|<[A-Za-z_]\w*>|'[A-Za-z_]\w*'|P<[A-Za-z_]\w*>|=|!|<=|<!|>)/.exec(inner);
+  const prefix = /^\?(?::|[a-zA-Z]*(?:-[a-zA-Z]+)?:|<[A-Za-z_]\w*>|'[A-Za-z_]\w*'|P<[A-Za-z_]\w*>|=|!|<=|<!|>)/.exec(
+    inner,
+  );
   if (prefix) return inner.slice(prefix[0].length);
   if (inner.startsWith('?')) return null; // inline flags or an unrecognised construct
   return inner;

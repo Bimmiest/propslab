@@ -25,9 +25,7 @@ function run(props: string, input: string) {
 describe('buildPunct', () => {
   it('drops letters and digits, keeps punctuation, maps spaces to underscores', () => {
     // The shape of the worked example in Splunk's search documentation.
-    expect(buildPunct('172.26.34.223 - - [01/Jul/2005:12:05:27 -0700]')).toBe(
-      '..._-_-_[//:::_-]',
-    );
+    expect(buildPunct('172.26.34.223 - - [01/Jul/2005:12:05:27 -0700]')).toBe('..._-_-_[//:::_-]');
   });
 
   it('maps a tab to the literal letter t (punct-whitespace-and-multiline)', () => {
@@ -55,10 +53,7 @@ describe('ANNOTATE_PUNCT in the pipeline (#185)', () => {
   });
 
   it('is disabled by ANNOTATE_PUNCT = false', () => {
-    const events = run(
-      'SHOULD_LINEMERGE = false\nANNOTATE_PUNCT = false\n',
-      '2026-01-15T10:00:00Z user=alice\n',
-    );
+    const events = run('SHOULD_LINEMERGE = false\nANNOTATE_PUNCT = false\n', '2026-01-15T10:00:00Z user=alice\n');
     expect(events[0]?.fields['punct']).toBeUndefined();
   });
 

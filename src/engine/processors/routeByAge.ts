@@ -40,11 +40,7 @@ export function parseAge(value: string): number | null {
  *
  * An event with no `_time` cannot be judged and is left alone.
  */
-export function routeEventsByAge(
-  events: SplunkEvent[],
-  directives: ConfDirective[],
-  ctx: RunContext,
-): SplunkEvent[] {
+export function routeEventsByAge(events: SplunkEvent[], directives: ConfDirective[], ctx: RunContext): SplunkEvent[] {
   const { diagnostics, now } = ctx;
   const dir = effectiveDirective(directives, 'ROUTE_EVENTS_OLDER_THAN');
   if (!dir) return events;

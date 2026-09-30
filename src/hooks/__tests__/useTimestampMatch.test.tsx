@@ -119,7 +119,7 @@ describe('useTimestampMatch', () => {
     expect(result.current.probes).toEqual([{ match: null, prefix: null }]);
   });
 
-  it('keeps the same page\'s probes, marked pending, while a new config is matched', () => {
+  it("keeps the same page's probes, marked pending, while a new config is matched", () => {
     const raws = ['a 2026-01-01'];
     const { result, rerender } = renderHook(({ c }) => useTimestampMatch(raws, c), {
       initialProps: { c: config() },

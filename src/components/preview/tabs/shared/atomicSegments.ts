@@ -59,7 +59,8 @@ export function atomicSegments(raw: string, highlights: Highlight[]): AtomicSegm
   let s = 0;
   for (const e of cuts) {
     if (e === s) continue;
-    for (let entry = byStart[next]; entry !== undefined && entry.h.start <= s; entry = byStart[++next]) open.push(entry);
+    for (let entry = byStart[next]; entry !== undefined && entry.h.start <= s; entry = byStart[++next])
+      open.push(entry);
     // Segments only move right, so a highlight that ends before this one never covers another.
     let kept = 0;
     let owner: OpenHighlight | null = null;
@@ -68,7 +69,12 @@ export function atomicSegments(raw: string, highlights: Highlight[]): AtomicSegm
       if (h.end < e) continue;
       open[kept++] = entry;
       const len = h.end - h.start;
-      if (owner === null || len < owner.h.end - owner.h.start || (len === owner.h.end - owner.h.start && entry.index < owner.index)) owner = entry;
+      if (
+        owner === null ||
+        len < owner.h.end - owner.h.start ||
+        (len === owner.h.end - owner.h.start && entry.index < owner.index)
+      )
+        owner = entry;
     }
     open.length = kept;
     const hl = owner === null ? null : owner.h;

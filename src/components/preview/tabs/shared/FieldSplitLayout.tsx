@@ -37,7 +37,9 @@ function getSavedLayout(storageKey: string): Layout | undefined {
       const parsed: unknown = JSON.parse(saved);
       if (isLayout(parsed, storageKey)) return parsed;
     }
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
   return undefined;
 }
 
@@ -66,14 +68,24 @@ export function FieldSplitLayout({ storageKey, collapsed, sidebar, children }: F
     // With the sidebar hidden the group holds the events pane alone: not a split to keep.
     if (!isLayout(next, storageKey)) return;
     setLayout(next);
-    try { localStorage.setItem(storageKey, JSON.stringify(next)); } catch { /* ignore */ }
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(next));
+    } catch {
+      /* ignore */
+    }
   };
 
   // One tree whether or not the sidebar shows: the events pane stays the
   // group's first panel, so hiding the sidebar does not remount every event
   // card beneath it or lose its scroll position.
   return (
-    <Group orientation="horizontal" id={storageKey} defaultLayout={layout} onLayoutChanged={saveLayout} resizePreviewMode="separator">
+    <Group
+      orientation="horizontal"
+      id={storageKey}
+      defaultLayout={layout}
+      onLayoutChanged={saveLayout}
+      resizePreviewMode="separator"
+    >
       <Panel defaultSize="85" minSize="40" id={eventsId(storageKey)}>
         <div className="h-full overflow-auto p-3 space-y-3" {...SCROLL_REGION}>
           {children}

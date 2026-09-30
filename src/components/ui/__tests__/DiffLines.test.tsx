@@ -6,7 +6,11 @@ import { computeDiff } from '../../../utils/diffEngine';
 
 describe('DiffLines', () => {
   it('renders one row per line, signed by whether it was kept, removed or added', () => {
-    const { container } = render(<div><DiffLines diff={computeDiff('a\nb\nc', 'a\nB\nc')} /></div>);
+    const { container } = render(
+      <div>
+        <DiffLines diff={computeDiff('a\nb\nc', 'a\nB\nc')} />
+      </div>,
+    );
     const rows = Array.from(container.firstElementChild!.children);
     const signed = rows.map((row) => `${row.children[0]!.textContent}${row.children[1]!.textContent}`);
     expect(signed).toEqual([' a', '-b', '+B', ' c']);

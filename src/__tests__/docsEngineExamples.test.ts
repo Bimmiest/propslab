@@ -16,9 +16,9 @@ import { runPipeline } from '../engine/pipeline';
 // or on `default`.
 const ts: typeof tsNamespace = (tsNamespace as unknown as { default?: typeof tsNamespace }).default ?? tsNamespace;
 
-const engineDoc = Object.values(
-  import.meta.glob<string>('/docs/engine.md', { query: '?raw', import: 'default', eager: true }),
-)[0] ?? '';
+const engineDoc =
+  Object.values(import.meta.glob<string>('/docs/engine.md', { query: '?raw', import: 'default', eager: true }))[0] ??
+  '';
 
 interface Block {
   /** 1-based line of the first line of code in engine.md. */
@@ -118,7 +118,10 @@ describe('docs/engine.md examples', () => {
 
   it('documents runPipeline with its real parameter names', () => {
     // The signature line is a `text` block (it is not valid TypeScript: `options?`).
-    const documented = /^runPipeline\(([^)]*)\)$/m.exec(engineDoc)?.[1]?.split(',').map((p) => p.trim());
+    const documented = /^runPipeline\(([^)]*)\)$/m
+      .exec(engineDoc)?.[1]
+      ?.split(',')
+      .map((p) => p.trim());
     const declaration = ts.sys.readFile(`${ts.sys.getCurrentDirectory()}/src/engine/pipeline.ts`) ?? '';
     const actual = /export function runPipeline\(([^)]*)\)/
       .exec(declaration)?.[1]

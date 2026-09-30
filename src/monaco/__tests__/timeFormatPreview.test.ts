@@ -32,7 +32,10 @@ const proberInline: PrefixMatcher = (pattern, sample) => {
   return Promise.resolve(probe?.prefix ? { status: 'matched', end: probe.prefix.end } : { status: 'no-match' });
 };
 
-async function buildTimeFormatPreview(format: string, options: TimeFormatPreviewOptions = {}): Promise<TimeFormatPreview> {
+async function buildTimeFormatPreview(
+  format: string,
+  options: TimeFormatPreviewOptions = {},
+): Promise<TimeFormatPreview> {
   const preview = await buildWith(format, { matchPrefix: proberInline, ...options });
   if (preview === null) throw new Error('unexpectedly cancelled');
   return preview;

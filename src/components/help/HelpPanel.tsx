@@ -22,7 +22,6 @@ export function HelpPanel() {
     toggleHelp();
   };
 
-
   const indexStages = PIPELINE_STAGES.filter((s) => s.phase === 'index-time');
   const searchStages = PIPELINE_STAGES.filter((s) => s.phase === 'search-time');
 
@@ -63,8 +62,8 @@ export function HelpPanel() {
         {/* Intro */}
         <div className="px-5 py-3 shrink-0 border-b" style={{ borderColor: 'var(--color-border-subtle)' }}>
           <p className="text-xs text-[var(--color-text-secondary)] leading-relaxed">
-            Splunk processes events in a fixed order. Index-time processors run when data is ingested;
-            search-time processors run at query time. Click any stage to see which directives control it.
+            Splunk processes events in a fixed order. Index-time processors run when data is ingested; search-time
+            processors run at query time. Click any stage to see which directives control it.
           </p>
         </div>
 
@@ -100,8 +99,8 @@ export function HelpPanel() {
               sentence, and this drawer is where a user goes to ask what the
               tool is. */}
           <p className="mt-2 pt-2 border-t" style={{ borderColor: 'var(--color-border-subtle)' }}>
-            Propslab is an independent project, not affiliated with or endorsed by Splunk Inc.
-            Splunk is a registered trademark of Splunk Inc.
+            Propslab is an independent project, not affiliated with or endorsed by Splunk Inc. Splunk is a registered
+            trademark of Splunk Inc.
           </p>
         </div>
       </div>
@@ -126,10 +125,7 @@ function StageGroup({
 }) {
   return (
     <div>
-      <p
-        className="text-[11px] font-semibold uppercase tracking-wider mb-2"
-        style={{ color: phaseColor }}
-      >
+      <p className="text-[11px] font-semibold uppercase tracking-wider mb-2" style={{ color: phaseColor }}>
         {title}
       </p>
       <div className="space-y-1.5">
@@ -208,9 +204,7 @@ function StageCard({
 
       {isExpanded && (
         <div className="px-3 pb-3 pt-1 border-t" style={{ borderColor: 'var(--color-border-subtle)' }}>
-          <p className="text-xs text-[var(--color-text-secondary)] leading-relaxed mb-3">
-            {stage.description}
-          </p>
+          <p className="text-xs text-[var(--color-text-secondary)] leading-relaxed mb-3">{stage.description}</p>
           <div className="flex flex-wrap gap-1.5">
             {stage.directives.map((d) => (
               <button

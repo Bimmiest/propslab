@@ -34,7 +34,13 @@ const entries: [string, () => Promise<unknown>, unknown][] = [
   [
     'pipelineWorker',
     () => import('../pipelineWorker'),
-    { id: 4, rawData: 'x', metadata: { index: 'main', host: 'h', source: 's', sourcetype: 'st' }, propsConfText: '', transformsConfText: '' },
+    {
+      id: 4,
+      rawData: 'x',
+      metadata: { index: 'main', host: 'h', source: 's', sourcetype: 'st' },
+      propsConfText: '',
+      transformsConfText: '',
+    },
   ],
   ['regexMatchWorker', () => import('../regexMatchWorker'), { id: 4, pattern: 'x', inputs: ['x'] }],
   [
@@ -58,7 +64,11 @@ describe('worker entries post WORKER_READY (#339)', () => {
    * hand: vi.waitFor advances fake timers itself, which would run that task.
    */
   const loaded = async () => {
-    const { setImmediate } = (globalThis as unknown as { process: { getBuiltinModule(id: 'node:timers'): { setImmediate(cb: () => void): void } } }).process.getBuiltinModule('node:timers');
+    const { setImmediate } = (
+      globalThis as unknown as {
+        process: { getBuiltinModule(id: 'node:timers'): { setImmediate(cb: () => void): void } };
+      }
+    ).process.getBuiltinModule('node:timers');
     for (let i = 0; i < 1000 && vi.getTimerCount() === 0; i++) await new Promise<void>((r) => setImmediate(r));
     expect(vi.getTimerCount()).toBeGreaterThan(0);
   };
@@ -86,16 +96,19 @@ describe('worker entries post WORKER_READY (#339)', () => {
     expect(posted.filter((p) => (p.message as { type?: string }).type === 'ready')).toHaveLength(1);
   });
 
-  it.each(entries)('%s fails to load, before ready, when its engine cannot be fetched', async (_name, entry, request) => {
-    stubFailingWasmFetch();
-    const { posted, send } = await load(entry);
-    send(request);
-    await loaded();
-    // Thrown in a task, so it is an uncaught worker error, which the page
-    // counts as a failure to load because no ready came first.
-    expect(() => vi.runOnlyPendingTimers()).toThrow(/asset unavailable/);
-    expect(posted).toEqual([]);
-  });
+  it.each(entries)(
+    '%s fails to load, before ready, when its engine cannot be fetched',
+    async (_name, entry, request) => {
+      stubFailingWasmFetch();
+      const { posted, send } = await load(entry);
+      send(request);
+      await loaded();
+      // Thrown in a task, so it is an uncaught worker error, which the page
+      // counts as a failure to load because no ready came first.
+      expect(() => vi.runOnlyPendingTimers()).toThrow(/asset unavailable/);
+      expect(posted).toEqual([]);
+    },
+  );
 
   it('takes nothing from a message but requests: a message shaped like an engine is just a request', async () => {
     stubWasmFetch();
@@ -111,7 +124,10 @@ describe('worker entries post WORKER_READY (#339)', () => {
 
   it('handles every queued request when one handler throws, and still surfaces the throw (#436)', async () => {
     stubWasmFetch();
-    const fakeSelf: { onmessage: Handler; postMessage: (m: unknown) => void } = { onmessage: null, postMessage: () => {} };
+    const fakeSelf: { onmessage: Handler; postMessage: (m: unknown) => void } = {
+      onmessage: null,
+      postMessage: () => {},
+    };
     const handled: number[] = [];
     serveWithRegexEngine<number>(fakeSelf, (n) => {
       if (n === 2) throw new Error('handler exploded');

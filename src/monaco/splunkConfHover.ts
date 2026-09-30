@@ -67,7 +67,7 @@ export function createHoverProvider(fileType: 'props.conf' | 'transforms.conf'):
     provideHover(
       model: editor.ITextModel,
       position: Position,
-      token: CancellationToken
+      token: CancellationToken,
     ): languages.ProviderResult<languages.Hover> {
       const line = model.getLineContent(position.lineNumber);
 
@@ -172,10 +172,7 @@ const DIRECTIVE_HOVER_TRUST: MarkdownStringTrustedOptions = {
  * Markdown for a directive-key hover. `actualKey` is document text, so it (and
  * the class name cut from it) is escaped; everything else is registry text.
  */
-function formatDirectiveHover(
-  info: import('../engine/directiveRegistry').DirectiveInfo,
-  actualKey: string,
-): string {
+function formatDirectiveHover(info: import('../engine/directiveRegistry').DirectiveInfo, actualKey: string): string {
   const parts: string[] = [];
 
   parts.push(`### ${escapeMarkdown(actualKey)}`);

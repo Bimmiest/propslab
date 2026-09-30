@@ -41,7 +41,7 @@ function fieldsOf(raw: string, directives: ConfDirective[]) {
 const WINEVT =
   "<Event xmlns='http://schemas.microsoft.com/win/2004/08/events/event'>" +
   "<System><Provider Name='Microsoft-Windows-Security-Auditing'/><EventID>4624</EventID>" +
-  "<Computer>dc01</Computer></System>" +
+  '<Computer>dc01</Computer></System>' +
   "<EventData><Data Name='SubjectUserName'>alice</Data><Data Name='LogonType'>3</Data></EventData>" +
   '</Event>';
 
@@ -138,7 +138,8 @@ describe('XML_INDEXED_EXTRACTIONS_PIPELINE (#271)', () => {
 });
 
 describe('XML_IE_INCLUDE / XML_IE_EXCLUDE (#271)', () => {
-  const raw = '<e><ProcessName>a.exe</ProcessName><ParentProcessName>b.exe</ParentProcessName><EventID>1</EventID><User>x</User></e>';
+  const raw =
+    '<e><ProcessName>a.exe</ProcessName><ParentProcessName>b.exe</ParentProcessName><EventID>1</EventID><User>x</User></e>';
 
   it('keeps only the fields INCLUDE names, with * wildcards', () => {
     const f = fieldsOf(raw, xmlDirs('xmlkv', d('XML_IE_INCLUDE', '*Process*,Event*')));
@@ -146,10 +147,7 @@ describe('XML_IE_INCLUDE / XML_IE_EXCLUDE (#271)', () => {
   });
 
   it('removes what EXCLUDE names from what INCLUDE let through', () => {
-    const f = fieldsOf(
-      raw,
-      xmlDirs('xmlkv', d('XML_IE_INCLUDE', '*Process*,Event*'), d('XML_IE_EXCLUDE', 'Parent*')),
-    );
+    const f = fieldsOf(raw, xmlDirs('xmlkv', d('XML_IE_INCLUDE', '*Process*,Event*'), d('XML_IE_EXCLUDE', 'Parent*')));
     expect(Object.keys(f).sort()).toEqual(['EventID', 'ProcessName']);
   });
 
@@ -249,10 +247,7 @@ describe('XML_IE_MAX_EXTRACTED_VALUE_SIZE (#271)', () => {
 
   it('honours a lower limit, counted in bytes', () => {
     // "é" is two bytes in UTF-8, so three of them exceed a five-byte limit.
-    const f = fieldsOf(
-      '<r><a>abcde</a><b>ééé</b></r>',
-      xmlDirs('xmlkv', d('XML_IE_MAX_EXTRACTED_VALUE_SIZE', '5')),
-    );
+    const f = fieldsOf('<r><a>abcde</a><b>ééé</b></r>', xmlDirs('xmlkv', d('XML_IE_MAX_EXTRACTED_VALUE_SIZE', '5')));
     expect(f['a']).toBe('abcde');
     expect(f['b']).toBeUndefined();
   });
@@ -341,15 +336,17 @@ describe('the XML attributes through the pipeline (#271)', () => {
       { perEventPipeline: false, captureOffsets: false },
     ).result.events[0]!.fields;
 
-  const procs = '<e><ProcessName>a.exe</ProcessName><ParentProcessName>b.exe</ParentProcessName><EventID>1</EventID></e>';
+  const procs =
+    '<e><ProcessName>a.exe</ProcessName><ParentProcessName>b.exe</ParentProcessName><EventID>1</EventID></e>';
 
   it('XML_IE_INCLUDE and XML_IE_EXCLUDE choose which fields are kept', () => {
     const f = fieldsOf(procs, 'xmlkv', 'XML_IE_INCLUDE = *Process*,Event*\nXML_IE_EXCLUDE = Parent*\n');
     // punct and timestamp are the pipeline's own fields, not the XML walk's.
-    expect(Object.keys(f).filter((k) => k.endsWith('ID') || k.endsWith('Name')).sort()).toEqual([
-      'EventID',
-      'ProcessName',
-    ]);
+    expect(
+      Object.keys(f)
+        .filter((k) => k.endsWith('ID') || k.endsWith('Name'))
+        .sort(),
+    ).toEqual(['EventID', 'ProcessName']);
   });
 
   it('XML_IE_INCLUDE_MV and XML_IE_EXCLUDE_MV choose which fields stay multivalue', () => {
@@ -391,13 +388,9 @@ describe('INDEXED_EXTRACTIONS xml family — line merging (#271)', () => {
     const raw = '<Event>\n  <user>bob</user>\n</Event>\n<Event>\n  <user>amy</user>\n</Event>\n';
     const props =
       '[st]\nINDEXED_EXTRACTIONS = xml\nXML_INDEXED_EXTRACTIONS_PIPELINE = typing\nBREAK_ONLY_BEFORE = <Event>\n';
-    const { result } = runPipeline(
-      raw,
-      { index: 'main', host: 'h', source: 's', sourcetype: 'st' },
-      props,
-      '',
-      { perEventPipeline: false },
-    );
+    const { result } = runPipeline(raw, { index: 'main', host: 'h', source: 's', sourcetype: 'st' }, props, '', {
+      perEventPipeline: false,
+    });
     expect(result.events).toHaveLength(2);
     expect(result.events.map((e) => e.fields['Event.user'])).toEqual(['bob', 'amy']);
   });

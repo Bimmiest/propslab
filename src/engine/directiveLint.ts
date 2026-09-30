@@ -157,9 +157,7 @@ export function lintDirectiveValues(
         if (!isIntegerLiteral(value)) {
           report(`${dir.key} takes an integer, and "${value}" is not one.`);
         } else if (isDisallowedNegative(info.key, value)) {
-          report(
-            `${dir.key} cannot be negative — "${value}" will not do what it looks like it does.`,
-          );
+          report(`${dir.key} cannot be negative — "${value}" will not do what it looks like it does.`);
         }
         continue;
       }

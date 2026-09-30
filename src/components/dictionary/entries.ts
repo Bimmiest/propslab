@@ -102,10 +102,7 @@ export const DEFAULT_FILTERS: DictionaryFilters = {
  * "search-time" would hide the thing that decides which stanza a setting even
  * belongs in — and they are only four rows.
  */
-export function filterEntries(
-  entries: DictionaryEntry[],
-  filters: DictionaryFilters,
-): DictionaryEntry[] {
+export function filterEntries(entries: DictionaryEntry[], filters: DictionaryFilters): DictionaryEntry[] {
   const needle = filters.search.trim().toLowerCase();
 
   return entries.filter((entry) => {

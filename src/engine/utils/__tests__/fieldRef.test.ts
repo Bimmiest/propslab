@@ -1,10 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {
-  isQuotedFieldName,
-  unquoteFieldName,
-  fieldNameNeedsQuoting,
-  fieldQuotingWarning,
-} from '../fieldRef';
+import { isQuotedFieldName, unquoteFieldName, fieldNameNeedsQuoting, fieldQuotingWarning } from '../fieldRef';
 import type { ConfDirective } from '../../types';
 
 describe('fieldRef', () => {
@@ -12,7 +7,7 @@ describe('fieldRef', () => {
     expect(isQuotedFieldName("'event.field'")).toBe(true);
     expect(isQuotedFieldName('"event.field"')).toBe(true);
     expect(isQuotedFieldName('event.field')).toBe(false);
-    expect(isQuotedFieldName("'mismatched\"")).toBe(false);
+    expect(isQuotedFieldName('\'mismatched"')).toBe(false);
     expect(isQuotedFieldName("'")).toBe(false);
   });
 

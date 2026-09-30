@@ -12,7 +12,7 @@ export interface CimValidationResult {
 
 export function validateCimCompliance(
   extractedFields: Set<string>,
-  options?: { includeAll?: boolean }
+  options?: { includeAll?: boolean },
 ): CimValidationResult[] {
   const results = CIM_MODELS.map((model) => {
     const requiredPresent: string[] = [];
@@ -31,13 +31,10 @@ export function validateCimCompliance(
     const totalFields = model.requiredFields.length + model.recommendedFields.length;
     const totalPresent = requiredPresent.length + recommendedPresent.length;
 
-    const requiredPercent = model.requiredFields.length > 0
-      ? Math.round((requiredPresent.length / model.requiredFields.length) * 100)
-      : 100;
+    const requiredPercent =
+      model.requiredFields.length > 0 ? Math.round((requiredPresent.length / model.requiredFields.length) * 100) : 100;
 
-    const totalPercent = totalFields > 0
-      ? Math.round((totalPresent / totalFields) * 100)
-      : 100;
+    const totalPercent = totalFields > 0 ? Math.round((totalPresent / totalFields) * 100) : 100;
 
     return {
       model,

@@ -95,10 +95,7 @@ export class MessageSizeLimiter extends Transform {
   private readonly maxBytes: number;
   private readonly onOversize: (maxBytes: number, id: RequestId | undefined) => void;
 
-  constructor(
-    maxBytes: number,
-    onOversize: (maxBytes: number, id: RequestId | undefined) => void,
-  ) {
+  constructor(maxBytes: number, onOversize: (maxBytes: number, id: RequestId | undefined) => void) {
     super();
     this.maxBytes = maxBytes;
     this.onOversize = onOversize;
@@ -167,9 +164,7 @@ export function oversizeMessageError(maxBytes: number, id?: RequestId): JSONRPCM
     ...(id === undefined ? {} : { id }),
     error: {
       code: INVALID_REQUEST,
-      message:
-        `Message exceeds ${maxBytes} bytes and was discarded unparsed; ` +
-        'send smaller conf and sample text.',
+      message: `Message exceeds ${maxBytes} bytes and was discarded unparsed; ` + 'send smaller conf and sample text.',
       data: { error: 'message_too_large', max_message_bytes: maxBytes },
     },
   };

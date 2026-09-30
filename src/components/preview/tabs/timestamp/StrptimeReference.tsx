@@ -20,16 +20,27 @@ export function StrptimeReference({ activeDirectives }: { activeDirectives: stri
       columns={STRPTIME_COLUMNS}
       categories={STRPTIME_REFERENCE}
       searchText={strptimeSearchText}
-      renderCategory={(cat) => <StrptimeCategoryRows key={cat.name} category={cat} activeDirectives={activeDirectives} />}
+      renderCategory={(cat) => (
+        <StrptimeCategoryRows key={cat.name} category={cat} activeDirectives={activeDirectives} />
+      )}
     />
   );
 }
 
-function StrptimeCategoryRows({ category, activeDirectives }: { category: StrptimeCategory; activeDirectives: string[] }) {
+function StrptimeCategoryRows({
+  category,
+  activeDirectives,
+}: {
+  category: StrptimeCategory;
+  activeDirectives: string[];
+}) {
   return (
     <>
       <tr>
-        <td colSpan={3} className="pt-2 pb-0.5 text-[10px] font-medium text-[var(--color-accent)] uppercase tracking-wider">
+        <td
+          colSpan={3}
+          className="pt-2 pb-0.5 text-[10px] font-medium text-[var(--color-accent)] uppercase tracking-wider"
+        >
           {category.name}
         </td>
       </tr>
@@ -46,7 +57,9 @@ function StrptimeCategoryRows({ category, activeDirectives }: { category: Strpti
                 className="font-mono px-1 py-0.5 rounded text-[11px]"
                 style={{
                   color: isActive ? 'var(--color-success)' : 'var(--color-text-primary)',
-                  backgroundColor: isActive ? 'var(--color-success-bg, rgba(34,197,94,0.15))' : 'var(--color-bg-tertiary)',
+                  backgroundColor: isActive
+                    ? 'var(--color-success-bg, rgba(34,197,94,0.15))'
+                    : 'var(--color-bg-tertiary)',
                 }}
               >
                 {d.directive}

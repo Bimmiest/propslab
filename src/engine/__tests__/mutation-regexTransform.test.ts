@@ -25,7 +25,10 @@ describe('LOOKAHEAD', () => {
   const late = 'x'.repeat(20) + 'id=7';
 
   it('bounds how far an index-time REGEX looks', () => {
-    const r = applyRegexTransform(event(late), stanza({ REGEX: 'id=(\\d)', FORMAT: 'id::$1', WRITE_META: 'true', LOOKAHEAD: '10' }));
+    const r = applyRegexTransform(
+      event(late),
+      stanza({ REGEX: 'id=(\\d)', FORMAT: 'id::$1', WRITE_META: 'true', LOOKAHEAD: '10' }),
+    );
     expect(r.matched).toBe(false);
   });
 
@@ -35,9 +38,13 @@ describe('LOOKAHEAD', () => {
   });
 
   it.each(['0', '-5', 'lots'])('falls back to the 4096 default for LOOKAHEAD = %s rather than to no limit', (value) => {
-    expect(applyRegexTransform(event(late), stanza({ REGEX: 'id=(\\d)', FORMAT: 'id::$1', LOOKAHEAD: value })).matched).toBe(true);
+    expect(
+      applyRegexTransform(event(late), stanza({ REGEX: 'id=(\\d)', FORMAT: 'id::$1', LOOKAHEAD: value })).matched,
+    ).toBe(true);
     const far = 'x'.repeat(5000) + 'id=7';
-    expect(applyRegexTransform(event(far), stanza({ REGEX: 'id=(\\d)', FORMAT: 'id::$1', LOOKAHEAD: value })).matched).toBe(false);
+    expect(
+      applyRegexTransform(event(far), stanza({ REGEX: 'id=(\\d)', FORMAT: 'id::$1', LOOKAHEAD: value })).matched,
+    ).toBe(false);
   });
 
   it('bounds an index-time REGEX at 4096 characters when LOOKAHEAD is absent', () => {
@@ -124,7 +131,10 @@ describe('$0 — the DEST_KEY value before the REGEX ran', () => {
   });
 
   it('reads the current value of a field DEST_KEY', () => {
-    const r = applyRegexTransform(event('v=1', { f: ['old', 'older'] }), stanza({ REGEX: 'v=(\\d)', FORMAT: '$0+$1', DEST_KEY: 'f' }));
+    const r = applyRegexTransform(
+      event('v=1', { f: ['old', 'older'] }),
+      stanza({ REGEX: 'v=(\\d)', FORMAT: '$0+$1', DEST_KEY: 'f' }),
+    );
     expect(r.destValue).toBe('old+1');
   });
 
@@ -149,7 +159,10 @@ describe('DEST_KEY', () => {
   });
 
   it('accumulates one line per match into _meta under REPEAT_MATCH, including adjacent matches', () => {
-    const r = applyRegexTransform(event('123'), stanza({ REGEX: '(\\d)', FORMAT: 'd::$1', DEST_KEY: '_meta', REPEAT_MATCH: 'true' }));
+    const r = applyRegexTransform(
+      event('123'),
+      stanza({ REGEX: '(\\d)', FORMAT: 'd::$1', DEST_KEY: '_meta', REPEAT_MATCH: 'true' }),
+    );
     expect(r.destValue).toBe('d::1\nd::2\nd::3');
   });
 
@@ -159,19 +172,28 @@ describe('DEST_KEY', () => {
   });
 
   it('trims DEST_KEY and FORMAT', () => {
-    const r = applyRegexTransform(event('v=1'), stanza({ REGEX: 'v=(\\d)', FORMAT: '  x::$1  ', DEST_KEY: '  _meta  ' }));
+    const r = applyRegexTransform(
+      event('v=1'),
+      stanza({ REGEX: 'v=(\\d)', FORMAT: '  x::$1  ', DEST_KEY: '  _meta  ' }),
+    );
     expect(r).toMatchObject({ destKey: '_meta', destValue: 'x::1' });
   });
 
   it('replaces the whole event with the FORMAT expansion for DEST_KEY = _raw', () => {
-    const r = applyRegexTransform(event('keep=1 drop'), stanza({ REGEX: 'keep=(\\d)', FORMAT: 'k$1', DEST_KEY: '_raw' }));
+    const r = applyRegexTransform(
+      event('keep=1 drop'),
+      stanza({ REGEX: 'keep=(\\d)', FORMAT: 'k$1', DEST_KEY: '_raw' }),
+    );
     expect(r).toMatchObject({ matched: true, destKey: '_raw', destValue: 'k1' });
   });
 });
 
 describe('FORMAT without DEST_KEY', () => {
   it('extracts adjacent matches under REPEAT_MATCH at index time', () => {
-    const r = applyRegexTransform(event('123'), stanza({ REGEX: '(\\d)', FORMAT: 'd::$1', REPEAT_MATCH: 'true', WRITE_META: 'true' }));
+    const r = applyRegexTransform(
+      event('123'),
+      stanza({ REGEX: '(\\d)', FORMAT: 'd::$1', REPEAT_MATCH: 'true', WRITE_META: 'true' }),
+    );
     expect(r.fields).toEqual({ d: ['1', '2', '3'] });
   });
 
@@ -190,7 +212,9 @@ describe('FORMAT without DEST_KEY', () => {
 describe('named groups', () => {
   it('keeps a leading underscore at index time unless WRITE_META is set', () => {
     expect(applyRegexTransform(event('v=1'), stanza({ REGEX: 'v=(?<_v>\\d)' })).fields).toEqual({ _v: '1' });
-    expect(applyRegexTransform(event('v=1'), stanza({ REGEX: 'v=(?<_v>\\d)', WRITE_META: 'true' })).fields).toEqual({ v: '1' });
+    expect(applyRegexTransform(event('v=1'), stanza({ REGEX: 'v=(?<_v>\\d)', WRITE_META: 'true' })).fields).toEqual({
+      v: '1',
+    });
   });
 
   it('skips a group that did not participate', () => {

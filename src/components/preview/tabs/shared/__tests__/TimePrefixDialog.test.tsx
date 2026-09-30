@@ -15,21 +15,33 @@ describe('TimePrefixDialog — only a settled result for this pattern enables Se
     onmessage: ((e: MessageEvent<RegexMatchResponse>) => void) | null = null;
     onerror: ((e: ErrorEvent) => void) | null = null;
     posted: unknown[] = [];
-    constructor() { FakeWorker.instances.push(this); }
-    postMessage(message: unknown) { this.posted.push(message); }
+    constructor() {
+      FakeWorker.instances.push(this);
+    }
+    postMessage(message: unknown) {
+      this.posted.push(message);
+    }
     terminate() {}
-    ready() { this.onmessage?.({ data: { type: 'ready' } } as unknown as MessageEvent<RegexMatchResponse>); }
+    ready() {
+      this.onmessage?.({ data: { type: 'ready' } } as unknown as MessageEvent<RegexMatchResponse>);
+    }
     respond() {
       const { request: req, inputs } = lastRequest<RegexMatchRequest, string[]>(this.posted, (r) => r.inputs);
-      this.onmessage?.({ data: { id: req.id, results: matchInputs(req.pattern, inputs) } } as MessageEvent<RegexMatchResponse>);
+      this.onmessage?.({
+        data: { id: req.id, results: matchInputs(req.pattern, inputs) },
+      } as MessageEvent<RegexMatchResponse>);
     }
   }
   const worker = () => FakeWorker.instances[FakeWorker.instances.length - 1]!;
   const setButton = () => screen.getByRole('button', { name: 'Set TIME_PREFIX' });
   const input = () => screen.getByRole('textbox', { name: /TIME_PREFIX/ });
   const settle = () => {
-    act(() => { vi.advanceTimersByTime(250); });
-    act(() => { worker().respond(); });
+    act(() => {
+      vi.advanceTimersByTime(250);
+    });
+    act(() => {
+      worker().respond();
+    });
   };
 
   function setup() {
@@ -74,7 +86,9 @@ describe('TimePrefixDialog — only a settled result for this pattern enables Se
   it('refuses a pattern that does not compile without sending it to the worker', () => {
     setup();
     fireEvent.change(input(), { target: { value: '(unbalanced' } });
-    act(() => { vi.advanceTimersByTime(250); });
+    act(() => {
+      vi.advanceTimersByTime(250);
+    });
     expect(setButton()).toBeDisabled();
     expect(requestsIn<RegexMatchRequest>(worker().posted).map((r) => r.pattern)).not.toContain('(unbalanced');
   });
@@ -82,9 +96,15 @@ describe('TimePrefixDialog — only a settled result for this pattern enables Se
   it('keeps Set disabled when the pattern times out', () => {
     const { onApply } = setup();
     fireEvent.change(input(), { target: { value: '\\[' } });
-    act(() => { vi.advanceTimersByTime(250); });
-    act(() => { worker().ready(); });
-    act(() => { vi.advanceTimersByTime(2_000); });
+    act(() => {
+      vi.advanceTimersByTime(250);
+    });
+    act(() => {
+      worker().ready();
+    });
+    act(() => {
+      vi.advanceTimersByTime(2_000);
+    });
     expect(screen.getByText(/took too long to run/)).toBeInTheDocument();
     expect(setButton()).toBeDisabled();
     fireEvent.click(setButton());

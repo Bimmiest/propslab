@@ -86,20 +86,20 @@ function resolvePriorDestValue(event: SplunkEvent, destKey: string | undefined):
   if (!destKey) return undefined;
   if (destKey === '_raw') return event._raw;
   switch (normaliseDestKey(destKey)) {
-    case 'MetaData:Host': return event.metadata.host;
-    case 'MetaData:Index': return event.metadata.index;
-    case 'MetaData:Source': return event.metadata.source;
-    case 'MetaData:Sourcetype': return event.metadata.sourcetype;
+    case 'MetaData:Host':
+      return event.metadata.host;
+    case 'MetaData:Index':
+      return event.metadata.index;
+    case 'MetaData:Source':
+      return event.metadata.source;
+    case 'MetaData:Sourcetype':
+      return event.metadata.sourcetype;
   }
   const v = getField(event.fields, destKey);
   return (Array.isArray(v) ? v[0] : v) ?? '';
 }
 
-function addMultiValue(
-  fields: Record<string, string | string[]>,
-  key: string,
-  value: string,
-): void {
+function addMultiValue(fields: Record<string, string | string[]>, key: string, value: string): void {
   // hasOwn-guarded + `__proto__`-safe: a named group like `(?<toString>…)` is
   // stored as a real field rather than reading back the inherited function.
   addFieldValue(fields, key, value);
@@ -269,9 +269,7 @@ function writeDestKey(run: MatchedRun, format: string, destKey: string, priorDes
  */
 function extractFormatPairs(run: MatchedRun, format: string): void {
   const { result, settings, cleanName } = run;
-  const pairs = parseFormatPairs(format).filter(
-    (p) => !/\$0(?!\d)/.test(p.key) && !/\$0(?!\d)/.test(p.value),
-  );
+  const pairs = parseFormatPairs(format).filter((p) => !/\$0(?!\d)/.test(p.key) && !/\$0(?!\d)/.test(p.value));
   const keepFirstMatchOnly = run.phase === 'search-time' && !settings.mvAdd;
   // Index time without REPEAT_MATCH: the REGEX runs once.
   for (const m of settings.scanAll ? run.compiled.matchAll(run.sourceValue) : [run.firstMatch]) {
@@ -410,7 +408,11 @@ export function applyRegexTransform(
   if (!compiled) {
     // The transform silently does nothing, so let the caller surface a diagnostic.
     onInvalidRegex?.(pattern);
-    return { fields: {}, matched: false, noOp: { kind: 'regex-invalid', error: validateRegex(pattern) ?? 'invalid regex' } };
+    return {
+      fields: {},
+      matched: false,
+      noOp: { kind: 'regex-invalid', error: validateRegex(pattern) ?? 'invalid regex' },
+    };
   }
 
   // The first match decides named vs numbered handling and is the only match

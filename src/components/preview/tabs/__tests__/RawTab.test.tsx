@@ -10,7 +10,14 @@ import { makeEvent } from '../../../../test/makeEvent';
 
 function makeItem(raw: string, line: number): EnrichedEvent {
   const event = makeEvent(raw, { lineNumbers: { start: line, end: line } });
-  return { event, searchText: raw.toLowerCase(), originalRaw: raw, hasChanges: false, hasMetadataChanges: false, isDropped: false };
+  return {
+    event,
+    searchText: raw.toLowerCase(),
+    originalRaw: raw,
+    hasChanges: false,
+    hasMetadataChanges: false,
+    isDropped: false,
+  };
 }
 
 const pageOne = [makeItem('first event', 1)];
@@ -25,9 +32,7 @@ const metadataShown = () => document.body.textContent.includes('sourcetype');
 // another after a page change.
 describe('RawTab — row state does not bleed across pages', () => {
   it('does not carry an expanded row onto the next page', () => {
-    const { rerender } = render(
-      <RawTab items={pageOne} currentPage={1} eventsPerPage={1} search="" />,
-    );
+    const { rerender } = render(<RawTab items={pageOne} currentPage={1} eventsPerPage={1} search="" />);
 
     fireEvent.click(screen.getByRole('button', { name: /Metadata/i }));
     expect(metadataShown()).toBe(true);
@@ -39,9 +44,7 @@ describe('RawTab — row state does not bleed across pages', () => {
   });
 
   it('keeps the row expanded when the same event re-renders', () => {
-    const { rerender } = render(
-      <RawTab items={pageOne} currentPage={1} eventsPerPage={1} search="" />,
-    );
+    const { rerender } = render(<RawTab items={pageOne} currentPage={1} eventsPerPage={1} search="" />);
     fireEvent.click(screen.getByRole('button', { name: /Metadata/i }));
     rerender(<RawTab items={pageOne} currentPage={1} eventsPerPage={1} search="" />);
     expect(metadataShown()).toBe(true);
@@ -52,9 +55,7 @@ describe('RawTab — CLONE_SOURCETYPE badge (#87)', () => {
   it('says where a cloned event came from', () => {
     const cloned = makeItem('2024-01-15 user=alice', 1);
     cloned.event.clonedFrom = 'my_app';
-    const { container } = render(
-      <RawTab items={[cloned]} currentPage={1} eventsPerPage={10} search="" />,
-    );
+    const { container } = render(<RawTab items={[cloned]} currentPage={1} eventsPerPage={10} search="" />);
     expect(container.textContent).toContain('Cloned from my_app');
   });
 
@@ -97,20 +98,32 @@ describe('RawTab — toggles announce their state (#335)', () => {
 // live fields.
 describe('RawTab — metadata baseline is the run (#335)', () => {
   const initial = useAppStore.getState();
-  afterEach(() => { useAppStore.setState(initial, true); });
+  afterEach(() => {
+    useAppStore.setState(initial, true);
+  });
 
-  it('compares against the result\'s input metadata, not the live fields', () => {
+  it("compares against the result's input metadata, not the live fields", () => {
     const meta = { index: 'main', host: 'h', source: 's', sourcetype: 'st' };
     useAppStore.setState({
       metadata: { ...meta, host: 'edited-since' },
-      processingResult: { events: [pageOne[0]!.event], originalRaw: 'first event', eventCount: 1, stepSummaries: [], fieldStats: EMPTY_FIELD_STATS, inputMetadata: meta },
+      processingResult: {
+        events: [pageOne[0]!.event],
+        originalRaw: 'first event',
+        eventCount: 1,
+        stepSummaries: [],
+        fieldStats: EMPTY_FIELD_STATS,
+        inputMetadata: meta,
+      },
     });
     const { container } = render(<RawTab items={pageOne} currentPage={1} eventsPerPage={1} search="" />);
     expect(container.textContent).not.toContain('Metadata modified');
   });
 
   it('flags nothing when there is no result to compare against', () => {
-    useAppStore.setState({ metadata: { index: 'other', host: 'x', source: 'y', sourcetype: 'z' }, processingResult: null });
+    useAppStore.setState({
+      metadata: { index: 'other', host: 'x', source: 'y', sourcetype: 'z' },
+      processingResult: null,
+    });
     const { container } = render(<RawTab items={pageOne} currentPage={1} eventsPerPage={1} search="" />);
     expect(container.textContent).not.toContain('Metadata modified');
   });
@@ -122,7 +135,11 @@ describe('RawTab — a clone and its original are separate rows (#422)', () => {
   afterEach(() => vi.restoreAllMocks());
 
   function cloneOf(item: EnrichedEvent, sourcetype: string): EnrichedEvent {
-    const event = { ...item.event, metadata: { ...item.event.metadata, sourcetype }, clonedFrom: item.event.metadata.sourcetype };
+    const event = {
+      ...item.event,
+      metadata: { ...item.event.metadata, sourcetype },
+      clonedFrom: item.event.metadata.sourcetype,
+    };
     return { ...item, event };
   }
 
@@ -148,8 +165,10 @@ describe('RawTab — a clone and its original are separate rows (#422)', () => {
     expect(toggles.map((b) => b.getAttribute('aria-expanded'))).toEqual(['true', 'false']);
   });
 
-  it('clears the token selection when the same event\'s _raw changes', () => {
-    const { rerender } = render(<RawTab items={[makeItem('user=alice', 1)]} currentPage={1} eventsPerPage={10} search="" />);
+  it("clears the token selection when the same event's _raw changes", () => {
+    const { rerender } = render(
+      <RawTab items={[makeItem('user=alice', 1)]} currentPage={1} eventsPerPage={10} search="" />,
+    );
     fireEvent.keyDown(screen.getByRole('textbox'), { key: 'ArrowRight' });
     expect(document.body.textContent).toContain('Selected: user');
     rerender(<RawTab items={[makeItem('name=bob', 1)]} currentPage={1} eventsPerPage={10} search="" />);
@@ -161,7 +180,9 @@ describe('RawTab — a clone and its original are separate rows (#422)', () => {
 // no descriptions (see toViewResult).
 describe('RawTab — metadata attribution and truncation from structured steps', () => {
   const initial = useAppStore.getState();
-  afterEach(() => { useAppStore.setState(initial, true); });
+  afterEach(() => {
+    useAppStore.setState(initial, true);
+  });
 
   function itemWith(trace: SplunkEvent['processingTrace']): EnrichedEvent {
     const item = makeItem('GET /a 200', 1);
@@ -174,12 +195,34 @@ describe('RawTab — metadata attribution and truncation from structured steps',
   it('names the step that last set the metadata key', () => {
     const meta = { index: 'main', host: 'h', source: 's', sourcetype: 'st' };
     useAppStore.setState({
-      processingResult: { events: [], originalRaw: '', eventCount: 0, stepSummaries: [], fieldStats: EMPTY_FIELD_STATS, inputMetadata: meta },
+      processingResult: {
+        events: [],
+        originalRaw: '',
+        eventCount: 0,
+        stepSummaries: [],
+        fieldStats: EMPTY_FIELD_STATS,
+        inputMetadata: meta,
+      },
     });
     const item = itemWith([
-      { processor: 'TRANSFORMS-a:first_host', phase: 'index-time', description: '', metadataChanges: [{ key: 'host', from: 'h', to: 'web01' }] },
-      { processor: 'TRANSFORMS-a:set_index', phase: 'index-time', description: '', metadataChanges: [{ key: 'index', from: 'main', to: 'main' }] },
-      { processor: 'TRANSFORMS-a:last_host', phase: 'index-time', description: '', metadataChanges: [{ key: 'host', from: 'web01', to: 'web02' }] },
+      {
+        processor: 'TRANSFORMS-a:first_host',
+        phase: 'index-time',
+        description: '',
+        metadataChanges: [{ key: 'host', from: 'h', to: 'web01' }],
+      },
+      {
+        processor: 'TRANSFORMS-a:set_index',
+        phase: 'index-time',
+        description: '',
+        metadataChanges: [{ key: 'index', from: 'main', to: 'main' }],
+      },
+      {
+        processor: 'TRANSFORMS-a:last_host',
+        phase: 'index-time',
+        description: '',
+        metadataChanges: [{ key: 'host', from: 'web01', to: 'web02' }],
+      },
     ]);
     render(<RawTab items={[item]} currentPage={1} eventsPerPage={1} search="" />);
     fireEvent.click(screen.getByRole('button', { name: /Metadata/i }));

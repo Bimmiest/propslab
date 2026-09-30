@@ -3,3 +3,6 @@
 #   git config blame.ignoreRevsFile .git-blame-ignore-revs
 #
 # One commit hash per line, oldest first, each under a comment naming the commit.
+
+# Format the TypeScript and JavaScript sources with Prettier (#510)
+f2099b47488442473acb9d7d57960a65c901a283

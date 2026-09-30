@@ -66,9 +66,7 @@ async function main(): Promise<void> {
     );
   } else if (reexecWanted) {
     if (heapFlagsSet) {
-      console.error(
-        'propslab MCP server: ignoring V8 heap-size flags so the sandbox heap limit applies',
-      );
+      console.error('propslab MCP server: ignoring V8 heap-size flags so the sandbox heap limit applies');
     }
     const child = spawn(
       process.execPath,

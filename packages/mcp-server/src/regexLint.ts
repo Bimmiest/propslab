@@ -17,10 +17,7 @@ import type { ParsedConf, ValidationDiagnostic } from '../../../src/engine/types
 import { validateRegex } from '../../../src/utils/splunkRegex';
 import { directivePatterns } from './directivePatterns';
 
-export function lintRegexDirectives(
-  propsConf: ParsedConf,
-  transformsConf: ParsedConf,
-): ValidationDiagnostic[] {
+export function lintRegexDirectives(propsConf: ParsedConf, transformsConf: ParsedConf): ValidationDiagnostic[] {
   const diagnostics: ValidationDiagnostic[] = [];
   for (const [file, conf] of [
     ['props.conf', propsConf],

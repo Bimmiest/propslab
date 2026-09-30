@@ -5,13 +5,7 @@ import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { Icon } from '../ui/Icon';
 import { DictionaryFilterBar, DictionaryList } from './DictionaryList';
 import { DictionaryDetail } from './DictionaryDetail';
-import {
-  buildEntries,
-  filterEntries,
-  findEntry,
-  DEFAULT_FILTERS,
-  type DictionaryFilters,
-} from './entries';
+import { buildEntries, filterEntries, findEntry, DEFAULT_FILTERS, type DictionaryFilters } from './entries';
 
 // Built once at module scope: the registry is static, so rebuilding the entry
 // list per render (or per keystroke in the search box) would be pure waste.
@@ -84,8 +78,7 @@ export function DictionaryView() {
   // do NOT write that back to the store: an implicit fallback that persists
   // would be indistinguishable from a deliberate selection the next time the
   // filters change.
-  const selected =
-    findEntry(visible, selectedId) ?? findEntry(ALL_ENTRIES, selectedId) ?? visible[0] ?? null;
+  const selected = findEntry(visible, selectedId) ?? findEntry(ALL_ENTRIES, selectedId) ?? visible[0] ?? null;
 
   const { drilled, listActiveId, select, back, onMove, listRef, backRef } = usePhoneDrill(
     isMobile,
@@ -94,23 +87,14 @@ export function DictionaryView() {
   );
 
   const list = (
-    <div
-      ref={listRef}
-      className="h-full flex flex-col"
-      style={{ backgroundColor: 'var(--color-bg-secondary)' }}
-    >
+    <div ref={listRef} className="h-full flex flex-col" style={{ backgroundColor: 'var(--color-bg-secondary)' }}>
       <DictionaryFilterBar
         filters={filters}
         onChange={setFilters}
         resultCount={visible.length}
         totalCount={ALL_ENTRIES.length}
       />
-      <DictionaryList
-        entries={visible}
-        selectedId={listActiveId}
-        onSelect={select}
-        onMove={onMove}
-      />
+      <DictionaryList entries={visible} selectedId={listActiveId} onSelect={select} onMove={onMove} />
     </div>
   );
 
@@ -120,9 +104,7 @@ export function DictionaryView() {
     </div>
   ) : (
     <div className="h-full flex items-center justify-center px-6">
-      <p className="text-xs text-center text-[var(--color-text-muted)]">
-        Select a directive to see its documentation.
-      </p>
+      <p className="text-xs text-center text-[var(--color-text-muted)]">Select a directive to see its documentation.</p>
     </div>
   );
 

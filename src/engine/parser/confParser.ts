@@ -134,10 +134,7 @@ function parseDirectiveKey(key: string): {
  * its quick fix answer this question too, and three implementations of
  * "is this a case typo" would be three chances to disagree.
  */
-export function miscasedCanonical(
-  rawKey: string,
-  file: 'props.conf' | 'transforms.conf',
-): string | undefined {
+export function miscasedCanonical(rawKey: string, file: 'props.conf' | 'transforms.conf'): string | undefined {
   const { className, miscasedPrefix } = parseDirectiveKey(rawKey);
   if (miscasedPrefix !== undefined) {
     return `${miscasedPrefix}${rawKey.slice(miscasedPrefix.length)}`;
@@ -165,9 +162,7 @@ export const MISCASED_SUGGESTION = (rawKey: string, canonical: string): string =
  * editor's hover and the dictionary use (`stanzaRegistry.classifyStanza`), so
  * the engine and the editor cannot disagree about what a header is.
  */
-function stanzaTypeFields(
-  name: string,
-): Pick<ConfStanza, 'type' | 'sourcePattern' | 'hostPattern'> {
+function stanzaTypeFields(name: string): Pick<ConfStanza, 'type' | 'sourcePattern' | 'hostPattern'> {
   const { kind, pattern } = classifyStanza(name);
   switch (kind.id) {
     case 'source':
@@ -216,10 +211,7 @@ function stanzaTypeFields(
  * @param fileName - Which file is being parsed (used in diagnostic messages).
  * @returns A `ParsedConf` with the merged stanzas and any errors.
  */
-export function parseConf(
-  input: ConfInput,
-  fileName: 'props.conf' | 'transforms.conf',
-): ParsedConf {
+export function parseConf(input: ConfInput, fileName: 'props.conf' | 'transforms.conf'): ParsedConf {
   if (typeof input === 'string') {
     const { stanzas, errors } = parseLayer(input, fileName);
     return { stanzas: mergeDuplicateStanzas(stanzas), errors };
@@ -295,11 +287,7 @@ function createContinuation() {
  * directive and diagnostic produced from this text, because once the layers are
  * concatenated a line number alone no longer says which file it is in.
  */
-function parseLayer(
-  text: string,
-  fileName: 'props.conf' | 'transforms.conf',
-  layer?: string,
-): ParsedConf {
+function parseLayer(text: string, fileName: 'props.conf' | 'transforms.conf', layer?: string): ParsedConf {
   const lines = text.split(/\r?\n/);
   const stanzas: ConfStanza[] = [];
   const errors: ValidationDiagnostic[] = [];

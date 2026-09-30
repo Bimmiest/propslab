@@ -67,14 +67,21 @@ export function RawTab({ items, currentPage, eventsPerPage, search }: RawTabProp
   );
 }
 
-function EventRow({ item, globalIdx, originalMetadata, search }: { item: EnrichedEvent; globalIdx: number; originalMetadata: EventMetadata | undefined; search: string }) {
+function EventRow({
+  item,
+  globalIdx,
+  originalMetadata,
+  search,
+}: {
+  item: EnrichedEvent;
+  globalIdx: number;
+  originalMetadata: EventMetadata | undefined;
+  search: string;
+}) {
   const { event, isDropped } = item;
   const [expanded, setExpanded] = useState(false);
 
-  const metadataChanges = useMemo(
-    () => getMetadataChanges(event, originalMetadata),
-    [event, originalMetadata]
-  );
+  const metadataChanges = useMemo(() => getMetadataChanges(event, originalMetadata), [event, originalMetadata]);
 
   const hasMetadataChanges = metadataChanges.length > 0;
 
@@ -106,55 +113,65 @@ function EventRow({ item, globalIdx, originalMetadata, search }: { item: Enriche
 
   return (
     <EventContextMenu event={event} selectionText={selectedText} selectionStart={selectionStart}>
-    <div
-      className={`border rounded ${isDropped ? 'border-[var(--color-error)]/40' : 'border-[var(--color-border)]'} bg-[var(--color-bg-secondary)]`}
-    >
-      <EventRowHeader event={event} globalIdx={globalIdx} isDropped={isDropped} hasMetadataChanges={hasMetadataChanges} />
-
-      <pre
-        ref={preRef}
-        // A dropped event is dimmed with the muted token, not opacity, which
-        // would take the text below 4.5:1.
-        className={`p-3 text-xs font-mono whitespace-pre-wrap break-all ${isDropped ? 'text-[var(--color-text-muted)]' : 'text-[var(--color-text-primary)]'} overflow-x-auto`}
-        style={{ maxHeight: expanded ? undefined : MAX_COLLAPSED_HEIGHT }}
+      <div
+        className={`border rounded ${isDropped ? 'border-[var(--color-error)]/40' : 'border-[var(--color-border)]'} bg-[var(--color-bg-secondary)]`}
       >
-        {searching
-          ? <SearchHighlightedRaw raw={event._raw} search={search} />
-          : <SelectableRaw raw={event._raw} selection={selection} onChange={setSelection} />}
-      </pre>
-      {overflows && (
+        <EventRowHeader
+          event={event}
+          globalIdx={globalIdx}
+          isDropped={isDropped}
+          hasMetadataChanges={hasMetadataChanges}
+        />
+
+        <pre
+          ref={preRef}
+          // A dropped event is dimmed with the muted token, not opacity, which
+          // would take the text below 4.5:1.
+          className={`p-3 text-xs font-mono whitespace-pre-wrap break-all ${isDropped ? 'text-[var(--color-text-muted)]' : 'text-[var(--color-text-primary)]'} overflow-x-auto`}
+          style={{ maxHeight: expanded ? undefined : MAX_COLLAPSED_HEIGHT }}
+        >
+          {searching ? (
+            <SearchHighlightedRaw raw={event._raw} search={search} />
+          ) : (
+            <SelectableRaw raw={event._raw} selection={selection} onChange={setSelection} />
+          )}
+        </pre>
+        {overflows && (
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            aria-expanded={expanded}
+            className="w-full flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-medium border-t border-[var(--color-border)] hover:bg-[var(--color-bg-tertiary)] transition-colors"
+            style={{ color: 'var(--color-accent)' }}
+          >
+            <ExpandLabel expanded={expanded} />
+          </button>
+        )}
+
+        {/* Metadata bar (collapsible) */}
         <button
           type="button"
-          onClick={() => setExpanded((v) => !v)}
-          aria-expanded={expanded}
-          className="w-full flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-medium border-t border-[var(--color-border)] hover:bg-[var(--color-bg-tertiary)] transition-colors"
-          style={{ color: 'var(--color-accent)' }}
+          onClick={() => setMetaExpanded((v) => !v)}
+          aria-expanded={metaExpanded}
+          className="w-full flex items-center gap-2 px-3 py-1 border-t border-[var(--color-border)] bg-[var(--color-bg-tertiary)] hover:bg-[var(--color-bg-secondary)] transition-colors"
         >
-          <ExpandLabel expanded={expanded} />
+          <svg
+            className={`w-3 h-3 flex-shrink-0 transition-transform ${metaExpanded ? 'rotate-90' : ''}`}
+            style={{ color: 'var(--color-text-muted)' }}
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2.5}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+          </svg>
+          <span className="text-xs text-[var(--color-text-muted)]">Metadata</span>
         </button>
-      )}
 
-      {/* Metadata bar (collapsible) */}
-      <button
-        type="button"
-        onClick={() => setMetaExpanded((v) => !v)}
-        aria-expanded={metaExpanded}
-        className="w-full flex items-center gap-2 px-3 py-1 border-t border-[var(--color-border)] bg-[var(--color-bg-tertiary)] hover:bg-[var(--color-bg-secondary)] transition-colors"
-      >
-        <svg
-          className={`w-3 h-3 flex-shrink-0 transition-transform ${metaExpanded ? 'rotate-90' : ''}`}
-          style={{ color: 'var(--color-text-muted)' }}
-          fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-        </svg>
-        <span className="text-xs text-[var(--color-text-muted)]">Metadata</span>
-      </button>
-
-      {metaExpanded && (
-        <MetadataDetails event={event} originalMetadata={originalMetadata} metadataChanges={metadataChanges} />
-      )}
-    </div>
+        {metaExpanded && (
+          <MetadataDetails event={event} originalMetadata={originalMetadata} metadataChanges={metadataChanges} />
+        )}
+      </div>
     </EventContextMenu>
   );
 }

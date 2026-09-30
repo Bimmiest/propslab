@@ -74,7 +74,7 @@ describe('EXTRACT under MATCH_LIMIT and DEPTH_LIMIT', () => {
   });
 });
 
-describe('transforms.conf REGEX under its own stanza\'s limits', () => {
+describe("transforms.conf REGEX under its own stanza's limits", () => {
   const props = '[st]\nREPORT-v = deep\n';
 
   it('fails at the default DEPTH_LIMIT and succeeds with a higher one', () => {
@@ -91,8 +91,7 @@ describe('transforms.conf REGEX under its own stanza\'s limits', () => {
     // DEPTH_LIMIT = 0 leaves depth unlimited, so it is MATCH_LIMIT alone that
     // stops the first run. TRUNCATE = 0 keeps the long subject whole.
     const long = 'ab'.repeat(60000);
-    const at = (transforms: string) =>
-      runPipeline(long, META, `${props}TRUNCATE = 0\n`, transforms).result.events[0]!;
+    const at = (transforms: string) => runPipeline(long, META, `${props}TRUNCATE = 0\n`, transforms).result.events[0]!;
     const stopped = at(`[deep]\nREGEX = ${ALTERNATING}\nDEPTH_LIMIT = 0\n`);
     expect(stopped.fields['v']).toBeUndefined();
     expect(stopped.noOps?.some((n) => n.reason.kind === 'regex-limit')).toBe(true);

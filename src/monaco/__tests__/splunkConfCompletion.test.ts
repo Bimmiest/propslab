@@ -24,7 +24,12 @@ function completeList(
 }
 
 /** Complete at (line, column) of a multi-line text; the caret defaults to the end of the last line. */
-function completeIn(fileType: ConfFile, text: string, lineNumber?: number, column?: number): languages.CompletionItem[] {
+function completeIn(
+  fileType: ConfFile,
+  text: string,
+  lineNumber?: number,
+  column?: number,
+): languages.CompletionItem[] {
   const lines = text.split('\n');
   const n = lineNumber ?? lines.length;
   const result = createCompletionProvider(fileType).provideCompletionItems(
@@ -36,8 +41,7 @@ function completeIn(fileType: ConfFile, text: string, lineNumber?: number, colum
   return result.suggestions;
 }
 
-const labelOf = (item: languages.CompletionItem) =>
-  typeof item.label === 'string' ? item.label : item.label.label;
+const labelOf = (item: languages.CompletionItem) => (typeof item.label === 'string' ? item.label : item.label.label);
 
 describe.each<ConfFile>(['props.conf', 'transforms.conf'])('directive completion in %s', (fileType) => {
   const items = completeList(fileType, '');
@@ -173,7 +177,7 @@ describe('snippet defaults are escaped (#501)', () => {
   });
 });
 
-describe('completion item kinds are the editor API\'s own (#499)', () => {
+describe("completion item kinds are the editor API's own (#499)", () => {
   const kindOf = (items: languages.CompletionItem[], label: string) => items.find((i) => labelOf(i) === label)?.kind;
 
   it('reads the enum from the runtime, whose numbers differ from the ones once hard-coded', () => {
@@ -198,9 +202,11 @@ describe('completion item kinds are the editor API\'s own (#499)', () => {
 
   it('marks boolean and enum values a Value', () => {
     const bool = getDirectivesForFile('props.conf').find((d) => d.valueType === 'boolean')!;
-    for (const item of completeList('props.conf', `${bool.key} = `)) expect(item.kind).toBe(monaco.CompletionItemKind.Value);
+    for (const item of completeList('props.conf', `${bool.key} = `))
+      expect(item.kind).toBe(monaco.CompletionItemKind.Value);
     const en = getDirectivesForFile('props.conf').find((d) => d.valueType === 'enum' && d.enumValues?.length)!;
-    for (const item of completeList('props.conf', `${en.key} = `)) expect(item.kind).toBe(monaco.CompletionItemKind.Value);
+    for (const item of completeList('props.conf', `${en.key} = `))
+      expect(item.kind).toBe(monaco.CompletionItemKind.Value);
   });
 
   it('marks strftime tokens a Constant', () => {

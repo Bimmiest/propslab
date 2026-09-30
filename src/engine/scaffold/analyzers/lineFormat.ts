@@ -27,9 +27,27 @@ export function detectLineFormat(rawData: string, lines: string[]): ScaffoldSugg
   const jsonRatio = jsonLines / nonBlank.length;
   if (jsonRatio >= 0.8) {
     return [
-      { key: 'LINE_BREAKER', value: '([\\r\\n]+)', confidence: 'medium', evidence: 'One JSON object per line — break on newlines', enabledByDefault: true },
-      { key: 'SHOULD_LINEMERGE', value: 'false', confidence: 'high', evidence: 'JSON events are a single line each; do not merge', enabledByDefault: true },
-      { key: 'KV_MODE', value: 'json', confidence: jsonRatio === 1 ? 'high' : 'medium', evidence: `${jsonLines}/${nonBlank.length} lines parse as JSON — search-time KV_MODE preferred over INDEXED_EXTRACTIONS (no index bloat)`, enabledByDefault: true },
+      {
+        key: 'LINE_BREAKER',
+        value: '([\\r\\n]+)',
+        confidence: 'medium',
+        evidence: 'One JSON object per line — break on newlines',
+        enabledByDefault: true,
+      },
+      {
+        key: 'SHOULD_LINEMERGE',
+        value: 'false',
+        confidence: 'high',
+        evidence: 'JSON events are a single line each; do not merge',
+        enabledByDefault: true,
+      },
+      {
+        key: 'KV_MODE',
+        value: 'json',
+        confidence: jsonRatio === 1 ? 'high' : 'medium',
+        evidence: `${jsonLines}/${nonBlank.length} lines parse as JSON — search-time KV_MODE preferred over INDEXED_EXTRACTIONS (no index bloat)`,
+        enabledByDefault: true,
+      },
     ];
   }
 
@@ -46,15 +64,35 @@ export function detectLineFormat(rawData: string, lines: string[]): ScaffoldSugg
   // Delimited (CSV / TSV / PSV).
   const delim = detectDelimiter(nonBlank);
   if (delim) {
-    return [{ key: 'INDEXED_EXTRACTIONS', value: delim.format, confidence: delim.confidence, evidence: `${delim.evidence} — delimited files use index-time structured extraction`, enabledByDefault: true }];
+    return [
+      {
+        key: 'INDEXED_EXTRACTIONS',
+        value: delim.format,
+        confidence: delim.confidence,
+        evidence: `${delim.evidence} — delimited files use index-time structured extraction`,
+        enabledByDefault: true,
+      },
+    ];
   }
 
   // Whitespace-indented continuation lines → merge into the preceding event.
   const continuation = nonBlank.filter((l) => /^\s/.test(l)).length;
   if (continuation > 0 && continuation / nonBlank.length >= 0.1) {
     return [
-      { key: 'SHOULD_LINEMERGE', value: 'true', confidence: 'medium', evidence: `${continuation} line(s) start with whitespace (continuations)`, enabledByDefault: true },
-      { key: 'BREAK_ONLY_BEFORE', value: '^\\S', confidence: 'medium', evidence: 'Start a new event only on a non-indented line', enabledByDefault: true },
+      {
+        key: 'SHOULD_LINEMERGE',
+        value: 'true',
+        confidence: 'medium',
+        evidence: `${continuation} line(s) start with whitespace (continuations)`,
+        enabledByDefault: true,
+      },
+      {
+        key: 'BREAK_ONLY_BEFORE',
+        value: '^\\S',
+        confidence: 'medium',
+        evidence: 'Start a new event only on a non-indented line',
+        enabledByDefault: true,
+      },
     ];
   }
 
@@ -63,14 +101,32 @@ export function detectLineFormat(rawData: string, lines: string[]): ScaffoldSugg
 
 /** KV_MODE = xml, and a LINE_BREAKER when the documents in the sample can be told apart. */
 function xmlSuggestions(rawData: string): ScaffoldSuggestion[] {
-  const kvMode: ScaffoldSuggestion = { key: 'KV_MODE', value: 'xml', confidence: 'high', evidence: 'Input looks like XML', enabledByDefault: true };
+  const kvMode: ScaffoldSuggestion = {
+    key: 'KV_MODE',
+    value: 'xml',
+    confidence: 'high',
+    evidence: 'Input looks like XML',
+    enabledByDefault: true,
+  };
   // Without an explicit breaker the default line merge (BREAK_ONLY_BEFORE_DATE)
   // splits a multi-line document at any line holding a date.
   const breaker = xmlDocumentBreaker(rawData);
   if (!breaker) return [kvMode];
   return [
-    { key: 'LINE_BREAKER', value: breaker.regex, confidence: 'medium', evidence: breaker.evidence, enabledByDefault: true },
-    { key: 'SHOULD_LINEMERGE', value: 'false', confidence: 'medium', evidence: 'Events are delimited by the LINE_BREAKER, not merged', enabledByDefault: true },
+    {
+      key: 'LINE_BREAKER',
+      value: breaker.regex,
+      confidence: 'medium',
+      evidence: breaker.evidence,
+      enabledByDefault: true,
+    },
+    {
+      key: 'SHOULD_LINEMERGE',
+      value: 'false',
+      confidence: 'medium',
+      evidence: 'Events are delimited by the LINE_BREAKER, not merged',
+      enabledByDefault: true,
+    },
     kvMode,
   ];
 }
@@ -87,7 +143,13 @@ function multiLineJsonSuggestions(several: boolean): ScaffoldSuggestion[] {
         : 'Multi-line JSON object — break only before a top-level `{`, so the object stays whole',
       enabledByDefault: true,
     },
-    { key: 'SHOULD_LINEMERGE', value: 'false', confidence: 'medium', evidence: 'Events are delimited by the LINE_BREAKER, not merged', enabledByDefault: true },
+    {
+      key: 'SHOULD_LINEMERGE',
+      value: 'false',
+      confidence: 'medium',
+      evidence: 'Events are delimited by the LINE_BREAKER, not merged',
+      enabledByDefault: true,
+    },
     { key: 'KV_MODE', value: 'json', confidence: 'medium', evidence: 'JSON payload', enabledByDefault: true },
   ];
 }
@@ -105,7 +167,8 @@ function xmlDocumentBreaker(rawData: string): { regex: string; evidence: string 
   let depth = 0;
   // `[^'"<>]` rather than `[^'">]` so an unclosed tag stops at the next `<`
   // instead of rescanning the rest of the sample.
-  const tagRe = /<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>|<[?!][^>]*>|<(\/?)([A-Za-z_][\w.:-]*)(?:"[^"]*"|'[^']*'|[^'"<>])*?(\/?)>/g;
+  const tagRe =
+    /<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>|<[?!][^>]*>|<(\/?)([A-Za-z_][\w.:-]*)(?:"[^"]*"|'[^']*'|[^'"<>])*?(\/?)>/g;
   for (const m of rawData.matchAll(tagRe)) {
     const name = m[2];
     if (name === undefined) continue;
@@ -123,7 +186,10 @@ function xmlDocumentBreaker(rawData: string): { regex: string; evidence: string 
 
   const declarations = rawData.match(/(?:^|[\r\n])\s*<\?xml\s/gi)?.length ?? 0;
   if (declarations === rootCount) {
-    return { regex: '([\\r\\n]+)(?=<\\?xml\\s)', evidence: 'Each XML document opens with a declaration — break only before each one' };
+    return {
+      regex: '([\\r\\n]+)(?=<\\?xml\\s)',
+      evidence: 'Each XML document opens with a declaration — break only before each one',
+    };
   }
   // Some documents carry a declaration and some do not: breaking before the
   // root would strand a declaration as an event of its own.
@@ -162,7 +228,11 @@ function detectDelimiter(lines: string[]): { format: string; confidence: Confide
   // Delimited detection needs a header plus at least one data row; a single
   // comma-containing line (e.g. prose) must not be mistaken for CSV.
   if (lines.length < 2) return null;
-  const candidates: Array<[string, string]> = [[',', 'csv'], ['\t', 'tsv'], ['|', 'psv']];
+  const candidates: Array<[string, string]> = [
+    [',', 'csv'],
+    ['\t', 'tsv'],
+    ['|', 'psv'],
+  ];
   const sample = lines.slice(0, 50);
   let best: { format: string; confidence: Confidence; evidence: string; score: number } | null = null;
 

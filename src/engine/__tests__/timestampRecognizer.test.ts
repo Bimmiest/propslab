@@ -51,7 +51,11 @@ const CORPUS: Case[] = [
   { line: '2026-01-15 10:00:00 Zookeeper started', format: '%Y-%m-%d %H:%M:%S', iso: '2026-01-15T10:00:00.000Z' },
   { line: '[2026-01-15 10:00:00] a', format: '%Y-%m-%d %H:%M:%S', iso: '2026-01-15T10:00:00.000Z' },
   { line: '<34>Jan 15 10:00:01 host a', format: '%b %e %H:%M:%S', iso: '2026-01-15T10:00:01.000Z' },
-  { line: '10.0.0.1 - - [15/Jan/2026:10:00:00 +0100] "GET /"', format: '%d/%b/%Y:%H:%M:%S %z', iso: '2026-01-15T09:00:00.000Z' },
+  {
+    line: '10.0.0.1 - - [15/Jan/2026:10:00:00 +0100] "GET /"',
+    format: '%d/%b/%Y:%H:%M:%S %z',
+    iso: '2026-01-15T09:00:00.000Z',
+  },
   { line: 'Thu Jan 15 10:00:00 2026 started', format: '%a %b %e %H:%M:%S %Y', iso: '2026-01-15T10:00:00.000Z' },
   { line: 'Thu, 15 Jan 2026 10:00:00 +0100 mail', format: '%a, %d %b %Y %H:%M:%S %z', iso: '2026-01-15T09:00:00.000Z' },
   { line: '15 Jan 2026 10:00:00 x', format: '%d %b %Y %H:%M:%S', iso: '2026-01-15T10:00:00.000Z' },
@@ -183,7 +187,10 @@ describe('line breaking, extraction and the scaffold agree', () => {
       return;
     }
     expect(suggestions.find((s) => s.key === 'TIME_FORMAT')?.value).toBe(format);
-    const configured = extracted(line, suggestions.map((s) => dir(s.key, s.value)));
+    const configured = extracted(
+      line,
+      suggestions.map((s) => dir(s.key, s.value)),
+    );
     expect(configured).toEqual({ source: 'TIME_FORMAT', format: undefined, iso });
   });
 

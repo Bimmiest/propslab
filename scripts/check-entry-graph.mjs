@@ -46,7 +46,9 @@ for (const { via, url } of referenced) {
 const STATIC_IMPORT = /\b(?:import|export)\s*(?:[^"'();]*?\bfrom\s*)?["']([^"']+)["']/g;
 
 const seen = new Set();
-const queue = referenced.filter((r) => r.url.endsWith('.js')).map((r) => ({ file: r.url.slice(1), from: 'index.html' }));
+const queue = referenced
+  .filter((r) => r.url.endsWith('.js'))
+  .map((r) => ({ file: r.url.slice(1), from: 'index.html' }));
 while (queue.length > 0) {
   const { file, from } = queue.pop();
   if (seen.has(file)) continue;

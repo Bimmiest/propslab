@@ -184,7 +184,10 @@ function decodeDelimiterChar(raw: string): { char?: string; whitespace?: true; n
 function parseNameList(raw: string): string[] {
   const out: string[] = [];
   for (const part of raw.split(',')) {
-    const name = part.trim().replace(/^"(.*)"$/, '$1').trim();
+    const name = part
+      .trim()
+      .replace(/^"(.*)"$/, '$1')
+      .trim();
     if (name) out.push(name);
   }
   return out;
@@ -208,7 +211,11 @@ function delimitedOptions(
   const opts: DelimitedOptions = {
     ...body,
     header,
-    fieldHeaderRegex: compileOption(find('FIELD_HEADER_REGEX'), 'The header was located as if it were unset.', diagnostics),
+    fieldHeaderRegex: compileOption(
+      find('FIELD_HEADER_REGEX'),
+      'The header was located as if it were unset.',
+      diagnostics,
+    ),
     // ASCII below 128 only, per the spec; anything else is not a character
     // the header processor can be told to keep.
     acceptableSpecialChars: Array.from(find('HEADER_FIELD_ACCEPTABLE_SPECIAL_CHARACTERS')?.value.trim() ?? '')
@@ -316,9 +323,7 @@ function applyTimestampFields(
   const composed = parts.join(' ');
 
   const probe: SplunkEvent = { ...event, _raw: composed, _time: null, processingTrace: [] };
-  const probeDirectives = directives.filter(
-    (d) => d.key !== 'TIME_PREFIX' && d.key !== 'MAX_TIMESTAMP_LOOKAHEAD',
-  );
+  const probeDirectives = directives.filter((d) => d.key !== 'TIME_PREFIX' && d.key !== 'MAX_TIMESTAMP_LOOKAHEAD');
   const probeDiagnostics: ValidationDiagnostic[] = [];
   const [result] = extractTimestamps([probe], probeDirectives, withDiagnostics(ctx, createCollector(probeDiagnostics)));
   probeDiagnostics.forEach(diagnostics);
@@ -456,7 +461,10 @@ function extractW3c(events: SplunkEvent[]): SplunkEvent[] {
   for (const event of events) {
     const fieldsMatch = event._raw.match(/^#Fields:\s*(.+)$/m);
     if (fieldsMatch) {
-      headers = (fieldsMatch[1] ?? '').trim().split(/\s+/).map((name) => sanitizeHeaderName(name));
+      headers = (fieldsMatch[1] ?? '')
+        .trim()
+        .split(/\s+/)
+        .map((name) => sanitizeHeaderName(name));
       break;
     }
   }
@@ -469,32 +477,32 @@ function extractW3c(events: SplunkEvent[]): SplunkEvent[] {
   return events
     .filter((event) => !isW3cDirectiveOnly(event._raw))
     .map((event) => {
-    const values = parseW3cLine(event._raw);
-    const fields = { ...event.fields };
-    const added: string[] = [];
+      const values = parseW3cLine(event._raw);
+      const fields = { ...event.fields };
+      const added: string[] = [];
 
-    for (const [i, header] of headers.entries()) {
-      const value = values[i];
-      if (header && value && value !== '-') {
-        setField(fields, header, value);
-        added.push(header);
+      for (const [i, header] of headers.entries()) {
+        const value = values[i];
+        if (header && value && value !== '-') {
+          setField(fields, header, value);
+          added.push(header);
+        }
       }
-    }
 
-    return {
-      ...event,
-      fields,
-      processingTrace: [
-        ...event.processingTrace,
-        {
-          processor: 'INDEXED_EXTRACTIONS(w3c)',
-          phase: 'index-time' as const,
-          description: `Extracted ${added.length} W3C fields`,
-          fieldsAdded: added,
-        },
-      ],
-    };
-  });
+      return {
+        ...event,
+        fields,
+        processingTrace: [
+          ...event.processingTrace,
+          {
+            processor: 'INDEXED_EXTRACTIONS(w3c)',
+            phase: 'index-time' as const,
+            description: `Extracted ${added.length} W3C fields`,
+            fieldsAdded: added,
+          },
+        ],
+      };
+    });
 }
 
 /** True for a line that carries data — not blank, not a `#` comment/directive. */
@@ -567,8 +575,7 @@ function parseDelimitedLine(line: string, opts: LineSyntax): string[] {
     fieldQuoted = false;
   };
 
-  const isDelimiter = (ch: string) =>
-    opts.whitespaceDelimiter ? ch === ' ' || ch === '\t' : ch === opts.delimiter;
+  const isDelimiter = (ch: string) => (opts.whitespaceDelimiter ? ch === ' ' || ch === '\t' : ch === opts.delimiter);
 
   for (let i = 0; i < line.length; i++) {
     const ch = line.charAt(i);

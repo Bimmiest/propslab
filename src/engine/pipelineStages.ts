@@ -25,7 +25,14 @@ export const PIPELINE_STAGES: PipelineStage[] = [
     phase: 'index-time',
     description:
       'Splits the raw data stream into individual events. Splunk looks for the LINE_BREAKER regex to find event boundaries. By default it breaks on newlines, but multiline events (e.g. stack traces) need SHOULD_LINEMERGE or BREAK_ONLY_BEFORE.',
-    directives: ['LINE_BREAKER', 'SHOULD_LINEMERGE', 'BREAK_ONLY_BEFORE', 'BREAK_ONLY_BEFORE_DATE', 'MUST_BREAK_AFTER', 'MAX_EVENTS'],
+    directives: [
+      'LINE_BREAKER',
+      'SHOULD_LINEMERGE',
+      'BREAK_ONLY_BEFORE',
+      'BREAK_ONLY_BEFORE_DATE',
+      'MUST_BREAK_AFTER',
+      'MAX_EVENTS',
+    ],
   },
   {
     step: 2,
@@ -41,7 +48,15 @@ export const PIPELINE_STAGES: PipelineStage[] = [
     phase: 'index-time',
     description:
       'Locates and parses the event timestamp. TIME_PREFIX anchors the search position; TIME_FORMAT parses the found value using strftime tokens. If no timestamp is found, the event inherits the previous event’s _time; the first event falls back to the time of indexing. Once _time is known, ROUTE_EVENTS_OLDER_THAN sends events older than its age to nullQueue.',
-    directives: ['TIME_PREFIX', 'TIME_FORMAT', 'MAX_TIMESTAMP_LOOKAHEAD', 'TZ', 'MAX_DAYS_AGO', 'MAX_DAYS_HENCE', 'ROUTE_EVENTS_OLDER_THAN'],
+    directives: [
+      'TIME_PREFIX',
+      'TIME_FORMAT',
+      'MAX_TIMESTAMP_LOOKAHEAD',
+      'TZ',
+      'MAX_DAYS_AGO',
+      'MAX_DAYS_HENCE',
+      'ROUTE_EVENTS_OLDER_THAN',
+    ],
   },
   {
     step: 4,

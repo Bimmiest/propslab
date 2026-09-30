@@ -100,9 +100,7 @@ export class WorkerBusyError extends Error {
   readonly maxConcurrent: number;
   readonly maxQueued: number;
   constructor(maxConcurrent: number, maxQueued: number) {
-    super(
-      `Server is busy: ${maxConcurrent} run(s) in progress and ${maxQueued} queued, the most it will hold`,
-    );
+    super(`Server is busy: ${maxConcurrent} run(s) in progress and ${maxQueued} queued, the most it will hold`);
     this.name = 'WorkerBusyError';
     this.maxConcurrent = maxConcurrent;
     this.maxQueued = maxQueued;
@@ -112,9 +110,7 @@ export class WorkerBusyError extends Error {
 export class WorkerOutOfMemoryError extends Error {
   readonly limits: ResourceLimits;
   constructor(limits: ResourceLimits) {
-    super(
-      `Worker exceeded its ${limits.maxOldGenerationSizeMb ?? '?'}MB heap limit and was terminated`,
-    );
+    super(`Worker exceeded its ${limits.maxOldGenerationSizeMb ?? '?'}MB heap limit and was terminated`);
     this.name = 'WorkerOutOfMemoryError';
     this.limits = limits;
   }
@@ -133,9 +129,7 @@ export class WorkerCancelledError extends Error {
   readonly reason: unknown;
   constructor(started: boolean, reason?: unknown) {
     super(
-      started
-        ? 'Request was cancelled; its worker was terminated'
-        : 'Request was cancelled before its worker started',
+      started ? 'Request was cancelled; its worker was terminated' : 'Request was cancelled before its worker started',
     );
     this.name = 'WorkerCancelledError';
     this.started = started;
@@ -305,9 +299,7 @@ export async function runInWorker<T>(
   workerPathOrOptions?: string | RunInWorkerOptions,
 ): Promise<T> {
   const options: RunInWorkerOptions =
-    typeof workerPathOrOptions === 'string'
-      ? { workerPath: workerPathOrOptions }
-      : (workerPathOrOptions ?? {});
+    typeof workerPathOrOptions === 'string' ? { workerPath: workerPathOrOptions } : (workerPathOrOptions ?? {});
   const { signal } = options;
   const release = await (options.limiter ?? defaultLimiter).acquire(signal);
   // The slot can be handed over in the same tick the request is cancelled

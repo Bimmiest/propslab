@@ -7,22 +7,16 @@ import type { SplunkEvent, ProcessingStep } from '../../../../engine/types';
 import { toViewResult } from '../../../../utils/viewResult';
 import { makeEvent } from '../../../../test/makeEvent';
 
-function eventWithTrace(
-  fields: Record<string, string>,
-  traces: ProcessingStep[],
-): SplunkEvent {
+function eventWithTrace(fields: Record<string, string>, traces: ProcessingStep[]): SplunkEvent {
   return makeEvent('', { fields, processingTrace: traces });
 }
 
 // An event with fields from both index-time and search-time phases.
-const event = eventWithTrace(
-  { idx_field: 'a', ext_field: 'b', evaled: '1' },
-  [
-    { processor: 'INDEXED_EXTRACTIONS', phase: 'index-time', description: '', fieldsAdded: ['idx_field'] },
-    { processor: 'EXTRACT-foo', phase: 'search-time', description: '', fieldsAdded: ['ext_field'] },
-    { processor: 'EVAL', phase: 'search-time', description: '', fieldsAdded: ['evaled'] },
-  ],
-);
+const event = eventWithTrace({ idx_field: 'a', ext_field: 'b', evaled: '1' }, [
+  { processor: 'INDEXED_EXTRACTIONS', phase: 'index-time', description: '', fieldsAdded: ['idx_field'] },
+  { processor: 'EXTRACT-foo', phase: 'search-time', description: '', fieldsAdded: ['ext_field'] },
+  { processor: 'EVAL', phase: 'search-time', description: '', fieldsAdded: ['evaled'] },
+]);
 
 const raw = {
   events: [event],
@@ -109,14 +103,17 @@ describe('FieldsTab — accessibility (#320)', () => {
 });
 
 describe('FieldsTab — nested field counts (#316)', () => {
-  it('counts each collapsed parent\'s immediate children', () => {
+  it("counts each collapsed parent's immediate children", () => {
     useAppStore.setState(initial, true);
-    const json = eventWithTrace(
-      { a: '{}', 'a.b': '{}', 'a.b.c': '1', 'a.b.d': '2', 'a.e': '3', z: 'x' },
-      [],
-    );
+    const json = eventWithTrace({ a: '{}', 'a.b': '{}', 'a.b.c': '1', 'a.b.d': '2', 'a.e': '3', z: 'x' }, []);
     useAppStore.setState({
-      processingResult: toViewResult({ events: [json], originalRaw: '', eventCount: 1, processingSteps: [], inputMetadata: { index: 'main', host: '', source: '', sourcetype: '' } }),
+      processingResult: toViewResult({
+        events: [json],
+        originalRaw: '',
+        eventCount: 1,
+        processingSteps: [],
+        inputMetadata: { index: 'main', host: '', source: '', sourcetype: '' },
+      }),
     });
     const { container } = render(<FieldsTab />);
     // Parents collapse on load, so only `a` and `z` show, with a's two
@@ -137,7 +134,13 @@ describe('FieldsTab — nested field counts (#316)', () => {
     useAppStore.setState(initial, true);
     const json = eventWithTrace({ a: '{}', 'a.b': '{}', 'a.b.c': '1' }, []);
     useAppStore.setState({
-      processingResult: toViewResult({ events: [json], originalRaw: '', eventCount: 1, processingSteps: [], inputMetadata: { index: 'main', host: '', source: '', sourcetype: '' } }),
+      processingResult: toViewResult({
+        events: [json],
+        originalRaw: '',
+        eventCount: 1,
+        processingSteps: [],
+        inputMetadata: { index: 'main', host: '', source: '', sourcetype: '' },
+      }),
     });
     const { container } = render(<FieldsTab />);
     const top = within(container).getByRole('button', { name: 'Toggle a' });
@@ -158,7 +161,13 @@ describe('FieldsTab — nested field counts (#316)', () => {
     useAppStore.setState(initial, true);
     const json = eventWithTrace({ a: '{}', 'a.b': '{}', 'a.b.c': '1', 'a.e': '2' }, []);
     useAppStore.setState({
-      processingResult: toViewResult({ events: [json], originalRaw: '', eventCount: 1, processingSteps: [], inputMetadata: { index: 'main', host: '', source: '', sourcetype: '' } }),
+      processingResult: toViewResult({
+        events: [json],
+        originalRaw: '',
+        eventCount: 1,
+        processingSteps: [],
+        inputMetadata: { index: 'main', host: '', source: '', sourcetype: '' },
+      }),
     });
     const { container } = render(<FieldsTab />);
     const top = within(container).getByRole('button', { name: 'Toggle a' });
@@ -170,7 +179,10 @@ describe('FieldsTab — nested field counts (#316)', () => {
     expect(controlled).toHaveLength(2);
     // Its immediate children, a.b and a.e — not the grandchild a.b.c.
     expect(controlled.map((row) => row?.tagName)).toEqual(['TR', 'TR']);
-    expect(controlled.map((row) => row?.querySelector('[title]')?.getAttribute('title')).sort()).toEqual(['a.b', 'a.e']);
+    expect(controlled.map((row) => row?.querySelector('[title]')?.getAttribute('title')).sort()).toEqual([
+      'a.b',
+      'a.e',
+    ]);
   });
 });
 
@@ -215,7 +227,7 @@ describe('FieldsTab — windowed for wide events (#454)', () => {
     useAppStore.setState({ processingResult: toViewResult({ ...raw, events: [wide] }) });
   });
 
-  it('renders a window of rows, and reports the full size and each row\'s position', () => {
+  it("renders a window of rows, and reports the full size and each row's position", () => {
     const { container } = render(<FieldsTab />);
     const table = within(container).getByRole('table');
     expect(table).toHaveAttribute('aria-rowcount', '2001');

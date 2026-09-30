@@ -6,12 +6,7 @@ import { McpError } from '@modelcontextprotocol/sdk/types.js';
 import { PassThrough } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import type { JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js';
-import {
-  createStdioTransport,
-  MAX_MESSAGE_BYTES,
-  MessageSizeLimiter,
-  oversizeMessageError,
-} from '../messageLimit';
+import { createStdioTransport, MAX_MESSAGE_BYTES, MessageSizeLimiter, oversizeMessageError } from '../messageLimit';
 import { ID_SCAN_BYTES } from '../requestId';
 
 /**
@@ -138,8 +133,7 @@ describe('oversizeMessageError', () => {
   it('names the request when its id is known, and leaves `id` out entirely when not', () => {
     const error = {
       code: -32600,
-      message:
-        'Message exceeds 64 bytes and was discarded unparsed; send smaller conf and sample text.',
+      message: 'Message exceeds 64 bytes and was discarded unparsed; send smaller conf and sample text.',
       data: { error: 'message_too_large', max_message_bytes: 64 },
     };
     expect(oversizeMessageError(64, 'req-1')).toStrictEqual({ jsonrpc: '2.0', id: 'req-1', error });

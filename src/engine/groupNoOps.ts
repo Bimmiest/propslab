@@ -62,8 +62,6 @@ export function groupNoOps(events: readonly Pick<SplunkEvent, 'noOps'>[]): Group
 
   return [...groups.values()].map(({ seen, ...group }) => ({
     ...group,
-    reasons: [...seen.entries()]
-      .map(([text, events]) => ({ text, events }))
-      .sort((a, b) => b.events - a.events),
+    reasons: [...seen.entries()].map(([text, events]) => ({ text, events })).sort((a, b) => b.events - a.events),
   }));
 }

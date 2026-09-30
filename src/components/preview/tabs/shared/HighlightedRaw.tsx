@@ -2,7 +2,14 @@ import { useMemo } from 'react';
 import { findFieldValuePositions } from '../../../../utils/fieldHighlight';
 import { useFieldFocusState } from './useFieldFocus';
 import { copyQuietly } from '../../../../utils/clipboard';
-import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuLabel } from '../../../ui/ContextMenu';
+import {
+  ContextMenu,
+  ContextMenuTrigger,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuLabel,
+} from '../../../ui/ContextMenu';
 import { tint } from '../../../../utils/tint';
 import { atomicSegments, type Highlight } from './atomicSegments';
 

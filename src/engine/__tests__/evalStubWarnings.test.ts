@@ -5,8 +5,13 @@ import { runCtx, FIXED_NOW } from './runCtx';
 import { makeEvent } from '../../test/makeEvent';
 
 const ev = (): SplunkEvent => makeEvent('x', { fields: { n: '3.14159' } });
-const evalDir = (expr: string): ConfDirective =>
-  ({ key: 'EVAL-out', value: expr, line: 1, directiveType: 'EVAL', className: 'out' });
+const evalDir = (expr: string): ConfDirective => ({
+  key: 'EVAL-out',
+  value: expr,
+  line: 1,
+  directiveType: 'EVAL',
+  className: 'out',
+});
 
 function warningsFor(expr: string): ValidationDiagnostic[] {
   const diagnostics: ValidationDiagnostic[] = [];
@@ -22,13 +27,10 @@ describe('eval — every unsimulated builtin warns (#127)', () => {
     expect(diagnostics.some((d) => d.message.startsWith(`${fn}() is not fully simulated`))).toBe(true);
   });
 
-  it.each(['mvfilter', 'searchmatch', 'strptime', 'relative_time', 'md5', 'sha256'])(
-    '%s() still warns',
-    (fn) => {
-      const diagnostics = warningsFor(`${fn}(n)`);
-      expect(diagnostics.some((d) => d.message.startsWith(`${fn}() is not fully simulated`))).toBe(true);
-    },
-  );
+  it.each(['mvfilter', 'searchmatch', 'strptime', 'relative_time', 'md5', 'sha256'])('%s() still warns', (fn) => {
+    const diagnostics = warningsFor(`${fn}(n)`);
+    expect(diagnostics.some((d) => d.message.startsWith(`${fn}() is not fully simulated`))).toBe(true);
+  });
 
   it('a fully simulated function does not warn', () => {
     expect(warningsFor('round(n, 2)')).toHaveLength(0);

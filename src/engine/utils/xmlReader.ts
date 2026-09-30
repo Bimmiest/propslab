@@ -377,7 +377,8 @@ class Reader {
     let textEncoded = false;
 
     const flushText = (into: XmlElement): void => {
-      if (text) into.children.push(textEncoded ? { kind: 'text', value: text, encoded: true } : { kind: 'text', value: text });
+      if (text)
+        into.children.push(textEncoded ? { kind: 'text', value: text, encoded: true } : { kind: 'text', value: text });
       text = '';
       textEncoded = false;
     };

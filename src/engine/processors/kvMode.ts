@@ -7,11 +7,7 @@ import { parseXmlDocument, xmlChildElements } from '../utils/xmlReader';
 import { walkXmlFields } from '../utils/xmlFields';
 import type { RunContext } from '../runContext';
 
-export function applyKvMode(
-  events: SplunkEvent[],
-  directives: ConfDirective[],
-  ctx: RunContext,
-): SplunkEvent[] {
+export function applyKvMode(events: SplunkEvent[], directives: ConfDirective[], ctx: RunContext): SplunkEvent[] {
   const { diagnostics } = ctx;
   const mode = effectiveValue(directives, 'KV_MODE')?.toLowerCase() ?? 'auto';
 
@@ -139,14 +135,27 @@ function* jsonObjectCandidates(raw: string): Generator<string, void, undefined> 
     let found = false;
     for (let i = start; i < raw.length; i++) {
       const ch = raw[i];
-      if (escape) { escape = false; continue; }
-      if (ch === '\\' && inString) { escape = true; continue; }
-      if (ch === '"') { inString = !inString; continue; }
+      if (escape) {
+        escape = false;
+        continue;
+      }
+      if (ch === '\\' && inString) {
+        escape = true;
+        continue;
+      }
+      if (ch === '"') {
+        inString = !inString;
+        continue;
+      }
       if (inString) continue;
       if (ch === '{') depth++;
       else if (ch === '}') {
         depth--;
-        if (depth === 0) { yield raw.slice(start, i + 1); found = true; break; }
+        if (depth === 0) {
+          yield raw.slice(start, i + 1);
+          found = true;
+          break;
+        }
       }
     }
     if (!found) return; // no closing brace found — nothing further to try
@@ -163,10 +172,7 @@ function* jsonObjectCandidates(raw: string): Generator<string, void, undefined> 
  * Distinguishing `notJson` from `invalid` lets the caller warn about malformed JSON
  * without spamming a diagnostic for ordinary non-JSON events.
  */
-type WholeJsonResult =
-  | { kind: 'parsed'; value: unknown }
-  | { kind: 'notJson' }
-  | { kind: 'invalid'; error: string };
+type WholeJsonResult = { kind: 'parsed'; value: unknown } | { kind: 'notJson' } | { kind: 'invalid'; error: string };
 
 function parseWholeJson(raw: string): WholeJsonResult {
   const trimmed = raw.trim();
@@ -179,8 +185,7 @@ function parseWholeJson(raw: string): WholeJsonResult {
   // `[INFO]`, so an array must also end with `]`. The cost is that a truncated
   // array does not warn; a truncated object still does, and whole-event
   // arrays are the rarer shape.
-  const looksLikeJson =
-    trimmed.startsWith('{') || (/^\[\s*[{["\d\-tfn\]]/.test(trimmed) && trimmed.endsWith(']'));
+  const looksLikeJson = trimmed.startsWith('{') || (/^\[\s*[{["\d\-tfn\]]/.test(trimmed) && trimmed.endsWith(']'));
   if (!looksLikeJson) return { kind: 'notJson' };
   try {
     return { kind: 'parsed', value: JSON.parse(trimmed) };
@@ -205,11 +210,7 @@ interface JsonExtractResult {
   parseError?: string;
 }
 
-function extractJson(
-  raw: string,
-  fields: Record<string, string | string[]>,
-  added: string[],
-): JsonExtractResult {
+function extractJson(raw: string, fields: Record<string, string | string[]>, added: string[]): JsonExtractResult {
   // KV_MODE=json treats the event as structured JSON, so try to parse the whole
   // event first — this also covers top-level arrays.
   const whole = parseWholeJson(raw);

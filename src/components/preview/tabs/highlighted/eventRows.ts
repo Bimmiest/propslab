@@ -56,7 +56,12 @@ export function selectRows(
 export function groupNames(tree: FieldNode[]): string[] {
   const groups: string[] = [];
   function walk(nodes: FieldNode[]) {
-    for (const n of nodes) { if (n.children.length > 0) { groups.push(n.name); walk(n.children); } }
+    for (const n of nodes) {
+      if (n.children.length > 0) {
+        groups.push(n.name);
+        walk(n.children);
+      }
+    }
   }
   walk(tree);
   return groups;

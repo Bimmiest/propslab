@@ -36,8 +36,8 @@ export function TimestampTab({ items, currentPage, eventsPerPage, inputs }: Time
   const { status, probes, error } = useTimestampMatch(raws, config);
 
   const directives = useMemo(
-    () => config.timeFormat ? extractDirectives(config.timeFormat) : [],
-    [config.timeFormat]
+    () => (config.timeFormat ? extractDirectives(config.timeFormat) : []),
+    [config.timeFormat],
   );
 
   return (
@@ -58,13 +58,10 @@ export function TimestampTab({ items, currentPage, eventsPerPage, inputs }: Time
           // The worker's watchdog stopped the probe: say so, rather than
           // leaving the tab unresponsive.
           <div className="flex flex-col items-center justify-center gap-1 py-12 text-center">
-            <span className="text-sm font-medium text-[var(--color-error)]">
-              Timestamp matching timed out
-            </span>
+            <span className="text-sm font-medium text-[var(--color-error)]">Timestamp matching timed out</span>
             <span className="text-xs text-[var(--color-text-muted)] max-w-md">
-              TIME_PREFIX took too long to match. The usual cause is a regular expression
-              that backtracks catastrophically — nested or overlapping quantifiers such as{' '}
-              <code className="font-mono">(a|a)*</code>.
+              TIME_PREFIX took too long to match. The usual cause is a regular expression that backtracks
+              catastrophically — nested or overlapping quantifiers such as <code className="font-mono">(a|a)*</code>.
             </span>
           </div>
         ) : status === 'error' ? (
@@ -72,9 +69,7 @@ export function TimestampTab({ items, currentPage, eventsPerPage, inputs }: Time
           // timeout above, which would send people looking for a backtracking
           // TIME_PREFIX that is not there.
           <div className="flex flex-col items-center justify-center gap-1 py-12 text-center">
-            <span className="text-sm font-medium text-[var(--color-error)]">
-              Timestamp matching failed
-            </span>
+            <span className="text-sm font-medium text-[var(--color-error)]">Timestamp matching failed</span>
             <span className="text-xs text-[var(--color-text-muted)] max-w-md font-mono">{error}</span>
           </div>
         ) : (

@@ -99,7 +99,7 @@ describe('findFieldValuePositions — offset accuracy (#28)', () => {
 });
 
 describe('findFieldValuePositions — collision prevention', () => {
-  it('fields sharing a value do not steal each other\'s positions when originalKey provided', () => {
+  it("fields sharing a value do not steal each other's positions when originalKey provided", () => {
     const raw = '{"_UID":"1000","_FSUID":"1000","_EUID":"1000"}';
     const uidPos = findFieldValuePositions(raw, 'UID', '1000', '_UID');
     const fsuidPos = findFieldValuePositions(raw, 'FSUID', '1000', '_FSUID');

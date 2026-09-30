@@ -43,9 +43,7 @@ function keyRange(model: editor.ITextModel, lineNumber: number): { range: IRange
   };
 }
 
-export function createCodeActionProvider(
-  fileType: 'props.conf' | 'transforms.conf',
-): languages.CodeActionProvider {
+export function createCodeActionProvider(fileType: 'props.conf' | 'transforms.conf'): languages.CodeActionProvider {
   return {
     provideCodeActions(model, _range, context) {
       const actions: languages.CodeAction[] = [];

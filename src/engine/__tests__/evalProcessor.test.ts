@@ -35,7 +35,11 @@ describe('applyEvalExpressions — dotted (nested JSON) field names', () => {
 
   it('warns when an unquoted dotted name matches an extracted field', () => {
     const diagnostics: import('../types').ValidationDiagnostic[] = [];
-    applyEvalExpressions([event({ 'event.field': 'NESTED' })], [evalDir('x', 'event.field')], runCtx(FIXED_NOW, diagnostics));
+    applyEvalExpressions(
+      [event({ 'event.field': 'NESTED' })],
+      [evalDir('x', 'event.field')],
+      runCtx(FIXED_NOW, diagnostics),
+    );
     const warn = diagnostics.find((d) => d.message.includes('event.field'));
     expect(warn).toBeDefined();
     expect(warn!.level).toBe('warning');
@@ -44,7 +48,11 @@ describe('applyEvalExpressions — dotted (nested JSON) field names', () => {
 
   it('does NOT warn for the correctly-quoted form', () => {
     const diagnostics: import('../types').ValidationDiagnostic[] = [];
-    applyEvalExpressions([event({ 'event.field': 'NESTED' })], [evalDir('x', "'event.field'")], runCtx(FIXED_NOW, diagnostics));
+    applyEvalExpressions(
+      [event({ 'event.field': 'NESTED' })],
+      [evalDir('x', "'event.field'")],
+      runCtx(FIXED_NOW, diagnostics),
+    );
     expect(diagnostics).toHaveLength(0);
   });
 });
@@ -62,13 +70,21 @@ describe('applyEvalExpressions — arithmetic', () => {
   });
 
   it('string concat with .', () => {
-    const result = applyEvalExpressions([event({ a: 'hello' })], [evalDir('msg', 'a . " world"')], runCtx(FIXED_NOW))[0]!;
+    const result = applyEvalExpressions(
+      [event({ a: 'hello' })],
+      [evalDir('msg', 'a . " world"')],
+      runCtx(FIXED_NOW),
+    )[0]!;
     expect(result.fields['msg']).toBe('hello world');
   });
 
   // SEM-8: + concatenates non-numeric strings rather than coercing to 0.
   it('+ concatenates two non-numeric strings', () => {
-    const result = applyEvalExpressions([event({ a: 'foo', b: 'bar' })], [evalDir('c', 'a + b')], runCtx(FIXED_NOW))[0]!;
+    const result = applyEvalExpressions(
+      [event({ a: 'foo', b: 'bar' })],
+      [evalDir('c', 'a + b')],
+      runCtx(FIXED_NOW),
+    )[0]!;
     expect(result.fields['c']).toBe('foobar');
   });
 
@@ -90,21 +106,41 @@ describe('applyEvalExpressions — arithmetic', () => {
 // result.
 describe('applyEvalExpressions — numeric predicates', () => {
   it('isnum() is false for non-numeric strings', () => {
-    const r = applyEvalExpressions([event({ a: 'abc' })], [evalDir('n', 'if(isnum(a), "true", "false")')], runCtx(FIXED_NOW))[0]!;
+    const r = applyEvalExpressions(
+      [event({ a: 'abc' })],
+      [evalDir('n', 'if(isnum(a), "true", "false")')],
+      runCtx(FIXED_NOW),
+    )[0]!;
     expect(r.fields['n']).toBe('false');
   });
 
   it('isnum() is true for numeric strings', () => {
-    const r = applyEvalExpressions([event({ a: '3.14' })], [evalDir('n', 'if(isnum(a), "true", "false")')], runCtx(FIXED_NOW))[0]!;
+    const r = applyEvalExpressions(
+      [event({ a: '3.14' })],
+      [evalDir('n', 'if(isnum(a), "true", "false")')],
+      runCtx(FIXED_NOW),
+    )[0]!;
     expect(r.fields['n']).toBe('true');
   });
 
   it('isint() is false for non-numeric and non-integer input', () => {
-    const r1 = applyEvalExpressions([event({ a: 'abc' })], [evalDir('n', 'if(isint(a), "true", "false")')], runCtx(FIXED_NOW))[0]!;
+    const r1 = applyEvalExpressions(
+      [event({ a: 'abc' })],
+      [evalDir('n', 'if(isint(a), "true", "false")')],
+      runCtx(FIXED_NOW),
+    )[0]!;
     expect(r1.fields['n']).toBe('false');
-    const r2 = applyEvalExpressions([event({ a: '5.5' })], [evalDir('n', 'if(isint(a), "true", "false")')], runCtx(FIXED_NOW))[0]!;
+    const r2 = applyEvalExpressions(
+      [event({ a: '5.5' })],
+      [evalDir('n', 'if(isint(a), "true", "false")')],
+      runCtx(FIXED_NOW),
+    )[0]!;
     expect(r2.fields['n']).toBe('false');
-    const r3 = applyEvalExpressions([event({ a: '5' })], [evalDir('n', 'if(isint(a), "true", "false")')], runCtx(FIXED_NOW))[0]!;
+    const r3 = applyEvalExpressions(
+      [event({ a: '5' })],
+      [evalDir('n', 'if(isint(a), "true", "false")')],
+      runCtx(FIXED_NOW),
+    )[0]!;
     expect(r3.fields['n']).toBe('true');
   });
 
@@ -125,9 +161,17 @@ describe('applyEvalExpressions — function fidelity', () => {
   });
 
   it('like() is case-sensitive', () => {
-    const hit = applyEvalExpressions([event({ a: 'Error' })], [evalDir('m', 'if(like(a, "Error"), "y", "n")')], runCtx(FIXED_NOW))[0]!;
+    const hit = applyEvalExpressions(
+      [event({ a: 'Error' })],
+      [evalDir('m', 'if(like(a, "Error"), "y", "n")')],
+      runCtx(FIXED_NOW),
+    )[0]!;
     expect(hit.fields['m']).toBe('y');
-    const miss = applyEvalExpressions([event({ a: 'error' })], [evalDir('m', 'if(like(a, "Error"), "y", "n")')], runCtx(FIXED_NOW))[0]!;
+    const miss = applyEvalExpressions(
+      [event({ a: 'error' })],
+      [evalDir('m', 'if(like(a, "Error"), "y", "n")')],
+      runCtx(FIXED_NOW),
+    )[0]!;
     expect(miss.fields['m']).toBe('n');
   });
 
@@ -163,7 +207,11 @@ describe('applyEvalExpressions — function fidelity', () => {
     const one = applyEvalExpressions([event({ a: 'x' })], [evalDir('c', 'mvcount(a)')], runCtx(FIXED_NOW))[0]!;
     expect(one.fields['c']).toBe('1');
     // Multivalue → count.
-    const many = applyEvalExpressions([event({})], [evalDir('c', 'mvcount(split("a,b,c", ","))')], runCtx(FIXED_NOW))[0]!;
+    const many = applyEvalExpressions(
+      [event({})],
+      [evalDir('c', 'mvcount(split("a,b,c", ","))')],
+      runCtx(FIXED_NOW),
+    )[0]!;
     expect(many.fields['c']).toBe('3');
   });
 
@@ -191,7 +239,11 @@ describe('applyEvalExpressions — function fidelity', () => {
   });
 
   it('tostring commas keeps thousands separators and 2-dp precision for fractions', () => {
-    const r = applyEvalExpressions([event({})], [evalDir('c', 'tostring(1000000.1278, "commas")')], runCtx(FIXED_NOW))[0]!;
+    const r = applyEvalExpressions(
+      [event({})],
+      [evalDir('c', 'tostring(1000000.1278, "commas")')],
+      runCtx(FIXED_NOW),
+    )[0]!;
     expect(r.fields['c']).toBe('1,000,000.13');
   });
 
@@ -223,7 +275,8 @@ describe('applyEvalExpressions — replace()', () => {
     const result = applyEvalExpressions(
       [event({}, 'aaaaaab')],
       [evalDir('safe', 'replace(_raw, "(a+)+", "x")')],
-      runCtx(FIXED_NOW))[0]!;
+      runCtx(FIXED_NOW),
+    )[0]!;
     expect(result.fields['safe']).toBe('xb');
   });
 
@@ -231,7 +284,8 @@ describe('applyEvalExpressions — replace()', () => {
     const result = applyEvalExpressions(
       [event({}, '2024-01-15')],
       [evalDir('redacted', 'replace(_raw, "\\\\d{4}", "YYYY")')],
-      runCtx(FIXED_NOW))[0]!;
+      runCtx(FIXED_NOW),
+    )[0]!;
     expect(result.fields['redacted']).toBe('YYYY-01-15');
   });
 });
@@ -248,7 +302,11 @@ describe('applyEvalExpressions — crypto stubs', () => {
   });
 
   it('sha1() and sha512() return their not-simulated placeholders', () => {
-    const result = applyEvalExpressions([event()], [evalDir('a', 'sha1("t")'), evalDir('b', 'sha512("t")')], runCtx(FIXED_NOW))[0]!;
+    const result = applyEvalExpressions(
+      [event()],
+      [evalDir('a', 'sha1("t")'), evalDir('b', 'sha512("t")')],
+      runCtx(FIXED_NOW),
+    )[0]!;
     expect(result.fields['a']).toBe('[sha1() not simulated]');
     expect(result.fields['b']).toBe('[sha512() not simulated]');
   });
@@ -304,7 +362,8 @@ describe('applyEvalExpressions — string functions', () => {
     const result = applyEvalExpressions(
       [event({ x: '10' })],
       [evalDir('r', 'if(x > 5, "big", "small")')],
-      runCtx(FIXED_NOW))[0]!;
+      runCtx(FIXED_NOW),
+    )[0]!;
     expect(result.fields['r']).toBe('big');
   });
 });
@@ -323,7 +382,8 @@ describe('applyEvalExpressions — IN / NOT IN operator', () => {
     const r = applyEvalExpressions(
       [event({ eventName: 'DeleteUser' })],
       [evalDir('hit', 'if(eventName IN ("DeleteUser","UpdateUser","CreateUser"), "true", "false")')],
-      runCtx(FIXED_NOW))[0]!;
+      runCtx(FIXED_NOW),
+    )[0]!;
     expect(r.fields['hit']).toBe('true');
   });
 
@@ -331,7 +391,8 @@ describe('applyEvalExpressions — IN / NOT IN operator', () => {
     const r = applyEvalExpressions(
       [event({ eventName: 'ListBuckets' })],
       [evalDir('hit', 'if(eventName IN ("DeleteUser","UpdateUser","CreateUser"), "true", "false")')],
-      runCtx(FIXED_NOW))[0]!;
+      runCtx(FIXED_NOW),
+    )[0]!;
     expect(r.fields['hit']).toBe('false');
   });
 
@@ -339,7 +400,8 @@ describe('applyEvalExpressions — IN / NOT IN operator', () => {
     const r = applyEvalExpressions(
       [event({ eventName: 'ListBuckets' })],
       [evalDir('hit', 'if(eventName NOT IN ("DeleteUser","UpdateUser"), "true", "false")')],
-      runCtx(FIXED_NOW))[0]!;
+      runCtx(FIXED_NOW),
+    )[0]!;
     expect(r.fields['hit']).toBe('true');
   });
 
@@ -347,7 +409,8 @@ describe('applyEvalExpressions — IN / NOT IN operator', () => {
     const r = applyEvalExpressions(
       [event({ eventName: 'DeleteUser' })],
       [evalDir('hit', 'if(eventName NOT IN ("DeleteUser","UpdateUser"), "true", "false")')],
-      runCtx(FIXED_NOW))[0]!;
+      runCtx(FIXED_NOW),
+    )[0]!;
     expect(r.fields['hit']).toBe('false');
   });
 
@@ -355,15 +418,22 @@ describe('applyEvalExpressions — IN / NOT IN operator', () => {
     const r = applyEvalExpressions(
       [event({ code: '200' })],
       [evalDir('ok', 'if(code IN (200, 201, 204), "true", "false")')],
-      runCtx(FIXED_NOW))[0]!;
+      runCtx(FIXED_NOW),
+    )[0]!;
     expect(r.fields['ok']).toBe('true');
   });
 
   it('IN inside case() — CloudTrail-style pattern', () => {
     const r = applyEvalExpressions(
       [event({ eventName: 'ListAliases', 'userIdentity.userName': 'alice' })],
-      [evalDir('src_user_name', `case(eventName IN ("AssumeRoleWithSAML","AssumeRoleWithWebIdentity","ListAliases"),'userIdentity.userName',eventName="AssumeRole","assumed")`)],
-      runCtx(FIXED_NOW))[0]!;
+      [
+        evalDir(
+          'src_user_name',
+          `case(eventName IN ("AssumeRoleWithSAML","AssumeRoleWithWebIdentity","ListAliases"),'userIdentity.userName',eventName="AssumeRole","assumed")`,
+        ),
+      ],
+      runCtx(FIXED_NOW),
+    )[0]!;
     expect(r.fields['src_user_name']).toBe('alice');
   });
 
@@ -371,7 +441,8 @@ describe('applyEvalExpressions — IN / NOT IN operator', () => {
     const r = applyEvalExpressions(
       [event({ x: '0' })],
       [evalDir('r', 'if(NOT x, "yes", "no")')],
-      runCtx(FIXED_NOW))[0]!;
+      runCtx(FIXED_NOW),
+    )[0]!;
     expect(r.fields['r']).toBe('yes');
   });
 });
@@ -445,11 +516,11 @@ describe('applyEvalExpressions — complex nested case() with OR', () => {
         'userIdentity.type': 'AssumedRole',
         'userIdentity.sessionContext.attributes.mfaAuthenticated': 'false',
       },
-      'test'
+      'test',
     );
-    
+
     const expr = `case((('additionalEventData.MFAUsed'="Yes" AND eventName="ConsoleLogin") OR eventName="CheckMfa"), "MFA", ('additionalEventData.MFAUsed'="No" AND eventName="ConsoleLogin") OR ((eventName="AssumeRole" OR eventName="ListAliases") AND 'userIdentity.type'="AssumedRole" AND 'userIdentity.sessionContext.attributes.mfaAuthenticated'="false"), "SFA")`;
-    
+
     const result = applyEvalExpressions([ev], [evalDir('auth_method', expr)], runCtx(FIXED_NOW))[0]!;
     expect(result.fields['auth_method']).toBe('SFA');
   });
@@ -494,12 +565,20 @@ describe('applyEvalExpressions — parser correctness (#9)', () => {
 // Non-numeric values are NULL, as in Splunk, not coerced to 0.
 describe('applyEvalExpressions — numeric NULL semantics (#10)', () => {
   it('does not treat a non-numeric string as 0 in comparison', () => {
-    const r = applyEvalExpressions([event({ a: 'abc' })], [evalDir('n', 'if(a == 0, "eq", "ne")')], runCtx(FIXED_NOW))[0]!;
+    const r = applyEvalExpressions(
+      [event({ a: 'abc' })],
+      [evalDir('n', 'if(a == 0, "eq", "ne")')],
+      runCtx(FIXED_NOW),
+    )[0]!;
     expect(r.fields['n']).toBe('ne');
   });
 
   it('still compares numeric strings numerically', () => {
-    const r = applyEvalExpressions([event({ a: '5' })], [evalDir('n', 'if(a == 5, "eq", "ne")')], runCtx(FIXED_NOW))[0]!;
+    const r = applyEvalExpressions(
+      [event({ a: '5' })],
+      [evalDir('n', 'if(a == 5, "eq", "ne")')],
+      runCtx(FIXED_NOW),
+    )[0]!;
     expect(r.fields['n']).toBe('eq');
   });
 
@@ -580,7 +659,11 @@ describe('applyEvalExpressions — replace() backreferences (#54)', () => {
 
 describe('applyEvalExpressions — strftime %z / %Z (#75.4)', () => {
   it('emits a numeric offset rather than the literal specifier', () => {
-    const result = applyEvalExpressions([event()], [evalDir('t', 'strftime(1705312800, "%Y-%m-%dT%H:%M:%S%z")')], runCtx(FIXED_NOW))[0]!;
+    const result = applyEvalExpressions(
+      [event()],
+      [evalDir('t', 'strftime(1705312800, "%Y-%m-%dT%H:%M:%S%z")')],
+      runCtx(FIXED_NOW),
+    )[0]!;
     expect(result.fields['t']).not.toContain('%z');
     expect(result.fields['t']).toMatch(/[+-]\d{4}$/);
   });
@@ -606,7 +689,11 @@ describe('applyEvalExpressions — strftime with an out-of-range epoch', () => {
 
   it.each(['%b', '%B', '%a', '%A', '%F'])('reports an error and drops the field for %s', (token) => {
     const diagnostics: ValidationDiagnostic[] = [];
-    const result = applyEvalExpressions([event()], [evalDir('t', `strftime(${HUGE}, "${token}")`)], runCtx(FIXED_NOW, diagnostics))[0]!;
+    const result = applyEvalExpressions(
+      [event()],
+      [evalDir('t', `strftime(${HUGE}, "${token}")`)],
+      runCtx(FIXED_NOW, diagnostics),
+    )[0]!;
     expect(result.fields['t']).toBeUndefined();
     expect(diagnostics.map((d) => d.message)).toEqual(['EVAL-t: strftime(): timestamp is out of range']);
   });

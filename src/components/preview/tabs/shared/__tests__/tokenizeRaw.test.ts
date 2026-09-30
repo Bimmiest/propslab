@@ -4,7 +4,11 @@ import { tokenizeRaw } from '../tokenizeRaw';
 describe('tokenizeRaw', () => {
   it('reproduces the input when segments are concatenated', () => {
     const raw = '192.168.1.10 - frank [10/Oct/2000:13:55:36 -0700] "GET /a.html"';
-    expect(tokenizeRaw(raw).map((s) => s.text).join('')).toBe(raw);
+    expect(
+      tokenizeRaw(raw)
+        .map((s) => s.text)
+        .join(''),
+    ).toBe(raw);
   });
 
   it('keeps a dotted-quad IP as a single selectable token', () => {

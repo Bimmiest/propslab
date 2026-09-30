@@ -23,7 +23,9 @@ export function onEditorRegistered(
   let set = _listeners.get(file);
   if (!set) _listeners.set(file, (set = new Set()));
   set.add(listener);
-  return () => { set.delete(listener); };
+  return () => {
+    set.delete(listener);
+  };
 }
 
 /**

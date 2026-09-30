@@ -26,7 +26,9 @@ export function ExtractNameDialog({
   onClose: () => void;
 }) {
   const [name, setName] = useState('new_field');
-  const [pattern, setPattern] = useState(() => buildExtractFromSelection(raw, selection, 'new_field', selectionStart)?.value ?? '');
+  const [pattern, setPattern] = useState(
+    () => buildExtractFromSelection(raw, selection, 'new_field', selectionStart)?.value ?? '',
+  );
   const [patternDirty, setPatternDirty] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -69,25 +71,32 @@ export function ExtractNameDialog({
       title="Create EXTRACT from selection"
       applyLabel="Add EXTRACT"
       applyDisabled={!valid}
-      onApply={() => { if (valid) { onApply(`EXTRACT-${cleanName}`, trimmed); onClose(); } }}
+      onApply={() => {
+        if (valid) {
+          onApply(`EXTRACT-${cleanName}`, trimmed);
+          onClose();
+        }
+      }}
       onClose={onClose}
     >
-      <NameField
-        name={name}
-        onChange={onNameChange}
-        inputRef={inputRef}
-        adjustedTo={nameAdjusted ? cleanName : null}
-      />
+      <NameField name={name} onChange={onNameChange} inputRef={inputRef} adjustedTo={nameAdjusted ? cleanName : null} />
 
       <div>
-        <label htmlFor="extract-pattern" className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-secondary)' }}>
+        <label
+          htmlFor="extract-pattern"
+          className="text-xs font-semibold uppercase tracking-wider"
+          style={{ color: 'var(--color-text-secondary)' }}
+        >
           Regex
         </label>
         <input
           id="extract-pattern"
           type="text"
           value={pattern}
-          onChange={(e) => { setPattern(e.target.value); setPatternDirty(true); }}
+          onChange={(e) => {
+            setPattern(e.target.value);
+            setPatternDirty(true);
+          }}
           spellCheck={false}
           className="mt-1 w-full px-2.5 py-1.5 rounded-md text-sm font-mono outline-none bg-[var(--color-bg-secondary)] text-[var(--color-text-primary)] border border-[var(--color-border)] focus:border-[var(--color-accent)]"
         />
@@ -115,7 +124,11 @@ function NameField({
 }) {
   return (
     <div>
-      <label htmlFor="extract-field-name" className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-secondary)' }}>
+      <label
+        htmlFor="extract-field-name"
+        className="text-xs font-semibold uppercase tracking-wider"
+        style={{ color: 'var(--color-text-secondary)' }}
+      >
         Field name
       </label>
       <input
@@ -129,7 +142,8 @@ function NameField({
       />
       {adjustedTo !== null && (
         <div className="mt-1 text-xs" style={{ color: 'var(--color-warning)' }}>
-          Field will be named <code className="font-mono">{adjustedTo}</code> — capture groups allow only letters, digits, and <code className="font-mono">_</code>.
+          Field will be named <code className="font-mono">{adjustedTo}</code> — capture groups allow only letters,
+          digits, and <code className="font-mono">_</code>.
         </div>
       )}
     </div>
@@ -140,12 +154,19 @@ function NameField({
 function AddedLine({ stanza, line }: { stanza: string; line: string }) {
   return (
     <div>
-      <div className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--color-text-secondary)' }}>
+      <div
+        className="text-xs font-semibold uppercase tracking-wider mb-1"
+        style={{ color: 'var(--color-text-secondary)' }}
+      >
         Adds to <code className="font-mono">[{stanza}]</code>
       </div>
       <pre
         className="text-xs font-mono rounded border p-2 overflow-x-auto whitespace-pre-wrap break-all"
-        style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-primary)', backgroundColor: 'var(--color-bg-secondary)' }}
+        style={{
+          borderColor: 'var(--color-border)',
+          color: 'var(--color-text-primary)',
+          backgroundColor: 'var(--color-bg-secondary)',
+        }}
       >
         {line}
       </pre>
@@ -157,7 +178,9 @@ function CapturePreview({ capture }: { capture: Capture }) {
   if (capture.state === 'empty') return null;
 
   const note = (color: string, text: string) => (
-    <div className="text-xs font-medium" style={{ color }}>{text}</div>
+    <div className="text-xs font-medium" style={{ color }}>
+      {text}
+    </div>
   );
 
   if (capture.state === 'invalid') {
@@ -174,19 +197,30 @@ function CapturePreview({ capture }: { capture: Capture }) {
   if (capture.state === 'nogroup') {
     return (
       <div className="text-xs" style={{ color: 'var(--color-warning)' }}>
-        Matches <span className="font-mono" style={{ color: 'var(--color-text-primary)' }}>{capture.full}</span>, but has no named group — add <span className="font-mono">(?&lt;name&gt;…)</span>
+        Matches{' '}
+        <span className="font-mono" style={{ color: 'var(--color-text-primary)' }}>
+          {capture.full}
+        </span>
+        , but has no named group — add <span className="font-mono">(?&lt;name&gt;…)</span>
       </div>
     );
   }
 
   return (
     <div>
-      <div className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--color-text-secondary)' }}>
+      <div
+        className="text-xs font-semibold uppercase tracking-wider mb-1"
+        style={{ color: 'var(--color-text-secondary)' }}
+      >
         Captures in this event
       </div>
       <div className="flex flex-wrap gap-1.5">
         {capture.groups.map(([k, v]) => (
-          <span key={k} className="text-xs font-mono px-1.5 py-0.5 rounded" style={{ backgroundColor: 'var(--color-bg-tertiary)', color: 'var(--color-text-primary)' }}>
+          <span
+            key={k}
+            className="text-xs font-mono px-1.5 py-0.5 rounded"
+            style={{ backgroundColor: 'var(--color-bg-tertiary)', color: 'var(--color-text-primary)' }}
+          >
             <span style={{ color: 'var(--color-success)' }}>{k}</span>
             <span style={{ color: 'var(--color-text-muted)' }}> = </span>
             {v === '' ? <span style={{ color: 'var(--color-text-muted)' }}>(empty)</span> : v}

@@ -57,12 +57,7 @@ describe('MCP server end to end', () => {
 
   it('lists all four tools', async () => {
     const { tools } = await client.listTools();
-    expect(tools.map((t) => t.name).sort()).toEqual([
-      'explain_precedence',
-      'lookup_directive',
-      'simulate',
-      'validate',
-    ]);
+    expect(tools.map((t) => t.name).sort()).toEqual(['explain_precedence', 'lookup_directive', 'simulate', 'validate']);
   });
 
   it('advertises an object outputSchema and read-only annotations for every tool', async () => {
@@ -161,7 +156,11 @@ describe('MCP server end to end', () => {
     ) as { events: Record<string, unknown>[]; truncationNote?: string };
     const events = simulated.events;
     expect(events[0]?.['fieldOffsets']).toEqual({ user: [[5, 10]] });
-    expect(events.some((e) => (e['noOps'] as { directive: string }[] | undefined)?.some((n) => n.directive === 'EXTRACT-never'))).toBe(true);
+    expect(
+      events.some((e) =>
+        (e['noOps'] as { directive: string }[] | undefined)?.some((n) => n.directive === 'EXTRACT-never'),
+      ),
+    ).toBe(true);
     expect(events.some((e) => e['clonedFrom'] === 'app')).toBe(true);
     expect(simulated.truncationNote).toMatch(/max_events/);
 
@@ -178,7 +177,10 @@ describe('MCP server end to end', () => {
     expect(cutSimulate['diagnosticCount']).toBe(90_000);
     const cutValidate = conforms(
       'validate',
-      (await client.callTool({ name: 'validate', arguments: { props_conf: malformed, timeout_ms: 30_000 } })) as TextResult,
+      (await client.callTool({
+        name: 'validate',
+        arguments: { props_conf: malformed, timeout_ms: 30_000 },
+      })) as TextResult,
     );
     expect(cutValidate['diagnosticCount']).toBe(90_000);
     expect(cutValidate['truncationNote']).toMatch(/diagnostics/);
@@ -198,7 +200,9 @@ describe('MCP server end to end', () => {
       })) as TextResult,
     );
     expect(cutExplain['parseErrorCount']).toBe(90_000);
-    expect(cutExplain['stanzaCount'] ?? (cutExplain['stanzas'] as { directiveCount?: number }[]).at(-1)?.directiveCount).toBeGreaterThan(0);
+    expect(
+      cutExplain['stanzaCount'] ?? (cutExplain['stanzas'] as { directiveCount?: number }[]).at(-1)?.directiveCount,
+    ).toBeGreaterThan(0);
     expect(cutExplain['truncationNote']).toMatch(/capped at/);
   }, 120_000);
 
@@ -377,9 +381,7 @@ describe('client disconnect', () => {
     ].join('\n');
     const launcher = fileURLToPath(new URL('../../dist/index.js', import.meta.url));
     const child = spawn(process.execPath, [launcher], { stdio: ['pipe', 'pipe', 'ignore'] });
-    const exited = new Promise<number | null>((resolve) =>
-      child.once('exit', (code) => resolve(code)),
-    );
+    const exited = new Promise<number | null>((resolve) => child.once('exit', (code) => resolve(code)));
     try {
       const send = (msg: unknown) => child.stdin.write(`${JSON.stringify(msg)}\n`);
       const initialized = new Promise<void>((resolve) => child.stdout.once('data', () => resolve()));
@@ -426,10 +428,7 @@ describe('client disconnect', () => {
 
 describe('built launcher', () => {
   it('starts with a shebang so the `propslab-mcp` bin runs directly', () => {
-    const index = readFileSync(
-      fileURLToPath(new URL('../../dist/index.js', import.meta.url)),
-      'utf8',
-    );
+    const index = readFileSync(fileURLToPath(new URL('../../dist/index.js', import.meta.url)), 'utf8');
     expect(index.startsWith('#!/usr/bin/env node\n')).toBe(true);
   });
 

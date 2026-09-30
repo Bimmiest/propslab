@@ -49,19 +49,8 @@ export function PreviewFilterBar({
           className="w-full pl-7 pr-2 py-1 text-xs rounded border border-[var(--color-border)] bg-[var(--color-bg-primary)] text-[var(--color-text-primary)] outline-none focus:border-[var(--color-accent)]"
         />
       </div>
-      <MultiSelect
-        label="Fields"
-        options={allFields}
-        selected={selectedFields}
-        onChange={onFieldsChange}
-        searchable
-      />
-      <MultiSelect
-        label="Status"
-        options={STATUS_OPTIONS}
-        selected={selectedStatus}
-        onChange={onStatusChange}
-      />
+      <MultiSelect label="Fields" options={allFields} selected={selectedFields} onChange={onFieldsChange} searchable />
+      <MultiSelect label="Status" options={STATUS_OPTIONS} selected={selectedStatus} onChange={onStatusChange} />
       <MultiSelect
         label="Changes"
         options={CHANGE_STATE_OPTIONS}
@@ -69,10 +58,7 @@ export function PreviewFilterBar({
         onChange={onChangeStateChange}
       />
       {hasFilters && (
-        <span
-          className="text-xs whitespace-nowrap ml-auto tabular-nums"
-          style={{ color: 'var(--color-accent)' }}
-        >
+        <span className="text-xs whitespace-nowrap ml-auto tabular-nums" style={{ color: 'var(--color-accent)' }}>
           {filteredCount} / {totalCount}
         </span>
       )}

@@ -43,7 +43,7 @@ export function createFoldingRangeProvider(): languages.FoldingRangeProvider {
     provideFoldingRanges(
       model: editor.ITextModel,
       _context: languages.FoldingContext,
-      _token: CancellationToken
+      _token: CancellationToken,
     ): languages.ProviderResult<languages.FoldingRange[]> {
       const ranges: languages.FoldingRange[] = [];
       const lineCount = model.getLineCount();

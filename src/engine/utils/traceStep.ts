@@ -32,7 +32,10 @@ export function appendTraceStep(event: SplunkEvent, step: ProcessingStep, rawBef
  * The metadata keys whose value differs between `before` and `after`, old → new,
  * in a fixed order. Empty when nothing changed.
  */
-export function metadataChanges(before: EventMetadata, after: EventMetadata): NonNullable<ProcessingStep['metadataChanges']> {
+export function metadataChanges(
+  before: EventMetadata,
+  after: EventMetadata,
+): NonNullable<ProcessingStep['metadataChanges']> {
   return METADATA_KEYS.filter((key) => before[key] !== after[key]).map((key) => ({
     key,
     from: before[key],

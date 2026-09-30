@@ -1,4 +1,13 @@
-import { useState, useRef, useEffect, useMemo, useId, type FocusEvent, type KeyboardEvent, type RefObject } from 'react';
+import {
+  useState,
+  useRef,
+  useEffect,
+  useMemo,
+  useId,
+  type FocusEvent,
+  type KeyboardEvent,
+  type RefObject,
+} from 'react';
 import { Icon } from './Icon';
 
 interface MultiSelectProps {
@@ -100,9 +109,7 @@ export function MultiSelect({ label, options, selected, onChange, searchable }: 
         }}
       >
         <span>{label}</span>
-        {activeCount > 0 && (
-          <span className="bg-white/25 rounded-full px-1 text-[10px] leading-4">{activeCount}</span>
-        )}
+        {activeCount > 0 && <span className="bg-white/25 rounded-full px-1 text-[10px] leading-4">{activeCount}</span>}
         <Icon name="chevron-down" className="w-3 h-3" />
       </button>
       {open && hasPopup && (
@@ -116,22 +123,24 @@ export function MultiSelect({ label, options, selected, onChange, searchable }: 
             borderColor: 'var(--color-border)',
           }}
         >
-          {showSearch && (
-            <OptionFilter label={label} query={query} setQuery={setQuery} searchRef={searchRef} />
-          )}
+          {showSearch && <OptionFilter label={label} query={query} setQuery={setQuery} searchRef={searchRef} />}
           <div className="overflow-auto flex-1">
             <OptionList options={filteredOptions} selected={selected} toggle={toggle} />
           </div>
-          {activeCount > 0 && (
-            <ClearAllButton onClear={() => onChange(new Set())} triggerRef={triggerRef} />
-          )}
+          {activeCount > 0 && <ClearAllButton onClear={() => onChange(new Set())} triggerRef={triggerRef} />}
         </div>
       )}
     </div>
   );
 }
 
-function ClearAllButton({ onClear, triggerRef }: { onClear: () => void; triggerRef: RefObject<HTMLButtonElement | null> }) {
+function ClearAllButton({
+  onClear,
+  triggerRef,
+}: {
+  onClear: () => void;
+  triggerRef: RefObject<HTMLButtonElement | null>;
+}) {
   return (
     <button
       type="button"
@@ -148,7 +157,15 @@ function ClearAllButton({ onClear, triggerRef }: { onClear: () => void; triggerR
   );
 }
 
-function OptionList({ options, selected, toggle }: { options: string[]; selected: ReadonlySet<string>; toggle: (value: string) => void }) {
+function OptionList({
+  options,
+  selected,
+  toggle,
+}: {
+  options: string[];
+  selected: ReadonlySet<string>;
+  toggle: (value: string) => void;
+}) {
   if (options.length === 0) {
     return <div className="px-3 py-2 text-xs text-[var(--color-text-muted)]">No matches</div>;
   }
@@ -169,11 +186,24 @@ function OptionList({ options, selected, toggle }: { options: string[]; selected
   ));
 }
 
-function OptionFilter({ label, query, setQuery, searchRef }: { label: string; query: string; setQuery: (value: string) => void; searchRef: RefObject<HTMLInputElement | null> }) {
+function OptionFilter({
+  label,
+  query,
+  setQuery,
+  searchRef,
+}: {
+  label: string;
+  query: string;
+  setQuery: (value: string) => void;
+  searchRef: RefObject<HTMLInputElement | null>;
+}) {
   return (
     <div className="p-1.5 border-b border-[var(--color-border)] shrink-0">
       <div className="relative">
-        <Icon name="search" className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-[var(--color-text-muted)] pointer-events-none" />
+        <Icon
+          name="search"
+          className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-[var(--color-text-muted)] pointer-events-none"
+        />
         <input
           ref={searchRef}
           type="text"
@@ -187,4 +217,3 @@ function OptionFilter({ label, query, setQuery, searchRef }: { label: string; qu
     </div>
   );
 }
-

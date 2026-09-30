@@ -89,7 +89,13 @@ describe('deployed security headers', () => {
     // src/trustedTypes.ts, for Vite's same-origin worker URLs.
     expect(allowed).toContain('default');
     // Monaco's own, created when the editor chunk loads, and its sanitizer's.
-    for (const name of ['defaultWorkerFactory', 'editorViewLayer', 'domLineBreaksComputer', 'tokenizeToString', 'dompurify']) {
+    for (const name of [
+      'defaultWorkerFactory',
+      'editorViewLayer',
+      'domLineBreaksComputer',
+      'tokenizeToString',
+      'dompurify',
+    ]) {
       expect(allowed).toContain(name);
     }
     expect(allowed).not.toContain("'none'");
@@ -99,7 +105,9 @@ describe('deployed security headers', () => {
   it('enforces Trusted Types in the meta policy as well as the header', () => {
     const meta = parsePolicy(metaContent!);
     expect(meta.get('require-trusted-types-for')).toEqual(["'script'"]);
-    expect(meta.get('trusted-types')).toEqual(parsePolicy(headers['Content-Security-Policy'] ?? '').get('trusted-types'));
+    expect(meta.get('trusted-types')).toEqual(
+      parsePolicy(headers['Content-Security-Policy'] ?? '').get('trusted-types'),
+    );
   });
 
   it('sets COOP and a Permissions-Policy denying unused features', () => {

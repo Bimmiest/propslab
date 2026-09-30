@@ -74,10 +74,18 @@ export function findProblems(thresholds, summary, root) {
   };
 
   const rel = (file) => relative(root, file).split(sep).join('/');
-  check('global', thresholds, measure(summary, () => true));
+  check(
+    'global',
+    thresholds,
+    measure(summary, () => true),
+  );
   for (const [glob, floors] of Object.entries(thresholds)) {
     if (typeof floors !== 'object' || floors === null) continue;
-    check(glob, floors, measure(summary, (file) => matchesGlob(rel(file), glob)));
+    check(
+      glob,
+      floors,
+      measure(summary, (file) => matchesGlob(rel(file), glob)),
+    );
   }
   return problems;
 }

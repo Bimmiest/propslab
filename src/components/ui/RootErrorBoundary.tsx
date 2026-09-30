@@ -6,16 +6,7 @@ import { copyToClipboard } from '../../utils/clipboard';
 /** Everything the user typed, in one paste-able block. Nothing else holds it: inputs are not persisted. */
 function configSnapshot(): string {
   const { rawData, propsConf, transformsConf } = useAppStore.getState();
-  return [
-    '# props.conf',
-    propsConf,
-    '',
-    '# transforms.conf',
-    transformsConf,
-    '',
-    '# Raw data',
-    rawData,
-  ].join('\n');
+  return ['# props.conf', propsConf, '', '# transforms.conf', transformsConf, '', '# Raw data', rawData].join('\n');
 }
 
 function RootFallback({ error }: { error: Error }) {
@@ -32,7 +23,9 @@ function RootFallback({ error }: { error: Error }) {
     <div role="alert" className="h-full flex items-center justify-center p-6 bg-[var(--color-bg-primary)]">
       <div className="max-w-md text-center">
         <h1 className="text-lg font-semibold text-[var(--color-text-primary)] mb-2">Propslab hit an error</h1>
-        <p className="text-sm text-[var(--color-text-secondary)] mb-2">{error.message || 'An unexpected error occurred.'}</p>
+        <p className="text-sm text-[var(--color-text-secondary)] mb-2">
+          {error.message || 'An unexpected error occurred.'}
+        </p>
         <p className="text-sm text-[var(--color-text-secondary)] mb-4">
           Your raw data and configuration are not saved anywhere. Copy them before reloading.
         </p>

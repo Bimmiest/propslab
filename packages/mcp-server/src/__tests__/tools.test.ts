@@ -28,8 +28,7 @@ const WORKER_PATH = fileURLToPath(new URL('../../dist/simulateWorker.js', import
 const payload = (r: { content: { text: string }[] }) => JSON.parse(resultText(r));
 
 /** Bytes of the JSON-RPC line the server would write for this result, as the SDK frames it. */
-const lineBytes = (result: object) =>
-  Buffer.byteLength(`${JSON.stringify({ result, jsonrpc: '2.0', id: 2 ** 31 })}\n`);
+const lineBytes = (result: object) => Buffer.byteLength(`${JSON.stringify({ result, jsonrpc: '2.0', id: 2 ** 31 })}\n`);
 
 const ACCESS_PROPS = [
   '[access_log]',
@@ -109,12 +108,9 @@ describe('simulate', () => {
     // characters in, but some 27 MB on the wire if returned whole — three
     // bytes a character, in both copies (#414).
     const raw = `${'日'.repeat(3_000)}\n`.repeat(300);
-    const props = [
-      '[access_log]',
-      'SHOULD_LINEMERGE = false',
-      'SEDCMD-x = s/日/本/g',
-      'SEDCMD-y = s/本/日/g',
-    ].join('\n');
+    const props = ['[access_log]', 'SHOULD_LINEMERGE = false', 'SEDCMD-x = s/日/本/g', 'SEDCMD-y = s/本/日/g'].join(
+      '\n',
+    );
     const result = await handleSimulate(
       simulateArgs({ raw, props_conf: props, max_events: 500, include_snapshots: true }),
       WORKER_PATH,
@@ -144,9 +140,7 @@ describe('simulate', () => {
     for (const step of lean.events[0].processingTrace) {
       expect(step).not.toHaveProperty('inputSnapshot');
     }
-    const full = payload(
-      await handleSimulate(simulateArgs({ include_snapshots: true }), WORKER_PATH),
-    );
+    const full = payload(await handleSimulate(simulateArgs({ include_snapshots: true }), WORKER_PATH));
     const withSnapshot = full.events[0].processingTrace.some(
       (s: Record<string, unknown>) => 'inputSnapshot' in s || 'outputSnapshot' in s,
     );
@@ -173,9 +167,7 @@ describe('simulate', () => {
     const out = payload(result);
     expect(out.error).toBe('timeout');
     expect(out.budget_ms).toBe(1_000);
-    const suspect = out.regex_directives.find(
-      (s: { key: string }) => s.key === 'EXTRACT-boom',
-    );
+    const suspect = out.regex_directives.find((s: { key: string }) => s.key === 'EXTRACT-boom');
     expect(suspect).toBeDefined();
     expect(suspect.stanza).toBe('evil');
     // Stalled on the one event, so the pattern is blamed and a retry is not advised.
@@ -209,13 +201,8 @@ describe('simulate', () => {
 
 describe('validate', () => {
   it('reports conf problems with no sample data', async () => {
-    const props = ['[access_log]', 'TRANSFORMS-x = missing_stanza', 'SHOULD_LINEMERGE = maybe'].join(
-      '\n',
-    );
-    const result = await handleValidate(
-      { props_conf: props, transforms_conf: '', timeout_ms: 10_000 },
-      WORKER_PATH,
-    );
+    const props = ['[access_log]', 'TRANSFORMS-x = missing_stanza', 'SHOULD_LINEMERGE = maybe'].join('\n');
+    const result = await handleValidate({ props_conf: props, transforms_conf: '', timeout_ms: 10_000 }, WORKER_PATH);
     const out = payload(result);
     const messages = out.diagnostics.map((d: { message: string }) => d.message);
     expect(messages.some((m: string) => m.includes('missing_stanza'))).toBe(true);
@@ -236,13 +223,9 @@ describe('validate', () => {
     ].join('\n');
     const transforms = ['[t]', 'REGEX = (?<=a+)b', 'FORMAT = f::$1', 'WRITE_META = true'].join('\n');
     const out = payload(
-      await handleValidate(
-        { props_conf: props, transforms_conf: transforms, timeout_ms: 10_000 },
-        WORKER_PATH,
-      ),
+      await handleValidate({ props_conf: props, transforms_conf: transforms, timeout_ms: 10_000 }, WORKER_PATH),
     );
-    const byKey = (key: string) =>
-      out.diagnostics.filter((d: { directiveKey?: string }) => d.directiveKey === key);
+    const byKey = (key: string) => out.diagnostics.filter((d: { directiveKey?: string }) => d.directiveKey === key);
     expect(byKey('EXTRACT-a')).toHaveLength(1);
     expect(byKey('EXTRACT-a')[0]).toMatchObject({ level: 'error', file: 'props.conf', line: 2 });
     expect(byKey('EXTRACT-a')[0].message).toMatch(/missing closing parenthesis/);
@@ -260,15 +243,10 @@ describe('validate', () => {
     // [default] and [host::localhost] would match a dummy sample, leaking its
     // processing out as diagnostics about text nobody sent — here, "replaced
     // the event and dropped 7 of 8 characters".
-    const props = ['[default]', 'TRANSFORMS-mask = mask', '[host::localhost]', 'SEDCMD-x = s/v/w/'].join(
-      '\n',
-    );
+    const props = ['[default]', 'TRANSFORMS-mask = mask', '[host::localhost]', 'SEDCMD-x = s/v/w/'].join('\n');
     const transforms = ['[mask]', 'REGEX = (v)', 'FORMAT = $1', 'DEST_KEY = _raw'].join('\n');
     const out = payload(
-      await handleValidate(
-        { props_conf: props, transforms_conf: transforms, timeout_ms: 10_000 },
-        WORKER_PATH,
-      ),
+      await handleValidate({ props_conf: props, transforms_conf: transforms, timeout_ms: 10_000 }, WORKER_PATH),
     );
     expect(out.diagnostics).toEqual([]);
   });
@@ -277,14 +255,9 @@ describe('validate', () => {
     const props = ['[app]', 'TRANSFORMS-idx = t1'].join('\n');
     const transforms = ['[t1]', 'REGEX = (x)', 'FORMAT = f::$1', 'MV_ADD = true'].join('\n');
     const out = payload(
-      await handleValidate(
-        { props_conf: props, transforms_conf: transforms, timeout_ms: 10_000 },
-        WORKER_PATH,
-      ),
+      await handleValidate({ props_conf: props, transforms_conf: transforms, timeout_ms: 10_000 }, WORKER_PATH),
     );
-    expect(
-      out.diagnostics.some((d: { message: string }) => d.message.includes('MV_ADD')),
-    ).toBe(true);
+    expect(out.diagnostics.some((d: { message: string }) => d.message.includes('MV_ADD'))).toBe(true);
   });
 });
 
@@ -337,14 +310,9 @@ describe('explain_precedence', () => {
       ),
     );
     expect(out.resolution).toBeDefined();
-    expect(
-      out.resolution.matchedStanzas.map((s: { name: string }) => s.name),
-    ).toContain('access_log');
+    expect(out.resolution.matchedStanzas.map((s: { name: string }) => s.name)).toContain('access_log');
     const effective = Object.fromEntries(
-      out.resolution.effectiveDirectives.map((d: { key: string; value: string }) => [
-        d.key,
-        d.value,
-      ]),
+      out.resolution.effectiveDirectives.map((d: { key: string; value: string }) => [d.key, d.value]),
     );
     // local/ wins the contested key; the default/-only key survives the merge.
     expect(effective['TIME_FORMAT']).toBe('%Y-%m-%d');
@@ -430,9 +398,7 @@ describe('conf size bound', () => {
     // The combined sum is a cross-field rule the shape cannot express; the
     // handler owns it (above). Each field alone still passes the schema.
     const big = layers(2, 600_000);
-    expect(
-      z.object(validateInputShape).safeParse({ props_conf: big, transforms_conf: big }).success,
-    ).toBe(true);
+    expect(z.object(validateInputShape).safeParse({ props_conf: big, transforms_conf: big }).success).toBe(true);
   });
 
   it('accepts input at the limit', async () => {
@@ -543,8 +509,7 @@ describe('timeout budget and advice (#488)', () => {
 
   const timeout = (progress?: RunProgress, budget = 5_000) =>
     new WorkerTimeoutError(budget, { suspects: [], total: 0 }, progress);
-  const advise = (err: unknown, context: Parameters<typeof workerFailure>[1]) =>
-    payload(workerFailure(err, context));
+  const advise = (err: unknown, context: Parameters<typeof workerFailure>[1]) => payload(workerFailure(err, context));
 
   it('advises from where the run stopped', () => {
     const simulate = { op: 'simulate', rawChars: 50 } as const;
@@ -645,10 +610,7 @@ describe('response size cap (#414)', () => {
 
   it('validate: diagnostics are cut, with a count', async () => {
     for (const props of [fill((i) => `EXTRACT-${i}=(`), fill((i) => `EXTRACT-${i}=(日本語`)]) {
-      const result = await handleValidate(
-        { props_conf: props, transforms_conf: '', timeout_ms: 30_000 },
-        WORKER_PATH,
-      );
+      const result = await handleValidate({ props_conf: props, transforms_conf: '', timeout_ms: 30_000 }, WORKER_PATH);
       expect(result.isError).toBeFalsy();
       expect(lineBytes(result)).toBeLessThanOrEqual(MAX_RESPONSE_BYTES);
       const out = payload(result);

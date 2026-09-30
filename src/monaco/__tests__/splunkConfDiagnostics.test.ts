@@ -91,8 +91,7 @@ describe('computeDiagnostics — SHOULD_LINEMERGE best practice inspects the val
   const withBreaker = (linemerge: string) =>
     computeDiagnostics(fakeModel(`[st]\nLINE_BREAKER = ([\\r\\n]+)\n${linemerge}`), 'props.conf');
 
-  const warned = (markers: { message: string }[]) =>
-    markers.some((m) => /SHOULD_LINEMERGE = false/.test(m.message));
+  const warned = (markers: { message: string }[]) => markers.some((m) => /SHOULD_LINEMERGE = false/.test(m.message));
 
   it('warns when SHOULD_LINEMERGE is set to true', () => {
     expect(warned(withBreaker('SHOULD_LINEMERGE = true'))).toBe(true);
@@ -160,7 +159,10 @@ describe('computeDiagnostics — regexes are checked by PCRE2 itself (#368)', ()
   it('accepts PCRE syntax a JS regex lacks, with no approximation warning', () => {
     for (const pattern of ['a (?x) b', '\\Aab\\z', 'x++(?>y)', '(?<=\\})\\K\\w+', '\\((?:[^()]|(?R))*\\)']) {
       const markers = computeDiagnostics(fakeModel(`[st]\nREGEX = ${pattern}`), 'transforms.conf');
-      expect(markers.filter((m) => m.startLineNumber === 2), pattern).toEqual([]);
+      expect(
+        markers.filter((m) => m.startLineNumber === 2),
+        pattern,
+      ).toEqual([]);
     }
   });
 

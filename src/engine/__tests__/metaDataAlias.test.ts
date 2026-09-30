@@ -18,7 +18,14 @@ const KEYS = [
   { key: 'Host', prior: 'h', read: 'host::h', write: 'host::new', field: 'host', written: 'new' },
   { key: 'Index', prior: 'main', read: 'main', write: 'other', field: 'index', written: 'other' },
   { key: 'Source', prior: 's', read: 'source::s', write: 'source::/new', field: 'source', written: '/new' },
-  { key: 'Sourcetype', prior: 'st', read: 'sourcetype::st', write: 'sourcetype::newst', field: 'sourcetype', written: 'newst' },
+  {
+    key: 'Sourcetype',
+    prior: 'st',
+    read: 'sourcetype::st',
+    write: 'sourcetype::newst',
+    field: 'sourcetype',
+    written: 'newst',
+  },
 ] as const;
 
 function stanza(directives: Record<string, string>): ConfStanza {
@@ -54,7 +61,10 @@ describe('the _MetaData: alias reads the same as MetaData: at every site', () =>
     });
 
     it('$0 in FORMAT is the slot before the REGEX ran', () => {
-      const r = applyRegexTransform(makeEvent('v=1'), stanza({ REGEX: 'v=(\\d)', FORMAT: '$0|$1', DEST_KEY: `_MetaData:${key}` }));
+      const r = applyRegexTransform(
+        makeEvent('v=1'),
+        stanza({ REGEX: 'v=(\\d)', FORMAT: '$0|$1', DEST_KEY: `_MetaData:${key}` }),
+      );
       expect(r.destValue).toBe(`${prior}|1`);
     });
 
@@ -67,7 +77,12 @@ describe('the _MetaData: alias reads the same as MetaData: at every site', () =>
     });
 
     it('the router writes the slot', () => {
-      const ev = applyDestKey(makeEvent('x'), { fields: {}, matched: true, destKey: `_MetaData:${key}`, destValue: write });
+      const ev = applyDestKey(makeEvent('x'), {
+        fields: {},
+        matched: true,
+        destKey: `_MetaData:${key}`,
+        destValue: write,
+      });
       expect(ev.metadata[field]).toBe(written);
     });
   });

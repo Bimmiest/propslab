@@ -100,9 +100,7 @@ describe('computeDiagnostics — agrees with confParser on mis-cased attributes 
   it('gives the same message the engine gives', () => {
     const text = '[st]\ntime_format = %s\n';
     const engineWarning = parseConf(text, 'props.conf').errors.find((e) => /case-sensitive/.test(e.message));
-    const marker = computeDiagnostics(fakeModel(text), 'props.conf').find((m) =>
-      /case-sensitive/.test(m.message),
-    );
+    const marker = computeDiagnostics(fakeModel(text), 'props.conf').find((m) => /case-sensitive/.test(m.message));
 
     expect(engineWarning).toBeDefined();
     expect(marker?.message).toBe(engineWarning?.message);
@@ -117,18 +115,16 @@ describe('computeDiagnostics — agrees with confParser on mis-cased attributes 
   it('agrees on a mis-cased class prefix too', () => {
     const text = '[st]\nextract-f = (?<a>\\w+)\n';
     const engineWarning = parseConf(text, 'props.conf').errors.find((e) => /case-sensitive/.test(e.message));
-    const marker = computeDiagnostics(fakeModel(text), 'props.conf').find((m) =>
-      /case-sensitive/.test(m.message),
-    );
+    const marker = computeDiagnostics(fakeModel(text), 'props.conf').find((m) => /case-sensitive/.test(m.message));
     expect(marker?.message).toBe(engineWarning?.message);
   });
 
   it('agrees that a correctly-cased attribute is fine', () => {
     const text = '[st]\nTIME_FORMAT = %s\n';
     expect(parseConf(text, 'props.conf').errors.filter((e) => /case-sensitive/.test(e.message))).toEqual([]);
-    expect(
-      computeDiagnostics(fakeModel(text), 'props.conf').filter((m) => /case-sensitive/.test(m.message)),
-    ).toEqual([]);
+    expect(computeDiagnostics(fakeModel(text), 'props.conf').filter((m) => /case-sensitive/.test(m.message))).toEqual(
+      [],
+    );
   });
 });
 
@@ -136,7 +132,9 @@ describe('computeDiagnostics — agrees with confParser on mis-cased attributes 
 // differently.
 describe('computeDiagnostics — agrees with confParser on line structure (#371)', () => {
   const malformedLines = (text: string) => ({
-    engine: parseConf(text, 'props.conf').errors.filter((e) => e.level === 'error').map((e) => e.line),
+    engine: parseConf(text, 'props.conf')
+      .errors.filter((e) => e.level === 'error')
+      .map((e) => e.line),
     linter: computeDiagnostics(fakeModel(text), 'props.conf')
       .filter((m) => m.severity === 8)
       .map((m) => m.startLineNumber),
@@ -144,7 +142,11 @@ describe('computeDiagnostics — agrees with confParser on line structure (#371)
 
   it('reads a broken header holding "=" as a broken header, not a directive keyed "[x"', () => {
     const text = '[x=y]\\\nk1 = v\n';
-    expect(parseConf(text, 'props.conf').stanzas.flatMap((s) => s.directives).map((d) => d.key)).toEqual(['k1']);
+    expect(
+      parseConf(text, 'props.conf')
+        .stanzas.flatMap((s) => s.directives)
+        .map((d) => d.key),
+    ).toEqual(['k1']);
     expect(malformedLines(text)).toEqual({ engine: [1], linter: [1] });
   });
 

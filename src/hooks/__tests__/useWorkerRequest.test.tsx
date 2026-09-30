@@ -22,8 +22,13 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useWorkerRequest } from '../useWorkerRequest';
 
-interface Req { value: string }
-interface Res { id: number; echo: string }
+interface Req {
+  value: string;
+}
+interface Res {
+  id: number;
+  echo: string;
+}
 
 class FakeWorker {
   static instances: FakeWorker[] = [];
@@ -468,7 +473,10 @@ describe('useWorkerRequest', () => {
   });
 
   describe('sendAhead and latestOnly (#496)', () => {
-    interface Big { key: string; inputs: string[] }
+    interface Big {
+      key: string;
+      inputs: string[];
+    }
     function setupBig() {
       const interpreted: Big[] = [];
       const hook = renderHook(() =>

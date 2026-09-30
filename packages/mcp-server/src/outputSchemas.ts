@@ -69,9 +69,7 @@ const traceStep = z.looseObject({
   fieldsRemoved: z.array(z.string()).optional(),
   fieldAliases: z.array(z.object({ target: z.string(), source: z.string() })).optional(),
   evalExpressions: z.record(z.string(), z.string()).optional(),
-  metadataChanges: z
-    .array(z.object({ key: metadata.keyof(), from: z.string(), to: z.string() }))
-    .optional(),
+  metadataChanges: z.array(z.object({ key: metadata.keyof(), from: z.string(), to: z.string() })).optional(),
 });
 
 /** Why a directive did nothing, by case (the engine's `NoOpReason`). */
@@ -117,10 +115,7 @@ const serializedEvent = z.object({
       'With capture_offsets only: [start, end) offsets in _raw of each value a positional ' +
         'EXTRACT captured, per field.',
     ),
-  noOps: z
-    .array(noOp)
-    .optional()
-    .describe('Directives that applied to this event and changed nothing, each with why.'),
+  noOps: z.array(noOp).optional().describe('Directives that applied to this event and changed nothing, each with why.'),
   clonedFrom: z
     .string()
     .optional()
@@ -144,16 +139,9 @@ export const simulateOutputShape = {
 } satisfies ShapeOf<SerializedSimulation>;
 
 const cutCount = (list: string) =>
-  z
-    .number()
-    .int()
-    .optional()
-    .describe(`Total ${list}; present only when \`${list}\` was cut to fit the size cap.`);
+  z.number().int().optional().describe(`Total ${list}; present only when \`${list}\` was cut to fit the size cap.`);
 
-const capNote = z
-  .string()
-  .optional()
-  .describe('Present when a list was cut to fit the size cap; says which.');
+const capNote = z.string().optional().describe('Present when a list was cut to fit the size cap; says which.');
 
 export const validateOutputShape = {
   diagnostics: z.array(diagnostic),
@@ -193,9 +181,7 @@ export const explainOutputShape = {
       metadata,
       effectiveMetadata: metadata,
       assignedSourcetype: z.string().optional(),
-      matchedStanzas: z.array(
-        z.object({ name: z.string(), type: stanzaType, layer: z.string().optional() }),
-      ),
+      matchedStanzas: z.array(z.object({ name: z.string(), type: stanzaType, layer: z.string().optional() })),
       effectiveDirectives: z.array(z.object({ ...explainDirectiveShape, stanza: z.string() })),
       matchedStanzaCount: cutCount('matchedStanzas'),
       effectiveDirectiveCount: cutCount('effectiveDirectives'),
@@ -232,10 +218,7 @@ const directiveEntry = z.looseObject({
 
 /** One shape for both modes: a listing (no `key`) or the matches for a key. */
 export const lookupOutputShape = {
-  'props.conf': z
-    .array(directiveSummary)
-    .optional()
-    .describe('Listing mode (no key): every props.conf directive.'),
+  'props.conf': z.array(directiveSummary).optional().describe('Listing mode (no key): every props.conf directive.'),
   'transforms.conf': z
     .array(directiveSummary)
     .optional()

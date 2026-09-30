@@ -13,10 +13,7 @@ import { atDirective } from '../parser/provenance';
 /** True if the trimmed token is wrapped in a matched pair of single or double quotes. */
 export function isQuotedFieldName(token: string): boolean {
   const t = token.trim();
-  return (
-    t.length >= 2 &&
-    ((t[0] === "'" && t[t.length - 1] === "'") || (t[0] === '"' && t[t.length - 1] === '"'))
-  );
+  return t.length >= 2 && ((t[0] === "'" && t[t.length - 1] === "'") || (t[0] === '"' && t[t.length - 1] === '"'));
 }
 
 /** Strip one layer of matched surrounding quotes, returning the literal field name. */
@@ -39,11 +36,7 @@ export function fieldNameNeedsQuoting(name: string, opts?: { allowWildcard?: boo
  * field-referencing directives. `reason` is the directive-specific explanation of
  * why the unquoted form fails (e.g. eval's `.` being the concat operator).
  */
-export function fieldQuotingWarning(
-  dir: ConfDirective,
-  bareName: string,
-  reason: string,
-): ValidationDiagnostic {
+export function fieldQuotingWarning(dir: ConfDirective, bareName: string, reason: string): ValidationDiagnostic {
   return {
     level: 'warning',
     message: `${dir.key}: "${bareName}" ${reason} — single-quote it: '${bareName}'.`,

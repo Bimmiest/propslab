@@ -50,12 +50,14 @@ describe('detectLineFormat', () => {
   });
 
   it('breaks XML before each declaration when every document has one', () => {
-    const raw = '<?xml version="1.0"?>\n<Event>\n  <a>1</a>\n</Event>\n<?xml version="1.0"?>\n<Event>\n  <a>2</a>\n</Event>';
+    const raw =
+      '<?xml version="1.0"?>\n<Event>\n  <a>1</a>\n</Event>\n<?xml version="1.0"?>\n<Event>\n  <a>2</a>\n</Event>';
     expect(byKey(detectLineFormat(raw, splitLines(raw)), 'LINE_BREAKER')?.value).toBe('([\\r\\n]+)(?=<\\?xml\\s)');
   });
 
   it('breaks XML before each top-level element name', () => {
-    const raw = '<!-- feed -->\n<Event id="1">\n  <Data a="x/y">1</Data>\n  <Empty/>\n</Event>\n<Alert>\n  <b>2</b>\n</Alert>';
+    const raw =
+      '<!-- feed -->\n<Event id="1">\n  <Data a="x/y">1</Data>\n  <Empty/>\n</Event>\n<Alert>\n  <b>2</b>\n</Alert>';
     const out = detectLineFormat(raw, splitLines(raw));
     expect(byKey(out, 'LINE_BREAKER')?.value).toBe('([\\r\\n]+)(?=<(?:Event|Alert)[\\s/>])');
     expect(byKey(out, 'SHOULD_LINEMERGE')?.value).toBe('false');
@@ -194,7 +196,9 @@ describe('serialize', () => {
   });
 
   it('appends to existing config with a blank-line separator', () => {
-    expect(appendStanza('[old]\nKV_MODE = none', '[new]\nKV_MODE = json')).toBe('[old]\nKV_MODE = none\n\n[new]\nKV_MODE = json\n');
+    expect(appendStanza('[old]\nKV_MODE = none', '[new]\nKV_MODE = json')).toBe(
+      '[old]\nKV_MODE = none\n\n[new]\nKV_MODE = json\n',
+    );
   });
 
   it('sets directly when config is empty', () => {
@@ -244,7 +248,10 @@ describe('scaffoldConfig end to end — one event per multi-line object', () => 
   it.each(cases)('%s', (_label, objects) => {
     const raw = objects.join('\n');
     const { sourcetype, suggestions } = scaffoldConfig(raw, META);
-    const props = renderStanza(sourcetype, suggestions.filter((s) => s.enabledByDefault));
+    const props = renderStanza(
+      sourcetype,
+      suggestions.filter((s) => s.enabledByDefault),
+    );
     const { result } = runPipeline(raw, { ...META, sourcetype }, props, '');
     expect(result.events.map((e) => e._raw)).toEqual(objects);
   });
@@ -264,7 +271,10 @@ describe('scaffoldConfig end to end — TRUNCATE sized to the whole object', () 
 
     const { sourcetype, suggestions } = scaffoldConfig(raw, META);
     expect(Number(byKey(suggestions, 'TRUNCATE')?.value)).toBeGreaterThanOrEqual(raw.length);
-    const props = renderStanza(sourcetype, suggestions.filter((s) => s.enabledByDefault));
+    const props = renderStanza(
+      sourcetype,
+      suggestions.filter((s) => s.enabledByDefault),
+    );
     const { result } = runPipeline(raw, { ...META, sourcetype }, props, '');
     expect(result.events.map((e) => e._raw)).toEqual([raw]);
     expect(result.events[0]?.fields['meta']).toBeUndefined();

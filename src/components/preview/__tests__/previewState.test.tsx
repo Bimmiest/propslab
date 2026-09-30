@@ -22,11 +22,18 @@ const meta: EventMetadata = { index: 'main', host: 'h', source: 's', sourcetype:
 function resultOf(fields: Record<string, string>[]): ViewResult {
   return toViewResult({
     events: fields.map((f, i) =>
-      makeEvent(Object.entries(f).map(([k, v]) => `${k}=${v}`).join(' ') || `event ${i}`, {
-        fields: f,
-        lineNumbers: { start: i + 1, end: i + 1 },
-        processingTrace: [{ processor: 'EXTRACT-kv', phase: 'search-time', description: '', fieldsAdded: Object.keys(f) }],
-      }),
+      makeEvent(
+        Object.entries(f)
+          .map(([k, v]) => `${k}=${v}`)
+          .join(' ') || `event ${i}`,
+        {
+          fields: f,
+          lineNumbers: { start: i + 1, end: i + 1 },
+          processingTrace: [
+            { processor: 'EXTRACT-kv', phase: 'search-time', description: '', fieldsAdded: Object.keys(f) },
+          ],
+        },
+      ),
     ),
     originalRaw: '',
     eventCount: fields.length,
@@ -39,7 +46,7 @@ beforeEach(() => {
   useAppStore.setState({ ...initial, metadata: meta, activeOutputTab: 'preview' }, true);
 });
 
-describe('the Preview tab\'s sub-tab and filters', () => {
+describe("the Preview tab's sub-tab and filters", () => {
   it('survive an output-tab switch and a remount', () => {
     useAppStore.setState({ processingResult: resultOf([{ user: 'alice' }, { user: 'bob' }]) });
     const { unmount } = render(<PreviewPanel />);
@@ -61,7 +68,10 @@ describe('the Preview tab\'s sub-tab and filters', () => {
   });
 
   it('go back to the first page when changed', () => {
-    useAppStore.setState({ processingResult: resultOf(Array.from({ length: 12 }, (_, i) => ({ n: String(i) }))), eventsPerPage: 5 });
+    useAppStore.setState({
+      processingResult: resultOf(Array.from({ length: 12 }, (_, i) => ({ n: String(i) }))),
+      eventsPerPage: 5,
+    });
     render(<PreviewPanel />);
     fireEvent.click(screen.getByRole('button', { name: 'Next page' }));
     expect(useAppStore.getState().currentPage).toBe(2);
@@ -72,7 +82,10 @@ describe('the Preview tab\'s sub-tab and filters', () => {
 
 describe('the page-size selector', () => {
   it('stays while there are more events than the smallest page', () => {
-    useAppStore.setState({ processingResult: resultOf(Array.from({ length: 8 }, (_, i) => ({ n: String(i) }))), eventsPerPage: 5 });
+    useAppStore.setState({
+      processingResult: resultOf(Array.from({ length: 8 }, (_, i) => ({ n: String(i) }))),
+      eventsPerPage: 5,
+    });
     render(<PreviewPanel />);
     const perPage = () => screen.queryByRole('combobox', { name: 'Per page:' });
     fireEvent.change(perPage()!, { target: { value: '25' } });
@@ -91,22 +104,38 @@ describe('the page-size selector', () => {
 });
 
 describe('Extractions pins', () => {
-  const itemsOf = (result: ViewResult): EnrichedEvent[] => result.events.map((event) => ({
-    event, searchText: event._raw.toLowerCase(), originalRaw: event._raw, hasChanges: false, hasMetadataChanges: false, isDropped: false,
-  }));
+  const itemsOf = (result: ViewResult): EnrichedEvent[] =>
+    result.events.map((event) => ({
+      event,
+      searchText: event._raw.toLowerCase(),
+      originalRaw: event._raw,
+      hasChanges: false,
+      hasMetadataChanges: false,
+      isDropped: false,
+    }));
 
   it('are dropped when the run no longer produces the field', () => {
     const first = resultOf([{ status: '200', user: 'alice' }, { user: 'bob' }]);
     const tab = (result: ViewResult) => {
       const items = itemsOf(result);
-      return <HighlightedTab items={items} allEvents={items} currentPage={1} eventsPerPage={10} fieldStats={result.fieldStats} />;
+      return (
+        <HighlightedTab
+          items={items}
+          allEvents={items}
+          currentPage={1}
+          eventsPerPage={10}
+          fieldStats={result.fieldStats}
+        />
+      );
     };
     const { container, rerender } = render(tab(first));
     fireEvent.click(within(container).getByTitle(/^status \(manual\)/));
     expect(container.textContent).toContain('1/2 events match 1 pinned field');
 
     // The EXTRACT changes so `status` is gone: no "0/2" with nothing to unpin.
-    act(() => { rerender(tab(resultOf([{ user: 'alice' }, { user: 'bob' }]))); });
+    act(() => {
+      rerender(tab(resultOf([{ user: 'alice' }, { user: 'bob' }])));
+    });
     expect(container.textContent).not.toContain('pinned field');
     expect(within(container).getAllByTitle(/^user \(manual\)/)).toHaveLength(2);
   });
@@ -119,7 +148,9 @@ describe('Extractions pins', () => {
     );
     fireEvent.click(within(container).getByTitle(/^status \(manual\)/));
     const bob = [all[1]!];
-    rerender(<HighlightedTab items={bob} allEvents={bob} currentPage={1} eventsPerPage={10} fieldStats={result.fieldStats} />);
+    rerender(
+      <HighlightedTab items={bob} allEvents={bob} currentPage={1} eventsPerPage={10} fieldStats={result.fieldStats} />,
+    );
     expect(container.textContent).toContain('0/1 events match 1 pinned field');
   });
 });

@@ -10,7 +10,13 @@ const REGEX_COLUMNS = [
 const regexSearchText = (d: RegexDirective) => [d.pattern, d.description, d.example];
 
 /** Regex Reference (collapsible). */
-export function RegexReference({ onInsert, onReplace }: { onInsert: (pattern: string) => void; onReplace: (pattern: string) => void }) {
+export function RegexReference({
+  onInsert,
+  onReplace,
+}: {
+  onInsert: (pattern: string) => void;
+  onReplace: (pattern: string) => void;
+}) {
   return (
     <ReferenceTable
       title="Regex Reference"
@@ -19,18 +25,31 @@ export function RegexReference({ onInsert, onReplace }: { onInsert: (pattern: st
       columns={REGEX_COLUMNS}
       categories={REGEX_REFERENCE}
       searchText={regexSearchText}
-      renderCategory={(cat) => <RegexCategoryRows key={cat.name} category={cat} onInsert={onInsert} onReplace={onReplace} />}
+      renderCategory={(cat) => (
+        <RegexCategoryRows key={cat.name} category={cat} onInsert={onInsert} onReplace={onReplace} />
+      )}
     />
   );
 }
 
-function RegexCategoryRows({ category, onInsert, onReplace }: { category: RegexCategory; onInsert: (pattern: string) => void; onReplace: (pattern: string) => void }) {
+function RegexCategoryRows({
+  category,
+  onInsert,
+  onReplace,
+}: {
+  category: RegexCategory;
+  onInsert: (pattern: string) => void;
+  onReplace: (pattern: string) => void;
+}) {
   const isReplace = REPLACE_CATEGORIES.has(category.name);
 
   return (
     <>
       <tr>
-        <td colSpan={3} className="pt-2 pb-0.5 text-[10px] font-medium text-[var(--color-accent)] uppercase tracking-wider">
+        <td
+          colSpan={3}
+          className="pt-2 pb-0.5 text-[10px] font-medium text-[var(--color-accent)] uppercase tracking-wider"
+        >
           {category.name}
           <span className="ml-1.5 font-normal normal-case tracking-normal text-[var(--color-text-muted)]">
             (click to {isReplace ? 'use' : 'append'})
@@ -49,7 +68,15 @@ function RegexCategoryRows({ category, onInsert, onReplace }: { category: RegexC
   );
 }
 
-function RegexReferenceRow({ directive: d, isReplace, onPick }: { directive: RegexDirective; isReplace: boolean; onPick: () => void }) {
+function RegexReferenceRow({
+  directive: d,
+  isReplace,
+  onPick,
+}: {
+  directive: RegexDirective;
+  isReplace: boolean;
+  onPick: () => void;
+}) {
   const descriptionId = useId();
   return (
     // Stays a plain row so the table keeps its row and cell semantics: a
@@ -67,7 +94,10 @@ function RegexReferenceRow({ directive: d, isReplace, onPick }: { directive: Reg
         <button
           type="button"
           // Stopped here so the row's handler does not run the action twice.
-          onClick={(e) => { e.stopPropagation(); onPick(); }}
+          onClick={(e) => {
+            e.stopPropagation();
+            onPick();
+          }}
           aria-label={isReplace ? `Use pattern ${d.pattern}` : `Append ${d.pattern}`}
           aria-describedby={descriptionId}
           className="font-mono px-1 py-0.5 rounded text-[11px] text-left bg-[var(--color-bg-tertiary)] text-[var(--color-text-primary)] border-none cursor-pointer"
@@ -75,7 +105,9 @@ function RegexReferenceRow({ directive: d, isReplace, onPick }: { directive: Reg
           {d.pattern}
         </button>
       </td>
-      <td id={descriptionId} className="py-0.5 pr-3 text-[var(--color-text-secondary)]">{d.description}</td>
+      <td id={descriptionId} className="py-0.5 pr-3 text-[var(--color-text-secondary)]">
+        {d.description}
+      </td>
       <td className="py-0.5 text-[var(--color-text-muted)] font-mono text-[11px]">{d.example}</td>
     </tr>
   );

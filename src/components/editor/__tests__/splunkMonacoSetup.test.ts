@@ -12,7 +12,11 @@ const monaco = vi.hoisted(() => {
   const track = (name: string) => () => {
     const entry = { name, disposed: false };
     disposables.push(entry);
-    return { dispose: () => { entry.disposed = true; } };
+    return {
+      dispose: () => {
+        entry.disposed = true;
+      },
+    };
   };
   return {
     disposables,
@@ -52,7 +56,11 @@ beforeEach(() => {
   monaco.registerHoverProvider.mockImplementation(() => {
     const entry = { name: 'hover', disposed: false };
     monaco.disposables.push(entry);
-    return { dispose: () => { entry.disposed = true; } };
+    return {
+      dispose: () => {
+        entry.disposed = true;
+      },
+    };
   });
 });
 

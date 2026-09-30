@@ -139,8 +139,16 @@ describe('applyDestKey — _meta (SEM-11)', () => {
   it('keeps _queue a string through the pipeline when a _meta FORMAT names it (#478)', () => {
     const props = '[syslog]\nSHOULD_LINEMERGE = false\nTRANSFORMS-q = drop, meta\n';
     const transforms = [
-      '[drop]', 'REGEX = .', 'DEST_KEY = queue', 'FORMAT = nullQueue', '',
-      '[meta]', 'REGEX = (\\w+)', 'DEST_KEY = _meta', 'FORMAT = _queue::indexQueue word::$1', '',
+      '[drop]',
+      'REGEX = .',
+      'DEST_KEY = queue',
+      'FORMAT = nullQueue',
+      '',
+      '[meta]',
+      'REGEX = (\\w+)',
+      'DEST_KEY = _meta',
+      'FORMAT = _queue::indexQueue word::$1',
+      '',
     ].join('\n');
     const meta = { index: 'main', host: 'h', source: '/log', sourcetype: 'syslog' };
     const { result: out } = runPipeline('hello', meta, props, transforms);

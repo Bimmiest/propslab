@@ -113,7 +113,8 @@ export function createRequestQueue<TInputs, TReq extends QueuedRequest>(
       options.skip(message);
       return;
     }
-    const inputs = message.inputsId !== undefined && current?.inputsId === message.inputsId ? current.inputs : undefined;
+    const inputs =
+      message.inputsId !== undefined && current?.inputsId === message.inputsId ? current.inputs : undefined;
     try {
       options.run(message, inputs);
     } catch (err) {

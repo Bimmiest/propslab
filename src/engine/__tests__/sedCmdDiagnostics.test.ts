@@ -5,8 +5,13 @@ import { runCtx, FIXED_NOW } from './runCtx';
 import { makeEvent } from '../../test/makeEvent';
 
 const ev = (raw: string): SplunkEvent => makeEvent(raw);
-const sed = (value: string, className = 'x'): ConfDirective =>
-  ({ key: `SEDCMD-${className}`, value, line: 1, directiveType: 'SEDCMD', className });
+const sed = (value: string, className = 'x'): ConfDirective => ({
+  key: `SEDCMD-${className}`,
+  value,
+  line: 1,
+  directiveType: 'SEDCMD',
+  className,
+});
 
 function run(value: string, raw: string) {
   const diagnostics: ValidationDiagnostic[] = [];
@@ -46,7 +51,7 @@ describe('SEDCMD — an uncompilable pattern warns rather than vanishing (#122)'
     expect(diagnostics).toEqual([]);
   });
 
-  it('warns when the pattern is not valid regex, with PCRE\'s reason', () => {
+  it("warns when the pattern is not valid regex, with PCRE's reason", () => {
     const { raw, diagnostics } = run('s/[unclosed/Z/', 'abc');
     expect(raw).toBe('abc');
     expect(diagnostics).toHaveLength(1);

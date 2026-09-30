@@ -25,9 +25,7 @@ function stagesOf(perEventPipeline: boolean): [RunStage, number][] {
 describe('PipelineOptions.onStage', () => {
   it('reports every batch stage once, in RUN_STAGES order, with the events it is given', () => {
     const seen = stagesOf(false);
-    expect(seen.map(([stage]) => stage)).toEqual(
-      RUN_STAGES.filter((s) => s !== 'search time per event'),
-    );
+    expect(seen.map(([stage]) => stage)).toEqual(RUN_STAGES.filter((s) => s !== 'search time per event'));
     // Line breaking is given no events — it makes them.
     expect(seen[0]).toEqual(['LINE_BREAKER', 0]);
     expect(seen.slice(1).every(([, events]) => events === 3)).toBe(true);

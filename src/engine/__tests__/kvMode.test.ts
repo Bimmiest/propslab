@@ -59,7 +59,11 @@ describe('applyKvMode — json', () => {
   });
 
   it('still promotes genuinely repeated prototype-named keys to multivalue', () => {
-    const r = applyKvMode([event('{"items":[{"toString":"a"},{"toString":"b"}]}')], [dir('json')], runCtx(FIXED_NOW))[0]!;
+    const r = applyKvMode(
+      [event('{"items":[{"toString":"a"},{"toString":"b"}]}')],
+      [dir('json')],
+      runCtx(FIXED_NOW),
+    )[0]!;
     expect(r.fields['items{}.toString']).toEqual(['a', 'b']);
   });
 
@@ -260,11 +264,7 @@ describe('applyKvMode — multi (multikv)', () => {
   });
 
   it('parses ps-style output where values are not column-aligned', () => {
-    const raw = [
-      'PID   TTY   STAT',
-      '1 ?     Ss',
-      '4242 pts/0 R+',
-    ].join('\n');
+    const raw = ['PID   TTY   STAT', '1 ?     Ss', '4242 pts/0 R+'].join('\n');
     const r = applyKvMode([event(raw)], [dir('multi')], runCtx(FIXED_NOW))[0]!;
     expect(r.fields['PID']).toEqual(['1', '4242']);
     expect(r.fields['TTY']).toEqual(['?', 'pts/0']);
@@ -435,7 +435,11 @@ describe('applyKvMode — KV_TRIM_SPACES (#274)', () => {
 
   it('applies to auto_escaped too', () => {
     const on = applyKvMode([event('msg=" say \\"hi\\" "')], [dir('auto_escaped')], runCtx(FIXED_NOW))[0]!;
-    const off = applyKvMode([event('msg=" say \\"hi\\" "')], [dir('auto_escaped'), trim('false')], runCtx(FIXED_NOW))[0]!;
+    const off = applyKvMode(
+      [event('msg=" say \\"hi\\" "')],
+      [dir('auto_escaped'), trim('false')],
+      runCtx(FIXED_NOW),
+    )[0]!;
     expect(on.fields['msg']).toBe('say "hi"');
     expect(off.fields['msg']).toBe(' say "hi" ');
   });
@@ -461,7 +465,11 @@ describe('applyKvMode — json depth limit skips only the deep subtree (#357)', 
     levels === 0 ? '"bottom"' : `{"v":"level${levels}","n":${nest(levels - 1)}}`;
 
   it('keeps shallow siblings that follow an over-deep object', () => {
-    const r = applyKvMode([event(`{"a":"first","deep":${nest(12)},"status":"ok"}`)], [dir('json')], runCtx(FIXED_NOW))[0]!;
+    const r = applyKvMode(
+      [event(`{"a":"first","deep":${nest(12)},"status":"ok"}`)],
+      [dir('json')],
+      runCtx(FIXED_NOW),
+    )[0]!;
     expect(r.fields['a']).toBe('first');
     expect(r.fields['status']).toBe('ok');
     // Shallow parts of the deep branch survive too; only past the limit is lost.
@@ -471,7 +479,11 @@ describe('applyKvMode — json depth limit skips only the deep subtree (#357)', 
   });
 
   it('keeps later array elements after an over-deep one', () => {
-    const r = applyKvMode([event(`{"items":[${nest(12)},{"id":"2"}],"status":"ok"}`)], [dir('json')], runCtx(FIXED_NOW))[0]!;
+    const r = applyKvMode(
+      [event(`{"items":[${nest(12)},{"id":"2"}],"status":"ok"}`)],
+      [dir('json')],
+      runCtx(FIXED_NOW),
+    )[0]!;
     expect(r.fields['items{}.id']).toBe('2');
     expect(r.fields['status']).toBe('ok');
   });

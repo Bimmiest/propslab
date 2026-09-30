@@ -72,11 +72,7 @@ export function setField<T>(fields: Record<string, T>, name: string, value: T): 
  * other event holding the same reference, from what is supposed to be a pure
  * processor.
  */
-export function addFieldValue(
-  fields: Record<string, string | string[]>,
-  name: string,
-  value: string,
-): boolean {
+export function addFieldValue(fields: Record<string, string | string[]>, name: string, value: string): boolean {
   if (!hasField(fields, name)) {
     setField(fields, name, value);
     return true;

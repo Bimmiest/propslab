@@ -26,9 +26,7 @@ test.describe('boot', () => {
 
   test('serves the tightened policy from the built artifact', async ({ page }) => {
     await page.goto('/');
-    const policy = await page
-      .locator('meta[http-equiv="Content-Security-Policy"]')
-      .getAttribute('content');
+    const policy = await page.locator('meta[http-equiv="Content-Security-Policy"]').getAttribute('content');
 
     expect(policy).toBeTruthy();
     // 'unsafe-eval' was removed once the editor moved to monaco's slim
@@ -71,7 +69,9 @@ test.describe('trusted types', () => {
     await page.keyboard.type('\n[tt]\nSHOULD_LINEMERGE = notabool\nTIME_PRE');
     await expect(page.locator('.suggest-widget')).toBeVisible();
     await page.keyboard.press('Escape');
-    await expect(page.locator('.squiggly-warning, .squiggly-error, .squiggly-info').first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('.squiggly-warning, .squiggly-error, .squiggly-info').first()).toBeVisible({
+      timeout: 15_000,
+    });
 
     // A directive hover: markdown rendered through Monaco's sanitizer.
     const token = props.getByText('SHOULD_LINEMERGE', { exact: true }).last();
@@ -87,7 +87,10 @@ test.describe('trusted types', () => {
 
     const violations = await page.evaluate(() => (window as unknown as { __e2eViolations: string[] }).__e2eViolations);
     expect(violations, 'Trusted Types / CSP violations').toEqual([]);
-    expect(complaints.all.filter((c) => /Trusted ?Type/i.test(c)), 'Trusted Types errors').toEqual([]);
+    expect(
+      complaints.all.filter((c) => /Trusted ?Type/i.test(c)),
+      'Trusted Types errors',
+    ).toEqual([]);
     expect(complaints.all).toEqual([]);
   });
 });
@@ -104,8 +107,9 @@ test.describe('monaco', () => {
 
     // A marker proves the whole language pipeline is wired: the model changed,
     // computeDiagnostics ran, and setModelMarkers reached the editor.
-    await expect(page.locator('.squiggly-warning, .squiggly-error, .squiggly-info').first())
-      .toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('.squiggly-warning, .squiggly-error, .squiggly-info').first()).toBeVisible({
+      timeout: 15_000,
+    });
 
     expect(complaints.csp, 'blocked by Content-Security-Policy').toEqual([]);
   });
@@ -163,8 +167,9 @@ test.describe('monaco contributions', () => {
 
   test('a quick fix renames a mis-cased key', async ({ page }) => {
     await typeIntoProps(page, '[web]\ntime_prefix = x');
-    await expect(page.locator('.squiggly-warning, .squiggly-error, .squiggly-info').first())
-      .toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('.squiggly-warning, .squiggly-error, .squiggly-info').first()).toBeVisible({
+      timeout: 15_000,
+    });
 
     await page.keyboard.press('Home');
     await page.keyboard.press('Control+.');
@@ -260,10 +265,13 @@ test.describe('pipeline worker', () => {
     await openApp(page);
     await loadExample(page, APACHE);
 
-    const before = await page.getByRole('tab', { name: /^Fields$/ }).click().then(async () => {
-      await expect(page.locator('tbody tr').first()).toBeVisible();
-      return page.locator('tbody tr').count();
-    });
+    const before = await page
+      .getByRole('tab', { name: /^Fields$/ })
+      .click()
+      .then(async () => {
+        await expect(page.locator('tbody tr').first()).toBeVisible();
+        return page.locator('tbody tr').count();
+      });
 
     // Add an EVAL that must produce a new field, then wait for it to appear.
     await page.locator('.monaco-editor').nth(1).click();
@@ -285,8 +293,7 @@ test.describe('engine output reaches the tabs', () => {
     // The filter pills are built from the category sets; "All" is their UNION,
     // so it can never exceed the sum and must not double-count.
     const pills = await page.getByRole('button', { name: /^(Auto|Manual|Calculated|All)/ }).allInnerTexts();
-    const count = (label: string) =>
-      Number(/\((\d+)\)/.exec(pills.find((p) => p.startsWith(label)) ?? '')?.[1] ?? 0);
+    const count = (label: string) => Number(/\((\d+)\)/.exec(pills.find((p) => p.startsWith(label)) ?? '')?.[1] ?? 0);
     expect(count('All')).toBeLessThanOrEqual(count('Auto') + count('Manual') + count('Calculated'));
     expect(count('All')).toBeGreaterThan(0);
 
@@ -440,7 +447,10 @@ test.describe('global styles (#498)', () => {
       bar.className = 'progress-indeterminate';
       document.body.append(bar);
       const cs = getComputedStyle(bar);
-      const out = { transition: parseFloat(getComputedStyle(document.body).transitionDuration), animation: cs.animationName };
+      const out = {
+        transition: parseFloat(getComputedStyle(document.body).transitionDuration),
+        animation: cs.animationName,
+      };
       bar.remove();
       return out;
     });
@@ -517,8 +527,7 @@ test.describe('dictionary', () => {
  */
 test.describe('split panels', () => {
   const separator = (page: Page) => page.locator('#main-horizontal > [role="separator"]');
-  const outputWidth = async (page: Page) =>
-    (await page.locator('#output-panel').boundingBox())?.width ?? 0;
+  const outputWidth = async (page: Page) => (await page.locator('#output-panel').boundingBox())?.width ?? 0;
 
   test('a drag previews the split and applies it on release', async ({ page, complaints }) => {
     await openApp(page);
@@ -587,7 +596,8 @@ test.describe('match workers', () => {
     // count and one card per event are the worker's results rendered.
     await expect(page.getByText(/^5\/5 events matched$/)).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole('tabpanel', { name: 'Regex' }).getByText(/^Event #\d+$/)).toHaveCount(5);
-    await expect.poll(() => workerReplies(page, REGEX_WORKER), { message: 'replies from regexMatchWorker' })
+    await expect
+      .poll(() => workerReplies(page, REGEX_WORKER), { message: 'replies from regexMatchWorker' })
       .toBeGreaterThan(0);
 
     expect(complaints.csp, 'blocked by Content-Security-Policy').toEqual([]);
@@ -607,7 +617,8 @@ test.describe('match workers', () => {
     });
     await expect(highlight).toBeVisible({ timeout: 15_000 });
     await expect(highlight).toHaveText(FIRST_EVENT_TIME);
-    await expect.poll(() => workerReplies(page, TIMESTAMP_WORKER), { message: 'replies from timestampMatchWorker' })
+    await expect
+      .poll(() => workerReplies(page, TIMESTAMP_WORKER), { message: 'replies from timestampMatchWorker' })
       .toBeGreaterThan(0);
 
     expect(complaints.csp, 'blocked by Content-Security-Policy').toEqual([]);
@@ -638,7 +649,8 @@ test.describe('match workers', () => {
     await dwellUntilVisible(page, onValue, sample);
     const hover = page.locator('.monaco-hover').filter({ has: sample });
     await expect(hover).toContainText(`matched ${FIRST_EVENT_TIME} → ${FIRST_EVENT_ISO}`);
-    await expect.poll(() => workerReplies(page, TIMESTAMP_WORKER), { message: 'replies from timestampMatchWorker' })
+    await expect
+      .poll(() => workerReplies(page, TIMESTAMP_WORKER), { message: 'replies from timestampMatchWorker' })
       .toBeGreaterThan(0);
 
     expect(complaints.csp, 'blocked by Content-Security-Policy').toEqual([]);
@@ -675,8 +687,9 @@ test.describe('match workers', () => {
 
     // The replacement worker answers the next hover.
     await dwellUntilVisible(page, onValue, page.getByText(/^Sample:/));
-    await expect(hover.filter({ has: page.getByText(/^Sample:/) }))
-      .toContainText(`matched ${FIRST_EVENT_TIME} → ${FIRST_EVENT_ISO}`);
+    await expect(hover.filter({ has: page.getByText(/^Sample:/) })).toContainText(
+      `matched ${FIRST_EVENT_TIME} → ${FIRST_EVENT_ISO}`,
+    );
   });
 });
 
@@ -722,7 +735,9 @@ test.describe('regex engine', () => {
     const loadMs = await page.evaluate(
       () => performance.getEntriesByName('propslab:regex-engine')[0]?.duration ?? Number.NaN,
     );
-    test.info().annotations.push({ type: 'regex engine fetch+compile+instantiate (ms)', description: loadMs.toFixed(1) });
+    test
+      .info()
+      .annotations.push({ type: 'regex engine fetch+compile+instantiate (ms)', description: loadMs.toFixed(1) });
     expect(loadMs).toBeLessThan(LOAD_BUDGET_MS);
     expect(wasmFetches.length, 'the page loads the module').toBeGreaterThan(0);
     expect(new Set(wasmFetches).size, 'every load is of the one same-origin asset').toBe(1);
@@ -744,9 +759,9 @@ test.describe('regex engine', () => {
 test.describe('worker load failure', () => {
   test('the status bar reports the main-thread fallback', async ({ page }) => {
     let wasmLoads = 0;
-    await page.context().route(/\.wasm$/, (route) =>
-      wasmLoads++ === 0 ? route.continue() : route.fulfill({ status: 404, body: '' }),
-    );
+    await page
+      .context()
+      .route(/\.wasm$/, (route) => (wasmLoads++ === 0 ? route.continue() : route.fulfill({ status: 404, body: '' })));
     await openApp(page);
     await loadExample(page, APACHE);
 

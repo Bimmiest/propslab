@@ -174,9 +174,16 @@ function describeDivergence(actual: CapturedEvent[], expected: CapturedEvent[]):
   for (let i = 0; i < Math.max(actual.length, expected.length); i++) {
     const a = actual[i];
     const b = expected[i];
-    if (!a) { lines.push(`[${i}] missing from engine output (Splunk: ${JSON.stringify(b?._raw)})`); continue; }
-    if (!b) { lines.push(`[${i}] extra in engine output (${JSON.stringify(a._raw)})`); continue; }
-    if (a._raw !== b._raw) lines.push(`[${i}] _raw:\n    engine: ${JSON.stringify(a._raw)}\n    splunk: ${JSON.stringify(b._raw)}`);
+    if (!a) {
+      lines.push(`[${i}] missing from engine output (Splunk: ${JSON.stringify(b?._raw)})`);
+      continue;
+    }
+    if (!b) {
+      lines.push(`[${i}] extra in engine output (${JSON.stringify(a._raw)})`);
+      continue;
+    }
+    if (a._raw !== b._raw)
+      lines.push(`[${i}] _raw:\n    engine: ${JSON.stringify(a._raw)}\n    splunk: ${JSON.stringify(b._raw)}`);
     if (a._time !== b._time) lines.push(`[${i}] _time: engine ${a._time}, splunk ${b._time}`);
     const keys = new Set([...Object.keys(a.fields), ...Object.keys(b.fields)]);
     for (const k of keys) {
@@ -216,10 +223,8 @@ describe('Splunk fidelity fixtures', () => {
       const sortedFixtures = [...fixtureIds].sort();
       const sortedCorpus = [...corpusIds].sort();
 
-      expect(sortedManifest, `manifest.cases for ${version} does not match fixture files`)
-        .toEqual(sortedFixtures);
-      expect(sortedManifest, `manifest.cases for ${version} does not match corpus ids`)
-        .toEqual(sortedCorpus);
+      expect(sortedManifest, `manifest.cases for ${version} does not match fixture files`).toEqual(sortedFixtures);
+      expect(sortedManifest, `manifest.cases for ${version} does not match corpus ids`).toEqual(sortedCorpus);
     }
   });
 
@@ -234,7 +239,10 @@ describe('Splunk fidelity fixtures', () => {
       it('every corpus case has a fixture', () => {
         const captured = new Set(fixtures.map((f) => f.id));
         const missing = CORPUS.filter((c) => !captured.has(c.id)).map((c) => c.id);
-        expect(missing, 'corpus cases with no fixture -- the corpus is closed to new cases; see fixtures/README.md').toEqual([]);
+        expect(
+          missing,
+          'corpus cases with no fixture -- the corpus is closed to new cases; see fixtures/README.md',
+        ).toEqual([]);
       });
 
       for (const fixture of fixtures) {
@@ -249,7 +257,7 @@ describe('Splunk fidelity fixtures', () => {
             expect(
               divergence,
               `engine now matches Splunk for "${fixture.id}". Remove knownMismatch ` +
-                `(${testCase.knownMismatch}) from the corpus so this is asserted properly.`
+                `(${testCase.knownMismatch}) from the corpus so this is asserted properly.`,
             ).not.toBe('');
           });
           continue;
@@ -279,8 +287,7 @@ describe('fidelity corpus', () => {
         // ("EXTRACT-"), which the registry cannot resolve -- it requires a
         // non-empty class name. Strip the trailing dash and look up the base.
         const lookup = key.endsWith('-') ? key.slice(0, -1) : key;
-        const known =
-          getDirectiveInfo(lookup, 'props.conf') ?? getDirectiveInfo(lookup, 'transforms.conf');
+        const known = getDirectiveInfo(lookup, 'props.conf') ?? getDirectiveInfo(lookup, 'transforms.conf');
         if (!known) unknown.push(`${c.id}: ${key}`);
       }
     }
@@ -306,9 +313,7 @@ describe('fidelity replay is independent of the wall clock (#293)', () => {
     vi.useRealTimers();
   });
 
-  const fixture = sets
-    .flatMap((s) => s.fixtures)
-    .find((f) => f.id === 'timestamp-named-timezone');
+  const fixture = sets.flatMap((s) => s.fixtures).find((f) => f.id === 'timestamp-named-timezone');
 
   it.skipIf(fixture === undefined)('a capture still matches in 2040 when now is injected', () => {
     vi.useFakeTimers({ toFake: ['Date'] });

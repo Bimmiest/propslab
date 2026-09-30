@@ -37,7 +37,11 @@ export function HighlightedTab({ items, allEvents, currentPage, eventsPerPage, f
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const { store: focusStore, pinnedFields, togglePin, setHoveredField } = useFieldFocus();
 
-  const { categories, containerFields, fieldColorMap, highlightColorMap } = useFieldColoring(allEvents, fieldFilter, fieldStats);
+  const { categories, containerFields, fieldColorMap, highlightColorMap } = useFieldColoring(
+    allEvents,
+    fieldFilter,
+    fieldStats,
+  );
 
   // Pins follow the run: a pinned field the latest run no longer extracts is
   // unpinned before the tab is painted. Every field of the run, not
@@ -67,7 +71,7 @@ export function HighlightedTab({ items, allEvents, currentPage, eventsPerPage, f
 
   const tree = useMemo(
     () => buildFieldTree(fieldColorMap, containerFields, categories.fieldProcessorMap),
-    [fieldColorMap, containerFields, categories.fieldProcessorMap]
+    [fieldColorMap, containerFields, categories.fieldProcessorMap],
   );
   const allGroupNames = useMemo(() => groupNames(tree), [tree]);
   const { collapsed, toggleGroup, setAllCollapsed } = useGroupCollapse(allGroupNames);
@@ -93,53 +97,55 @@ export function HighlightedTab({ items, allEvents, currentPage, eventsPerPage, f
 
   return (
     <FieldFocusContext.Provider value={focusStore}>
-    <div className="flex flex-col h-full">
-      <HighlightedFilterBar
-        categories={categories}
-        fieldFilter={fieldFilter}
-        setFieldFilter={setFieldFilter}
-        pinned={pinnedFields.size > 0 ? {
-          matching: pinMatches.length,
-          total: allEvents.length,
-          count: pinnedFields.size,
-          clear: () => { for (const f of pinnedFields) togglePin(f); },
-        } : null}
-        sidebarCollapsed={sidebarCollapsed}
-        toggleSidebar={() => setSidebarCollapsed((v) => !v)}
-      />
+      <div className="flex flex-col h-full">
+        <HighlightedFilterBar
+          categories={categories}
+          fieldFilter={fieldFilter}
+          setFieldFilter={setFieldFilter}
+          pinned={
+            pinnedFields.size > 0
+              ? {
+                  matching: pinMatches.length,
+                  total: allEvents.length,
+                  count: pinnedFields.size,
+                  clear: () => {
+                    for (const f of pinnedFields) togglePin(f);
+                  },
+                }
+              : null
+          }
+          sidebarCollapsed={sidebarCollapsed}
+          toggleSidebar={() => setSidebarCollapsed((v) => !v)}
+        />
 
-      <div className="flex-1 min-h-0 flex">
-        <FieldSplitLayout
-          storageKey="highlighted-split-layout"
-          collapsed={sidebarCollapsed}
-          sidebar={sidebar}
-        >
-          {pinnedOverflow && <PinnedOverflowNote total={pinMatches.length} />}
-          {/*
+        <div className="flex-1 min-h-0 flex">
+          <FieldSplitLayout storageKey="highlighted-split-layout" collapsed={sidebarCollapsed} sidebar={sidebar}>
+            {pinnedOverflow && <PinnedOverflowNote total={pinMatches.length} />}
+            {/*
             Extraction directives that ran against these events and produced no
             field — the case where this tab otherwise shows an event with
             nothing highlighted and no reason why.
           */}
-          <div className="mb-2">
-            <DirectiveNoOpList events={filteredItems.map(({ item }) => item.event)} phase="search-time" />
-          </div>
-          {filteredItems.map(({ item, globalIdx }, idx) => (
-            <HighlightedEventCard
-              key={globalIdx}
-              item={item}
-              globalIdx={globalIdx}
-              badges={eventBadgeCounts[idx] ?? NO_BADGES}
-              highlightColorMap={highlightColorMap}
-              fieldColorMap={fieldColorMap}
-              categories={categories}
-              pinnedFields={pinnedFields}
-              togglePin={togglePin}
-              setHoveredField={setHoveredField}
-            />
-          ))}
-        </FieldSplitLayout>
+            <div className="mb-2">
+              <DirectiveNoOpList events={filteredItems.map(({ item }) => item.event)} phase="search-time" />
+            </div>
+            {filteredItems.map(({ item, globalIdx }, idx) => (
+              <HighlightedEventCard
+                key={globalIdx}
+                item={item}
+                globalIdx={globalIdx}
+                badges={eventBadgeCounts[idx] ?? NO_BADGES}
+                highlightColorMap={highlightColorMap}
+                fieldColorMap={fieldColorMap}
+                categories={categories}
+                pinnedFields={pinnedFields}
+                togglePin={togglePin}
+                setHoveredField={setHoveredField}
+              />
+            ))}
+          </FieldSplitLayout>
+        </div>
       </div>
-    </div>
     </FieldFocusContext.Provider>
   );
 }
@@ -154,9 +160,8 @@ function PinnedOverflowNote({ total }: { total: number }) {
         border: '1px solid var(--color-border-subtle)',
       }}
     >
-      Showing the first {MAX_PINNED_ROWS.toLocaleString()} of{' '}
-      {total.toLocaleString()} events with a pinned field. Narrow the
-      set with the search box, or unpin to page through every event.
+      Showing the first {MAX_PINNED_ROWS.toLocaleString()} of {total.toLocaleString()} events with a pinned field.
+      Narrow the set with the search box, or unpin to page through every event.
     </div>
   );
 }

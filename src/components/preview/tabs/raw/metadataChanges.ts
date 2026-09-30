@@ -27,10 +27,10 @@ export function getMetadataChanges(event: ViewEvent, original: EventMetadata | u
   for (const key of Object.keys(DEST_KEY_LABELS) as (keyof EventMetadata)[]) {
     if (event.metadata[key] !== original[key] && event.metadata[key] !== '') {
       // The step that last set this key, which wrote the value shown.
-      const step = [...event.processingTrace].reverse().find(
-        (s) => s.metadataChanges?.some((change) => change.key === key) ?? false,
-      );
-      const transform = step ? step.processor.split(':').pop() ?? null : null;
+      const step = [...event.processingTrace]
+        .reverse()
+        .find((s) => s.metadataChanges?.some((change) => change.key === key) ?? false);
+      const transform = step ? (step.processor.split(':').pop() ?? null) : null;
       changes.push({ field: key, from: original[key] || '(default)', to: event.metadata[key], transform });
     }
   }

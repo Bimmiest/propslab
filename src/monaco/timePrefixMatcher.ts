@@ -54,11 +54,7 @@ export type PrefixMatchOutcome =
   /** The caller's token was cancelled first. */
   | { status: 'cancelled' };
 
-export type PrefixMatcher = (
-  pattern: string,
-  sample: string,
-  token?: CancellationLike,
-) => Promise<PrefixMatchOutcome>;
+export type PrefixMatcher = (pattern: string, sample: string, token?: CancellationLike) => Promise<PrefixMatchOutcome>;
 
 interface Pending {
   /** Null once the caller cancelled: the request stays in flight so a hang is still reaped. */

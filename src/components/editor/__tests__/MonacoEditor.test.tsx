@@ -38,19 +38,15 @@ function mount(value: string, modelKey?: string) {
       handle.instance = instance;
     },
   });
-  const view = render(
-    <MonacoEditor {...props(value)} />,
-  );
+  const view = render(<MonacoEditor {...props(value)} />);
   return {
     handle,
-    setValue: (v: string) =>
-      view.rerender(<MonacoEditor {...props(v)} />),
+    setValue: (v: string) => view.rerender(<MonacoEditor {...props(v)} />),
     unmount: view.unmount,
   };
 }
 
-const typeText = (instance: editor.IStandaloneCodeEditor, text: string) =>
-  instance.trigger('test', 'type', { text });
+const typeText = (instance: editor.IStandaloneCodeEditor, text: string) => instance.trigger('test', 'type', { text });
 const undo = (instance: editor.IStandaloneCodeEditor) => instance.trigger('test', 'undo', null);
 
 beforeEach(() => resetModelRegistry());

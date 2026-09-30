@@ -45,7 +45,13 @@ describe('applyTransforms — DEST_KEY=_raw data-loss warning', () => {
       FORMAT: '$1',
       DEST_KEY: '_raw',
     });
-    const e = applyTransforms([event('connect from 10.0.0.1 port 443 with details')], transformsDir('mask'), conf, 'index-time', runCtx(FIXED_NOW, diags))[0]!;
+    const e = applyTransforms(
+      [event('connect from 10.0.0.1 port 443 with details')],
+      transformsDir('mask'),
+      conf,
+      'index-time',
+      runCtx(FIXED_NOW, diags),
+    )[0]!;
     expect(e._raw).toBe('10.0.0.1'); // whole event replaced by the capture
     expect(diags.some(lossMsg)).toBe(true);
   });
@@ -57,7 +63,13 @@ describe('applyTransforms — DEST_KEY=_raw data-loss warning', () => {
       FORMAT: '$1REDACTED$3',
       DEST_KEY: '_raw',
     });
-    const e = applyTransforms([event('connect from 10.0.0.1 port 443')], transformsDir('mask'), conf, 'index-time', runCtx(FIXED_NOW, diags))[0]!;
+    const e = applyTransforms(
+      [event('connect from 10.0.0.1 port 443')],
+      transformsDir('mask'),
+      conf,
+      'index-time',
+      runCtx(FIXED_NOW, diags),
+    )[0]!;
     expect(e._raw).toBe('connect from REDACTED port 443');
     expect(diags.some(lossMsg)).toBe(false);
   });
@@ -65,11 +77,7 @@ describe('applyTransforms — DEST_KEY=_raw data-loss warning', () => {
   it('warns at most once per stanza across many events', () => {
     const diags: ValidationDiagnostic[] = [];
     const conf = transformsConf('mask', { REGEX: '(?<a>\\d+)', FORMAT: '$1', DEST_KEY: '_raw' });
-    const events = [
-      event('aaaa 1 bbbb cccc dddd'),
-      event('eeee 2 ffff gggg hhhh'),
-      event('iiii 3 jjjj kkkk llll'),
-    ];
+    const events = [event('aaaa 1 bbbb cccc dddd'), event('eeee 2 ffff gggg hhhh'), event('iiii 3 jjjj kkkk llll')];
     applyTransforms(events, transformsDir('mask'), conf, 'index-time', runCtx(FIXED_NOW, diags));
     expect(diags.filter(lossMsg)).toHaveLength(1);
   });
@@ -84,7 +92,13 @@ describe('applyTransforms — unknown DEST_KEY warning (SEM-11)', () => {
   it('does not warn at run time for a key outside the documented set, and writes no field', () => {
     const diags: ValidationDiagnostic[] = [];
     const conf = transformsConf('route', { REGEX: '(.*)', FORMAT: '$1', DEST_KEY: 'MetaData:Bogus' });
-    const out = applyTransforms([event('hello')], transformsDir('route'), conf, 'index-time', runCtx(FIXED_NOW, diags))[0]!;
+    const out = applyTransforms(
+      [event('hello')],
+      transformsDir('route'),
+      conf,
+      'index-time',
+      runCtx(FIXED_NOW, diags),
+    )[0]!;
     expect(diags).toEqual([]);
     expect(out.fields['MetaData:Bogus']).toBeUndefined();
   });
@@ -161,7 +175,9 @@ describe('applyTransforms — index-time extraction without WRITE_META (SEM-7)',
   it('does NOT warn for the same extraction at search time (REPORT)', () => {
     const diags: ValidationDiagnostic[] = [];
     const conf = transformsConf('grab', { REGEX: '(?<user>\\w+)' });
-    const reportDir: ConfDirective[] = [{ key: 'REPORT-x', value: 'grab', line: 1, directiveType: 'REPORT', className: 'x' }];
+    const reportDir: ConfDirective[] = [
+      { key: 'REPORT-x', value: 'grab', line: 1, directiveType: 'REPORT', className: 'x' },
+    ];
     applyTransforms([event('alice')], reportDir, conf, 'search-time', runCtx(FIXED_NOW, diags));
     expect(diags.some((d) => d.message.includes('no effect'))).toBe(false);
   });
@@ -172,7 +188,13 @@ describe('applyTransforms — index-time extraction without WRITE_META (SEM-7)',
   it('does not add the fields to the event, while still warning and tracing them', () => {
     const diags: ValidationDiagnostic[] = [];
     const conf = transformsConf('grab', { REGEX: '(?<user>\\w+)' });
-    const e = applyTransforms([event('alice')], transformsDir('grab'), conf, 'index-time', runCtx(FIXED_NOW, diags))[0]!;
+    const e = applyTransforms(
+      [event('alice')],
+      transformsDir('grab'),
+      conf,
+      'index-time',
+      runCtx(FIXED_NOW, diags),
+    )[0]!;
     expect(e.fields['user']).toBeUndefined();
     expect(diags.some((d) => d.message.includes('no effect'))).toBe(true);
     const step = e.processingTrace.at(-1);
@@ -196,7 +218,9 @@ describe('applyTransforms — index-time extraction without WRITE_META (SEM-7)',
   it('extracts nothing from a REPORT with numbered groups and no FORMAT, and says why', () => {
     const diags: ValidationDiagnostic[] = [];
     const conf = transformsConf('word', { REGEX: '(\\w+)' });
-    const reportDir: ConfDirective[] = [{ key: 'REPORT-x', value: 'word', line: 1, directiveType: 'REPORT', className: 'x' }];
+    const reportDir: ConfDirective[] = [
+      { key: 'REPORT-x', value: 'word', line: 1, directiveType: 'REPORT', className: 'x' },
+    ];
     const e = applyTransforms([event('alice')], reportDir, conf, 'search-time', runCtx(FIXED_NOW, diags))[0]!;
     expect(e.fields).toEqual({});
     expect(diags.some((d) => d.message.includes('At search time FORMAT has no default'))).toBe(true);
@@ -211,7 +235,9 @@ describe('applyTransforms — index-time extraction without WRITE_META (SEM-7)',
   it('does not warn about a named-group REPORT whose group did not participate', () => {
     const diags: ValidationDiagnostic[] = [];
     const conf = transformsConf('opt', { REGEX: 'x(?<y>y)?' });
-    const reportDir: ConfDirective[] = [{ key: 'REPORT-x', value: 'opt', line: 1, directiveType: 'REPORT', className: 'x' }];
+    const reportDir: ConfDirective[] = [
+      { key: 'REPORT-x', value: 'opt', line: 1, directiveType: 'REPORT', className: 'x' },
+    ];
     applyTransforms([event('x')], reportDir, conf, 'search-time', runCtx(FIXED_NOW, diags));
     expect(diags.some((d) => d.message.includes('FORMAT has no default'))).toBe(false);
   });
@@ -232,14 +258,22 @@ describe('applyTransforms — INGEST_EVAL interleaving (SEM-2)', () => {
       stanza('extract', { REGEX: '(?<word>HELLO)', WRITE_META: 'true' }),
     );
     // List order: eval rewrites _raw, then the regex extracts from the new _raw.
-    const e = applyTransforms([event('original text')], transformsDir('rewrite, extract'), conf, 'index-time', runCtx(FIXED_NOW))[0]!;
+    const e = applyTransforms(
+      [event('original text')],
+      transformsDir('rewrite, extract'),
+      conf,
+      'index-time',
+      runCtx(FIXED_NOW),
+    )[0]!;
     expect(e._raw).toBe('HELLO');
     expect(e.fields['word']).toBe('HELLO');
   });
 
   it('does not run INGEST_EVAL on the search-time (REPORT) pass', () => {
     const conf = multiTransformsConf(stanza('rewrite', { INGEST_EVAL: '_raw="HELLO"' }));
-    const reportDir: ConfDirective[] = [{ key: 'REPORT-x', value: 'rewrite', line: 1, directiveType: 'REPORT', className: 'x' }];
+    const reportDir: ConfDirective[] = [
+      { key: 'REPORT-x', value: 'rewrite', line: 1, directiveType: 'REPORT', className: 'x' },
+    ];
     const e = applyTransforms([event('original text')], reportDir, conf, 'search-time', runCtx(FIXED_NOW))[0]!;
     expect(e._raw).toBe('original text');
   });
@@ -252,7 +286,13 @@ describe('applyTransforms — DEST_KEY is index-time only (#57)', () => {
 
   it('does not route a search-time REPORT to nullQueue', () => {
     const conf = transformsConf('drop', { REGEX: 'DEBUG', DEST_KEY: 'queue', FORMAT: 'nullQueue' });
-    const out = applyTransforms([event('DEBUG something')], reportDir('drop'), conf, 'search-time', runCtx(FIXED_NOW))[0]!;
+    const out = applyTransforms(
+      [event('DEBUG something')],
+      reportDir('drop'),
+      conf,
+      'search-time',
+      runCtx(FIXED_NOW),
+    )[0]!;
     expect(out._meta._queue).toBeUndefined();
   });
 
@@ -268,7 +308,13 @@ describe('applyTransforms — DEST_KEY is index-time only (#57)', () => {
 
   it('does not replace _raw from a search-time REPORT', () => {
     const conf = transformsConf('mask', { REGEX: '(\\w+)', DEST_KEY: '_raw', FORMAT: '$1' });
-    const out = applyTransforms([event('keep all of this')], reportDir('mask'), conf, 'search-time', runCtx(FIXED_NOW))[0]!;
+    const out = applyTransforms(
+      [event('keep all of this')],
+      reportDir('mask'),
+      conf,
+      'search-time',
+      runCtx(FIXED_NOW),
+    )[0]!;
     expect(out._raw).toBe('keep all of this');
   });
 
@@ -279,7 +325,13 @@ describe('applyTransforms — DEST_KEY is index-time only (#57)', () => {
       FORMAT: 'user::$1',
       DEST_KEY: 'queue',
     });
-    const out = applyTransforms([event('user=alice')], reportDir('r'), conf, 'search-time', runCtx(FIXED_NOW, diags))[0]!;
+    const out = applyTransforms(
+      [event('user=alice')],
+      reportDir('r'),
+      conf,
+      'search-time',
+      runCtx(FIXED_NOW, diags),
+    )[0]!;
     expect(out.fields['user']).toBe('alice');
     expect(out._meta._queue).toBeUndefined();
     expect(diags.some((d) => d.message.includes('DEST_KEY is index-time only'))).toBe(true);
@@ -287,7 +339,13 @@ describe('applyTransforms — DEST_KEY is index-time only (#57)', () => {
 
   it('still routes at index time', () => {
     const conf = transformsConf('drop', { REGEX: 'DEBUG', DEST_KEY: 'queue', FORMAT: 'nullQueue' });
-    const out = applyTransforms([event('DEBUG something')], transformsDir('drop'), conf, 'index-time', runCtx(FIXED_NOW))[0]!;
+    const out = applyTransforms(
+      [event('DEBUG something')],
+      transformsDir('drop'),
+      conf,
+      'index-time',
+      runCtx(FIXED_NOW),
+    )[0]!;
     expect(out._meta._queue).toBe('nullQueue');
   });
 });
@@ -300,7 +358,13 @@ describe('applyTransforms — SOURCE_KEY reads pipeline metadata (#53)', () => {
       DEST_KEY: 'MetaData:Sourcetype',
       FORMAT: 'sourcetype::forced',
     });
-    const out = applyTransforms([event('anything')], transformsDir('force_sourcetype'), conf, 'index-time', runCtx(FIXED_NOW))[0]!;
+    const out = applyTransforms(
+      [event('anything')],
+      transformsDir('force_sourcetype'),
+      conf,
+      'index-time',
+      runCtx(FIXED_NOW),
+    )[0]!;
     expect(out.metadata.sourcetype).toBe('forced');
   });
 
@@ -380,8 +444,7 @@ describe('applyTransforms — search-time-only attributes reached index-time', (
     return [{ key: 'REPORT-x', value: stanzaName, line: 1, directiveType: 'REPORT', className: 'x' }];
   }
 
-  const warnMsg = (d: ValidationDiagnostic) =>
-    d.message.includes('valid only for search-time field extractions');
+  const warnMsg = (d: ValidationDiagnostic) => d.message.includes('valid only for search-time field extractions');
 
   it('warns when a DELIMS stanza is referenced by TRANSFORMS-', () => {
     const diags: ValidationDiagnostic[] = [];
@@ -402,7 +465,10 @@ describe('applyTransforms — search-time-only attributes reached index-time', (
     const conf = transformsConf('pairs', { DELIMS: '"|", "="' });
     applyTransforms(
       [event('a=1|b=2'), event('c=3|d=4'), event('e=5|f=6')],
-      transformsDir('pairs'), conf, 'index-time', runCtx(FIXED_NOW, diags),
+      transformsDir('pairs'),
+      conf,
+      'index-time',
+      runCtx(FIXED_NOW, diags),
     );
     expect(diags.filter(warnMsg)).toHaveLength(1);
   });
@@ -410,7 +476,10 @@ describe('applyTransforms — search-time-only attributes reached index-time', (
   it('names every offending attribute, not just the first', () => {
     const diags: ValidationDiagnostic[] = [];
     const conf = transformsConf('kv', {
-      REGEX: '(\\w+)=(\\w+)', FORMAT: '$1::$2', MV_ADD: 'true', CLEAN_KEYS: 'false',
+      REGEX: '(\\w+)=(\\w+)',
+      FORMAT: '$1::$2',
+      MV_ADD: 'true',
+      CLEAN_KEYS: 'false',
     });
     applyTransforms([event('a=1')], transformsDir('kv'), conf, 'index-time', runCtx(FIXED_NOW, diags));
 
@@ -487,8 +556,7 @@ describe('#87 — CLONE_SOURCETYPE', () => {
   // events receive index-time transformations and sed commands for all
   // transforms that match its new host, source, or source type."
   describe('index-time processing of the clone (#282)', () => {
-    const cloneProps =
-      '[orig]\nTRANSFORMS-clone = do_clone\n\n[masked]\nSEDCMD-mask = s/\\d{4}-\\d{4}/XXXX-XXXX/g\n';
+    const cloneProps = '[orig]\nTRANSFORMS-clone = do_clone\n\n[masked]\nSEDCMD-mask = s/\\d{4}-\\d{4}/XXXX-XXXX/g\n';
     const cloneTransforms = '[do_clone]\nREGEX = .\nCLONE_SOURCETYPE = masked\n';
     const runOrig = (p: string, t: string) =>
       runPipeline('card 1234-5678\n', { ...metadata, sourcetype: 'orig' }, p, t, {

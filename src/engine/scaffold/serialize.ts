@@ -104,7 +104,8 @@ export function upsertDirectiveInStanza(propsText: string, stanzaName: string, k
     // of the block rather than detached after a blank-line gap.
     let insertAt = end;
     // A blank line that ends a continuation belongs to that directive.
-    while (insertAt > headerIdx + 1 && !continued[insertAt - 1] && (lines[insertAt - 1] ?? '').trim() === '') insertAt--;
+    while (insertAt > headerIdx + 1 && !continued[insertAt - 1] && (lines[insertAt - 1] ?? '').trim() === '')
+      insertAt--;
     lines.splice(insertAt, 0, directiveLine);
   }
   return lines.join('\n');

@@ -1,11 +1,6 @@
 import type { SplunkEvent, ConfDirective } from '../types';
 import { validateRegex } from '../../utils/splunkRegex';
-import {
-  parseTimestampDetailed,
-  parseTzAlias,
-  type CalendarDate,
-  type ParsedTimestamp,
-} from '../../utils/strftime';
+import { parseTimestampDetailed, parseTzAlias, type CalendarDate, type ParsedTimestamp } from '../../utils/strftime';
 import { atDirective } from '../parser/provenance';
 import { setField } from '../utils/fieldBag';
 import { effectiveBool, effectiveDirective, effectiveValue } from '../utils/directiveValues';
@@ -48,8 +43,18 @@ export const EXTRA_TIME_FIELD_NAMES = [
 ] as const;
 
 const MONTH_NAMES = [
-  'january', 'february', 'march', 'april', 'may', 'june',
-  'july', 'august', 'september', 'october', 'november', 'december',
+  'january',
+  'february',
+  'march',
+  'april',
+  'may',
+  'june',
+  'july',
+  'august',
+  'september',
+  'october',
+  'november',
+  'december',
 ];
 const WEEKDAY_NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 
@@ -123,10 +128,7 @@ const BOUND_DEFAULTS = {
 
 const DAY_MS = 86_400_000;
 
-function numericDirective(
-  directives: ConfDirective[],
-  key: keyof typeof BOUND_DEFAULTS,
-): number {
+function numericDirective(directives: ConfDirective[], key: keyof typeof BOUND_DEFAULTS): number {
   const raw = effectiveValue(directives, key);
   if (raw === undefined) return BOUND_DEFAULTS[key];
   const parsed = parseInt(raw, 10);
@@ -255,11 +257,16 @@ function warnBrokenPrefix(
 
 function notFound(search: Exclude<TimestampSearch, { found: true }>): string {
   switch (search.reason) {
-    case 'prefix-broken': return 'TIME_PREFIX could not be compiled, so it never matches';
-    case 'prefix-unmatched': return 'TIME_PREFIX did not match this event';
-    case 'format-unmatched': return 'TIME_FORMAT did not match this event';
-    case 'unparsable': return `Could not parse "${search.text}" with TIME_FORMAT`;
-    case 'unrecognised': return 'No recognisable timestamp in this event';
+    case 'prefix-broken':
+      return 'TIME_PREFIX could not be compiled, so it never matches';
+    case 'prefix-unmatched':
+      return 'TIME_PREFIX did not match this event';
+    case 'format-unmatched':
+      return 'TIME_FORMAT did not match this event';
+    case 'unparsable':
+      return `Could not parse "${search.text}" with TIME_FORMAT`;
+    case 'unrecognised':
+      return 'No recognisable timestamp in this event';
   }
 }
 
@@ -272,7 +279,10 @@ interface TimestampBounds {
 }
 
 /** Options the parser needs to re-read a TIME_FORMAT match. */
-type ParseOptions = Pick<NonNullable<Parameters<typeof parseTimestampDetailed>[2]>, 'tz' | 'onUnresolvedTz' | 'tzAlias' | 'now'>;
+type ParseOptions = Pick<
+  NonNullable<Parameters<typeof parseTimestampDetailed>[2]>,
+  'tz' | 'onUnresolvedTz' | 'tzAlias' | 'now'
+>;
 
 interface BatchConfig {
   now: Date;
@@ -462,10 +472,12 @@ class TimestampBatch {
       return { parsed: onToday, how: `date taken from the clock (${source})` };
     }
     const yesterday = reparse(candidate(1));
-    return yesterday && {
-      parsed: yesterday,
-      how: `date taken from the clock as yesterday, being 3h or more ahead of it (${source})`,
-    };
+    return (
+      yesterday && {
+        parsed: yesterday,
+        how: `date taken from the clock as yesterday, being 3h or more ahead of it (${source})`,
+      }
+    );
   }
 
   /**
@@ -622,7 +634,13 @@ export function extractTimestamps(
   }
 
   const batch = new TimestampBatch({
-    now, extraMode, datelessFromSystem, bounds, parseOptions, boundsAnchor: timeFormatDir ?? tzDir, diagnostics,
+    now,
+    extraMode,
+    datelessFromSystem,
+    bounds,
+    parseOptions,
+    boundsAnchor: timeFormatDir ?? tzDir,
+    diagnostics,
   });
   return events.map((event) => batch.place(event, finder.find(event._raw)));
 }

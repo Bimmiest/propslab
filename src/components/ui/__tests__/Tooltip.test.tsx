@@ -17,7 +17,9 @@ describe('Tooltip', () => {
       </RadixTooltip.Provider>,
     );
     act(() => screen.getByRole('button', { name: 'Trigger' }).focus());
-    const content = screen.getAllByText('A long explanation worth reading')[0]!.closest('[data-radix-popper-content-wrapper] > *');
+    const content = screen
+      .getAllByText('A long explanation worth reading')[0]!
+      .closest('[data-radix-popper-content-wrapper] > *');
     expect(content).not.toBeNull();
     expect(content).not.toHaveClass('pointer-events-none');
   });

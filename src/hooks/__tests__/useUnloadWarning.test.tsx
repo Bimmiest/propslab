@@ -36,7 +36,12 @@ describe('useUnloadWarning', () => {
     expect(fireBeforeUnload().defaultPrevented).toBe(true);
     act(() => {
       const s = useAppStore.getState();
-      s.loadInputs({ rawData: s.rawData, propsConf: s.propsConf, transformsConf: s.transformsConf, metadata: s.metadata });
+      s.loadInputs({
+        rawData: s.rawData,
+        propsConf: s.propsConf,
+        transformsConf: s.transformsConf,
+        metadata: s.metadata,
+      });
     });
     expect(fireBeforeUnload().defaultPrevented).toBe(false);
   });

@@ -25,7 +25,10 @@ export function compileWildcard(pattern: string): WildcardMatcher {
   const head = pattern.slice(0, firstStar);
   const tail = pattern.slice(lastStar + 1);
   // Adjacent stars leave empty segments, which match anywhere.
-  const middle = pattern.slice(firstStar + 1, lastStar).split('*').filter(Boolean);
+  const middle = pattern
+    .slice(firstStar + 1, lastStar)
+    .split('*')
+    .filter(Boolean);
   const fixed = head.length + tail.length;
 
   return (s) => {

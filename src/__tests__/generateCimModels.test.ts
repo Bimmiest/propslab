@@ -61,12 +61,23 @@ const FIXTURE = fixture('cim');
 
 const FIXTURE_INCLUDE: Record<string, Spec> = {
   'Widgets/All_Widgets': {
-    name: 'Widgets', displayName: 'Widgets', description: 'Invented widgets', tags: ['widget'],
+    name: 'Widgets',
+    displayName: 'Widgets',
+    description: 'Invented widgets',
+    tags: ['widget'],
     note: 'A note becomes a comment above the entry.',
   },
-  'Gadgets/All_Gadgets': { name: 'Gadgets', displayName: 'Gadgets', description: 'Invented gadgets', tags: ['gadget', 'device'] },
+  'Gadgets/All_Gadgets': {
+    name: 'Gadgets',
+    displayName: 'Gadgets',
+    description: 'Invented gadgets',
+    tags: ['gadget', 'device'],
+  },
   'Ticket_Management/All_Ticket_Management': {
-    name: 'Ticket_Management', displayName: 'Tickets', description: 'Invented tickets', tags: ['ticketing'],
+    name: 'Ticket_Management',
+    displayName: 'Tickets',
+    description: 'Invented tickets',
+    tags: ['ticketing'],
   },
 };
 
@@ -175,6 +186,10 @@ describe('generate-cim-models: the committed cimModelsData.ts', () => {
   });
 
   it('lists exactly the datasets the generator would include', () => {
-    expect(CIM_MODELS.map((m) => m.name).sort()).toEqual(Object.values(INCLUDE).map((s) => s.name).sort());
+    expect(CIM_MODELS.map((m) => m.name).sort()).toEqual(
+      Object.values(INCLUDE)
+        .map((s) => s.name)
+        .sort(),
+    );
   });
 });

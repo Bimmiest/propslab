@@ -452,18 +452,12 @@ describe('applyRegexTransform — FORMAT is tokenized before capture substitutio
   });
 
   it('does not synthesize a phantom field from a captured "::"', () => {
-    const r = applyRegexTransform(
-      event('data=a::b'),
-      stanza('t', { REGEX: 'data=(.*)$', FORMAT: 'payload::$1' }),
-    );
+    const r = applyRegexTransform(event('data=a::b'), stanza('t', { REGEX: 'data=(.*)$', FORMAT: 'payload::$1' }));
     expect(r.fields).toEqual({ payload: 'a::b' });
   });
 
   it('supports $N on both sides of the separator', () => {
-    const r = applyRegexTransform(
-      event('color=blue'),
-      stanza('t', { REGEX: '(\\w+)=(\\w+)', FORMAT: '$1::$2' }),
-    );
+    const r = applyRegexTransform(event('color=blue'), stanza('t', { REGEX: '(\\w+)=(\\w+)', FORMAT: '$1::$2' }));
     expect(r.fields['color']).toBe('blue');
   });
 
@@ -477,10 +471,7 @@ describe('applyRegexTransform — FORMAT is tokenized before capture substitutio
   });
 
   it('keeps quoted literal values intact', () => {
-    const r = applyRegexTransform(
-      event('x=1'),
-      stanza('t', { REGEX: 'x=(\\d)', FORMAT: 'tag::"a b" num::$1' }),
-    );
+    const r = applyRegexTransform(event('x=1'), stanza('t', { REGEX: 'x=(\\d)', FORMAT: 'tag::"a b" num::$1' }));
     expect(r.fields['tag']).toBe('a b');
     expect(r.fields['num']).toBe('1');
   });
@@ -632,10 +623,7 @@ describe('#285 — REPEAT_MATCH gates repeated matching at index time only', () 
   });
 
   it('runs a DEST_KEY = <field> REGEX once at index time without REPEAT_MATCH', () => {
-    const r = applyRegexTransform(
-      event('foo bar'),
-      stanza('t', { REGEX: '(\\w+)', FORMAT: '$1', DEST_KEY: 'words' }),
-    );
+    const r = applyRegexTransform(event('foo bar'), stanza('t', { REGEX: '(\\w+)', FORMAT: '$1', DEST_KEY: 'words' }));
     expect(r.destValue).toBe('foo');
   });
 
@@ -671,10 +659,7 @@ describe('#285 — CLEAN_KEYS applies to _KEY_n names', () => {
 describe('#285 — MV_ADD agrees between named groups and FORMAT', () => {
   it('accumulates named groups and FORMAT pairs alike', () => {
     const named = searchTime(event('n=1 n=2'), stanza('t', { REGEX: 'n=(?<n>\\d+)', MV_ADD: 'true' }));
-    const format = searchTime(
-      event('n=1 n=2'),
-      stanza('t', { REGEX: 'n=(\\d+)', FORMAT: 'n::$1', MV_ADD: 'true' }),
-    );
+    const format = searchTime(event('n=1 n=2'), stanza('t', { REGEX: 'n=(\\d+)', FORMAT: 'n::$1', MV_ADD: 'true' }));
     expect(named.fields['n']).toEqual(['1', '2']);
     expect(format.fields['n']).toEqual(named.fields['n']);
   });

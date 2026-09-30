@@ -85,12 +85,14 @@ describe('copyQuietly', () => {
   // The runner's process, reached through a local type: this file is compiled
   // under tsconfig.app.json, whose `types` is browser-only and deliberately
   // excludes @types/node.
-  const runner = (globalThis as unknown as {
-    process: {
-      on(event: 'unhandledRejection', listener: () => void): void;
-      off(event: 'unhandledRejection', listener: () => void): void;
-    };
-  }).process;
+  const runner = (
+    globalThis as unknown as {
+      process: {
+        on(event: 'unhandledRejection', listener: () => void): void;
+        off(event: 'unhandledRejection', listener: () => void): void;
+      };
+    }
+  ).process;
 
   // Context-menu items have nowhere to report a failed copy, but the rejection
   // still has to be settled — left floating it reaches the console as an

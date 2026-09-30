@@ -1,6 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import {
-  addBlockReason, alignResults, buildGroupColorMap, classNameError, countMatched, extractNamedGroups, highlightSegments,
+  addBlockReason,
+  alignResults,
+  buildGroupColorMap,
+  classNameError,
+  countMatched,
+  extractNamedGroups,
+  highlightSegments,
 } from '../regexLogic';
 import { matchInputs, type RegexMatchInfo } from '../../../../../engine/regexMatch';
 import { fieldColorAt } from '../../shared/fieldColors';
@@ -12,7 +18,10 @@ function matchOf(pattern: string, raw: string): RegexMatchInfo {
   return info;
 }
 
-const colors = new Map([['ip', 'red'], ['m', 'blue']]);
+const colors = new Map([
+  ['ip', 'red'],
+  ['m', 'blue'],
+]);
 /** Segments as `kind:text`, the part of each that is drawn. */
 const drawn = (raw: string, pattern: string) =>
   highlightSegments(raw, matchOf(pattern, raw), colors).map((s) => `${s.kind}:${s.text}`);
@@ -30,7 +39,12 @@ describe('highlightSegments', () => {
     const raw = 'x 10.0.0.1 GET /a';
     const segments = highlightSegments(raw, matchOf('(?P<ip>[\\d.]+) (?P<m>\\w+) /', raw), colors);
     expect(segments.map((s) => `${s.kind}:${s.text}`)).toEqual([
-      'outside:x ', 'group:10.0.0.1', 'between: ', 'group:GET', 'between: /', 'outside:a',
+      'outside:x ',
+      'group:10.0.0.1',
+      'between: ',
+      'group:GET',
+      'between: /',
+      'outside:a',
     ]);
     expect(segments[1]).toMatchObject({ key: 'grp-ip', name: 'ip', color: 'red' });
     expect(segments[2]!.key).toBe('mid-10');
@@ -130,6 +144,9 @@ describe('named groups', () => {
 
   it('colours groups by position in the theme palette', () => {
     const map = buildGroupColorMap(['a', 'b'], 'dark');
-    expect([...map]).toEqual([['a', fieldColorAt(0, 'dark')], ['b', fieldColorAt(1, 'dark')]]);
+    expect([...map]).toEqual([
+      ['a', fieldColorAt(0, 'dark')],
+      ['b', fieldColorAt(1, 'dark')],
+    ]);
   });
 });

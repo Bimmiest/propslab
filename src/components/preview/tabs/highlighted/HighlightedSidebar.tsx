@@ -9,7 +9,15 @@ import type { FieldNode } from '../shared/fieldTreeUtils';
 import { useActiveFields, type FieldFocusStore } from '../shared/useFieldFocus';
 
 export function HighlightedSidebar({
-  fieldCount, tree, allGroupNames, collapsed, setAllCollapsed, toggleGroup, focusStore, pinnedFields, onCollapse,
+  fieldCount,
+  tree,
+  allGroupNames,
+  collapsed,
+  setAllCollapsed,
+  toggleGroup,
+  focusStore,
+  pinnedFields,
+  onCollapse,
 }: {
   fieldCount: number;
   tree: FieldNode[];

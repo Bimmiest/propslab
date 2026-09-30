@@ -19,22 +19,13 @@ import type { RunContext, DiagnosticSink, ExplanationBudget } from '../runContex
  *   `fieldOffsets`, which the highlighter reads. Defaults to `true`; a caller
  *   that renders no highlights can pass `false` to skip the bookkeeping.
  */
-export function extractFields(
-  events: SplunkEvent[],
-  directives: ConfDirective[],
-  ctx: RunContext,
-): SplunkEvent[] {
+export function extractFields(events: SplunkEvent[], directives: ConfDirective[], ctx: RunContext): SplunkEvent[] {
   const { diagnostics, captureOffsets } = ctx;
-  const extractDirectives = directives
-    .filter((d) => d.directiveType === 'EXTRACT')
-    .sort(byClassName);
+  const extractDirectives = directives.filter((d) => d.directiveType === 'EXTRACT').sort(byClassName);
 
   if (extractDirectives.length === 0) return events;
 
-  const limits = extractionLimits(
-    effectiveValue(directives, 'MATCH_LIMIT'),
-    effectiveValue(directives, 'DEPTH_LIMIT'),
-  );
+  const limits = extractionLimits(effectiveValue(directives, 'MATCH_LIMIT'), effectiveValue(directives, 'DEPTH_LIMIT'));
 
   const extractions = extractDirectives.map((dir): Extraction => {
     const { pattern, sourceField } = parseExtractValue(dir.value);
@@ -65,7 +56,12 @@ export function extractFields(
       noOps: [],
     };
     for (const extraction of extractions) {
-      runExtraction(event, extraction, state, { diagnostics, captureOffsets, reportedStrippedRefs, explanations: ctx.explanations });
+      runExtraction(event, extraction, state, {
+        diagnostics,
+        captureOffsets,
+        reportedStrippedRefs,
+        explanations: ctx.explanations,
+      });
     }
     return {
       ...event,
@@ -118,7 +114,11 @@ function noteNoOp(state: ExtractionState, dir: ConfDirective, reason: NoOpReason
  * Warn when an EXTRACT reads `in _field` and the event has `field`: index-time
  * extractions strip leading underscores, so Splunk resolves the name without it.
  */
-function warnStrippedSourceRef(fields: SplunkEvent['fields'], extraction: Extraction, options: ExtractionOptions): void {
+function warnStrippedSourceRef(
+  fields: SplunkEvent['fields'],
+  extraction: Extraction,
+  options: ExtractionOptions,
+): void {
   const { diagnostics, reportedStrippedRefs } = options;
   const { sourceField, directive } = extraction;
   if (
@@ -209,7 +209,12 @@ function storeGroups(
 }
 
 /** Run one EXTRACT against one event. */
-function runExtraction(event: SplunkEvent, extraction: Extraction, state: ExtractionState, options: ExtractionOptions): void {
+function runExtraction(
+  event: SplunkEvent,
+  extraction: Extraction,
+  state: ExtractionState,
+  options: ExtractionOptions,
+): void {
   const { directive, regex, sourceField } = extraction;
   if (!regex) {
     const { pattern } = parseExtractValue(directive.value);
@@ -234,7 +239,9 @@ function runExtraction(event: SplunkEvent, extraction: Extraction, state: Extrac
   }
   if (!m || !m.groups) {
     const { pattern } = parseExtractValue(directive.value);
-    const explain = options.explanations.take(noOpDirectiveKey({ file: 'props.conf', line: directive.line, directive: directive.key }));
+    const explain = options.explanations.take(
+      noOpDirectiveKey({ file: 'props.conf', line: directive.line, directive: directive.key }),
+    );
     noteNoOp(state, directive, explainNoMatch(pattern, sourceValue, explain));
     return;
   }

@@ -105,10 +105,7 @@ describe('MAX_DIFF_SECS_AGO / MAX_DIFF_SECS_HENCE through the pipeline', () => {
     // so the earlier-than-allowed jump is refused and the previous event's
     // time is used.
     const raw = '2026-08-03T10:00:00 first\n08/03/2026 08:00:00 two hours earlier';
-    expect(times(raw, 'MAX_DIFF_SECS_AGO = 3600\n')).toEqual([
-      '2026-08-03T10:00:00.000Z',
-      '2026-08-03T10:00:00.000Z',
-    ]);
+    expect(times(raw, 'MAX_DIFF_SECS_AGO = 3600\n')).toEqual(['2026-08-03T10:00:00.000Z', '2026-08-03T10:00:00.000Z']);
   });
 });
 

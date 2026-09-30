@@ -111,7 +111,7 @@ export const TRANSFORMS_SPEC_COMPLETENESS: DirectiveDefinition[] = [
     key: 'metrics.disabled',
     description:
       'In [_ruleset:global_settings], whether per-transform-rule metrics are collected. ' +
-      'When on, the indexer reports each rule\'s event count, raw size and routing to ' +
+      "When on, the indexer reports each rule's event count, raw size and routing to " +
       'metrics.log.',
     example: 'metrics.disabled = false',
     defaultValue: 'true',
@@ -125,7 +125,7 @@ export const TRANSFORMS_SPEC_COMPLETENESS: DirectiveDefinition[] = [
     key: 'metrics.report_interval',
     description:
       'How often per-transform-rule metrics are written, as a duration such as 30s or 1m. ' +
-      'Rounded to a multiple of the interval in limits.conf\'s [metrics] stanza.',
+      "Rounded to a multiple of the interval in limits.conf's [metrics] stanza.",
     example: 'metrics.report_interval = 1m',
     defaultValue: '30s',
     category: 'Performance',
@@ -181,7 +181,7 @@ export const TRANSFORMS_SPEC_COMPLETENESS: DirectiveDefinition[] = [
     description:
       'Which fields of a static CSV lookup are indexed and therefore searchable. ' +
       'Restricting the list makes the lookup faster. Defaults to every field in the ' +
-      'file\'s header.',
+      "file's header.",
     example: 'index_fields_list = host, ip',
     defaultValue: '',
     category: 'Lookups',
@@ -193,8 +193,7 @@ export const TRANSFORMS_SPEC_COMPLETENESS: DirectiveDefinition[] = [
   {
     key: 'python.version',
     description:
-      'Deprecated in favour of python.required. For scripted lookups, which Python the ' +
-      'script runs under.',
+      'Deprecated in favour of python.required. For scripted lookups, which Python the ' + 'script runs under.',
     example: 'python.version = python3',
     defaultValue: '',
     category: 'Lookups',
@@ -222,9 +221,7 @@ export const TRANSFORMS_SPEC_COMPLETENESS: DirectiveDefinition[] = [
   },
   {
     key: 'max_offset_secs',
-    description:
-      'For a temporal lookup, how far after a lookup entry\'s time an event may fall and ' +
-      'still match.',
+    description: "For a temporal lookup, how far after a lookup entry's time an event may fall and " + 'still match.',
     example: 'max_offset_secs = 3600',
     defaultValue: '2000000000',
     category: 'Lookups',
@@ -236,8 +233,7 @@ export const TRANSFORMS_SPEC_COMPLETENESS: DirectiveDefinition[] = [
   {
     key: 'min_offset_secs',
     description:
-      'For a temporal lookup, how far after a lookup entry\'s time an event must fall ' +
-      'before it may match.',
+      "For a temporal lookup, how far after a lookup entry's time an event must fall " + 'before it may match.',
     example: 'min_offset_secs = 60',
     defaultValue: '0',
     category: 'Lookups',
@@ -248,8 +244,7 @@ export const TRANSFORMS_SPEC_COMPLETENESS: DirectiveDefinition[] = [
   },
   {
     key: 'allow_caching',
-    description:
-      'Whether output from a scripted lookup may be cached.',
+    description: 'Whether output from a scripted lookup may be cached.',
     example: 'allow_caching = false',
     defaultValue: 'true',
     category: 'Lookups',
@@ -273,9 +268,7 @@ export const TRANSFORMS_SPEC_COMPLETENESS: DirectiveDefinition[] = [
   },
   {
     key: 'max_ext_batch',
-    description:
-      'The largest external batch size, between 1 and 1000. Applies only to KV Store ' +
-      'lookups.',
+    description: 'The largest external batch size, between 1 and 1000. Applies only to KV Store ' + 'lookups.',
     example: 'max_ext_batch = 300',
     defaultValue: '300',
     category: 'Lookups',
@@ -300,8 +293,7 @@ export const TRANSFORMS_SPEC_COMPLETENESS: DirectiveDefinition[] = [
   },
   {
     key: 'feature_id_element',
-    description:
-      'For a KMZ geospatial lookup, the XML path from the placemark down to its name.',
+    description: 'For a KMZ geospatial lookup, the XML path from the placemark down to its name.',
     example: 'feature_id_element = /Placemark/name',
     defaultValue: '/Placemark/name',
     category: 'Lookups',

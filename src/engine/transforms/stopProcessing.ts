@@ -48,7 +48,13 @@ export function evaluateStopCondition(
   // This runs once per event, and a config problem reported 500 times buries
   // everything else, so each message is reported once per run.
   const report = (level: ValidationDiagnostic['level'], message: string) => {
-    diagnostics.report(transformsMessageKey(message), { level, message, file: 'transforms.conf', ...atDirective(dir), directiveKey: dir.key });
+    diagnostics.report(transformsMessageKey(message), {
+      level,
+      message,
+      file: 'transforms.conf',
+      ...atDirective(dir),
+      directiveKey: dir.key,
+    });
   };
 
   try {

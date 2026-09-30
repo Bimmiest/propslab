@@ -34,7 +34,9 @@ describe('StatusBar', () => {
   });
 
   it('shows "Worker idle" after a worker run', () => {
-    useAppStore.setState({ processingResult: { events: [], eventCount: 0, fieldStats: EMPTY_FIELD_STATS } as unknown as ViewResult });
+    useAppStore.setState({
+      processingResult: { events: [], eventCount: 0, fieldStats: EMPTY_FIELD_STATS } as unknown as ViewResult,
+    });
     renderStatusBar();
     expect(screen.getByText('Worker idle')).toBeInTheDocument();
     expect(screen.queryByTestId('pipeline-main-thread')).toBeNull();
@@ -89,7 +91,13 @@ describe('StatusBar', () => {
       { level: 'warning', message: 'w1', file: 'props.conf' },
     ];
     useAppStore.setState({
-      processingResult: toViewResult({ events: [], originalRaw: '', eventCount: 0, processingSteps: [], inputMetadata: { index: 'main', host: '', source: '', sourcetype: '' } }),
+      processingResult: toViewResult({
+        events: [],
+        originalRaw: '',
+        eventCount: 0,
+        processingSteps: [],
+        inputMetadata: { index: 'main', host: '', source: '', sourcetype: '' },
+      }),
       validationDiagnostics: diags,
     });
     renderStatusBar();

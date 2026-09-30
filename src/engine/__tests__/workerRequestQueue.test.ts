@@ -39,10 +39,24 @@ function setup() {
   const flush = () => {
     while (deferred.length > 0) deferred.shift()!();
   };
-  return { serve, runs, skipped, deferred, rethrown, flush, failOn: (p: string) => { failOn = p; } };
+  return {
+    serve,
+    runs,
+    skipped,
+    deferred,
+    rethrown,
+    flush,
+    failOn: (p: string) => {
+      failOn = p;
+    },
+  };
 }
 
-const inputs = (inputsId: number, values: string[]): WorkerInputsMessage<string[]> => ({ type: 'inputs', inputsId, inputs: values });
+const inputs = (inputsId: number, values: string[]): WorkerInputsMessage<string[]> => ({
+  type: 'inputs',
+  inputsId,
+  inputs: values,
+});
 
 describe('createRequestQueue', () => {
   it('runs a plain request at once, with its own inputs', () => {
@@ -58,7 +72,10 @@ describe('createRequestQueue', () => {
     serve({ id: 1, pattern: 'p', inputsId: 1 });
     serve(inputs(2, ['c']));
     serve({ id: 2, pattern: 'p', inputsId: 2 });
-    expect(runs).toEqual([{ id: 1, inputs: ['a', 'b'] }, { id: 2, inputs: ['c'] }]);
+    expect(runs).toEqual([
+      { id: 1, inputs: ['a', 'b'] },
+      { id: 2, inputs: ['c'] },
+    ]);
   });
 
   it('gives a request naming inputs it does not have none', () => {

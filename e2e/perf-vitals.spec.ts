@@ -80,9 +80,15 @@ async function observeVitals(context: BrowserContext): Promise<void> {
         // An entry type this browser lacks: the read below fails on the zero.
       }
     };
-    observe('largest-contentful-paint', (entry) => { vitals.lcp = entry.startTime; });
-    observe('paint', (entry) => { if (entry.name === 'first-contentful-paint') vitals.fcp = entry.startTime; });
-    observe('longtask', (entry) => { vitals.longTasks.push({ start: entry.startTime, duration: entry.duration }); });
+    observe('largest-contentful-paint', (entry) => {
+      vitals.lcp = entry.startTime;
+    });
+    observe('paint', (entry) => {
+      if (entry.name === 'first-contentful-paint') vitals.fcp = entry.startTime;
+    });
+    observe('longtask', (entry) => {
+      vitals.longTasks.push({ start: entry.startTime, duration: entry.duration });
+    });
   });
 }
 
@@ -103,14 +109,21 @@ async function measureFirstLoad(context: BrowserContext): Promise<Vitals> {
   const finished: Promise<{ path: string; bytes: number }>[] = [];
   context.on('requestfinished', (request) => {
     finished.push(
-      request.sizes().then((s) => ({ path: new URL(request.url()).pathname, bytes: s.responseHeadersSize + s.responseBodySize })),
+      request
+        .sizes()
+        .then((s) => ({ path: new URL(request.url()).pathname, bytes: s.responseHeadersSize + s.responseBodySize })),
     );
   });
   await waitUntilUsable(page);
   const responses = await Promise.all(finished);
 
   const raw = await page.evaluate(
-    () => (window as unknown as { __vitals: { lcp: number; fcp: number; longTasks: { start: number; duration: number }[] } }).__vitals,
+    () =>
+      (
+        window as unknown as {
+          __vitals: { lcp: number; fcp: number; longTasks: { start: number; duration: number }[] };
+        }
+      ).__vitals,
   );
   await page.close();
   // A page that never painted must fail loudly, not measure as a fast one.

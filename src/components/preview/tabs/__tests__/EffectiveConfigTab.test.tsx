@@ -141,7 +141,9 @@ describe('EffectiveConfigTab — follows what the pipeline ran with (#347)', () 
     expect(container.textContent).not.toContain('changed since the pipeline last ran');
 
     act(() => useAppStore.getState().setPropsConf('[my_app]\nTRUNCATE = 123\n'));
-    act(() => { vi.advanceTimersByTime(1000); });
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
     expect(within(container).getByText('= 999')).toBeInTheDocument();
     expect(within(container).queryByText('= 123')).not.toBeInTheDocument();
     expect(within(container).getByRole('status')).toHaveTextContent('changed since the pipeline last ran');
@@ -169,7 +171,9 @@ describe('EffectiveConfigTab — follows what the pipeline ran with (#347)', () 
     act(() => useAppStore.getState().setPropsConf('[my_app]\nTRUNCATE = 123\n'));
     expect(within(container).getByText('= 999')).toBeInTheDocument();
     expect(within(container).queryByRole('status')).not.toBeInTheDocument();
-    act(() => { vi.advanceTimersByTime(300); });
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
     expect(within(container).getByText('= 123')).toBeInTheDocument();
   });
 });
