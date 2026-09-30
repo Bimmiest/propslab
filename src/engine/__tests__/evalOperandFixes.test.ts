@@ -1,6 +1,6 @@
 // Eval operand handling: trim's character set (#474), multivalue operands in
 // comparisons and IN (#475), and the expression parser's limits and literals
-// (#484).
+// (#485).
 //
 // Doc-derived (Splunk eval function and operator reference), not captured; no
 // fixture covers eval, so each assertion is kept to the documented behaviour.
@@ -84,7 +84,7 @@ describe('multivalue operands match when any value does (#475)', () => {
   });
 });
 
-describe('expression size limit (#484)', () => {
+describe('expression size limit (#485)', () => {
   it('rejects a 200k-term chain with a clear diagnostic, not a stack overflow', () => {
     const chain = Array.from({ length: 200_000 }, () => '1').join('+');
     expect(() => value(chain)).toThrow(/too long or deeply nested/);
@@ -127,7 +127,7 @@ describe('expression size limit (#484)', () => {
   });
 });
 
-describe('exponent literals (#484)', () => {
+describe('exponent literals (#485)', () => {
   // The string "1e3" already coerces to 1000 (parseDecimal); the literal now
   // means the same thing.
   it.each([
@@ -152,7 +152,7 @@ describe('exponent literals (#484)', () => {
   });
 });
 
-describe('unary minus repeats (#484)', () => {
+describe('unary minus repeats (#485)', () => {
   it.each([
     ['- - 3', 3],
     ['- - - 3', -3],
