@@ -180,3 +180,17 @@ describe('the tokenizer and parseConf agree on the lines of a generated file', (
     );
   });
 });
+
+// SplunkEditor turns quickSuggestions off in strings, so a key painted as a
+// string gets no completion while it is being typed.
+describe('a key still being typed', () => {
+  it('is not a string token, so quick suggestions still fire', () => {
+    const [, line] = tokenize('[web]\nTIME_PRE');
+    expect(line?.map((p) => p.type)).toEqual(['identifier']);
+  });
+
+  it('stays value text on a continuation line', () => {
+    const [, line] = tokenize('REGEX = a\\\nTIME_PRE');
+    expect(line?.some((p) => p.type === 'identifier')).toBe(false);
+  });
+});
