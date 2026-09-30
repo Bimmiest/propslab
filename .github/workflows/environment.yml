@@ -11,9 +11,13 @@ on:
     - cron: '0 7 * * 1'
   workflow_dispatch:
 
-# The environment endpoints read with `actions: read`. Listing secret names
-# needs a permission no GITHUB_TOKEN can hold, so that check uses
-# SECRETS_READ_TOKEN (a fine-grained token, Secrets: read-only).
+# The environment endpoints read with `actions: read`, and the rulesets that
+# protect `main` (GET /rules/branches/main) with `contents: read`; no extra
+# permission is granted for them. Classic branch protection and the secret
+# names need permissions no GITHUB_TOKEN can hold ("Administration: read" and
+# "Secrets: read"): the secret check uses SECRETS_READ_TOKEN (a fine-grained
+# token, Secrets: read-only), and classic protection, when a requirement is
+# not already met by a ruleset, is reported as skipped with a warning.
 permissions:
   contents: read
   actions: read
@@ -31,7 +35,7 @@ jobs:
         with:
           node-version-file: .nvmrc
 
-      - name: production deploys from main only, and holds the deployment token
+      - name: production deploys from main only, holds the deployment token, and main is protected
         env:
           GITHUB_TOKEN: ${{ github.token }}
           SECRETS_READ_TOKEN: ${{ secrets.SECRETS_READ_TOKEN }}
