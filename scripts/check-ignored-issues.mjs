@@ -18,13 +18,12 @@
 // ---------------------------------------------------------------------------
 
 import { DIRECTIVE_SUPPORT } from '../src/engine/directiveSupport.ts';
+import { classifyIssue, ignoredDirectives } from './lib/ignoredIssues.mjs';
 
 const REPO = process.env.GITHUB_REPOSITORY ?? 'Bimmiest/propslab';
 const token = process.env.GITHUB_TOKEN;
 
-const tracked = Object.entries(DIRECTIVE_SUPPORT)
-  .filter(([, entry]) => entry.support === 'ignored')
-  .map(([key, entry]) => ({ key, issue: entry.issue }));
+const tracked = ignoredDirectives(DIRECTIVE_SUPPORT);
 
 if (tracked.length === 0) {
   // Not a special case to apologise for: an empty roster is the goal state, and
@@ -43,29 +42,15 @@ const stale = [];
 const unreadable = [];
 
 for (const { key, issue } of tracked) {
-  if (issue === undefined) {
-    // directiveSupport.test.ts fails on this already; treat it as unreadable
-    // here rather than silently passing a directive nobody is tracking.
-    unreadable.push(`${key}: no issue number`);
-    continue;
+  let response;
+  if (issue !== undefined) {
+    const raw = await fetch(`https://api.github.com/repos/${REPO}/issues/${issue}`, { headers });
+    response = { ok: raw.ok, status: raw.status, ...(raw.ok ? { body: await raw.json() } : {}) };
   }
-
-  const response = await fetch(`https://api.github.com/repos/${REPO}/issues/${issue}`, { headers });
-  if (!response.ok) {
-    unreadable.push(`${key}: #${issue} returned HTTP ${response.status}`);
-    continue;
-  }
-
-  const { state, title, pull_request: pullRequest } = await response.json();
-  if (pullRequest) {
-    // An `ignored` entry must name the issue arguing for the work, not the pull
-    // request that happened to touch it — a merged PR reads as "done".
-    unreadable.push(`${key}: #${issue} is a pull request, not an issue`);
-  } else if (state !== 'open') {
-    stale.push(`${key}: #${issue} (${title}) is ${state}`);
-  } else {
-    console.log(`  ok  ${key} → #${issue} (open)`);
-  }
+  const { kind, line } = classifyIssue(key, issue, response);
+  if (kind === 'ok') console.log(`  ok  ${line}`);
+  else if (kind === 'stale') stale.push(line);
+  else unreadable.push(line);
 }
 
 if (unreadable.length > 0) {
