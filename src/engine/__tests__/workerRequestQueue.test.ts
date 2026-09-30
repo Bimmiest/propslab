@@ -10,6 +10,7 @@ import { describe, it, expect, vi } from 'vitest';
 import {
   createRequestQueue,
   isWorkerInputsMessage,
+  isWorkerReadyMessage,
   isWorkerSkippedResponse,
   type QueuedRequest,
   type WorkerInputsMessage,
@@ -113,6 +114,32 @@ describe('createRequestQueue', () => {
     expect(runs.map((r) => r.id)).toEqual([3]);
   });
 
+  it('gives a request naming inputs when none were ever sent none', () => {
+    const { serve, runs } = setup();
+    serve({ id: 1, pattern: 'p', inputsId: 1 });
+    expect(runs).toEqual([{ id: 1, inputs: undefined }]);
+  });
+
+  it('is superseded only by a newer latest-only request, not by anything else queued behind it', () => {
+    const { serve, runs, skipped, flush } = setup();
+    serve({ id: 1, pattern: 'p1', inputs: ['a'], latestOnly: true });
+    serve({ id: 2, pattern: 'hover', inputs: ['h'] });
+    serve(inputs(1, ['b']));
+    flush();
+    expect(skipped).toEqual([]);
+    expect(runs.map((r) => r.id)).toEqual([1, 2]);
+  });
+
+  it('schedules again for the next burst once a drain has run', () => {
+    const { serve, runs, deferred, flush } = setup();
+    serve({ id: 1, pattern: 'p1', inputs: ['a'], latestOnly: true });
+    flush();
+    serve({ id: 2, pattern: 'p2', inputs: ['a'], latestOnly: true });
+    expect(deferred).toHaveLength(1);
+    flush();
+    expect(runs.map((r) => r.id)).toEqual([1, 2]);
+  });
+
   it('schedules one drain for a burst', () => {
     const { serve, deferred } = setup();
     for (let id = 1; id <= 5; id++) serve({ id, pattern: 'p', inputs: [], latestOnly: true });
@@ -127,10 +154,12 @@ describe('the inputs and skipped messages are told apart from everything else', 
     [{ type: 'ready' }, false, false],
     [{ id: 1, results: null }, false, false],
     [null, false, false],
+    [undefined, false, false],
     ['inputs', false, false],
   ])('%j', (message, isInputs, isSkipped) => {
     expect(isWorkerInputsMessage(message)).toBe(isInputs);
     expect(isWorkerSkippedResponse(message)).toBe(isSkipped);
+    expect(isWorkerReadyMessage(message)).toBe(JSON.stringify(message) === '{"type":"ready"}');
   });
 });
 
