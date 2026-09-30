@@ -1,80 +1,21 @@
 import { useMemo } from 'react';
-import { useAppStore } from '../../store/useAppStore';
-import { parseConf } from '../../engine/parser/confParser';
+import { deploymentTiers } from './deploymentTiers';
+import type { PipelineInputs } from '../preview/tabs/shared/usePipelineInputs';
 
-type ComponentType = 'uf' | 'hf' | 'indexer' | 'searchHead';
-
-interface ComponentState {
-  active: boolean;
-  configs: string[];
-}
-
-const INDEX_TIME_DIRECTIVES = new Set([
-  'LINE_BREAKER', 'SHOULD_LINEMERGE', 'BREAK_ONLY_BEFORE', 'BREAK_ONLY_BEFORE_DATE',
-  'MUST_BREAK_AFTER', 'TIME_PREFIX', 'TIME_FORMAT', 'MAX_TIMESTAMP_LOOKAHEAD',
-  'TRUNCATE', 'SEDCMD', 'TRANSFORMS', 'INDEXED_EXTRACTIONS',
-  'EVENT_BREAKER', 'EVENT_BREAKER_ENABLE',
-]);
-
-const SEARCH_TIME_DIRECTIVES = new Set([
-  'EXTRACT', 'REPORT', 'FIELDALIAS', 'EVAL', 'KV_MODE',
-]);
-
-const ROUTING_DIRECTIVES = new Set([
-  'TRANSFORMS',
-]);
-
-export function ArchitecturePanel({ embedded }: { embedded?: boolean } = {}) {
-  const propsConf = useAppStore((s) => s.propsConf);
-  const transformsConf = useAppStore((s) => s.transformsConf);
-
-  const components = useMemo(() => {
-    const state: Record<ComponentType, ComponentState> = {
-      uf: { active: false, configs: [] },
-      hf: { active: false, configs: [] },
-      indexer: { active: false, configs: [] },
-      searchHead: { active: false, configs: [] },
-    };
-
-    const parsed = parseConf(propsConf, 'props.conf');
-    const parsedTransforms = parseConf(transformsConf, 'transforms.conf');
-
-    let hasIndexTime = false;
-    let hasSearchTime = false;
-    let hasRouting = false;
-
-    for (const stanza of parsed.stanzas) {
-      for (const dir of stanza.directives) {
-        if (INDEX_TIME_DIRECTIVES.has(dir.directiveType)) {
-          hasIndexTime = true;
-          state.hf.configs.push(dir.key);
-        }
-        if (SEARCH_TIME_DIRECTIVES.has(dir.directiveType)) {
-          hasSearchTime = true;
-          state.searchHead.configs.push(dir.key);
-        }
-        if (ROUTING_DIRECTIVES.has(dir.directiveType)) {
-          hasRouting = true;
-        }
-      }
-    }
-
-    // Check transforms.conf for routing (DEST_KEY = queue)
-    for (const stanza of parsedTransforms.stanzas) {
-      const destKey = stanza.directives.find((d) => d.key === 'DEST_KEY');
-      if (destKey?.value.trim() === 'queue' || destKey?.value.includes('MetaData:')) {
-        hasRouting = true;
-        state.hf.configs.push(`${stanza.name}: ${destKey.key}=${destKey.value}`);
-      }
-    }
-
-    state.uf.active = hasIndexTime || hasRouting;
-    state.hf.active = hasIndexTime || hasRouting;
-    state.indexer.active = hasIndexTime;
-    state.searchHead.active = hasSearchTime;
-
-    return { state, hasIndexTime, hasSearchTime, hasRouting };
-  }, [propsConf, transformsConf]);
+/**
+ * Where each part of the configuration runs. Drawn from the props.conf and
+ * transforms.conf the pipeline last ran with (`usePipelineInputs`), like the
+ * other output tabs: debounced as the pipeline is, and frozen in manual-apply
+ * mode, rather than re-parsed on every keystroke.
+ */
+export function ArchitecturePanel({ inputs, embedded }: { inputs: PipelineInputs; embedded?: boolean }) {
+  const { propsConf, transformsConf } = inputs;
+  const { hasIndexTime, hasSearchTime, hasRouting } = useMemo(
+    () => deploymentTiers(propsConf, transformsConf),
+    [propsConf, transformsConf],
+  );
+  // Forwarders are involved as soon as anything is parsed or routed before indexing.
+  const forwarding = hasIndexTime || hasRouting;
 
   return (
     <div className="h-full flex flex-col bg-[var(--color-bg-primary)]">
@@ -91,36 +32,36 @@ export function ArchitecturePanel({ embedded }: { embedded?: boolean } = {}) {
           <ComponentBox
             label="Universal Forwarder"
             sublabel="inputs.conf"
-            active={components.state.uf.active}
+            active={forwarding}
             description="Data collection & forwarding"
           />
-          <Arrow active={components.state.uf.active} />
+          <Arrow active={forwarding} />
           <ComponentBox
             label="Heavy Forwarder"
             sublabel="props.conf + transforms.conf"
-            active={components.state.hf.active}
-            description={components.hasRouting ? 'Parsing, routing & transformation' : 'Parsing & transformation'}
-            highlight={components.hasIndexTime}
+            active={forwarding}
+            description={hasRouting ? 'Parsing, routing & transformation' : 'Parsing & transformation'}
+            highlight={hasIndexTime}
           />
-          <Arrow active={components.state.indexer.active} />
+          <Arrow active={hasIndexTime} />
           <ComponentBox
             label="Indexer"
             sublabel="props.conf + transforms.conf"
-            active={components.state.indexer.active}
+            active={hasIndexTime}
             description="Index-time processing & storage"
-            highlight={components.hasIndexTime}
+            highlight={hasIndexTime}
           />
-          <Arrow active={components.state.searchHead.active} />
+          <Arrow active={hasSearchTime} />
           <ComponentBox
             label="Search Head"
             sublabel="props.conf"
-            active={components.state.searchHead.active}
+            active={hasSearchTime}
             description="Search-time field extraction"
-            highlight={components.hasSearchTime}
+            highlight={hasSearchTime}
           />
         </div>
 
-        {!components.hasIndexTime && !components.hasSearchTime && (
+        {!hasIndexTime && !hasSearchTime && (
           <div className="mt-4 text-center text-xs text-[var(--color-text-muted)]">
             Add props.conf / transforms.conf configuration to see deployment recommendations
           </div>

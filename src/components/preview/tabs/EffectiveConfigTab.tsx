@@ -119,14 +119,28 @@ interface EffectiveConfigTabProps {
   inputs: PipelineInputs;
 }
 
+/**
+ * Says the editors have moved on since the run shown. A component of its own
+ * so that only it subscribes to the live props.conf and metadata, and only
+ * while mounted: in manual-apply mode, since in auto mode the pipeline catches
+ * up by itself within its debounce and a notice would flash on every keystroke.
+ */
+function PendingChangesNotice({ inputs, className }: { inputs: PipelineInputs; className?: string }) {
+  const livePropsConf = useAppStore((s) => s.propsConf);
+  const liveMetadata = useAppStore((s) => s.metadata);
+  if (livePropsConf === inputs.propsConf && liveMetadata === inputs.metadata) return null;
+  const notice = (
+    <p className="text-xs text-[var(--color-warning)]" role="status">
+      props.conf or the metadata has changed since the pipeline last ran. This shows the configuration that run
+      used; run the pipeline to resolve the changes.
+    </p>
+  );
+  return className ? <div className={className}>{notice}</div> : notice;
+}
+
 export function EffectiveConfigTab({ inputs }: EffectiveConfigTabProps) {
   const { propsConf, metadata } = inputs;
   const manualApply = useAppStore((s) => s.settings.manualApply);
-  const livePropsConf = useAppStore((s) => s.propsConf);
-  const liveMetadata = useAppStore((s) => s.metadata);
-  // Only in manual-apply mode: in auto mode the pipeline catches up by itself
-  // within its debounce, and a notice would flash on every keystroke.
-  const pendingChanges = manualApply && (livePropsConf !== propsConf || liveMetadata !== metadata);
   const [contestedOnly, setContestedOnly] = useState(false);
 
   // Resolved with `resolveStanzasForEvent`, as the pipeline does, so an
@@ -143,17 +157,10 @@ export function EffectiveConfigTab({ inputs }: EffectiveConfigTabProps) {
   const contestedCount = effective.filter((d) => d.overriddenByStanza.length > 0).length;
   const shown = contestedOnly ? effective.filter((d) => d.overriddenByStanza.length > 0) : effective;
 
-  const pendingNotice = pendingChanges && (
-    <p className="text-xs text-[var(--color-warning)]" role="status">
-      props.conf or the metadata has changed since the pipeline last ran. This shows the configuration that run
-      used; run the pipeline to resolve the changes.
-    </p>
-  );
-
   if (effective.length === 0) {
     return (
       <div className="h-full overflow-auto p-3 space-y-2">
-        {pendingNotice}
+        {manualApply && <PendingChangesNotice inputs={inputs} />}
         <p className="text-xs text-[var(--color-text-muted)]">
           {propsConf.trim() === ''
             ? 'No props.conf yet.'
@@ -181,8 +188,8 @@ export function EffectiveConfigTab({ inputs }: EffectiveConfigTabProps) {
         )}
       </div>
 
-      {pendingNotice && (
-        <div className="px-3 py-2 border-b border-[var(--color-border-subtle)]">{pendingNotice}</div>
+      {manualApply && (
+        <PendingChangesNotice inputs={inputs} className="px-3 py-2 border-b border-[var(--color-border-subtle)]" />
       )}
 
       {assignedSourcetype !== undefined && (

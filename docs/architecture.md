@@ -35,9 +35,18 @@ The lifecycle rules:
 
 A new worker entry must serve through `serveWithRegexEngine`, which posts `WORKER_READY`. A caller must not handle `onerror` itself.
 
+### The live testers' requests
+
+The Regex and Timestamp tabs match a changing pattern or config against the same events many times. Two rules keep that cheap (#496):
+
+- **Inputs travel once.** `useWorkerRequest`'s `sendAhead` posts the events in an inputs message (`WorkerInputsMessage`) when they change, and each request names them by `inputsId` instead of carrying them; at 20k events that was about 10 MB cloned per keystroke. The lifecycle's `setInputs` re-sends the current inputs first to every replacement worker, so a request replayed after a crash or a timeout finds them there.
+- **Superseded requests are skipped.** A request marked `latestOnly` waits one task in the worker (`createRequestQueue`), and is answered `skipped` without running when a newer `latestOnly` request has arrived behind it. With a slow pattern, the answer the user waits for no longer queues behind every pattern typed past. The TIME_FORMAT hover's requests are not `latestOnly`: several hovers can each be waited on.
+
 ### What the pipeline worker sends back
 
 The pipeline worker does not post `runPipeline`'s result as is. At 20k events, cloning it cost as much as the run itself, and most of that was per-event traces: prose and before/after snapshots on every step, which no view reads per event. `toViewResult` (`utils/viewResult.ts`) reduces each step to its structured fields (`TraceStep`) and interns the traces, so events whose steps match share one array and structured clone sends it once; it also interns metadata and drops `timestampText` where it equals `_raw`. The Pipeline tab, the one view that shows step prose, reads `stepSummaries`, which the worker builds from the full traces. The store holds a `ViewResult`, and the inline fallback applies the same reduction, so the views see one shape either way. A view that needs something new from a step reads a structured field (`metadataChanges`, `truncation`, `timeSource`), never `description`.
+
+The worker also counts the run's fields once (`fieldStats`, `utils/fieldStats.ts`): the distinct names in first-seen order, how many events have each, and which hold JSON containers. The status bar, the preview's field filter and the CIM, Extractions and Fields tabs read that rather than each walking every event's fields on the main thread after every run (#496).
 
 ## Monaco bundling
 

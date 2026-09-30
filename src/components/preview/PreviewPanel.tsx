@@ -29,6 +29,8 @@ import { usePipelineInputs, type PipelineInputs } from './tabs/shared/usePipelin
 
 export interface EnrichedEvent {
   event: ViewEvent;
+  /** `_raw` lower-cased once, for the search filter. */
+  searchText: string;
   originalRaw: string;
   hasChanges: boolean;
   hasMetadataChanges: boolean;
@@ -47,6 +49,12 @@ function hasMetadataDiff(eventMeta: EventMetadata, originalMeta: EventMetadata):
 /** How long the preview search waits for typing to pause before filtering. */
 const SEARCH_DEBOUNCE_MS = 200;
 
+/**
+ * How long a run must take before the output is covered with "Processing…".
+ * Most runs take tens of milliseconds, and an overlay on each one only flashes.
+ */
+export const PROCESSING_OVERLAY_DELAY_MS = 150;
+
 const PREVIEW_SUB_TABS: { id: PreviewSubTabId; label: string }[] = [
   { id: 'raw', label: 'Raw' },
   { id: 'timestamp', label: 'Timestamp' },
@@ -56,6 +64,9 @@ const PREVIEW_SUB_TABS: { id: PreviewSubTabId; label: string }[] = [
 ];
 
 const PipelineInputsContext = createContext<PipelineInputs | null>(null);
+
+/** What the preview's sub-tabs read of the pipeline inputs: the Timestamp tab's config. */
+type PreviewInputs = Pick<PipelineInputs, 'propsConf' | 'metadata'>;
 
 /**
  * Holds the last run's inputs for the tabs below. Held here rather than in the
@@ -84,6 +95,8 @@ export const PreviewPanel = memo(function PreviewPanel() {
   const setActiveTab = useAppStore((s) => s.setActiveOutputTab);
   const result = useAppStore((s) => s.processingResult);
   const isProcessing = useAppStore((s) => s.isProcessing);
+  // Shown once a run has lasted PROCESSING_OVERLAY_DELAY_MS, hidden the moment it ends.
+  const showOverlay = useDebounce(isProcessing, PROCESSING_OVERLAY_DELAY_MS) && isProcessing;
   const tabsId = useId();
   const diagnostics = useAppStore((s) => s.validationDiagnostics);
   // A run that produced no result at all — watchdog timeout, repeated worker
@@ -133,7 +146,7 @@ export const PreviewPanel = memo(function PreviewPanel() {
             failure={failure}
           />
         </PipelineInputsProvider>
-        {isProcessing && (
+        {showOverlay && (
           <div
             className="absolute inset-0 flex items-center justify-center pointer-events-none"
             style={{ backgroundColor: 'var(--color-bg-primary)', opacity: 0.6 }}
@@ -155,7 +168,12 @@ const TabContent = memo(function TabContent({ tab, hasData, failure }: {
   failure: string | null;
 }) {
   const pipelineInputs = usePipelineInputsContext();
-  if (tab === 'architecture') return <ArchitecturePanel embedded />;
+  // What the preview's tabs read of the inputs, kept by identity while those
+  // parts are unchanged, so an edit that only the Architecture tab reads (in
+  // transforms.conf) does not re-render the preview beneath it.
+  const { propsConf, metadata } = pipelineInputs;
+  const previewInputs = useMemo(() => ({ propsConf, metadata }), [propsConf, metadata]);
+  if (tab === 'architecture') return <ArchitecturePanel inputs={pipelineInputs} embedded />;
   // Resolves the last run's props.conf and metadata, so it has an answer
   // before any data has been processed — the same reason Architecture sits
   // above the gate rather than inside the switch.
@@ -170,7 +188,7 @@ const TabContent = memo(function TabContent({ tab, hasData, failure }: {
   }
 
   switch (tab) {
-    case 'preview': return <PreviewSubTab pipelineInputs={pipelineInputs} />;
+    case 'preview': return <PreviewSubTab pipelineInputs={previewInputs} />;
     case 'cim': return <CimModelsTab />;
     case 'fields': return <FieldsTab />;
     case 'transforms': return <TransformsTab />;
@@ -284,6 +302,7 @@ function enrichEvents(
     const origSlice = origLines.slice(startIdx, endIdx).join('\n');
     return {
       event,
+      searchText: event._raw.toLowerCase(),
       originalRaw: origSlice,
       hasChanges: normalise(origSlice) !== normalise(event._raw),
       hasMetadataChanges: originalMetadata !== undefined && hasMetadataDiff(event.metadata, originalMetadata),
@@ -307,12 +326,21 @@ function pruneSelection(selected: Set<string>, options: string[]): Set<string> {
   return kept.length === selected.size ? selected : new Set(kept);
 }
 
+/** Whether any filter would remove an event. */
+function anyFilter({ search, selectedFields, selectedStatus, selectedChangeState }: PreviewFilters): boolean {
+  return search !== '' || selectedFields.size > 0 || selectedStatus.size > 0 || selectedChangeState.size > 0;
+}
+
+/** `filters.search` is lower-cased by the caller, once for the whole pass. */
 function matchesFilters(item: EnrichedEvent, filters: PreviewFilters): boolean {
   const { search, selectedFields, selectedStatus, selectedChangeState } = filters;
-  if (search && !item.event._raw.toLowerCase().includes(search.toLowerCase())) return false;
+  if (search && !item.searchText.includes(search)) return false;
   if (selectedFields.size > 0) {
-    const eventFieldKeys = Object.keys(item.event.fields);
-    if (!eventFieldKeys.some((k) => selectedFields.has(k))) return false;
+    let any = false;
+    for (const field of selectedFields) {
+      if (Object.hasOwn(item.event.fields, field)) { any = true; break; }
+    }
+    if (!any) return false;
   }
   if (selectedStatus.size > 0) {
     if (selectedStatus.has('Dropped') && !selectedStatus.has('Accepted') && !item.isDropped) return false;
@@ -331,7 +359,7 @@ function matchesFilters(item: EnrichedEvent, filters: PreviewFilters): boolean {
   return true;
 }
 
-function PreviewSubTab({ pipelineInputs }: { pipelineInputs: PipelineInputs }) {
+const PreviewSubTab = memo(function PreviewSubTab({ pipelineInputs }: { pipelineInputs: PreviewInputs }) {
   const result = useAppStore((s) => s.processingResult);
   const events = useMemo(() => result?.events ?? [], [result]);
   const originalRaw = result?.originalRaw ?? '';
@@ -359,16 +387,9 @@ function PreviewSubTab({ pipelineInputs }: { pipelineInputs: PipelineInputs }) {
     [events, originalRaw, originalMetadata],
   );
 
-  // Collect all field names across events
-  const allFields = useMemo(() => {
-    const fieldSet = new Set<string>();
-    for (const { event } of enrichedEvents) {
-      for (const key of Object.keys(event.fields)) {
-        fieldSet.add(key);
-      }
-    }
-    return Array.from(fieldSet).sort();
-  }, [enrichedEvents]);
+  // Every field of the run, counted with the result rather than walked here.
+  const fieldStats = result?.fieldStats;
+  const allFields = useMemo(() => [...(fieldStats?.names ?? [])].sort(), [fieldStats]);
 
   // A field a later run no longer extracts has no checkbox to untick, yet
   // would keep filtering (to "0 / N" if it was the only one), so it is dropped
@@ -378,8 +399,11 @@ function PreviewSubTab({ pipelineInputs }: { pipelineInputs: PipelineInputs }) {
   if (liveSelectedFields !== selectedFields) setSelectedFields(liveSelectedFields);
 
   // Apply filters
+  // With no filter set, the very same array: the tabs below read that as
+  // "every event" and use the run's precomputed statistics.
   const filteredEvents = useMemo(() => {
-    const filters = { search: debouncedSearch, selectedFields: liveSelectedFields, selectedStatus, selectedChangeState };
+    const filters = { search: debouncedSearch.toLowerCase(), selectedFields: liveSelectedFields, selectedStatus, selectedChangeState };
+    if (!anyFilter(filters)) return enrichedEvents;
     return enrichedEvents.filter((item) => matchesFilters(item, filters));
   }, [enrichedEvents, debouncedSearch, liveSelectedFields, selectedStatus, selectedChangeState]);
 
@@ -424,7 +448,7 @@ function PreviewSubTab({ pipelineInputs }: { pipelineInputs: PipelineInputs }) {
         aria-labelledby={tabId(subTabsId, subTab)}
       >
         {subTab === 'raw' && <RawTab items={paginatedItems} currentPage={currentPage} eventsPerPage={eventsPerPage} search={debouncedSearch} />}
-        {subTab === 'highlighted' && <HighlightedTab items={paginatedItems} allEvents={filteredEvents} currentPage={currentPage} eventsPerPage={eventsPerPage} />}
+        {subTab === 'highlighted' && <HighlightedTab items={paginatedItems} allEvents={filteredEvents} currentPage={currentPage} eventsPerPage={eventsPerPage} fieldStats={fieldStats} />}
         {subTab === 'diff' && <DiffTab items={paginatedItems} currentPage={currentPage} eventsPerPage={eventsPerPage} />}
         {subTab === 'timestamp' && <TimestampTab items={paginatedItems} currentPage={currentPage} eventsPerPage={eventsPerPage} inputs={pipelineInputs} />}
         {subTab === 'regex' && <RegexTab items={paginatedItems} allEvents={filteredEvents} currentPage={currentPage} eventsPerPage={eventsPerPage} />}
@@ -443,4 +467,4 @@ function PreviewSubTab({ pipelineInputs }: { pipelineInputs: PipelineInputs }) {
       )}
     </div>
   );
-}
+});

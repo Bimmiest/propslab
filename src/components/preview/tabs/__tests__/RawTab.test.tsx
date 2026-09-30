@@ -5,6 +5,7 @@ import { useAppStore } from '../../../../store/useAppStore';
 import { RawTab } from '../RawTab';
 import type { EnrichedEvent } from '../../PreviewPanel';
 import type { SplunkEvent } from '../../../../engine/types';
+import { EMPTY_FIELD_STATS } from '../../../../utils/fieldStats';
 
 function makeItem(raw: string, line: number): EnrichedEvent {
   const event: SplunkEvent = {
@@ -16,7 +17,7 @@ function makeItem(raw: string, line: number): EnrichedEvent {
     lineNumbers: { start: line, end: line },
     processingTrace: [],
   };
-  return { event, originalRaw: raw, hasChanges: false, hasMetadataChanges: false, isDropped: false };
+  return { event, searchText: raw.toLowerCase(), originalRaw: raw, hasChanges: false, hasMetadataChanges: false, isDropped: false };
 }
 
 const pageOne = [makeItem('first event', 1)];
@@ -109,7 +110,7 @@ describe('RawTab — metadata baseline is the run (#335)', () => {
     const meta = { index: 'main', host: 'h', source: 's', sourcetype: 'st' };
     useAppStore.setState({
       metadata: { ...meta, host: 'edited-since' },
-      processingResult: { events: [pageOne[0]!.event], originalRaw: 'first event', eventCount: 1, stepSummaries: [], inputMetadata: meta },
+      processingResult: { events: [pageOne[0]!.event], originalRaw: 'first event', eventCount: 1, stepSummaries: [], fieldStats: EMPTY_FIELD_STATS, inputMetadata: meta },
     });
     const { container } = render(<RawTab items={pageOne} currentPage={1} eventsPerPage={1} search="" />);
     expect(container.textContent).not.toContain('Metadata modified');
@@ -180,7 +181,7 @@ describe('RawTab — metadata attribution and truncation from structured steps',
   it('names the step that last set the metadata key', () => {
     const meta = { index: 'main', host: 'h', source: 's', sourcetype: 'st' };
     useAppStore.setState({
-      processingResult: { events: [], originalRaw: '', eventCount: 0, stepSummaries: [], inputMetadata: meta },
+      processingResult: { events: [], originalRaw: '', eventCount: 0, stepSummaries: [], fieldStats: EMPTY_FIELD_STATS, inputMetadata: meta },
     });
     const item = itemWith([
       { processor: 'TRANSFORMS-a:first_host', phase: 'index-time', description: '', metadataChanges: [{ key: 'host', from: 'h', to: 'web01' }] },

@@ -7,10 +7,12 @@ import type { EnrichedEvent } from '../../PreviewPanel';
 import { makeEvent } from '../../../../test/makeEvent';
 import { matchInputs } from '../../../../engine/regexMatch';
 import type { RegexMatchRequest, RegexMatchResponse } from '../../../../engine/regexMatchWorker';
+import { lastInputs, lastRequest, requestsIn } from '../../../../test/workerInputs';
 
 function makeItem(raw: string): EnrichedEvent {
   return {
     event: makeEvent(raw),
+    searchText: raw.toLowerCase(),
     originalRaw: raw,
     hasChanges: false,
     hasMetadataChanges: false,
@@ -275,15 +277,15 @@ class FakeWorker {
   static instances: FakeWorker[] = [];
   onmessage: ((e: MessageEvent<RegexMatchResponse>) => void) | null = null;
   onerror: ((e: ErrorEvent) => void) | null = null;
-  posted: RegexMatchRequest[] = [];
+  posted: unknown[] = [];
   constructor() { FakeWorker.instances.push(this); }
-  postMessage(message: RegexMatchRequest) { this.posted.push(message); }
+  postMessage(message: unknown) { this.posted.push(message); }
   terminate() {}
   /** The module has loaded: a timeout after this is the pattern's, not the load's. */
   ready() { this.onmessage?.({ data: { type: 'ready' } } as unknown as MessageEvent<RegexMatchResponse>); }
   respond() {
-    const req = this.posted[this.posted.length - 1]!;
-    this.onmessage?.({ data: { id: req.id, results: matchInputs(req.pattern, req.inputs) } } as MessageEvent<RegexMatchResponse>);
+    const { request: req, inputs } = lastRequest<RegexMatchRequest, string[]>(this.posted, (r) => r.inputs);
+    this.onmessage?.({ data: { id: req.id, results: matchInputs(req.pattern, inputs) } } as MessageEvent<RegexMatchResponse>);
   }
 }
 const worker = () => FakeWorker.instances[FakeWorker.instances.length - 1]!;
@@ -364,7 +366,7 @@ describe('RegexTab — results follow the events they were matched over (#329)',
 
     // Before the worker answers: the filtered events, numbered in the filtered
     // dataset — not page 1 of the old one ("GET /a", "POST /b" as #1 and #2).
-    expect(worker().posted.at(-1)?.inputs).toEqual(posts.map((p) => p.event._raw));
+    expect(lastInputs(worker().posted)).toEqual(posts.map((p) => p.event._raw));
     expect(cardTitles(container)).toEqual(['Event #1', 'Event #2']);
     expect(container.textContent).toContain('POST /b 10.0.0.2');
     expect(container.textContent).toContain('POST /d 10.0.0.4');
@@ -441,7 +443,7 @@ describe('RegexTab — Add to props.conf waits for a settled match (#338)', () =
 
     // Posted, not answered.
     act(() => { vi.advanceTimersByTime(250); });
-    expect(worker().posted.at(-1)?.pattern).toBe('GET');
+    expect(requestsIn<RegexMatchRequest>(worker().posted).at(-1)?.pattern).toBe('GET');
     expect(addButton(container)).toBeDisabled();
 
     fireEvent.click(addButton(container));

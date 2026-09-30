@@ -8,17 +8,10 @@ export function CimModelsTab() {
   const result = useAppStore((s) => s.processingResult);
   const [showMatchingOnly, setShowMatchingOnly] = useState(false);
 
-  const allCimResults = useMemo(() => {
-    const allFields = new Set<string>();
-    if (result && result.events.length > 0) {
-      for (const event of result.events) {
-        for (const key of Object.keys(event.fields)) {
-          allFields.add(key);
-        }
-      }
-    }
-    return validateCimCompliance(allFields, { includeAll: true });
-  }, [result]);
+  const allCimResults = useMemo(
+    () => validateCimCompliance(new Set(result?.fieldStats.names), { includeAll: true }),
+    [result],
+  );
 
   const matchingCount = useMemo(
     () => allCimResults.filter((r) => r.requiredPresent.length > 0 || r.recommendedPresent.length > 0).length,

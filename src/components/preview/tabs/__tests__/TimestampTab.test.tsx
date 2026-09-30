@@ -20,6 +20,7 @@ const item: EnrichedEvent = {
     lineNumbers: { start: 1, end: 1 },
     processingTrace: [],
   },
+  searchText: 'ts=2026-01-15 msg',
   originalRaw: 'ts=2026-01-15 msg',
   hasChanges: false,
   hasMetadataChanges: false,

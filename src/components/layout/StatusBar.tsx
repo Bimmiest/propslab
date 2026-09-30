@@ -112,14 +112,9 @@ function ResultSummary() {
   const result = useAppStore((s) => s.processingResult);
   const diagnostics = useAppStore((s) => s.validationDiagnostics);
 
-  const fieldCount = useMemo(() => {
-    if (!result) return 0;
-    const fieldSet = new Set<string>();
-    for (const event of result.events) {
-      for (const key of Object.keys(event.fields)) fieldSet.add(key);
-    }
-    return fieldSet.size;
-  }, [result]);
+  // Counted once per run, with the result (`fieldStats`): this bar is always
+  // mounted, and a walk of every event's fields here ran after every run.
+  const fieldCount = result?.fieldStats.names.length ?? 0;
 
   const errorCount = useMemo(() => diagnostics.filter((d) => d.level === 'error').length, [diagnostics]);
   const warningCount = useMemo(() => diagnostics.filter((d) => d.level === 'warning').length, [diagnostics]);

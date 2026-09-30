@@ -25,6 +25,7 @@ function makeEvent(
 function toItem(event: SplunkEvent): EnrichedEvent {
   return {
     event,
+    searchText: event._raw.toLowerCase(),
     originalRaw: event._raw,
     hasChanges: false,
     hasMetadataChanges: false,

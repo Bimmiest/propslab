@@ -18,10 +18,13 @@ export interface ApplyDirective {
   apply: (key: string, value: string) => void;
 }
 
+/**
+ * Subscribes to the sourcetype alone, which names the stanza shown. The
+ * props.conf text is read from the store when a directive is applied: every
+ * event card and Raw row has a context menu that calls this, and subscribed
+ * to props.conf each of them re-rendered on every keystroke in the editor.
+ */
 export function useApplyDirective(): ApplyDirective {
-  const propsConf = useAppStore((s) => s.propsConf);
-  const setPropsConf = useAppStore((s) => s.setPropsConf);
-  const setMetadataField = useAppStore((s) => s.setMetadataField);
   const sourcetype = useAppStore((s) => s.metadata.sourcetype);
   const stanza = sourcetype.trim() || 'my:sourcetype';
 
@@ -36,6 +39,7 @@ export function useApplyDirective(): ApplyDirective {
      * stanza too, the way ScaffoldModal already does.
      */
     apply: (key: string, value: string) => {
+      const { propsConf, setPropsConf, setMetadataField } = useAppStore.getState();
       setPropsConf(upsertDirectiveInStanza(propsConf, stanza, key, value));
       if (stanza !== sourcetype) setMetadataField('sourcetype', stanza);
     },

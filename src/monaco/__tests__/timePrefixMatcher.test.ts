@@ -62,7 +62,7 @@ class FakeWorker {
   answer(request: TimestampMatchRequest = this.posted[this.posted.length - 1]!) {
     this.ready();
     this.onmessage?.({
-      data: { id: request.id, probes: probeTimestamps(request.raws, request.config) },
+      data: { id: request.id, probes: probeTimestamps(request.raws!, request.config) },
     } as MessageEvent<TimestampMatchResponse>);
   }
 }

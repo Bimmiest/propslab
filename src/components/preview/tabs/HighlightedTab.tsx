@@ -14,6 +14,7 @@ import type { FieldNode } from './shared/fieldTreeUtils';
 import { DirectiveNoOpList } from './shared/DirectiveNoOpList';
 import { pressable } from '../../ui/pressable';
 import { tint } from '../../../utils/tint';
+import { isJsonContainer, type FieldStats } from '../../../utils/fieldStats';
 
 const AUTO_PROCESSORS = ['KV_MODE', 'INDEXED_EXTRACTIONS'];
 const MANUAL_PROCESSORS = ['EXTRACT', 'REPORT', 'TRANSFORMS', 'RULESET', 'SEDCMD'];
@@ -29,20 +30,17 @@ function isManualProcessor(p: string) { return MANUAL_PROCESSORS.some((m) => p.s
 
 type FieldFilter = 'auto' | 'manual' | 'calc' | 'all';
 
-function isJsonContainer(value: string | string[]): boolean {
-  if (Array.isArray(value)) return false;
-  const t = value.trim();
-  if ((t.startsWith('{') && t.endsWith('}')) || (t.startsWith('[') && t.endsWith(']'))) {
-    try { JSON.parse(t); return true; } catch { return false; }
-  }
-  return false;
-}
-
 export interface HighlightedTabProps {
   items: EnrichedEvent[];
   allEvents: EnrichedEvent[];
   currentPage: number;
   eventsPerPage: number;
+  /**
+   * The run's field statistics (`ViewResult.fieldStats`). While `allEvents`
+   * is every event of the run, the field list is read from here instead of
+   * walked; the JSON containers always are.
+   */
+  fieldStats?: FieldStats;
 }
 
 /** Which category each extracted field falls in, and the processor that produced it. */
@@ -53,12 +51,21 @@ interface FieldCategories {
   fieldProcessorMap: Map<string, string>;
 }
 
+/**
+ * Events with the same steps share one trace array (see `toViewResult`), and
+ * applying a trace twice in a row changes nothing, so a run of events with
+ * the same trace is classified once. Runs, not distinct traces: which
+ * processor a field is credited to depends on the order traces are applied.
+ */
 function classifyFields(allEvents: EnrichedEvent[]): FieldCategories {
   const auto = new Set<string>();
   const manual = new Set<string>();
   const calc = new Set<string>();
   const processorMap = new Map<string, string>();
+  let previous: EnrichedEvent['event']['processingTrace'] | null = null;
   for (const { event } of allEvents) {
+    if (event.processingTrace === previous) continue;
+    previous = event.processingTrace;
     for (const step of event.processingTrace) {
       if (!step.fieldsAdded) continue;
       if (isAutoProcessor(step.processor)) {
@@ -82,7 +89,25 @@ function classifyFields(allEvents: EnrichedEvent[]): FieldCategories {
   return { autoFields: auto, manualFields: manual, calcFields: calc, fieldProcessorMap: processorMap };
 }
 
-function findContainerFields(allEvents: EnrichedEvent[]): Set<string> {
+/**
+ * The distinct fields of `allEvents`, in first-seen order: the run's own list
+ * when `allEvents` is the whole run (the preview's filters only ever remove
+ * events, so the same count means the same events), else a walk of the keys.
+ */
+function fieldNamesInView(allEvents: EnrichedEvent[], stats: FieldStats | undefined): string[] {
+  if (stats && allEvents.length === stats.eventCount) return stats.names;
+  const names = new Set<string>();
+  for (const { event } of allEvents) {
+    for (const key in event.fields) {
+      if (Object.hasOwn(event.fields, key)) names.add(key);
+    }
+  }
+  return [...names];
+}
+
+/** Fields holding a JSON object or array: the run's, or found in `allEvents` without statistics. */
+function findContainerFields(allEvents: EnrichedEvent[], stats: FieldStats | undefined): Set<string> {
+  if (stats) return new Set(stats.containers);
   const containers = new Set<string>();
   for (const { event } of allEvents) {
     for (const [key, value] of Object.entries(event.fields)) {
@@ -94,30 +119,23 @@ function findContainerFields(allEvents: EnrichedEvent[]): Set<string> {
 
 /** A colour for each field the filter shows, in first-seen order. */
 function assignFieldColors(
-  allEvents: EnrichedEvent[],
+  fieldNames: string[],
   { autoFields, manualFields, calcFields }: FieldCategories,
   fieldFilter: FieldFilter,
   theme: 'light' | 'dark',
 ): Map<string, string> {
   const map = new Map<string, string>();
-  let colorIdx = 0;
   const includeAuto = fieldFilter === 'auto' || fieldFilter === 'all';
   const includeManual = fieldFilter === 'manual' || fieldFilter === 'all';
   const includeCalc = fieldFilter === 'calc' || fieldFilter === 'all';
 
-  for (const { event } of allEvents) {
-    for (const key of Object.keys(event.fields)) {
-      // Membership, not single-bucket: a field extracted (manual) and then
-      // overwritten by EVAL (calc) belongs to BOTH categories, so it must show
-      // under each of their filters — and stay consistent with the filter counts.
-      const inSelectedFilter =
-        (includeAuto && autoFields.has(key)) || (includeManual && manualFields.has(key)) || (includeCalc && calcFields.has(key));
-      if (!inSelectedFilter) continue;
-      if (!map.has(key)) {
-        map.set(key, fieldColorAt(colorIdx, theme));
-        colorIdx++;
-      }
-    }
+  for (const key of fieldNames) {
+    // Membership, not single-bucket: a field extracted (manual) and then
+    // overwritten by EVAL (calc) belongs to BOTH categories, so it must show
+    // under each of their filters — and stay consistent with the filter counts.
+    const inSelectedFilter =
+      (includeAuto && autoFields.has(key)) || (includeManual && manualFields.has(key)) || (includeCalc && calcFields.has(key));
+    if (inSelectedFilter) map.set(key, fieldColorAt(map.size, theme));
   }
   return map;
 }
@@ -237,14 +255,15 @@ function useGroupCollapse(allGroupNames: string[]) {
 }
 
 /** The fields' categories, and the colour each one the filter shows is drawn in. */
-function useFieldColoring(allEvents: EnrichedEvent[], fieldFilter: FieldFilter) {
+function useFieldColoring(allEvents: EnrichedEvent[], fieldFilter: FieldFilter, fieldStats: FieldStats | undefined) {
   const categories = useMemo(() => classifyFields(allEvents), [allEvents]);
-  const containerFields = useMemo(() => findContainerFields(allEvents), [allEvents]);
+  const containerFields = useMemo(() => findContainerFields(allEvents, fieldStats), [allEvents, fieldStats]);
+  const fieldNames = useMemo(() => fieldNamesInView(allEvents, fieldStats), [allEvents, fieldStats]);
 
   const theme = useAppStore((s) => s.theme);
   const fieldColorMap = useMemo(
-    () => assignFieldColors(allEvents, categories, fieldFilter, theme),
-    [allEvents, categories, fieldFilter, theme],
+    () => assignFieldColors(fieldNames, categories, fieldFilter, theme),
+    [fieldNames, categories, fieldFilter, theme],
   );
 
   // JSON containers are listed in the sidebar but not highlighted in the event.
@@ -259,12 +278,12 @@ function useFieldColoring(allEvents: EnrichedEvent[], fieldFilter: FieldFilter) 
   return { categories, containerFields, fieldColorMap, highlightColorMap };
 }
 
-export function HighlightedTab({ items, allEvents, currentPage, eventsPerPage }: HighlightedTabProps) {
+export function HighlightedTab({ items, allEvents, currentPage, eventsPerPage, fieldStats }: HighlightedTabProps) {
   const [fieldFilter, setFieldFilter] = useState<FieldFilter>('all');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const { store: focusStore, pinnedFields, togglePin, setHoveredField } = useFieldFocus();
 
-  const { categories, containerFields, fieldColorMap, highlightColorMap } = useFieldColoring(allEvents, fieldFilter);
+  const { categories, containerFields, fieldColorMap, highlightColorMap } = useFieldColoring(allEvents, fieldFilter, fieldStats);
 
   const pinMatches = useMemo(
     () => selectRows({ items, allEvents, currentPage, eventsPerPage }, pinnedFields),

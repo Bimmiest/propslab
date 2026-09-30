@@ -17,7 +17,7 @@ interface TimestampTabProps {
    * instance of the hook here would start from unrun edits. The
    * fallback serves a tab rendered on its own.
    */
-  inputs?: PipelineInputs;
+  inputs?: Pick<PipelineInputs, 'propsConf' | 'metadata'>;
 }
 
 export function TimestampTab({ items, currentPage, eventsPerPage, inputs }: TimestampTabProps) {
