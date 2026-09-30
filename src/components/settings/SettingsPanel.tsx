@@ -23,16 +23,20 @@ function Toggle({
       id={id}
       onClick={onChange}
       className={[
-        'relative inline-flex h-5 w-9 shrink-0 rounded-full border-2 border-transparent transition-colors',
+        'relative inline-flex h-5 w-9 shrink-0 rounded-full border-2 transition-colors',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]',
         disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
-        checked ? 'bg-[var(--color-accent)]' : 'bg-[var(--color-bg-tertiary)]',
+        // The off track's outline and knob carry the 3:1 non-text contrast
+        // against the panel; the on knob is the accent's own text colour.
+        checked
+          ? 'bg-[var(--color-accent)] border-transparent'
+          : 'bg-[var(--color-bg-tertiary)] border-[var(--color-text-muted)]',
       ].join(' ')}
     >
       <span
         className={[
-          'pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform',
-          checked ? 'translate-x-4' : 'translate-x-0',
+          'pointer-events-none inline-block h-4 w-4 rounded-full shadow-sm transition-transform',
+          checked ? 'translate-x-4 bg-[var(--color-text-on-accent)]' : 'translate-x-0 bg-[var(--color-text-muted)]',
         ].join(' ')}
       />
     </button>

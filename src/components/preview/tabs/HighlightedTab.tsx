@@ -396,6 +396,8 @@ function FilterBar({ categories, fieldFilter, setFieldFilter, pinned, sidebarCol
           {filterButtons.map(({ id, label, count }) => (
             <button
               key={id}
+              type="button"
+              aria-pressed={fieldFilter === id}
               onClick={() => setFieldFilter(id)}
               className="px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer"
               style={{

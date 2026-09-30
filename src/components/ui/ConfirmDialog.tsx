@@ -31,6 +31,10 @@ export function ConfirmDialog({
       onClose={onCancel}
       label={title}
       role="alertdialog"
+      // The consequence is what the dialog is FOR, so it is the description a
+      // screen reader hears on open. The visible copy below is hidden from the
+      // accessibility tree so it is not announced a second time.
+      description={children}
       containerClassName="fixed inset-0 z-50 flex items-start justify-center pt-[20vh] px-4"
       className="w-full max-w-md rounded-xl overflow-hidden shadow-2xl"
       style={{ backgroundColor: 'var(--color-bg-elevated)', border: '1px solid var(--color-border)' }}
@@ -38,10 +42,11 @@ export function ConfirmDialog({
       <div>
         <div className="flex items-center gap-2 px-4 h-11 shrink-0" style={{ borderBottom: '1px solid var(--color-border)' }}>
           <Icon name="warning" className="w-4 h-4 text-[var(--color-warning)]" />
-          <span className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>{title}</span>
+          {/* The dialog is already named by `title` (the Overlay's Title). */}
+          <span aria-hidden="true" className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>{title}</span>
         </div>
 
-        <div className="p-4 text-sm" style={{ color: 'var(--color-text-secondary)' }}>{children}</div>
+        <div aria-hidden="true" className="p-4 text-sm" style={{ color: 'var(--color-text-secondary)' }}>{children}</div>
 
         <div className="flex items-center justify-end gap-2 px-4 py-3" style={{ borderTop: '1px solid var(--color-border)' }}>
           <button

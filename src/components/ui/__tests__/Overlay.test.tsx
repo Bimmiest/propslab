@@ -151,3 +151,53 @@ describe('Overlay', () => {
     expect(dialog).toHaveStyle({ zIndex: '51' });
   });
 });
+
+describe('Overlay description and outside clicks (#495)', () => {
+  it('links a description to the dialog with aria-describedby', () => {
+    render(
+      <Overlay open onClose={() => {}} label="Test dialog" description="This cannot be undone.">
+        <button>Inside</button>
+      </Overlay>,
+    );
+    expect(screen.getByRole('dialog', { name: 'Test dialog' })).toHaveAccessibleDescription('This cannot be undone.');
+  });
+
+  it('has no description when none is given', () => {
+    render(
+      <Overlay open onClose={() => {}} label="Test dialog">
+        <button>Inside</button>
+      </Overlay>,
+    );
+    expect(screen.getByRole('dialog')).not.toHaveAttribute('aria-describedby');
+  });
+
+  it('closes a dialog on a click outside it', async () => {
+    const onClose = vi.fn();
+    render(
+      <Overlay open onClose={onClose} label="Test dialog">
+        <button>Inside</button>
+      </Overlay>,
+    );
+    // Radix arms its outside-press listener on the next tick.
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    fireEvent.pointerDown(document.body, { pointerType: 'mouse', button: 0 });
+    fireEvent.click(document.body);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps an alertdialog open on a click outside it, but still closes on Escape', async () => {
+    const onClose = vi.fn();
+    render(
+      <Overlay open onClose={onClose} label="Confirm" role="alertdialog">
+        <button>Inside</button>
+      </Overlay>,
+    );
+    // Radix arms its outside-press listener on the next tick.
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    fireEvent.pointerDown(document.body, { pointerType: 'mouse', button: 0 });
+    fireEvent.click(document.body);
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.keyDown(screen.getByRole('alertdialog'), { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});

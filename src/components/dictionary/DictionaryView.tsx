@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Panel, Group, Separator } from 'react-resizable-panels';
 import { useAppStore } from '../../store/useAppStore';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
@@ -18,6 +18,53 @@ import {
 const ALL_ENTRIES = buildEntries();
 
 /**
+ * The phone layout's list/detail hand-off (#494).
+ *
+ * On a phone the store's selection means "drilled into the detail", so the
+ * arrow keys cannot write to it: the first ArrowDown would swap the list for
+ * the detail pane and unmount the focused listbox. The list keeps its own
+ * cursor there instead; Enter or a click commits it to the store. Drilling in
+ * or out unmounts the control that had focus, so focus goes to its counterpart
+ * on the other side rather than to <body>.
+ */
+function usePhoneDrill(isMobile: boolean, selectedEntryId: string | null, storeSelection: string | null) {
+  const setDictionarySelection = useAppStore((s) => s.setDictionarySelection);
+  const [cursorId, setCursorId] = useState<string | null>(null);
+  const drilled = isMobile && Boolean(storeSelection) && selectedEntryId !== null;
+  const listActiveId = isMobile ? (cursorId ?? selectedEntryId) : selectedEntryId;
+
+  const pendingFocus = useRef<'list' | 'back' | null>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const backRef = useRef<HTMLButtonElement>(null);
+  useLayoutEffect(() => {
+    const target = pendingFocus.current;
+    pendingFocus.current = null;
+    if (target === 'back') backRef.current?.focus();
+    else if (target === 'list') {
+      const listbox = listRef.current?.querySelector<HTMLElement>('[role="listbox"]');
+      listbox?.focus();
+      listbox?.querySelector<HTMLElement>('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
+    }
+  }, [drilled]);
+
+  const select = (id: string) => {
+    if (isMobile) {
+      pendingFocus.current = 'back';
+      setCursorId(id);
+    }
+    setDictionarySelection(id);
+  };
+
+  const back = () => {
+    pendingFocus.current = 'list';
+    setCursorId(selectedEntryId);
+    setDictionarySelection(null);
+  };
+
+  return { drilled, listActiveId, select, back, onMove: isMobile ? setCursorId : undefined, listRef, backRef };
+}
+
+/**
  * Reference view for every props.conf and transforms.conf setting the simulator
  * knows about, plus the four stanza header kinds.
  *
@@ -27,7 +74,6 @@ const ALL_ENTRIES = buildEntries();
  */
 export function DictionaryView() {
   const selectedId = useAppStore((s) => s.dictionarySelection);
-  const setDictionarySelection = useAppStore((s) => s.setDictionarySelection);
   const isMobile = useMediaQuery('(max-width: 767px)');
 
   const [filters, setFilters] = useState<DictionaryFilters>(DEFAULT_FILTERS);
@@ -41,8 +87,18 @@ export function DictionaryView() {
   const selected =
     findEntry(visible, selectedId) ?? findEntry(ALL_ENTRIES, selectedId) ?? visible[0] ?? null;
 
+  const { drilled, listActiveId, select, back, onMove, listRef, backRef } = usePhoneDrill(
+    isMobile,
+    selected?.id ?? null,
+    selectedId,
+  );
+
   const list = (
-    <div className="h-full flex flex-col" style={{ backgroundColor: 'var(--color-bg-secondary)' }}>
+    <div
+      ref={listRef}
+      className="h-full flex flex-col"
+      style={{ backgroundColor: 'var(--color-bg-secondary)' }}
+    >
       <DictionaryFilterBar
         filters={filters}
         onChange={setFilters}
@@ -51,8 +107,9 @@ export function DictionaryView() {
       />
       <DictionaryList
         entries={visible}
-        selectedId={selected?.id ?? null}
-        onSelect={setDictionarySelection}
+        selectedId={listActiveId}
+        onSelect={select}
+        onMove={onMove}
       />
     </div>
   );
@@ -74,7 +131,7 @@ export function DictionaryView() {
   // returns. `selectedId` doubles as "has the user drilled in yet", which is
   // also what makes a deep link from elsewhere open straight onto the detail.
   if (isMobile) {
-    if (!selectedId || !selected) return list;
+    if (!drilled || !selected) return list;
     return (
       <div className="h-full flex flex-col">
         <div
@@ -85,8 +142,9 @@ export function DictionaryView() {
           }}
         >
           <button
+            ref={backRef}
             type="button"
-            onClick={() => setDictionarySelection(null)}
+            onClick={back}
             className="flex items-center gap-1 px-2 py-1 rounded-md text-xs cursor-pointer border-none bg-transparent
               text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-tertiary)] hover:text-[var(--color-text-primary)]
               outline-none focus-visible:ring-2 transition-colors"
