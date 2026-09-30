@@ -24,6 +24,16 @@ const OUTPUT_TABS: { id: OutputTabId; label: string }[] = [
   { id: 'architecture', label: 'Architecture' },
 ];
 
+/**
+ * Whether a modal other than the palette is showing. Read from the DOM rather
+ * than the store because not every overlay has a store flag (the directive
+ * dialogs and the confirm dialog keep theirs locally); Radix marks an open one
+ * with `data-state="open"` and drops it as soon as it starts to close.
+ */
+function anotherOverlayIsOpen(): boolean {
+  return document.querySelector('[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]') !== null;
+}
+
 /** Runs a command's action, then closes the palette. */
 type RunCommand = (fn: () => void) => void;
 
@@ -57,6 +67,11 @@ export function CommandPalette() {
       // Compare case-insensitively: with Caps Lock on, `e.key` is "K", and the
       // shortcut did nothing at all.
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        // Not over another modal (Scaffold, the confirm dialog, a directive
+        // dialog): the palette would stack on top of it, and its own actions
+        // then act on a page the user cannot see. Pressing it again with the
+        // palette itself open still closes it.
+        if (!useAppStore.getState().commandPaletteOpen && anotherOverlayIsOpen()) return;
         e.preventDefault();
         e.stopPropagation();
         toggleCommandPalette();
@@ -240,13 +255,21 @@ function ActionCommands({ run, replaceInputs }: { run: RunCommand; replaceInputs
   const toggleTheme = useAppStore((s) => s.toggleTheme);
   const toggleHelp = useAppStore((s) => s.toggleHelp);
   const toggleScaffold = useAppStore((s) => s.toggleScaffold);
+  // "Open", not "toggle": the panel may already be open behind the palette, and
+  // choosing the command must not close it.
+  const openHelp = () => {
+    if (!useAppStore.getState().helpOpen) toggleHelp();
+  };
+  const openScaffold = () => {
+    if (!useAppStore.getState().scaffoldOpen) toggleScaffold();
+  };
   return (
     <CommandGroup heading="Actions">
       <CommandItem
         label="Scaffold config from sample data"
         hint="Suggest props.conf"
         icon="sparkles"
-        onSelect={() => run(toggleScaffold)}
+        onSelect={() => run(openScaffold)}
       />
       <CommandItem
         label="Toggle theme"
@@ -256,7 +279,7 @@ function ActionCommands({ run, replaceInputs }: { run: RunCommand; replaceInputs
       <CommandItem
         label="Open pipeline reference"
         icon="info"
-        onSelect={() => run(toggleHelp)}
+        onSelect={() => run(openHelp)}
       />
       <CommandItem
         label="Clear all editors"

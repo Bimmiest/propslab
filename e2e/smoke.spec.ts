@@ -533,7 +533,7 @@ test.describe('match workers', () => {
     await loadExample(page, APACHE);
 
     await page.getByRole('tab', { name: /^Regex$/ }).click();
-    await page.getByRole('textbox', { name: 'Regular expression pattern' }).fill('HTTP/1\\.(?P<minor>\\d)');
+    await page.getByRole('textbox', { name: 'Regex Pattern' }).fill('HTTP/1\\.(?P<minor>\\d)');
 
     // Every Apache event carries an HTTP version, so all of them match: the
     // count and one card per event are the worker's results rendered.
@@ -655,7 +655,7 @@ test.describe('regex engine', () => {
     // PCRE-only syntax, in all three workers: a possessive group in the Regex
     // tab, `\K` in an EXTRACT the pipeline runs, and the Timestamp tab's prober.
     await page.getByRole('tab', { name: /^Regex$/ }).click();
-    await page.getByRole('textbox', { name: 'Regular expression pattern' }).fill('HTTP/1\\.(?P<minor>\\d)++');
+    await page.getByRole('textbox', { name: 'Regex Pattern' }).fill('HTTP/1\\.(?P<minor>\\d)++');
     await expect(page.getByText(/^5\/5 events matched$/)).toBeVisible({ timeout: 15_000 });
 
     // Before Fields: selecting a tab scrolls the strip, which can take this one out of reach.

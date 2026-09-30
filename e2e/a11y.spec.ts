@@ -254,7 +254,9 @@ test.describe('windowed field lists', () => {
     }
   });
 
-  test('the Extractions sidebar is windowed and walkable by keyboard', async ({ page }) => {
+  // The tree is ONE tab stop (roving tabindex, #495): Tab enters and leaves it,
+  // the arrow keys walk the rows. The walk used to be 44 Tabs, one per row.
+  test('the Extractions sidebar is windowed, one Tab stop, and walkable by arrow keys', async ({ page }) => {
     test.setTimeout(60_000);
     await openWideFields(page);
     await page.getByRole('tab', { name: /^Extractions$/ }).click();
@@ -267,14 +269,24 @@ test.describe('windowed field lists', () => {
 
     // The walk ends on a row that was not rendered when it began.
     await expect(sidebar.locator('[data-window-index="44"]')).toHaveCount(0);
+    // Exactly one rendered row is in the tab order.
+    await expect(sidebar.locator('[data-field-row][tabindex="0"]')).toHaveCount(1);
+
     await rows.first().getByRole('button').focus();
     const focusedIndex = () => page.evaluate(() => Number(document.activeElement?.closest<HTMLElement>('[data-window-index]')?.dataset.windowIndex));
     let previous = await focusedIndex();
     for (let i = 1; i < 45; i++) {
-      await page.keyboard.press('Tab');
+      await page.keyboard.press('ArrowDown');
       const current = await focusedIndex();
-      expect(current, `sidebar row focused after ${i} Tabs`).toBe(previous + 1);
+      expect(current, `sidebar row focused after ${i} ArrowDowns`).toBe(previous + 1);
       previous = current;
     }
+    // The roving stop followed the focus, and is still the only one.
+    await expect(sidebar.locator('[data-field-row][tabindex="0"]')).toHaveCount(1);
+    await expect(sidebar.locator(`[data-window-index="${previous}"] [data-field-row]`)).toHaveAttribute('tabindex', '0');
+
+    // Tab leaves the tree rather than stepping to the next row.
+    await page.keyboard.press('Tab');
+    expect(await page.evaluate(() => document.activeElement?.closest('[data-window-index]') != null)).toBe(false);
   });
 });

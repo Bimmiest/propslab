@@ -38,11 +38,15 @@ export function CimModelsTab() {
             : `${allCimResults.length} models (no fields matched yet)`}
         </span>
         {matchingCount > 0 && (
+          // A toggle: the name stays put and aria-pressed carries the state,
+          // which the flipping label alone conveyed only to sighted users.
           <button
+            type="button"
+            aria-pressed={showMatchingOnly}
             onClick={() => setShowMatchingOnly(!showMatchingOnly)}
-            className="text-xs text-[var(--color-accent)] hover:underline cursor-pointer"
+            className={`text-xs text-[var(--color-accent)] hover:underline cursor-pointer ${showMatchingOnly ? 'font-semibold underline' : ''}`}
           >
-            {showMatchingOnly ? 'Show all models' : 'Show matching only'}
+            Show matching only
           </button>
         )}
       </div>

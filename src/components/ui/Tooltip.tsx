@@ -16,7 +16,7 @@ export function Tooltip({ content, children, side = 'top', delayDuration = 400 }
         <RadixTooltip.Content
           side={side}
           sideOffset={6}
-          className="z-50 px-2.5 py-1.5 text-xs rounded-md shadow-lg select-none pointer-events-none animate-in fade-in-0 zoom-in-95"
+          className="z-50 px-2.5 py-1.5 text-xs rounded-md shadow-lg select-none animate-in fade-in-0 zoom-in-95"
           style={{
             backgroundColor: 'var(--color-bg-elevated)',
             color: 'var(--color-text-primary)',
