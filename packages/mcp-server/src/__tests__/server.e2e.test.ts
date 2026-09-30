@@ -324,7 +324,6 @@ describe('a flood of calls (#490)', () => {
     const held = DEFAULT_MAX_CONCURRENT_WORKERS + DEFAULT_MAX_QUEUED_CALLS;
     const extra = 3;
     const controller = new AbortController();
-    const startedAt = Date.now();
     const calls = Array.from({ length: held + extra }, () =>
       client.callTool(
         {
@@ -337,12 +336,27 @@ describe('a flood of calls (#490)', () => {
     );
     try {
       // The calls past the queue's bound come back as soon as they arrive,
-      // while the others hold every slot and queue position.
-      const settled = await Promise.race([
-        Promise.all(calls.slice(held)),
-        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('no busy refusal')), 5_000)),
-      ]);
-      expect(Date.now() - startedAt).toBeLessThan(5_000);
+      // while the others hold every slot and queue position. "At once" is
+      // ordering, not a stopwatch (#507): by the time the refusals have come
+      // back, every call that has come back at all is a refusal, and none has
+      // run to its end. A server that queued the extra calls instead would
+      // answer them only after a held call ended, and every held call runs for
+      // its whole 30 s budget, which is longer than this test's own timeout, so
+      // a slow machine cannot make a correct server fail here. (Which calls are
+      // refused is the server's to decide, and a previous test's workers may
+      // still be freeing slots, so this counts what has settled rather than
+      // reading the refusals off the last three by index.)
+      const settledSoFar: unknown[] = [];
+      for (const call of calls)
+        void call.then(
+          (r) => settledSoFar.push(r),
+          () => settledSoFar.push(undefined),
+        );
+      const settled = await Promise.all(calls.slice(held));
+      for (const early of settledSoFar) {
+        expect(early).toMatchObject({ isError: true });
+        expect(payload(early as TextResult).error).toBe('busy');
+      }
       for (const result of settled) {
         expect(result.isError).toBe(true);
         expect(payload(result)).toMatchObject({

@@ -260,13 +260,15 @@ describe('PreviewPanel — the change check is linear in whitespace (#427)', () 
     expect(unmodifiedCount()).toBe('1 / 1');
   });
 
-  it('checks an event with a long inner run of whitespace quickly', () => {
-    // 80k spaces took several seconds with the regex strip.
-    const raw = `a${' '.repeat(80_000)}b`;
+  it('checks an event with a long inner run of whitespace in linear time', () => {
+    // 80k spaces took several seconds with the regex strip. No stopwatch
+    // (#507), and nothing to count either: the cost sat inside one regex call.
+    // So the run is sized for the test's own timeout to be the bound: 400,000
+    // spaces is 25 times the work, minutes for the regex and a few milliseconds
+    // for trimEnd. (The one regex left, on CRLF, is linear.)
+    const raw = `a${' '.repeat(400_000)}b`;
     useAppStore.setState({ processingResult: resultOf(raw, raw) });
-    const start = performance.now();
     render(<PreviewPanel />);
-    expect(performance.now() - start).toBeLessThan(1500);
     expect(unmodifiedCount()).toBe('1 / 1');
   });
 });

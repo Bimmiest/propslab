@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
 import { fileURLToPath } from 'node:url';
+import { describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 import {
   explainInputShape,
   handleExplainPrecedence,
@@ -12,11 +13,24 @@ import {
 } from '../tools';
 import { WorkerStartTimeoutError, WorkerTimeoutError } from '../runInWorker';
 import type { RunProgress } from '../progress';
-import { z } from 'zod';
 import { explainOutputShape, validateOutputShape } from '../outputSchemas';
 import { MAX_RESPONSE_BYTES } from '../responseBudget';
 import { collectRegexSuspects } from '../suspects';
 import { resultText } from './resultText';
+
+// Counts the confs parsed on this thread, the server's. The parser itself still
+// runs: collectRegexSuspects below calls it for real. See withParseCount.
+const parseCalls = vi.hoisted(() => ({ count: 0 }));
+vi.mock('../../../../src/engine/parser/confParser', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../../src/engine/parser/confParser')>();
+  return {
+    ...actual,
+    parseConf: (...args: Parameters<typeof actual.parseConf>) => {
+      parseCalls.count++;
+      return actual.parseConf(...args);
+    },
+  };
+});
 
 /**
  * The handlers run engine code in a worker thread, and a worker loads
@@ -418,22 +432,16 @@ describe('the timeout path (#468)', () => {
   const pathological = `[st]\nEXTRACT-a = x\\\n${'a\\\n'.repeat(660_000)}`;
   const HANG_WORKER = fileURLToPath(new URL('./fixtures/hangWorker.cjs', import.meta.url));
 
-  /** Runs `call` while measuring the longest the event loop went without a turn. */
-  async function withLoopWatch<T>(call: () => Promise<T>): Promise<{ result: T; maxGapMs: number; elapsedMs: number }> {
-    let last = performance.now();
-    let maxGapMs = 0;
-    const ticker = setInterval(() => {
-      const now = performance.now();
-      maxGapMs = Math.max(maxGapMs, now - last);
-      last = now;
-    }, 10);
-    const start = performance.now();
-    try {
-      const result = await call();
-      return { result, maxGapMs, elapsedMs: performance.now() - start };
-    } finally {
-      clearInterval(ticker);
-    }
+  // The stall this guards against was one thing: the server parsing the conf on
+  // its own thread. So instead of a ticker measuring how long the event loop
+  // went without a turn (a stopwatch, #507), count the parses on this thread.
+  // The worker has its own copy of the parser, so none of these calls may reach
+  // the one counted here.
+  /** Runs `call` and returns what it did on this thread: the result and the confs parsed here. */
+  async function withParseCount<T>(call: () => Promise<T>): Promise<{ result: T; parsedHere: number }> {
+    parseCalls.count = 0;
+    const result = await call();
+    return { result, parsedHere: parseCalls.count };
   }
 
   it('never parses the conf on the server thread when a run times out', async () => {
@@ -444,13 +452,12 @@ describe('the timeout path (#468)', () => {
       () => handleSimulate(simulateArgs({ props_conf: pathological, timeout_ms: 200 }), HANG_WORKER),
       () => handleValidate({ props_conf: pathological, transforms_conf: '', timeout_ms: 200 }, HANG_WORKER),
     ]) {
-      const { result, maxGapMs, elapsedMs } = await withLoopWatch(call);
+      const { result, parsedHere } = await withParseCount(call);
       const out = payload(result);
       expect(out.error).toBe('timeout');
       expect(out).not.toHaveProperty('regex_directives');
       expect(out.message).not.toMatch(/backtrack/);
-      expect(elapsedMs).toBeLessThan(5_000);
-      expect(maxGapMs).toBeLessThan(1_000);
+      expect(parsedHere).toBe(0);
     }
   }, 30_000);
 
@@ -464,12 +471,12 @@ describe('the timeout path (#468)', () => {
           WORKER_PATH,
         ),
     ]) {
-      const { result, maxGapMs, elapsedMs } = await withLoopWatch(call);
+      const { result, parsedHere } = await withParseCount(call);
       // Linear now, so the run may well finish inside its budget; either way
-      // the answer comes promptly and the server's loop keeps turning.
+      // the answer comes back (this test's own timeout is the bound on when)
+      // and the conf was parsed only in the worker.
       expect(['timeout', undefined]).toContain(payload(result).error);
-      expect(elapsedMs).toBeLessThan(10_000);
-      expect(maxGapMs).toBeLessThan(1_000);
+      expect(parsedHere).toBe(0);
     }
   }, 60_000);
 });

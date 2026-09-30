@@ -110,8 +110,8 @@ export default defineConfig({
       thresholds: {
         statements: 92,
         branches: 84,
-        functions: 89,
-        lines: 92,
+        functions: 91,
+        lines: 94,
         // The engine is held to a much higher bar than the app as a whole. It
         // is where correctness lives — a simulator whose UI is under-tested is
         // annoying, whereas one whose pipeline is under-tested is wrong — and
@@ -126,10 +126,10 @@ export default defineConfig({
           lines: 97,
         },
         'src/components/**': {
-          statements: 83,
-          branches: 75,
-          functions: 80,
-          lines: 85,
+          statements: 86,
+          branches: 77,
+          functions: 83,
+          lines: 88,
         },
         'src/hooks/**': {
           statements: 92,

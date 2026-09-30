@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { parseConf } from '../parser/confParser';
+import { expectLinearWork } from '../../test/scanWork';
 
 function directives(text: string, stanzaName: string) {
   const parsed = parseConf(text, 'props.conf');
@@ -134,13 +135,17 @@ describe('parseConf — line continuation (SEM-18)', () => {
   });
 
   it('parses a long run of continuation lines in linear time (#468)', () => {
-    // Just under the MCP server's two-million-character conf limit. Appending
-    // each line to the whole value made this take minutes.
-    const text = `[st]\nEXTRACT-a = x\\\n${'a\\\n'.repeat(660_000)}`;
-    const start = performance.now();
-    const v = value(text, 'st', 'EXTRACT-a');
-    expect(performance.now() - start).toBeLessThan(3_000);
-    expect(v).toBe(`x${'a'.repeat(660_000)}`);
+    // Appending each line to the whole value re-copied it every time, which
+    // took minutes just under the MCP server's two-million-character conf
+    // limit. Counted, not timed (#507): the length scanned by slices and joins
+    // must not much more than double when the number of lines does.
+    const conf = (lines: number) => `[st]\nEXTRACT-a = x\\\n${'a\\\n'.repeat(lines)}`;
+    expectLinearWork((lines) => {
+      const text = conf(lines);
+      return () => void parseConf(text, 'props.conf');
+    }, 5_000);
+    // And the value is still every line joined, at the size the limit allows.
+    expect(value(conf(660_000), 'st', 'EXTRACT-a')).toBe(`x${'a'.repeat(660_000)}`);
   });
 });
 

@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { marked, type Tokens } from 'marked';
+import type { Position, languages } from 'monaco-editor';
 import { createHoverProvider } from '../splunkConfHover';
 import { OPEN_DICTIONARY_COMMAND_ID, openDictionaryCommandUri } from '../dictionaryCommand';
-import type { Position, languages } from 'monaco-editor';
 import { fakeModel } from '../../test/fakeModel';
 
 const at = (lineNumber: number, column: number) => ({ lineNumber, column }) as Position;

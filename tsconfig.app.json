@@ -26,6 +26,15 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
+    /* `exactOptionalPropertyTypes` is off on purpose, in every tsconfig. Tried
+       (#510): 38 sites in 27 files across the app, the engine, the MCP server's
+       zod output schemas, the e2e specs and vitest.stryker.config.ts (whose
+       typing is a third party's). Most are the same fix, a `key: T | undefined`
+       assigned to an optional `key?: T`, but 13 are in ten src/engine files,
+       which the PR mutation check would then have to re-run in full, and the
+       zod ones need their schemas retyped. That is a change to make by itself:
+       turn the flag on in each tsconfig and fix what `npm run build` and
+       `npm run typecheck` in packages/mcp-server report. */
   },
   "include": ["src"]
 }

@@ -3,6 +3,7 @@ import globals from 'globals';
 import reactHooks from 'eslint-plugin-react-hooks';
 import reactRefresh from 'eslint-plugin-react-refresh';
 import vitest from '@vitest/eslint-plugin';
+import importX from 'eslint-plugin-import-x';
 import tseslint from 'typescript-eslint';
 import { defineConfig, globalIgnores } from 'eslint/config';
 
@@ -184,6 +185,23 @@ export default defineConfig([
       ecmaVersion: 'latest',
       sourceType: 'module',
       globals: globals.node,
+    },
+  },
+  {
+    // Import order: Node built-ins, then packages, then the project's own files
+    // (parent, sibling and index alike). The one thing the codebase already did
+    // by habit, so the rule holds a line rather than starting a reorder: within
+    // a group the order is the author's, and blank lines are Prettier's.
+    // Side-effect imports (`import './setup'`) are not ordered by the rule, which
+    // matters where one has to run first (a Monaco stub before the editor). The
+    // fixer moves whole declarations, so `eslint --fix` applies it.
+    files: ['**/*.{ts,tsx,js,mjs}'],
+    plugins: { 'import-x': importX },
+    rules: {
+      'import-x/order': [
+        'error',
+        { groups: ['builtin', 'external', ['parent', 'sibling', 'index']], 'newlines-between': 'ignore' },
+      ],
     },
   },
   {

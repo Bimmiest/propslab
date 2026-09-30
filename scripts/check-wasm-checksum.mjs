@@ -18,10 +18,10 @@
 //   node scripts/check-wasm-checksum.mjs [dir]      (default: the cwd)
 // ---------------------------------------------------------------------------
 
-import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { basename, dirname, join, resolve } from 'node:path';
+import { verifyChecksum } from './lib/wasmChecksum.mjs';
 
 const from = resolve(process.argv[2] ?? '.');
 
@@ -42,16 +42,12 @@ try {
   process.exit(1);
 }
 
-// `<64 hex>  <name>` lines, as sha256sum writes them; `*` marks binary mode.
-const entries = [...sums.matchAll(/^([0-9a-f]{64}) [ *](.+)$/gm)];
-const expected = entries.find(([, , name]) => name === basename(wasmPath))?.[1];
-if (!expected) {
+const { status, expected, actual } = verifyChecksum(readFileSync(wasmPath), sums, basename(wasmPath));
+if (status === 'no-entry') {
   console.error(`${sumPath} has no valid entry for ${basename(wasmPath)}.`);
   process.exit(1);
 }
-
-const actual = createHash('sha256').update(readFileSync(wasmPath)).digest('hex');
-if (actual !== expected) {
+if (status === 'mismatch') {
   console.error(`${wasmPath}: FAILED\n  expected ${expected}\n  actual   ${actual}`);
   process.exit(1);
 }

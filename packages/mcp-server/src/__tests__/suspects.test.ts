@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
 import v8 from 'node:v8';
 import vm from 'node:vm';
+import { describe, expect, it } from 'vitest';
 import { boundedRegexSuspects, collectRegexSuspects } from '../suspects';
 import { MAX_PAYLOAD_BYTES, responseBytes } from '../responseBudget';
 

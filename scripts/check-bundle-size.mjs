@@ -28,7 +28,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { gzipSync } from 'node:zlib';
-import { documentAssets } from './lib/htmlAssets.mjs';
+import { budgetRows, initialLoadFiles, staleBudgets } from './lib/bundleBudget.mjs';
 
 /**
  * Budgets in kB (1000 bytes, as Vite reports) of gzip output, keyed by
@@ -71,13 +71,11 @@ try {
   process.exit(1);
 }
 
-const rows = files.map((file) => {
-  // `name-<hash>.ext`; Vite's hashes are 8 url-safe base64 characters.
-  const key = file.replace(/-[\w-]{8}(\.\w+)$/, '$1');
-  const kb = gzipSync(readFileSync(join(dir, file))).length / 1000;
-  const budget = BUDGETS_KB[key] ?? DEFAULT_KB;
-  return { key, kb, budget, over: kb > budget };
-});
+const rows = budgetRows(
+  files.map((file) => ({ file, kb: gzipSync(readFileSync(join(dir, file))).length / 1000 })),
+  BUDGETS_KB,
+  DEFAULT_KB,
+);
 
 // The initial-load set, straight from the HTML: `src` of the entry script,
 // `href` of each modulepreload and stylesheet.
@@ -88,19 +86,13 @@ try {
   console.error(`No index.html next to ${dir} — run \`npm run build\` first.`);
   process.exit(1);
 }
-const initialFiles = [
-  ...new Set(
-    documentAssets(html)
-      .filter((r) => r.url.startsWith('/assets/'))
-      .map((r) => r.url.slice('/assets/'.length)),
-  ),
-].filter((f) => /\.(js|css)$/.test(f));
+const initialFiles = initialLoadFiles(html);
 const initialKb = initialFiles.reduce((sum, f) => sum + gzipSync(readFileSync(join(dir, f))).length / 1000, 0);
 const initialOver = initialKb > INITIAL_LOAD_BUDGET_KB;
 
 // A budget whose chunk does not exist is stale: renamed or merged away, and
 // guarding nothing.
-const missing = Object.keys(BUDGETS_KB).filter((key) => !rows.some((r) => r.key === key));
+const missing = staleBudgets(BUDGETS_KB, rows);
 
 for (const r of rows.sort((a, b) => b.kb - a.kb)) {
   const mark = r.over ? 'OVER' : 'ok';

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { computeDiagnostics } from '../splunkConfDiagnostics';
 import { fakeModel } from '../../test/fakeModel';
+import { expectLinearWork } from '../../test/scanWork';
 
 describe('computeDiagnostics — continuation gating (#24)', () => {
   it('validates the line after a backslash-terminated stanza header', () => {
@@ -50,10 +51,14 @@ describe('computeDiagnostics — continued values are validated as a whole (#70.
     // Re-concatenating the whole value per line made this quadratic. Every
     // continuation line belongs to the one value, so none is read as a
     // directive or reported as malformed.
-    const text = `[st]\nTIME_FORMAT = %Y\\\n${'a\\\n'.repeat(200_000)}`;
-    const start = performance.now();
-    const markers = computeDiagnostics(fakeModel(text), 'props.conf');
-    expect(performance.now() - start).toBeLessThan(3_000);
+    // Counted, not timed (#507): the length copied and scanned by slices, joins
+    // and searches must not much more than double when the number of lines does.
+    const conf = (lines: number) => `[st]\nTIME_FORMAT = %Y\\\n${'a\\\n'.repeat(lines)}`;
+    expectLinearWork((lines) => {
+      const model = fakeModel(conf(lines));
+      return () => void computeDiagnostics(model, 'props.conf');
+    }, 5_000);
+    const markers = computeDiagnostics(fakeModel(conf(200_000)), 'props.conf');
     expect(markers).toEqual([]);
   });
 
