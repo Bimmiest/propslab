@@ -25,6 +25,7 @@ npm run test:watch   # vitest watch mode
 npm run test:e2e     # Playwright smoke tests (builds, then serves dist/)
 npm run test:e2e:ui  # …in Playwright's interactive runner
 npm run test:mutation # Stryker mutation testing
+npm run test:mutation:canary # 40-second check that Stryker still kills mutants (the vitest shim)
 npm run check:overrides # Verify the @radix-ui overrides match what the Radix packages pin
 ```
 

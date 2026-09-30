@@ -29,11 +29,15 @@ export default defineConfig({
         'src/index.ts',
         'src/simulateWorker.ts',
       ],
-      // Measured, not chosen: just under what the suite produces today with
-      // the heap-limit tests skipped, which they are wherever NODE_OPTIONS
-      // already sets a heap size (runInWorker.test.ts). As in the app's
-      // config, raise them when tests raise coverage; never lower them to
-      // make a branch green.
+      // Measured, not chosen: within a point of what the suite produces with
+      // the heap-limit tests skipped (93.6 / 88.2 / 94.1 / 93.8), which they are
+      // wherever NODE_OPTIONS already sets a heap size (runInWorker.test.ts).
+      // Without NODE_OPTIONS, as in CI, they run and the figures are 94.8 / 89.2
+      // / 96.6 / 95.2, so the floors sit 1.2-2.6 points under CI's numbers and
+      // hold on the Windows and macOS legs, where the Linux-only launcher tests
+      // skip. scripts/check-coverage-floors.mjs fails CI's Linux leg when a
+      // floor is more than 3 points under (#506). As in the app's config, raise
+      // them when tests raise coverage; never lower them to make a branch green.
       thresholds: {
         statements: 93,
         branches: 88,

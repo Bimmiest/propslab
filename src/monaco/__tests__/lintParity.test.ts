@@ -21,8 +21,9 @@ import { lintConfigs } from '../../engine/configLint';
 import { parseConf } from '../../engine/parser/confParser';
 import type { ValidationDiagnostic } from '../../engine/types';
 import { fakeModel } from '../../test/fakeModel';
+import { fcSeed } from '../../test/fcSeed';
 
-fc.configureGlobal({ seed: 500, numRuns: 400 });
+fc.configureGlobal({ seed: fcSeed(500), numRuns: 400 });
 
 type ConfFile = 'props.conf' | 'transforms.conf';
 
