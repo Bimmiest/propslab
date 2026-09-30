@@ -100,6 +100,10 @@ All notable changes to Propslab are documented here, newest first. Entries say w
 
 ### Fixed
 
+- **First load is held to Web Vitals budgets** ([#514](https://github.com/Bimmiest/propslab/issues/514)): a non-retried perf spec loads the production build cold and checks LCP, total blocking time and transferred bytes, and every perf spec writes its numbers to the job summary.
+- **The deploy bundle is attested and verified before upload** ([#518](https://github.com/Bimmiest/propslab/issues/518)). A job holding only the signing permissions attests a manifest of `dist/`; the deploy job checks the attestation and that `dist/` is exactly that manifest.
+- **A `supply-chain` workflow checks the Radix overrides and reminds when `.nvmrc` falls behind its Node line** ([#518](https://github.com/Bimmiest/propslab/issues/518)); the override check had been inspecting only one of its three packages. Node moves to 24.21.0.
+- **The CIM generator is unit-tested and must reproduce the committed data file** ([#518](https://github.com/Bimmiest/propslab/issues/518)), which caught it dropping the licence header.
 - **Coverage floors sit one point under the measured figures** ([#506](https://github.com/Bimmiest/propslab/issues/506)), with per-directory floors for components, hooks, monaco, store and utils, and a CI step fails when any floor falls more than 3 points behind. `main.tsx` and the worker entry points are measured rather than excluded.
 - **The weekly randomised run is random** ([#513](https://github.com/Bimmiest/propslab/issues/513)): it draws a fresh property-test seed, uses it for test order too, and prints it with a replay command. Unset, every property test had run on its fixed default.
 - **Tests no longer assert wall-clock time** in the wildcard matcher or the MCP server's end-to-end cancellation tests; a shared `makeEvent` helper is introduced and Playwright pins `colorScheme` ([#507](https://github.com/Bimmiest/propslab/issues/507), in part).
