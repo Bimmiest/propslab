@@ -118,6 +118,13 @@ jobs:
         # gives locally, and the floor is a ratchet rather than a suggestion.
         run: npm run test:coverage
 
+      - name: Coverage floors are tight
+        # vitest enforces actual >= floor; this enforces the other half. A floor
+        # more than 3 points under the measured figure is not a ratchet (#506):
+        # coverage could fall by that much unnoticed. It reads the config's
+        # thresholds and coverage/coverage-summary.json from the step above.
+        run: node scripts/check-coverage-floors.mjs
+
       # Chromium only — the e2e suite covers browser-level wiring (CSP, worker
       # bundling, Monaco's chunk split), not cross-browser rendering, so the
       # other engines would cost minutes to re-assert the same facts.
@@ -226,15 +233,24 @@ jobs:
         # With the coverage floor in vitest.config.mts, as the app's Test step.
         run: npm run test:coverage
 
+      - name: Coverage floors are tight
+        # As the app's job: the floors in vitest.config.mts must stay within 3
+        # points of the measured figures. Linux only, because the figures are
+        # Linux's: the launcher tests skip elsewhere, so the floors are set for
+        # the lowest leg and the others sit further above them.
+        if: matrix.os == 'ubuntu-latest'
+        run: node ../../scripts/check-coverage-floors.mjs vitest.config.mts
+
   # The default run is deterministic on purpose: one timezone, one locale, a
   # fixed order, and property-test seeds that FC_SEED can pin. That is what
   # makes a red run reproducible, and it is also what lets a test that only
   # passes under those conditions stay green forever (#507). Once a week the
   # unit suite runs the other way: a zone that is neither UTC nor the runner's,
-  # a non-English locale, files and tests in a random order, and FC_SEED left
-  # unset so property tests draw fresh seeds. The vitest config is used as is,
-  # without the coverage floor, which is not a property of the ordering. Vitest
-  # and fast-check both report the seed that reproduces a failure.
+  # a non-English locale, files and tests in a random order, and a fresh FC_SEED
+  # so property tests draw new inputs (unset would not: fcSeed() then returns
+  # each test's fixed default, #513). The vitest config is used as is, without
+  # the coverage floor, which is not a property of the ordering. The step prints
+  # the seed and the command that replays the run.
   randomised:
     if: github.event_name == 'schedule'
     name: ${{ format('unit tests, randomised ({0}, {1})', matrix.tz, matrix.lang) }}
@@ -264,11 +280,20 @@ jobs:
         run: node scripts/check-wasm-checksum.mjs
 
       - name: Test
-        # FC_SEED is deliberately not set anywhere in this job.
+        # fcSeed() returns a test's fixed default whenever FC_SEED is unset, so
+        # leaving it unset randomises nothing (#513): every property ran on its
+        # committed seed and this job only varied the order. The seed is drawn
+        # here instead, and printed where a failure's reader will see it, along
+        # with the command that replays the run. It also seeds the file and test
+        # order, so one number reproduces both. Vitest and fast-check each print
+        # their own seed on a failure too.
         env:
           TZ: ${{ matrix.tz }}
           LANG: ${{ matrix.lang }}
-        run: npx vitest run --sequence.shuffle
+        run: |
+          seed=$(( (RANDOM << 15) | RANDOM ))
+          echo "Seed: $seed. Replay: FC_SEED=$seed TZ=$TZ LANG=$LANG npx vitest run --sequence.shuffle --sequence.seed=$seed" | tee -a "$GITHUB_STEP_SUMMARY"
+          FC_SEED="$seed" npx vitest run --sequence.shuffle --sequence.seed="$seed"
 
   # Split out of the main job on purpose. Sequentially, a new advisory turned
   # the whole run red after five minutes of tests, and the tests' own verdict

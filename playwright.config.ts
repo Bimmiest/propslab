@@ -57,6 +57,9 @@ export default defineConfig({
     screenshot: 'only-on-failure',
     timezoneId: 'America/Los_Angeles',
     locale: 'en-GB',
+    // Playwright's default too, but stated, like the zone and locale above: a
+    // spec must not depend on what a future default says (#507).
+    colorScheme: 'light',
   },
   projects: [
     {

@@ -11,6 +11,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Position, languages } from 'monaco-editor';
 import { createHoverProvider, firstNonBlankLine } from '../splunkConfHover';
 import { fakeModel } from '../../test/fakeModel';
+import { fcSeed } from '../../test/fcSeed';
 import { useAppStore } from '../../store/useAppStore';
 
 const build = vi.hoisted(() => vi.fn());
@@ -114,7 +115,7 @@ describe('firstNonBlankLine', () => {
         const raw = parts.join('');
         expect(firstNonBlankLine(raw)).toBe(raw.split('\n').find((l) => l.trim() !== ''));
       }),
-      { seed: 502 },
+      { seed: fcSeed(502) },
     );
   });
 });
