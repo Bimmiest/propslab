@@ -118,6 +118,13 @@ jobs:
         # gives locally, and the floor is a ratchet rather than a suggestion.
         run: npm run test:coverage
 
+      - name: Coverage floors are tight
+        # vitest enforces actual >= floor; this enforces the other half. A floor
+        # more than 3 points under the measured figure is not a ratchet (#506):
+        # coverage could fall by that much unnoticed. It reads the config's
+        # thresholds and coverage/coverage-summary.json from the step above.
+        run: node scripts/check-coverage-floors.mjs
+
       # Chromium only — the e2e suite covers browser-level wiring (CSP, worker
       # bundling, Monaco's chunk split), not cross-browser rendering, so the
       # other engines would cost minutes to re-assert the same facts.
@@ -225,6 +232,14 @@ jobs:
       - name: Test
         # With the coverage floor in vitest.config.mts, as the app's Test step.
         run: npm run test:coverage
+
+      - name: Coverage floors are tight
+        # As the app's job: the floors in vitest.config.mts must stay within 3
+        # points of the measured figures. Linux only, because the figures are
+        # Linux's: the launcher tests skip elsewhere, so the floors are set for
+        # the lowest leg and the others sit further above them.
+        if: matrix.os == 'ubuntu-latest'
+        run: node ../../scripts/check-coverage-floors.mjs vitest.config.mts
 
   # The default run is deterministic on purpose: one timezone, one locale, a
   # fixed order, and property-test seeds that FC_SEED can pin. That is what
