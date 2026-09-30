@@ -231,12 +231,15 @@ export function parseConf(
     return { stanzas: mergeDuplicateStanzas(stanzas), errors };
   }
 
+  // Appended one by one: spreading into push() passes every element as an
+  // argument, and a layer of a few hundred thousand one-line stanzas or
+  // malformed lines overflows the stack.
   const stanzas: ConfStanza[] = [];
   const errors: ValidationDiagnostic[] = [];
   for (const { layer, text } of input) {
     const parsed = parseLayer(text, fileName, layer);
-    stanzas.push(...parsed.stanzas);
-    errors.push(...parsed.errors);
+    for (const stanza of parsed.stanzas) stanzas.push(stanza);
+    for (const error of parsed.errors) errors.push(error);
   }
 
   const merged = mergeDuplicateStanzas(stanzas);
@@ -467,7 +470,8 @@ function mergeDuplicateStanzas(stanzas: ConfStanza[]): ConfStanza[] {
       continue;
     }
 
-    existing.directives.push(...stanza.directives);
+    // One by one, as in parseConf: a spread of a huge stanza overflows the stack.
+    for (const directive of stanza.directives) existing.directives.push(directive);
 
     if (stanza.layer === undefined || existing.layers === undefined) {
       existing.lineRange.end = Math.max(existing.lineRange.end, stanza.lineRange.end);

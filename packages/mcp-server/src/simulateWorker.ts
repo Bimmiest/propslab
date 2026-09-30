@@ -94,7 +94,8 @@ function handleValidate(request: ValidateRequest, run: Run): ValidateResponse {
   const diagnostics = [...propsConf.errors, ...transformsConf.errors];
   run.progress.phase('running');
   lintConfigs(propsConf, transformsConf, diagnostics);
-  diagnostics.push(...lintRegexDirectives(propsConf, transformsConf));
+  // One by one: a spread of a few hundred thousand would overflow the stack.
+  for (const d of lintRegexDirectives(propsConf, transformsConf)) diagnostics.push(d);
   run.progress.phase('finishing');
   return boundValidate(diagnostics);
 }

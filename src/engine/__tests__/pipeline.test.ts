@@ -286,3 +286,11 @@ describe('runPipeline — CLONE_SOURCETYPE copies are not reported as MetaData:*
     expect(step?.description).toMatch(/^Cloned by CLONE_SOURCETYPE \("st" → "cloned"\)/);
   });
 });
+
+describe('runPipeline — a conf of hundreds of thousands of parse errors (#517)', () => {
+  it('reports them all rather than overflowing the stack', () => {
+    // Pushing the parse errors with a spread passed each as an argument.
+    const { diagnostics } = runPipeline('x\n', META, 'x\n'.repeat(300_000), '', { perEventPipeline: false });
+    expect(diagnostics.filter((d) => d.message.startsWith('Malformed line'))).toHaveLength(300_000);
+  });
+});

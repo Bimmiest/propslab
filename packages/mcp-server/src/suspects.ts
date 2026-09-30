@@ -18,9 +18,9 @@
  * says so.
  */
 import { parseConf } from '../../../src/engine/parser/confParser';
-import { getDirectiveInfo } from '../../../src/engine/directiveRegistry';
 import { hasReDoSRisk } from '../../../src/utils/redosHeuristic';
-import type { ConfDirective, ConfInput, ConfStanza } from '../../../src/engine/types';
+import type { ConfInput } from '../../../src/engine/types';
+import { directivePatterns } from './directivePatterns';
 import { elementBytes, fitting, MAX_PAYLOAD_BYTES } from './responseBudget';
 
 export interface RegexSuspect {
@@ -30,6 +30,8 @@ export interface RegexSuspect {
   line: number;
   layer?: string;
   pattern: string;
+  /** A regex inside an eval expression: the function it is passed to, e.g. `match()`. */
+  via?: string;
   /** True when the engine's structural ReDoS heuristic flags the pattern. */
   redos_risk: boolean;
 }
@@ -44,27 +46,12 @@ export interface SuspectList {
 }
 
 /**
- * Every directive in `stanzas` whose non-empty value is a regex the engine
- * compiles. Shared with validate's static regex check (regexLint.ts), so the
- * two agree on what counts as regex-bearing.
+ * Every regex every directive in the conf runs, one suspect each — the same
+ * patterns validate compiles (directivePatterns.ts), so an `EXTRACT … in
+ * <field>` lists its pattern without the suffix, a SEDCMD its `s///` regex,
+ * and an eval expression each literal regex it passes to `match()`,
+ * `replace()` or `mvfind()` (`via` names the function).
  */
-export function* regexDirectives(
-  stanzas: ConfStanza[],
-  file: 'props.conf' | 'transforms.conf',
-): Generator<{ stanza: ConfStanza; dir: ConfDirective }> {
-  for (const stanza of stanzas) {
-    for (const dir of stanza.directives) {
-      const baseKey = dir.className ? dir.directiveType : dir.key;
-      const info = getDirectiveInfo(baseKey, file);
-      // SEDCMD's value embeds its regex in sed syntax rather than being
-      // typed `regex` in the registry; it executes against `_raw` all the
-      // same, so it belongs on the list.
-      const carriesRegex = info?.valueType === 'regex' || dir.directiveType === 'SEDCMD';
-      if (carriesRegex && dir.value.trim()) yield { stanza, dir };
-    }
-  }
-}
-
 export function collectRegexSuspects(
   propsConf: ConfInput,
   transformsConf: ConfInput,
@@ -76,17 +63,21 @@ export function collectRegexSuspects(
   ];
 
   for (const [file, input] of files) {
-    for (const { stanza, dir } of regexDirectives(parseConf(input, file).stanzas, file)) {
-      const pattern = dir.value.trim();
-      suspects.push({
-        file,
-        stanza: stanza.name,
-        key: dir.key,
-        line: dir.line,
-        ...(dir.layer !== undefined ? { layer: dir.layer } : {}),
-        pattern,
-        redos_risk: hasReDoSRisk(pattern),
-      });
+    for (const stanza of parseConf(input, file).stanzas) {
+      for (const dir of stanza.directives) {
+        for (const { pattern, fn } of directivePatterns(dir, file)) {
+          suspects.push({
+            file,
+            stanza: stanza.name,
+            key: dir.key,
+            line: dir.line,
+            ...(dir.layer !== undefined ? { layer: dir.layer } : {}),
+            pattern,
+            ...(fn !== undefined ? { via: `${fn}()` } : {}),
+            redos_risk: hasReDoSRisk(pattern),
+          });
+        }
+      }
     }
   }
 

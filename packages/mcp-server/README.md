@@ -125,9 +125,12 @@ reviewed. `docs/engine.md`'s closing section is the spec this implements:
   many events may simply need a larger `timeout_ms`, and the advice says
   both; a run stopped while parsing the conf or shaping the response is
   about size, not a pattern. Where a regex may be the cause, the error lists
-  every regex-valued directive in the conf (file / stanza / key / line /
-  layer), and which of them a structural ReDoS heuristic flags — so the
-  agent can repair the pattern rather than retry blind. The heuristic is
+  every regex a directive in the conf runs (file / stanza / key / line /
+  layer, and `via` — `match()`, `replace()` or `mvfind()` — for a
+  literal regex inside an `EVAL-`, `INGEST_EVAL` or `STOP_PROCESSING_IF`
+  expression), read as validate reads it: an EXTRACT's pattern without its
+  `in <field>`, a SEDCMD's `s///` regex (#517). Each says whether a
+  structural ReDoS heuristic flags it — so the agent can repair the pattern rather than retry blind. The heuristic is
   advisory and cannot see every form (e.g. `(a|aa)+`), and the error text
   says so. The list is built inside the worker, which posts it before the
   pipeline runs, and the worker records its progress in shared memory the
@@ -275,6 +278,15 @@ npm run typecheck   # tsc --noEmit over the package + the engine it imports
 npm run build       # typecheck + esbuild bundles (dist/index.js, dist/simulateWorker.js)
 npm test            # builds, then vitest — the worker tests run the built bundle
 ```
+
+`src/__tests__/adversarial.test.ts` is the wall-clock regression suite:
+input at the schemas' limits (a maximum-length conf of continuation lines,
+of one-line stanzas and of malformed lines; the maximum sample with an
+empty `LINE_BREAKER` group; deeply nested JSON and XML; twenty concurrent
+calls) through the real protocol, each answered or refused with `busy`
+within a fixed bound of its budget, with the server's event loop never
+stalled for a second. A change that lets agent input wedge the server
+should fail it.
 
 The engine is imported from `../../src/engine` as-is; this package makes no
 engine changes, which is the boundary #202 draws — if one ever seems needed,

@@ -392,7 +392,9 @@ export function runPipeline(
   // 1. Parse configurations
   const propsConf = parseConf(propsConfInput, 'props.conf');
   const transformsConf = parseConf(transformsConfInput, 'transforms.conf');
-  diagnostics.push(...propsConf.errors, ...transformsConf.errors);
+  // Not push(...errors): a conf of a few hundred thousand malformed lines
+  // would pass that many arguments and overflow the stack.
+  for (const error of [...propsConf.errors, ...transformsConf.errors]) diagnostics.push(error);
 
   // Config-level lint: everything here reads the conf files alone, not which
   // stanzas match this event, and none of it changes what the pipeline does.

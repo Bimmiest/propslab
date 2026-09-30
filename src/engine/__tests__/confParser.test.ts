@@ -122,6 +122,17 @@ describe('parseConf — line continuation (SEM-18)', () => {
     expect(value('[s]\nK = a\\\nb\\\nc', 's', 'K')).toBe('abc');
   });
 
+  it('takes layers of hundreds of thousands of stanzas and errors without overflowing the stack (#517)', () => {
+    // Spreading a layer's results into push() passed each as an argument.
+    const layer = (text: string) => ({ layer: 'l', text });
+    const stanzas = '[s]\nk=v\n'.repeat(300_000);
+    const malformed = 'x\n'.repeat(300_000);
+    const parsed = parseConf([layer(stanzas), layer(malformed)], 'props.conf');
+    expect(parsed.errors).toHaveLength(300_000);
+    expect(parsed.stanzas).toHaveLength(1);
+    expect(parsed.stanzas[0]?.directives).toHaveLength(300_000);
+  });
+
   it('parses a long run of continuation lines in linear time (#468)', () => {
     // Just under the MCP server's two-million-character conf limit. Appending
     // each line to the whole value made this take minutes.

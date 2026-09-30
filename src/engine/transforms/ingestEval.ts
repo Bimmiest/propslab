@@ -83,6 +83,18 @@ function splitAssignment(expr: string): { fieldName: string; evalExpr: string } 
 }
 
 /**
+ * The expression of each `field=expr` assignment in an INGEST_EVAL value,
+ * split as `applyIngestEval` splits them. For callers that read the
+ * expressions without running them (the MCP server's regex lint).
+ */
+export function ingestEvalExpressions(value: string): string[] {
+  return splitAssignments(value).flatMap((expr) => {
+    const assignment = splitAssignment(expr);
+    return assignment ? [assignment.evalExpr] : [];
+  });
+}
+
+/**
  * The run-wide ledger keys INGEST_EVAL reports under. The transforms pass
  * calls applyIngestEval once per event, so a set local to the call would
  * forget between events. Warnings are keyed by message (stubs, regex

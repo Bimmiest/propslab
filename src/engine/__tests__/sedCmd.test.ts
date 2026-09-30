@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applySedCommands } from '../processors/sedCmd';
+import { applySedCommands, sedPattern } from '../processors/sedCmd';
 import type { SplunkEvent, ConfDirective, ValidationDiagnostic } from '../types';
 import { runCtx } from './runCtx';
 
@@ -97,5 +97,29 @@ describe('applySedCommands', () => {
     const diags: ValidationDiagnostic[] = [];
     applySedCommands([event('a a a')], [sedDir('x', 's/a/b/2')], runCtx(diags));
     expect(diags.some((d) => d.message.includes('numeric occurrence flag'))).toBe(true);
+  });
+});
+
+// Not Splunk behaviour: sedPattern is the engine's own accessor, so these pin
+// that it reads the pattern the expression parser compiles.
+describe('sedPattern', () => {
+  it('returns the s/// regex with its backslashes, for any delimiter', () => {
+    expect(sedPattern(' s/\\d{4}/xxxx/g ')).toBe('\\d{4}');
+    expect(sedPattern('s#a\\#b#c#')).toBe('a\\#b');
+    expect(sedPattern('s/a/b')).toBe('a');
+  });
+
+  it('returns null where there is no regex to compile', () => {
+    expect(sedPattern('y/abc/xyz/')).toBeNull();
+    expect(sedPattern('not sed')).toBeNull();
+    expect(sedPattern('s/unclosed')).toBeNull();
+    expect(sedPattern('')).toBeNull();
+  });
+
+  it('reads the pattern applySedCommands applies', () => {
+    const value = 's/\\d{4}/####/';
+    expect(sedPattern(value)).toBe('\\d{4}');
+    const [out] = applySedCommands([event('year 2024 here')], [sedDir('m', value)], runCtx([]));
+    expect(out?._raw).toBe('year #### here');
   });
 });

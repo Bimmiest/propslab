@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyIngestEval } from '../transforms/ingestEval';
+import { applyIngestEval, ingestEvalExpressions } from '../transforms/ingestEval';
 import { runPipeline } from '../pipeline';
 import type { SplunkEvent, ConfDirective, EventMetadata, ValidationDiagnostic } from '../types';
 import { runCtx } from './runCtx';
@@ -317,5 +317,21 @@ describe('runPipeline — CLONE_SOURCETYPE does not repeat INGEST_EVAL problems 
     const { result, diagnostics } = runPipeline('one\ntwo\nthree', meta, props, transforms, { perEventPipeline });
     expect(result.events.filter((e) => e.clonedFrom !== undefined)).toHaveLength(3);
     expect(diagnostics.filter((d) => d.message.startsWith('INGEST_EVAL b:'))).toHaveLength(1);
+  });
+});
+
+// Not Splunk behaviour: the engine's own accessor, pinned to split as
+// applyIngestEval does (top-level commas only; `=` and `:=`).
+describe('ingestEvalExpressions', () => {
+  it('returns each assignment’s expression, split at top-level commas only', () => {
+    expect(ingestEvalExpressions('a=upper(x), b:=if(y>1, "p,q", z) ,c = "s,t"')).toEqual([
+      'upper(x)',
+      'if(y>1, "p,q", z)',
+      '"s,t"',
+    ]);
+  });
+
+  it('skips a part that is not an assignment', () => {
+    expect(ingestEvalExpressions('justanexpression, =x, a=1')).toEqual(['1']);
   });
 });
