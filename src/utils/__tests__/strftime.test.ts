@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import fc from 'fast-check';
-import { cachedFormatCount, formatSpecifiers, formatStrftime, parseTimestamp, parseTzAlias, strftimeToRegex, supportedSpecifiers, unsupportedSpecifiers } from '../strftime';
+import { cachedFormatCount, cachedZoneCount, formatSpecifiers, formatStrftime, parseTimestamp, parseTzAlias, strftimeToRegex, supportedSpecifiers, unsupportedSpecifiers } from '../strftime';
 import { fcSeed } from '../../test/fcSeed';
 
 /** Helper: ISO string of a parsed timestamp, or null. */
@@ -421,6 +421,33 @@ describe('tokenise cache (#436)', () => {
     expect(strftimeToRegex('%Y-%m-%d hot')).toBe(hot);
     expect(strftimeToRegex('%Y-%m-%d cold')).not.toBe(cold);
     expect(iso('2024-01-15 cold', '%Y-%m-%d cold')).toBe('2024-01-15T00:00:00.000Z');
+  });
+});
+
+describe('zone formatter cache (#480)', () => {
+  it('stays bounded, keeps a zone in use, and rebuilds an evicted one', () => {
+    // Zone names come from the data (%Z, TZ_ALIAS targets), so every distinct
+    // word is a lookup; the cache must not grow with them.
+    const at = (tz: string) => iso('2024-07-01 10:00:00', '%Y-%m-%d %H:%M:%S', tz);
+    expect(at('America/New_York')).toBe('2024-07-01T14:00:00.000Z');
+    const built = vi.spyOn(Intl, 'DateTimeFormat');
+    try {
+      for (let i = 0; i < 200; i++) {
+        expect(at(`Bogus/Zone${i}`)).toBe('2024-07-01T10:00:00.000Z');
+        expect(at('America/New_York')).toBe('2024-07-01T14:00:00.000Z');
+      }
+      expect(cachedZoneCount()).toBe(64);
+      // New York stayed in use, so it was never rebuilt; each unknown name
+      // was tried once, and its failure cached.
+      expect(built).toHaveBeenCalledTimes(200);
+      expect(at('Bogus/Zone199')).toBe('2024-07-01T10:00:00.000Z');
+      expect(built).toHaveBeenCalledTimes(200);
+      // Evicted long ago, so tried again.
+      at('Bogus/Zone0');
+      expect(built).toHaveBeenCalledTimes(201);
+    } finally {
+      built.mockRestore();
+    }
   });
 });
 
