@@ -126,6 +126,82 @@ describe('MCP server end to end', () => {
     }
   }, 20_000);
 
+  it('conforms to the advertised outputSchema with every optional field present (#489)', async () => {
+    const { tools } = await client.listTools();
+    const validator = new AjvJsonSchemaValidator();
+    const conforms = (name: string, result: TextResult) => {
+      expect(result.isError, `${name}: ${resultText(result).slice(0, 500)}`).toBeFalsy();
+      const schema = tools.find((t) => t.name === name)?.outputSchema;
+      const check = validator.getValidator(schema as JsonSchemaType)(result.structuredContent);
+      expect(check.errorMessage, name).toBeUndefined();
+      return payload(result) as Record<string, unknown>;
+    };
+
+    // fieldOffsets (capture_offsets), noOps (an EXTRACT that never matches),
+    // clonedFrom (CLONE_SOURCETYPE), and events cut by max_events.
+    const simulated = conforms(
+      'simulate',
+      (await client.callTool({
+        name: 'simulate',
+        arguments: {
+          raw: 'user=alice\nuser=bob\nuser=carol\n',
+          sourcetype: 'app',
+          props_conf: [
+            '[app]',
+            'SHOULD_LINEMERGE = false',
+            'TRANSFORMS-copy = copy',
+            'EXTRACT-user = user=(?<user>\\w+)',
+            'EXTRACT-never = nothing=(?<never>\\w+)',
+          ].join('\n'),
+          transforms_conf: '[copy]\nREGEX = alice\nCLONE_SOURCETYPE = app_copy',
+          capture_offsets: true,
+          max_events: 3,
+        },
+      })) as TextResult,
+    ) as { events: Record<string, unknown>[]; truncationNote?: string };
+    const events = simulated.events;
+    expect(events[0]?.fieldOffsets).toEqual({ user: [[5, 10]] });
+    expect(events.some((e) => (e.noOps as { directive: string }[] | undefined)?.some((n) => n.directive === 'EXTRACT-never'))).toBe(true);
+    expect(events.some((e) => e.clonedFrom === 'app')).toBe(true);
+    expect(simulated.truncationNote).toMatch(/max_events/);
+
+    // Every list cut to the size cap, with its count: 90,000 malformed lines,
+    // each a diagnostic, fill far more than the budget allows.
+    const malformed = Array.from({ length: 90_000 }, (_, i) => `bad ${i}`).join('\n');
+    const cutSimulate = conforms(
+      'simulate',
+      (await client.callTool({
+        name: 'simulate',
+        arguments: { raw: 'x\n', sourcetype: 'app', props_conf: malformed, timeout_ms: 30_000 },
+      })) as TextResult,
+    );
+    expect(cutSimulate.diagnosticCount).toBe(90_000);
+    const cutValidate = conforms(
+      'validate',
+      (await client.callTool({ name: 'validate', arguments: { props_conf: malformed, timeout_ms: 30_000 } })) as TextResult,
+    );
+    expect(cutValidate.diagnosticCount).toBe(90_000);
+    expect(cutValidate.truncationNote).toMatch(/diagnostics/);
+    const stanzas = Array.from({ length: 30_000 }, (_, i) => `[s${i}]\nk=${'v'.repeat(20)}`).join('\n');
+    const cutExplain = conforms(
+      'explain_precedence',
+      (await client.callTool({
+        name: 'explain_precedence',
+        arguments: {
+          conf: [
+            { layer: 'default', text: malformed },
+            { layer: 'local', text: stanzas },
+          ],
+          sourcetype: 's1',
+          timeout_ms: 30_000,
+        },
+      })) as TextResult,
+    );
+    expect(cutExplain.parseErrorCount).toBe(90_000);
+    expect(cutExplain.stanzaCount ?? (cutExplain.stanzas as { directiveCount?: number }[]).at(-1)?.directiveCount).toBeGreaterThan(0);
+    expect(cutExplain.truncationNote).toMatch(/capped at/);
+  }, 120_000);
+
   it('leaves structuredContent off an error result', async () => {
     // Its payload is an error object, which the output schema does not
     // describe; the error stays in the text.

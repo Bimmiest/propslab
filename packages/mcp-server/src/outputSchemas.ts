@@ -9,8 +9,19 @@
  * registry defines (diagnostics, trace steps, directive entries) are
  * `z.looseObject`, so a new optional engine field is not an output-validation
  * failure on every call.
+ *
+ * Each response shape, and the serialized event inside simulate's, is checked
+ * at compile time against the type the worker builds (`satisfies ShapeOf<…>`):
+ * the same keys, none missing and none extra, each schema producing that
+ * field's type. A field added to the serializer and not here — which strict
+ * validation would then reject on every call — fails the build instead.
  */
 import { z } from 'zod';
+import type { ExplainResponse, ValidateResponse } from './protocol';
+import type { SerializedEvent, SerializedSimulation } from './serialize';
+
+/** A zod shape with exactly `T`'s keys, each producing a value of that field's type. */
+type ShapeOf<T> = { [K in keyof T]-?: z.ZodType<T[K]> };
 
 const lineRange = z.object({ start: z.number().int(), end: z.number().int() });
 const phase = z.enum(['index-time', 'search-time']);
@@ -41,7 +52,16 @@ const traceStep = z.looseObject({
   processor: z.string(),
   phase,
   description: z.string(),
-  timeSource: z.string().optional(),
+  timeSource: z
+    .enum([
+      'TIME_FORMAT',
+      'auto-recognition',
+      'previous-event',
+      'current-time',
+      'datetime-config-current',
+      'datetime-config-none',
+    ])
+    .optional(),
   inputSnapshot: z.string().optional(),
   outputSnapshot: z.string().optional(),
   fieldsAdded: z.array(z.string()).optional(),
@@ -54,6 +74,34 @@ const traceStep = z.looseObject({
     .optional(),
 });
 
+/** Why a directive did nothing, by case (the engine's `NoOpReason`). */
+const noOpReason = z.discriminatedUnion('kind', [
+  z.looseObject({ kind: z.literal('stanza-not-matched'), stanza: z.string(), wonInstead: z.string().optional() }),
+  z.looseObject({ kind: z.literal('transforms-stanza-missing'), name: z.string() }),
+  z.looseObject({ kind: z.literal('regex-invalid'), error: z.string() }),
+  z.looseObject({ kind: z.literal('regex-limit'), error: z.string() }),
+  z.looseObject({ kind: z.literal('source-key-empty'), sourceKey: z.string() }),
+  z.looseObject({
+    kind: z.literal('no-match'),
+    partialEnd: z.number().int().optional(),
+    partialPattern: z.string().optional(),
+  }),
+  z.looseObject({ kind: z.literal('fields-already-set'), fields: z.array(z.string()) }),
+  z.looseObject({ kind: z.literal('values-empty'), fields: z.array(z.string()) }),
+  z.looseObject({ kind: z.literal('eval-null'), expression: z.string() }),
+  z.looseObject({ kind: z.literal('not-explained') }),
+]);
+
+/** A directive that applied to an event and changed nothing. */
+const noOp = z.looseObject({
+  directive: z.string(),
+  file: confFile,
+  line: z.number().int(),
+  phase,
+  reason: noOpReason,
+  description: z.string().describe("The reason in one line, as the app's Pipeline tab shows it."),
+});
+
 const serializedEvent = z.object({
   _raw: z.string(),
   _time: z.string().nullable().describe('ISO-8601, or null when no timestamp was assigned.'),
@@ -62,7 +110,22 @@ const serializedEvent = z.object({
   indexedFields: fieldValues,
   lineNumbers: lineRange,
   processingTrace: z.array(traceStep),
-});
+  fieldOffsets: z
+    .record(z.string(), z.array(z.tuple([z.number().int(), z.number().int()])))
+    .optional()
+    .describe(
+      'With capture_offsets only: [start, end) offsets in _raw of each value a positional ' +
+        'EXTRACT captured, per field.',
+    ),
+  noOps: z
+    .array(noOp)
+    .optional()
+    .describe('Directives that applied to this event and changed nothing, each with why.'),
+  clonedFrom: z
+    .string()
+    .optional()
+    .describe('CLONE_SOURCETYPE copies only: the sourcetype the original event carried.'),
+} satisfies ShapeOf<SerializedEvent>);
 
 export const simulateOutputShape = {
   eventCount: z.number().int().describe('Events the run produced, returned or not.'),
@@ -72,16 +135,13 @@ export const simulateOutputShape = {
     .optional()
     .describe('Present when events or diagnostics were cut by max_events or the size cap.'),
   events: z.array(serializedEvent),
-  processingSteps: z
-    .array(traceStep)
-    .describe("The returned events' trace steps, in order."),
   diagnostics: z.array(diagnostic),
   diagnosticCount: z
     .number()
     .int()
     .optional()
     .describe('Total diagnostics; present only when `diagnostics` was cut to fit.'),
-};
+} satisfies ShapeOf<SerializedSimulation>;
 
 const cutCount = (list: string) =>
   z
@@ -99,7 +159,7 @@ export const validateOutputShape = {
   diagnostics: z.array(diagnostic),
   diagnosticCount: cutCount('diagnostics'),
   truncationNote: capNote,
-};
+} satisfies ShapeOf<ValidateResponse>;
 
 const overridden = z.object({ layer: z.string(), line: z.number().int(), value: z.string() });
 
@@ -142,7 +202,7 @@ export const explainOutputShape = {
     })
     .optional()
     .describe('props.conf with a sourcetype only: matched stanzas and the merged directive set.'),
-};
+} satisfies ShapeOf<ExplainResponse>;
 
 const directiveSummary = z.looseObject({
   key: z.string(),

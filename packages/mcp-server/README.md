@@ -22,7 +22,7 @@ schemas, in `src/outputSchemas.ts`:
 
 | Tool | `structuredContent` |
 |---|---|
-| `simulate` | `{ eventCount, returnedEvents, truncationNote?, events[], processingSteps[], diagnostics[], diagnosticCount? }`; each event is `{ _raw, _time (ISO-8601 or null), metadata, fields, indexedFields, lineNumbers, processingTrace[] }` |
+| `simulate` | `{ eventCount, returnedEvents, truncationNote?, events[], diagnostics[], diagnosticCount? }`; each event is `{ _raw, _time (ISO-8601 or null), metadata, fields, indexedFields, lineNumbers, processingTrace[], fieldOffsets?, noOps?, clonedFrom? }`: `fieldOffsets` with `capture_offsets` only, `noOps` (each directive that applied and did nothing, with a structured `reason` and a one-line `description`) and `clonedFrom` (a CLONE_SOURCETYPE copy's original sourcetype) whenever there are any. There is no separate `processingSteps` list (#489): it repeated every returned event's trace. |
 | `validate` | `{ diagnostics[], diagnosticCount?, truncationNote? }` |
 | `explain_precedence` | `{ parseErrors[], stanzas[], parseErrorCount?, stanzaCount?, truncationNote?, resolution? }`; each stanza may carry `directiveCount`; `resolution` (props.conf with a `sourcetype`) is `{ metadata, effectiveMetadata, assignedSourcetype?, matchedStanzas[], effectiveDirectives[], matchedStanzaCount?, effectiveDirectiveCount? }` |
 | `lookup_directive` | Without `key`: `{ "props.conf"?: [...], "transforms.conf"?: [...] }`, one summary per directive. With `key`: `{ matches[], classBased? }` |
@@ -98,7 +98,8 @@ reviewed. `docs/engine.md`'s closing section is the spec this implements:
   request, so no request's budget pays for compilation. `MATCH_LIMIT` and
   `DEPTH_LIMIT` stop a runaway field-extraction match, as in Splunk; the
   watchdog bounds the run as a whole.
-- **`captureOffsets` defaults to `false`** — nothing here renders highlights.
+- **`capture_offsets` defaults to `false`**; set it to get each event's
+  `fieldOffsets` back.
 - **The launcher re-execs node with
   `--enable-experimental-regexp-engine-on-excessive-backtracks`** (plus a
   backtrack threshold) before anything compiles a regex. User patterns no
@@ -189,8 +190,7 @@ reviewed. `docs/engine.md`'s closing section is the spec this implements:
   posts only that, so a full result never reaches the server's own thread,
   where no heap limit applies. What does not fit is cut, with the list's
   total in a `…Count` field and a `truncationNote` saying which cut applied:
-  - `simulate`: `max_events` bounds `events` and `processingSteps` alike
-    (the latter covers the returned events only); events that would not fit
+  - `simulate`: `max_events` bounds `events`; events that would not fit
     are left out, and diagnostics may take at most half the budget.
   - `validate`: `diagnostics` (`diagnosticCount`).
   - `explain_precedence`: parse errors take at most a quarter of the budget,

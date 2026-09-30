@@ -81,8 +81,8 @@ describe('simulate', () => {
   });
 
   it('keeps the response bounded however many events the sample breaks into (#351)', async () => {
-    // 100k one-character events: processingSteps must follow max_events, not
-    // carry every event's trace steps (some 80 MB).
+    // 100k one-character events: the response follows max_events, and does
+    // not carry every event's trace steps (some 80 MB).
     const result = await handleSimulate(
       simulateArgs({
         raw: 'a\n'.repeat(100_000),
@@ -95,17 +95,22 @@ describe('simulate', () => {
     const out = payload(result);
     expect(out.eventCount).toBe(100_000);
     expect(out.returnedEvents).toBe(1);
-    expect(out.processingSteps).toEqual(out.events[0].processingTrace);
-    expect(out.truncationNote).toMatch(/processingSteps/);
+    expect(out).not.toHaveProperty('processingSteps');
+    expect(out.truncationNote).toMatch(/max_events/);
   }, 20_000);
 
   it('holds the response under the size cap when max_events would exceed it (#351)', async () => {
     // 300 events of 3,000 CJK characters (under TRUNCATE's 10,000 bytes),
-    // each with a SEDCMD step carrying before/after snapshots of it: 900k
-    // characters in, but some 16 MB on the wire if returned whole — three
+    // each with two SEDCMD steps carrying before/after snapshots of it: 900k
+    // characters in, but some 27 MB on the wire if returned whole — three
     // bytes a character, in both copies (#414).
     const raw = `${'日'.repeat(3_000)}\n`.repeat(300);
-    const props = ['[access_log]', 'SHOULD_LINEMERGE = false', 'SEDCMD-x = s/日/本/g'].join('\n');
+    const props = [
+      '[access_log]',
+      'SHOULD_LINEMERGE = false',
+      'SEDCMD-x = s/日/本/g',
+      'SEDCMD-y = s/本/日/g',
+    ].join('\n');
     const result = await handleSimulate(
       simulateArgs({ raw, props_conf: props, max_events: 500, include_snapshots: true }),
       WORKER_PATH,

@@ -77,6 +77,7 @@ function handleSimulate(request: SimulateRequest, run: Run): SimulateResponse {
   return serializeSimulation(result, diagnostics, {
     maxEvents: request.maxEvents,
     includeSnapshots: request.includeSnapshots,
+    includeOffsets: request.captureOffsets,
   });
 }
 

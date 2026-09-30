@@ -50,15 +50,54 @@ const size = (v: unknown) => {
 };
 
 describe('serializeSimulation', () => {
-  it('bounds processingSteps to the returned events', () => {
+  it('returns max_events events and nothing per event beyond them', () => {
     const events = Array.from({ length: 10_000 }, (_, i) => event(i, 1, 3));
     const out = serializeSimulation(result(events), [], { maxEvents: 2, includeSnapshots: false });
     expect(out.eventCount).toBe(10_000);
     expect(out.returnedEvents).toBe(2);
-    expect(out.processingSteps).toHaveLength(6);
     expect(out.truncationNote).toMatch(/max_events/);
-    expect(out.truncationNote).toMatch(/processingSteps covers the returned events only/);
     expect(size(out)).toBeLessThan(5_000);
+  });
+
+  it('sends each trace once: no processingSteps copy beside the events (#489)', () => {
+    const out = serializeSimulation(result([event(0, 1, 3)]), [], { maxEvents: 20, includeSnapshots: false });
+    expect(out).not.toHaveProperty('processingSteps');
+    expect(JSON.stringify(out).match(/did something/g)).toHaveLength(3);
+  });
+
+  it('emits fieldOffsets only when asked, and noOps and clonedFrom whenever present (#489)', () => {
+    const noOp = {
+      directive: 'EXTRACT-user',
+      file: 'props.conf' as const,
+      line: 3,
+      phase: 'search-time' as const,
+      reason: { kind: 'no-match' as const },
+    };
+    const e: SplunkEvent = {
+      ...event(0, 3, 0),
+      fieldOffsets: { user: [[2, 5]] },
+      noOps: [noOp],
+      clonedFrom: 'original_st',
+    };
+    const off = serializeSimulation(result([e]), [], { maxEvents: 20, includeSnapshots: false });
+    expect(off.events[0]).not.toHaveProperty('fieldOffsets');
+    expect(off.events[0]?.clonedFrom).toBe('original_st');
+    expect(off.events[0]?.noOps).toEqual([
+      { ...noOp, description: 'the pattern did not match anywhere in the source' },
+    ]);
+    const on = serializeSimulation(result([e]), [], {
+      maxEvents: 20,
+      includeSnapshots: false,
+      includeOffsets: true,
+    });
+    expect(on.events[0]?.fieldOffsets).toEqual({ user: [[2, 5]] });
+    // Neither appears on an event that has none.
+    const plain = serializeSimulation(result([{ ...event(0, 3, 0), noOps: [] }]), [], {
+      maxEvents: 20,
+      includeSnapshots: false,
+      includeOffsets: true,
+    });
+    for (const key of ['fieldOffsets', 'noOps', 'clonedFrom']) expect(plain.events[0]).not.toHaveProperty(key);
   });
 
   it('returns fewer events than max_events when they would exceed the size cap, and says so', () => {
@@ -147,7 +186,6 @@ describe('serializeSimulation', () => {
     });
     expect(out).not.toHaveProperty('truncationNote');
     expect(out).not.toHaveProperty('diagnosticCount');
-    expect(out.processingSteps).toHaveLength(1);
   });
 
   it('shapes an event: ISO _time, and trace snapshots only when asked for', () => {
@@ -163,7 +201,6 @@ describe('serializeSimulation', () => {
     };
     const without = serializeSimulation(result([e]), [], { maxEvents: 20, includeSnapshots: false });
     expect(without.events).toStrictEqual([{ ...shaped, processingTrace: [step] }]);
-    expect(without.processingSteps).toStrictEqual([step]);
     const withSnapshots = serializeSimulation(result([e]), [], { maxEvents: 20, includeSnapshots: true });
     const full = { ...step, inputSnapshot: '0:xxx', outputSnapshot: '0:xxx' };
     expect(withSnapshots.events).toStrictEqual([{ ...shaped, processingTrace: [full] }]);
@@ -174,7 +211,7 @@ describe('serializeSimulation', () => {
     const byMaxEvents = serializeSimulation(result(events), [], { maxEvents: 2, includeSnapshots: false });
     expect(byMaxEvents.truncationNote).toBe(
       'Only the first 2 of 10 events are returned; raise max_events or use a smaller sample ' +
-        'to see the rest. processingSteps covers the returned events only.',
+        'to see the rest.',
     );
     const byCap = serializeSimulation(result([event(0, MAX_PAYLOAD_BYTES, 0)]), [], {
       maxEvents: 20,
@@ -183,7 +220,7 @@ describe('serializeSimulation', () => {
     expect(byCap.truncationNote).toBe(
       `Only the first 0 of 1 events are returned: the response is capped at ${MAX_RESPONSE_BYTES} ` +
         'bytes. Use include_snapshots=false, a lower max_events or a smaller sample to see more ' +
-        'of each event. processingSteps covers the returned events only.',
+        'of each event.',
     );
   });
 

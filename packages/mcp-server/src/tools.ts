@@ -166,9 +166,9 @@ export const simulateInputShape = {
     .boolean()
     .default(false)
     .describe(
-      "Record capture spans for positional EXTRACTs in each event's fieldOffsets. " +
-        'Off by default: nothing here renders highlights. PCRE2 reports the spans ' +
-        'with every match anyway, so this costs output size, not matching time.',
+      "Return each event's fieldOffsets: the [start, end) spans in _raw of the values " +
+        'positional EXTRACTs captured, per field. Off by default: it costs output size, ' +
+        'not matching time, since PCRE2 reports the spans with every match anyway.',
     ),
   include_snapshots: z
     .boolean()
@@ -181,7 +181,7 @@ export const simulateInputShape = {
     .max(500)
     .default(20)
     .describe(
-      'Most events to return; processingSteps covers the returned events only. The whole ' +
+      'Most events to return. The whole ' +
         `response is also capped at ${MAX_RESPONSE_BYTES} bytes, and returns fewer ` +
         'events when they would not fit — truncationNote says when either cut applies.',
     ),
