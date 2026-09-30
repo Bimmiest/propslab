@@ -2,7 +2,12 @@ import { Icon } from '../../../ui/Icon';
 import type { PhaseFilter } from './data';
 
 export function FieldsToolbar({
-  search, setSearch, fieldCount, phaseFilter, setPhaseFilter, collapseToggle,
+  search,
+  setSearch,
+  fieldCount,
+  phaseFilter,
+  setPhaseFilter,
+  collapseToggle,
 }: {
   search: string;
   setSearch: (value: string) => void;

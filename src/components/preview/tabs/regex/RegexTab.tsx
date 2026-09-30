@@ -44,7 +44,9 @@ export function RegexTab(props: RegexTabProps) {
       {/* Regex input */}
       <div className="flex-shrink-0 px-3 py-2 border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
         <div className="flex items-center gap-2 mb-1">
-          <label htmlFor={patternId} className="text-xs font-medium text-[var(--color-text-muted)]">Regex Pattern</label>
+          <label htmlFor={patternId} className="text-xs font-medium text-[var(--color-text-muted)]">
+            Regex Pattern
+          </label>
           {/* Only settled counts: while matching is pending, "0/N" would
               describe a pattern that has not been tried yet. */}
           {pattern && !validationError && status === 'ok' && matchStats.total > 0 && (
@@ -63,9 +65,7 @@ export function RegexTab(props: RegexTabProps) {
           className="w-full px-2 py-1.5 text-xs font-mono rounded border border-[var(--color-border)] bg-[var(--color-bg-primary)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent)]"
           spellCheck={false}
         />
-        {validationError && (
-          <div className="mt-1 text-[10px] text-[var(--color-error)]">{validationError}</div>
-        )}
+        {validationError && <div className="mt-1 text-[10px] text-[var(--color-error)]">{validationError}</div>}
       </div>
 
       {/* Named capture groups */}

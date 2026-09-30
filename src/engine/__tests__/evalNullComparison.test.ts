@@ -27,8 +27,13 @@ function event(fields: Record<string, string> = {}): SplunkEvent {
   return makeEvent('raw', { fields });
 }
 
-const evalDir = (value: string): ConfDirective =>
-  ({ key: 'EVAL-out', value, line: 1, directiveType: 'EVAL', className: 'out' });
+const evalDir = (value: string): ConfDirective => ({
+  key: 'EVAL-out',
+  value,
+  line: 1,
+  directiveType: 'EVAL',
+  className: 'out',
+});
 
 /** What `EVAL-out = expr` writes, or undefined when it writes nothing. */
 function evalWith(expr: string, fields: Record<string, string> = {}) {
@@ -36,7 +41,8 @@ function evalWith(expr: string, fields: Record<string, string> = {}) {
 }
 
 /** The raw eval value, for asserting NULL itself rather than its effect. */
-const value = (expr: string, fields: Record<string, string> = {}) => evaluateExpression(expr, event(fields), undefined, Date.now());
+const value = (expr: string, fields: Record<string, string> = {}) =>
+  evaluateExpression(expr, event(fields), undefined, Date.now());
 
 describe('comparison operators with a NULL operand (#343)', () => {
   it.each(['=', '==', '!=', '<', '>', '<=', '>='])('missing %s "" is NULL', (op) => {
@@ -143,7 +149,12 @@ describe('consumers of a NULL condition (#343)', () => {
     // `level != "INFO"` is NULL for an event with no `level`, so it is not
     // routed to nullQueue.
     const dirs: ConfDirective[] = [
-      { key: 'INGEST_EVAL', value: 'queue=if(level!="INFO","nullQueue","indexQueue")', line: 1, directiveType: 'INGEST_EVAL' },
+      {
+        key: 'INGEST_EVAL',
+        value: 'queue=if(level!="INFO","nullQueue","indexQueue")',
+        line: 1,
+        directiveType: 'INGEST_EVAL',
+      },
     ];
     expect(applyIngestEval([event()], dirs, runCtx(FIXED_NOW))[0]!._meta._queue).toBe('indexQueue');
     expect(applyIngestEval([event({ level: 'DEBUG' })], dirs, runCtx(FIXED_NOW))[0]!._meta._queue).toBe('nullQueue');

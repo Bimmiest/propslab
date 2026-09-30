@@ -28,13 +28,7 @@ import type {
 } from '../../../src/engine/types';
 import { describeNoOp } from '../../../src/engine/noOpExplainer';
 import { indexedFields } from '../../../src/engine/utils/metadataFields';
-import {
-  elementBytes,
-  fitting,
-  MAX_PAYLOAD_BYTES,
-  MAX_RESPONSE_BYTES,
-  responseBytes,
-} from './responseBudget';
+import { elementBytes, fitting, MAX_PAYLOAD_BYTES, MAX_RESPONSE_BYTES, responseBytes } from './responseBudget';
 
 export interface SerializeOptions {
   maxEvents: number;
@@ -141,9 +135,7 @@ export function serializeSimulation(
       ...(notes.length > 0 ? { truncationNote: notes.join(' ') } : {}),
       events,
       diagnostics: keptDiagnostics,
-      ...(keptDiagnostics.length < diagnostics.length
-        ? { diagnosticCount: diagnostics.length }
-        : {}),
+      ...(keptDiagnostics.length < diagnostics.length ? { diagnosticCount: diagnostics.length } : {}),
     };
   };
 

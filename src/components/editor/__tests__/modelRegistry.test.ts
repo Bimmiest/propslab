@@ -4,7 +4,12 @@ import { acquireModel, saveViewState, takeViewState, resetModelRegistry } from '
 
 function fakeModel() {
   let disposed = false;
-  return { isDisposed: () => disposed, dispose: () => { disposed = true; } };
+  return {
+    isDisposed: () => disposed,
+    dispose: () => {
+      disposed = true;
+    },
+  };
 }
 
 describe('modelRegistry', () => {

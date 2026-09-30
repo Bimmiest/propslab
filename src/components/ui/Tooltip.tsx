@@ -25,14 +25,9 @@ export function Tooltip({ content, children, side = 'top', delayDuration = 400 }
           }}
         >
           {content}
-          <RadixTooltip.Arrow
-            style={{ fill: 'var(--color-border)' }}
-            width={10}
-            height={5}
-          />
+          <RadixTooltip.Arrow style={{ fill: 'var(--color-border)' }} width={10} height={5} />
         </RadixTooltip.Content>
       </RadixTooltip.Portal>
     </RadixTooltip.Root>
   );
 }
-

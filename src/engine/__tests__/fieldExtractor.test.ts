@@ -51,7 +51,11 @@ describe('extractFields — fieldOffsets provenance', () => {
 
   it('does not overwrite a pre-existing field value', () => {
     const raw = 'status=500';
-    const e = extractFields([event(raw, { status: '200' })], [dir('s', 'status=(?<status>\\d+)')], runCtx(FIXED_NOW))[0]!;
+    const e = extractFields(
+      [event(raw, { status: '200' })],
+      [dir('s', 'status=(?<status>\\d+)')],
+      runCtx(FIXED_NOW),
+    )[0]!;
     expect(e.fields['status']).toBe('200');
   });
 
@@ -121,11 +125,15 @@ describe('extractFields — captureOffsets (#118)', () => {
 // earlier ones produced.
 describe('extractFields — `in <field>` reads what earlier EXTRACTs produced', () => {
   it('sees a field from an EXTRACT whose class sorts first, and only then', () => {
-    const e = extractFields([event('2026-09-28 12:00:00 src="abc"')], [
-      dir('a_reads', '(?<reads>\\w+) in src'),
-      dir('m_src', 'src="(?<src>[^"]*)"'),
-      dir('z_reads_after', '(?<after>\\w+) in src'),
-    ], runCtx(FIXED_NOW))[0]!;
+    const e = extractFields(
+      [event('2026-09-28 12:00:00 src="abc"')],
+      [
+        dir('a_reads', '(?<reads>\\w+) in src'),
+        dir('m_src', 'src="(?<src>[^"]*)"'),
+        dir('z_reads_after', '(?<after>\\w+) in src'),
+      ],
+      runCtx(FIXED_NOW),
+    )[0]!;
     expect(e.fields).toEqual({ src: 'abc', after: 'abc' });
   });
 });
@@ -133,7 +141,8 @@ describe('extractFields — `in <field>` reads what earlier EXTRACTs produced', 
 // Checked on Splunk 10.4.0, not doc-derived (#411). KV_MODE = none and
 // EXTRACT-a_src = src="(?<src>[^"]*)", one event per input line.
 describe('extractFields — values are trimmed, and an empty one creates no field', () => {
-  const extractSrc = (raw: string) => extractFields([event(raw)], [dir('a_src', 'src="(?<src>[^"]*)"')], runCtx(FIXED_NOW))[0]!;
+  const extractSrc = (raw: string) =>
+    extractFields([event(raw)], [dir('a_src', 'src="(?<src>[^"]*)"')], runCtx(FIXED_NOW))[0]!;
 
   it.each([
     ['src="  abc"', 'abc'],

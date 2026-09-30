@@ -50,7 +50,10 @@ function PipelineSection() {
 
   return (
     <section>
-      <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: 'var(--color-text-secondary)' }}>
+      <h3
+        className="text-xs font-semibold uppercase tracking-wider mb-3"
+        style={{ color: 'var(--color-text-secondary)' }}
+      >
         Pipeline
       </h3>
 
@@ -60,21 +63,22 @@ function PipelineSection() {
         style={{ backgroundColor: 'var(--color-bg-elevated)', border: '1px solid var(--color-border-subtle)' }}
       >
         <div className="flex items-center justify-between gap-3">
-          <label htmlFor="toggle-per-event" className="text-sm font-medium cursor-pointer" style={{ color: 'var(--color-text-primary)' }}>
+          <label
+            htmlFor="toggle-per-event"
+            className="text-sm font-medium cursor-pointer"
+            style={{ color: 'var(--color-text-primary)' }}
+          >
             Re-match stanzas after metadata rewrites
           </label>
-          <Toggle
-            id="toggle-per-event"
-            checked={settings.perEventPipeline}
-            onChange={togglePerEventPipeline}
-          />
+          <Toggle id="toggle-per-event" checked={settings.perEventPipeline} onChange={togglePerEventPipeline} />
         </div>
         <p className="text-xs leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>
           Simulates{' '}
           <code className="font-mono text-[11px] px-1 rounded" style={{ backgroundColor: 'var(--color-bg-tertiary)' }}>
             DEST_KEY = MetaData:*
           </code>{' '}
-          correctly. After any index-time transform rewrites the sourcetype, host, or source, stanzas are re-matched and search-time processors (EXTRACT, REPORT, FIELDALIAS, EVAL) apply directives from the new sourcetype.
+          correctly. After any index-time transform rewrites the sourcetype, host, or source, stanzas are re-matched and
+          search-time processors (EXTRACT, REPORT, FIELDALIAS, EVAL) apply directives from the new sourcetype.
         </p>
         {settings.perEventPipeline && (
           <p className="text-xs font-medium" style={{ color: 'var(--color-warning)' }}>
@@ -89,7 +93,11 @@ function PipelineSection() {
         style={{ backgroundColor: 'var(--color-bg-elevated)', border: '1px solid var(--color-border-subtle)' }}
       >
         <div className="flex items-center justify-between gap-3">
-          <label htmlFor="toggle-manual" className="text-sm font-medium cursor-pointer" style={{ color: 'var(--color-text-primary)' }}>
+          <label
+            htmlFor="toggle-manual"
+            className="text-sm font-medium cursor-pointer"
+            style={{ color: 'var(--color-text-primary)' }}
+          >
             Manual apply
           </label>
           <Toggle
@@ -100,8 +108,8 @@ function PipelineSection() {
           />
         </div>
         <p className="text-xs leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>
-          Disables live updates while you type. Use the{' '}
-          <strong>Run pipeline</strong> button in the status bar to process changes.{' '}
+          Disables live updates while you type. Use the <strong>Run pipeline</strong> button in the status bar to
+          process changes.{' '}
           {settings.perEventPipeline
             ? 'Required while per-event mode is on, so it cannot be turned off here.'
             : 'Recommended when per-event mode is on.'}
@@ -121,12 +129,7 @@ export function SettingsPanel() {
   if (!settingsOpen) return null;
 
   return (
-    <Overlay
-      open={settingsOpen}
-      onClose={toggleSettings}
-      label="Settings"
-      containerClassName=""
-    >
+    <Overlay open={settingsOpen} onClose={toggleSettings} label="Settings" containerClassName="">
       <aside
         className="fixed top-0 right-0 z-50 h-full w-80 flex flex-col shadow-xl"
         style={{
@@ -139,7 +142,10 @@ export function SettingsPanel() {
           className="flex items-center justify-between px-4 h-12 shrink-0"
           style={{ borderBottom: '1px solid var(--color-border)' }}
         >
-          <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-secondary)' }}>
+          <span
+            className="text-xs font-semibold uppercase tracking-wider"
+            style={{ color: 'var(--color-text-secondary)' }}
+          >
             Settings
           </span>
           <button
@@ -153,10 +159,8 @@ export function SettingsPanel() {
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto p-4 space-y-6">
-
           {/* Pipeline section */}
           <PipelineSection />
-
         </div>
       </aside>
     </Overlay>

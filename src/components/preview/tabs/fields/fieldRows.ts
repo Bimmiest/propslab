@@ -73,8 +73,16 @@ export function aggregateFields(
   const entryFor = (key: string): AggregatedField => {
     let entry = fields.get(key);
     if (!entry) {
-      const count = counted ? stats.counts.get(key) ?? 0 : 0;
-      entry = { name: key, values: new Set(), count, sources: new Set(), phases: new Set(), aliases: [], maskedBy: new Set() };
+      const count = counted ? (stats.counts.get(key) ?? 0) : 0;
+      entry = {
+        name: key,
+        values: new Set(),
+        count,
+        sources: new Set(),
+        phases: new Set(),
+        aliases: [],
+        maskedBy: new Set(),
+      };
       fields.set(key, entry);
     }
     return entry;
@@ -126,21 +134,30 @@ export function aggregateFields(
 const firstValue = (f: AggregatedField): string => f.values.values().next().value ?? '';
 
 /** Sort comparator based on current sort settings. */
-export function fieldComparator(sortKey: SortKey, sortDir: SortDir): (a: AggregatedField, b: AggregatedField) => number {
+export function fieldComparator(
+  sortKey: SortKey,
+  sortDir: SortDir,
+): (a: AggregatedField, b: AggregatedField) => number {
   const dir = sortDir === 'asc' ? 1 : -1;
   return (a, b) => {
     switch (sortKey) {
-      case 'name': return dir * fieldCollator.compare(a.name, b.name);
-      case 'count': return dir * (a.count - b.count);
-      case 'distinct': return dir * (a.values.size - b.values.size);
+      case 'name':
+        return dir * fieldCollator.compare(a.name, b.name);
+      case 'count':
+        return dir * (a.count - b.count);
+      case 'distinct':
+        return dir * (a.values.size - b.values.size);
       case 'source': {
         const aS = Array.from(a.sources).join(',');
         const bS = Array.from(b.sources).join(',');
         return dir * fieldCollator.compare(aS, bS);
       }
-      case 'aliases': return dir * (a.aliases.length - b.aliases.length);
-      case 'values': return dir * fieldCollator.compare(firstValue(a), firstValue(b));
-      default: return 0;
+      case 'aliases':
+        return dir * (a.aliases.length - b.aliases.length);
+      case 'values':
+        return dir * fieldCollator.compare(firstValue(a), firstValue(b));
+      default:
+        return 0;
     }
   };
 }
@@ -177,7 +194,10 @@ export function immediateParent(name: string, allNames: Set<string>): string | n
  * parent. Top-level rows sort by the chosen key; children always sort by name
  * within their parent.
  */
-export function nestFields(entries: AggregatedField[], compare: (a: AggregatedField, b: AggregatedField) => number): FieldRow[] {
+export function nestFields(
+  entries: AggregatedField[],
+  compare: (a: AggregatedField, b: AggregatedField) => number,
+): FieldRow[] {
   const allNames = new Set(entries.map((e) => e.name));
   const parentFields = findParentFields(allNames);
 
@@ -227,9 +247,8 @@ export function buildFieldRows(
   let entries = aggregated;
   if (search) {
     const lower = search.toLowerCase();
-    entries = entries.filter((f) =>
-      f.name.toLowerCase().includes(lower) ||
-      f.aliases.some((a) => a.toLowerCase().includes(lower))
+    entries = entries.filter(
+      (f) => f.name.toLowerCase().includes(lower) || f.aliases.some((a) => a.toLowerCase().includes(lower)),
     );
   }
   if (phaseFilter !== 'all') {
@@ -243,7 +262,10 @@ export function buildFieldRows(
  * in `aria-controls`. By position rather than by name: a field name
  * may hold spaces, which would split an id reference list.
  */
-export function buildRowIds(rows: FieldRow[], prefix: string): { rowIds: Map<string, string>; childRowIds: Map<string, string[]> } {
+export function buildRowIds(
+  rows: FieldRow[],
+  prefix: string,
+): { rowIds: Map<string, string>; childRowIds: Map<string, string[]> } {
   const ids = new Map<string, string>();
   rows.forEach((f, i) => ids.set(f.name, `${prefix}-row-${i}`));
   const children = new Map<string, string[]>();

@@ -14,7 +14,12 @@
 import { matchInputs } from './regexMatch';
 import type { RegexMatchInfo } from './regexMatch';
 import { serveWithRegexEngine } from '../utils/regexEngineLoader';
-import { createRequestQueue, type QueuedRequest, type WorkerInputsMessage, type WorkerSkippedResponse } from './workerProtocol';
+import {
+  createRequestQueue,
+  type QueuedRequest,
+  type WorkerInputsMessage,
+  type WorkerSkippedResponse,
+} from './workerProtocol';
 
 export interface RegexMatchRequest extends QueuedRequest {
   pattern: string;
@@ -49,7 +54,10 @@ const serve = createRequestQueue<string[], RegexMatchRequest>({
   },
   skip: ({ id }) => self.postMessage({ id, skipped: true } satisfies WorkerSkippedResponse),
   defer: (drain) => setTimeout(drain),
-  rethrow: (err) => setTimeout(() => { throw err; }),
+  rethrow: (err) =>
+    setTimeout(() => {
+      throw err;
+    }),
 });
 
 // Loads the regex engine from its fixed asset URL, then signals ready and

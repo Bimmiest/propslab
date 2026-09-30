@@ -28,8 +28,7 @@ import { resultText } from './resultText';
  * the property under test is about the worker plumbing, not about what any
  * particular conf costs to run.
  */
-const fixture = (name: string) =>
-  fileURLToPath(new URL(`./fixtures/${name}`, import.meta.url));
+const fixture = (name: string) => fileURLToPath(new URL(`./fixtures/${name}`, import.meta.url));
 const OOM_WORKER = fixture('oomWorker.cjs');
 const SLEEP_WORKER = fixture('sleepWorker.cjs');
 const LOG_WORKER = fixture('logWorker.cjs');
@@ -56,8 +55,7 @@ interface SleepResult {
 // below covers the stripping itself.
 const heapFlagsInEffect =
   stripHeapSizeFlags(process.execArgv).length !== process.execArgv.length ||
-  stripHeapSizeFlagsFromNodeOptions(process.env['NODE_OPTIONS'] ?? '') !==
-    (process.env['NODE_OPTIONS'] ?? '');
+  stripHeapSizeFlagsFromNodeOptions(process.env['NODE_OPTIONS'] ?? '') !== (process.env['NODE_OPTIONS'] ?? '');
 
 describe.skipIf(heapFlagsInEffect)('worker heap limit', () => {
   it('maps ERR_WORKER_OUT_OF_MEMORY to WorkerOutOfMemoryError', async () => {
@@ -118,8 +116,7 @@ describe('concurrency cap', () => {
       );
       // Overlap measured from inside the workers, independently of the
       // limiter's own bookkeeping.
-      const overlapAt = (t: number) =>
-        runs.filter((r) => r.startedAt <= t && t < r.endedAt).length;
+      const overlapAt = (t: number) => runs.filter((r) => r.startedAt <= t && t < r.endedAt).length;
       expect(Math.max(...runs.map((r) => overlapAt(r.startedAt)))).toBeLessThanOrEqual(2);
       expect(peakActive).toBe(2);
       expect(peakQueued).toBeGreaterThanOrEqual(1);
@@ -212,8 +209,7 @@ describe('concurrency cap', () => {
 });
 
 describe('start-up (#488)', () => {
-  const slowStart = (startMs: number, ms: number, ready = true) =>
-    ({ startMs, ms, ready }) as unknown as WorkerRequest;
+  const slowStart = (startMs: number, ms: number, ready = true) => ({ startMs, ms, ready }) as unknown as WorkerRequest;
 
   it('starts the budget when the worker reports ready, not when it is spawned', async () => {
     // 400ms of start-up against a 150ms budget: counted from the spawn, this
@@ -412,14 +408,13 @@ describe('cancellation', () => {
 
 describe('worker stdout', () => {
   it("goes to the server's stderr, never to stdout, which is the protocol channel", async () => {
-    const written = (spy: { mock: { calls: unknown[][] } }) =>
-      spy.mock.calls.map((c) => String(c[0])).join('');
+    const written = (spy: { mock: { calls: unknown[][] } }) => spy.mock.calls.map((c) => String(c[0])).join('');
     const stdout = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
     const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
     try {
-      await expect(
-        runInWorker(sleep(0), 10_000, { workerPath: LOG_WORKER, limiter: new Semaphore(1) }),
-      ).resolves.toBe('done');
+      await expect(runInWorker(sleep(0), 10_000, { workerPath: LOG_WORKER, limiter: new Semaphore(1) })).resolves.toBe(
+        'done',
+      );
       await vi.waitFor(() => expect(written(stderr)).toContain('more stray output'));
       expect(written(stderr)).toContain('stray worker output');
       expect(written(stdout)).not.toContain('stray');
@@ -557,18 +552,18 @@ describe('permission model', () => {
         },
       });
       expect(warnings).toEqual([
-        expect.stringMatching(/cannot change to refuse \(ERR_ACCESS_DENIED\); sandbox workers can read anything below \/home\/me/),
+        expect.stringMatching(
+          /cannot change to refuse \(ERR_ACCESS_DENIED\); sandbox workers can read anything below \/home\/me/,
+        ),
       ]);
     });
   });
 
   it('is not what makes the probe fail: without the flags, both reads succeed', () => {
     const fixtures = path.dirname(LOG_WORKER);
-    const out = execFileSync(
-      process.execPath,
-      [path.join(fixtures, 'permissionProbe.cjs'), PACKAGE_JSON],
-      { encoding: 'utf8' },
-    );
+    const out = execFileSync(process.execPath, [path.join(fixtures, 'permissionProbe.cjs'), PACKAGE_JSON], {
+      encoding: 'utf8',
+    });
     const allowed = { inside: 'ok', outside: 'ok' };
     expect(JSON.parse(out)).toEqual({ main: allowed, worker: allowed });
   });
@@ -590,7 +585,9 @@ describe.skipIf(process.platform !== 'linux')('launcher', () => {
         stderr += chunk.toString();
         if (stderr.includes('listening on stdio')) {
           const serverPid = Number(
-            execFileSync('pgrep', ['-P', String(launcher.pid)]).toString().trim(),
+            execFileSync('pgrep', ['-P', String(launcher.pid)])
+              .toString()
+              .trim(),
           );
           resolve({ launcher, serverPid });
         }
@@ -671,10 +668,10 @@ describe.skipIf(process.platform !== 'linux')('launcher', () => {
   it('strips heap-size flags even when the regex flags are already on the command line', async () => {
     // Before, the launcher skipped its re-exec whenever the regex flags were
     // present, so the heap flags stayed in effect.
-    const { launcher, serverPid } = await startLauncher(
-      { NODE_OPTIONS: '--max-old-space-size=8192' },
-      [REGEXP_FALLBACK_FLAGS[0], '--max-semi-space-size=64'],
-    );
+    const { launcher, serverPid } = await startLauncher({ NODE_OPTIONS: '--max-old-space-size=8192' }, [
+      REGEXP_FALLBACK_FLAGS[0],
+      '--max-semi-space-size=64',
+    ]);
     try {
       const environ = readFileSync(`/proc/${serverPid}/environ`, 'utf8').split('\0');
       const nodeOptions = environ.find((e) => e.startsWith('NODE_OPTIONS='));

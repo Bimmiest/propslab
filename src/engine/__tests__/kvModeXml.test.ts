@@ -29,9 +29,7 @@ function fieldsOf(raw: string, props = 'SHOULD_LINEMERGE = false\nKV_MODE = xml\
 
 describe('KV_MODE = xml', () => {
   it('names a field by its dotted path from the document root (#171)', () => {
-    const fields = fieldsOf(
-      '<event><ts>2026-01-15T10:00:00Z</ts><user>alice</user><status>200</status></event>',
-    );
+    const fields = fieldsOf('<event><ts>2026-01-15T10:00:00Z</ts><user>alice</user><status>200</status></event>');
     // The wrapper element is part of the name -- `event.user`, not `user`. This
     // is what the Splunk 10.4.0 capture records.
     expect(fields).toMatchObject({

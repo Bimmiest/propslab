@@ -105,8 +105,7 @@ export interface ExplainResponse {
 
 /** The worker's answer: the last message it posts. */
 export type WorkerResponse =
-  | { ok: true; data: SimulateResponse | ValidateResponse | ExplainResponse }
-  | { ok: false; error: string };
+  { ok: true; data: SimulateResponse | ValidateResponse | ExplainResponse } | { ok: false; error: string };
 
 /**
  * Posted by a simulate worker before its pipeline runs: the conf's regex

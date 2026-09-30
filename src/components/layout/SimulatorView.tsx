@@ -64,8 +64,19 @@ export const SimulatorView = memo(function SimulatorView() {
         <div className="h-full flex flex-col">
           {/* Resizable area for expanded panels */}
           <div className="flex-1 min-h-0">
-            <Group orientation="vertical" id={`left-vertical-${layoutKey}`} key={layoutKey} resizePreviewMode="separator">
-              <Panel defaultSize={propsCollapsed && transformsCollapsed ? '100' : propsCollapsed || transformsCollapsed ? '50' : '30'} minSize="10" id="raw-panel">
+            <Group
+              orientation="vertical"
+              id={`left-vertical-${layoutKey}`}
+              key={layoutKey}
+              resizePreviewMode="separator"
+            >
+              <Panel
+                defaultSize={
+                  propsCollapsed && transformsCollapsed ? '100' : propsCollapsed || transformsCollapsed ? '50' : '30'
+                }
+                minSize="10"
+                id="raw-panel"
+              >
                 <ErrorBoundary panelName="Raw Data">
                   <RawPanel />
                 </ErrorBoundary>

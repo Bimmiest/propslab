@@ -28,10 +28,16 @@ const deepPath = Array.from({ length: DEPTH }, () => 'a').join('.');
 const normal = '<event><user>bob</user></event>';
 
 function run(raw: string, props: string) {
-  const { result, diagnostics } = runPipeline(raw, metadata, `[xmltest]\nSHOULD_LINEMERGE = false\nTRUNCATE = 0\n${props}`, '', {
-    perEventPipeline: false,
-    captureOffsets: false,
-  });
+  const { result, diagnostics } = runPipeline(
+    raw,
+    metadata,
+    `[xmltest]\nSHOULD_LINEMERGE = false\nTRUNCATE = 0\n${props}`,
+    '',
+    {
+      perEventPipeline: false,
+      captureOffsets: false,
+    },
+  );
   return { events: result.events, diagnostics };
 }
 

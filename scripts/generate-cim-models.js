@@ -24,11 +24,7 @@ import { readFileSync, readdirSync, existsSync, writeFileSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-const OUTPUT = resolve(
-  dirname(fileURLToPath(import.meta.url)),
-  '..',
-  'src/engine/cim/cimModelsData.ts',
-);
+const OUTPUT = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'src/engine/cim/cimModelsData.ts');
 
 // The curated layer: which CIM root datasets the toolkit presents, and how they
 // are labelled. Everything else about an entry — fields, split, tags — is read
@@ -228,22 +224,13 @@ function die(message) {
 }
 
 function locate(input) {
-  const candidates = [
-    join(input, 'default', 'data', 'models'),
-    join(input, 'data', 'models'),
-    input,
-  ];
-  const models = candidates.find(
-    (dir) => existsSync(dir) && readdirSync(dir).some((f) => f.endsWith('.json')),
-  );
+  const candidates = [join(input, 'default', 'data', 'models'), join(input, 'data', 'models'), input];
+  const models = candidates.find((dir) => existsSync(dir) && readdirSync(dir).some((f) => f.endsWith('.json')));
   if (!models) die(`no CIM model JSON found under ${input}`);
 
   // Provenance: take the version from the add-on rather than trusting the
   // filename or the operator's memory.
-  const appConf = [
-    join(input, 'default', 'app.conf'),
-    join(models, '..', '..', 'app.conf'),
-  ].find(existsSync);
+  const appConf = [join(input, 'default', 'app.conf'), join(models, '..', '..', 'app.conf')].find(existsSync);
   if (!appConf) die(`found models at ${models} but no default/app.conf to read the CIM version from`);
 
   const version = /^\s*version\s*=\s*(\S+)\s*$/m.exec(readFileSync(appConf, 'utf8'))?.[1];
@@ -256,10 +243,7 @@ function locate(input) {
 // the CIM defines action/src/dest/user and friends as eval calculations, so
 // reading `fields` alone misses most of the fields that matter.
 function datasetFields(object) {
-  return [
-    ...(object.fields ?? []),
-    ...(object.calculations ?? []).flatMap((calc) => calc.outputFields ?? []),
-  ];
+  return [...(object.fields ?? []), ...(object.calculations ?? []).flatMap((calc) => calc.outputFields ?? [])];
 }
 
 // Skip hidden fields and asset/identity enrichment (`ta_relevant: false`):
@@ -317,9 +301,7 @@ function build(modelsDir, include = INCLUDE) {
 
       const rootFields = datasetFields(object);
       let requiredFields = [
-        ...new Set(
-          rootFields.filter((f) => f.comment?.recommended && usable(f)).map((f) => f.fieldName),
-        ),
+        ...new Set(rootFields.filter((f) => f.comment?.recommended && usable(f)).map((f) => f.fieldName)),
       ].sort();
 
       // Fallback for the roots that flag nothing: Splunk's own key-field checks.

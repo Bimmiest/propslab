@@ -21,7 +21,6 @@ export function DirectiveDialog({
   onClose: () => void;
   children: ReactNode;
 }) {
-
   /**
    * Enter submits from the dialog's inputs, but must not hijack an activation
    * the user aimed at a control: Enter on a focused Cancel button must
@@ -45,8 +44,12 @@ export function DirectiveDialog({
       header={<DialogHeader icon="sparkles" iconClassName="text-[var(--color-accent)]" title={title} />}
       footer={
         <DialogFooter>
-          <DialogButton variant="cancel" onClick={onClose}>Cancel</DialogButton>
-          <DialogButton variant="accent" onClick={onApply} disabled={applyDisabled}>{applyLabel}</DialogButton>
+          <DialogButton variant="cancel" onClick={onClose}>
+            Cancel
+          </DialogButton>
+          <DialogButton variant="accent" onClick={onApply} disabled={applyDisabled}>
+            {applyLabel}
+          </DialogButton>
         </DialogFooter>
       }
     >

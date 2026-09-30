@@ -18,8 +18,7 @@ function stepFor(
   return step;
 }
 
-const sedStep = (raw: string, propsConf: string) =>
-  stepFor(raw, propsConf, (s) => s.processor.startsWith('SEDCMD'));
+const sedStep = (raw: string, propsConf: string) => stepFor(raw, propsConf, (s) => s.processor.startsWith('SEDCMD'));
 
 describe('SEDCMD field attribution', () => {
   it('names exactly the masked field when several are extracted', () => {
@@ -102,15 +101,12 @@ describe('SEDCMD field attribution', () => {
   });
 
   it('attributes fields extracted by KV_MODE, not just EXTRACT', () => {
-    const step = sedStep(
-      'user=alice ssn=123-45-6789',
-      props('SEDCMD-mask = s/\\d{3}-\\d{2}-\\d{4}/XXX-XX-XXXX/'),
-    );
+    const step = sedStep('user=alice ssn=123-45-6789', props('SEDCMD-mask = s/\\d{3}-\\d{2}-\\d{4}/XXX-XX-XXXX/'));
 
     expect(step.fieldsModified).toEqual(['ssn']);
   });
 
-  it('attributes in per-event mode, using each event\'s own resolved directives', () => {
+  it("attributes in per-event mode, using each event's own resolved directives", () => {
     const { result } = runPipeline(
       'ssn=123-45-6789',
       meta,
@@ -136,12 +132,9 @@ describe('SEDCMD field attribution', () => {
 });
 
 describe('DEST_KEY = _raw field attribution', () => {
-  const transforms = [
-    '[maskit]',
-    'REGEX = (.*)ssn=\\S+(.*)',
-    'FORMAT = $1ssn=REDACTED$2',
-    'DEST_KEY = _raw',
-  ].join('\n');
+  const transforms = ['[maskit]', 'REGEX = (.*)ssn=\\S+(.*)', 'FORMAT = $1ssn=REDACTED$2', 'DEST_KEY = _raw'].join(
+    '\n',
+  );
 
   it('attributes a _raw overwrite to the field it destroyed', () => {
     const step = stepFor(
@@ -219,10 +212,7 @@ describe('INGEST_EVAL _raw= field attribution (#346)', () => {
 describe('trace snapshots window on the change', () => {
   it('shows the substitution rather than a prefix that omits it', () => {
     const pad = 'a'.repeat(400);
-    const step = sedStep(
-      `${pad} ssn=123-45-6789 tail=end`,
-      props('SEDCMD-mask = s/\\d{3}-\\d{2}-\\d{4}/XXX-XX-XXXX/'),
-    );
+    const step = sedStep(`${pad} ssn=123-45-6789 tail=end`, props('SEDCMD-mask = s/\\d{3}-\\d{2}-\\d{4}/XXX-XX-XXXX/'));
 
     expect(step.inputSnapshot).toContain('123-45-6789');
     expect(step.outputSnapshot).toContain('XXX-XX-XXXX');

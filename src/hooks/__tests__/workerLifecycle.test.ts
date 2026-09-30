@@ -10,11 +10,22 @@
 // ---------------------------------------------------------------------------
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { createManagedWorker, LOAD_WAIT_FACTOR, MAX_WORKER_LOAD_FAILURES, type ManagedWorkerConfig } from '../workerLifecycle';
+import {
+  createManagedWorker,
+  LOAD_WAIT_FACTOR,
+  MAX_WORKER_LOAD_FAILURES,
+  type ManagedWorkerConfig,
+} from '../workerLifecycle';
 import { WORKER_READY, isWorkerReadyMessage } from '../../engine/workerProtocol';
 
-interface Req { id: number; value: string }
-interface Res { id: number; echo: string }
+interface Req {
+  id: number;
+  value: string;
+}
+interface Res {
+  id: number;
+  echo: string;
+}
 
 class FakeWorker {
   static instances: FakeWorker[] = [];
@@ -298,7 +309,7 @@ describe('createManagedWorker (#339)', () => {
       expect(calls.timeout).toHaveBeenLastCalledWith(req(2), [], true);
     });
 
-    it('does not start a request\'s budget until its worker has loaded (#420)', () => {
+    it("does not start a request's budget until its worker has loaded (#420)", () => {
       const { managed, calls } = setup();
       managed.post(req(1));
       const slow = latest();
@@ -382,7 +393,7 @@ describe('createManagedWorker (#339)', () => {
       expect(calls.timeout).toHaveBeenCalledWith(req(1), [], true);
     });
 
-    it('starts a queued request\'s budget when the one ahead is answered (#364)', () => {
+    it("starts a queued request's budget when the one ahead is answered (#364)", () => {
       const { managed, calls } = setup();
       managed.post(req(1));
       latest().ready();

@@ -39,7 +39,10 @@ function offsetFromPoint(container: HTMLElement, x: number, y: number): number |
   let off = 0;
   if (typeof doc.caretPositionFromPoint === 'function') {
     const pos = doc.caretPositionFromPoint(x, y);
-    if (pos) { node = pos.offsetNode; off = pos.offset; }
+    if (pos) {
+      node = pos.offsetNode;
+      off = pos.offset;
+    }
   } else if (
     // The fallback for older browsers without caretPositionFromPoint.
     // eslint-disable-next-line @typescript-eslint/no-deprecated
@@ -47,7 +50,10 @@ function offsetFromPoint(container: HTMLElement, x: number, y: number): number |
   ) {
     // eslint-disable-next-line @typescript-eslint/no-deprecated
     const r = doc.caretRangeFromPoint(x, y);
-    if (r) { node = r.startContainer; off = r.startOffset; }
+    if (r) {
+      node = r.startContainer;
+      off = r.startOffset;
+    }
   }
   if (!node || !container.contains(node)) return null;
   return charOffset(container, node, off);
@@ -204,7 +210,10 @@ export function SelectableRaw({
   const onKeyDown = (e: ReactKeyboardEvent<HTMLSpanElement>) => {
     if (tokens.length === 0) return;
     if (e.key === 'Escape') {
-      if (selection) { e.preventDefault(); onChange(null); }
+      if (selection) {
+        e.preventDefault();
+        onChange(null);
+      }
       return;
     }
     if (!NAV_KEYS.has(e.key)) return;
@@ -251,7 +260,8 @@ export function SelectableRaw({
       {/* aria-describedby rather than aria-description: the latter is ARIA
           1.3 and not yet announced everywhere. */}
       <span id={hintId} className="sr-only">
-        Arrow keys select a token, Shift extends, Escape clears. Shift+F10 or the Menu key opens actions for the selection.
+        Arrow keys select a token, Shift extends, Escape clears. Shift+F10 or the Menu key opens actions for the
+        selection.
       </span>
       <span className="sr-only" aria-live="polite">
         {selectedText ? `Selected: ${selectedText}` : ''}
@@ -263,21 +273,25 @@ export function SelectableRaw({
 function RawSegments({ segments, selection }: { segments: RawSegment[]; selection: RawSelection | null }) {
   return (
     <>
-  {segments.map((seg) => {
-    const selected = selection != null && seg.start >= selection.start && seg.end <= selection.end;
-    if (!seg.selectable) {
-      return <span key={seg.start} style={selected ? SELECTED_STYLE : undefined}>{seg.text}</span>;
-    }
-    return (
-      <span
-        key={seg.start}
-        className={`cursor-pointer rounded-sm ${selected ? '' : 'hover:bg-[var(--color-bg-tertiary)]'}`}
-        style={selected ? SELECTED_STYLE : undefined}
-      >
-        {seg.text}
-      </span>
-    );
-  })}
+      {segments.map((seg) => {
+        const selected = selection != null && seg.start >= selection.start && seg.end <= selection.end;
+        if (!seg.selectable) {
+          return (
+            <span key={seg.start} style={selected ? SELECTED_STYLE : undefined}>
+              {seg.text}
+            </span>
+          );
+        }
+        return (
+          <span
+            key={seg.start}
+            className={`cursor-pointer rounded-sm ${selected ? '' : 'hover:bg-[var(--color-bg-tertiary)]'}`}
+            style={selected ? SELECTED_STYLE : undefined}
+          >
+            {seg.text}
+          </span>
+        );
+      })}
     </>
   );
 }

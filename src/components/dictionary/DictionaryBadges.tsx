@@ -71,13 +71,7 @@ const FILE_LABEL_SHORT: Record<DirectiveInfo['appliesTo'], string> = {
   both: 'both',
 };
 
-export function FileBadge({
-  appliesTo,
-  short = false,
-}: {
-  appliesTo: DirectiveInfo['appliesTo'];
-  short?: boolean;
-}) {
+export function FileBadge({ appliesTo, short = false }: { appliesTo: DirectiveInfo['appliesTo']; short?: boolean }) {
   return <Chip mono>{(short ? FILE_LABEL_SHORT : FILE_LABEL)[appliesTo]}</Chip>;
 }
 
@@ -88,11 +82,7 @@ export function FileBadge({
  */
 export function SupportBadge({ support }: { support: DirectiveInfo['support'] }) {
   if (support === 'simulated') return null;
-  return support === 'ignored' ? (
-    <Chip tone="danger">not simulated</Chip>
-  ) : (
-    <Chip>out of scope</Chip>
-  );
+  return support === 'ignored' ? <Chip tone="danger">not simulated</Chip> : <Chip>out of scope</Chip>;
 }
 
 /** The full badge row for a directive, in a fixed order so rows stay scannable. */

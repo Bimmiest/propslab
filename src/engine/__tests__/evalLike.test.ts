@@ -25,8 +25,13 @@ function event(fields: Record<string, string>): SplunkEvent {
   return makeEvent('raw', { fields });
 }
 
-const evalDir = (className: string, value: string): ConfDirective =>
-  ({ key: `EVAL-${className}`, value, line: 3, directiveType: 'EVAL', className });
+const evalDir = (className: string, value: string): ConfDirective => ({
+  key: `EVAL-${className}`,
+  value,
+  line: 3,
+  directiveType: 'EVAL',
+  className,
+});
 
 function like(s: string, pattern: string) {
   const diagnostics: ValidationDiagnostic[] = [];
@@ -71,7 +76,11 @@ describe('like() reports a pattern the guard refuses (#303)', () => {
     vi.mocked(splunkRegex.safeRegex).mockReturnValue(null);
     const diagnostics: ValidationDiagnostic[] = [];
     const events = Array.from({ length: 5 }, () => event({ s: 'abc' }));
-    const out = applyEvalExpressions(events, [evalDir('r', 'if(like(s, "a%"), "true", "false")')], runCtx(FIXED_NOW, diagnostics));
+    const out = applyEvalExpressions(
+      events,
+      [evalDir('r', 'if(like(s, "a%"), "true", "false")')],
+      runCtx(FIXED_NOW, diagnostics),
+    );
 
     expect(out[0]!.fields['r']).toBe('false');
     expect(diagnostics).toHaveLength(1);

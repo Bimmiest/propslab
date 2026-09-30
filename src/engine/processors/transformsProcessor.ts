@@ -48,8 +48,7 @@ type TransformResult = ReturnType<typeof applyRegexTransform>;
  * still runs after a TRANSFORMS-z.
  */
 function orderedTransformLists(directives: ConfDirective[], phase: Phase): ConfDirective[] {
-  const byType = (type: string) =>
-    directives.filter((d) => d.directiveType === type).sort(byClassName);
+  const byType = (type: string) => directives.filter((d) => d.directiveType === type).sort(byClassName);
   return phase === 'index-time' ? [...byType('TRANSFORMS'), ...byType('RULESET')] : byType('REPORT');
 }
 
@@ -156,7 +155,12 @@ function runEvalStanza(
 }
 
 /** The once-per-stanza warnings a matched regex transform can raise before routing. */
-function warnMatched(run: TransformsRun, result: TransformResult, stanzaName: string, transformStanza: TransformStanza): void {
+function warnMatched(
+  run: TransformsRun,
+  result: TransformResult,
+  stanzaName: string,
+  transformStanza: TransformStanza,
+): void {
   const { diagnostics } = run;
   if (run.phase === 'index-time') {
     warnIndexTimeNoWriteMeta(result, stanzaName, transformStanza, diagnostics, warnKey(run, 'noWriteMeta', stanzaName));
@@ -166,16 +170,18 @@ function warnMatched(run: TransformsRun, result: TransformResult, stanzaName: st
   // the stanza.
   if (run.phase === 'search-time') {
     warnSearchTimeDestKey(stanzaName, transformStanza, diagnostics, warnKey(run, 'searchTimeDestKey', stanzaName));
-    warnSearchTimeNoFormat(result, stanzaName, transformStanza, diagnostics, warnKey(run, 'searchTimeNoFormat', stanzaName));
+    warnSearchTimeNoFormat(
+      result,
+      stanzaName,
+      transformStanza,
+      diagnostics,
+      warnKey(run, 'searchTimeNoFormat', stanzaName),
+    );
   }
 }
 
 /** The trace text for a transform that matched. */
-function describeMatch(
-  result: TransformResult,
-  discardedFields: string[],
-  cloneType: string | undefined,
-): string {
+function describeMatch(result: TransformResult, discardedFields: string[], cloneType: string | undefined): string {
   const extracted = Object.keys(result.fields);
   if (result.destKey) return `Transform routed to ${result.destKey}`;
   if (discardedFields.length > 0) {
@@ -231,9 +237,7 @@ function applyMatch(
   // in the warning and
   // the trace, so the reader can see what was lost.
   const discardedFields =
-    phase === 'index-time' && !result.destKey && !stanzaWritesMeta(transformStanza)
-      ? Object.keys(result.fields)
-      : [];
+    phase === 'index-time' && !result.destKey && !stanzaWritesMeta(transformStanza) ? Object.keys(result.fields) : [];
   const effective = discardedFields.length > 0 ? { ...result, fields: {} } : result;
   const beforeRaw = state.event._raw;
   // applyDestKey records queue values onto _meta._queue rather than dropping
@@ -252,7 +256,13 @@ function applyMatch(
     warnRawLoss(beforeRaw, routed._raw, stanzaName, transformStanza, diagnostics, warnKey(run, 'rawLoss', stanzaName));
   }
   if (result.destKey) {
-    warnUnsimulatedDestKey(result.destKey, stanzaName, transformStanza, diagnostics, warnKey(run, 'unknownDestKey', stanzaName));
+    warnUnsimulatedDestKey(
+      result.destKey,
+      stanzaName,
+      transformStanza,
+      diagnostics,
+      warnKey(run, 'unknownDestKey', stanzaName),
+    );
   }
   // DEST_KEY = _raw overwrites the whole event with the FORMAT output,
   // destroying field values by the same mechanism as SEDCMD. The
@@ -278,17 +288,28 @@ function applyMatch(
 }
 
 /** Run one REGEX (or DELIMS) transform stanza against the event. */
-function runRegexStanza(run: TransformsRun, state: EventState, site: TransformSite, transformStanza: TransformStanza): void {
+function runRegexStanza(
+  run: TransformsRun,
+  state: EventState,
+  site: TransformSite,
+  transformStanza: TransformStanza,
+): void {
   const { phase, diagnostics } = run;
   const { stanzaName } = site;
-  const result = applyRegexTransform(state.event, transformStanza, (pattern) => {
-    diagnostics.report(warnKey(run, 'invalidRegex', stanzaName), {
-      level: 'warning',
-      message: `Transform "${stanzaName}" was skipped: its REGEX (${pattern}) does not compile (${validateRegex(pattern) ?? 'invalid regex'}).`,
-      file: 'transforms.conf',
-      ...positionOfKeyOrStanza(transformStanza, 'REGEX'),
-    });
-  }, phase, () => run.ctx.explanations.take(noOpDirectiveKey(noOpSite(site))));
+  const result = applyRegexTransform(
+    state.event,
+    transformStanza,
+    (pattern) => {
+      diagnostics.report(warnKey(run, 'invalidRegex', stanzaName), {
+        level: 'warning',
+        message: `Transform "${stanzaName}" was skipped: its REGEX (${pattern}) does not compile (${validateRegex(pattern) ?? 'invalid regex'}).`,
+        file: 'transforms.conf',
+        ...positionOfKeyOrStanza(transformStanza, 'REGEX'),
+      });
+    },
+    phase,
+    () => run.ctx.explanations.take(noOpDirectiveKey(noOpSite(site))),
+  );
 
   // Fires whether or not the transform matched: a DELIMS stanza reached
   // through TRANSFORMS- extracts nothing at all, so `matched` is false and
@@ -304,7 +325,10 @@ function runRegexStanza(run: TransformsRun, state: EventState, site: TransformSi
 /** Run one TRANSFORMS-/RULESET-/REPORT- list against the event. */
 function runTransformList(run: TransformsRun, state: EventState, dir: ConfDirective): void {
   // Value can be comma-separated list of transform stanza names
-  const stanzaNames = dir.value.split(',').map((s) => s.trim()).filter(Boolean);
+  const stanzaNames = dir.value
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
   const listLabel = `${dir.directiveType}-${dir.className ?? ''}`;
 
   for (const [position, stanzaName] of stanzaNames.entries()) {
@@ -349,9 +373,7 @@ export function applyTransforms(
 
     const { noOps, clones } = state;
     const resolved =
-      noOps.length > 0
-        ? { ...state.event, noOps: [...(state.event.noOps ?? []), ...noOps] }
-        : state.event;
+      noOps.length > 0 ? { ...state.event, noOps: [...(state.event.noOps ?? []), ...noOps] } : state.event;
     return clones.length > 0 ? [resolved, ...clones] : [resolved];
   });
 }
@@ -410,9 +432,7 @@ function warnIndexTimeSearchOnlyAttrs(
   diagnostics: DiagnosticsCollector,
   key: string,
 ): void {
-  const present = SEARCH_TIME_ONLY_ATTRS.filter((attr) =>
-    transformStanza.directives.some((d) => d.key === attr),
-  );
+  const present = SEARCH_TIME_ONLY_ATTRS.filter((attr) => transformStanza.directives.some((d) => d.key === attr));
   if (present.length === 0) return;
 
   const hasDelims = present.includes('DELIMS');
@@ -423,9 +443,7 @@ function warnIndexTimeSearchOnlyAttrs(
       `${present.length === 1 ? 'That attribute is' : 'Those attributes are'} valid only for search-time field ` +
       'extractions, so Splunk ignores ' +
       `${present.length === 1 ? 'it' : 'them'} here. ` +
-      (hasDelims
-        ? 'DELIMS is the alternative to REGEX, so this stanza extracts nothing at all. '
-        : '') +
+      (hasDelims ? 'DELIMS is the alternative to REGEX, so this stanza extracts nothing at all. ' : '') +
       'Reference the stanza with REPORT-<class> instead.',
     file: 'transforms.conf',
     ...positionOfKeyOrStanza(transformStanza, present[0] ?? 'DELIMS'),
@@ -545,4 +563,3 @@ function warnRawLoss(
     ...positionOfKeyOrStanza(transformStanza, 'DEST_KEY'),
   });
 }
-

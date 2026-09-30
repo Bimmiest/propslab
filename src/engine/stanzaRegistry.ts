@@ -54,10 +54,7 @@ const HOST_KIND: StanzaKind = {
     'Host-based stanza matching a hostname pattern. Use it to apply settings to data from particular machines regardless of sourcetype.',
   rank: 2,
   precedence: 'Overrides [sourcetype] and [default]; overridden by [source::*].',
-  patternSyntax: [
-    '`*` matches any characters',
-    'More specific patterns take precedence',
-  ],
+  patternSyntax: ['`*` matches any characters', 'More specific patterns take precedence'],
   example: '[host::web-*.example.com]',
 };
 

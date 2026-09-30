@@ -9,11 +9,19 @@ import { useAppStore } from '../../../../store/useAppStore';
 import type { EnrichedEvent } from '../../enrichEvents';
 import type { FieldStats } from '../../../../utils/fieldStats';
 import {
-  assignFieldColors, classifyFields, fieldNamesInView, findContainerFields, type FieldFilter,
+  assignFieldColors,
+  classifyFields,
+  fieldNamesInView,
+  findContainerFields,
+  type FieldFilter,
 } from './fieldColoring';
 
 /** The fields' categories, and the colour each one the filter shows is drawn in. */
-export function useFieldColoring(allEvents: EnrichedEvent[], fieldFilter: FieldFilter, fieldStats: FieldStats | undefined) {
+export function useFieldColoring(
+  allEvents: EnrichedEvent[],
+  fieldFilter: FieldFilter,
+  fieldStats: FieldStats | undefined,
+) {
   const categories = useMemo(() => classifyFields(allEvents), [allEvents]);
   const containerFields = useMemo(() => findContainerFields(allEvents, fieldStats), [allEvents, fieldStats]);
   const fieldNames = useMemo(() => fieldNamesInView(allEvents, fieldStats), [allEvents, fieldStats]);
@@ -44,10 +52,7 @@ export function useFieldColoring(allEvents: EnrichedEvent[], fieldFilter: FieldF
  */
 export function useGroupCollapse(allGroupNames: string[]) {
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
-  const collapsed = useMemo(
-    () => new Set(allGroupNames.filter((g) => !expanded.has(g))),
-    [allGroupNames, expanded],
-  );
+  const collapsed = useMemo(() => new Set(allGroupNames.filter((g) => !expanded.has(g))), [allGroupNames, expanded]);
 
   const toggleGroup = useCallback((name: string) => {
     setExpanded((prev) => {
@@ -59,9 +64,12 @@ export function useGroupCollapse(allGroupNames: string[]) {
   }, []);
 
   /** Collapse every group, or expand every group there is now. */
-  const setAllCollapsed = useCallback((all: boolean) => {
-    setExpanded(all ? new Set() : new Set(allGroupNames));
-  }, [allGroupNames]);
+  const setAllCollapsed = useCallback(
+    (all: boolean) => {
+      setExpanded(all ? new Set() : new Set(allGroupNames));
+    },
+    [allGroupNames],
+  );
 
   return { collapsed, toggleGroup, setAllCollapsed };
 }

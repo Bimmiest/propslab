@@ -19,7 +19,7 @@ function renderedText(markdown: string): string {
   let text = marked.parseInline(markdown, { async: false });
   // Strip tags until none are left: one pass can leave a tag behind when
   // removing an inner one joins the halves of an outer one (`<<b>script>`).
-  for (let prev = ''; prev !== text; ) {
+  for (let prev = ''; prev !== text;) {
     prev = text;
     text = text.replace(/<[^>]*>/g, '');
   }

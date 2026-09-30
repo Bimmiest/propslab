@@ -87,9 +87,14 @@ const inYears = (from: number, to: number) => fc.integer({ min: utc(from, 0, 2),
 /** Within a day and a half of 1 January, or of 29 February in a leap year. */
 const nearBoundary = (from: number, to: number) =>
   fc.oneof(
-    fc.tuple(fc.integer({ min: from, max: to }), fc.integer({ min: -36 * HOUR, max: 36 * HOUR }))
+    fc
+      .tuple(fc.integer({ min: from, max: to }), fc.integer({ min: -36 * HOUR, max: 36 * HOUR }))
       .map(([y, d]) => utc(y, 0, 1) + d),
-    fc.tuple(fc.integer({ min: Math.ceil(from / 4), max: Math.floor(to / 4) }), fc.integer({ min: -36 * HOUR, max: 36 * HOUR }))
+    fc
+      .tuple(
+        fc.integer({ min: Math.ceil(from / 4), max: Math.floor(to / 4) }),
+        fc.integer({ min: -36 * HOUR, max: 36 * HOUR }),
+      )
       .map(([q, d]) => utc(q * 4, 1, 29, 12) + d),
   );
 
@@ -151,7 +156,20 @@ const stamp = fc
 
 // ── Rendering ───────────────────────────────────────────
 
-const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const MONTHS = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+];
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const pad = (n: number, w = 2) => String(n).padStart(w, '0');
 
@@ -163,11 +181,19 @@ function spellZone(z: Zone): string {
 }
 
 /** `at`'s wall clock `offset` minutes east of UTC, written with `format`. */
-function render(format: string, at: number, offset: number, z: Zone | undefined, fraction: string, longNames: boolean): string {
+function render(
+  format: string,
+  at: number,
+  offset: number,
+  z: Zone | undefined,
+  fraction: string,
+  longNames: boolean,
+): string {
   const wall = new Date(at + offset * MIN);
   const year = wall.getUTCFullYear();
   const h = wall.getUTCHours();
-  const dayOfYear = Math.floor((Date.UTC(2000, wall.getUTCMonth(), wall.getUTCDate()) - Date.UTC(2000, 0, 1)) / DAY) + 1;
+  const dayOfYear =
+    Math.floor((Date.UTC(2000, wall.getUTCMonth(), wall.getUTCDate()) - Date.UTC(2000, 0, 1)) / DAY) + 1;
   const leapShift = wall.getUTCMonth() > 1 && !isLeap(year) ? -1 : 0; // 2000 is a leap year
   const name = (full: string) => (longNames ? full : full.slice(0, 3));
   const tokens: Record<string, string> = {
@@ -308,14 +334,16 @@ describe('parseTimestamp — a yearless stamp is the most recent one it can be',
       host: hostOffset,
     })
     .chain((g) =>
-      fc.oneof(
-        fc.constant(g.now - g.back),
-        // A 29 February near now, which most years cannot hold.
-        fc.integer({ min: -4, max: 1 }).map((dy) => {
-          const y = new Date(g.now).getUTCFullYear() + dy;
-          return Date.UTC(y - (y % 4), 1, 29, 12);
-        }),
-      ).map((at) => ({ ...g, at })),
+      fc
+        .oneof(
+          fc.constant(g.now - g.back),
+          // A 29 February near now, which most years cannot hold.
+          fc.integer({ min: -4, max: 1 }).map((dy) => {
+            const y = new Date(g.now).getUTCFullYear() + dy;
+            return Date.UTC(y - (y % 4), 1, 29, 12);
+          }),
+        )
+        .map((at) => ({ ...g, at })),
     );
 
   it('never lands more than the tolerance past now, and no later candidate would', () => {
@@ -324,14 +352,23 @@ describe('parseTimestamp — a yearless stamp is the most recent one it can be',
         const offset = z === undefined ? 0 : offsetOf(z);
         const fmt = z === undefined ? format : `${format} %z`;
         const text = render(fmt, at, offset, z, '', false);
-        const parsed = inHostZone(host, () => parseTimestamp(text, fmt, undefined, undefined, undefined, new Date(now)));
+        const parsed = inHostZone(host, () =>
+          parseTimestamp(text, fmt, undefined, undefined, undefined, new Date(now)),
+        );
 
         // Every instant with this wall date and time, in the years that could hold it.
         const wall = new Date(at + offset * MIN);
         const candidates: number[] = [];
         const nowYear = new Date(now).getUTCFullYear();
         for (let y = nowYear - 8; y <= nowYear + 1; y++) {
-          const t = Date.UTC(y, wall.getUTCMonth(), wall.getUTCDate(), wall.getUTCHours(), wall.getUTCMinutes(), wall.getUTCSeconds());
+          const t = Date.UTC(
+            y,
+            wall.getUTCMonth(),
+            wall.getUTCDate(),
+            wall.getUTCHours(),
+            wall.getUTCMinutes(),
+            wall.getUTCSeconds(),
+          );
           if (new Date(t).getUTCDate() === wall.getUTCDate()) candidates.push(t - offset * MIN);
         }
         const latest = Math.max(...candidates.filter((t) => t <= now + YEARLESS_TOLERANCE));

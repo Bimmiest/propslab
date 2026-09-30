@@ -104,9 +104,7 @@ export function noOpDirectiveKey(noOp: { file: string; line: number; directive: 
 export function explainNoMatch(pattern: string, source: string, explain: boolean): NoOpReason {
   if (!explain) return { kind: 'not-explained' };
   const partial = longestPartialMatch(pattern, source);
-  return partial
-    ? { kind: 'no-match', partialEnd: partial.end, partialPattern: partial.prefix }
-    : { kind: 'no-match' };
+  return partial ? { kind: 'no-match', partialEnd: partial.end, partialPattern: partial.prefix } : { kind: 'no-match' };
 }
 
 /**
@@ -181,10 +179,7 @@ function atomBoundaries(pattern: string): number[] {
  * after it. Trying every cut cost one probe per atom per event, which at a few
  * thousand events was most of the run (#415).
  */
-export function longestPartialMatch(
-  pattern: string,
-  text: string,
-): { end: number; prefix: string } | null {
+export function longestPartialMatch(pattern: string, text: string): { end: number; prefix: string } | null {
   // The last boundary is the whole pattern, which by the time this is called
   // is already known not to match.
   const cuts = atomBoundaries(pattern)

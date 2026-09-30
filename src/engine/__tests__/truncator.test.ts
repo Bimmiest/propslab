@@ -82,16 +82,13 @@ describe('truncateEvents', () => {
 
   // parseInt is too lenient — these forms must be rejected, not silently
   // truncating with a wrong length (1e3→1) or disabling truncation (0x10→0).
-  it.each(['0x10', '1e3', '100abc', '1.5', '-5'])(
-    'ignores a malformed TRUNCATE value %s',
-    (bad) => {
-      const diags: ValidationDiagnostic[] = [];
-      const long = 'x'.repeat(50);
-      const e = truncateEvents([event(long)], truncateDir(bad), runCtx(FIXED_NOW, diags))[0]!;
-      expect(e._raw).toBe(long); // unchanged
-      expect(diags.some((d) => d.message.includes('not a valid byte count'))).toBe(true);
-    },
-  );
+  it.each(['0x10', '1e3', '100abc', '1.5', '-5'])('ignores a malformed TRUNCATE value %s', (bad) => {
+    const diags: ValidationDiagnostic[] = [];
+    const long = 'x'.repeat(50);
+    const e = truncateEvents([event(long)], truncateDir(bad), runCtx(FIXED_NOW, diags))[0]!;
+    expect(e._raw).toBe(long); // unchanged
+    expect(diags.some((d) => d.message.includes('not a valid byte count'))).toBe(true);
+  });
 });
 
 // Doc-derived (props.conf.spec): TRUNCATE is "the default maximum line length",
@@ -105,7 +102,11 @@ describe('#287 — TRUNCATE caps LINE_BREAKER segments, not newline-separated pi
   it('cuts a multi-line JSON record kept in one segment by a custom LINE_BREAKER', () => {
     const record = '{\n  "a": "0123456789",\n  "b": "0123456789"\n}';
     const directives = [d('SHOULD_LINEMERGE', 'false'), d('LINE_BREAKER', '(\\n)(?=\\{)'), d('TRUNCATE', '20')];
-    const events = truncateEvents(breakLines(`${record}\n${record}`, directives, META, runCtx(FIXED_NOW)), directives, runCtx(FIXED_NOW));
+    const events = truncateEvents(
+      breakLines(`${record}\n${record}`, directives, META, runCtx(FIXED_NOW)),
+      directives,
+      runCtx(FIXED_NOW),
+    );
     expect(events).toHaveLength(2);
     // Every '\n'-piece is under 20 bytes, so a per-'\n' reading would leave
     // both records whole.
@@ -127,11 +128,7 @@ describe('#287 — TRUNCATE caps LINE_BREAKER segments, not newline-separated pi
     // A breaker that splits on `;\n` keeps `a\nb` style pairs as one segment;
     // merging then joins those segments. Each segment is its own line.
     const raw = `${'p'.repeat(8)}\n${'q'.repeat(8)};\n${'r'.repeat(4)}`;
-    const directives = [
-      d('LINE_BREAKER', ';(\\n)'),
-      d('BREAK_ONLY_BEFORE_DATE', 'false'),
-      d('TRUNCATE', '12'),
-    ];
+    const directives = [d('LINE_BREAKER', ';(\\n)'), d('BREAK_ONLY_BEFORE_DATE', 'false'), d('TRUNCATE', '12')];
     const [e] = truncateEvents(breakLines(raw, directives, META, runCtx(FIXED_NOW)), directives, runCtx(FIXED_NOW));
     expect(e!._raw).toBe(`${'p'.repeat(8)}\n${'q'.repeat(3)}\n${'r'.repeat(4)}`);
   });

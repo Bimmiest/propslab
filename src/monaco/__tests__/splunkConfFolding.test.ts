@@ -12,11 +12,7 @@ vi.mock('monaco-editor/editor', () => ({
 
 function fold(text: string) {
   const model = fakeModel(text);
-  const ranges = createFoldingRangeProvider().provideFoldingRanges(
-    model,
-    {},
-    {} as never,
-  ) as languages.FoldingRange[];
+  const ranges = createFoldingRangeProvider().provideFoldingRanges(model, {}, {} as never) as languages.FoldingRange[];
   return ranges.map(({ start, end, kind }) => ({ start, end, kind: kind?.value }));
 }
 

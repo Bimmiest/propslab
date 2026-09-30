@@ -28,7 +28,13 @@ function getModifierName(): string {
 }
 
 /** A header button that opens a side panel, highlighted while the panel is open. */
-function PanelToggle({ tooltip, label, icon, open, onClick }: {
+function PanelToggle({
+  tooltip,
+  label,
+  icon,
+  open,
+  onClick,
+}: {
   tooltip: string;
   label: string;
   icon: IconName;
@@ -91,10 +97,7 @@ export function Header() {
       <div className="flex items-center justify-between px-4 h-12">
         <div className="flex items-center gap-2">
           <Icon name="sliders" className="w-5 h-5 shrink-0 text-[var(--color-accent)]" />
-          <h1
-            className="text-sm font-bold tracking-wide"
-            style={{ color: 'var(--color-text-primary)' }}
-          >
+          <h1 className="text-sm font-bold tracking-wide" style={{ color: 'var(--color-text-primary)' }}>
             Propslab
           </h1>
         </div>
@@ -108,14 +111,26 @@ export function Header() {
             >
               <Icon name="search" className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Commands</span>
-              <kbd className="ml-1 px-1 rounded text-[10px] font-mono bg-[var(--color-bg-tertiary)] hidden sm:inline">{modifierName}K</kbd>
+              <kbd className="ml-1 px-1 rounded text-[10px] font-mono bg-[var(--color-bg-tertiary)] hidden sm:inline">
+                {modifierName}K
+              </kbd>
             </button>
           </Tooltip>
-          {hasAnyContent && (
-            <ClearButton onClear={resetAll} label="Clear All" />
-          )}
-          <PanelToggle tooltip="Settings" label="Open settings" icon="settings" open={settingsOpen} onClick={toggleSettings} />
-          <PanelToggle tooltip="Pipeline reference" label="Open pipeline reference" icon="info" open={helpOpen} onClick={toggleHelp} />
+          {hasAnyContent && <ClearButton onClear={resetAll} label="Clear All" />}
+          <PanelToggle
+            tooltip="Settings"
+            label="Open settings"
+            icon="settings"
+            open={settingsOpen}
+            onClick={toggleSettings}
+          />
+          <PanelToggle
+            tooltip="Pipeline reference"
+            label="Open pipeline reference"
+            icon="info"
+            open={helpOpen}
+            onClick={toggleHelp}
+          />
           <ThemeToggle />
         </div>
       </div>

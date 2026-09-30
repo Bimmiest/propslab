@@ -36,9 +36,25 @@ interface Stanza {
 }
 
 const key = fc.constantFrom(
-  'TIME_FORMAT', 'LINE_BREAKER', 'SHOULD_LINEMERGE', 'KV_MODE', 'REGEX', 'FORMAT', 'DEST_KEY',
-  'EXTRACT-status', 'REPORT-a', 'TRANSFORMS-route', 'SEDCMD-mask', 'EVAL-x', 'FIELDALIAS-a',
-  'kv_mode', 'my_custom', 'a.b', 'key with spaces', 'x#y', 'x]',
+  'TIME_FORMAT',
+  'LINE_BREAKER',
+  'SHOULD_LINEMERGE',
+  'KV_MODE',
+  'REGEX',
+  'FORMAT',
+  'DEST_KEY',
+  'EXTRACT-status',
+  'REPORT-a',
+  'TRANSFORMS-route',
+  'SEDCMD-mask',
+  'EVAL-x',
+  'FIELDALIAS-a',
+  'kv_mode',
+  'my_custom',
+  'a.b',
+  'key with spaces',
+  'x#y',
+  'x]',
 );
 
 /**
@@ -53,7 +69,14 @@ const value = fc
   .filter((v) => !/^\s/.test(v) && trailingBackslashes(v) % 2 === 0);
 
 const stanzaName = fc.constantFrom(
-  'default', 'access_log', 'source::/var/log/*.log', 'host::web*', 'my:sourcetype', 'a b', 'x=y', '#hash',
+  'default',
+  'access_log',
+  'source::/var/log/*.log',
+  'host::web*',
+  'my:sourcetype',
+  'a b',
+  'x=y',
+  '#hash',
 );
 
 const stanza = (name: fc.Arbitrary<string | null>) =>
@@ -182,7 +205,20 @@ describe('confParser — serialise → parse round-trips the directive map', () 
 describe('confParser — continuation semantics', () => {
   /** Anything a physical line can hold, including what would otherwise be structure. */
   const anyLine = fc.oneof(
-    fc.constantFrom('', '   ', '# comment', '[stanza]', '  [indented]', 'KEY = v', '  KEY = v', '\\', '\\\\', 'x\\', '=', '#\\'),
+    fc.constantFrom(
+      '',
+      '   ',
+      '# comment',
+      '[stanza]',
+      '  [indented]',
+      'KEY = v',
+      '  KEY = v',
+      '\\',
+      '\\\\',
+      'x\\',
+      '=',
+      '#\\',
+    ),
     fc.array(valueChar, { maxLength: 12 }).map((cs) => cs.join('')),
   );
 

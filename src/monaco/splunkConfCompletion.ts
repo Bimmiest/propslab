@@ -21,7 +21,7 @@ export function createCompletionProvider(fileType: 'props.conf' | 'transforms.co
       model: editor.ITextModel,
       position: Position,
       _context: languages.CompletionContext,
-      _token: CancellationToken
+      _token: CancellationToken,
     ): languages.ProviderResult<languages.CompletionList> {
       const line = model.getLineContent(position.lineNumber);
       const textBefore = line.substring(0, position.column - 1).trimStart();
@@ -176,7 +176,8 @@ function directiveToCompletionItem(
   // Splunk config and refusing to complete it would be its own wrong answer --
   // but the list is where the user decides, so it says so there.
   const unsimulated = dir.support !== 'simulated';
-  const supportSuffix = dir.support === 'ignored' ? ' — not simulated' : dir.support === 'documented' ? ' — out of scope' : '';
+  const supportSuffix =
+    dir.support === 'ignored' ? ' — not simulated' : dir.support === 'documented' ? ' — out of scope' : '';
 
   return {
     label: unsimulated ? { label: dir.key, description: supportSuffix.slice(3) } : dir.key,
@@ -221,7 +222,7 @@ function getValueSuggestions(
   key: string,
   model: editor.ITextModel,
   position: Position,
-  fileType: 'props.conf' | 'transforms.conf'
+  fileType: 'props.conf' | 'transforms.conf',
 ): languages.CompletionItem[] {
   const directives = getDirectivesForFile(fileType);
   const baseKey = key.includes('-') ? key.split('-')[0] : key;

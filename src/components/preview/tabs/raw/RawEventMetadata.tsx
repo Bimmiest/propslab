@@ -13,14 +13,23 @@ function MetadataField({ label, value, original }: { label: string; value: strin
   const changed = original !== undefined && value !== original && value !== '';
   return (
     <span className="text-[var(--color-text-muted)]">
-      {label}=<span className={changed ? 'text-[var(--color-warning)] font-semibold' : 'text-[var(--color-text-secondary)]'}>
+      {label}=
+      <span className={changed ? 'text-[var(--color-warning)] font-semibold' : 'text-[var(--color-text-secondary)]'}>
         {value || '—'}
       </span>
     </span>
   );
 }
 
-export function MetadataDetails({ event, originalMetadata, metadataChanges }: { event: ViewEvent; originalMetadata: EventMetadata | undefined; metadataChanges: MetadataChange[] }) {
+export function MetadataDetails({
+  event,
+  originalMetadata,
+  metadataChanges,
+}: {
+  event: ViewEvent;
+  originalMetadata: EventMetadata | undefined;
+  metadataChanges: MetadataChange[];
+}) {
   return (
     <>
       <div className="px-3 py-1.5 border-t border-[var(--color-border)] bg-[var(--color-bg-tertiary)]">
@@ -40,13 +49,9 @@ export function MetadataDetails({ event, originalMetadata, metadataChanges }: { 
                 <span className="font-mono font-medium text-[var(--color-warning)]">
                   {DEST_KEY_LABELS[change.field]}
                 </span>
-                <span className="font-mono text-[var(--color-text-muted)] line-through">
-                  {change.from}
-                </span>
+                <span className="font-mono text-[var(--color-text-muted)] line-through">{change.from}</span>
                 <Icon name="arrow-right" className="w-3 h-3 text-[var(--color-text-muted)] flex-shrink-0" />
-                <span className="font-mono font-semibold text-[var(--color-warning)]">
-                  {change.to}
-                </span>
+                <span className="font-mono font-semibold text-[var(--color-warning)]">{change.to}</span>
                 {change.transform && (
                   <span className="text-[var(--color-text-muted)]">
                     via <span className="font-mono text-[var(--color-accent)]">[{change.transform}]</span>

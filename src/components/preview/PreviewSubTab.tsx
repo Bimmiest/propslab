@@ -55,13 +55,25 @@ function subTabContent(subTab: PreviewSubTabId, d: SubTabData): ReactNode {
     case 'raw':
       return <RawTab items={d.items} currentPage={d.currentPage} eventsPerPage={d.eventsPerPage} search={d.search} />;
     case 'highlighted':
-      return <HighlightedTab items={d.items} allEvents={d.allEvents} currentPage={d.currentPage} eventsPerPage={d.eventsPerPage} fieldStats={d.fieldStats} />;
+      return (
+        <HighlightedTab
+          items={d.items}
+          allEvents={d.allEvents}
+          currentPage={d.currentPage}
+          eventsPerPage={d.eventsPerPage}
+          fieldStats={d.fieldStats}
+        />
+      );
     case 'diff':
       return <DiffTab items={d.items} currentPage={d.currentPage} eventsPerPage={d.eventsPerPage} />;
     case 'timestamp':
-      return <TimestampTab items={d.items} currentPage={d.currentPage} eventsPerPage={d.eventsPerPage} inputs={d.inputs} />;
+      return (
+        <TimestampTab items={d.items} currentPage={d.currentPage} eventsPerPage={d.eventsPerPage} inputs={d.inputs} />
+      );
     case 'regex':
-      return <RegexTab items={d.items} allEvents={d.allEvents} currentPage={d.currentPage} eventsPerPage={d.eventsPerPage} />;
+      return (
+        <RegexTab items={d.items} allEvents={d.allEvents} currentPage={d.currentPage} eventsPerPage={d.eventsPerPage} />
+      );
   }
 }
 
@@ -112,7 +124,12 @@ export const PreviewSubTab = memo(function PreviewSubTab({ pipelineInputs }: { p
   // With no filter set, the very same array: the tabs below read that as
   // "every event" and use the run's precomputed statistics.
   const filteredEvents = useMemo(() => {
-    const filters = { search: debouncedSearch.toLowerCase(), selectedFields: liveSelectedFields, selectedStatus, selectedChangeState };
+    const filters = {
+      search: debouncedSearch.toLowerCase(),
+      selectedFields: liveSelectedFields,
+      selectedStatus,
+      selectedChangeState,
+    };
     if (!anyFilter(filters)) return enrichedEvents;
     return enrichedEvents.filter((item) => matchesFilters(item, filters));
   }, [enrichedEvents, debouncedSearch, liveSelectedFields, selectedStatus, selectedChangeState]);

@@ -68,9 +68,7 @@ describe('directive support classification (#153)', () => {
     for (const [level, count] of Object.entries(counts)) {
       const row = new RegExp(`\\*\\*${level}\\*\\*\\s*\\|\\s*(\\d+)\\s*\\|`).exec(readme ?? '');
       expect(row, `README has no support-table row for "${level}"`).toBeTruthy();
-      expect(Number(row?.[1]), `README says ${row?.[1]} ${level} directives; the table has ${count}`).toBe(
-        count,
-      );
+      expect(Number(row?.[1]), `README says ${row?.[1]} ${level} directives; the table has ${count}`).toBe(count);
     }
   });
 
@@ -79,10 +77,7 @@ describe('directive support classification (#153)', () => {
     // freshness, so it is asserted rather than trusted.
     const keys = new Set(getAllDirectives().map((d) => d.key));
     const documented = [...UNDOCUMENTED_ATTRIBUTES].filter((k) => keys.has(k));
-    expect(
-      documented,
-      'these are in the registry now -- remove them from UNDOCUMENTED_ATTRIBUTES',
-    ).toEqual([]);
+    expect(documented, 'these are in the registry now -- remove them from UNDOCUMENTED_ATTRIBUTES').toEqual([]);
   });
 
   it('keeps the undocumented list disjoint from the classification table', () => {
@@ -188,9 +183,7 @@ describe('unsimulated directives are reported rather than ignored (#153)', () =>
   it('locates the diagnostic on the line the directive is written on', () => {
     // Line 1 is the stanza header, so TRUNCATE is 2 and TZ_ALIAS is 3.
     const d = withSupport('TZ_ALIAS', IGNORED_STANDIN, () =>
-      diagnosticsFor('TRUNCATE = 500\nTZ_ALIAS = EST=GMT-5\n').find(
-        (x) => x.directiveKey === 'TZ_ALIAS',
-      ),
+      diagnosticsFor('TRUNCATE = 500\nTZ_ALIAS = EST=GMT-5\n').find((x) => x.directiveKey === 'TZ_ALIAS'),
     );
     expect(d?.line).toBe(3);
     expect(d?.file).toBe('props.conf');
@@ -221,9 +214,7 @@ describe('unsimulated directives are reported rather than ignored (#153)', () =>
     // to stay assertable when there is nothing parked in it. A name the
     // registry will never hold, so registering real attributes cannot break it.
     const KEY = 'A_FUTURE_SPLUNK_ATTRIBUTE';
-    const d = withUndocumented(KEY, () =>
-      diagnosticsFor(`${KEY} = foo\n`).find((x) => x.directiveKey === KEY),
-    );
+    const d = withUndocumented(KEY, () => diagnosticsFor(`${KEY} = foo\n`).find((x) => x.directiveKey === KEY));
     expect(d?.level).toBe('warning');
     expect(d?.message).toContain('valid Splunk attribute');
     // Deliberately asserts no issue number: a message must not point a user
@@ -234,15 +225,13 @@ describe('unsimulated directives are reported rather than ignored (#153)', () =>
   it('still says nothing about a key that is genuinely not an attribute', () => {
     // The undocumented list must not turn into a catch-all that mutes the typo
     // diagnostic, which is the only thing that catches a misspelling.
-    const d = diagnosticsFor('NOT_A_REAL_DIRECTIVE = 1\n').find(
-      (x) => x.directiveKey === 'NOT_A_REAL_DIRECTIVE',
-    );
+    const d = diagnosticsFor('NOT_A_REAL_DIRECTIVE = 1\n').find((x) => x.directiveKey === 'NOT_A_REAL_DIRECTIVE');
     expect(d).toBeUndefined();
   });
 
   it('does not double-report LOOKUP, which has its own warning', () => {
-    const lookupDiags = diagnosticsFor('LOOKUP-geo = geo_lookup ip OUTPUT city\n').filter(
-      (d) => d.directiveKey?.startsWith('LOOKUP'),
+    const lookupDiags = diagnosticsFor('LOOKUP-geo = geo_lookup ip OUTPUT city\n').filter((d) =>
+      d.directiveKey?.startsWith('LOOKUP'),
     );
     expect(lookupDiags).toHaveLength(1);
     expect(lookupDiags[0]?.message).toContain('lookup table execution is not simulated');

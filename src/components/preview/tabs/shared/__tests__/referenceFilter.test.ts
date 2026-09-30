@@ -2,7 +2,13 @@ import { describe, it, expect } from 'vitest';
 import { filterReference } from '../referenceFilter';
 
 const categories = [
-  { name: 'Digits', directives: [{ p: '\\d', d: 'Digit' }, { p: '\\w', d: 'Word character' }] },
+  {
+    name: 'Digits',
+    directives: [
+      { p: '\\d', d: 'Digit' },
+      { p: '\\w', d: 'Word character' },
+    ],
+  },
   { name: 'Anchors', directives: [{ p: '^', d: 'Start of string' }] },
 ];
 const text = (r: { p: string; d: string }) => [r.p, r.d];

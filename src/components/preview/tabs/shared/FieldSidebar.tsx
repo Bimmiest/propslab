@@ -15,13 +15,7 @@ interface FieldSidebarProps {
   renderControls?: (search: string) => ReactNode;
 }
 
-export function FieldSidebar({
-  fieldCount,
-  activeFields,
-  onCollapse,
-  renderItems,
-  renderControls,
-}: FieldSidebarProps) {
+export function FieldSidebar({ fieldCount, activeFields, onCollapse, renderItems, renderControls }: FieldSidebarProps) {
   const [search, setSearch] = useState('');
   const listRef = useRef<HTMLDivElement>(null);
   const focused = isAnyFocused(activeFields);
@@ -59,9 +53,7 @@ export function FieldSidebar({
           />
         </div>
         <div className="flex items-center justify-between">
-          <span className="text-[10px] text-[var(--color-text-muted)]">
-            {fieldCount} fields
-          </span>
+          <span className="text-[10px] text-[var(--color-text-muted)]">{fieldCount} fields</span>
           {renderControls?.(lowerSearch)}
         </div>
       </div>

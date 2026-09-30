@@ -75,10 +75,7 @@ const HINT_ZONE_NAME = new RegExp(`\\s${ZONE_NAME}`);
 const FRACTION_WIDTHS = [9, 8, 7, 6, 5, 4, 3, 2, 1];
 function isoDateTimeFormats(separator: string): string[] {
   const base = `%Y-%m-%d${separator}%H:%M:%S`;
-  const times = [
-    ...['.', ','].flatMap((mark) => FRACTION_WIDTHS.map((w) => `${base}${mark}%${w}N`)),
-    base,
-  ];
+  const times = [...['.', ','].flatMap((mark) => FRACTION_WIDTHS.map((w) => `${base}${mark}%${w}N`)), base];
   const twelveHour = separator === ' ' ? times.map((t) => `${t.replace('%H', '%I')} %p`) : [];
   return [
     ...times.map((t) => `${t}%z`),
@@ -109,14 +106,14 @@ function isoDateTimeFormats(separator: string): string[] {
 const ISO_FORMATS = [...isoDateTimeFormats('T'), ...isoDateTimeFormats(' ')];
 const OTHER_FORMATS = [
   '%a, %d %b %Y %H:%M:%S %z', // RFC 2822
-  '%a %b %e %H:%M:%S %Z %Y',  // date(1): ctime with the zone before the year
-  '%a %b %e %H:%M:%S %Y',     // ctime
-  '%d/%b/%Y:%H:%M:%S %z',     // Apache access log
+  '%a %b %e %H:%M:%S %Z %Y', // date(1): ctime with the zone before the year
+  '%a %b %e %H:%M:%S %Y', // ctime
+  '%d/%b/%Y:%H:%M:%S %z', // Apache access log
   '%d/%b/%Y:%H:%M:%S',
   '%d %b %Y %I:%M:%S %p',
   '%d %b %Y %H:%M:%S',
-  '%d-%b-%Y %H:%M:%S',        // Oracle
-  '%b %e %H:%M:%S',           // syslog: no year, so the most recent one it can be
+  '%d-%b-%Y %H:%M:%S', // Oracle
+  '%b %e %H:%M:%S', // syslog: no year, so the most recent one it can be
   '%Y/%m/%d %I:%M:%S %p',
   '%Y/%m/%d %H:%M:%S',
   '%m/%d/%Y %I:%M:%S %p %Z',
@@ -256,10 +253,7 @@ export interface RecognizedTimestamp {
  * A format whose first match does not parse (`2026-13-45`), or would leave
  * part of the stamp unread (see `followGuard`), is passed over.
  */
-export function recognizeTimestamp(
-  region: string,
-  options: ParseTimestampOptions = {},
-): RecognizedTimestamp | null {
+export function recognizeTimestamp(region: string, options: ParseTimestampOptions = {}): RecognizedTimestamp | null {
   // Every format needs a digit; most lines of a stack trace have none.
   if (!/\d/.test(region)) return null;
   let best: RecognizedTimestamp | null = null;

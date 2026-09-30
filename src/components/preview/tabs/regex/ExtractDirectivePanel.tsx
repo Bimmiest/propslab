@@ -5,7 +5,12 @@ import { classNameError } from './regexLogic';
 
 /** The EXTRACT directive the pattern makes, with copy and add-to-props.conf. */
 export function ExtractDirectivePanel({
-  pattern, className, setClassName, block, copied: [copied, flashCopied], added: [added, flashAdded],
+  pattern,
+  className,
+  setClassName,
+  block,
+  copied: [copied, flashCopied],
+  added: [added, flashAdded],
 }: {
   pattern: string;
   className: string;
@@ -23,7 +28,8 @@ export function ExtractDirectivePanel({
   const matchBlock = block.reason;
   const classError = classNameError(className);
   const canAdd = matchBlock === null && classError === null;
-  const addDescribedBy = [matchBlock && matchBlockId, classError && classErrorId].filter(Boolean).join(' ') || undefined;
+  const addDescribedBy =
+    [matchBlock && matchBlockId, classError && classErrorId].filter(Boolean).join(' ') || undefined;
 
   /**
    * Write the directive straight into props.conf, closing the loop from
@@ -61,7 +67,9 @@ export function ExtractDirectivePanel({
         />
       </div>
       {classError && (
-        <div id={classErrorId} className="mb-1 text-[10px] text-[var(--color-error)]">{classError}</div>
+        <div id={classErrorId} className="mb-1 text-[10px] text-[var(--color-error)]">
+          {classError}
+        </div>
       )}
       <div className="flex items-center gap-2">
         <code className="flex-1 text-xs font-mono px-2 py-1.5 rounded bg-[var(--color-bg-tertiary)] text-[var(--color-success)] break-all select-all">
@@ -100,8 +108,8 @@ export function ExtractDirectivePanel({
       */}
       {isPlaceholderStanza && (
         <p className="mt-1 text-[10px] text-[var(--color-text-muted)]">
-          This event has no sourcetype. Adding writes <code>[{stanza}]</code> and sets the
-          event&apos;s sourcetype to match, so the stanza applies.
+          This event has no sourcetype. Adding writes <code>[{stanza}]</code> and sets the event&apos;s sourcetype to
+          match, so the stanza applies.
         </p>
       )}
     </div>

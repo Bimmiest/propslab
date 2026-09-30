@@ -6,14 +6,23 @@ import type { PageEntry } from './useRegexResults';
 
 function CenteredNote({ tone = 'muted', children }: { tone?: 'muted' | 'error'; children: React.ReactNode }) {
   return (
-    <div className={`flex items-center justify-center py-12 text-sm ${tone === 'error' ? 'text-[var(--color-error)]' : 'text-[var(--color-text-muted)]'}`}>
+    <div
+      className={`flex items-center justify-center py-12 text-sm ${tone === 'error' ? 'text-[var(--color-error)]' : 'text-[var(--color-text-muted)]'}`}
+    >
       {children}
     </div>
   );
 }
 
 /** The event cards, or why there are none to show. */
-export function RegexResults({ pattern, validationError, status, pageEntries, matchedElsewhere, groupColorMap }: {
+export function RegexResults({
+  pattern,
+  validationError,
+  status,
+  pageEntries,
+  matchedElsewhere,
+  groupColorMap,
+}: {
   pattern: string;
   validationError: string | null;
   status: string;
@@ -95,7 +104,9 @@ function RegexEventCard({
         <div className="flex items-center gap-2">
           {hasPattern && matchInfo && (
             <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-success)]/10 text-[var(--color-success)] font-medium">
-              Matched{capturedFields.length > 0 && ` \u2013 ${capturedFields.length} group${capturedFields.length !== 1 ? 's' : ''}`}
+              Matched
+              {capturedFields.length > 0 &&
+                ` \u2013 ${capturedFields.length} group${capturedFields.length !== 1 ? 's' : ''}`}
             </span>
           )}
           {hasPattern && !matchInfo && (
@@ -124,7 +135,9 @@ function RegexEventCard({
                 const color = groupColorMap.get(name) ?? 'var(--color-text-primary)';
                 return (
                   <tr key={name}>
-                    <td className="py-0.5 pr-3 font-mono" style={{ color }}>{name}</td>
+                    <td className="py-0.5 pr-3 font-mono" style={{ color }}>
+                      {name}
+                    </td>
                     <td className="py-0.5 font-mono text-[var(--color-text-primary)]">{value}</td>
                   </tr>
                 );
@@ -144,11 +157,19 @@ function SegmentSpan({ segment }: { segment: HighlightSegment }) {
     case 'outside':
       return <span className="text-[var(--color-text-muted)]">{segment.text}</span>;
     case 'between':
-      return <span style={MATCH_TEXT_STYLE} className="rounded-sm">{segment.text}</span>;
+      return (
+        <span style={MATCH_TEXT_STYLE} className="rounded-sm">
+          {segment.text}
+        </span>
+      );
     case 'group':
       return (
         <span
-          style={{ backgroundColor: tint(segment.color, 19), borderBottom: `2px solid ${segment.color}`, color: segment.color }}
+          style={{
+            backgroundColor: tint(segment.color, 19),
+            borderBottom: `2px solid ${segment.color}`,
+            color: segment.color,
+          }}
           className="rounded-sm px-0.5"
           title={`${segment.name}: ${segment.text}`}
         >
@@ -181,5 +202,11 @@ function RegexHighlightedRaw({
   if (!segments) {
     return <span className="text-[var(--color-text-secondary)]">{raw}</span>;
   }
-  return <>{segments.map((segment) => <SegmentSpan key={segment.key} segment={segment} />)}</>;
+  return (
+    <>
+      {segments.map((segment) => (
+        <SegmentSpan key={segment.key} segment={segment} />
+      ))}
+    </>
+  );
 }

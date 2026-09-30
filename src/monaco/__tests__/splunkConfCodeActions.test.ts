@@ -75,9 +75,7 @@ describe('mis-cased attribute quick fix (#89)', () => {
   it('scopes the suggestion to the file being edited', () => {
     // FORMAT is a transforms.conf attribute; a mis-cased one in props.conf has
     // no canonical spelling to offer because it would be wrong there anyway.
-    expect(actionsFor('[t1]\nformat = $1', 'transforms.conf')[0]?.title).toBe(
-      'Change "format" to "FORMAT"',
-    );
+    expect(actionsFor('[t1]\nformat = $1', 'transforms.conf')[0]?.title).toBe('Change "format" to "FORMAT"');
     expect(actionsFor('[st]\nformat = $1', 'props.conf')).toEqual([]);
   });
 

@@ -64,7 +64,8 @@ describe('TIME_FORMAT hover reads TIME_PREFIX as the engine does (#502)', () => 
   });
 
   it('inherits TIME_PREFIX from [default], and the stanza overrides it', async () => {
-    const conf = '[default]\nTIME_PREFIX = dflt=\n\n[a]\nTIME_FORMAT = %Y\n\n[b]\nTIME_PREFIX = own=\nTIME_FORMAT = %Y\n';
+    const conf =
+      '[default]\nTIME_PREFIX = dflt=\n\n[a]\nTIME_FORMAT = %Y\n\n[b]\nTIME_PREFIX = own=\nTIME_FORMAT = %Y\n';
     expect((await previewFor(conf, 5))?.timePrefix).toBe('dflt=');
     expect((await previewFor(conf, 9))?.timePrefix).toBe('own=');
   });

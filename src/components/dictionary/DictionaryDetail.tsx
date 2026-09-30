@@ -21,9 +21,7 @@ function Page({ children }: { children: React.ReactNode }) {
 
 function Eyebrow({ children }: { children: React.ReactNode }) {
   return (
-    <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--color-text-muted)]">
-      {children}
-    </p>
+    <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--color-text-muted)]">{children}</p>
   );
 }
 
@@ -31,15 +29,7 @@ function Eyebrow({ children }: { children: React.ReactNode }) {
  * Header block: category, key, badges, then a rule that separates the identity
  * of the thing from everything said about it.
  */
-function PageHeader({
-  eyebrow,
-  title,
-  badges,
-}: {
-  eyebrow: string;
-  title: string;
-  badges: React.ReactNode;
-}) {
+function PageHeader({ eyebrow, title, badges }: { eyebrow: string; title: string; badges: React.ReactNode }) {
   return (
     <header className="flex flex-col gap-2 pb-5 mb-6 border-b" style={{ borderColor: 'var(--color-border-subtle)' }}>
       <Eyebrow>{eyebrow}</Eyebrow>
@@ -65,11 +55,7 @@ function Columns({ main, aside }: { main: React.ReactNode; aside: React.ReactNod
 }
 
 function Lede({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="text-[13px] leading-[1.7] text-[var(--color-text-secondary)] max-w-prose">
-      {children}
-    </p>
-  );
+  return <p className="text-[13px] leading-[1.7] text-[var(--color-text-secondary)] max-w-prose">{children}</p>;
 }
 
 /** Boxed group used for both the code sample and the reference tables. */
@@ -187,9 +173,9 @@ export function DictionaryDetail({ entry }: { entry: DictionaryEntry }) {
 
             {info.isClassBased && (
               <Callout tone="info" icon="info">
-                This key takes a class name suffix, so one stanza can declare several of them — for
-                example <Mono>{info.key}-client_ip</Mono> and <Mono>{info.key}-status</Mono>. The suffix
-                names the setting; it is not part of the extracted field name.
+                This key takes a class name suffix, so one stanza can declare several of them — for example{' '}
+                <Mono>{info.key}-client_ip</Mono> and <Mono>{info.key}-status</Mono>. The suffix names the setting; it
+                is not part of the extracted field name.
               </Callout>
             )}
           </>
@@ -219,9 +205,7 @@ export function DictionaryDetail({ entry }: { entry: DictionaryEntry }) {
               </Card>
             )}
 
-            {stages.length > 0 && (
-              <StageLinks stages={stages} onOpen={openHelpAt} />
-            )}
+            {stages.length > 0 && <StageLinks stages={stages} onOpen={openHelpAt} />}
           </>
         }
       />
@@ -229,7 +213,13 @@ export function DictionaryDetail({ entry }: { entry: DictionaryEntry }) {
   );
 }
 
-function StageLinks({ stages, onOpen }: { stages: ReturnType<typeof getStagesForDirective>; onOpen: (step: number) => void }) {
+function StageLinks({
+  stages,
+  onOpen,
+}: {
+  stages: ReturnType<typeof getStagesForDirective>;
+  onOpen: (step: number) => void;
+}) {
   return (
     <Card label="Runs at">
       <div className="flex flex-col gap-1.5">
@@ -247,26 +237,17 @@ function StageLinks({ stages, onOpen }: { stages: ReturnType<typeof getStagesFor
               className="shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold"
               style={{
                 backgroundColor: tint(
-                  stage.phase === 'index-time'
-                    ? 'var(--color-warning)'
-                    : 'var(--color-accent)',
+                  stage.phase === 'index-time' ? 'var(--color-warning)' : 'var(--color-accent)',
                   18,
                 ),
-                color:
-                  stage.phase === 'index-time'
-                    ? 'var(--color-warning)'
-                    : 'var(--color-accent)',
+                color: stage.phase === 'index-time' ? 'var(--color-warning)' : 'var(--color-accent)',
               }}
             >
               {stage.step}
             </span>
             <span className="flex-1 min-w-0 flex flex-col">
-              <span className="text-[12px] font-medium text-[var(--color-text-primary)] truncate">
-                {stage.name}
-              </span>
-              <span className="text-[10px] text-[var(--color-text-muted)]">
-                {PHASE_LABELS[stage.phase]}
-              </span>
+              <span className="text-[12px] font-medium text-[var(--color-text-primary)] truncate">{stage.name}</span>
+              <span className="text-[10px] text-[var(--color-text-muted)]">{PHASE_LABELS[stage.phase]}</span>
             </span>
             <Icon
               name="arrow-right"
@@ -293,16 +274,16 @@ function SupportCallouts({ info }: { info: DirectiveEntryInfo }) {
           says whether the preview will do it too. */}
       {info.support === 'ignored' && (
         <Callout tone="danger" icon="warning">
-          <strong>Not simulated.</strong> {info.supportNote} The preview ignores this
-          directive, so its output is what Splunk would produce without it
+          <strong>Not simulated.</strong> {info.supportNote} The preview ignores this directive, so its output is what
+          Splunk would produce without it
           {info.supportIssue ? ` (tracked as #${info.supportIssue})` : ''}.
         </Callout>
       )}
 
       {info.support === 'documented' && (
         <Callout tone="info" icon="info">
-          <strong>Outside the simulation.</strong> {info.supportNote} It is documented here
-          because it is valid Splunk config, but nothing in the preview depends on it.
+          <strong>Outside the simulation.</strong> {info.supportNote} It is documented here because it is valid Splunk
+          config, but nothing in the preview depends on it.
         </Callout>
       )}
 
@@ -334,9 +315,7 @@ function StanzaDetail({ stanza }: { stanza: StanzaEntryInfo }) {
             <Lede>{stanza.description}</Lede>
             {/* `[default]` takes no pattern, so its example is the heading
                 again. A code card that restates the title is ceremony. */}
-            {stanza.example !== stanza.label && (
-              <CodeCard label="Example" code={stanza.example} />
-            )}
+            {stanza.example !== stanza.label && <CodeCard label="Example" code={stanza.example} />}
             {stanza.patternSyntax.length > 0 && (
               <Card label="Pattern syntax">
                 <ul className="flex flex-col gap-1.5">
@@ -358,13 +337,10 @@ function StanzaDetail({ stanza }: { stanza: StanzaEntryInfo }) {
         }
         aside={
           <Card label="Precedence">
-            <p className="text-[12px] leading-relaxed text-[var(--color-text-secondary)]">
-              {stanza.precedence}
-            </p>
+            <p className="text-[12px] leading-relaxed text-[var(--color-text-secondary)]">{stanza.precedence}</p>
           </Card>
         }
       />
     </Page>
   );
 }
-

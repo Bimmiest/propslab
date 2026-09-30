@@ -12,8 +12,13 @@ function event(raw = 'hello'): SplunkEvent {
   });
 }
 
-const dir = (key: string, value: string, directiveType: string, className?: string): ConfDirective =>
-  ({ key, value, line: 1, directiveType, className });
+const dir = (key: string, value: string, directiveType: string, className?: string): ConfDirective => ({
+  key,
+  value,
+  line: 1,
+  directiveType,
+  className,
+});
 
 // host/source/sourcetype/index are default fields at search time, so a
 // large family of staple TA/CIM directives can read them without any prior
@@ -29,7 +34,11 @@ describe('metadata as search-time default fields (#56)', () => {
   });
 
   it('FIELDALIAS host AS dvc aliases the metadata host', () => {
-    const out = applyFieldAliases([event()], [dir('FIELDALIAS-cim', 'host AS dvc', 'FIELDALIAS', 'cim')], runCtx(FIXED_NOW))[0]!;
+    const out = applyFieldAliases(
+      [event()],
+      [dir('FIELDALIAS-cim', 'host AS dvc', 'FIELDALIAS', 'cim')],
+      runCtx(FIXED_NOW),
+    )[0]!;
     expect(out.fields['dvc']).toBe('web01');
   });
 

@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type {
-  ProcessingResult,
-  SplunkEvent,
-  ValidationDiagnostic,
-} from '../../../../src/engine/types';
+import type { ProcessingResult, SplunkEvent, ValidationDiagnostic } from '../../../../src/engine/types';
 import { serializeSimulation } from '../serialize';
 import { MAX_PAYLOAD_BYTES, MAX_RESPONSE_BYTES, responseBytes } from '../responseBudget';
 import { makeEvent } from '../../../../src/test/makeEvent';
@@ -207,8 +203,7 @@ describe('serializeSimulation', () => {
     const events = Array.from({ length: 10 }, (_, i) => event(i, 1, 1));
     const byMaxEvents = serializeSimulation(result(events), [], { maxEvents: 2, includeSnapshots: false });
     expect(byMaxEvents.truncationNote).toBe(
-      'Only the first 2 of 10 events are returned; raise max_events or use a smaller sample ' +
-        'to see the rest.',
+      'Only the first 2 of 10 events are returned; raise max_events or use a smaller sample ' + 'to see the rest.',
     );
     const byCap = serializeSimulation(result([event(0, MAX_PAYLOAD_BYTES, 0)]), [], {
       maxEvents: 20,

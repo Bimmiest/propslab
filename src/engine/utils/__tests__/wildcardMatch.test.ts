@@ -66,7 +66,12 @@ describe('compileWildcard', () => {
     fc.assert(
       fc.property(
         fc.array(chars, { maxLength: 8 }).map((c) => c.join('')),
-        fc.array(chars.filter((c) => c !== '*'), { maxLength: 12 }).map((c) => c.join('')),
+        fc
+          .array(
+            chars.filter((c) => c !== '*'),
+            { maxLength: 12 },
+          )
+          .map((c) => c.join('')),
         (pattern, s) => compileWildcard(pattern)(s) === reference(pattern).test(s),
       ),
       { seed: fcSeed(371), numRuns: 2000 },

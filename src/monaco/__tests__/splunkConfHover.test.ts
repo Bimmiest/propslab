@@ -9,12 +9,8 @@ const at = (lineNumber: number, column: number) => ({ lineNumber, column }) as P
 
 function hoverText(line: string): string {
   const provider = createHoverProvider('props.conf');
-  const result = provider.provideHover(
-    fakeModel(line),
-    at(1, 2),
-    {} as never,
-    undefined,
-  ) as languages.Hover | null | undefined;
+  const result = provider.provideHover(fakeModel(line), at(1, 2), {} as never, undefined) as
+    languages.Hover | null | undefined;
   return result?.contents.map((c) => c.value).join('\n') ?? '';
 }
 
@@ -40,12 +36,8 @@ describe('splunkConfHover — stanza headers with surrounding whitespace (#31.1)
 // link it opens as a command.
 describe('splunkConfHover — document text cannot inject Markdown (#296)', () => {
   function hover(line: string, fileType: 'props.conf' | 'transforms.conf' = 'props.conf') {
-    const result = createHoverProvider(fileType).provideHover(
-      fakeModel(line),
-      at(1, 2),
-      {} as never,
-      undefined,
-    ) as languages.Hover | null | undefined;
+    const result = createHoverProvider(fileType).provideHover(fakeModel(line), at(1, 2), {} as never, undefined) as
+      languages.Hover | null | undefined;
     return result?.contents ?? [];
   }
 
@@ -88,7 +80,11 @@ describe('splunkConfHover — document text cannot inject Markdown (#296)', () =
   });
 
   it('escapes a stanza name, which reaches the (untrusted) stanza hover too', () => {
-    for (const line of ['[x](command:foo)[y]','[source::`](https://example.invalid)`]', '[host::![i](https://example.invalid)]']) {
+    for (const line of [
+      '[x](command:foo)[y]',
+      '[source::`](https://example.invalid)`]',
+      '[host::![i](https://example.invalid)]',
+    ]) {
       const [content] = hover(line);
       expect(content).toBeDefined();
       expect(content!.isTrusted).toBeFalsy();

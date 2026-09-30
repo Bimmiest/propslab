@@ -25,10 +25,7 @@ export function ProgressBar({ value, label, variant = 'default' }: ProgressBarPr
         aria-label={label ?? 'Loading'}
         aria-valuetext="loading"
       >
-        <div
-          className="h-full w-1/3 progress-indeterminate"
-          style={{ backgroundColor: barColor }}
-        />
+        <div className="h-full w-1/3 progress-indeterminate" style={{ backgroundColor: barColor }} />
       </div>
     );
   }
@@ -39,24 +36,15 @@ export function ProgressBar({ value, label, variant = 'default' }: ProgressBarPr
     <div className="w-full">
       <div className="flex items-center justify-between mb-1">
         {label && (
-          <span
-            className="text-xs font-medium"
-            style={{ color: 'var(--color-text-secondary)' }}
-          >
+          <span className="text-xs font-medium" style={{ color: 'var(--color-text-secondary)' }}>
             {label}
           </span>
         )}
-        <span
-          className="text-xs font-mono ml-auto"
-          style={{ color: 'var(--color-text-muted)' }}
-        >
+        <span className="text-xs font-mono ml-auto" style={{ color: 'var(--color-text-muted)' }}>
           {Math.round(clampedValue)}%
         </span>
       </div>
-      <div
-        className="w-full h-2 rounded-full overflow-hidden"
-        style={{ backgroundColor: 'var(--color-bg-tertiary)' }}
-      >
+      <div className="w-full h-2 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--color-bg-tertiary)' }}>
         <div
           className="h-full rounded-full transition-all duration-300 ease-out"
           style={{

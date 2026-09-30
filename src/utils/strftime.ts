@@ -12,22 +12,25 @@ import { escapeRegex } from './splunkRegex';
 // ---------------------------------------------------------------------------
 
 const MONTH_NAMES_FULL = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
 ] as const;
 
-const MONTH_NAMES_ABBR = [
-  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-] as const;
+const MONTH_NAMES_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const;
 
-const WEEKDAY_NAMES_FULL = [
-  'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday',
-] as const;
+const WEEKDAY_NAMES_FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as const;
 
-const WEEKDAY_NAMES_ABBR = [
-  'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat',
-] as const;
+const WEEKDAY_NAMES_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
 
 /** The name at `index` of a table indexed by a valid Date's month or weekday. */
 function nameAt(names: readonly string[], index: number): string {
@@ -44,9 +47,26 @@ const WEEKDAY_NAME_REGEX = `(${[...WEEKDAY_NAMES_FULL, ...WEEKDAY_NAMES_ABBR].jo
 
 /** The symbolic names a directive's capture group can take (the `capture:` of each directive). */
 type CaptureName =
-  | 'ampm' | 'day' | 'dayOfYear' | 'epoch' | 'hour12' | 'hour24' | 'microseconds'
-  | 'microsecondsFull' | 'milliseconds' | 'minute' | 'month' | 'monthName' | 'nanoseconds'
-  | 'second' | 'subseconds' | 'tzName' | 'tzOffset' | 'weekdayName' | 'year2' | 'year4';
+  | 'ampm'
+  | 'day'
+  | 'dayOfYear'
+  | 'epoch'
+  | 'hour12'
+  | 'hour24'
+  | 'microseconds'
+  | 'microsecondsFull'
+  | 'milliseconds'
+  | 'minute'
+  | 'month'
+  | 'monthName'
+  | 'nanoseconds'
+  | 'second'
+  | 'subseconds'
+  | 'tzName'
+  | 'tzOffset'
+  | 'weekdayName'
+  | 'year2'
+  | 'year4';
 
 /** The text each capture read from a timestamp; a capture the format lacks is absent. */
 type CaptureBag = Partial<Record<CaptureName, string>>;
@@ -72,8 +92,7 @@ const hour12 = (date: Date) => (date.getHours() % 12 === 0 ? 12 : date.getHours(
  * The first `width` digits of the fractional second. A Date holds milliseconds,
  * so the digits past the third are always zero.
  */
-const fraction = (width: number) => (date: Date) =>
-  pad(date.getMilliseconds(), 3).padEnd(width, '0').slice(0, width);
+const fraction = (width: number) => (date: Date) => pad(date.getMilliseconds(), 3).padEnd(width, '0').slice(0, width);
 
 function buildDirectiveMap(): Record<string, DirectiveMeta> {
   return {
@@ -106,7 +125,11 @@ function buildDirectiveMap(): Record<string, DirectiveMeta> {
     // Splunk "enhanced strptime" offsets with explicit colons.
     '%:z': { regex: '(Z|[+-]\\d{2}:\\d{2})', capture: 'tzOffset', format: (d) => formatUtcOffset(d, ':') },
     // getTimezoneOffset() is in whole minutes, so the seconds are always zero.
-    '%::z': { regex: '(Z|[+-]\\d{2}:\\d{2}:\\d{2})', capture: 'tzOffset', format: (d) => `${formatUtcOffset(d, ':')}:00` },
+    '%::z': {
+      regex: '(Z|[+-]\\d{2}:\\d{2}:\\d{2})',
+      capture: 'tzOffset',
+      format: (d) => `${formatUtcOffset(d, ':')}:00`,
+    },
     '%s': { regex: '(\\d{10,13})', capture: 'epoch', format: (d) => String(Math.floor(d.getTime() / 1000)) },
     '%3N': { regex: '(\\d{3})', capture: 'milliseconds', format: fraction(3) },
     '%6N': { regex: '(\\d{6})', capture: 'microseconds', format: fraction(6) },
@@ -312,16 +335,24 @@ export function strftimeToRegex(format: string): RegExp {
  * Only a small subset is included; extend as needed.
  */
 const TZ_OFFSETS: Record<string, number> = {
-  UTC: 0, GMT: 0,
-  EST: -300, EDT: -240,
-  CST: -360, CDT: -300,
-  MST: -420, MDT: -360,
-  PST: -480, PDT: -420,
+  UTC: 0,
+  GMT: 0,
+  EST: -300,
+  EDT: -240,
+  CST: -360,
+  CDT: -300,
+  MST: -420,
+  MDT: -360,
+  PST: -480,
+  PDT: -420,
   IST: 330,
-  CET: 60, CEST: 120,
+  CET: 60,
+  CEST: 120,
   JST: 540,
-  AEST: 600, AEDT: 660,
-  NZST: 720, NZDT: 780,
+  AEST: 600,
+  AEDT: 660,
+  NZST: 720,
+  NZDT: 780,
 };
 
 /**
@@ -331,7 +362,17 @@ const TZ_OFFSETS: Record<string, number> = {
  * Kept to names tzdata itself defines: ICU also accepts legacy aliases such as
  * `PST`, which zoneinfo has no zone for.
  */
-const TZDATA_ABBREVIATION_ZONES: ReadonlySet<string> = new Set(['CET', 'EET', 'WET', 'MET', 'EST', 'MST', 'HST', 'UTC', 'GMT']);
+const TZDATA_ABBREVIATION_ZONES: ReadonlySet<string> = new Set([
+  'CET',
+  'EET',
+  'WET',
+  'MET',
+  'EST',
+  'MST',
+  'HST',
+  'UTC',
+  'GMT',
+]);
 
 /** The zone abbreviations `%Z` resolves without TZ_ALIAS, for recognition to look for. */
 export const KNOWN_ZONE_ABBREVIATIONS: readonly string[] = Object.keys(TZ_OFFSETS);
@@ -461,8 +502,7 @@ function resolveTzOffsetMinutes(tz: string): number | null {
   const gmtRelative = /^(?:GMT|UTC)([+-])(\d{1,2})(?::?(\d{2}))?$/.exec(upper);
   if (gmtRelative) {
     const sign = gmtRelative[1] === '+' ? 1 : -1;
-    return sign * (parseInt(gmtRelative[2] ?? '0', 10) * 60
-      + (gmtRelative[3] ? parseInt(gmtRelative[3], 10) : 0));
+    return sign * (parseInt(gmtRelative[2] ?? '0', 10) * 60 + (gmtRelative[3] ? parseInt(gmtRelative[3], 10) : 0));
   }
 
   // Try parsing as +HHMM / -HH:MM / +HH:MM:SS / +HH (minutes and seconds
@@ -470,9 +510,8 @@ function resolveTzOffsetMinutes(tz: string): number | null {
   const m = /^([+-])(\d{2})(?::?(\d{2}))?(?::?(\d{2}))?$/.exec(tz);
   if (m) {
     const sign = m[1] === '+' ? 1 : -1;
-    const minutes = parseInt(m[2] ?? '0', 10) * 60
-      + (m[3] ? parseInt(m[3], 10) : 0)
-      + (m[4] ? parseInt(m[4], 10) / 60 : 0);
+    const minutes =
+      parseInt(m[2] ?? '0', 10) * 60 + (m[3] ? parseInt(m[3], 10) : 0) + (m[4] ? parseInt(m[4], 10) / 60 : 0);
     return sign * minutes;
   }
 
@@ -632,8 +671,7 @@ export function parseTimestampDetailed(
   // and the local year differs from it around New Year in every zone but UTC.
   const thisYear = now.getUTCFullYear();
   const { captures } = tokenise(format);
-  const yearless =
-    !captures.some((c) => YEAR_CAPTURES.has(c)) && captures.some((c) => DATE_CAPTURES.has(c));
+  const yearless = !captures.some((c) => YEAR_CAPTURES.has(c)) && captures.some((c) => DATE_CAPTURES.has(c));
   const current = assembleTimestamp(text, format, options, thisYear);
   if (!yearless) return current;
 
@@ -771,13 +809,25 @@ function resolveHour(bag: CaptureBag): number {
  * over (e.g. %m=13 → the next January, %d=32 → the next month, %H=25 → the
  * next day). Splunk treats an out-of-range field as a parse failure.
  */
-function componentsInRange(year: number, month: number, day: number, hour: number, minute: number, second: number): boolean {
+function componentsInRange(
+  year: number,
+  month: number,
+  day: number,
+  hour: number,
+  minute: number,
+  second: number,
+): boolean {
   return !(
-    month < 0 || month > 11 ||
-    day < 1 || day > (monthLengths(year)[month] ?? 0) ||
-    hour < 0 || hour > 23 ||
-    minute < 0 || minute > 59 ||
-    second < 0 || second > 60 // allow a leap second
+    month < 0 ||
+    month > 11 ||
+    day < 1 ||
+    day > (monthLengths(year)[month] ?? 0) ||
+    hour < 0 ||
+    hour > 23 ||
+    minute < 0 ||
+    minute > 59 ||
+    second < 0 ||
+    second > 60 // allow a leap second
   );
 }
 
@@ -825,7 +875,10 @@ function resolveZone(
 
     // The stanza's TZ is a zoneinfo name first: `TZ = CET` is the zone, with
     // its summer time, not the abbreviation.
-    const stanzaZone = bag.tzName === undefined && TZDATA_ABBREVIATION_ZONES.has(zoneName.toUpperCase()) ? ianaFormatter(zoneName) : null;
+    const stanzaZone =
+      bag.tzName === undefined && TZDATA_ABBREVIATION_ZONES.has(zoneName.toUpperCase())
+        ? ianaFormatter(zoneName)
+        : null;
     if (stanzaZone) return inZone(stanzaZone);
 
     // A fixed offset or a known abbreviation is a constant, so answer directly.
@@ -875,8 +928,7 @@ function assembleTimestamp(
   }
 
   // A weekday alone (%a) does not name a date, so it does not count.
-  const hasDate = [bag.year4, bag.year2, bag.month, bag.monthName, bag.day, bag.dayOfYear]
-    .some((v) => v !== undefined);
+  const hasDate = [bag.year4, bag.year2, bag.month, bag.monthName, bag.day, bag.dayOfYear].some((v) => v !== undefined);
   const suppliedDate = hasDate ? undefined : options.dateForDateless;
 
   const year = resolveYear(bag, suppliedDate, yearForYearless);

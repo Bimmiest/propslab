@@ -8,7 +8,14 @@ import { filterReference, type ReferenceCategory } from './referenceFilter';
  * one tab's rows insert a pattern, the other's mark the directives in use.
  */
 export function ReferenceTable<R>({
-  title, searchLabel, searchPlaceholder, panelId, columns, categories, searchText, renderCategory,
+  title,
+  searchLabel,
+  searchPlaceholder,
+  panelId,
+  columns,
+  categories,
+  searchText,
+  renderCategory,
 }: {
   title: string;
   searchLabel: string;
@@ -62,12 +69,14 @@ export function ReferenceTable<R>({
             <table className="w-full text-xs">
               <thead>
                 <tr className="text-left text-[10px] text-[var(--color-text-muted)] uppercase tracking-wider">
-                  {columns.map((c) => <th key={c.label} className={c.className}>{c.label}</th>)}
+                  {columns.map((c) => (
+                    <th key={c.label} className={c.className}>
+                      {c.label}
+                    </th>
+                  ))}
                 </tr>
               </thead>
-              <tbody>
-                {filtered.map(renderCategory)}
-              </tbody>
+              <tbody>{filtered.map(renderCategory)}</tbody>
             </table>
           </div>
         </div>

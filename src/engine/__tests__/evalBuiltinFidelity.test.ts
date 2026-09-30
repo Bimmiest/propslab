@@ -24,8 +24,7 @@ function event(fields: Fields): SplunkEvent {
   return makeEvent('raw', { fields });
 }
 
-const run = (expr: string, fields: Fields = {}) =>
-  evaluateExpression(expr, event(fields), undefined, 0);
+const run = (expr: string, fields: Fields = {}) => evaluateExpression(expr, event(fields), undefined, 0);
 
 // ── Citations ───────────────────────────────────────────
 
@@ -181,7 +180,12 @@ row('typeof', 'typeof(missing)', 'Invalid', `${INFO} > typeof(X): a nonexistent 
 row('typeof', 'typeof("")', 'String', `${INFO} > typeof(X)`);
 row('typeof', 'typeof("😀")', 'String', `${INFO} > typeof(X)`);
 row('typeof', 'typeof(sqrt(-1))', 'Invalid', NOT_A_NUMBER);
-todo('typeof', 'typeof(mv)', 'the docs list the possible type names without saying which a multivalue field gets', MV_AB);
+todo(
+  'typeof',
+  'typeof(mv)',
+  'the docs list the possible type names without saying which a multivalue field gets',
+  MV_AB,
+);
 
 row('isnull', 'isnull(missing)', true, `${INFO} > isnull(X)`);
 row('isnull', 'isnull("")', false, `${INFO} > isnull(X): an empty string is a value`);
@@ -193,7 +197,12 @@ row('isnotnull', 'isnotnull("")', true, `${INFO} > isnotnull(X): an empty string
 row('isnotnull', 'isnotnull(sqrt(-1))', false, NOT_A_NUMBER);
 row('isnotnull', 'isnotnull(mv)', true, `${INFO} > isnotnull(X)`, MV_AB);
 
-for (const [fn, yes] of [['isint', '3'], ['isnum', '3.5'], ['isstr', '"a"'], ['isbool', '1==1']] as const) {
+for (const [fn, yes] of [
+  ['isint', '3'],
+  ['isnum', '3.5'],
+  ['isstr', '"a"'],
+  ['isbool', '1==1'],
+] as const) {
   const doc = `${INFO} > ${fn}(X)`;
   row(fn, `${fn}(missing)`, false, `${doc}: a nonexistent field is none of these types`);
   row(fn, `${fn}(${yes})`, true, doc);
@@ -214,7 +223,11 @@ for (const fn of ['abs', 'ceiling', 'ceil', 'floor', 'sqrt', 'ln', 'exp', 'round
   nulls(fn, [`${fn}("")`, `${fn}("😀")`], `${MATH} > ${fn}(X): a non-numeric argument is NULL`);
   todo(fn, `${fn}(mv)`, MV_UNDOCUMENTED, MV_AB);
 }
-todo('round', 'round(1.5, missing)', 'the docs do not say what a NULL precision gives (the simulator rounds to 0 places)');
+todo(
+  'round',
+  'round(1.5, missing)',
+  'the docs do not say what a NULL precision gives (the simulator rounds to 0 places)',
+);
 todo('round', 'round(1.5, mv)', MV_UNDOCUMENTED, MV_AB);
 row('round', 'round(2.5)', 3, `${MATH} > round(X,Y)`);
 row('round', 'round(1.234, 2)', 1.23, `${MATH} > round(X,Y)`);
@@ -255,8 +268,12 @@ todo('log', 'log(8, mv)', MV_UNDOCUMENTED, MV_AB);
 
 row('pi', 'pi()', Math.PI, `${MATH} > pi()`);
 
-row('random', 'random()', (v) => typeof v === 'number' && Number.isInteger(v) && v >= 0 && v < 2 ** 31,
-  `${MATH} > random(): an integer from 0 to 2^31-1`);
+row(
+  'random',
+  'random()',
+  (v) => typeof v === 'number' && Number.isInteger(v) && v >= 0 && v < 2 ** 31,
+  `${MATH} > random(): an integer from 0 to 2^31-1`,
+);
 
 row('min', 'min(missing)', null, `${COND} > min(X,...): NULL values are not candidates`);
 row('min', 'min(missing, 3)', 3, `${COND} > min(X,...): NULL values are not candidates`);
@@ -281,7 +298,13 @@ todo('mvcount', 'mvcount("")', 'the docs do not say whether an empty string is o
 
 row('mvindex', 'mvindex(missing, 0)', null, `${MV} > mvindex(MVFIELD,STARTINDEX,ENDINDEX): nothing to index is NULL`);
 row('mvindex', 'mvindex(mv, 0)', 'a', `${MV} > mvindex(MVFIELD,STARTINDEX,ENDINDEX): 0-based`, MV_AB);
-row('mvindex', 'mvindex(mv, -1)', 'b', `${MV} > mvindex(MVFIELD,STARTINDEX,ENDINDEX): negative counts from the end`, MV_AB);
+row(
+  'mvindex',
+  'mvindex(mv, -1)',
+  'b',
+  `${MV} > mvindex(MVFIELD,STARTINDEX,ENDINDEX): negative counts from the end`,
+  MV_AB,
+);
 row('mvindex', 'mvindex(mv, 0, 1)', ['a', 'b'], `${MV} > mvindex(MVFIELD,STARTINDEX,ENDINDEX)`, MV_AB);
 row('mvindex', 'mvindex("", 0)', '', `${MV} > mvindex(MVFIELD,STARTINDEX,ENDINDEX): an empty string is a value`);
 row('mvindex', 'mvindex(split("😀,b", ","), 0)', '😀', `${MV} > mvindex(MVFIELD,STARTINDEX,ENDINDEX)`);
@@ -305,8 +328,12 @@ row('mvsort', 'mvsort(split("b,a", ","))', ['a', 'b'], `${MV} > mvsort(X): lexic
 // The docs' own example: "Numbers are sorted based on the first digit. For
 // example, the numbers 10, 9, 70, 100 are sorted lexicographically as 10, 100,
 // 70, 9." (#524 read it the other way.)
-row('mvsort', 'mvsort(split("10,9,70,100", ","))', ['10', '100', '70', '9'],
-  `${MV} > mvsort(X): numbers are sorted based on the first digit`);
+row(
+  'mvsort',
+  'mvsort(split("10,9,70,100", ","))',
+  ['10', '100', '70', '9'],
+  `${MV} > mvsort(X): numbers are sorted based on the first digit`,
+);
 todo('mvsort', 'mvsort(missing)', 'whether a NULL argument is NULL or an empty multivalue is open: #446 item 3');
 todo('mvsort', 'mvsort("")', 'the docs do not say what a single empty string gives');
 
@@ -317,8 +344,14 @@ row('mvfind', 'mvfind(split("x,😀", ","), "😀")', 1, `${MV} > mvfind(MVFIELD
 todo('mvfind', 'mvfind(mv, missing)', 'the docs do not say what a NULL regex gives', MV_AB);
 todo('mvfind', 'mvfind("", "^$")', 'the docs do not say whether an empty string is a value to match');
 
-row('mvzip', 'mvzip(a, b, "-")', ['1-x', '2-y'], `${MV} > mvzip(MVFIELD_X,MVFIELD_Y,"Z")`, { a: ['1', '2'], b: ['x', 'y'] });
-row('mvzip', 'mvzip(a, b)', ['1,x', '2,y'], `${MV} > mvzip(MVFIELD_X,MVFIELD_Y,"Z"): comma by default`, { a: ['1', '2'], b: ['x', 'y'] });
+row('mvzip', 'mvzip(a, b, "-")', ['1-x', '2-y'], `${MV} > mvzip(MVFIELD_X,MVFIELD_Y,"Z")`, {
+  a: ['1', '2'],
+  b: ['x', 'y'],
+});
+row('mvzip', 'mvzip(a, b)', ['1,x', '2,y'], `${MV} > mvzip(MVFIELD_X,MVFIELD_Y,"Z"): comma by default`, {
+  a: ['1', '2'],
+  b: ['x', 'y'],
+});
 row('mvzip', 'mvzip("😀", "b", "")', ['😀b'], `${MV} > mvzip(MVFIELD_X,MVFIELD_Y,"Z")`);
 todo('mvzip', 'mvzip(missing, "b")', 'whether a NULL argument is NULL or an empty multivalue is open: #446 item 3');
 todo('mvzip', 'mvzip(mv, mv, missing)', 'the docs do not say what a NULL delimiter gives', MV_AB);
@@ -332,8 +365,11 @@ for (const fn of ['md5', 'sha1', 'sha256', 'sha512']) {
 row('now', 'now()', 0, `${TIME} > now(): the run's injected clock (0 here)`);
 row('time', 'time()', 0, `${TIME} > time(): the run's injected clock (0 here)`);
 nulls('strftime', ['strftime(missing, "%Y")']);
-nulls('strftime', ['strftime("", "%Y")', 'strftime("😀", "%Y")', 'strftime(sqrt(-1), "%Y")'],
-  `${TIME} > strftime(X,Y): a value that is not a time is NULL`);
+nulls(
+  'strftime',
+  ['strftime("", "%Y")', 'strftime("😀", "%Y")', 'strftime(sqrt(-1), "%Y")'],
+  `${TIME} > strftime(X,Y): a value that is not a time is NULL`,
+);
 row('strftime', 'strftime(0, "%Y")', '1970', `${TIME} > strftime(X,Y): %Y is the year`);
 row('strftime', 'strftime(0, "😀%Y")', '😀1970', `${TIME} > strftime(X,Y): other text is literal`);
 row('strftime', 'strftime(0, "")', '', `${TIME} > strftime(X,Y): an empty format is empty`);
@@ -368,8 +404,18 @@ todo('match', 'match("a", mv)', MV_UNDOCUMENTED, MV_AB);
 nulls('cidrmatch', ['cidrmatch(missing, "10.0.0.1")', 'cidrmatch("10.0.0.0/8", missing)']);
 row('cidrmatch', 'cidrmatch("10.0.0.0/8", "10.1.2.3")', true, `${COND} > cidrmatch("CIDR",IP)`);
 row('cidrmatch', 'cidrmatch("10.0.0.0/8", "11.1.2.3")', false, `${COND} > cidrmatch("CIDR",IP)`);
-row('cidrmatch', 'cidrmatch("", "10.1.2.3")', false, `${COND} > cidrmatch("CIDR",IP): an unparseable range matches nothing`);
-row('cidrmatch', 'cidrmatch("10.0.0.0/8", "😀")', false, `${COND} > cidrmatch("CIDR",IP): an unparseable address matches nothing`);
+row(
+  'cidrmatch',
+  'cidrmatch("", "10.1.2.3")',
+  false,
+  `${COND} > cidrmatch("CIDR",IP): an unparseable range matches nothing`,
+);
+row(
+  'cidrmatch',
+  'cidrmatch("10.0.0.0/8", "😀")',
+  false,
+  `${COND} > cidrmatch("CIDR",IP): an unparseable address matches nothing`,
+);
 todo('cidrmatch', 'cidrmatch("10.0.0.0/8", mv)', MV_UNDOCUMENTED, MV_AB);
 
 todo('searchmatch', 'searchmatch("a")', 'not simulated (always false, with a warning)');
@@ -388,7 +434,13 @@ todo('validate', 'validate(mv, "x")', MV_UNDOCUMENTED, MV_AB);
 row('coalesce', 'coalesce(missing, missing)', null, `${COND} > coalesce(X,...): all NULL is NULL`);
 row('coalesce', 'coalesce(missing, "")', '', `${COND} > coalesce(X,...): an empty string is not NULL`);
 row('coalesce', 'coalesce(missing, "😀")', '😀', `${COND} > coalesce(X,...)`);
-row('coalesce', 'coalesce(missing, mv)', ['a', 'b'], `${COND} > coalesce(X,...): the first non-NULL value, as it is`, MV_AB);
+row(
+  'coalesce',
+  'coalesce(missing, mv)',
+  ['a', 'b'],
+  `${COND} > coalesce(X,...): the first non-NULL value, as it is`,
+  MV_AB,
+);
 
 // ── The checks ──────────────────────────────────────────
 
@@ -404,7 +456,16 @@ describe('every eval builtin has documented rows', () => {
 
   it('has an asserted row (not only TODOs) for every function the simulator computes', () => {
     const notSimulated = new Set([
-      'exact', 'sigfig', 'mvfilter', 'md5', 'sha1', 'sha256', 'sha512', 'strptime', 'relative_time', 'searchmatch',
+      'exact',
+      'sigfig',
+      'mvfilter',
+      'md5',
+      'sha1',
+      'sha256',
+      'sha512',
+      'strptime',
+      'relative_time',
+      'searchmatch',
     ]);
     const asserted = new Set(rows.map((r) => r.fn));
     const missing = [...builtinNames(), ...BRANCHING].filter((fn) => !notSimulated.has(fn) && !asserted.has(fn));

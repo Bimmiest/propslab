@@ -5,8 +5,7 @@ import type { ConfDirective, EventMetadata } from '../types';
 import { runCtx, FIXED_NOW } from './runCtx';
 
 const META: EventMetadata = { index: 'main', host: '', source: '', sourcetype: 'st' };
-const dir = (key: string, value: string): ConfDirective =>
-  ({ key, value, line: 1, directiveType: key });
+const dir = (key: string, value: string): ConfDirective => ({ key, value, line: 1, directiveType: key });
 
 // Keys are compared case-sensitively, as confParser's "is ignored" warning for
 // a mis-cased attribute says: the simulator must not honour a directive it has
@@ -27,12 +26,7 @@ describe('lineBreaker — directive keys are case-sensitive (#119)', () => {
   });
 
   it('honours the correctly-cased LINE_BREAKER', () => {
-    const { result } = runPipeline(
-      'aXbXc',
-      META,
-      '[st]\nLINE_BREAKER = (X)\nSHOULD_LINEMERGE = false\n',
-      '',
-    );
+    const { result } = runPipeline('aXbXc', META, '[st]\nLINE_BREAKER = (X)\nSHOULD_LINEMERGE = false\n', '');
     expect(result.events.map((e) => e._raw)).toEqual(['a', 'b', 'c']);
   });
 

@@ -7,8 +7,7 @@ import type { EventMetadata } from '../engine/types';
 import { toViewResult } from '../utils/viewResult';
 
 // Vite worker import — bundled as a separate chunk
-const createWorker = () =>
-  new Worker(new URL('../engine/pipelineWorker.ts', import.meta.url), { type: 'module' });
+const createWorker = () => new Worker(new URL('../engine/pipelineWorker.ts', import.meta.url), { type: 'module' });
 
 const WORKER_TIMEOUT_MS = 5_000;
 // How many times a single request may restart the worker after a crash before we
@@ -116,7 +115,8 @@ function giveUp(p: WorkerPolicy, message: string): void {
   report(p, message);
 }
 
-const NO_REPLACEMENT_AFTER_CRASH = 'Worker crashed while processing this input, and no replacement worker could be started to retry it. Processing was stopped — try reducing the input size or simplifying your patterns.';
+const NO_REPLACEMENT_AFTER_CRASH =
+  'Worker crashed while processing this input, and no replacement worker could be started to retry it. Processing was stopped — try reducing the input size or simplifying your patterns.';
 
 /**
  * Finish the latest request on the tab's own thread, where no worker can be
@@ -142,11 +142,13 @@ function onResponse(p: WorkerPolicy, { id, result, error }: PipelineWorkerRespon
 
   if (error || !result) {
     p.setProcessingResult(null);
-    p.setValidationDiagnostics([{
-      level: 'error',
-      message: `Pipeline error: ${error ?? 'Unknown error'}`,
-      file: 'props.conf',
-    }]);
+    p.setValidationDiagnostics([
+      {
+        level: 'error',
+        message: `Pipeline error: ${error ?? 'Unknown error'}`,
+        file: 'props.conf',
+      },
+    ]);
     return;
   }
 
@@ -165,7 +167,10 @@ function onTimeout(p: WorkerPolicy, request: PipelineWorkerRequest, loaded: bool
     if (!p.managed.postWhenReady(request)) finishInline(p, request);
     return;
   }
-  giveUp(p, `Pipeline timed out after ${WORKER_TIMEOUT_MS / 1000} s — a regex may be backtracking heavily on every event. Try simplifying your EXTRACT or TRANSFORMS pattern, or lowering its MATCH_LIMIT.`);
+  giveUp(
+    p,
+    `Pipeline timed out after ${WORKER_TIMEOUT_MS / 1000} s — a regex may be backtracking heavily on every event. Try simplifying your EXTRACT or TRANSFORMS pattern, or lowering its MATCH_LIMIT.`,
+  );
 }
 
 function onCrash(p: WorkerPolicy, inFlight: PipelineWorkerRequest[], message: string): void {
@@ -289,11 +294,13 @@ function runPipelineInline(
     .catch((err: unknown) => {
       if (request.id !== refs.requestIdRef.current) return;
       sinks.setProcessingResult(null);
-      sinks.setValidationDiagnostics([{
-        level: 'error',
-        message: `Pipeline error: ${err instanceof Error ? err.message : String(err)}`,
-        file: 'props.conf',
-      }]);
+      sinks.setValidationDiagnostics([
+        {
+          level: 'error',
+          message: `Pipeline error: ${err instanceof Error ? err.message : String(err)}`,
+          file: 'props.conf',
+        },
+      ]);
     })
     .finally(() => {
       if (request.id === refs.requestIdRef.current) sinks.setIsProcessing(false);
@@ -359,48 +366,54 @@ export function useProcessingPipeline() {
     liveInputsRef.current = { rawData, metadata, propsConf, transformsConf };
   }, [rawData, metadata, propsConf, transformsConf]);
 
-  const runInline = useCallback((request: PipelineWorkerRequest) => {
-    runPipelineInline(
-      request,
-      { requestIdRef, requestStartRef, retryCountRef, latestRef },
-      { setIsProcessing, setLastProcessingMs, setProcessingResult, setValidationDiagnostics },
-    );
-  }, [setIsProcessing, setLastProcessingMs, setProcessingResult, setValidationDiagnostics]);
+  const runInline = useCallback(
+    (request: PipelineWorkerRequest) => {
+      runPipelineInline(
+        request,
+        { requestIdRef, requestStartRef, retryCountRef, latestRef },
+        { setIsProcessing, setLastProcessingMs, setProcessingResult, setValidationDiagnostics },
+      );
+    },
+    [setIsProcessing, setLastProcessingMs, setProcessingResult, setValidationDiagnostics],
+  );
 
-  const sendRequest = useCallback((
-    inputs: { rawData: string; metadata: typeof metadata; propsConf: string; transformsConf: string },
-    opts: typeof settings,
-  ) => {
-    const id = ++requestIdRef.current;
-    requestStartRef.current = performance.now();
-    lastRunRef.current = { ...inputs, perEventPipeline: opts.perEventPipeline };
+  const sendRequest = useCallback(
+    (
+      inputs: { rawData: string; metadata: typeof metadata; propsConf: string; transformsConf: string },
+      opts: typeof settings,
+    ) => {
+      const id = ++requestIdRef.current;
+      requestStartRef.current = performance.now();
+      lastRunRef.current = { ...inputs, perEventPipeline: opts.perEventPipeline };
 
-    const request: PipelineWorkerRequest = {
-      id,
-      rawData: inputs.rawData,
-      metadata: inputs.metadata,
-      propsConfText: inputs.propsConf,
-      transformsConfText: inputs.transformsConf,
-      options: { perEventPipeline: opts.perEventPipeline },
-    };
+      const request: PipelineWorkerRequest = {
+        id,
+        rawData: inputs.rawData,
+        metadata: inputs.metadata,
+        propsConfText: inputs.propsConf,
+        transformsConfText: inputs.transformsConf,
+        options: { perEventPipeline: opts.perEventPipeline },
+      };
 
-    // Answers to earlier requests are stale now. The worker is still running
-    // them, so they keep their watchdogs, and this request's starts when the
-    // worker reaches it: an edit mid-run must not charge the new input
-    // for the old one's run time.
-    const managed = workerRef.current;
-    managed?.forget();
-    latestRef.current = { request, state: 'running', crashed: false };
+      // Answers to earlier requests are stale now. The worker is still running
+      // them, so they keep their watchdogs, and this request's starts when the
+      // worker reaches it: an edit mid-run must not charge the new input
+      // for the old one's run time.
+      const managed = workerRef.current;
+      managed?.forget();
+      latestRef.current = { request, state: 'running', crashed: false };
 
-    // The retry budget spans requests: it is cleared when a request completes
-    // cleanly or the pipeline gives up on one, never by a new request. See
-    // docs/adr/0014-pipeline-worker-failure-policy.md.
-    if (managed?.post(request)) {
-      setIsProcessing(true);
-      return;
-    }
-    runInline(request);
-  }, [runInline, setIsProcessing]);
+      // The retry budget spans requests: it is cleared when a request completes
+      // cleanly or the pipeline gives up on one, never by a new request. See
+      // docs/adr/0014-pipeline-worker-failure-policy.md.
+      if (managed?.post(request)) {
+        setIsProcessing(true);
+        return;
+      }
+      runInline(request);
+    },
+    [runInline, setIsProcessing],
+  );
 
   // Build the worker once; the lifecycle rebuilds it after a failure.
   useEffect(() => {
@@ -434,8 +447,7 @@ export function useProcessingPipeline() {
     if (settings.manualApply) {
       const last = lastRunRef.current;
       setPipelineDirty(
-        last === null ||
-          !sameRunInputs(last, { ...debouncedInputs, perEventPipeline: settings.perEventPipeline }),
+        last === null || !sameRunInputs(last, { ...debouncedInputs, perEventPipeline: settings.perEventPipeline }),
       );
       return;
     }

@@ -1,4 +1,13 @@
-import type { ConfInput, EventMetadata, ParsedConf, PipelineOptions, ProcessingResult, ValidationDiagnostic, ConfDirective, SplunkEvent } from './types';
+import type {
+  ConfInput,
+  EventMetadata,
+  ParsedConf,
+  PipelineOptions,
+  ProcessingResult,
+  ValidationDiagnostic,
+  ConfDirective,
+  SplunkEvent,
+} from './types';
 import { parseConf } from './parser/confParser';
 import { matchStanzas, mergeDirectives, resolveStanzasForEvent, getRenamedSourcetype } from './parser/stanzaMatcher';
 import { breakLines } from './processors/lineBreaker';
@@ -179,14 +188,28 @@ function runIndexTime(rawData: string, run: PipelineRun): SplunkEvent[] {
   // SHOULD_LINEMERGE default INDEXED_EXTRACTIONS implies (see
   // docs/adr/0008-structured-formats-default-line-merging-off.md). With nothing
   // broken there are no events to carry forward, so the fallback is empty.
-  let events = safeProcessor('LINE_BREAKER', [], (_, c) => breakLines(rawData, directives, run.effectiveMetadata, c), ctx, 'props.conf', 'batch');
+  let events = safeProcessor(
+    'LINE_BREAKER',
+    [],
+    (_, c) => breakLines(rawData, directives, run.effectiveMetadata, c),
+    ctx,
+    'props.conf',
+    'batch',
+  );
 
   // Stage 2: Truncation
   events = safeProcessor('TRUNCATE', events, (batch, c) => truncateEvents(batch, directives, c), ctx);
 
   // Stage 3: Timestamp extraction. Batch-shaped: an event with no timestamp
   // inherits the previous event's.
-  events = safeProcessor('Timestamp', events, (batch, c) => extractTimestamps(batch, directives, c), ctx, 'props.conf', 'batch');
+  events = safeProcessor(
+    'Timestamp',
+    events,
+    (batch, c) => extractTimestamps(batch, directives, c),
+    ctx,
+    'props.conf',
+    'batch',
+  );
 
   // Stage 3, continued: ROUTE_EVENTS_OLDER_THAN — the spec runs the age test "after
   // timestamp extraction", so it reads the extracted _time, before any
@@ -195,7 +218,14 @@ function runIndexTime(rawData: string, run: PipelineRun): SplunkEvent[] {
 
   // Stage 4: Indexed extractions. Batch-shaped: CSV's header row names the
   // fields of every row after it. The XML modes catch per event themselves.
-  events = safeProcessor('INDEXED_EXTRACTIONS', events, (batch, c) => applyIndexedExtractions(batch, directives, c), ctx, 'props.conf', 'batch');
+  events = safeProcessor(
+    'INDEXED_EXTRACTIONS',
+    events,
+    (batch, c) => applyIndexedExtractions(batch, directives, c),
+    ctx,
+    'props.conf',
+    'batch',
+  );
 
   // Stage 5: SEDCMD
   events = safeProcessor('SEDCMD', events, (batch, c) => applySedCommands(batch, directives, c), ctx);
@@ -206,11 +236,23 @@ function runIndexTime(rawData: string, run: PipelineRun): SplunkEvent[] {
   // (only when a props.conf stanza references them).
   // This stage and the clone pass, which calls applyTransforms once per clone,
   // report against the run's one warning ledger.
-  events = safeProcessor('TRANSFORMS', events, (batch, c) => applyTransforms(batch, directives, transformsConf, 'index-time', c), ctx, 'transforms.conf');
+  events = safeProcessor(
+    'TRANSFORMS',
+    events,
+    (batch, c) => applyTransforms(batch, directives, transformsConf, 'index-time', c),
+    ctx,
+    'transforms.conf',
+  );
 
   // Stage 7: CLONE_SOURCETYPE copies get the SEDCMD and TRANSFORMS of the
   // sourcetype they were cloned to.
-  events = safeProcessor('CLONE_SOURCETYPE', events, (batch, c) => applyCloneIndexTime(batch, propsConf, transformsConf, c), ctx, 'transforms.conf');
+  events = safeProcessor(
+    'CLONE_SOURCETYPE',
+    events,
+    (batch, c) => applyCloneIndexTime(batch, propsConf, transformsConf, c),
+    ctx,
+    'transforms.conf',
+  );
 
   // Stage 8: ANNOTATE_PUNCT — the annotation processor runs after regex
   // replacement, so the punct signature reflects _raw as indexed (post-SEDCMD,
@@ -235,7 +277,13 @@ function runSearchTimeStages(
   let ev = safeProcessor('EXTRACT', events, (batch, c) => extractFields(batch, directives, c), ctx);
   // Stage 11: Search-time REPORT transforms (run BEFORE automatic KV — Splunk's
   // documented order is inline EXTRACT → REPORT field transforms → automatic KV).
-  ev = safeProcessor('REPORT', ev, (batch, c) => applyTransforms(batch, directives, transformsConf, 'search-time', c), ctx, 'transforms.conf');
+  ev = safeProcessor(
+    'REPORT',
+    ev,
+    (batch, c) => applyTransforms(batch, directives, transformsConf, 'search-time', c),
+    ctx,
+    'transforms.conf',
+  );
   // Stage 12: KV_MODE (automatic key-value extraction)
   ev = safeProcessor('KV_MODE', ev, (batch, c) => applyKvMode(batch, directives, c), ctx);
   // Stage 13: FIELDALIAS
@@ -247,7 +295,12 @@ function runSearchTimeStages(
   // changed or destroyed. Runs last because it replays search-time extraction
   // against the pre-rewrite text.
   // See docs/adr/0011-raw-rewrites-attributed-by-replay.md.
-  return safeProcessor('SEDCMD attribution', ev, (batch, c) => attributeRawMutations(batch, () => directives, transformsConf, c), ctx);
+  return safeProcessor(
+    'SEDCMD attribution',
+    ev,
+    (batch, c) => attributeRawMutations(batch, () => directives, transformsConf, c),
+    ctx,
+  );
 }
 
 const metaKey = (m: EventMetadata) => `${m.sourcetype}|${m.host}|${m.source}`;
@@ -273,9 +326,7 @@ function runSearchTimePerEvent(events: SplunkEvent[], run: PipelineRun, original
     // then take `rename` for the search-time set.
     const matched = matchStanzas(propsConf.stanzas, event.metadata);
     const renamed = getRenamedSourcetype(matched);
-    const stanzas = renamed
-      ? matchStanzas(propsConf.stanzas, { ...event.metadata, sourcetype: renamed })
-      : matched;
+    const stanzas = renamed ? matchStanzas(propsConf.stanzas, { ...event.metadata, sourcetype: renamed }) : matched;
     const resolvedDirs = mergeDirectives(stanzas);
     directivesCache.set(key, resolvedDirs);
     return resolvedDirs;
@@ -307,9 +358,10 @@ function runSearchTimePerEvent(events: SplunkEvent[], run: PipelineRun, original
  */
 function traceRematch(event: SplunkEvent, originalMetaKey: string, directiveCount: number): SplunkEvent {
   if (metaKey(event.metadata) === originalMetaKey) return event;
-  const why = event.clonedFrom !== undefined
-    ? `Cloned by CLONE_SOURCETYPE ("${event.clonedFrom}" → "${event.metadata.sourcetype}")`
-    : `Metadata rewritten at index-time (sourcetype → "${event.metadata.sourcetype}")`;
+  const why =
+    event.clonedFrom !== undefined
+      ? `Cloned by CLONE_SOURCETYPE ("${event.clonedFrom}" → "${event.metadata.sourcetype}")`
+      : `Metadata rewritten at index-time (sourcetype → "${event.metadata.sourcetype}")`;
   return {
     ...event,
     processingTrace: [
@@ -333,7 +385,11 @@ function traceRematch(event: SplunkEvent, originalMetaKey: string, directiveCoun
  * index-time SEDCMD and TRANSFORMS already come from the new sourcetype,
  * but search-time here does not, so they get their own warning.
  */
-function warnBatchMetadataRewrites(events: SplunkEvent[], originalMetaKey: string, diagnostics: ValidationDiagnostic[]): void {
+function warnBatchMetadataRewrites(
+  events: SplunkEvent[],
+  originalMetaKey: string,
+  diagnostics: ValidationDiagnostic[],
+): void {
   const rewroteMetadata = events.some((e) => e.clonedFrom === undefined && metaKey(e.metadata) !== originalMetaKey);
   const clonedSourcetypes = [
     ...new Set(
@@ -380,7 +436,7 @@ export function runPipeline(
   metadata: EventMetadata,
   propsConfInput: ConfInput,
   transformsConfInput: ConfInput,
-  options?: PipelineOptions
+  options?: PipelineOptions,
 ): { result: ProcessingResult; diagnostics: ValidationDiagnostic[] } {
   const diagnostics: ValidationDiagnostic[] = [];
   const ctx = createRunContext({

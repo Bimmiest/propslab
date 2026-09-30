@@ -55,11 +55,7 @@ describe('groupNoOps', () => {
   it('counts events past the explanation limit apart from the reasons (#452)', () => {
     // Fifty analysed misses and 450 past the cap: the headline must stay the
     // real reason, not "not analysed", however many there are of the latter.
-    const groups = groupNoOps([
-      event([noMatch]),
-      event([notExplained]),
-      event([notExplained]),
-    ]);
+    const groups = groupNoOps([event([noMatch]), event([notExplained]), event([notExplained])]);
     expect(groups[0]?.eventsAffected).toBe(3);
     expect(groups[0]?.notExplained).toBe(2);
     expect(groups[0]?.reasons).toEqual([{ text: expect.stringContaining('stopped agreeing') as string, events: 1 }]);
@@ -80,9 +76,7 @@ describe('DirectiveNoOpList', () => {
   });
 
   it('says how many events it had no effect on', () => {
-    const { container } = render(
-      <DirectiveNoOpList events={[event([noMatch]), event([noMatch]), event([])]} />,
-    );
+    const { container } = render(<DirectiveNoOpList events={[event([noMatch]), event([noMatch]), event([])]} />);
     expect(container.textContent).toContain('no effect on 2 of 3 events');
   });
 

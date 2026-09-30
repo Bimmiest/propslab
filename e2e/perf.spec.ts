@@ -74,7 +74,12 @@ async function timeTabSwitch(page: Page, tabName: string): Promise<number> {
 
 /** Tab timings as job-summary rows, each against the tab budget. */
 function tabRows(timings: Record<string, number>): SummaryRow[] {
-  return Object.entries(timings).map(([name, ms]) => ({ name: `${name} (tab switch)`, value: ms, unit: 'ms', budget: TAB_BUDGET_MS }));
+  return Object.entries(timings).map(([name, ms]) => ({
+    name: `${name} (tab switch)`,
+    value: ms,
+    unit: 'ms',
+    budget: TAB_BUDGET_MS,
+  }));
 }
 
 test('a 20k-event paste stays within the pipeline and tab-switch budgets', async ({ page, complaints }) => {
@@ -138,8 +143,8 @@ function largeLines(count: number): string {
     const msg = Array.from({ length: 120 }, (_, w) => words[(i + w) % words.length]).join(' ');
     lines.push(
       `ts=${1_700_000_000 + i} host=web${i % 20} level=${levels[i % 4]} user=u${i % 50} ` +
-      `src=10.${i % 256}.${(i * 3) % 256}.${(i * 7) % 256} card=4111111111${String(100000 + i).slice(-6)} ` +
-      `path=/api/v${i % 3}/items/${i % 97}/detail.json ${kv} msg="${msg}"`,
+        `src=10.${i % 256}.${(i * 3) % 256}.${(i * 7) % 256} card=4111111111${String(100000 + i).slice(-6)} ` +
+        `path=/api/v${i % 3}/items/${i % 97}/detail.json ${kv} msg="${msg}"`,
     );
   }
   return lines.join('\n');
@@ -203,7 +208,9 @@ test('a regex-heavy config over large events stays within its budget', async ({ 
 
   const started = Date.now();
   await pasteInto(page, 0, largeLines(REGEX_EVENTS));
-  await expect(page.getByText(`${REGEX_EVENTS} events`, { exact: true })).toBeVisible({ timeout: REGEX_PIPELINE_BUDGET_MS });
+  await expect(page.getByText(`${REGEX_EVENTS} events`, { exact: true })).toBeVisible({
+    timeout: REGEX_PIPELINE_BUDGET_MS,
+  });
   const pipelineMs = Date.now() - started;
 
   const timings: Record<string, number> = {};
@@ -241,9 +248,7 @@ test('a 3,000-field JSON event renders a window of the Fields table and sidebar'
   await openApp(page);
   await loadExample(page, /Apache Access Log/i);
   await pasteInto(page, 1, '[access_combined]\nSHOULD_LINEMERGE = false\nTRUNCATE = 0\nKV_MODE = json');
-  const wide = Object.fromEntries(
-    Array.from({ length: WIDE_FIELDS }, (_, i) => [`g${i % 30}_f${i}`, `v${i}`]),
-  );
+  const wide = Object.fromEntries(Array.from({ length: WIDE_FIELDS }, (_, i) => [`g${i % 30}_f${i}`, `v${i}`]));
   await pasteInto(page, 0, JSON.stringify(wide));
   await expect(page.getByText('1 event', { exact: true })).toBeVisible({ timeout: 30_000 });
 
@@ -254,13 +259,17 @@ test('a 3,000-field JSON event renders a window of the Fields table and sidebar'
   expect(await table.locator('tbody tr[aria-rowindex]').count()).toBeLessThan(200);
 
   // Scrolled to the end, the last row is rendered and numbered as such.
-  await table.locator('xpath=..').evaluate((el) => { el.scrollTop = el.scrollHeight; });
+  await table.locator('xpath=..').evaluate((el) => {
+    el.scrollTop = el.scrollHeight;
+  });
   const rowCount = Number(await table.getAttribute('aria-rowcount'));
   await expect(table.locator(`tbody tr[aria-rowindex="${rowCount}"]`)).toBeInViewport();
 
   await page.getByRole('tab', { name: /^Preview$/ }).click();
   const extractionsMs = await timeTabSwitch(page, 'Extractions');
-  const sidebar = page.getByRole('textbox', { name: 'Filter fields' }).locator('xpath=ancestor::div[contains(@class,"flex-col")][1]');
+  const sidebar = page
+    .getByRole('textbox', { name: 'Filter fields' })
+    .locator('xpath=ancestor::div[contains(@class,"flex-col")][1]');
   expect(await sidebar.locator('[data-window-row]').count()).toBeLessThan(200);
 
   console.log(`perf (${WIDE_FIELDS}-field JSON): ${JSON.stringify({ fieldsMs, extractionsMs })}`);

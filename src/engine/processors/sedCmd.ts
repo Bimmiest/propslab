@@ -82,10 +82,7 @@ function buildReplacement(raw: string): (match: RegexMatch) => string {
 const SED_COMMAND_RE = /^([sy])([^\w\s])/;
 
 /** Shared shape for every diagnostic this file raises about one directive. */
-function sedWarning(
-  dir: ConfDirective | undefined,
-  message: string,
-): ValidationDiagnostic {
+function sedWarning(dir: ConfDirective | undefined, message: string): ValidationDiagnostic {
   return {
     level: 'warning',
     message: `SEDCMD-${dir?.className ?? ''}: ${message}`,
@@ -109,8 +106,7 @@ function unescapeTranslateSet(set: string, delimiter: string): string {
       continue;
     }
     const next = set.charAt(++i);
-    out +=
-      next === 'n' ? '\n' : next === 't' ? '\t' : next === 'r' ? '\r' : next === delimiter ? delimiter : next;
+    out += next === 'n' ? '\n' : next === 't' ? '\t' : next === 'r' ? '\r' : next === delimiter ? delimiter : next;
   }
   return out;
 }
@@ -297,15 +293,9 @@ export function parseSedExpression(
   };
 }
 
-export function applySedCommands(
-  events: SplunkEvent[],
-  directives: ConfDirective[],
-  ctx: RunContext,
-): SplunkEvent[] {
+export function applySedCommands(events: SplunkEvent[], directives: ConfDirective[], ctx: RunContext): SplunkEvent[] {
   const { diagnostics } = ctx;
-  const sedDirectives = directives
-    .filter((d) => d.directiveType === 'SEDCMD')
-    .sort(byClassName);
+  const sedDirectives = directives.filter((d) => d.directiveType === 'SEDCMD').sort(byClassName);
 
   if (sedDirectives.length === 0) return events;
 

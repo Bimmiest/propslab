@@ -19,8 +19,13 @@ const PROTO_NAMES = ['toString', 'constructor', 'valueOf', 'hasOwnProperty', '__
 
 const ev = (raw: string, fields: Record<string, string | string[]> = {}): SplunkEvent => makeEvent(raw, { fields });
 
-const dir = (key: string, value: string, directiveType: string, className?: string): ConfDirective =>
-  ({ key, value, line: 1, directiveType, ...(className ? { className } : {}) });
+const dir = (key: string, value: string, directiveType: string, className?: string): ConfDirective => ({
+  key,
+  value,
+  line: 1,
+  directiveType,
+  ...(className ? { className } : {}),
+});
 
 describe('EXTRACT — a capture group named after an Object.prototype member (#120)', () => {
   it.each(PROTO_NAMES)('extracts (?<%s>…) as an ordinary field', (name) => {
@@ -102,9 +107,11 @@ describe('INGEST_EVAL / INDEXED_EXTRACTIONS — same names, same treatment (#120
 
   it('CSV header colliding with a prototype member becomes a field', () => {
     const events = [ev('toString,b'), ev('1,2')];
-    const r = applyIndexedExtractions(events, [
-      dir('INDEXED_EXTRACTIONS', 'csv', 'INDEXED_EXTRACTIONS'),
-    ], runCtx(FIXED_NOW))[0]!;
+    const r = applyIndexedExtractions(
+      events,
+      [dir('INDEXED_EXTRACTIONS', 'csv', 'INDEXED_EXTRACTIONS')],
+      runCtx(FIXED_NOW),
+    )[0]!;
     expect(r.fields.toString).toBe('1');
     expect(r.fields['b']).toBe('2');
   });

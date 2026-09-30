@@ -18,7 +18,8 @@ describe('applyIndexedExtractions — JSON', () => {
     const events = applyIndexedExtractions(
       [event('{"action":"login","user":"alice","status":200}')],
       [dir('json')],
-      runCtx(FIXED_NOW));
+      runCtx(FIXED_NOW),
+    );
     expect(events[0]!.fields['action']).toBe('login');
     expect(events[0]!.fields['user']).toBe('alice');
     // Numeric JSON values are stringified when stored in SplunkEvent.fields
@@ -29,7 +30,8 @@ describe('applyIndexedExtractions — JSON', () => {
     const events = applyIndexedExtractions(
       [event('{"request":{"method":"GET","path":"/api"}}')],
       [dir('json')],
-      runCtx(FIXED_NOW));
+      runCtx(FIXED_NOW),
+    );
     expect(events[0]!.fields['request.method']).toBe('GET');
     expect(events[0]!.fields['request.path']).toBe('/api');
   });
@@ -39,7 +41,11 @@ describe('applyIndexedExtractions — JSON', () => {
     // cost only the subtree past it, not the keys that follow.
     let deep = '"bottom"';
     for (let i = 0; i < 12; i++) deep = `{"n":${deep}}`;
-    const events = applyIndexedExtractions([event(`{"a":"first","deep":${deep},"status":"ok"}`)], [dir('json')], runCtx(FIXED_NOW));
+    const events = applyIndexedExtractions(
+      [event(`{"a":"first","deep":${deep},"status":"ok"}`)],
+      [dir('json')],
+      runCtx(FIXED_NOW),
+    );
     expect(events[0]!.fields['a']).toBe('first');
     expect(events[0]!.fields['status']).toBe('ok');
     expect(events[0]!.processingTrace.at(-1)?.description).toMatch(/depth limit reached/);
@@ -54,10 +60,7 @@ describe('applyIndexedExtractions — JSON', () => {
   // is not part of the JSON document (RFC 8259 section 8.1 lets a parser
   // ignore it), and Splunk reads such a file's first event normally.
   it('reads JSON that starts with a byte order mark or has surrounding whitespace (#482)', () => {
-    const events = applyIndexedExtractions(
-      [event('﻿{"a":1}'), event('  {"b":2}\n')],
-      [dir('json')],
-      runCtx(FIXED_NOW));
+    const events = applyIndexedExtractions([event('﻿{"a":1}'), event('  {"b":2}\n')], [dir('json')], runCtx(FIXED_NOW));
     expect(events[0]!.fields['a']).toBe('1');
     expect(events[1]!.fields['b']).toBe('2');
   });
@@ -69,7 +72,8 @@ describe('applyIndexedExtractions — JSON', () => {
     const events = applyIndexedExtractions(
       [event('{"ok":1}'), bad, event('not json')],
       [dir('json')],
-      runCtx(FIXED_NOW, diagnostics));
+      runCtx(FIXED_NOW, diagnostics),
+    );
     expect(events[0]!.fields['ok']).toBe('1');
     expect(events[1]!.fields).toEqual({});
     expect(diagnostics).toHaveLength(1);
@@ -95,7 +99,8 @@ describe('applyIndexedExtractions — JSON', () => {
     const events = applyIndexedExtractions(
       [event('{"_constructor":"good","keep":"ok"}')],
       [dir('json')],
-      runCtx(FIXED_NOW));
+      runCtx(FIXED_NOW),
+    );
     expect(Object.prototype.hasOwnProperty.call(events[0]!.fields, 'constructor')).toBe(true);
     expect(events[0]!.fields['constructor']).toBe('good');
     expect(events[0]!.fields['keep']).toBe('ok');
@@ -105,7 +110,8 @@ describe('applyIndexedExtractions — JSON', () => {
     const events = applyIndexedExtractions(
       [event('{"items":[{"id":1,"n":"a"},{"id":2,"n":"b"}]}')],
       [dir('json')],
-      runCtx(FIXED_NOW));
+      runCtx(FIXED_NOW),
+    );
     expect(events[0]!.fields['items{}.id']).toEqual(['1', '2']);
     expect(events[0]!.fields['items{}.n']).toEqual(['a', 'b']);
     // Positional and stringified-parent forms must NOT appear.
@@ -123,7 +129,8 @@ describe('applyIndexedExtractions — JSON', () => {
     const events = applyIndexedExtractions(
       [event('{"user":{"name":"alice","id":5}}')],
       [dir('json')],
-      runCtx(FIXED_NOW));
+      runCtx(FIXED_NOW),
+    );
     expect(events[0]!.fields['user.name']).toBe('alice');
     expect(events[0]!.fields['user.id']).toBe('5');
     expect(events[0]!.fields['user']).toBeUndefined();
@@ -133,17 +140,15 @@ describe('applyIndexedExtractions — JSON', () => {
     const events = applyIndexedExtractions(
       [event('{"msg":"line1\\nline2","q":"say \\"hi\\"","path":"C:\\\\tmp"}')],
       [dir('json')],
-      runCtx(FIXED_NOW));
+      runCtx(FIXED_NOW),
+    );
     expect(events[0]!.fields['msg']).toBe('line1\nline2');
     expect(events[0]!.fields['q']).toBe('say "hi"');
     expect(events[0]!.fields['path']).toBe('C:\\tmp');
   });
 
   it('extracts a top-level JSON array', () => {
-    const events = applyIndexedExtractions(
-      [event('[{"id":1},{"id":2}]')],
-      [dir('json')],
-      runCtx(FIXED_NOW));
+    const events = applyIndexedExtractions([event('[{"id":1},{"id":2}]')], [dir('json')], runCtx(FIXED_NOW));
     expect(events[0]!.fields['{}.id']).toEqual(['1', '2']);
   });
 
@@ -151,7 +156,8 @@ describe('applyIndexedExtractions — JSON', () => {
     const events = applyIndexedExtractions(
       [event('{"_GID":"100","_UID":"1000","normalKey":"value"}')],
       [dir('json')],
-      runCtx(FIXED_NOW));
+      runCtx(FIXED_NOW),
+    );
     const sourceKeys = events[0]!.fieldSourceKeys ?? {};
     expect(sourceKeys['GID']).toBe('_GID');
     expect(sourceKeys['UID']).toBe('_UID');
@@ -163,7 +169,8 @@ describe('applyIndexedExtractions — JSON', () => {
     const events = applyIndexedExtractions(
       [event('{"_AUDIT_SESSION":"3","_AUDIT_FIELD_EXIT":"0","_AUDIT_TYPE_NAME":"SYSCALL"}')],
       [dir('json')],
-      runCtx(FIXED_NOW));
+      runCtx(FIXED_NOW),
+    );
     const sourceKeys = events[0]!.fieldSourceKeys ?? {};
     expect(sourceKeys['AUDIT_SESSION']).toBe('_AUDIT_SESSION');
     expect(sourceKeys['AUDIT_FIELD_EXIT']).toBe('_AUDIT_FIELD_EXIT');
@@ -237,7 +244,8 @@ describe('applyIndexedExtractions — leading underscore stripping', () => {
     const events = applyIndexedExtractions(
       [event('{"_AUDIT_TYPE_NAME":"SYSCALL","user":"alice"}')],
       [dir('json')],
-      runCtx(FIXED_NOW));
+      runCtx(FIXED_NOW),
+    );
     expect(events[0]!.fields['AUDIT_TYPE_NAME']).toBe('SYSCALL');
     expect(events[0]!.fields['_AUDIT_TYPE_NAME']).toBeUndefined();
     expect(events[0]!.fields['user']).toBe('alice');
@@ -247,17 +255,15 @@ describe('applyIndexedExtractions — leading underscore stripping', () => {
     const events = applyIndexedExtractions(
       [event('{"outer":{"_inner":"value","normal":"v2"}}')],
       [dir('json')],
-      runCtx(FIXED_NOW));
+      runCtx(FIXED_NOW),
+    );
     expect(events[0]!.fields['outer.inner']).toBe('value');
     expect(events[0]!.fields['outer.normal']).toBe('v2');
     expect(events[0]!.fields['outer._inner']).toBeUndefined();
   });
 
   it('strips multiple leading underscores', () => {
-    const events = applyIndexedExtractions(
-      [event('{"__double":"v"}')],
-      [dir('json')],
-      runCtx(FIXED_NOW));
+    const events = applyIndexedExtractions([event('{"__double":"v"}')], [dir('json')], runCtx(FIXED_NOW));
     expect(events[0]!.fields['double']).toBe('v');
   });
 
@@ -458,7 +464,7 @@ describe('applyIndexedExtractions — FIELD_NAMES (#184)', () => {
       [dir('csv'), dirOf('FIELD_NAMES', '"col a", "col-b"')],
       runCtx(FIXED_NOW),
     );
-    expect(events[0]!.fields).toMatchObject({ col_a: '1', 'col_b': '2' });
+    expect(events[0]!.fields).toMatchObject({ col_a: '1', col_b: '2' });
   });
 });
 
@@ -588,7 +594,11 @@ describe('applyIndexedExtractions — FIELD_HEADER_REGEX (#272)', () => {
 
   it('extracts nothing when no line matches', () => {
     const input = [event('a,b'), event('1,2')];
-    const events = applyIndexedExtractions(input, [dir('csv'), dirOf('FIELD_HEADER_REGEX', '^#Fields:')], runCtx(FIXED_NOW));
+    const events = applyIndexedExtractions(
+      input,
+      [dir('csv'), dirOf('FIELD_HEADER_REGEX', '^#Fields:')],
+      runCtx(FIXED_NOW),
+    );
     expect(events).toBe(input);
   });
 
@@ -789,7 +799,9 @@ describe('header-side delimited overrides through the pipeline (#272)', () => {
 
   it('HEADER_FIELD_ACCEPTABLE_SPECIAL_CHARACTERS keeps the characters it names in field names', () => {
     expect(fieldsOf('field.name\nv\n', '')[0]?.['field_name']).toBe('v');
-    expect(fieldsOf('field.name\nv\n', 'HEADER_FIELD_ACCEPTABLE_SPECIAL_CHARACTERS = .\n')[0]?.['field.name']).toBe('v');
+    expect(fieldsOf('field.name\nv\n', 'HEADER_FIELD_ACCEPTABLE_SPECIAL_CHARACTERS = .\n')[0]?.['field.name']).toBe(
+      'v',
+    );
   });
 
   it('MISSING_VALUE_REGEX extracts no field for a placeholder value', () => {

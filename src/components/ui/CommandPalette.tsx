@@ -114,8 +114,8 @@ export function CommandPalette() {
       }}
       onCancel={() => setPending(null)}
     >
-      {pending.what} replaces the raw data, props.conf, transforms.conf and metadata you have now. Your
-      changes are not saved anywhere else.
+      {pending.what} replaces the raw data, props.conf, transforms.conf and metadata you have now. Your changes are not
+      saved anywhere else.
     </ConfirmDialog>
   );
 
@@ -137,13 +137,8 @@ export function CommandPalette() {
         <Command label="Command palette">
           <PaletteInput />
 
-          <Command.List
-            className="max-h-80 overflow-y-auto py-1"
-          >
-            <Command.Empty
-              className="py-6 text-center text-sm"
-              style={{ color: 'var(--color-text-muted)' }}
-            >
+          <Command.List className="max-h-80 overflow-y-auto py-1">
+            <Command.Empty className="py-6 text-center text-sm" style={{ color: 'var(--color-text-muted)' }}>
               No results found.
             </Command.Empty>
 
@@ -160,10 +155,7 @@ export function CommandPalette() {
 
 function PaletteInput() {
   return (
-    <div
-      className="flex items-center gap-2 px-3 border-b"
-      style={{ borderColor: 'var(--color-border)' }}
-    >
+    <div className="flex items-center gap-2 px-3 border-b" style={{ borderColor: 'var(--color-border)' }}>
       <Icon name="search" className="w-4 h-4 shrink-0 text-[var(--color-text-muted)]" />
       <Command.Input
         placeholder="Type a command…"
@@ -205,11 +197,7 @@ function NavigateCommands({ run }: { run: RunCommand }) {
   const setActiveView = useAppStore((s) => s.setActiveView);
   return (
     <CommandGroup heading="Navigate">
-      <CommandItem
-        label="Go to: Simulator"
-        icon="sliders"
-        onSelect={() => run(() => setActiveView('simulator'))}
-      />
+      <CommandItem label="Go to: Simulator" icon="sliders" onSelect={() => run(() => setActiveView('simulator'))} />
       <CommandItem
         label="Go to: Dictionary"
         hint="Browse every directive"
@@ -271,16 +259,8 @@ function ActionCommands({ run, replaceInputs }: { run: RunCommand; replaceInputs
         icon="sparkles"
         onSelect={() => run(openScaffold)}
       />
-      <CommandItem
-        label="Toggle theme"
-        icon="sun"
-        onSelect={() => run(toggleTheme)}
-      />
-      <CommandItem
-        label="Open pipeline reference"
-        icon="info"
-        onSelect={() => run(openHelp)}
-      />
+      <CommandItem label="Toggle theme" icon="sun" onSelect={() => run(toggleTheme)} />
+      <CommandItem label="Open pipeline reference" icon="info" onSelect={() => run(openHelp)} />
       <CommandItem
         label="Clear all editors"
         icon="x"
@@ -295,9 +275,7 @@ function CommandGroup({ heading, children }: { heading: string; children: React.
     <Command.Group
       heading={heading}
       className="[&>[cmdk-group-heading]]:px-3 [&>[cmdk-group-heading]]:py-1.5 [&>[cmdk-group-heading]]:text-[10px] [&>[cmdk-group-heading]]:font-semibold [&>[cmdk-group-heading]]:uppercase [&>[cmdk-group-heading]]:tracking-wider"
-      style={
-        { '--heading-color': 'var(--color-text-muted)' } as React.CSSProperties
-      }
+      style={{ '--heading-color': 'var(--color-text-muted)' } as React.CSSProperties}
     >
       {children}
     </Command.Group>
@@ -324,7 +302,10 @@ function CommandItem({
         text-[var(--color-text-primary)]
         aria-selected:bg-[var(--color-accent)] aria-selected:text-[var(--color-text-on-accent)]"
     >
-      <Icon name={icon} className="w-4 h-4 shrink-0 text-[var(--color-text-muted)] group-aria-selected:text-[var(--color-text-on-accent)]" />
+      <Icon
+        name={icon}
+        className="w-4 h-4 shrink-0 text-[var(--color-text-muted)] group-aria-selected:text-[var(--color-text-on-accent)]"
+      />
       <span className="flex-1">{label}</span>
       {hint && (
         <span className="text-[11px] truncate max-w-[180px] text-[var(--color-text-muted)] group-aria-selected:text-[var(--color-text-on-accent)]">

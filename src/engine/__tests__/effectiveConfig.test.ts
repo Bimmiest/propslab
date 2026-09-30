@@ -43,10 +43,7 @@ describe('resolveEffectiveConfig — which stanza won', () => {
   });
 
   it('gives source:: precedence over the sourcetype stanza, and says what it beat', () => {
-    const d = byKey(
-      '[my_app]\nTRUNCATE = 500\n\n[source::/var/log/app.log]\nTRUNCATE = 999\n',
-      'TRUNCATE',
-    );
+    const d = byKey('[my_app]\nTRUNCATE = 500\n\n[source::/var/log/app.log]\nTRUNCATE = 999\n', 'TRUNCATE');
     expect(d?.value).toBe('999');
     expect(d?.stanza.type).toBe('source');
     expect(d?.overriddenByStanza).toHaveLength(1);

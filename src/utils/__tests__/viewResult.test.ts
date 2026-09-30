@@ -46,16 +46,23 @@ describe('toViewResult', () => {
     };
     const [view] = toViewResult(resultOf([event('ssn=XXX', [step])])).events;
     expect(view!.processingTrace).toEqual([
-      { processor: 'SEDCMD-mask', phase: 'index-time', fieldsModified: ['ssn'], metadataChanges: [{ key: 'host', from: 'h', to: 'web01' }] },
+      {
+        processor: 'SEDCMD-mask',
+        phase: 'index-time',
+        fieldsModified: ['ssn'],
+        metadataChanges: [{ key: 'host', from: 'h', to: 'web01' }],
+      },
     ]);
   });
 
   it('shares one trace array between events whose steps match, prose aside', () => {
-    const view = toViewResult(resultOf([
-      event('a=1', [lineBreak(1), kv(2)]),
-      event('a=2', [lineBreak(2), kv(2)]),
-      event('a=3', [lineBreak(3), kv(1)]),
-    ]));
+    const view = toViewResult(
+      resultOf([
+        event('a=1', [lineBreak(1), kv(2)]),
+        event('a=2', [lineBreak(2), kv(2)]),
+        event('a=3', [lineBreak(3), kv(1)]),
+      ]),
+    );
     const [first, second, third] = view.events.map((e) => e.processingTrace);
     expect(first).toBe(second);
     expect(third).not.toBe(first);
@@ -73,7 +80,12 @@ describe('toViewResult', () => {
       { processor: 'p', phase: 'index-time', description: '', fieldAliases: [{ target: 'x', source: 'y' }] },
       { processor: 'p', phase: 'index-time', description: '', evalExpressions: { x: '1' } },
       { processor: 'p', phase: 'index-time', description: '', metadataChanges: [{ key: 'host', from: 'a', to: 'b' }] },
-      { processor: 'p', phase: 'index-time', description: '', truncation: { lines: 1, limitBytes: 5, isDefault: false } },
+      {
+        processor: 'p',
+        phase: 'index-time',
+        description: '',
+        truncation: { lines: 1, limitBytes: 5, isDefault: false },
+      },
       { processor: 'q', phase: 'index-time', description: '' },
       // A list boundary moving must not collide: ['x,y'] vs ['x', 'y'].
       { processor: 'p', phase: 'index-time', description: '', fieldsAdded: ['x', 'y'] },
@@ -84,21 +96,21 @@ describe('toViewResult', () => {
   });
 
   it('shares metadata objects between events with equal metadata', () => {
-    const view = toViewResult(resultOf([
-      event('a', []),
-      event('b', []),
-      event('c', [], { metadata: { ...meta, host: 'other' } }),
-    ]));
+    const view = toViewResult(
+      resultOf([event('a', []), event('b', []), event('c', [], { metadata: { ...meta, host: 'other' } })]),
+    );
     expect(view.events[0]!.metadata).toBe(view.events[1]!.metadata);
     expect(view.events[2]!.metadata).toEqual({ ...meta, host: 'other' });
   });
 
   it('drops timestampText only where it is the same as _raw', () => {
-    const view = toViewResult(resultOf([
-      event('t=1 a', [], { timestampText: 't=1 a' }),
-      event('a', [], { timestampText: 't=1 a' }),
-      event('b', []),
-    ]));
+    const view = toViewResult(
+      resultOf([
+        event('t=1 a', [], { timestampText: 't=1 a' }),
+        event('a', [], { timestampText: 't=1 a' }),
+        event('b', []),
+      ]),
+    );
     expect(view.events.map((e) => e.timestampText)).toEqual([undefined, 't=1 a', undefined]);
     expect('timestampText' in view.events[0]!).toBe(false);
   });
@@ -121,7 +133,10 @@ describe('toViewResult', () => {
   });
 
   it('matches the stripped trace of every event of a real run', () => {
-    const raw = Array.from({ length: 30 }, (_, i) => `t=${1_700_000_000 + i} host=web${i % 3} user=u${i % 4} ssn=123-45-${String(1000 + i)}`).join('\n');
+    const raw = Array.from(
+      { length: 30 },
+      (_, i) => `t=${1_700_000_000 + i} host=web${i % 3} user=u${i % 4} ssn=123-45-${String(1000 + i)}`,
+    ).join('\n');
     const props = [
       '[st]',
       'SHOULD_LINEMERGE = false',
@@ -152,12 +167,23 @@ describe('toViewResult', () => {
 
 describe('summarizeSteps', () => {
   it('groups by processor and counts events, not steps', () => {
-    const twice: ProcessingStep = { processor: 'SEDCMD-x', phase: 'index-time', description: 'd', fieldsModified: ['m'] };
+    const twice: ProcessingStep = {
+      processor: 'SEDCMD-x',
+      phase: 'index-time',
+      description: 'd',
+      fieldsModified: ['m'],
+    };
     const [sed, kvRow] = summarizeSteps([
       event('a', [twice, { ...twice, fieldsRemoved: ['r'] }, kv(2)]),
       event('b', [kv(1)]),
     ]);
-    expect(sed).toMatchObject({ processor: 'SEDCMD-x', eventsAffected: 1, totalEvents: 2, fieldsModified: ['m'], fieldsRemoved: ['r'] });
+    expect(sed).toMatchObject({
+      processor: 'SEDCMD-x',
+      eventsAffected: 1,
+      totalEvents: 2,
+      fieldsModified: ['m'],
+      fieldsRemoved: ['r'],
+    });
     expect(kvRow).toMatchObject({
       processor: 'KV_MODE(auto)',
       eventsAffected: 2,

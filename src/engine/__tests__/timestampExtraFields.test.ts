@@ -12,11 +12,7 @@
 // ---------------------------------------------------------------------------
 
 import { describe, it, expect } from 'vitest';
-import {
-  extractTimestamps,
-  resolveExtraTimeFields,
-  EXTRA_TIME_FIELD_NAMES,
-} from '../processors/timestampExtractor';
+import { extractTimestamps, resolveExtraTimeFields, EXTRA_TIME_FIELD_NAMES } from '../processors/timestampExtractor';
 import { runPipeline } from '../pipeline';
 import type { SplunkEvent, ConfDirective } from '../types';
 import { runCtx } from './runCtx';
@@ -222,7 +218,7 @@ describe('DETERMINE_TIMESTAMP_DATE_WITH_SYSTEM_TIME (#273)', () => {
     );
   });
 
-  it('keeps the carried date for a step back of 12 hours or less, the simulator\'s threshold', () => {
+  it("keeps the carried date for a step back of 12 hours or less, the simulator's threshold", () => {
     // Not a Splunk claim: where "backwards across midnight" starts is the
     // simulator's choice. A line 12 hours earlier is out of order on the same day.
     expect(run(['23:00:00 a', '11:00:00 b'], [TIME_ONLY]).map((e) => e._time?.toISOString())).toEqual([
@@ -267,11 +263,14 @@ describe('DETERMINE_TIMESTAMP_DATE_WITH_SYSTEM_TIME (#273)', () => {
   });
 
   it('leaves a timestamp that has a date alone', () => {
-    const out = run(['2024-01-15 10:00:00 x'], [
-      dir('TIME_FORMAT', '%Y-%m-%d %H:%M:%S'),
-      dir('DETERMINE_TIMESTAMP_DATE_WITH_SYSTEM_TIME', 'true'),
-      dir('MAX_DAYS_AGO', '10000'),
-    ]);
+    const out = run(
+      ['2024-01-15 10:00:00 x'],
+      [
+        dir('TIME_FORMAT', '%Y-%m-%d %H:%M:%S'),
+        dir('DETERMINE_TIMESTAMP_DATE_WITH_SYSTEM_TIME', 'true'),
+        dir('MAX_DAYS_AGO', '10000'),
+      ],
+    );
     expect(out[0]?._time?.toISOString()).toBe('2024-01-15T10:00:00.000Z');
   });
 

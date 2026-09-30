@@ -160,13 +160,19 @@ describe('breakLines — BREAK_ONLY_BEFORE', () => {
   // the pattern is searched for anywhere in a line, and the event starts at
   // the beginning of the matching line, leading whitespace and all.
   it('breaks before a line that matches anywhere, not only at its start', () => {
-    const raw = 'EVENT 1 starts here\ncontinuation of 1\na EVENT 2 is mid-line\ncontinuation of 2\n  EVENT 3 after two spaces\nEVENT 4 starts here\n';
-    const events = breakLines(raw, [
-      dir('SHOULD_LINEMERGE', 'true'),
-      dir('BREAK_ONLY_BEFORE', 'EVENT'),
-      dir('BREAK_ONLY_BEFORE_DATE', 'false'),
-      dir('DATETIME_CONFIG', 'CURRENT'),
-    ], META, runCtx(FIXED_NOW));
+    const raw =
+      'EVENT 1 starts here\ncontinuation of 1\na EVENT 2 is mid-line\ncontinuation of 2\n  EVENT 3 after two spaces\nEVENT 4 starts here\n';
+    const events = breakLines(
+      raw,
+      [
+        dir('SHOULD_LINEMERGE', 'true'),
+        dir('BREAK_ONLY_BEFORE', 'EVENT'),
+        dir('BREAK_ONLY_BEFORE_DATE', 'false'),
+        dir('DATETIME_CONFIG', 'CURRENT'),
+      ],
+      META,
+      runCtx(FIXED_NOW),
+    );
     expect(events.map((e) => e._raw)).toEqual([
       'EVENT 1 starts here\ncontinuation of 1',
       'a EVENT 2 is mid-line\ncontinuation of 2',
@@ -180,10 +186,12 @@ describe('breakLines — custom LINE_BREAKER', () => {
   it('splits on a custom separator pattern', () => {
     // Separator pattern with a capturing group
     const raw = 'event1---event2---event3';
-    const events = breakLines(raw, [
-      dir('LINE_BREAKER', '(---)'),
-      dir('SHOULD_LINEMERGE', 'false'),
-    ], META, runCtx(FIXED_NOW));
+    const events = breakLines(
+      raw,
+      [dir('LINE_BREAKER', '(---)'), dir('SHOULD_LINEMERGE', 'false')],
+      META,
+      runCtx(FIXED_NOW),
+    );
     expect(events).toHaveLength(3);
     expect(events[0]!._raw).toBe('event1');
     expect(events[1]!._raw).toBe('event2');
@@ -195,10 +203,12 @@ describe('breakLines — custom LINE_BREAKER', () => {
     // match includes surrounding context. Use a pattern where the captured
     // group content appears earlier in m[0] to expose the indexOf bug.
     const raw = 'aXXbXXc';
-    const events = breakLines(raw, [
-      dir('LINE_BREAKER', 'a(XX)'),
-      dir('SHOULD_LINEMERGE', 'false'),
-    ], META, runCtx(FIXED_NOW));
+    const events = breakLines(
+      raw,
+      [dir('LINE_BREAKER', 'a(XX)'), dir('SHOULD_LINEMERGE', 'false')],
+      META,
+      runCtx(FIXED_NOW),
+    );
     // "a" before the capture group belongs to the first (empty) segment,
     // "bXXc" is the rest. We care that the split is not off by the repeated "XX".
     expect(events.some((e) => e._raw === 'bXXc')).toBe(true);
@@ -211,28 +221,34 @@ describe('breakLines — custom LINE_BREAKER', () => {
 // break at the very start of the current event ends no event at all.
 describe('#283 — zero-width LINE_BREAKER captures', () => {
   it('breaks before each lookahead match, keeping every character', () => {
-    const events = breakLines('a\nbcd\nbxy', [
-      dir('LINE_BREAKER', '()(?=b)'),
-      dir('SHOULD_LINEMERGE', 'false'),
-    ], META, runCtx(FIXED_NOW));
+    const events = breakLines(
+      'a\nbcd\nbxy',
+      [dir('LINE_BREAKER', '()(?=b)'), dir('SHOULD_LINEMERGE', 'false')],
+      META,
+      runCtx(FIXED_NOW),
+    );
     // Was ['a\n', 'b', 'cd\n', 'b', 'xy']: the empty match at the start of
     // each new event re-fired, and the loop guard emitted one character alone.
     expect(events.map((e) => e._raw)).toEqual(['a\n', 'bcd\n', 'bxy']);
   });
 
   it('does not produce an empty or one-character event at the start of input', () => {
-    const events = breakLines('bxy\nbz', [
-      dir('LINE_BREAKER', '()(?=b)'),
-      dir('SHOULD_LINEMERGE', 'false'),
-    ], META, runCtx(FIXED_NOW));
+    const events = breakLines(
+      'bxy\nbz',
+      [dir('LINE_BREAKER', '()(?=b)'), dir('SHOULD_LINEMERGE', 'false')],
+      META,
+      runCtx(FIXED_NOW),
+    );
     expect(events.map((e) => e._raw)).toEqual(['bxy\n', 'bz']);
   });
 
   it('records each event at its real offset in the input', () => {
-    const events = breakLines('a\nbcd\nbxy', [
-      dir('LINE_BREAKER', '()(?=b)'),
-      dir('SHOULD_LINEMERGE', 'false'),
-    ], META, runCtx(FIXED_NOW));
+    const events = breakLines(
+      'a\nbcd\nbxy',
+      [dir('LINE_BREAKER', '()(?=b)'), dir('SHOULD_LINEMERGE', 'false')],
+      META,
+      runCtx(FIXED_NOW),
+    );
     expect(events.map((e) => e.lineNumbers.start)).toEqual([1, 2, 3]);
   });
 
@@ -240,10 +256,12 @@ describe('#283 — zero-width LINE_BREAKER captures', () => {
     // A blank-line separator written with a lookbehind: the run of newlines
     // after the first is the separator. The lookbehind must see the newline
     // just consumed, or a newline leaks into the second event.
-    const events = breakLines('a\n\n\nb', [
-      dir('LINE_BREAKER', '(?<=\\n)(\\n)'),
-      dir('SHOULD_LINEMERGE', 'false'),
-    ], META, runCtx(FIXED_NOW));
+    const events = breakLines(
+      'a\n\n\nb',
+      [dir('LINE_BREAKER', '(?<=\\n)(\\n)'), dir('SHOULD_LINEMERGE', 'false')],
+      META,
+      runCtx(FIXED_NOW),
+    );
     expect(events.map((e) => e._raw)).toEqual(['a\n', 'b']);
   });
 });
@@ -279,16 +297,22 @@ describe('breakLines — uncompilable break patterns are reported (#75.2)', () =
 describe('#172 — a LINE_BREAKER with no capture group', () => {
   it('falls back to breaking on newlines, leaving the delimiter as its own event', () => {
     const raw = '2026-01-15T10:00:00Z one\n-----\n2026-01-15T10:00:01Z two\n';
-    const events = breakLines(raw, [dir('SHOULD_LINEMERGE', 'false'), dir('LINE_BREAKER', '-----')], META, runCtx(FIXED_NOW));
-    expect(events.map((e) => e._raw)).toEqual([
-      '2026-01-15T10:00:00Z one',
-      '-----',
-      '2026-01-15T10:00:01Z two',
-    ]);
+    const events = breakLines(
+      raw,
+      [dir('SHOULD_LINEMERGE', 'false'), dir('LINE_BREAKER', '-----')],
+      META,
+      runCtx(FIXED_NOW),
+    );
+    expect(events.map((e) => e._raw)).toEqual(['2026-01-15T10:00:00Z one', '-----', '2026-01-15T10:00:01Z two']);
   });
 
   it('leaves no trailing newline in _raw', () => {
-    const events = breakLines('a\nb\n', [dir('SHOULD_LINEMERGE', 'false'), dir('LINE_BREAKER', 'X')], META, runCtx(FIXED_NOW));
+    const events = breakLines(
+      'a\nb\n',
+      [dir('SHOULD_LINEMERGE', 'false'), dir('LINE_BREAKER', 'X')],
+      META,
+      runCtx(FIXED_NOW),
+    );
     expect(events.every((e) => !e._raw.endsWith('\n'))).toBe(true);
   });
 
@@ -299,7 +323,12 @@ describe('#172 — a LINE_BREAKER with no capture group', () => {
   });
 
   it('still honours a pattern that does have a group', () => {
-    const events = breakLines('a-----b', [dir('SHOULD_LINEMERGE', 'false'), dir('LINE_BREAKER', '(-----)')], META, runCtx(FIXED_NOW));
+    const events = breakLines(
+      'a-----b',
+      [dir('SHOULD_LINEMERGE', 'false'), dir('LINE_BREAKER', '(-----)')],
+      META,
+      runCtx(FIXED_NOW),
+    );
     expect(events.map((e) => e._raw)).toEqual(['a', 'b']);
   });
 });
@@ -310,10 +339,12 @@ describe('#472 — a LINE_BREAKER that does not compile', () => {
   // simulator breaks on newlines then; the point of these tests is the message.
   it('reports its compile error, not a missing capture group', () => {
     const diags: ValidationDiagnostic[] = [];
-    const events = breakLines('a\nb\n', [
-      dir('SHOULD_LINEMERGE', 'false'),
-      dir('LINE_BREAKER', '([\\r\\n]+'),
-    ], META, runCtx(FIXED_NOW, diags));
+    const events = breakLines(
+      'a\nb\n',
+      [dir('SHOULD_LINEMERGE', 'false'), dir('LINE_BREAKER', '([\\r\\n]+')],
+      META,
+      runCtx(FIXED_NOW, diags),
+    );
     const lb = diags.filter((d) => d.directiveKey === 'LINE_BREAKER');
     expect(lb).toHaveLength(1);
     expect(lb[0]!.message).toContain('does not compile (missing closing parenthesis');
@@ -371,11 +402,7 @@ describe('breakLines — MUST_NOT_BREAK_BEFORE / MUST_NOT_BREAK_AFTER (#190)', (
       META,
       runCtx(FIXED_NOW),
     );
-    expect(events.map((e) => e._raw)).toEqual([
-      'EVENT one\ndetail',
-      'EVENT protected',
-      'EVENT two',
-    ]);
+    expect(events.map((e) => e._raw)).toEqual(['EVENT one\ndetail', 'EVENT protected', 'EVENT two']);
   });
 
   it('MUST_NOT_BREAK_BEFORE is inert against a BREAK_ONLY_BEFORE_DATE break too', () => {
@@ -397,11 +424,7 @@ describe('breakLines — MUST_NOT_BREAK_BEFORE / MUST_NOT_BREAK_AFTER (#190)', (
     const raw = Array.from({ length: 6 }, (_, i) => `line${i}`).join('\n');
     const events = breakLines(
       raw,
-      [
-        dir('SHOULD_LINEMERGE', 'true'),
-        dir('MAX_EVENTS', '2'),
-        dir('MUST_NOT_BREAK_BEFORE', '.*'),
-      ],
+      [dir('SHOULD_LINEMERGE', 'true'), dir('MAX_EVENTS', '2'), dir('MUST_NOT_BREAK_BEFORE', '.*')],
       META,
       runCtx(FIXED_NOW),
     );
@@ -433,11 +456,7 @@ describe('breakLines — MUST_NOT_BREAK_BEFORE / MUST_NOT_BREAK_AFTER (#190)', (
   it('MUST_NOT_BREAK_AFTER with no MUST_BREAK_AFTER suppresses to the end of input', () => {
     const events = breakLines(
       '2026-01-15T10:00:00Z BEGIN\n2026-01-15T10:00:01Z a\n2026-01-15T10:00:02Z b',
-      [
-        dir('SHOULD_LINEMERGE', 'true'),
-        dir('BREAK_ONLY_BEFORE_DATE', 'true'),
-        dir('MUST_NOT_BREAK_AFTER', 'BEGIN'),
-      ],
+      [dir('SHOULD_LINEMERGE', 'true'), dir('BREAK_ONLY_BEFORE_DATE', 'true'), dir('MUST_NOT_BREAK_AFTER', 'BEGIN')],
       META,
       runCtx(FIXED_NOW),
     );
@@ -476,7 +495,12 @@ describe('breakLines — LINE_BREAKER capture groups counted on the translated p
 
   it('still warns when the translated pattern genuinely has no capturing group', () => {
     const diagnostics: ValidationDiagnostic[] = [];
-    breakLines('a\nb', [dir('LINE_BREAKER', '(?i)[\\r\\n]+'), dir('SHOULD_LINEMERGE', 'false')], META, runCtx(FIXED_NOW, diagnostics));
+    breakLines(
+      'a\nb',
+      [dir('LINE_BREAKER', '(?i)[\\r\\n]+'), dir('SHOULD_LINEMERGE', 'false')],
+      META,
+      runCtx(FIXED_NOW, diagnostics),
+    );
     expect(diagnostics.some((d) => d.message.includes('has no capturing group'))).toBe(true);
   });
 });
@@ -550,7 +574,9 @@ describe('breakLines — the SHOULD_LINEMERGE default INDEXED_EXTRACTIONS implie
   });
 
   it('lets an explicit SHOULD_LINEMERGE win over the format default', () => {
-    expect(breakLines(raw, [dir('INDEXED_EXTRACTIONS', 'csv'), dir('SHOULD_LINEMERGE', 'true')], META, runCtx(FIXED_NOW))).toHaveLength(1);
+    expect(
+      breakLines(raw, [dir('INDEXED_EXTRACTIONS', 'csv'), dir('SHOULD_LINEMERGE', 'true')], META, runCtx(FIXED_NOW)),
+    ).toHaveLength(1);
   });
 });
 
@@ -577,7 +603,12 @@ describe('breakLines — BREAK_ONLY_BEFORE_DATE honours the stanza timestamp set
 
   it('reads the format only after TIME_PREFIX', () => {
     const raw = 'ts=10:00:00 a\nts=10:00:01 b\nnote 10:00:02 no prefix\nts=10:00:03 c';
-    const events = breakLines(raw, [dir('TIME_PREFIX', 'ts='), dir('TIME_FORMAT', '%H:%M:%S')], META, runCtx(FIXED_NOW));
+    const events = breakLines(
+      raw,
+      [dir('TIME_PREFIX', 'ts='), dir('TIME_FORMAT', '%H:%M:%S')],
+      META,
+      runCtx(FIXED_NOW),
+    );
     expect(events.map((e) => e._raw)).toEqual([
       'ts=10:00:00 a',
       'ts=10:00:01 b\nnote 10:00:02 no prefix',
@@ -589,7 +620,9 @@ describe('breakLines — BREAK_ONLY_BEFORE_DATE honours the stanza timestamp set
     const raw = 'first 15.01.2026 10:00:01\nlater 15.01.2026 10:00:02';
     const directives = [dir('TIME_FORMAT', '%d.%m.%Y %H:%M:%S')];
     expect(breakLines(raw, directives, META, runCtx(FIXED_NOW))).toHaveLength(2);
-    expect(breakLines(raw, [...directives, dir('MAX_TIMESTAMP_LOOKAHEAD', '10')], META, runCtx(FIXED_NOW))).toHaveLength(1);
+    expect(
+      breakLines(raw, [...directives, dir('MAX_TIMESTAMP_LOOKAHEAD', '10')], META, runCtx(FIXED_NOW)),
+    ).toHaveLength(1);
   });
 
   it('does not break on a match TIME_FORMAT cannot parse', () => {

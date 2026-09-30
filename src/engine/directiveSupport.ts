@@ -219,14 +219,14 @@ export const DIRECTIVE_SUPPORT: Record<string, SupportEntry> = {
   MATCH_LIMIT: {
     support: 'simulated',
     note:
-      'Applied to EXTRACT (props.conf) and to REPORT/TRANSFORMS REGEX (transforms.conf) as PCRE2\'s ' +
+      "Applied to EXTRACT (props.conf) and to REPORT/TRANSFORMS REGEX (transforms.conf) as PCRE2's " +
       'match limit; a match that reaches it is no match. Counted as the PCRE2 interpreter counts, ' +
-      'which is close to but not exactly PCRE1\'s count.',
+      "which is close to but not exactly PCRE1's count.",
   },
   DEPTH_LIMIT: {
     support: 'simulated',
     note:
-      'Applied like MATCH_LIMIT, as PCRE2\'s depth limit. Approximate: PCRE1 counted recursion on the ' +
+      "Applied like MATCH_LIMIT, as PCRE2's depth limit. Approximate: PCRE1 counted recursion on the " +
       'stack, PCRE2 counts backtracking frames on the heap, so the depth at which a pattern stops differs.',
   },
   CAN_OPTIMIZE: {
@@ -257,31 +257,103 @@ export const DIRECTIVE_SUPPORT: Record<string, SupportEntry> = {
   // Added to the registry so they complete, hover and warn rather than
   // passing unnoticed. Most belong to the input and forwarder layers a
   // browser has no access to; the rest are real gaps and name their issue.
-  CHECK_METHOD: { support: 'documented', note: 'A file-input concern: which bytes identify a file as already read. There are no files here.' },
-  HEADER_MODE: { support: 'documented', note: 'Belongs to the input layer, which decides whether an inline ***SPLUNK*** directive may rewrite fields.' },
-  LB_CHUNK_BREAKER: { support: 'documented', note: 'Deprecated, and governs forwarder-to-indexer chunking over HTTP — a transport this tool has no part in.' },
-  LB_CHUNK_BREAKER_TRUNCATE: { support: 'documented', note: 'Bounds an HTTP forwarder chunk, which is a transport concern rather than an event one.' },
-  LEARN_MODEL: { support: 'documented', note: 'Controls sourcetype-model learning on disk, which has no analogue in a browser.' },
-  MAX_EXPECTED_EVENT_LINES: { support: 'documented', note: 'A memory-allocation hint. It tunes throughput and cannot change output.' },
-  'METRIC-SCHEMA-TRANSFORMS': { support: 'documented', note: 'Converts events into metrics, and metrics are outside what this tool previews.' },
-  METRICS_PROTOCOL: { support: 'documented', note: 'Declares the source to be metrics rather than events. This simulator models the event pipeline.' },
-  PREFIX_SOURCETYPE: { support: 'documented', note: 'Names files the classifier found too small to classify, which requires the input layer.' },
-  SOURCETYPE_NAME_RESTRICTED_CHARACTERS: { support: 'documented', note: 'Constrains sourcetype naming at input time; it does not change how an event is processed.' },
-  'STATSD-DIM-TRANSFORMS': { support: 'documented', note: 'Extracts dimensions from statsd metrics, which are outside the event pipeline modelled here.' },
+  CHECK_METHOD: {
+    support: 'documented',
+    note: 'A file-input concern: which bytes identify a file as already read. There are no files here.',
+  },
+  HEADER_MODE: {
+    support: 'documented',
+    note: 'Belongs to the input layer, which decides whether an inline ***SPLUNK*** directive may rewrite fields.',
+  },
+  LB_CHUNK_BREAKER: {
+    support: 'documented',
+    note: 'Deprecated, and governs forwarder-to-indexer chunking over HTTP — a transport this tool has no part in.',
+  },
+  LB_CHUNK_BREAKER_TRUNCATE: {
+    support: 'documented',
+    note: 'Bounds an HTTP forwarder chunk, which is a transport concern rather than an event one.',
+  },
+  LEARN_MODEL: {
+    support: 'documented',
+    note: 'Controls sourcetype-model learning on disk, which has no analogue in a browser.',
+  },
+  MAX_EXPECTED_EVENT_LINES: {
+    support: 'documented',
+    note: 'A memory-allocation hint. It tunes throughput and cannot change output.',
+  },
+  'METRIC-SCHEMA-TRANSFORMS': {
+    support: 'documented',
+    note: 'Converts events into metrics, and metrics are outside what this tool previews.',
+  },
+  METRICS_PROTOCOL: {
+    support: 'documented',
+    note: 'Declares the source to be metrics rather than events. This simulator models the event pipeline.',
+  },
+  PREFIX_SOURCETYPE: {
+    support: 'documented',
+    note: 'Names files the classifier found too small to classify, which requires the input layer.',
+  },
+  SOURCETYPE_NAME_RESTRICTED_CHARACTERS: {
+    support: 'documented',
+    note: 'Constrains sourcetype naming at input time; it does not change how an event is processed.',
+  },
+  'STATSD-DIM-TRANSFORMS': {
+    support: 'documented',
+    note: 'Extracts dimensions from statsd metrics, which are outside the event pipeline modelled here.',
+  },
   STATSD_EMIT_SINGLE_MEASUREMENT_FORMAT: { support: 'documented', note: 'Shapes metric data points, not events.' },
-  category: { support: 'documented', note: 'Sourcetype metadata for the Splunk UI, with no effect on events or fields.' },
-  description: { support: 'documented', note: 'Sourcetype metadata for the Splunk UI, with no effect on events or fields.' },
-  detect_trailing_nulls: { support: 'documented', note: 'Decided at input time while reading a file from disk, which this tool does not do.' },
-  force_local_processing: { support: 'documented', note: 'Moves processing onto a universal forwarder. Where the work happens is not modelled here.' },
-  initCrcLength: { support: 'documented', note: 'Part of file identity for the monitor input, upstream of anything this tool sees.' },
-  invalid_cause: { support: 'documented', note: 'Hands a file to the archive or Event Log processor at input time, before any of this runs.' },
-  is_valid: { support: 'documented', note: 'Set automatically by invalid_cause, and the spec says plainly not to set it.' },
-  maxDist: { support: 'documented', note: 'Tunes sourcetype model matching, a classification step upstream of the pipeline simulated here.' },
-  termFrequencyWeightedDist: { support: 'documented', note: 'Changes how file distance is measured for sourcetype classification, upstream of this tool.' },
-  trackPipelineLatency: { support: 'documented', note: 'Emits latency metrics to metrics.log. It observes processing rather than changing it.' },
-  unarchive_cmd: { support: 'documented', note: 'Runs a shell command to expand an archive at input time. There is no shell and no archive here.' },
-  unarchive_cmd_start_mode: { support: 'documented', note: 'Chooses how the unarchive command is launched, which this tool never launches.' },
-  unarchive_sourcetype: { support: 'documented', note: 'Names the sourcetype for the contents of an expanded archive, an input-layer decision.' },
+  category: {
+    support: 'documented',
+    note: 'Sourcetype metadata for the Splunk UI, with no effect on events or fields.',
+  },
+  description: {
+    support: 'documented',
+    note: 'Sourcetype metadata for the Splunk UI, with no effect on events or fields.',
+  },
+  detect_trailing_nulls: {
+    support: 'documented',
+    note: 'Decided at input time while reading a file from disk, which this tool does not do.',
+  },
+  force_local_processing: {
+    support: 'documented',
+    note: 'Moves processing onto a universal forwarder. Where the work happens is not modelled here.',
+  },
+  initCrcLength: {
+    support: 'documented',
+    note: 'Part of file identity for the monitor input, upstream of anything this tool sees.',
+  },
+  invalid_cause: {
+    support: 'documented',
+    note: 'Hands a file to the archive or Event Log processor at input time, before any of this runs.',
+  },
+  is_valid: {
+    support: 'documented',
+    note: 'Set automatically by invalid_cause, and the spec says plainly not to set it.',
+  },
+  maxDist: {
+    support: 'documented',
+    note: 'Tunes sourcetype model matching, a classification step upstream of the pipeline simulated here.',
+  },
+  termFrequencyWeightedDist: {
+    support: 'documented',
+    note: 'Changes how file distance is measured for sourcetype classification, upstream of this tool.',
+  },
+  trackPipelineLatency: {
+    support: 'documented',
+    note: 'Emits latency metrics to metrics.log. It observes processing rather than changing it.',
+  },
+  unarchive_cmd: {
+    support: 'documented',
+    note: 'Runs a shell command to expand an archive at input time. There is no shell and no archive here.',
+  },
+  unarchive_cmd_start_mode: {
+    support: 'documented',
+    note: 'Chooses how the unarchive command is launched, which this tool never launches.',
+  },
+  unarchive_sourcetype: {
+    support: 'documented',
+    note: 'Names the sourcetype for the contents of an expanded archive, an input-layer decision.',
+  },
   ADD_EXTRA_TIME_FIELDS: {
     support: 'simulated',
     note:
@@ -303,7 +375,10 @@ export const DIRECTIVE_SUPPORT: Record<string, SupportEntry> = {
       'Applied after every TRANSFORMS- class, in class order. Splunk also runs rulesets on a heavy ' +
       'forwarder as well as the indexer; the preview is one pipeline and shows them run once.',
   },
-  RULESET_DESC: { support: 'documented', note: 'A description of the matching RULESET- for the next reader. Splunk does nothing with it, and neither does the preview.' },
+  RULESET_DESC: {
+    support: 'documented',
+    note: 'A description of the matching RULESET- for the next reader. Splunk does nothing with it, and neither does the preview.',
+  },
   ROUTE_EVENTS_OLDER_THAN: {
     support: 'simulated',
     note:
@@ -321,27 +396,81 @@ export const DIRECTIVE_SUPPORT: Record<string, SupportEntry> = {
   // Mostly lookup settings, documented for the reason every lookup attribute
   // is: a lookup needs a table, and a browser with no backend has none. The
   // metrics settings describe the metrics pipeline, not the event pipeline.
-  'METRIC-SCHEMA-BLACKLIST-DIMS': { support: 'documented', note: 'Selects dimensions for generated metrics, not fields on an event.' },
-  'METRIC-SCHEMA-MEASURES': { support: 'documented', note: 'Turns events into metrics, which this tool does not preview.' },
-  'METRIC-SCHEMA-WHITELIST-DIMS': { support: 'documented', note: 'Selects dimensions for generated metrics, not fields on an event.' },
-  REMOVE_DIMS_FROM_METRIC_NAME: { support: 'documented', note: 'Shapes statsd metric names, and metrics are outside the event pipeline modelled here.' },
-  allow_caching: { support: 'documented', note: 'Caches scripted-lookup output, and this tool runs no lookup scripts.' },
+  'METRIC-SCHEMA-BLACKLIST-DIMS': {
+    support: 'documented',
+    note: 'Selects dimensions for generated metrics, not fields on an event.',
+  },
+  'METRIC-SCHEMA-MEASURES': {
+    support: 'documented',
+    note: 'Turns events into metrics, which this tool does not preview.',
+  },
+  'METRIC-SCHEMA-WHITELIST-DIMS': {
+    support: 'documented',
+    note: 'Selects dimensions for generated metrics, not fields on an event.',
+  },
+  REMOVE_DIMS_FROM_METRIC_NAME: {
+    support: 'documented',
+    note: 'Shapes statsd metric names, and metrics are outside the event pipeline modelled here.',
+  },
+  allow_caching: {
+    support: 'documented',
+    note: 'Caches scripted-lookup output, and this tool runs no lookup scripts.',
+  },
   cache_size: { support: 'documented', note: 'Sizes the lookup cache, and there is no lookup to cache here.' },
-  check_permission: { support: 'documented', note: 'Guards writes to a CSV lookup file, which this tool never performs.' },
-  feature_id_element: { support: 'documented', note: 'A geospatial lookup setting, and a lookup needs a table this tool has nowhere to get.' },
+  check_permission: {
+    support: 'documented',
+    note: 'Guards writes to a CSV lookup file, which this tool never performs.',
+  },
+  feature_id_element: {
+    support: 'documented',
+    note: 'A geospatial lookup setting, and a lookup needs a table this tool has nowhere to get.',
+  },
   filter: { support: 'documented', note: 'Narrows lookup rows before they are returned, and there are no rows here.' },
-  index_fields_list: { support: 'documented', note: 'A lookup setting, and a lookup needs a table this tool has nowhere to get.' },
-  max_duplicates: { support: 'documented', note: 'A lookup setting, and a lookup needs a table this tool has nowhere to get.' },
+  index_fields_list: {
+    support: 'documented',
+    note: 'A lookup setting, and a lookup needs a table this tool has nowhere to get.',
+  },
+  max_duplicates: {
+    support: 'documented',
+    note: 'A lookup setting, and a lookup needs a table this tool has nowhere to get.',
+  },
   max_ext_batch: { support: 'documented', note: 'A KV Store lookup setting, and there is no KV Store here.' },
-  max_offset_secs: { support: 'documented', note: 'A temporal lookup setting, and a lookup needs a table this tool has nowhere to get.' },
-  'metrics.disabled': { support: 'documented', note: 'Controls reporting to metrics.log. It observes processing rather than changing it.' },
-  'metrics.report_interval': { support: 'documented', note: 'Sets how often metrics.log is written, which has no bearing on an event.' },
-  'metrics.rule_filter': { support: 'documented', note: 'Limits which rules report to metrics.log; it changes no output.' },
-  min_offset_secs: { support: 'documented', note: 'A temporal lookup setting, and a lookup needs a table this tool has nowhere to get.' },
-  'python.required': { support: 'documented', note: 'Selects the interpreter for a scripted lookup, which this tool cannot run.' },
-  'python.version': { support: 'documented', note: 'Deprecated, and it selects the interpreter for a scripted lookup this tool cannot run.' },
-  replicate: { support: 'documented', note: 'Decides where a CSV lookup is replicated, which is a deployment concern.' },
-  reverse_lookup_honor_case_sensitive_match: { support: 'documented', note: 'A lookup setting, and a lookup needs a table this tool has nowhere to get.' },
+  max_offset_secs: {
+    support: 'documented',
+    note: 'A temporal lookup setting, and a lookup needs a table this tool has nowhere to get.',
+  },
+  'metrics.disabled': {
+    support: 'documented',
+    note: 'Controls reporting to metrics.log. It observes processing rather than changing it.',
+  },
+  'metrics.report_interval': {
+    support: 'documented',
+    note: 'Sets how often metrics.log is written, which has no bearing on an event.',
+  },
+  'metrics.rule_filter': {
+    support: 'documented',
+    note: 'Limits which rules report to metrics.log; it changes no output.',
+  },
+  min_offset_secs: {
+    support: 'documented',
+    note: 'A temporal lookup setting, and a lookup needs a table this tool has nowhere to get.',
+  },
+  'python.required': {
+    support: 'documented',
+    note: 'Selects the interpreter for a scripted lookup, which this tool cannot run.',
+  },
+  'python.version': {
+    support: 'documented',
+    note: 'Deprecated, and it selects the interpreter for a scripted lookup this tool cannot run.',
+  },
+  replicate: {
+    support: 'documented',
+    note: 'Decides where a CSV lookup is replicated, which is a deployment concern.',
+  },
+  reverse_lookup_honor_case_sensitive_match: {
+    support: 'documented',
+    note: 'A lookup setting, and a lookup needs a table this tool has nowhere to get.',
+  },
   CAN_OPTIMIZE_IE: {
     support: 'documented',
     note:
@@ -350,8 +479,7 @@ export const DIRECTIVE_SUPPORT: Record<string, SupportEntry> = {
   },
   STOP_PROCESSING_IF: {
     support: 'simulated',
-    note:
-      'When true, skips the rules after it in the same RULESET- or TRANSFORMS- list; later lists still run.',
+    note: 'When true, skips the rules after it in the same RULESET- or TRANSFORMS- list; later lists still run.',
   },
 };
 

@@ -101,7 +101,8 @@ describe('upsertDirectiveInStanza', () => {
   });
 
   it('edits the definition that wins: the last line in the last block (#431)', () => {
-    const text = '[web]\nTIME_PREFIX = a\nTIME_PREFIX = b\n\n[db]\nKV_MODE = json\n\n[web]\nTIME_PREFIX = c\nTIME_PREFIX = d';
+    const text =
+      '[web]\nTIME_PREFIX = a\nTIME_PREFIX = b\n\n[db]\nKV_MODE = json\n\n[web]\nTIME_PREFIX = c\nTIME_PREFIX = d';
     expect(upsertDirectiveInStanza(text, 'web', 'TIME_PREFIX', 'e')).toBe(
       '[web]\nTIME_PREFIX = a\nTIME_PREFIX = b\n\n[db]\nKV_MODE = json\n\n[web]\nTIME_PREFIX = c\nTIME_PREFIX = e',
     );
@@ -118,7 +119,9 @@ describe('upsertDirectiveInStanza', () => {
   // replacing a directive replaces every physical line it spans.
   describe('a directive continued with backslashes (#484)', () => {
     const valueOf = (text: string, key: string): string | undefined =>
-      parseConf(text, 'props.conf').stanzas.flatMap((st) => st.directives).find((d) => d.key === key)?.value;
+      parseConf(text, 'props.conf')
+        .stanzas.flatMap((st) => st.directives)
+        .find((d) => d.key === key)?.value;
 
     it('replaces the whole continued REGEX, not just its first line', () => {
       const text = '[web]\nREGEX = a\\\n  b\\\n  c\nKV_MODE = none';
@@ -136,7 +139,9 @@ describe('upsertDirectiveInStanza', () => {
 
     it('replaces a continued value whose continuation line looks like a header or a comment', () => {
       const text = '[web]\nREGEX = a\\\n[not-a-stanza]\\\n# not a comment\nKV_MODE = none\n\n[db]\nKV_MODE = json';
-      expect(upsertDirectiveInStanza(text, 'web', 'REGEX', 'z')).toBe('[web]\nREGEX = z\nKV_MODE = none\n\n[db]\nKV_MODE = json');
+      expect(upsertDirectiveInStanza(text, 'web', 'REGEX', 'z')).toBe(
+        '[web]\nREGEX = z\nKV_MODE = none\n\n[db]\nKV_MODE = json',
+      );
     });
 
     it('does not treat a value ending in an even number of backslashes as continued', () => {

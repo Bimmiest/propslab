@@ -25,7 +25,10 @@ describe('regexMatchWorker', () => {
       return [null];
     };
     const posted: unknown[] = [];
-    const fakeSelf: { onmessage: ((e: MessageEvent<RegexMatchRequest>) => void) | null; postMessage: (m: unknown) => void } = {
+    const fakeSelf: {
+      onmessage: ((e: MessageEvent<RegexMatchRequest>) => void) | null;
+      postMessage: (m: unknown) => void;
+    } = {
       onmessage: null,
       postMessage: (m) => posted.push(m),
     };
@@ -33,7 +36,8 @@ describe('regexMatchWorker', () => {
     stubWasmFetch();
     vi.resetModules();
     await import('../regexMatchWorker');
-    const send = (request: RegexMatchRequest) => fakeSelf.onmessage!({ data: request } as MessageEvent<RegexMatchRequest>);
+    const send = (request: RegexMatchRequest) =>
+      fakeSelf.onmessage!({ data: request } as MessageEvent<RegexMatchRequest>);
 
     // All three arrive before the engine has loaded, so they drain together.
     send({ id: 1, pattern: 'a', inputs: ['x'] });

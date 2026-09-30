@@ -109,9 +109,7 @@ async function attemptSample(
 
   // With a prefix the format must sit immediately after it, matching the
   // engine's anchoring rule.
-  const active = timePrefix
-    ? new RegExp(`^\\s*(?:${formatRegex.source})`, formatRegex.flags)
-    : formatRegex;
+  const active = timePrefix ? new RegExp(`^\\s*(?:${formatRegex.source})`, formatRegex.flags) : formatRegex;
 
   const match = active.exec(region);
   if (!match) return { status: 'no-match', searchedFrom: searchStart };
@@ -205,9 +203,7 @@ export function renderTimeFormatPreview(preview: TimeFormatPreview): string {
       case 'prefix-refused':
         // The reason can quote the pattern (a SyntaxError message does), so it
         // is document text like any other.
-        parts.push(
-          `**Sample:** not tried — TIME_PREFIX was not run: ${escapeMarkdown(preview.sample.reason)}`,
-        );
+        parts.push(`**Sample:** not tried — TIME_PREFIX was not run: ${escapeMarkdown(preview.sample.reason)}`);
         break;
       case 'prefix-timed-out':
         parts.push(

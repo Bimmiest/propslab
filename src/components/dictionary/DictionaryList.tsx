@@ -17,9 +17,7 @@ function Segmented<T extends string>({
 }) {
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
-        {label}
-      </span>
+      <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">{label}</span>
       <div
         role="group"
         aria-label={label}
@@ -116,9 +114,7 @@ export function DictionaryFilterBar({
       </label>
 
       <p className="text-[10px] text-[var(--color-text-muted)]" role="status" aria-live="polite">
-        {resultCount === totalCount
-          ? `${totalCount} entries`
-          : `${resultCount} of ${totalCount} entries`}
+        {resultCount === totalCount ? `${totalCount} entries` : `${resultCount} of ${totalCount} entries`}
       </p>
     </div>
   );
@@ -158,15 +154,9 @@ function DictionaryOption({
       onClick={() => onSelect(entry.id)}
       className={[
         'flex items-center gap-1.5 px-3 py-1.5 cursor-pointer transition-colors',
-        isSelected
-          ? 'bg-[var(--color-accent)]/15'
-          : 'hover:bg-[var(--color-bg-tertiary)]',
+        isSelected ? 'bg-[var(--color-accent)]/15' : 'hover:bg-[var(--color-bg-tertiary)]',
       ].join(' ')}
-      style={
-        isSelected
-          ? { boxShadow: 'inset 2px 0 0 var(--color-accent)' }
-          : undefined
-      }
+      style={isSelected ? { boxShadow: 'inset 2px 0 0 var(--color-accent)' } : undefined}
     >
       <span
         className="flex-1 min-w-0 truncate text-[11px] font-mono"
@@ -240,9 +230,7 @@ export function DictionaryList({
   if (entries.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center px-4">
-        <p className="text-xs text-center text-[var(--color-text-muted)]">
-          No directives match these filters.
-        </p>
+        <p className="text-xs text-center text-[var(--color-text-muted)]">No directives match these filters.</p>
       </div>
     );
   }

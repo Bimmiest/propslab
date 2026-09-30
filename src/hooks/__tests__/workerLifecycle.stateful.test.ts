@@ -48,8 +48,12 @@ import fc from 'fast-check';
 import { createManagedWorker, MAX_WORKER_LOAD_FAILURES, type ManagedWorker } from '../workerLifecycle';
 import { WORKER_READY } from '../../engine/workerProtocol';
 
-interface Req { id: number }
-interface Res { id: number }
+interface Req {
+  id: number;
+}
+interface Res {
+  id: number;
+}
 
 const TIMEOUT_MS = 1000;
 const DEFAULT_SEED = 513;
@@ -131,7 +135,10 @@ class Sim {
       timeoutMs: TIMEOUT_MS,
       onResponse: (response, request) => {
         invariant(response.id === request.id, 'a response was delivered with a different request');
-        invariant(this.expected.kind === 'result' && this.expected.id === request.id, `unexpected response for ${request.id}`);
+        invariant(
+          this.expected.kind === 'result' && this.expected.id === request.id,
+          `unexpected response for ${request.id}`,
+        );
         this.calls.responses.push(request.id);
         this.outcome(request.id, 'response');
       },
@@ -139,8 +146,14 @@ class Sim {
         const e = this.expected;
         invariant(e.kind === 'timeout', `unexpected timeout for ${request.id}`);
         invariant(loaded, 'a watchdog fired on a worker that never loaded');
-        invariant(e.headLive && e.head === request.id, `timeout blamed ${request.id}, the worker was running ${e.head}${e.headLive ? '' : ' (superseded)'}`);
-        invariant(same(ids(others), e.tail), `timeout handed back ${JSON.stringify(ids(others))}, expected ${JSON.stringify(e.tail)}`);
+        invariant(
+          e.headLive && e.head === request.id,
+          `timeout blamed ${request.id}, the worker was running ${e.head}${e.headLive ? '' : ' (superseded)'}`,
+        );
+        invariant(
+          same(ids(others), e.tail),
+          `timeout handed back ${JSON.stringify(ids(others))}, expected ${JSON.stringify(e.tail)}`,
+        );
         this.calls.timeouts.push(request.id);
         this.outcome(request.id, 'timeout');
         for (const r of others) this.place(r);
@@ -168,8 +181,14 @@ class Sim {
       onLoadFailure: (inFlight, capped) => {
         const e = this.expected;
         invariant(e.kind === 'loadFailure', `unexpected load failure for ${JSON.stringify(ids(inFlight))}`);
-        invariant(same(ids(inFlight), e.live), `load failure handed back ${JSON.stringify(ids(inFlight))}, expected ${JSON.stringify(e.live)}`);
-        invariant(capped === this.loadFailures >= MAX_WORKER_LOAD_FAILURES, `capped=${String(capped)} with ${this.loadFailures} load failures`);
+        invariant(
+          same(ids(inFlight), e.live),
+          `load failure handed back ${JSON.stringify(ids(inFlight))}, expected ${JSON.stringify(e.live)}`,
+        );
+        invariant(
+          capped === this.loadFailures >= MAX_WORKER_LOAD_FAILURES,
+          `capped=${String(capped)} with ${this.loadFailures} load failures`,
+        );
         this.calls.loadFailures.push(ids(inFlight));
         for (const r of inFlight) this.place(r);
       },
@@ -199,7 +218,10 @@ class Sim {
   /** What a caller does with a request it must run again: post it, or fall back. */
   private place(request: Req) {
     if (this.managed.post(request)) return;
-    invariant(this.loadFailures >= MAX_WORKER_LOAD_FAILURES, `post refused ${request.id} with only ${this.loadFailures} load failures`);
+    invariant(
+      this.loadFailures >= MAX_WORKER_LOAD_FAILURES,
+      `post refused ${request.id} with only ${this.loadFailures} load failures`,
+    );
     this.fallback(request);
   }
 
@@ -216,7 +238,10 @@ class Sim {
     this.begin({ kind: 'none' });
     const ok = whenReady ? this.managed.postWhenReady(request) : this.managed.post(request);
     if (!ok) {
-      invariant(this.loadFailures >= MAX_WORKER_LOAD_FAILURES, `post refused ${request.id} with only ${this.loadFailures} load failures`);
+      invariant(
+        this.loadFailures >= MAX_WORKER_LOAD_FAILURES,
+        `post refused ${request.id} with only ${this.loadFailures} load failures`,
+      );
       this.fallback(request);
     } else if (whenReady && !this.current()?.ready) {
       this.deferred.push(request.id);
@@ -251,7 +276,10 @@ class Sim {
     const live = this.live(id);
     this.begin({ kind: 'result', id: live ? id : -1 });
     w.onmessage?.({ data: { id } } as MessageEvent);
-    invariant(same(this.calls.responses, live ? [id] : []), `response for ${id} (live: ${String(live)}) produced ${JSON.stringify(this.calls.responses)}`);
+    invariant(
+      same(this.calls.responses, live ? [id] : []),
+      `response for ${id} (live: ${String(live)}) produced ${JSON.stringify(this.calls.responses)}`,
+    );
     this.settle();
   }
 
@@ -281,8 +309,14 @@ class Sim {
       vi.advanceTimersToNextTimer();
       invariant(w.terminated, 'a hung worker was not terminated');
       invariant(this.workers.length === before + 1, 'a hung worker was not replaced exactly once');
-      invariant(same(this.calls.timeouts, headLive ? [head] : []), `timeout of ${head} (live: ${String(headLive)}) produced ${JSON.stringify(this.calls.timeouts)}`);
-      invariant(same(this.current()?.queue ?? [], tail), 'the requests behind a hung one were not re-posted, in order, on the replacement');
+      invariant(
+        same(this.calls.timeouts, headLive ? [head] : []),
+        `timeout of ${head} (live: ${String(headLive)}) produced ${JSON.stringify(this.calls.timeouts)}`,
+      );
+      invariant(
+        same(this.current()?.queue ?? [], tail),
+        'the requests behind a hung one were not re-posted, in order, on the replacement',
+      );
     }
     this.settle();
   }
@@ -313,7 +347,10 @@ class Sim {
     trigger();
     invariant(w.terminated, 'a worker that failed to load was not terminated');
     const capped = this.loadFailures >= MAX_WORKER_LOAD_FAILURES;
-    invariant(this.workers.length === before + (capped ? 0 : 1), `a load failure built ${this.workers.length - before} workers (capped: ${String(capped)})`);
+    invariant(
+      this.workers.length === before + (capped ? 0 : 1),
+      `a load failure built ${this.workers.length - before} workers (capped: ${String(capped)})`,
+    );
     invariant(this.calls.loadFailures.length === 1, 'a load failure was not reported exactly once');
   }
 
@@ -327,7 +364,10 @@ class Sim {
     invariant(w.terminated, 'a crashed worker was not terminated');
     // Replaced when something wanted was in flight, and not otherwise: a worker
     // that dies idle is replaced by the next post, not in a loop.
-    invariant(this.workers.length === before + (live.length > 0 ? 1 : 0), `a crash with ${live.length} live requests built ${this.workers.length - before} workers`);
+    invariant(
+      this.workers.length === before + (live.length > 0 ? 1 : 0),
+      `a crash with ${live.length} live requests built ${this.workers.length - before} workers`,
+    );
     if (headLive) {
       invariant(this.calls.crashes.length === 1, 'a crash of a live request was not reported exactly once');
     } else if (live.length === 0) {
@@ -350,10 +390,17 @@ class Sim {
     const timers = vi.getTimerCount();
     const snapshot = JSON.stringify([...this.outcomes]);
     if (kind === 'ready') w.onmessage?.({ data: WORKER_READY } as MessageEvent);
-    else if (kind === 'result') w.onmessage?.({ data: { id: w.everPosted[pick % Math.max(1, w.everPosted.length)] ?? 1 } } as MessageEvent);
+    else if (kind === 'result')
+      w.onmessage?.({ data: { id: w.everPosted[pick % Math.max(1, w.everPosted.length)] ?? 1 } } as MessageEvent);
     else w.onerror?.({ message: 'late' } as ErrorEvent);
-    invariant(this.workers.length === workers && vi.getTimerCount() === timers, `a late ${kind} from a replaced worker changed the lifecycle`);
-    invariant(snapshot === JSON.stringify([...this.outcomes]), `a late ${kind} from a replaced worker produced an outcome`);
+    invariant(
+      this.workers.length === workers && vi.getTimerCount() === timers,
+      `a late ${kind} from a replaced worker changed the lifecycle`,
+    );
+    invariant(
+      snapshot === JSON.stringify([...this.outcomes]),
+      `a late ${kind} from a replaced worker produced an outcome`,
+    );
     this.settle();
   }
 
@@ -371,18 +418,27 @@ class Sim {
 
   /** Everything that must hold between any two steps. */
   private settle() {
-    invariant(this.calls.responses.length + this.calls.timeouts.length <= 1, 'more than one request was answered by a single event');
+    invariant(
+      this.calls.responses.length + this.calls.timeouts.length <= 1,
+      'more than one request was answered by a single event',
+    );
     this.begin({ kind: 'none' });
 
     const live = this.workers.filter((w) => !w.terminated);
     invariant(live.length <= 1, 'more than one live worker');
     const cur = this.current();
     invariant(cur === null || live[0] === cur, 'the live worker is not the newest');
-    invariant(cur === null || this.loadFailures < MAX_WORKER_LOAD_FAILURES, 'a worker exists with the load-failure cap spent');
+    invariant(
+      cur === null || this.loadFailures < MAX_WORKER_LOAD_FAILURES,
+      'a worker exists with the load-failure cap spent',
+    );
 
     // Every request still wanted is somewhere it will be answered from.
     for (const id of this.outstanding()) {
-      invariant(cur !== null && (cur.queue.includes(id) || this.deferred.includes(id)), `request ${id} is neither on the worker nor waiting for it`);
+      invariant(
+        cur !== null && (cur.queue.includes(id) || this.deferred.includes(id)),
+        `request ${id} is neither on the worker nor waiting for it`,
+      );
     }
 
     // No timer without a request: none with no worker; one watchdog (the
@@ -392,10 +448,15 @@ class Sim {
     // still be pending; `expire` holds its firing to changing nothing.
     const timers = vi.getTimerCount();
     if (cur === null) invariant(timers === 0, `${timers} timers with no worker`);
-    else if (cur.ready) invariant(timers === (cur.queue.length > 0 ? 1 : 0), `${timers} timers on a loaded worker with ${cur.queue.length} queued`);
+    else if (cur.ready)
+      invariant(
+        timers === (cur.queue.length > 0 ? 1 : 0),
+        `${timers} timers on a loaded worker with ${cur.queue.length} queued`,
+      );
     else {
       invariant(timers <= 1, `${timers} timers on a loading worker`);
-      if (this.waitingOn(cur).length > 0) invariant(timers === 1, 'a loading worker has live requests waiting and no load timer');
+      if (this.waitingOn(cur).length > 0)
+        invariant(timers === 1, 'a loading worker has live requests waiting and no load timer');
     }
   }
 
@@ -414,12 +475,16 @@ class Sim {
     invariant(vi.getTimerCount() === 0, 'a timer outlived every request');
     for (const id of this.posted) {
       const outcome = this.outcomes.get(id);
-      if (this.superseded.has(id)) invariant(outcome === undefined, `superseded request ${id} got outcome ${String(outcome)}`);
+      if (this.superseded.has(id))
+        invariant(outcome === undefined, `superseded request ${id} got outcome ${String(outcome)}`);
       else invariant(outcome !== undefined, `request ${id} never got an outcome`);
       if (this.crashed.has(id)) invariant(outcome !== 'inline', `request ${id} crashed a worker and then ran inline`);
     }
     this.managed.dispose();
-    invariant(vi.getTimerCount() === 0 && this.workers.every((w) => w.terminated), 'dispose left a timer or a worker behind');
+    invariant(
+      vi.getTimerCount() === 0 && this.workers.every((w) => w.terminated),
+      'dispose left a timer or a worker behind',
+    );
   }
 }
 
@@ -440,16 +505,66 @@ const loading = (s: Sim) => {
 const loaded = (s: Sim) => s.current()?.ready === true;
 
 const commands: fc.Arbitrary<Cmd>[] = [
-  ...[false, false, false, true].map((whenReady) => fc.constant(cmd(whenReady ? 'postWhenReady' : 'post', () => true, (s) => s.post(whenReady)))),
-  ...[0, 1].map(() => fc.constant(cmd('forget', () => true, (s) => s.forget()))),
-  ...[0, 1, 2].map(() => fc.constant(cmd('worker ready', loading, (s) => s.ready()))),
-  ...[0, 1, 2, 3].map(() => fc.constant(cmd('worker result', (s) => loaded(s) && (s.current()?.queue.length ?? 0) > 0, (s) => s.result()))),
-  ...[0, 1].map(() => fc.constant(cmd('worker error', (s) => s.current() !== null, (s) => s.error()))),
-  ...[0, 1].map(() => fc.constant(cmd('timer expires', () => vi.getTimerCount() > 0, (s) => s.expire()))),
-  fc.tuple(fc.constantFrom('ready', 'result', 'error'), fc.nat(50)).map(([kind, pick]) =>
-    cmd(`late ${kind} from a replaced worker (${pick})`, (s) => s.workers.some((w) => w.terminated), (s) => s.stale(kind, pick)),
+  ...[false, false, false, true].map((whenReady) =>
+    fc.constant(
+      cmd(
+        whenReady ? 'postWhenReady' : 'post',
+        () => true,
+        (s) => s.post(whenReady),
+      ),
+    ),
   ),
-  fc.constant(cmd('dispose', () => true, (s) => s.dispose())),
+  ...[0, 1].map(() =>
+    fc.constant(
+      cmd(
+        'forget',
+        () => true,
+        (s) => s.forget(),
+      ),
+    ),
+  ),
+  ...[0, 1, 2].map(() => fc.constant(cmd('worker ready', loading, (s) => s.ready()))),
+  ...[0, 1, 2, 3].map(() =>
+    fc.constant(
+      cmd(
+        'worker result',
+        (s) => loaded(s) && (s.current()?.queue.length ?? 0) > 0,
+        (s) => s.result(),
+      ),
+    ),
+  ),
+  ...[0, 1].map(() =>
+    fc.constant(
+      cmd(
+        'worker error',
+        (s) => s.current() !== null,
+        (s) => s.error(),
+      ),
+    ),
+  ),
+  ...[0, 1].map(() =>
+    fc.constant(
+      cmd(
+        'timer expires',
+        () => vi.getTimerCount() > 0,
+        (s) => s.expire(),
+      ),
+    ),
+  ),
+  fc.tuple(fc.constantFrom('ready', 'result', 'error'), fc.nat(50)).map(([kind, pick]) =>
+    cmd(
+      `late ${kind} from a replaced worker (${pick})`,
+      (s) => s.workers.some((w) => w.terminated),
+      (s) => s.stale(kind, pick),
+    ),
+  ),
+  fc.constant(
+    cmd(
+      'dispose',
+      () => true,
+      (s) => s.dispose(),
+    ),
+  ),
 ];
 
 describe('workerLifecycle as a state machine (#513)', () => {

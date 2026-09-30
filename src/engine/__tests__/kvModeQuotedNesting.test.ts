@@ -5,8 +5,7 @@ import { runCtx, FIXED_NOW } from './runCtx';
 import { makeEvent } from '../../test/makeEvent';
 
 const ev = (raw: string): SplunkEvent => makeEvent(raw);
-const kv = (mode: string): ConfDirective[] =>
-  [{ key: 'KV_MODE', value: mode, line: 1, directiveType: 'KV_MODE' }];
+const kv = (mode: string): ConfDirective[] => [{ key: 'KV_MODE', value: mode, line: 1, directiveType: 'KV_MODE' }];
 
 // Quoted values of either style are consumed whole, so no pass mines a
 // key=value from inside a quoted value of the other style.

@@ -61,8 +61,7 @@ describe('disabled — a stanza switched off takes no part in resolution', () =>
 
   it('lets a lower-precedence stanza win when the higher one is disabled', () => {
     const { result } = run(
-      '[source::/var/log/app.log]\ndisabled = 1\nEVAL-who = "source"\n\n' +
-        '[original]\nEVAL-who = "sourcetype"\n',
+      '[source::/var/log/app.log]\ndisabled = 1\nEVAL-who = "source"\n\n' + '[original]\nEVAL-who = "sourcetype"\n',
     );
     expect(result.events[0]!.fields['who']).toBe('sourcetype');
   });
@@ -88,16 +87,13 @@ describe('priority — orders stanzas within a kind, and cannot reach across kin
     // and [<sourcetype>] patterns, regardless of their respective priority key
     // values." 200 is far above every default and still loses.
     const { result } = run(
-      '[source::/var/log/app.log]\nEVAL-who = "source"\n\n' +
-        '[original]\npriority = 200\nEVAL-who = "sourcetype"\n',
+      '[source::/var/log/app.log]\nEVAL-who = "source"\n\n' + '[original]\npriority = 200\nEVAL-who = "sourcetype"\n',
     );
     expect(result.events[0]!.fields['who']).toBe('source');
   });
 
   it('does not let a priority lift a host stanza above a source stanza either', () => {
-    const names = matchedNames(
-      '[host::web01]\npriority = 500\nEVAL-a = 1\n\n[source::/var/log/app.log]\nEVAL-b = 1\n',
-    );
+    const names = matchedNames('[host::web01]\npriority = 500\nEVAL-a = 1\n\n[source::/var/log/app.log]\nEVAL-b = 1\n');
     expect(names[0]).toBe('source::/var/log/app.log');
   });
 
@@ -113,9 +109,7 @@ describe('priority — orders stanzas within a kind, and cannot reach across kin
   it('defaults a literal stanza to 100 and a wildcard stanza of the same kind to 0', () => {
     // Nothing declares a priority, and both patterns match. The literal one wins
     // on its default alone — the wildcard would need to declare above 100.
-    const names = matchedNames(
-      '[source::...app...]\nEVAL-a = 1\n\n[source::/var/log/app.log]\nEVAL-b = 1\n',
-    );
+    const names = matchedNames('[source::...app...]\nEVAL-a = 1\n\n[source::/var/log/app.log]\nEVAL-b = 1\n');
     expect(names[0]).toBe('source::/var/log/app.log');
   });
 
@@ -181,9 +175,7 @@ describe('sourcetype — an input-time assignment decides what else matches', ()
 
 describe('rename — a search-time-only sourcetype change', () => {
   it('takes search-time settings from the target stanza', () => {
-    const { result } = run(
-      '[original]\nrename = renamed\n\n[renamed]\nEVAL-tag = "from renamed"\n',
-    );
+    const { result } = run('[original]\nrename = renamed\n\n[renamed]\nEVAL-tag = "from renamed"\n');
     expect(result.events[0]!.fields['tag']).toBe('from renamed');
   });
 
@@ -191,8 +183,7 @@ describe('rename — a search-time-only sourcetype change', () => {
     // The surprising half, and the reason this is worth simulating: an EXTRACT
     // on the original sourcetype stops applying entirely after a rename.
     const { result } = run(
-      '[original]\nrename = renamed\nEXTRACT-u = user=(?<uname>\\w+)\n\n' +
-        '[renamed]\nKV_MODE = none\nEVAL-tag = 1\n',
+      '[original]\nrename = renamed\nEXTRACT-u = user=(?<uname>\\w+)\n\n' + '[renamed]\nKV_MODE = none\nEVAL-tag = 1\n',
     );
     // `uname` can only come from that EXTRACT — auto-KV would produce `user`.
     expect(result.events[0]!.fields['uname']).toBeUndefined();

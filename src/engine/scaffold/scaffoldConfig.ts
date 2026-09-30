@@ -21,11 +21,7 @@ export function scaffoldConfig(rawData: string, metadata: EventMetadata): Scaffo
   const segments = breaker ? splitSegments(rawData, breaker, []).map((s) => s.text) : lines;
 
   // Timestamp first so TIME_* directives lead the stanza, then format, then sizing.
-  let suggestions: ScaffoldSuggestion[] = [
-    ...detectTimestamp(lines),
-    ...format,
-    ...detectTruncate(segments),
-  ];
+  let suggestions: ScaffoldSuggestion[] = [...detectTimestamp(lines), ...format, ...detectTruncate(segments)];
 
   // Never propose INDEXED_EXTRACTIONS and KV_MODE together: applying both
   // double-extracts and duplicates field values. When a delimited (index-time)

@@ -7,8 +7,13 @@ import { makeEvent } from '../../test/makeEvent';
 
 const ev = (fields: Record<string, string | string[]> = {}): SplunkEvent =>
   makeEvent('raw text', { fields, metadata: { index: 'main', host: 'h1', source: 's', sourcetype: 'st' } });
-const dir = (key: string, value: string, directiveType: string, className: string): ConfDirective =>
-  ({ key, value, line: 1, directiveType, className });
+const dir = (key: string, value: string, directiveType: string, className: string): ConfDirective => ({
+  key,
+  value,
+  line: 1,
+  directiveType,
+  className,
+});
 
 // Alias pairs are carried as data on the step, not parsed out of `description`,
 // a display string.
@@ -64,10 +69,7 @@ describe('EVAL — the step carries the expression behind each field (#129)', ()
   it('maps each computed field to its expression', () => {
     const r = applyEvalExpressions(
       [ev({ bytes: '2048' })],
-      [
-        dir('EVAL-kb', 'bytes / 1024', 'EVAL', 'kb'),
-        dir('EVAL-label', '"size:" . bytes', 'EVAL', 'label'),
-      ],
+      [dir('EVAL-kb', 'bytes / 1024', 'EVAL', 'kb'), dir('EVAL-label', '"size:" . bytes', 'EVAL', 'label')],
       runCtx(FIXED_NOW),
     )[0]!;
     const step = r.processingTrace.find((t) => t.processor === 'EVAL')!;

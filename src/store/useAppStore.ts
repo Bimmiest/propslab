@@ -214,8 +214,14 @@ function loadSettings(): { perEventPipeline: boolean; manualApply: boolean } {
 
 type OutputTabState = Pick<
   AppState,
-  | 'regexPattern' | 'setRegexPattern' | 'regexClassName' | 'setRegexClassName'
-  | 'previewSubTab' | 'setPreviewSubTab' | 'previewFilters' | 'setPreviewFilters'
+  | 'regexPattern'
+  | 'setRegexPattern'
+  | 'regexClassName'
+  | 'setRegexClassName'
+  | 'previewSubTab'
+  | 'setPreviewSubTab'
+  | 'previewFilters'
+  | 'setPreviewFilters'
 >;
 
 /** What the output tabs keep across unmounting: the Regex tab's input, the Preview tab's sub-tab and filters. */
@@ -248,7 +254,11 @@ function settingsState(set: StoreApi<AppState>['setState']): SettingsState {
         const perEventPipeline = !state.settings.perEventPipeline;
         const manualApply = perEventPipeline ? true : state.settings.manualApply;
         const next = { ...state.settings, perEventPipeline, manualApply };
-        try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+        try {
+          localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
+        } catch {
+          /* ignore */
+        }
         return { settings: next };
       }),
     toggleManualApply: () =>
@@ -261,7 +271,11 @@ function settingsState(set: StoreApi<AppState>['setState']): SettingsState {
         // disagreed until then.
         if (state.settings.perEventPipeline && state.settings.manualApply) return {};
         const next = { ...state.settings, manualApply: !state.settings.manualApply };
-        try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+        try {
+          localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
+        } catch {
+          /* ignore */
+        }
         return { settings: next };
       }),
   };
@@ -301,9 +315,7 @@ export const useAppStore = create<AppState>((set) => ({
       metadata: { ...inputs.metadata },
       loadedInputs: inputs,
       currentPage: 1,
-      ...(state.settings.manualApply
-        ? { manualRunTick: state.manualRunTick + 1, pipelineDirty: false }
-        : {}),
+      ...(state.settings.manualApply ? { manualRunTick: state.manualRunTick + 1, pipelineDirty: false } : {}),
     })),
 
   processingResult: null,
@@ -316,7 +328,11 @@ export const useAppStore = create<AppState>((set) => ({
   toggleTheme: () =>
     set((state) => {
       const theme = state.theme === 'light' ? 'dark' : 'light';
-      try { localStorage.setItem(THEME_KEY, theme); } catch { /* ignore */ }
+      try {
+        localStorage.setItem(THEME_KEY, theme);
+      } catch {
+        /* ignore */
+      }
       return { theme };
     }),
 

@@ -1,6 +1,16 @@
 import { describe, it, expect, vi } from 'vitest';
 import fc from 'fast-check';
-import { cachedFormatCount, cachedZoneCount, formatSpecifiers, formatStrftime, parseTimestamp, parseTzAlias, strftimeToRegex, supportedSpecifiers, unsupportedSpecifiers } from '../strftime';
+import {
+  cachedFormatCount,
+  cachedZoneCount,
+  formatSpecifiers,
+  formatStrftime,
+  parseTimestamp,
+  parseTzAlias,
+  strftimeToRegex,
+  supportedSpecifiers,
+  unsupportedSpecifiers,
+} from '../strftime';
 import { fcSeed } from '../../test/fcSeed';
 
 /** Helper: ISO string of a parsed timestamp, or null. */
@@ -11,18 +21,15 @@ function iso(text: string, format: string, tz?: string): string | null {
 
 describe('strftime — baseline directives (regression)', () => {
   it('parses a full ISO-8601 timestamp with milliseconds', () => {
-    expect(iso('2024-01-15T10:00:00.123', '%Y-%m-%dT%H:%M:%S.%3N'))
-      .toBe('2024-01-15T10:00:00.123Z');
+    expect(iso('2024-01-15T10:00:00.123', '%Y-%m-%dT%H:%M:%S.%3N')).toBe('2024-01-15T10:00:00.123Z');
   });
 
   it('parses month abbreviations', () => {
-    expect(iso('Jan 15 2024 10:00:00', '%b %d %Y %H:%M:%S'))
-      .toBe('2024-01-15T10:00:00.000Z');
+    expect(iso('Jan 15 2024 10:00:00', '%b %d %Y %H:%M:%S')).toBe('2024-01-15T10:00:00.000Z');
   });
 
   it('applies a numeric %z offset', () => {
-    expect(iso('2024-01-15T10:00:00+05:30', '%Y-%m-%dT%H:%M:%S%z'))
-      .toBe('2024-01-15T04:30:00.000Z');
+    expect(iso('2024-01-15T10:00:00+05:30', '%Y-%m-%dT%H:%M:%S%z')).toBe('2024-01-15T04:30:00.000Z');
   });
 
   it('reads a four-digit year below 100 as written, not as 19xx (#371)', () => {
@@ -41,18 +48,15 @@ describe('strftime — baseline directives (regression)', () => {
 
 describe('#69.1 — Splunk enhanced-strptime specifiers', () => {
   it('supports %:z (offset with a colon)', () => {
-    expect(iso('2024-01-02T03:04:05+05:30', '%Y-%m-%dT%H:%M:%S%:z'))
-      .toBe('2024-01-01T21:34:05.000Z');
+    expect(iso('2024-01-02T03:04:05+05:30', '%Y-%m-%dT%H:%M:%S%:z')).toBe('2024-01-01T21:34:05.000Z');
   });
 
   it('supports %::z (offset with seconds)', () => {
-    expect(iso('2024-01-02T03:04:05+05:30:00', '%Y-%m-%dT%H:%M:%S%::z'))
-      .toBe('2024-01-01T21:34:05.000Z');
+    expect(iso('2024-01-02T03:04:05+05:30:00', '%Y-%m-%dT%H:%M:%S%::z')).toBe('2024-01-01T21:34:05.000Z');
   });
 
   it('supports bare %N as %9N (nanoseconds)', () => {
-    expect(iso('2024-01-15T10:00:00.123456789', '%Y-%m-%dT%H:%M:%S.%N'))
-      .toBe('2024-01-15T10:00:00.123Z');
+    expect(iso('2024-01-15T10:00:00.123456789', '%Y-%m-%dT%H:%M:%S.%N')).toBe('2024-01-15T10:00:00.123Z');
   });
 
   it('supports the %Q subsecond family with %s', () => {
@@ -76,13 +80,11 @@ describe('#69.2 — %s must not discard captured subseconds', () => {
 
 describe('#69.3 — numeric directives accept 1-2 unpadded digits', () => {
   it('parses US-style unpadded dates and times', () => {
-    expect(iso('1/5/2024 3:04:05', '%m/%d/%Y %H:%M:%S'))
-      .toBe('2024-01-05T03:04:05.000Z');
+    expect(iso('1/5/2024 3:04:05', '%m/%d/%Y %H:%M:%S')).toBe('2024-01-05T03:04:05.000Z');
   });
 
   it('still parses zero-padded values', () => {
-    expect(iso('01/05/2024 03:04:05', '%m/%d/%Y %H:%M:%S'))
-      .toBe('2024-01-05T03:04:05.000Z');
+    expect(iso('01/05/2024 03:04:05', '%m/%d/%Y %H:%M:%S')).toBe('2024-01-05T03:04:05.000Z');
   });
 });
 
@@ -173,9 +175,7 @@ describe('#159 — IANA zone names resolve against real zone data', () => {
   });
 
   it('still prefers an explicit offset in the event over the stanza zone', () => {
-    expect(iso('2026-01-15 10:00:00 +0900', `${FMT} %z`, 'America/New_York')).toBe(
-      '2026-01-15T01:00:00.000Z',
-    );
+    expect(iso('2026-01-15 10:00:00 +0900', `${FMT} %z`, 'America/New_York')).toBe('2026-01-15T01:00:00.000Z');
   });
 
   it('treats an unresolvable zone as UTC and reports it', () => {
@@ -212,7 +212,13 @@ describe('#159 — IANA zone names resolve against real zone data', () => {
     // the table's fixed -08:00 stands.
     expect(iso('2026-07-01 10:00:00', FMT, 'PST')).toBe('2026-07-01T18:00:00.000Z');
     // A TZ_ALIAS target is a zone read from the event too.
-    const aliased = parseTimestamp('2026-07-01 10:00:00 XYZ', `${FMT} %Z`, undefined, undefined, new Map([['XYZ', 'CET']]));
+    const aliased = parseTimestamp(
+      '2026-07-01 10:00:00 XYZ',
+      `${FMT} %Z`,
+      undefined,
+      undefined,
+      new Map([['XYZ', 'CET']]),
+    );
     expect(aliased?.toISOString()).toBe('2026-07-01T09:00:00.000Z');
   });
 });
@@ -222,7 +228,7 @@ describe('#159 — IANA zone names resolve against real zone data', () => {
 describe('strftime — GMT-relative zone specs (#227)', () => {
   const FMT = '%Y-%m-%d %H:%M:%S';
 
-  it('reads GMT-5:00 as UTC-5, the sign meaning Splunk\'s example relies on', () => {
+  it("reads GMT-5:00 as UTC-5, the sign meaning Splunk's example relies on", () => {
     expect(iso('2026-01-15 10:00:00', FMT, 'GMT-5:00')).toBe('2026-01-15T15:00:00.000Z');
   });
 
@@ -305,7 +311,7 @@ describe('strftime — the year of a yearless timestamp (#356)', () => {
   });
 
   // Found by timestampProperties.test.ts.
-  it('goes back to the last 29 February rather than forward to this year\'s', () => {
+  it("goes back to the last 29 February rather than forward to this year's", () => {
     expect(at('Feb 29 10:00:00', '2024-01-15T00:00:00Z')).toBe('2020-02-29T10:00:00.000Z');
   });
 
@@ -403,17 +409,33 @@ describe('formatStrftime then parseTimestamp agree for every specifier (#429)', 
   // read in the host's real zone, which %z/%Z carry across.
   const T = '%H:%M:%S %z';
   const cases = [
-    `%Y-%m-%d ${T}`, `%y-%m-%d ${T}`, `%Y-%m-%e ${T}`, `%Y %j ${T}`,
-    `%Y %b %d ${T}`, `%Y %B %d ${T}`, `%a %A %F ${T}`,
-    '%Y-%m-%d %I:%M:%S %p %z', '%Y-%m-%d %l:%M:%S %p %z', '%Y-%m-%d %k:%M:%S %z',
-    '%F %T %Z', '%F %T %:z', '%F %T %::z', '%s', '%s.%3N', '100%% %F %T %z',
-    ...['%1N', '%2N', '%3N', '%4N', '%5N', '%6N', '%7N', '%8N', '%9N', '%N', '%Q', '%3Q', '%6Q', '%9Q', '%f']
-      .map((s) => `%F %T.${s} %z`),
+    `%Y-%m-%d ${T}`,
+    `%y-%m-%d ${T}`,
+    `%Y-%m-%e ${T}`,
+    `%Y %j ${T}`,
+    `%Y %b %d ${T}`,
+    `%Y %B %d ${T}`,
+    `%a %A %F ${T}`,
+    '%Y-%m-%d %I:%M:%S %p %z',
+    '%Y-%m-%d %l:%M:%S %p %z',
+    '%Y-%m-%d %k:%M:%S %z',
+    '%F %T %Z',
+    '%F %T %:z',
+    '%F %T %::z',
+    '%s',
+    '%s.%3N',
+    '100%% %F %T %z',
+    ...['%1N', '%2N', '%3N', '%4N', '%5N', '%6N', '%7N', '%8N', '%9N', '%N', '%Q', '%3Q', '%6Q', '%9Q', '%f'].map(
+      (s) => `%F %T.${s} %z`,
+    ),
   ];
 
   it('covers every supported specifier', () => {
     for (const spec of supportedSpecifiers()) {
-      expect(cases.some((c) => c.includes(spec)), spec).toBe(true);
+      expect(
+        cases.some((c) => c.includes(spec)),
+        spec,
+      ).toBe(true);
     }
   });
 
@@ -425,8 +447,9 @@ describe('formatStrftime then parseTimestamp agree for every specifier (#429)', 
         const text = formatStrftime(new Date(ms), format);
         const width = /%(\d)N/.exec(format)?.[1];
         const precision = width ? 10 ** Math.max(0, 3 - Number(width)) : /%\d?[NQf]/.test(format) ? 1 : 1000;
-        expect(parseTimestamp(text, format)?.getTime(), `${format} → ${text}`)
-          .toBe(Math.floor(ms / precision) * precision);
+        expect(parseTimestamp(text, format)?.getTime(), `${format} → ${text}`).toBe(
+          Math.floor(ms / precision) * precision,
+        );
       }),
       { seed: fcSeed(429), numRuns: 2000 },
     );
@@ -477,7 +500,8 @@ describe('zone formatter cache (#480)', () => {
 });
 
 describe('formatSpecifiers (#457)', () => {
-  const tokens = (format: string) => formatSpecifiers(format).map((s) => `${s.index}:${s.specifier}:${s.supported ? 'y' : 'n'}`);
+  const tokens = (format: string) =>
+    formatSpecifiers(format).map((s) => `${s.index}:${s.specifier}:${s.supported ? 'y' : 'n'}`);
 
   it('tokenises longest first, as the parser does', () => {
     expect(tokens('%::z %:z %3N %N %3Q')).toEqual(['0:%::z:y', '5:%:z:y', '9:%3N:y', '13:%N:y', '16:%3Q:y']);
@@ -493,7 +517,9 @@ describe('formatSpecifiers (#457)', () => {
 
   it('is what unsupportedSpecifiers reports, less the supported ones', () => {
     expect(unsupportedSpecifiers('%Y %i %0N %')).toEqual([
-      { specifier: '%i', index: 3 }, { specifier: '%0N', index: 6 }, { specifier: '%', index: 10 },
+      { specifier: '%i', index: 3 },
+      { specifier: '%0N', index: 6 },
+      { specifier: '%', index: 10 },
     ]);
   });
 });

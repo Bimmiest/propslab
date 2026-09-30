@@ -102,9 +102,7 @@ describe('TimestampTab', () => {
         _raw: '2026-01-15 10:00:00 login',
         _time: time,
         timestampText: 'host=web01 2026-01-15 10:00:00 login',
-        processingTrace: [
-          { processor: 'timestampExtractor', phase: 'index-time', timeSource: 'TIME_FORMAT' },
-        ],
+        processingTrace: [{ processor: 'timestampExtractor', phase: 'index-time', timeSource: 'TIME_FORMAT' }],
       },
     };
     render(<TimestampTab items={[rewritten]} currentPage={1} eventsPerPage={10} />);

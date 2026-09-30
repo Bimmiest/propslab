@@ -38,12 +38,18 @@ export function ConfirmDialog({
       header={<DialogHeader icon="warning" iconClassName="text-[var(--color-warning)]" title={title} titleHidden />}
       footer={
         <DialogFooter>
-          <DialogButton variant="cancel" onClick={onCancel}>Cancel</DialogButton>
-          <DialogButton variant="danger" onClick={onConfirm}>{confirmLabel}</DialogButton>
+          <DialogButton variant="cancel" onClick={onCancel}>
+            Cancel
+          </DialogButton>
+          <DialogButton variant="danger" onClick={onConfirm}>
+            {confirmLabel}
+          </DialogButton>
         </DialogFooter>
       }
     >
-      <div aria-hidden="true" className="p-4 text-sm" style={{ color: 'var(--color-text-secondary)' }}>{children}</div>
+      <div aria-hidden="true" className="p-4 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+        {children}
+      </div>
     </DialogFrame>
   );
 }

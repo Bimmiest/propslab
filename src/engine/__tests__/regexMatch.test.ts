@@ -47,6 +47,9 @@ describe('matchInputs', () => {
     expect(Object.getOwnPropertyDescriptor(r!.groupSpans, '__proto__')?.value).toEqual([0, 1]);
     // Still a plain object, so it survives postMessage and Object.entries as before.
     expect(Object.getPrototypeOf(r!.groups)).toBe(Object.prototype);
-    expect(Object.entries(structuredClone(r!.groups))).toEqual([['__proto__', 'x'], ['v', '1']]);
+    expect(Object.entries(structuredClone(r!.groups))).toEqual([
+      ['__proto__', 'x'],
+      ['v', '1'],
+    ]);
   });
 });

@@ -71,9 +71,7 @@ export function timestampTextOf(event: ViewEvent): string {
 
 /** How the pipeline actually resolved this event's `_time`. */
 export function resolvedTimeSource(event: ViewEvent): TimeSource | undefined {
-  return event.processingTrace
-    .filter((step) => step.processor === 'timestampExtractor')
-    .at(-1)?.timeSource;
+  return event.processingTrace.filter((step) => step.processor === 'timestampExtractor').at(-1)?.timeSource;
 }
 
 /** A run of an event's text and how the overlay draws it. */
@@ -96,7 +94,11 @@ export interface OverlaySegment {
  * re-derived here: the user's TIME_PREFIX must never run during render, where
  * no watchdog can stop it.
  */
-export function overlaySegments(raw: string, probe: TimestampProbe | null, config: TimeConfig): OverlaySegment[] | null {
+export function overlaySegments(
+  raw: string,
+  probe: TimestampProbe | null,
+  config: TimeConfig,
+): OverlaySegment[] | null {
   const result = probe?.match ?? null;
   const segments: OverlaySegment[] = [];
   if (!result) {
@@ -123,7 +125,10 @@ export function overlaySegments(raw: string, probe: TimestampProbe | null, confi
   // Prefix region (only if TIME_PREFIX was configured and matched something)
   if (config.timePrefix && result.prefixEnd > result.prefixStart) {
     segments.push({
-      key: 'prefix', kind: 'prefix', text: raw.substring(cursor, result.prefixEnd), title: `TIME_PREFIX: ${config.timePrefix}`,
+      key: 'prefix',
+      kind: 'prefix',
+      text: raw.substring(cursor, result.prefixEnd),
+      title: `TIME_PREFIX: ${config.timePrefix}`,
     });
     cursor = result.prefixEnd;
   }
@@ -136,7 +141,10 @@ export function overlaySegments(raw: string, probe: TimestampProbe | null, confi
 
   const parsed = result.parsedTimeMs != null ? new Date(result.parsedTimeMs).toISOString() : 'failed';
   segments.push({
-    key: 'ts', kind: 'timestamp', text: raw.substring(cursor, result.tsEnd), title: `TIME_FORMAT: ${config.timeFormat}\nParsed: ${parsed}`,
+    key: 'ts',
+    kind: 'timestamp',
+    text: raw.substring(cursor, result.tsEnd),
+    title: `TIME_FORMAT: ${config.timeFormat}\nParsed: ${parsed}`,
   });
   cursor = result.tsEnd;
 

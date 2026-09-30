@@ -53,10 +53,7 @@ export interface SuspectList {
  * and an eval expression each literal regex it passes to `match()`,
  * `replace()` or `mvfind()` (`via` names the function).
  */
-export function collectRegexSuspects(
-  propsConf: ConfInput,
-  transformsConf: ConfInput,
-): RegexSuspect[] {
+export function collectRegexSuspects(propsConf: ConfInput, transformsConf: ConfInput): RegexSuspect[] {
   const suspects: RegexSuspect[] = [];
   const files: ['props.conf' | 'transforms.conf', ConfInput][] = [
     ['props.conf', propsConf],

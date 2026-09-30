@@ -44,7 +44,9 @@ function Sidebar({ search = '' }: { search?: string }) {
 }
 
 function renderedIndexes(container: HTMLElement): number[] {
-  return [...container.querySelectorAll<HTMLElement>('[data-window-index]')].map((e) => Number(e.dataset['windowIndex']));
+  return [...container.querySelectorAll<HTMLElement>('[data-window-index]')].map((e) =>
+    Number(e.dataset['windowIndex']),
+  );
 }
 
 describe('FieldTreeList windowing (#469)', () => {

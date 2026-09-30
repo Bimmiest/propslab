@@ -24,8 +24,12 @@ import { runCtx, FIXED_NOW } from './runCtx';
 import { makeEvent } from '../../test/makeEvent';
 
 const event = (raw: string): SplunkEvent => makeEvent(raw);
-const ingest = (value: string, line = 1): ConfDirective =>
-  ({ key: 'INGEST_EVAL', value, line, directiveType: 'INGEST_EVAL' });
+const ingest = (value: string, line = 1): ConfDirective => ({
+  key: 'INGEST_EVAL',
+  value,
+  line,
+  directiveType: 'INGEST_EVAL',
+});
 
 beforeEach(() => {
   parses.count = 0;

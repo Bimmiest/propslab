@@ -16,15 +16,13 @@ function diagnosticsFor(props: string, transforms = '') {
   }).diagnostics;
 }
 
-const messagesFor = (props: string, transforms = '') =>
-  diagnosticsFor(props, transforms).map((d) => d.message);
+const messagesFor = (props: string, transforms = '') => diagnosticsFor(props, transforms).map((d) => d.message);
 
 describe('#177 — a transforms setting that is inert in its phase', () => {
   it('flags a search-time-only setting in a TRANSFORMS- stanza', () => {
-    const d = diagnosticsFor(
-      'TRANSFORMS-x = t1\n',
-      '[t1]\nREGEX = (\\w+)\nFORMAT = a::$1\nMV_ADD = true\n',
-    ).find((x) => x.directiveKey === 'MV_ADD');
+    const d = diagnosticsFor('TRANSFORMS-x = t1\n', '[t1]\nREGEX = (\\w+)\nFORMAT = a::$1\nMV_ADD = true\n').find(
+      (x) => x.directiveKey === 'MV_ADD',
+    );
     expect(d?.level).toBe('warning');
     expect(d?.message).toContain('does nothing here');
     expect(d?.message).toContain('TRANSFORMS-');
@@ -32,10 +30,9 @@ describe('#177 — a transforms setting that is inert in its phase', () => {
   });
 
   it('flags an index-time-only setting in a REPORT- stanza', () => {
-    const d = diagnosticsFor(
-      'REPORT-x = t1\n',
-      '[t1]\nREGEX = (?<a>\\w+)\nREPEAT_MATCH = true\n',
-    ).find((x) => x.directiveKey === 'REPEAT_MATCH');
+    const d = diagnosticsFor('REPORT-x = t1\n', '[t1]\nREGEX = (?<a>\\w+)\nREPEAT_MATCH = true\n').find(
+      (x) => x.directiveKey === 'REPEAT_MATCH',
+    );
     expect(d?.message).toContain('REPORT-');
     expect(d?.message).toContain('index-time');
   });
@@ -69,9 +66,7 @@ describe('#177 — a transforms setting that is inert in its phase', () => {
 
 describe('#179 — a value that is not the documented type', () => {
   it('flags a boolean that is not a boolean literal', () => {
-    const d = diagnosticsFor('SHOULD_LINEMERGE = yes please\n').find(
-      (x) => x.directiveKey === 'SHOULD_LINEMERGE',
-    );
+    const d = diagnosticsFor('SHOULD_LINEMERGE = yes please\n').find((x) => x.directiveKey === 'SHOULD_LINEMERGE');
     expect(d?.level).toBe('warning');
     expect(d?.message).toContain('takes a boolean');
   });
@@ -81,7 +76,10 @@ describe('#179 — a value that is not the documented type', () => {
     // linter accepts every spelling the engine honours.
     for (const v of ['true', 'False', '1', '0', 't', 'f', 'yes', 'no', 'y', 'n', 'on', 'off']) {
       const msgs = messagesFor(`SHOULD_LINEMERGE = ${v}\n`);
-      expect(msgs.filter((m) => m.includes('takes a boolean')), `for ${v}`).toEqual([]);
+      expect(
+        msgs.filter((m) => m.includes('takes a boolean')),
+        `for ${v}`,
+      ).toEqual([]);
     }
   });
 
@@ -128,10 +126,9 @@ describe('#179 — a value that is not the documented type', () => {
   });
 
   it('checks transforms.conf too', () => {
-    const d = diagnosticsFor(
-      'REPORT-x = t1\n',
-      '[t1]\nREGEX = (\\w+)\nFORMAT = a::$1\nMV_ADD = maybe\n',
-    ).find((x) => x.directiveKey === 'MV_ADD' && x.message.includes('takes a boolean'));
+    const d = diagnosticsFor('REPORT-x = t1\n', '[t1]\nREGEX = (\\w+)\nFORMAT = a::$1\nMV_ADD = maybe\n').find(
+      (x) => x.directiveKey === 'MV_ADD' && x.message.includes('takes a boolean'),
+    );
     expect(d).toBeDefined();
   });
 });

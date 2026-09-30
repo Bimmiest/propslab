@@ -100,8 +100,7 @@ function lintDirectiveSupport(dir: ConfDirective, file: ConfFile, diagnostics: V
     // permanent edge, so it is informational.
     level: entry.support === 'ignored' ? 'warning' : 'info',
     message:
-      `${dir.key} is recognised but not simulated — the preview ignores it. ` +
-      `${entry.note ?? ''}${tracking}`.trim(),
+      `${dir.key} is recognised but not simulated — the preview ignores it. ` + `${entry.note ?? ''}${tracking}`.trim(),
     file,
     ...atDirective(dir),
     directiveKey: dir.key,
@@ -152,7 +151,9 @@ function lintDestKeyFormat(
   diagnostics: ValidationDiagnostic[],
 ): void {
   // hasOwn: DEST_KEY is user input, and `toString` must not hit the prototype.
-  const requiredPrefix = Object.hasOwn(DEST_KEY_REQUIRED_PREFIX, destKey) ? DEST_KEY_REQUIRED_PREFIX[destKey] : undefined;
+  const requiredPrefix = Object.hasOwn(DEST_KEY_REQUIRED_PREFIX, destKey)
+    ? DEST_KEY_REQUIRED_PREFIX[destKey]
+    : undefined;
   if (requiredPrefix && !formatDir.value.includes(requiredPrefix)) {
     diagnostics.push({
       level: 'warning',
@@ -211,9 +212,13 @@ function lintTransformReferences(
     for (const dir of stanza.directives) {
       // RULESET- is index-time like TRANSFORMS-: a stanza it names is
       // referenced, must exist, and is linted as index-time.
-      if (dir.directiveType !== 'TRANSFORMS' && dir.directiveType !== 'RULESET' && dir.directiveType !== 'REPORT') continue;
+      if (dir.directiveType !== 'TRANSFORMS' && dir.directiveType !== 'RULESET' && dir.directiveType !== 'REPORT')
+        continue;
       const phase = dir.directiveType === 'REPORT' ? 'search-time' : 'index-time';
-      const stanzaNames = dir.value.split(',').map((s) => s.trim()).filter(Boolean);
+      const stanzaNames = dir.value
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
       for (const name of stanzaNames) {
         const seen = transformPhase.get(name);
         transformPhase.set(name, seen === undefined || seen === phase ? phase : 'both');
@@ -307,8 +312,7 @@ export function lintMatchedDirectives(
     // search-time extraction it describes would actually run.
     const autoKvJson = effectiveBool(searchTimeDirectives, 'AUTO_KV_JSON', true);
     const searchTimeJson =
-      kvMode === 'json' ||
-      ((kvMode === undefined || kvMode === 'auto' || kvMode === 'auto_escaped') && autoKvJson);
+      kvMode === 'json' || ((kvMode === undefined || kvMode === 'auto' || kvMode === 'auto_escaped') && autoKvJson);
     if (kvMode !== 'none' && searchTimeJson) {
       const kvDesc = kvMode ? `KV_MODE = ${kvMode}` : 'the default KV_MODE = auto';
       diagnostics.push({

@@ -41,10 +41,7 @@ describe('matchStanzas — precedence ordering', () => {
   });
 
   it('sourcetype wins over default', () => {
-    const stanzas = [
-      stanza('default', 'default'),
-      stanza('sourcetype', 'access_combined'),
-    ];
+    const stanzas = [stanza('default', 'default'), stanza('sourcetype', 'access_combined')];
     const result = matchStanzas(stanzas, META);
     expect(result[0]!.type).toBe('sourcetype');
   });
@@ -61,10 +58,7 @@ describe('matchStanzas — precedence ordering', () => {
   });
 
   it('unmatched stanza types are excluded', () => {
-    const stanzas = [
-      stanza('sourcetype', 'wrong_sourcetype'),
-      stanza('default', 'default'),
-    ];
+    const stanzas = [stanza('sourcetype', 'wrong_sourcetype'), stanza('default', 'default')];
     const result = matchStanzas(stanzas, META);
     expect(result).toHaveLength(1);
     expect(result[0]!.type).toBe('default');
@@ -114,12 +108,18 @@ describe('matchStanzas — wildcard patterns', () => {
   it('counts literal dots toward host specificity', () => {
     const meta = { ...META, host: 'a.b.c.d' };
     const literal: ConfStanza = {
-      name: 'host::a.b.c.d', type: 'host', hostPattern: 'a.b.c.d',
-      directives: [], lineRange: { start: 1, end: 2 },
+      name: 'host::a.b.c.d',
+      type: 'host',
+      hostPattern: 'a.b.c.d',
+      directives: [],
+      lineRange: { start: 1, end: 2 },
     };
     const wild: ConfStanza = {
-      name: 'host::a?b?c?d', type: 'host', hostPattern: 'a?b?c?d',
-      directives: [], lineRange: { start: 1, end: 2 },
+      name: 'host::a?b?c?d',
+      type: 'host',
+      hostPattern: 'a?b?c?d',
+      directives: [],
+      lineRange: { start: 1, end: 2 },
     };
     // Wildcard listed first: a tie (dots uncounted) would leave it ahead. The
     // literal must rank first because its four literal dots make it more specific.
@@ -188,8 +188,11 @@ describe('matchStanzas — host case-insensitivity without the `i` flag (#118)',
 // 'or'. `( )` are used to limit scope of `|`." Not a captured fixture.
 describe('matchStanzas — `|` alternation and `( )` scoping (#284)', () => {
   const source = (pattern: string): ConfStanza => ({
-    name: `source::${pattern}`, type: 'source', sourcePattern: pattern,
-    directives: [], lineRange: { start: 1, end: 2 },
+    name: `source::${pattern}`,
+    type: 'source',
+    sourcePattern: pattern,
+    directives: [],
+    lineRange: { start: 1, end: 2 },
   });
   const at = (path: string): EventMetadata => ({ ...META, source: path });
 
@@ -233,8 +236,10 @@ describe('matchStanzas — `|` alternation and `( )` scoping (#284)', () => {
     // literal wins even when listed second.
     const alt = source('/var/log/(messages|secure)');
     const literal = source('/var/log/secure');
-    expect(matchStanzas([alt, literal], at('/var/log/secure')).map((s) => s.name))
-      .toEqual(['source::/var/log/secure', 'source::/var/log/(messages|secure)']);
+    expect(matchStanzas([alt, literal], at('/var/log/secure')).map((s) => s.name)).toEqual([
+      'source::/var/log/secure',
+      'source::/var/log/(messages|secure)',
+    ]);
   });
 
   it('scores an alternation by its least specific branch, not by every branch', () => {
@@ -244,8 +249,10 @@ describe('matchStanzas — `|` alternation and `( )` scoping (#284)', () => {
     // plus the parentheses and `|`, scored the alternation 26 and put it first.
     const alt = source('/var/log/(messages|secure)');
     const wild = source('/var/log/message?');
-    expect(matchStanzas([alt, wild], at('/var/log/messages')).map((s) => s.name))
-      .toEqual(['source::/var/log/message?', 'source::/var/log/(messages|secure)']);
+    expect(matchStanzas([alt, wild], at('/var/log/messages')).map((s) => s.name)).toEqual([
+      'source::/var/log/message?',
+      'source::/var/log/(messages|secure)',
+    ]);
   });
 });
 
@@ -253,8 +260,11 @@ describe('matchStanzas — `|` alternation and `( )` scoping (#284)', () => {
 // backslash '\'". Not checked against a capture.
 describe('matchStanzas — a doubled backslash matches one literal backslash (#303)', () => {
   const source = (pattern: string): ConfStanza => ({
-    name: `source::${pattern}`, type: 'source', sourcePattern: pattern,
-    directives: [], lineRange: { start: 1, end: 2 },
+    name: `source::${pattern}`,
+    type: 'source',
+    sourcePattern: pattern,
+    directives: [],
+    lineRange: { start: 1, end: 2 },
   });
   const at = (path: string): EventMetadata => ({ ...META, source: path });
   // The conf text `C:\\logs\\app.log`, i.e. written the way the spec says.
@@ -288,8 +298,10 @@ describe('matchStanzas — a doubled backslash matches one literal backslash (#3
 
   it('is still a literal-matching stanza, with the default priority that implies', () => {
     const wild = source('C:\\\\logs\\\\*');
-    expect(matchStanzas([wild, source(SPEC_WINDOWS)], at('C:\\logs\\app.log')).map((s) => s.name))
-      .toEqual([`source::${SPEC_WINDOWS}`, 'source::C:\\\\logs\\\\*']);
+    expect(matchStanzas([wild, source(SPEC_WINDOWS)], at('C:\\logs\\app.log')).map((s) => s.name)).toEqual([
+      `source::${SPEC_WINDOWS}`,
+      'source::C:\\\\logs\\\\*',
+    ]);
   });
 
   it('scores an escaped pair as the one character it matches', () => {
@@ -298,8 +310,10 @@ describe('matchStanzas — a doubled backslash matches one literal backslash (#3
     // characters of each pair would score the first 14 and put it ahead.
     const escaped = source('C:\\\\logs\\\\*.log');
     const lone = source('C:\\logs\\a*.log');
-    expect(matchStanzas([escaped, lone], at('C:\\logs\\app.log')).map((s) => s.name))
-      .toEqual(['source::C:\\logs\\a*.log', 'source::C:\\\\logs\\\\*.log']);
+    expect(matchStanzas([escaped, lone], at('C:\\logs\\app.log')).map((s) => s.name)).toEqual([
+      'source::C:\\logs\\a*.log',
+      'source::C:\\\\logs\\\\*.log',
+    ]);
   });
 
   it('survives the conf parser: the stanza header keeps its backslashes', () => {
@@ -314,8 +328,10 @@ describe('matchStanzas — ASCII order breaks a full tie (#318)', () => {
   // captured `precedence-ascii-order` fixture agrees (`...fx_a...` beats
   // `...fx_z...`). What this pins is that file order does not decide it.
   const tied = (first: string, second: string) =>
-    parseConf(`[source::${first}]\nSEDCMD-who = s/M/${first}/\n\n[source::${second}]\nSEDCMD-who = s/M/${second}/\n`, 'props.conf')
-      .stanzas;
+    parseConf(
+      `[source::${first}]\nSEDCMD-who = s/M/${first}/\n\n[source::${second}]\nSEDCMD-who = s/M/${second}/\n`,
+      'props.conf',
+    ).stanzas;
   const meta: EventMetadata = { ...META, source: '/logs/app_a_app_z.log' };
 
   it('puts the ASCII-lower stanza first whichever comes first in the file', () => {

@@ -33,7 +33,10 @@ describe('isFieldVisible (#15)', () => {
   });
 
   it('terminates on a cyclic index rather than spinning', () => {
-    const cyclic = new Map<string, string | null>([['a', 'b'], ['b', 'a']]);
+    const cyclic = new Map<string, string | null>([
+      ['a', 'b'],
+      ['b', 'a'],
+    ]);
     const field: CollapsibleField = { name: 'a', depth: 1, parentName: 'b' };
     expect(isFieldVisible(field, new Set(), cyclic)).toBe(true);
   });
@@ -48,11 +51,7 @@ describe('reconcileCollapsed (#15)', () => {
   });
 
   it('collapses a parent that appears later', () => {
-    const result = reconcileCollapsed(
-      ['event', 'payload'],
-      new Set(['event']),
-      new Set(),
-    );
+    const result = reconcileCollapsed(['event', 'payload'], new Set(['event']), new Set());
     expect(result!.collapsed).toEqual(new Set(['payload']));
   });
 

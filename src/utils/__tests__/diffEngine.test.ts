@@ -30,8 +30,18 @@ describe('computeDiff', () => {
     const modified = 'one\nTWO\nthree\nfour\nfive\n';
     const segments = computeDiff(original, modified);
 
-    expect(segments.filter((s) => !s.added).map((s) => s.value).join('')).toBe(original);
-    expect(segments.filter((s) => !s.removed).map((s) => s.value).join('')).toBe(modified);
+    expect(
+      segments
+        .filter((s) => !s.added)
+        .map((s) => s.value)
+        .join(''),
+    ).toBe(original);
+    expect(
+      segments
+        .filter((s) => !s.removed)
+        .map((s) => s.value)
+        .join(''),
+    ).toBe(modified);
   });
 
   it('reports a pure addition without inventing a removal', () => {

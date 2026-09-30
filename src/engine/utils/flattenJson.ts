@@ -43,12 +43,7 @@ export interface FlattenOptions {
 }
 
 /** Append a value to a field, promoting to a multivalue array on repeated keys. */
-function addValue(
-  fields: Record<string, string | string[]>,
-  added: string[],
-  name: string,
-  value: string,
-): void {
+function addValue(fields: Record<string, string | string[]>, added: string[], name: string, value: string): void {
   // `addFieldValue` is hasOwnProperty-guarded and `__proto__`-safe, so keys that
   // collide with Object.prototype members (`toString`, `constructor`, …) are
   // extracted verbatim instead of reading back an inherited function.

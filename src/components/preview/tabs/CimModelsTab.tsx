@@ -62,9 +62,7 @@ function CimModelCard({ result }: { result: ReturnType<typeof validateCimComplia
   const variant = result.requiredPercent >= 80 ? 'success' : result.requiredPercent >= 40 ? 'warning' : 'error';
 
   return (
-    <div
-      className="border border-[var(--color-border)] rounded bg-[var(--color-bg-secondary)]"
-    >
+    <div className="border border-[var(--color-border)] rounded bg-[var(--color-bg-secondary)]">
       <button
         onClick={() => setExpanded(!expanded)}
         aria-expanded={expanded}
@@ -73,12 +71,12 @@ function CimModelCard({ result }: { result: ReturnType<typeof validateCimComplia
         <div className="flex-1">
           {/* A model with no matching field is dimmed with the muted token, not
               opacity, which would take the muted description below 4.5:1. */}
-          <div className={`text-sm font-medium ${hasMatches ? 'text-[var(--color-text-primary)]' : 'text-[var(--color-text-muted)]'}`}>
+          <div
+            className={`text-sm font-medium ${hasMatches ? 'text-[var(--color-text-primary)]' : 'text-[var(--color-text-muted)]'}`}
+          >
             {result.model.displayName}
           </div>
-          <div className="text-xs text-[var(--color-text-muted)]">
-            {result.model.description}
-          </div>
+          <div className="text-xs text-[var(--color-text-muted)]">{result.model.description}</div>
         </div>
         <div className="w-32">
           {declaresRequired ? (
@@ -101,11 +99,7 @@ function CimModelCard({ result }: { result: ReturnType<typeof validateCimComplia
       {expanded && (
         <div className="px-3 py-2 border-t border-[var(--color-border)] space-y-2">
           {declaresRequired && (
-            <FieldGroup
-              title="Required Fields"
-              present={result.requiredPresent}
-              missing={result.requiredMissing}
-            />
+            <FieldGroup title="Required Fields" present={result.requiredPresent} missing={result.requiredMissing} />
           )}
           <FieldGroup
             title="Recommended Fields"
@@ -118,21 +112,16 @@ function CimModelCard({ result }: { result: ReturnType<typeof validateCimComplia
   );
 }
 
-function FieldGroup({
-  title,
-  present,
-  missing,
-}: {
-  title: string;
-  present: string[];
-  missing: string[];
-}) {
+function FieldGroup({ title, present, missing }: { title: string; present: string[]; missing: string[] }) {
   return (
     <div>
       <div className="text-xs font-medium text-[var(--color-text-muted)] mb-1">{title}</div>
       <div className="flex flex-wrap gap-1">
         {present.map((f) => (
-          <span key={f} className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-[var(--color-success)]/10 text-[var(--color-success)]">
+          <span
+            key={f}
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-[var(--color-success)]/10 text-[var(--color-success)]"
+          >
             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
             </svg>
@@ -140,7 +129,10 @@ function FieldGroup({
           </span>
         ))}
         {missing.map((f) => (
-          <span key={f} className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-[var(--color-error)]/10 text-[var(--color-error)]">
+          <span
+            key={f}
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-[var(--color-error)]/10 text-[var(--color-error)]"
+          >
             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>

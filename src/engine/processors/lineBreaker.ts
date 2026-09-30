@@ -292,7 +292,9 @@ function shouldLineMergeFor(directives: ConfDirective[]): boolean {
   const shouldLineMergeVal = getDirective(directives, 'SHOULD_LINEMERGE');
   const structuredFormat = getDirective(directives, 'INDEXED_EXTRACTIONS')?.trim().toLowerCase();
   const structured =
-    structuredFormat !== undefined && structuredFormat !== '' && structuredFormat !== 'none' &&
+    structuredFormat !== undefined &&
+    structuredFormat !== '' &&
+    structuredFormat !== 'none' &&
     !XML_EXTRACTIONS.has(structuredFormat);
   // Only an absent (or empty) key gets the structured-format default; an
   // explicit non-boolean reads as false, like every other boolean.
@@ -350,8 +352,7 @@ function readMergeRules(directives: ConfDirective[], diagnostics?: DiagnosticSin
   // four-line event, as the `linebreak-max-events` capture records.
   const maxEventsStr = getDirective(directives, 'MAX_EVENTS');
   const parsedMaxEvents = maxEventsStr !== undefined ? parseInt(maxEventsStr.trim(), 10) : 256;
-  const maxContinuationLines =
-    Number.isFinite(parsedMaxEvents) && parsedMaxEvents > 0 ? parsedMaxEvents : 256;
+  const maxContinuationLines = Number.isFinite(parsedMaxEvents) && parsedMaxEvents > 0 ? parsedMaxEvents : 256;
 
   // MUST_BREAK_AFTER adds a mandatory break; it does not license merging. When
   // it is the ONLY rule in force, Splunk breaks on every line. With no

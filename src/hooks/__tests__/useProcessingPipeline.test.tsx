@@ -422,7 +422,7 @@ describe('useProcessingPipeline', () => {
     expect(FakeWorker.instances[4]!.posted).toEqual([]);
   });
 
-  it('does not run a request inline when its replay\'s worker then fails to load (#326)', async () => {
+  it("does not run a request inline when its replay's worker then fails to load (#326)", async () => {
     // The request crashed worker 1; worker 2, carrying its replay, and worker 3
     // both fail to load, which exhausts the load-failure cap. The request still
     // crashed a worker, so it is reported rather than finished inline.

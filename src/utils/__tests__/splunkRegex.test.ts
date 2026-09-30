@@ -124,7 +124,11 @@ describe('PCRE syntax compiles and means what it means in PCRE', () => {
     expect([k[0], k.index]).toEqual(['bob', 5]);
     const cond = safeRegex('^(<)?\\w+(?(1)>)$')!;
     expect([cond.test('<a>'), cond.test('a'), cond.test('<a')]).toEqual([true, true, false]);
-    expect(safeRegex('\\Gab')!.matchAll('ababxab').map((m) => m.index)).toEqual([0, 2]);
+    expect(
+      safeRegex('\\Gab')!
+        .matchAll('ababxab')
+        .map((m) => m.index),
+    ).toEqual([0, 2]);
     expect(matches('^\\p{Lu}\\p{Ll}+$', 'Élan')).toBe(true);
     expect(matches('^\\X$', 'é')).toBe(true);
     expect(matches('^(a)\\g{-1}$', 'aa')).toBe(true);
@@ -194,12 +198,18 @@ describe('MATCH_LIMIT and DEPTH_LIMIT', () => {
     expect(extractionLimits()).toEqual({ matchLimit: DEFAULT_MATCH_LIMIT, depthLimit: DEFAULT_DEPTH_LIMIT });
     expect(extractionLimits('500000', '5000')).toEqual({ matchLimit: 500000, depthLimit: 5000 });
     expect(extractionLimits('0', '0')).toEqual({ matchLimit: 0xffffffff, depthLimit: 0xffffffff });
-    expect(extractionLimits('-1', 'lots')).toEqual({ matchLimit: DEFAULT_MATCH_LIMIT, depthLimit: DEFAULT_DEPTH_LIMIT });
+    expect(extractionLimits('-1', 'lots')).toEqual({
+      matchLimit: DEFAULT_MATCH_LIMIT,
+      depthLimit: DEFAULT_DEPTH_LIMIT,
+    });
   });
 
   it('treats an empty or blank value as unset, not as 0', () => {
     expect(extractionLimits('', '  ')).toEqual({ matchLimit: DEFAULT_MATCH_LIMIT, depthLimit: DEFAULT_DEPTH_LIMIT });
-    expect(extractionLimits('1.5', '1e3')).toEqual({ matchLimit: DEFAULT_MATCH_LIMIT, depthLimit: DEFAULT_DEPTH_LIMIT });
+    expect(extractionLimits('1.5', '1e3')).toEqual({
+      matchLimit: DEFAULT_MATCH_LIMIT,
+      depthLimit: DEFAULT_DEPTH_LIMIT,
+    });
     const re = safeRegex('^(a+)+$', '', extractionLimits(''))!;
     expect(re.exec(runaway)).toBeNull();
     expect(re.lastError).toMatch(/match limit exceeded/);

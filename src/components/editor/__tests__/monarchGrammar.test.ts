@@ -78,7 +78,12 @@ describe('a value continues on an odd run of trailing backslashes', () => {
 
   it('carries on through further lines that end in a backslash, then stops', () => {
     expect(kinds('REGEX = a\\\n[b]\\\n# c\\\n[d]\nKEY = v\n[st]')).toEqual([
-      'directive', 'text', 'text', 'text', 'directive', 'header',
+      'directive',
+      'text',
+      'text',
+      'text',
+      'directive',
+      'header',
     ]);
   });
 
@@ -101,7 +106,17 @@ describe('a value continues on an odd run of trailing backslashes', () => {
   });
 
   it('applies to every kind of value', () => {
-    for (const head of ['KEY', 'EVAL-x', 'INGEST_EVAL', 'EXTRACT-a', 'FIELDALIAS-a', 'TRANSFORMS-a', 'LOOKUP-a', 'REGEX', 'plain key']) {
+    for (const head of [
+      'KEY',
+      'EVAL-x',
+      'INGEST_EVAL',
+      'EXTRACT-a',
+      'FIELDALIAS-a',
+      'TRANSFORMS-a',
+      'LOOKUP-a',
+      'REGEX',
+      'plain key',
+    ]) {
       expect(kinds(`${head} = a\\\n[x]\\\n# y\nOTHER = z`), head).toEqual(['directive', 'text', 'text', 'directive']);
     }
   });
@@ -134,10 +149,47 @@ const tail = fc.constantFrom('', '', '\\', '\\\\', '\\\\\\', '\\ ', ' ');
 
 /** One line of a generated file: what it is meant to be, and its text (each line numbered). */
 const line = fc.oneof(
-  { weight: 4, arbitrary: fc.tuple(fc.constantFrom('KEY', 'EXTRACT-a', 'REGEX', 'EVAL-x', 'FIELDALIAS-y', 'TRANSFORMS-z', 'LOOKUP-l', 'other_key', 'a key'), fragment, tail).map(([k, f, t]) => (i: number) => `${k} = ${f}~${i}~${t}`) },
+  {
+    weight: 4,
+    arbitrary: fc
+      .tuple(
+        fc.constantFrom(
+          'KEY',
+          'EXTRACT-a',
+          'REGEX',
+          'EVAL-x',
+          'FIELDALIAS-y',
+          'TRANSFORMS-z',
+          'LOOKUP-l',
+          'other_key',
+          'a key',
+        ),
+        fragment,
+        tail,
+      )
+      .map(
+        ([k, f, t]) =>
+          (i: number) =>
+            `${k} = ${f}~${i}~${t}`,
+      ),
+  },
   { weight: 2, arbitrary: fc.constant((i: number) => `[stanza~${i}~]`) },
-  { weight: 2, arbitrary: fc.tuple(fragment, tail).map(([f, t]) => (i: number) => `#${f}~${i}~${t}`) },
-  { weight: 1, arbitrary: fc.tuple(fc.constantFrom('  ', '\t', ''), fragment, tail).map(([ws, f, t]) => (i: number) => `${ws}${f}~${i}~${t}`) },
+  {
+    weight: 2,
+    arbitrary: fc.tuple(fragment, tail).map(
+      ([f, t]) =>
+        (i: number) =>
+          `#${f}~${i}~${t}`,
+    ),
+  },
+  {
+    weight: 1,
+    arbitrary: fc.tuple(fc.constantFrom('  ', '\t', ''), fragment, tail).map(
+      ([ws, f, t]) =>
+        (i: number) =>
+          `${ws}${f}~${i}~${t}`,
+    ),
+  },
   { weight: 1, arbitrary: fc.constant(() => '') },
 );
 
@@ -173,7 +225,13 @@ describe('the tokenizer and parseConf agree on the lines of a generated file', (
           // being typed. The diagnostics are what flag it.
           const expected: Kind = continuations.has(n)
             ? 'text'
-            : headers.has(n) || l.startsWith('[') ? 'header' : directives.has(n) ? 'directive' : l.startsWith('#') ? 'comment' : 'text';
+            : headers.has(n) || l.startsWith('[')
+              ? 'header'
+              : directives.has(n)
+                ? 'directive'
+                : l.startsWith('#')
+                  ? 'comment'
+                  : 'text';
           expect(actual[i], `line ${n} ${JSON.stringify(l)} in ${JSON.stringify(text)}`).toBe(expected);
         });
       }),

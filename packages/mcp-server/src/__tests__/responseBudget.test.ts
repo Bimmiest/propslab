@@ -2,13 +2,7 @@ import { PassThrough } from 'node:stream';
 import { describe, expect, it, vi } from 'vitest';
 import type { ValidationDiagnostic } from '../../../../src/engine/types';
 import type { ExplainResponse, ExplainStanza } from '../protocol';
-import {
-  boundExplain,
-  boundValidate,
-  elementBytes,
-  MAX_PAYLOAD_BYTES,
-  responseBytes,
-} from '../responseBudget';
+import { boundExplain, boundValidate, elementBytes, MAX_PAYLOAD_BYTES, responseBytes } from '../responseBudget';
 import { exitOnStdoutError } from '../server';
 
 // The budget counts both copies of a payload in UTF-8 (#414): the object as
@@ -53,9 +47,7 @@ describe('boundValidate', () => {
       expect(out.diagnosticCount).toBe(20_000);
       expect(out.truncationNote).toMatch(new RegExp(`first ${out.diagnostics.length} of 20000`));
       // It fills the budget rather than stopping short.
-      expect(wire(out) + elementBytes(diagnostics[out.diagnostics.length])).toBeGreaterThan(
-        MAX_PAYLOAD_BYTES - 1024,
-      );
+      expect(wire(out) + elementBytes(diagnostics[out.diagnostics.length])).toBeGreaterThan(MAX_PAYLOAD_BYTES - 1024);
     }
   });
 

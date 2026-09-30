@@ -76,10 +76,7 @@ export function applyCloneIndexTime(
     // applyTransforms returns the clone first and any clones IT emitted after.
     const [processed, ...grandchildren] = out;
     const nextLineage = new Set(lineage).add(sourcetype);
-    return [
-      ...(processed ? [processed] : []),
-      ...grandchildren.flatMap((g) => processClone(g, nextLineage)),
-    ];
+    return [...(processed ? [processed] : []), ...grandchildren.flatMap((g) => processClone(g, nextLineage))];
   };
 
   return events.flatMap((event) =>

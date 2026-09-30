@@ -54,11 +54,13 @@ describe('atomicSegments', () => {
   });
 
   it('agrees with the scan it replaced', () => {
-    const highlight = fc.record({
-      start: fc.integer({ min: -2, max: 30 }),
-      len: fc.integer({ min: 0, max: 12 }),
-      field: fc.constantFrom('a', 'b', 'c', 'd'),
-    }).map(({ start, len, field }) => hl(start, start + len, field));
+    const highlight = fc
+      .record({
+        start: fc.integer({ min: -2, max: 30 }),
+        len: fc.integer({ min: 0, max: 12 }),
+        field: fc.constantFrom('a', 'b', 'c', 'd'),
+      })
+      .map(({ start, len, field }) => hl(start, start + len, field));
     fc.assert(
       fc.property(fc.string({ maxLength: 28 }), fc.array(highlight, { maxLength: 12 }), (raw, highlights) => {
         expect(atomicSegments(raw, highlights)).toEqual(reference(raw, highlights));

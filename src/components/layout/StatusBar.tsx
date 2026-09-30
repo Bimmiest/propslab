@@ -53,18 +53,17 @@ function PipelineStatus() {
   const triggerManualRun = useAppStore((s) => s.triggerManualRun);
   const toggleSettings = useAppStore((s) => s.toggleSettings);
 
-  const timingLabel = lastProcessingMs !== null
-    ? lastProcessingMs < 1000
-      ? `${Math.round(lastProcessingMs)}ms`
-      : `${(lastProcessingMs / 1000).toFixed(1)}s`
-    : null;
+  const timingLabel =
+    lastProcessingMs !== null
+      ? lastProcessingMs < 1000
+        ? `${Math.round(lastProcessingMs)}ms`
+        : `${(lastProcessingMs / 1000).toFixed(1)}s`
+      : null;
 
   return (
     <div className="flex items-center gap-3">
       <WorkerState />
-      {timingLabel && !isProcessing && (
-        <span>{timingLabel}</span>
-      )}
+      {timingLabel && !isProcessing && <span>{timingLabel}</span>}
       {settings.perEventPipeline && (
         <Tooltip
           content="Per-event pipeline is on — events that rewrite metadata via DEST_KEY = MetaData:* will re-match stanzas and may use different search-time directives. Click to open Settings."
@@ -80,9 +79,7 @@ function PipelineStatus() {
       )}
       {settings.manualApply && (
         <span className="flex items-center gap-1.5">
-          {pipelineDirty && !isProcessing && (
-            <span style={{ color: 'var(--color-warning)' }}>● Out of date</span>
-          )}
+          {pipelineDirty && !isProcessing && <span style={{ color: 'var(--color-warning)' }}>● Out of date</span>}
           <Tooltip content="Run pipeline (applies current config)" side="top">
             <button
               onClick={triggerManualRun}
@@ -123,15 +120,23 @@ function ResultSummary() {
     <div className="flex items-center gap-3">
       {result && (
         <>
-          <span>{result.eventCount} event{result.eventCount !== 1 ? 's' : ''}</span>
-          <span>{fieldCount} field{fieldCount !== 1 ? 's' : ''}</span>
+          <span>
+            {result.eventCount} event{result.eventCount !== 1 ? 's' : ''}
+          </span>
+          <span>
+            {fieldCount} field{fieldCount !== 1 ? 's' : ''}
+          </span>
         </>
       )}
       {errorCount > 0 && (
-        <span style={{ color: 'var(--color-error)' }}>{errorCount} error{errorCount !== 1 ? 's' : ''}</span>
+        <span style={{ color: 'var(--color-error)' }}>
+          {errorCount} error{errorCount !== 1 ? 's' : ''}
+        </span>
       )}
       {warningCount > 0 && (
-        <span style={{ color: 'var(--color-warning)' }}>{warningCount} warning{warningCount !== 1 ? 's' : ''}</span>
+        <span style={{ color: 'var(--color-warning)' }}>
+          {warningCount} warning{warningCount !== 1 ? 's' : ''}
+        </span>
       )}
       {result && errorCount === 0 && warningCount === 0 && (
         <span style={{ color: 'var(--color-success)' }}>✓ Valid</span>

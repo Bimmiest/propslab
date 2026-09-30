@@ -7,7 +7,14 @@
 // ---------------------------------------------------------------------------
 
 import { describe, it, expect } from 'vitest';
-import { longestPartialMatch, explainNoMatch, explainRegexNoOp, describeNoOp, noOpDirectiveKey, type NoOpReason } from '../noOpExplainer';
+import {
+  longestPartialMatch,
+  explainNoMatch,
+  explainRegexNoOp,
+  describeNoOp,
+  noOpDirectiveKey,
+  type NoOpReason,
+} from '../noOpExplainer';
 
 describe('longestPartialMatch', () => {
   it('reports where the pattern stopped agreeing with the text', () => {
@@ -97,9 +104,9 @@ describe('explainRegexNoOp', () => {
 
 describe('describeNoOp', () => {
   it('names the stanza that won when one did', () => {
-    expect(
-      describeNoOp({ kind: 'stanza-not-matched', stanza: 'my_app', wonInstead: 'source::/var/log' }),
-    ).toContain('[source::/var/log] won instead');
+    expect(describeNoOp({ kind: 'stanza-not-matched', stanza: 'my_app', wonInstead: 'source::/var/log' })).toContain(
+      '[source::/var/log] won instead',
+    );
   });
 
   it('reads as a sentence for every kind', () => {

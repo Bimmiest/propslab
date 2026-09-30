@@ -7,17 +7,7 @@
 import type { SplunkEvent } from '../../types';
 import { safeRegex, validateRegex, type RegexMatch, type SplunkRegex } from '../../../utils/splunkRegex';
 import { formatStrftime } from '../../../utils/strftime';
-import {
-  type EvalValue,
-  isNumericValue,
-  minMax,
-  numArg,
-  parseDecimal,
-  strArg,
-  toMv,
-  toNum,
-  toStr,
-} from './values';
+import { type EvalValue, isNumericValue, minMax, numArg, parseDecimal, strArg, toMv, toNum, toStr } from './values';
 
 export interface EvalCtx {
   event: SplunkEvent;
@@ -56,10 +46,12 @@ function evalRegex(ctx: EvalCtx, fn: string, pattern: string): SplunkRegex | nul
 type Builtin = (args: EvalValue[], ctx: EvalCtx) => EvalValue;
 
 /** A function of one string argument that propagates NULL. */
-const onString = (f: (s: string) => EvalValue): Builtin => (args) => {
-  const s = strArg(args[0]);
-  return s === null ? null : f(s);
-};
+const onString =
+  (f: (s: string) => EvalValue): Builtin =>
+  (args) => {
+    const s = strArg(args[0]);
+    return s === null ? null : f(s);
+  };
 
 /**
  * A numeric result, with NaN and +/-Infinity turned into NULL. Splunk's
@@ -71,16 +63,20 @@ const onString = (f: (s: string) => EvalValue): Builtin => (args) => {
 const finite = (n: number): EvalValue => (Number.isFinite(n) ? n : null);
 
 /** A function of one numeric argument; a non-numeric (or NULL) argument yields NULL. */
-const onNumber = (f: (n: number) => number): Builtin => (args) => {
-  const n = numArg(args[0]);
-  return n === null ? null : finite(f(n));
-};
+const onNumber =
+  (f: (n: number) => number): Builtin =>
+  (args) => {
+    const n = numArg(args[0]);
+    return n === null ? null : finite(f(n));
+  };
 
 /** An unsimulated function: warn, then return `result(args)`. */
-const stub = (name: string, result: (args: EvalValue[]) => EvalValue): Builtin => (args, ctx) => {
-  ctx.onStubWarning?.(name);
-  return result(args);
-};
+const stub =
+  (name: string, result: (args: EvalValue[]) => EvalValue): Builtin =>
+  (args, ctx) => {
+    ctx.onStubWarning?.(name);
+    return result(args);
+  };
 
 function substr(args: EvalValue[]): EvalValue {
   const s = strArg(args[0]);
@@ -135,7 +131,7 @@ function trimFrom(sides: 'left' | 'right' | 'both'): Builtin {
 // absence. The matching predicates (like, match, cidrmatch) do, as the
 // comparison operators do.
 const STRING_BUILTINS: Record<string, Builtin> = {
-  nullif: (args) => toStr(args[0]) === toStr(args[1]) ? null : args[0] ?? null,
+  nullif: (args) => (toStr(args[0]) === toStr(args[1]) ? null : (args[0] ?? null)),
   lower: onString((s) => s.toLowerCase()),
   upper: onString((s) => s.toUpperCase()),
   len: onString((s) => s.length),
@@ -151,8 +147,11 @@ const STRING_BUILTINS: Record<string, Builtin> = {
   ltrim: trimFrom('left'),
   rtrim: trimFrom('right'),
   urldecode: onString((s) => {
-    try { return decodeURIComponent(s); }
-    catch { return s; }
+    try {
+      return decodeURIComponent(s);
+    } catch {
+      return s;
+    }
   }),
   split: (args) => {
     const s = strArg(args[0]);
@@ -240,7 +239,7 @@ const MATH_BUILTINS: Record<string, Builtin> = {
   round: (args) => {
     const val = numArg(args[0]);
     if (val === null) return null;
-    const decimals = args[1] !== undefined ? numArg(args[1]) ?? 0 : 0;
+    const decimals = args[1] !== undefined ? (numArg(args[1]) ?? 0) : 0;
     const factor = Math.pow(10, decimals);
     // Splunk rounds halves away from zero; JS Math.round rounds toward +∞.
     const scaled = val * factor;
@@ -280,7 +279,7 @@ function mvindex(args: EvalValue[]): EvalValue {
   const end = args[2] !== undefined ? norm(toNum(args[2])) : start;
   // Out-of-range or inverted ranges yield NULL.
   if (start < 0 || start >= n || end < 0 || end >= n || end < start) return null;
-  return start === end ? mv[start] ?? null : mv.slice(start, end + 1);
+  return start === end ? (mv[start] ?? null) : mv.slice(start, end + 1);
 }
 
 function mvzip(args: EvalValue[]): EvalValue {
@@ -399,15 +398,17 @@ const OTHER_BUILTINS: Record<string, Builtin> = {
  * function named after an Object.prototype member (`toString`) is unknown,
  * not inherited.
  */
-const BUILTINS = new Map<string, Builtin>(Object.entries({
-  ...STRING_BUILTINS,
-  ...TYPE_BUILTINS,
-  ...MATH_BUILTINS,
-  ...MULTIVALUE_BUILTINS,
-  ...CRYPTO_BUILTINS,
-  ...TIME_BUILTINS,
-  ...OTHER_BUILTINS,
-}));
+const BUILTINS = new Map<string, Builtin>(
+  Object.entries({
+    ...STRING_BUILTINS,
+    ...TYPE_BUILTINS,
+    ...MATH_BUILTINS,
+    ...MULTIVALUE_BUILTINS,
+    ...CRYPTO_BUILTINS,
+    ...TIME_BUILTINS,
+    ...OTHER_BUILTINS,
+  }),
+);
 
 /** The name of every non-branching function, for the registry-level fidelity test. */
 export function builtinNames(): string[] {

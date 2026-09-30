@@ -84,7 +84,10 @@ export function addBlockReason(
   const current = match.pattern === requestedPattern;
   const isError = current && (match.status === 'timeout' || match.status === 'invalid');
   if (current && match.status === 'timeout') {
-    return { reason: 'This pattern timed out — it likely backtracks catastrophically. Simplify the pattern before adding it.', isError };
+    return {
+      reason: 'This pattern timed out — it likely backtracks catastrophically. Simplify the pattern before adding it.',
+      isError,
+    };
   }
   if (current && match.status === 'invalid') {
     return { reason: "This pattern won't compile, so it can't be added.", isError };
@@ -140,7 +143,13 @@ function groupSegments(
     if (gh.start > cursor) {
       result.push({ kind: 'between', key: `mid-${cursor}`, text: raw.substring(cursor, gh.start) });
     }
-    result.push({ kind: 'group', key: `grp-${gh.name}`, text: raw.substring(gh.start, gh.end), name: gh.name, color: gh.color });
+    result.push({
+      kind: 'group',
+      key: `grp-${gh.name}`,
+      text: raw.substring(gh.start, gh.end),
+      name: gh.name,
+      color: gh.color,
+    });
     cursor = gh.end;
   }
   // Remaining match text after last group
@@ -151,7 +160,11 @@ function groupSegments(
 }
 
 /** `raw` as segments: the text around the match, and the match itself. */
-export function highlightSegments(raw: string, matchInfo: RegexMatchInfo, groupColorMap: Map<string, string>): HighlightSegment[] {
+export function highlightSegments(
+  raw: string,
+  matchInfo: RegexMatchInfo,
+  groupColorMap: Map<string, string>,
+): HighlightSegment[] {
   const fullMatchStart = matchInfo.index;
   const fullMatchEnd = matchInfo.index + matchInfo.match.length;
   const result: HighlightSegment[] = [];

@@ -14,7 +14,12 @@
 import { probeTimestamps } from './timestampMatch';
 import type { TimeConfig, TimestampProbe } from './timestampMatch';
 import { serveWithRegexEngine } from '../utils/regexEngineLoader';
-import { createRequestQueue, type QueuedRequest, type WorkerInputsMessage, type WorkerSkippedResponse } from './workerProtocol';
+import {
+  createRequestQueue,
+  type QueuedRequest,
+  type WorkerInputsMessage,
+  type WorkerSkippedResponse,
+} from './workerProtocol';
 
 export interface TimestampMatchRequest extends QueuedRequest {
   /**
@@ -52,7 +57,10 @@ const serve = createRequestQueue<string[], TimestampMatchRequest>({
   },
   skip: ({ id }) => self.postMessage({ id, skipped: true } satisfies WorkerSkippedResponse),
   defer: (drain) => setTimeout(drain),
-  rethrow: (err) => setTimeout(() => { throw err; }),
+  rethrow: (err) =>
+    setTimeout(() => {
+      throw err;
+    }),
 });
 
 // Loads the regex engine from its fixed asset URL, then signals ready and

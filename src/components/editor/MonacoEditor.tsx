@@ -165,7 +165,11 @@ export function MonacoEditor({
       monaco.editor.setModelLanguage(model, initialLanguage);
       if (!sameText(model.getValue(), initialValue)) {
         model.pushStackElement();
-        model.pushEditOperations([], [{ range: model.getFullModelRange(), text: initialValue, forceMoveMarkers: true }], () => null);
+        model.pushEditOperations(
+          [],
+          [{ range: model.getFullModelRange(), text: initialValue, forceMoveMarkers: true }],
+          () => null,
+        );
         model.pushStackElement();
       }
       const viewState = takeViewState(key) as editor.ICodeEditorViewState | undefined;

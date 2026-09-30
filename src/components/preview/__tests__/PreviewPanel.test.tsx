@@ -52,7 +52,12 @@ describe('PreviewPanel', () => {
   it('wires the active tab and its panel to each other by per-instance ids', () => {
     // Ids are per-tablist, so two tablists (or two mounts of one) cannot
     // collide and point aria-controls at the wrong panel.
-    render(<><PreviewPanel /><PreviewPanel /></>);
+    render(
+      <>
+        <PreviewPanel />
+        <PreviewPanel />
+      </>,
+    );
     const tabs = screen.getAllByRole('tab', { name: 'Preview' });
     const panels = screen.getAllByRole('tabpanel');
     expect(tabs[0]!.id).not.toBe(tabs[1]!.id);
@@ -114,7 +119,9 @@ describe('PreviewPanel — metadata changes are relative to the run (#316)', () 
     render(<PreviewPanel />);
     // Typing a new host (manual-apply: no run follows) is not a change the
     // pipeline made to these events.
-    act(() => { useAppStore.getState().setMetadataField('host', 'web02'); });
+    act(() => {
+      useAppStore.getState().setMetadataField('host', 'web02');
+    });
     expect(metadataModifiedCount()).toBe('0 / 1');
   });
 
@@ -150,7 +157,14 @@ describe('PreviewPanel — search is debounced (#335)', () => {
 
   beforeEach(() => {
     vi.useFakeTimers();
-    useAppStore.setState({ ...initial, activeOutputTab: 'preview', processingResult: resultOf(['GET /a 200', 'POST /b 500', 'GET /c 404']) }, true);
+    useAppStore.setState(
+      {
+        ...initial,
+        activeOutputTab: 'preview',
+        processingResult: resultOf(['GET /a 200', 'POST /b 500', 'GET /c 404']),
+      },
+      true,
+    );
   });
 
   afterEach(() => {
@@ -168,7 +182,9 @@ describe('PreviewPanel — search is debounced (#335)', () => {
     expect(screen.getByText('3 / 3')).toBeInTheDocument();
     expect(container.textContent).toContain('POST /b 500');
 
-    act(() => { vi.advanceTimersByTime(200); });
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
     expect(screen.getByText('2 / 3')).toBeInTheDocument();
     expect(container.textContent).not.toContain('POST /b 500');
   });
@@ -210,15 +226,17 @@ describe('PreviewPanel — the change check is linear in whitespace (#427)', () 
   const meta: EventMetadata = { index: 'main', host: 'h', source: 's', sourcetype: 'st' };
   function resultOf(raw: string, originalRaw: string): ViewResult {
     return toViewResult({
-      events: [{
-        _raw: raw,
-        _time: null,
-        _meta: {},
-        fields: {},
-        metadata: meta,
-        lineNumbers: { start: 1, end: 1 },
-        processingTrace: [],
-      }],
+      events: [
+        {
+          _raw: raw,
+          _time: null,
+          _meta: {},
+          fields: {},
+          metadata: meta,
+          lineNumbers: { start: 1, end: 1 },
+          processingTrace: [],
+        },
+      ],
       originalRaw,
       eventCount: 1,
       processingSteps: [],
@@ -259,15 +277,17 @@ describe('PreviewPanel — the field filter follows the current fields (#432)', 
   const meta: EventMetadata = { index: 'main', host: 'h', source: 's', sourcetype: 'st' };
   function resultWith(fields: Record<string, string[]>): ViewResult {
     return toViewResult({
-      events: [{
-        _raw: 'user=alice',
-        _time: null,
-        _meta: {},
-        fields,
-        metadata: meta,
-        lineNumbers: { start: 1, end: 1 },
-        processingTrace: [],
-      }],
+      events: [
+        {
+          _raw: 'user=alice',
+          _time: null,
+          _meta: {},
+          fields,
+          metadata: meta,
+          lineNumbers: { start: 1, end: 1 },
+          processingTrace: [],
+        },
+      ],
       originalRaw: 'user=alice',
       eventCount: 1,
       processingSteps: [],
@@ -276,7 +296,10 @@ describe('PreviewPanel — the field filter follows the current fields (#432)', 
   }
 
   beforeEach(() => {
-    useAppStore.setState({ ...initial, activeOutputTab: 'preview', processingResult: resultWith({ user: ['alice'] }) }, true);
+    useAppStore.setState(
+      { ...initial, activeOutputTab: 'preview', processingResult: resultWith({ user: ['alice'] }) },
+      true,
+    );
   });
 
   it('drops a selected field that disappears', () => {
@@ -299,7 +322,9 @@ describe('PreviewPanel — the field filter follows the current fields (#432)', 
   it('keeps the Regex tab pattern and class name across tab switches', () => {
     render(<PreviewPanel />);
     fireEvent.click(screen.getByRole('tab', { name: 'Regex' }));
-    fireEvent.change(screen.getByRole('textbox', { name: 'Regex Pattern' }), { target: { value: 'user=(?<user>\\w+)' } });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Regex Pattern' }), {
+      target: { value: 'user=(?<user>\\w+)' },
+    });
     fireEvent.change(screen.getByRole('textbox', { name: 'EXTRACT class name' }), { target: { value: 'users' } });
 
     fireEvent.click(screen.getByRole('tab', { name: 'Raw' }));

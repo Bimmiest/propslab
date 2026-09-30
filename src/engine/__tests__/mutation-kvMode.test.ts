@@ -97,7 +97,12 @@ describe('KV_MODE = auto — the trace step', () => {
   it('names the mode and counts the fields', () => {
     const r = applyKvMode([event('a=1 b=2')], [], runCtx(FIXED_NOW))[0]!;
     expect(r.processingTrace).toEqual([
-      { processor: 'KV_MODE(auto)', phase: 'search-time', description: 'Extracted 2 fields via KV_MODE=auto', fieldsAdded: ['a', 'b'] },
+      {
+        processor: 'KV_MODE(auto)',
+        phase: 'search-time',
+        description: 'Extracted 2 fields via KV_MODE=auto',
+        fieldsAdded: ['a', 'b'],
+      },
     ]);
   });
 
@@ -148,7 +153,11 @@ describe('KV_MODE = xml — what is not a field', () => {
   });
 
   it('names a leaf by its Name attribute when it has one, and by its path when it does not', () => {
-    const r = applyKvMode([event('<Data Name="User">bob</Data><Data>plain</Data>')], [mode('xml')], runCtx(FIXED_NOW))[0]!;
+    const r = applyKvMode(
+      [event('<Data Name="User">bob</Data><Data>plain</Data>')],
+      [mode('xml')],
+      runCtx(FIXED_NOW),
+    )[0]!;
     expect(r.fields['User']).toBe('bob');
     expect(r.fields['Data']).toBe('plain');
     expect(r.fields['Data_Name']).toBe('User');

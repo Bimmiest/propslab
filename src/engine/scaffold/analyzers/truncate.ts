@@ -14,7 +14,10 @@ const encoder = new TextEncoder();
 export function detectTruncate(segments: string[]): ScaffoldSuggestion[] {
   // TRUNCATE counts UTF-8 bytes (truncator.ts), so measure bytes, not UTF-16
   // units: 4000 CJK characters are 12000 bytes and would be cut.
-  const lengths = segments.map((l) => encoder.encode(l).length).filter((n) => n > 0).sort((a, b) => a - b);
+  const lengths = segments
+    .map((l) => encoder.encode(l).length)
+    .filter((n) => n > 0)
+    .sort((a, b) => a - b);
   if (lengths.length === 0) return [];
 
   const p99 = percentile(lengths, 0.99);
@@ -28,13 +31,15 @@ export function detectTruncate(segments: string[]): ScaffoldSuggestion[] {
   const headroom = Math.max(p99Headroom, maxHeadroom);
   if (headroom <= DEFAULT_TRUNCATE) return [];
 
-  return [{
-    key: 'TRUNCATE',
-    value: String(headroom),
-    confidence: 'medium',
-    evidence: `Longest events ≈ ${maxLen} bytes — raise TRUNCATE above the ${DEFAULT_TRUNCATE} default`,
-    enabledByDefault: true,
-  }];
+  return [
+    {
+      key: 'TRUNCATE',
+      value: String(headroom),
+      confidence: 'medium',
+      evidence: `Longest events ≈ ${maxLen} bytes — raise TRUNCATE above the ${DEFAULT_TRUNCATE} default`,
+      enabledByDefault: true,
+    },
+  ];
 }
 
 function percentile(sorted: number[], p: number): number {

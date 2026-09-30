@@ -32,7 +32,13 @@ describe('MAX_DAYS_AGO and MAX_DAYS_HENCE', () => {
     const d: ValidationDiagnostic[] = [];
     const [onAgo, pastAgo, onHence, pastHence] = run(
       ['2026-07-25 00:00:00', '2026-07-24 23:59:59', '2026-08-06 00:00:00', '2026-08-06 00:00:01'],
-      [FMT, dir('MAX_DAYS_AGO', '10'), dir('MAX_DAYS_HENCE', '2'), dir('MAX_DIFF_SECS_AGO', '99999999'), dir('MAX_DIFF_SECS_HENCE', '99999999')],
+      [
+        FMT,
+        dir('MAX_DAYS_AGO', '10'),
+        dir('MAX_DAYS_HENCE', '2'),
+        dir('MAX_DIFF_SECS_AGO', '99999999'),
+        dir('MAX_DIFF_SECS_HENCE', '99999999'),
+      ],
       d,
     );
     expect(iso(onAgo!)).toBe('2026-07-25T00:00:00.000Z');
@@ -41,7 +47,10 @@ describe('MAX_DAYS_AGO and MAX_DAYS_HENCE', () => {
     expect(iso(onHence!)).toBe('2026-08-06T00:00:00.000Z');
     expect(step(pastHence!).description).toMatch(/rejected: more than MAX_DAYS_HENCE \(2\) days in the future/);
     // Located at TIME_FORMAT, which is what to check first.
-    expect(d.map((x) => [x.line, x.directiveKey])).toEqual([[5, 'TIME_FORMAT'], [5, 'TIME_FORMAT']]);
+    expect(d.map((x) => [x.line, x.directiveKey])).toEqual([
+      [5, 'TIME_FORMAT'],
+      [5, 'TIME_FORMAT'],
+    ]);
   });
 
   it.each(['0', '-4', 'soon'])('fall back to the default for an unusable value (%s)', (value) => {
@@ -96,7 +105,9 @@ describe('MAX_DIFF_SECS_AGO and MAX_DIFF_SECS_HENCE', () => {
     // Auto-recognition: two ISO stamps, then a US-style date an hour and more earlier.
     const [, , odd] = run(['2026-08-03 10:00:00', '2026-08-03 10:00:01', '08/03/2026 08:00:00'], []);
     expect(step(odd!).timeSource).toBe('previous-event');
-    expect(step(odd!).description).toMatch(/in a format \(%m\/%d\/%Y %H:%M:%S\) most of this source's timestamps do not use/);
+    expect(step(odd!).description).toMatch(
+      /in a format \(%m\/%d\/%Y %H:%M:%S\) most of this source's timestamps do not use/,
+    );
   });
 });
 
@@ -115,7 +126,9 @@ describe('what the trace says when no timestamp was read', () => {
 
   it('inherits from the previous event and says so', () => {
     const [, e] = run(['2026-08-03 10:00:00', 'no stamp here'], [FMT]);
-    expect(step(e!).description).toBe('TIME_FORMAT did not match this event — inherited 2026-08-03T10:00:00.000Z from the previous event');
+    expect(step(e!).description).toBe(
+      'TIME_FORMAT did not match this event — inherited 2026-08-03T10:00:00.000Z from the previous event',
+    );
   });
 
   it('reports a TIME_PREFIX that will not compile, as an error, and treats it as never matching', () => {
@@ -123,7 +136,9 @@ describe('what the trace says when no timestamp was read', () => {
     const [e] = run(['2026-08-03 10:00:00'], [dir('TIME_PREFIX', '(unclosed', 4)], d);
     expect(d[0]).toMatchObject({ level: 'error', line: 4, directiveKey: 'TIME_PREFIX' });
     expect(d[0]!.message).toMatch(/^TIME_PREFIX \(\(unclosed\) could not be compiled: /);
-    expect(step(e!).description).toMatch(/^TIME_PREFIX could not be compiled, so it never matches, and no previous event/);
+    expect(step(e!).description).toMatch(
+      /^TIME_PREFIX could not be compiled, so it never matches, and no previous event/,
+    );
   });
 
   it('marks the event timestamp=none and records the field', () => {
@@ -160,7 +175,8 @@ describe('DATETIME_CONFIG', () => {
     expect(step(e!)).toEqual({
       processor: 'timestampExtractor',
       phase: 'index-time',
-      description: 'DATETIME_CONFIG = CURRENT — _time set to the time of indexing (2026-08-04T00:00:00.000Z), not read from the event',
+      description:
+        'DATETIME_CONFIG = CURRENT — _time set to the time of indexing (2026-08-04T00:00:00.000Z), not read from the event',
       timeSource: 'datetime-config-current',
       fieldsAdded: ['timestamp'],
     });
@@ -172,7 +188,8 @@ describe('DATETIME_CONFIG', () => {
     expect(step(e!)).toEqual({
       processor: 'timestampExtractor',
       phase: 'index-time',
-      description: 'DATETIME_CONFIG = NONE — timestamp extraction disabled, _time is the time of indexing (2026-08-04T00:00:00.000Z)',
+      description:
+        'DATETIME_CONFIG = NONE — timestamp extraction disabled, _time is the time of indexing (2026-08-04T00:00:00.000Z)',
       timeSource: 'datetime-config-none',
     });
   });

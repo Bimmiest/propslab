@@ -258,7 +258,10 @@ describe('transforms diagnostics point at the definition that took effect (was: 
 
 describe('every boolean directive follows one rule (#473)', () => {
   const spellings = [...TRUE_SPELLINGS, ...FALSE_SPELLINGS];
-  const value = fc.oneof(fc.constantFrom(...spellings, 'nope', 'maybe', '2', 'truee', 'onn'), fc.string({ maxLength: 6 }));
+  const value = fc.oneof(
+    fc.constantFrom(...spellings, 'nope', 'maybe', '2', 'truee', 'onn'),
+    fc.string({ maxLength: 6 }),
+  );
   const booleanDirectives = getAllDirectives().filter((info) => info.valueType === 'boolean');
 
   it('the registry has boolean directives to check', () => {
@@ -299,9 +302,18 @@ describe('every boolean directive follows one rule (#473)', () => {
     // default-true: ANNOTATE_PUNCT, BREAK_ONLY_BEFORE_DATE, CLEAN_KEYS
     const [punct] = annotatePunct([event('a=b')], [d('ANNOTATE_PUNCT', 'nope')], runCtx(FIXED_NOW));
     expect(punct?.fields['punct']).toBeUndefined();
-    expect(breakLines('2026-01-15 10:00:00 a\n2026-01-15 10:00:01 b', [d('BREAK_ONLY_BEFORE_DATE', 'nope')], META, runCtx(FIXED_NOW))).toHaveLength(1);
+    expect(
+      breakLines(
+        '2026-01-15 10:00:00 a\n2026-01-15 10:00:01 b',
+        [d('BREAK_ONLY_BEFORE_DATE', 'nope')],
+        META,
+        runCtx(FIXED_NOW),
+      ),
+    ).toHaveLength(1);
     const s = stanza('raw', { REGEX: '([\\w.\\-]+)=(\\w+)', FORMAT: '$1::$2', CLEAN_KEYS: 'nope' });
-    expect(applyRegexTransform(event('my.odd-key=value'), s, undefined, 'search-time').fields).toEqual({ 'my.odd-key': 'value' });
+    expect(applyRegexTransform(event('my.odd-key=value'), s, undefined, 'search-time').fields).toEqual({
+      'my.odd-key': 'value',
+    });
     // SHOULD_LINEMERGE, whatever the structured-format default would have been.
     expect(breakLines(raw, [d('SHOULD_LINEMERGE', 'nope')], META, runCtx(FIXED_NOW))).toHaveLength(3);
     expect(

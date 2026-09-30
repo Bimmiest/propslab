@@ -23,10 +23,7 @@ describe('probeTimestamp — matching', () => {
 
   it('anchors the search after a TIME_PREFIX match', () => {
     const raw = 'ignore 1999-01-01 ts=2026-04-21 10:00:00 rest';
-    const { match } = probeTimestamp(
-      raw,
-      config({ timePrefix: 'ts=', timeFormat: '%Y-%m-%d %H:%M:%S' }),
-    );
+    const { match } = probeTimestamp(raw, config({ timePrefix: 'ts=', timeFormat: '%Y-%m-%d %H:%M:%S' }));
     expect(match).not.toBeNull();
     // The 1999 date precedes the prefix, so it must not win.
     expect(match!.matchedText).toBe('2026-04-21 10:00:00');
@@ -35,10 +32,7 @@ describe('probeTimestamp — matching', () => {
 
   it('honours MAX_TIMESTAMP_LOOKAHEAD', () => {
     const raw = 'ts=' + ' '.repeat(60) + '2026-04-21 10:00:00';
-    const tight = probeTimestamp(
-      raw,
-      config({ timePrefix: 'ts=', timeFormat: '%Y-%m-%d %H:%M:%S', maxLookahead: 10 }),
-    );
+    const tight = probeTimestamp(raw, config({ timePrefix: 'ts=', timeFormat: '%Y-%m-%d %H:%M:%S', maxLookahead: 10 }));
     expect(tight.match).toBeNull();
 
     const loose = probeTimestamp(
@@ -65,10 +59,7 @@ describe('probeTimestamp — the prefix span the overlay renders', () => {
   // render thread never re-runs the regex.
   it('carries the prefix span when the prefix matched but the format did not', () => {
     const raw = 'ts=not-a-timestamp at all';
-    const probe = probeTimestamp(
-      raw,
-      config({ timePrefix: 'ts=', timeFormat: '%Y-%m-%d %H:%M:%S', maxLookahead: 10 }),
-    );
+    const probe = probeTimestamp(raw, config({ timePrefix: 'ts=', timeFormat: '%Y-%m-%d %H:%M:%S', maxLookahead: 10 }));
     expect(probe.match).toBeNull();
     expect(probe.prefix).not.toBeNull();
     expect(raw.substring(probe.prefix!.start, probe.prefix!.end)).toBe('ts=');

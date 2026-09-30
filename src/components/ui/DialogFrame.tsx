@@ -95,7 +95,10 @@ export function DialogHeader({
   children?: ReactNode;
 }) {
   return (
-    <div className="flex items-center gap-2 px-4 h-11 shrink-0" style={{ borderBottom: '1px solid var(--color-border)' }}>
+    <div
+      className="flex items-center gap-2 px-4 h-11 shrink-0"
+      style={{ borderBottom: '1px solid var(--color-border)' }}
+    >
       <Icon name={icon} className={`w-4 h-4 ${iconClassName}`} />
       <span
         {...(titleHidden ? { 'aria-hidden': true } : {})}
@@ -111,7 +114,10 @@ export function DialogHeader({
 
 export function DialogFooter({ children }: { children: ReactNode }) {
   return (
-    <div className="flex items-center justify-end gap-2 px-4 py-3 shrink-0" style={{ borderTop: '1px solid var(--color-border)' }}>
+    <div
+      className="flex items-center justify-end gap-2 px-4 py-3 shrink-0"
+      style={{ borderTop: '1px solid var(--color-border)' }}
+    >
       {children}
     </div>
   );
@@ -138,7 +144,10 @@ const BUTTON_VARIANTS = {
 export function DialogButton({
   variant,
   ...props
-}: { variant: keyof typeof BUTTON_VARIANTS } & Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'className' | 'style' | 'type'>) {
+}: { variant: keyof typeof BUTTON_VARIANTS } & Omit<
+  ButtonHTMLAttributes<HTMLButtonElement>,
+  'className' | 'style' | 'type'
+>) {
   const { className, style } = BUTTON_VARIANTS[variant];
   return <button type="button" className={className} style={style} {...props} />;
 }

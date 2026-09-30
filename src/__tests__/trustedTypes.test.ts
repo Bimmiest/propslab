@@ -44,7 +44,11 @@ describe('installDefaultTrustedTypesPolicy', () => {
   });
 
   it('survives a refusal (a policy already installed, or not allowed)', () => {
-    vi.stubGlobal('trustedTypes', { createPolicy: () => { throw new TypeError('refused'); } });
+    vi.stubGlobal('trustedTypes', {
+      createPolicy: () => {
+        throw new TypeError('refused');
+      },
+    });
     expect(() => installDefaultTrustedTypesPolicy()).not.toThrow();
   });
 });

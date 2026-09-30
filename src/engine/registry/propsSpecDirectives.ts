@@ -199,7 +199,7 @@ export const PROPS_SPEC_COMPLETENESS: DirectiveDefinition[] = [
   {
     key: 'HEADER_FIELD_QUOTE',
     description:
-      'The quote character used in the header line, when it differs from the body\'s. ' +
+      "The quote character used in the header line, when it differs from the body's. " +
       'Accepts the same delimiter names as the other header settings, plus "none" for a ' +
       'null terminator.',
     example: 'HEADER_FIELD_QUOTE = "',
@@ -393,8 +393,7 @@ export const PROPS_SPEC_COMPLETENESS: DirectiveDefinition[] = [
   },
   {
     key: 'extraction_cutoff',
-    description:
-      'How many bytes of an XML event index-time extraction reads before it stops.',
+    description: 'How many bytes of an XML event index-time extraction reads before it stops.',
     example: 'extraction_cutoff = 10000',
     defaultValue: '10000',
     category: 'Structured Data',
@@ -513,7 +512,7 @@ export const PROPS_SPEC_COMPLETENESS: DirectiveDefinition[] = [
     description:
       'Whether the file classifier writes a model file for a known sourcetype into the ' +
       'learned directory. Turn it off for sources with no representative example — source ' +
-      'code being the spec\'s own case.',
+      "code being the spec's own case.",
     example: 'LEARN_MODEL = false',
     defaultValue: 'true',
     category: 'Data Input',
@@ -525,7 +524,7 @@ export const PROPS_SPEC_COMPLETENESS: DirectiveDefinition[] = [
   {
     key: 'maxDist',
     description:
-      'How far a file may differ from a sourcetype\'s learned model and still match. ' +
+      "How far a file may differ from a sourcetype's learned model and still match. " +
       'Smaller is stricter; the spec suggests moving it by about 100 at a time when a ' +
       'model matches too broadly or too narrowly.',
     example: 'maxDist = 30',
@@ -594,9 +593,7 @@ export const PROPS_SPEC_COMPLETENESS: DirectiveDefinition[] = [
   },
   {
     key: 'is_valid',
-    description:
-      'Set automatically by invalid_cause. The spec is unusually blunt about this one: do ' +
-      'not set it.',
+    description: 'Set automatically by invalid_cause. The spec is unusually blunt about this one: do ' + 'not set it.',
     example: 'is_valid = false',
     defaultValue: 'true',
     category: 'Data Input',
@@ -610,7 +607,7 @@ export const PROPS_SPEC_COMPLETENESS: DirectiveDefinition[] = [
     description:
       'The shell command that extracts an archived source, reading stdin and writing ' +
       'stdout. Called only when invalid_cause is archive, and valid only on [source::...] ' +
-      'stanzas. _auto uses Splunk\'s own handling for tar, tar.gz, tgz, tbz, tbz2 and zip.',
+      "stanzas. _auto uses Splunk's own handling for tar, tar.gz, tgz, tbz, tbz2 and zip.",
     example: 'unarchive_cmd = gzip -cd -',
     defaultValue: '',
     category: 'Data Input',

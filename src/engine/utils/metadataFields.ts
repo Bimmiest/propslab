@@ -43,9 +43,7 @@ export function getMetadataField(event: SplunkEvent, name: string): string | und
  * routing slot kept on `_meta` for convenience. Splunk holds the queue under
  * its own key, so it is never one of the indexed fields.
  */
-export function indexedFields(
-  meta: SplunkEvent['_meta'],
-): Record<string, string | string[]> {
+export function indexedFields(meta: SplunkEvent['_meta']): Record<string, string | string[]> {
   const { _queue: _, ...fields } = meta;
   return fields;
 }

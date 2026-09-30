@@ -87,7 +87,11 @@ function OverlaySpan({ segment: { kind, text, title } }: { segment: OverlaySegme
       return <span className="text-[var(--color-text-muted)]">{text}</span>;
     case 'prefix':
       return (
-        <span style={{ backgroundColor: tint(PREFIX_COLOR, 19), borderBottom: `2px solid ${PREFIX_COLOR}` }} className="rounded-sm px-0.5" title={title}>
+        <span
+          style={{ backgroundColor: tint(PREFIX_COLOR, 19), borderBottom: `2px solid ${PREFIX_COLOR}` }}
+          className="rounded-sm px-0.5"
+          title={title}
+        >
           {text}
         </span>
       );
@@ -97,7 +101,11 @@ function OverlaySpan({ segment: { kind, text, title } }: { segment: OverlaySegme
       return <span className="text-[var(--color-text-primary)]">{text}</span>;
     case 'timestamp':
       return (
-        <span style={{ backgroundColor: tint(FORMAT_COLOR, 21), borderBottom: `2px solid ${FORMAT_COLOR}` }} className="rounded-sm px-0.5" title={title}>
+        <span
+          style={{ backgroundColor: tint(FORMAT_COLOR, 21), borderBottom: `2px solid ${FORMAT_COLOR}` }}
+          className="rounded-sm px-0.5"
+          title={title}
+        >
           {text}
         </span>
       );
@@ -109,5 +117,11 @@ function OverlaySpan({ segment: { kind, text, title } }: { segment: OverlaySegme
 function TimestampOverlay({ raw, probe, config }: { raw: string; probe: TimestampProbe | null; config: TimeConfig }) {
   const segments = overlaySegments(raw, probe, config);
   if (!segments) return <span className="text-[var(--color-text-secondary)]">{raw}</span>;
-  return <>{segments.map((segment) => <OverlaySpan key={segment.key} segment={segment} />)}</>;
+  return (
+    <>
+      {segments.map((segment) => (
+        <OverlaySpan key={segment.key} segment={segment} />
+      ))}
+    </>
+  );
 }

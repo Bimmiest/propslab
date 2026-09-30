@@ -39,7 +39,7 @@ export function SearchHighlightedRaw({ raw, search }: { raw: string; search: str
                 }}
               >
                 {line.substring(searchIdx, searchIdx + trimmed.length)}
-              </mark>
+              </mark>,
             );
             cursor = searchIdx + trimmed.length;
             searchIdx = lowerLine.indexOf(trimmed, cursor);

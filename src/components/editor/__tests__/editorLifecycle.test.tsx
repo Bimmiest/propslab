@@ -19,11 +19,7 @@ import * as monaco from 'monaco-editor/editor';
 import { providerCounts } from '../../../test/monacoRegistry';
 import { resetModelRegistry } from '../modelRegistry';
 import { getEditor } from '../editorRegistry';
-import {
-  disposeSplunkMonaco,
-  PROPS_LANGUAGE_ID,
-  TRANSFORMS_LANGUAGE_ID,
-} from '../splunkMonacoSetup';
+import { disposeSplunkMonaco, PROPS_LANGUAGE_ID, TRANSFORMS_LANGUAGE_ID } from '../splunkMonacoSetup';
 
 const { MonacoEditor } = await import('../MonacoEditor');
 const { SplunkEditor } = await import('../SplunkEditor');
@@ -74,13 +70,7 @@ describe('mounting and disposing an editor', () => {
     const second: string[] = [];
     const mount = (into: string[]) =>
       render(
-        <MonacoEditor
-          value="a"
-          language="plaintext"
-          theme="vs"
-          modelKey="props.conf"
-          onChange={(v) => into.push(v)}
-        />,
+        <MonacoEditor value="a" language="plaintext" theme="vs" modelKey="props.conf" onChange={(v) => into.push(v)} />,
       );
 
     mount(first).unmount();

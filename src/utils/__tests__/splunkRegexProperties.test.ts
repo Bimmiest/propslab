@@ -51,18 +51,105 @@ type Alt = Seq[];
 /** Characters used for literals and for the subject strings, so matches happen. */
 const SUBJECT_CHARS = ['a', 'b', 'A', 'B', '1', ' ', '-', '_', '.', '*', '\n', ',', '(', ']', '<', 'é', '#'];
 
-const literal = fc.constantFrom('a', 'b', 'A', 'B', '1', ' ', '-', '_', ',', ':', '=', '#', '/', '<', '>', '!', '@', '~', '"', "'", '%', '&', 'é');
+const literal = fc.constantFrom(
+  'a',
+  'b',
+  'A',
+  'B',
+  '1',
+  ' ',
+  '-',
+  '_',
+  ',',
+  ':',
+  '=',
+  '#',
+  '/',
+  '<',
+  '>',
+  '!',
+  '@',
+  '~',
+  '"',
+  "'",
+  '%',
+  '&',
+  'é',
+);
 const escape = fc.constantFrom(
-  '\\d', '\\w', '\\s', '\\D', '\\W', '\\S', '\\.', '\\*', '\\+', '\\?', '\\(', '\\)', '\\[', '\\]',
-  '\\{', '\\}', '\\|', '\\\\', '\\/', '\\-', '\\^', '\\$', '\\t', '\\n', '\\#', '\\ ',
+  '\\d',
+  '\\w',
+  '\\s',
+  '\\D',
+  '\\W',
+  '\\S',
+  '\\.',
+  '\\*',
+  '\\+',
+  '\\?',
+  '\\(',
+  '\\)',
+  '\\[',
+  '\\]',
+  '\\{',
+  '\\}',
+  '\\|',
+  '\\\\',
+  '\\/',
+  '\\-',
+  '\\^',
+  '\\$',
+  '\\t',
+  '\\n',
+  '\\#',
+  '\\ ',
 );
 
 /** A single class member. No `-` except in explicit ranges or escaped, so no accidental range. */
 const classItem = fc.constantFrom(
-  'a', 'b', 'A', '1', ' ', '_', ',', '#', '*', '+', '?', '(', ')', '{', '}', '|', '.', '$', '<', '>', '=', '!', '"',
-  'a-z', '0-9', 'A-F', '\\d', '\\w', '\\s', '\\]', '\\\\', '\\-', '\\[', '\\^',
+  'a',
+  'b',
+  'A',
+  '1',
+  ' ',
+  '_',
+  ',',
+  '#',
+  '*',
+  '+',
+  '?',
+  '(',
+  ')',
+  '{',
+  '}',
+  '|',
+  '.',
+  '$',
+  '<',
+  '>',
+  '=',
+  '!',
+  '"',
+  'a-z',
+  '0-9',
+  'A-F',
+  '\\d',
+  '\\w',
+  '\\s',
+  '\\]',
+  '\\\\',
+  '\\-',
+  '\\[',
+  '\\^',
   // PCRE syntax that is only text inside a class — the translator must not act on it.
-  '(?P<x>', '(?i)', '(?>', '++', '*+', '?+', '{2}+', '(?P=x)',
+  '(?P<x>',
+  '(?i)',
+  '(?>',
+  '++',
+  '*+',
+  '?+',
+  '{2}+',
+  '(?P=x)',
 );
 
 /**
@@ -118,7 +205,7 @@ function render(pattern: Alt, flavour: 'js' | 'pcre'): string {
   const atom = (a: Atom): string => {
     switch (a.t) {
       case 'text':
-        return flavour === 'pcre' ? a.pcre ?? a.s : a.s;
+        return flavour === 'pcre' ? (a.pcre ?? a.s) : a.s;
       case 'anchor':
         return a.s;
       case 'quant':
@@ -252,21 +339,26 @@ describe('PCRE2 agrees with JS on the syntax the two share (#368)', () => {
     rest: fc.option(seqOnly, { nil: undefined }),
   });
   const seqText = (s: Atom[], flavour: 'js' | 'pcre' = 'js') =>
-    s.map((a) => (a.t === 'text' ? (flavour === 'pcre' ? a.pcre ?? a.s : a.s) : a.t === 'anchor' ? a.s : '')).join('');
+    s
+      .map((a) => (a.t === 'text' ? (flavour === 'pcre' ? (a.pcre ?? a.s) : a.s) : a.t === 'anchor' ? a.s : ''))
+      .join('');
 
-  it.runIf(SUPPORTS_SCOPED_MODIFIERS)('scopes a mid-pattern (?i) to the rest of its group and each later alternative', () => {
-    fc.assert(
-      fc.property(midPattern, subjects, ({ outer, inGroup, pre, post, rest }, strings) => {
-        const tail = rest === undefined ? '' : `|${seqText(rest, 'pcre')}`;
-        const tailJs = rest === undefined ? '' : `|(?i:(?:${seqText(rest)}))`;
-        const body = `${seqText(pre, 'pcre')}(?i)${seqText(post, 'pcre')}${tail}`;
-        const bodyJs = `${seqText(pre)}(?i:(?:${seqText(post)}))${tailJs}`;
-        const [beforePcre, afterPcre] = outer.map((o) => seqText(o, 'pcre')) as [string, string];
-        const [before, after] = outer.map((o) => seqText(o)) as [string, string];
-        const p = inGroup ? `${beforePcre}(${body})${afterPcre}` : body;
-        const js = inGroup ? `${before}(${bodyJs})${after}` : bodyJs;
-        expectSameMatches(pcre(p)!, new RegExp(js), strings);
-      }),
-    );
-  });
+  it.runIf(SUPPORTS_SCOPED_MODIFIERS)(
+    'scopes a mid-pattern (?i) to the rest of its group and each later alternative',
+    () => {
+      fc.assert(
+        fc.property(midPattern, subjects, ({ outer, inGroup, pre, post, rest }, strings) => {
+          const tail = rest === undefined ? '' : `|${seqText(rest, 'pcre')}`;
+          const tailJs = rest === undefined ? '' : `|(?i:(?:${seqText(rest)}))`;
+          const body = `${seqText(pre, 'pcre')}(?i)${seqText(post, 'pcre')}${tail}`;
+          const bodyJs = `${seqText(pre)}(?i:(?:${seqText(post)}))${tailJs}`;
+          const [beforePcre, afterPcre] = outer.map((o) => seqText(o, 'pcre')) as [string, string];
+          const [before, after] = outer.map((o) => seqText(o)) as [string, string];
+          const p = inGroup ? `${beforePcre}(${body})${afterPcre}` : body;
+          const js = inGroup ? `${before}(${bodyJs})${after}` : bodyJs;
+          expectSameMatches(pcre(p)!, new RegExp(js), strings);
+        }),
+      );
+    },
+  );
 });

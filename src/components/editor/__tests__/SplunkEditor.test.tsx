@@ -74,7 +74,7 @@ describe('which language and name each file gets', () => {
     expect(ready[0]!.getModel()?.getLanguageId()).toBe(PROPS_LANGUAGE_ID);
   });
 
-  it('lets an explicit language override the file type\'s', () => {
+  it("lets an explicit language override the file type's", () => {
     const { ready } = mount({ fileType: 'transforms.conf', language: PROPS_LANGUAGE_ID });
     expect(ready[0]!.getModel()?.getLanguageId()).toBe(PROPS_LANGUAGE_ID);
   });

@@ -11,10 +11,7 @@ import type { RunContext } from '../runContext';
 // Node. Declared here, narrowed to what this file calls, rather than by pulling
 // in a whole lib that would also admit DOMParser and friends.
 declare const TextEncoder: new () => { encode(input: string): Uint8Array };
-declare const TextDecoder: new (
-  label: string,
-  options: { fatal: boolean },
-) => { decode(input: Uint8Array): string };
+declare const TextDecoder: new (label: string, options: { fatal: boolean }) => { decode(input: Uint8Array): string };
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder('utf-8', { fatal: false });
@@ -80,11 +77,7 @@ function splitIntoSegments(event: SplunkEvent): string[] {
   return raw.split('\n');
 }
 
-export function truncateEvents(
-  events: SplunkEvent[],
-  directives: ConfDirective[],
-  ctx: RunContext,
-): SplunkEvent[] {
+export function truncateEvents(events: SplunkEvent[], directives: ConfDirective[], ctx: RunContext): SplunkEvent[] {
   const { diagnostics } = ctx;
   const truncateDir = effectiveDirective(directives, 'TRUNCATE');
   const isDefault = !truncateDir;

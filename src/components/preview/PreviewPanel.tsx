@@ -59,24 +59,27 @@ export const PreviewPanel = memo(function PreviewPanel() {
   // first-run "No data yet" invitation to paste some input. A successful run
   // always sets a result, so a null result beside an error can only mean a
   // failure.
-  const failure = result === null
-    ? diagnostics.find((d) => d.level === 'error')?.message ?? null
-    : null;
-  const tabs = useMemo(() => [
-    { id: 'preview', label: 'Preview' },
-    { id: 'cim', label: 'CIM Models' },
-    { id: 'fields', label: 'Fields' },
-    { id: 'transforms', label: 'Pipeline' },
-    { id: 'effective', label: 'Effective config' },
-    { id: 'architecture', label: 'Architecture' },
-  ], []);
+  const failure = result === null ? (diagnostics.find((d) => d.level === 'error')?.message ?? null) : null;
+  const tabs = useMemo(
+    () => [
+      { id: 'preview', label: 'Preview' },
+      { id: 'cim', label: 'CIM Models' },
+      { id: 'fields', label: 'Fields' },
+      { id: 'transforms', label: 'Pipeline' },
+      { id: 'effective', label: 'Effective config' },
+      { id: 'architecture', label: 'Architecture' },
+    ],
+    [],
+  );
 
   return (
     <div className="h-full flex flex-col bg-[var(--color-bg-primary)]">
       <div className="flex items-center justify-between border-b border-[var(--color-border-subtle)] bg-[var(--color-bg-secondary)]">
         <div className="flex items-center gap-2 px-3 shrink-0">
           <Icon name="eye" className="w-3.5 h-3.5 text-[var(--color-accent)]" />
-          <span className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">Output</span>
+          <span className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">
+            Output
+          </span>
         </div>
         <Tabs
           idPrefix={tabsId}
@@ -94,11 +97,7 @@ export const PreviewPanel = memo(function PreviewPanel() {
         aria-busy={isProcessing}
       >
         <PipelineInputsProvider>
-          <TabContent
-            tab={activeTab}
-            hasData={!!result && result.events.length > 0}
-            failure={failure}
-          />
+          <TabContent tab={activeTab} hasData={!!result && result.events.length > 0} failure={failure} />
         </PipelineInputsProvider>
         {showOverlay && (
           <div
@@ -116,7 +115,11 @@ export const PreviewPanel = memo(function PreviewPanel() {
 
 // Memoised so the processing overlay toggling on and off around every run does
 // not re-render the tab beneath it.
-const TabContent = memo(function TabContent({ tab, hasData, failure }: {
+const TabContent = memo(function TabContent({
+  tab,
+  hasData,
+  failure,
+}: {
   tab: OutputTabId;
   hasData: boolean;
   failure: string | null;
@@ -142,10 +145,15 @@ const TabContent = memo(function TabContent({ tab, hasData, failure }: {
   }
 
   switch (tab) {
-    case 'preview': return <PreviewSubTab pipelineInputs={previewInputs} />;
-    case 'cim': return <CimModelsTab />;
-    case 'fields': return <FieldsTab />;
-    case 'transforms': return <TransformsTab />;
-    default: return null;
+    case 'preview':
+      return <PreviewSubTab pipelineInputs={previewInputs} />;
+    case 'cim':
+      return <CimModelsTab />;
+    case 'fields':
+      return <FieldsTab />;
+    case 'transforms':
+      return <TransformsTab />;
+    default:
+      return null;
   }
 });

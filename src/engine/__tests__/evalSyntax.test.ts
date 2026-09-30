@@ -20,8 +20,13 @@ function event(fields: Record<string, string> = {}): SplunkEvent {
   return makeEvent('raw', { fields });
 }
 
-const evalDir = (className: string, value: string): ConfDirective =>
-  ({ key: `EVAL-${className}`, value, line: 1, directiveType: 'EVAL', className });
+const evalDir = (className: string, value: string): ConfDirective => ({
+  key: `EVAL-${className}`,
+  value,
+  line: 1,
+  directiveType: 'EVAL',
+  className,
+});
 
 function run(expr: string, fields: Record<string, string> = {}) {
   const diagnostics: ValidationDiagnostic[] = [];
@@ -103,7 +108,7 @@ describe('eval LIKE operator (#312)', () => {
     expect(run('if(a Like "F%", 1, 0)', { a: 'foo' }).value).toBe('0');
   });
 
-  it('shares like()\'s handling of a run of %', () => {
+  it("shares like()'s handling of a run of %", () => {
     // like() collapses `%%`; the operator form must do the same.
     expect(run('if(a LIKE "a%%b", 1, 0)', { a: 'axxb' }).value).toBe('1');
   });
@@ -136,7 +141,7 @@ describe('eval XOR operator (#312)', () => {
     expect(run('if(1==1 XOR 1==1 AND 1==2, 1, 0)').value).toBe('1');
   });
 
-  it('shares OR\'s precedence level, left to right', () => {
+  it("shares OR's precedence level, left to right", () => {
     // (true OR false) XOR true = false; true OR (false XOR true) would be true.
     expect(run('if(1==1 OR 1==2 XOR 1==1, 1, 0)').value).toBe('0');
   });

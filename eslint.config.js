@@ -1,10 +1,10 @@
-import js from '@eslint/js'
-import globals from 'globals'
-import reactHooks from 'eslint-plugin-react-hooks'
-import reactRefresh from 'eslint-plugin-react-refresh'
-import vitest from '@vitest/eslint-plugin'
-import tseslint from 'typescript-eslint'
-import { defineConfig, globalIgnores } from 'eslint/config'
+import js from '@eslint/js';
+import globals from 'globals';
+import reactHooks from 'eslint-plugin-react-hooks';
+import reactRefresh from 'eslint-plugin-react-refresh';
+import vitest from '@vitest/eslint-plugin';
+import tseslint from 'typescript-eslint';
+import { defineConfig, globalIgnores } from 'eslint/config';
 
 // Flat config merges `globals` across matching blocks rather than replacing
 // them, so a later `globals: globals.node` would leave every browser global
@@ -14,7 +14,7 @@ import { defineConfig, globalIgnores } from 'eslint/config'
 const nodeOnlyGlobals = {
   ...Object.fromEntries(Object.keys(globals.browser).map((name) => [name, 'off'])),
   ...globals.node,
-}
+};
 
 export default defineConfig([
   // All generated: build output (the app's and any package's), and the
@@ -41,11 +41,14 @@ export default defineConfig([
     rules: {
       // Honour the TypeScript convention of prefixing intentionally unused
       // identifiers with _  (common in interface implementations).
-      '@typescript-eslint/no-unused-vars': ['error', {
-        varsIgnorePattern: '^_',
-        argsIgnorePattern: '^_',
-        caughtErrorsIgnorePattern: '^_',
-      }],
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          varsIgnorePattern: '^_',
+          argsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+        },
+      ],
       // A union gains a member (a new directive kind, a new diagnostic code)
       // and every switch over it has to name it: a `default:` does not count
       // as handling a union member, since it is where the new one would
@@ -198,12 +201,7 @@ export default defineConfig([
   {
     // Tests are exempt: a describe() callback holds a whole suite, so its length
     // counts cases, and a table of cases is not branching logic.
-    files: [
-      '**/__tests__/**/*.{ts,tsx}',
-      '**/*.test.{ts,tsx}',
-      'e2e/**/*.ts',
-      'packages/*/test/**/*.ts',
-    ],
+    files: ['**/__tests__/**/*.{ts,tsx}', '**/*.test.{ts,tsx}', 'e2e/**/*.ts', 'packages/*/test/**/*.ts'],
     rules: {
       'max-lines-per-function': 'off',
       complexity: 'off',
@@ -241,18 +239,40 @@ export default defineConfig([
     files: ['src/engine/**/*.{ts,tsx}'],
     ignores: ['src/engine/**/__tests__/**', 'src/engine/**/*.test.{ts,tsx}'],
     rules: {
-      'no-restricted-imports': ['error', {
-        patterns: [
-          {
-            group: ['**/components', '**/components/**', '**/hooks', '**/hooks/**', '**/store', '**/store/**', '**/monaco', '**/monaco/**'],
-            message: 'The engine must stay UI-free. Do not import UI components, hooks, the store or the editor integration.',
-          },
-          {
-            group: ['react', 'react/*', 'react-dom', 'react-dom/*', 'zustand', 'zustand/*', 'monaco-editor', 'monaco-editor/*'],
-            message: 'The engine must stay UI-free. Do not import React, zustand or Monaco.',
-          },
-        ],
-      }],
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: [
+                '**/components',
+                '**/components/**',
+                '**/hooks',
+                '**/hooks/**',
+                '**/store',
+                '**/store/**',
+                '**/monaco',
+                '**/monaco/**',
+              ],
+              message:
+                'The engine must stay UI-free. Do not import UI components, hooks, the store or the editor integration.',
+            },
+            {
+              group: [
+                'react',
+                'react/*',
+                'react-dom',
+                'react-dom/*',
+                'zustand',
+                'zustand/*',
+                'monaco-editor',
+                'monaco-editor/*',
+              ],
+              message: 'The engine must stay UI-free. Do not import React, zustand or Monaco.',
+            },
+          ],
+        },
+      ],
     },
   },
-])
+]);

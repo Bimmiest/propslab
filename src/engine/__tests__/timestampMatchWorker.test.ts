@@ -19,7 +19,10 @@ const CONFIG = { timePrefix: null, timeFormat: '%Y', maxLookahead: 128, tz: null
 /** Load the worker against a fake `self`, returning what it posts back. */
 async function loadWorker() {
   const posted: TimestampMatchResponse[] = [];
-  const fakeSelf: { onmessage: ((e: MessageEvent<TimestampMatchRequest>) => void) | null; postMessage: (m: TimestampMatchResponse) => void } = {
+  const fakeSelf: {
+    onmessage: ((e: MessageEvent<TimestampMatchRequest>) => void) | null;
+    postMessage: (m: TimestampMatchResponse) => void;
+  } = {
     onmessage: null,
     postMessage: (m) => posted.push(m),
   };

@@ -6,8 +6,7 @@ import type { ConfStanza, EventMetadata } from '../types';
 
 const META: EventMetadata = { index: 'main', host: '', source: '', sourcetype: 'st' };
 
-const stanza = (parsed: { stanzas: ConfStanza[] }, name: string) =>
-  parsed.stanzas.find((s) => s.name === name)!;
+const stanza = (parsed: { stanzas: ConfStanza[] }, name: string) => parsed.stanzas.find((s) => s.name === name)!;
 
 const directive = (parsed: { stanzas: ConfStanza[] }, name: string, key: string) =>
   stanza(parsed, name).directives.filter((d) => d.key === key);
@@ -124,7 +123,10 @@ describe('parseConf — default/ and local/ merge per attribute (#115)', () => {
 
   it('treats a repeat within one layer by the same rule as a cross-layer override', () => {
     const parsed = parseConf(
-      [{ layer: 'default', text: '[st]\nTZ = UTC\nTZ = GMT' }, { layer: 'local', text: '[st]\nTZ = EST' }],
+      [
+        { layer: 'default', text: '[st]\nTZ = UTC\nTZ = GMT' },
+        { layer: 'local', text: '[st]\nTZ = EST' },
+      ],
       'props.conf',
     );
     const winner = resolved(parsed, 'TZ')!;
@@ -151,7 +153,10 @@ describe('parseConf — default/ and local/ merge per attribute (#115)', () => {
 
   it('does not let a mis-cased attribute override the correctly-cased one', () => {
     const parsed = parseConf(
-      [{ layer: 'default', text: '[st]\nKV_MODE = json' }, { layer: 'local', text: '[st]\nkv_mode = none' }],
+      [
+        { layer: 'default', text: '[st]\nKV_MODE = json' },
+        { layer: 'local', text: '[st]\nkv_mode = none' },
+      ],
       'props.conf',
     );
     // Splunk ignores `kv_mode` outright, so it cannot shadow KV_MODE.
@@ -201,10 +206,7 @@ describe('parseConf — stanza-level layer origins (#115)', () => {
   });
 
   it('merges a stanza repeated within one layer into that layer’s single range', () => {
-    const parsed = parseConf(
-      [{ layer: 'default', text: '[st]\nTZ = UTC\n\n[st]\nKV_MODE = json' }],
-      'props.conf',
-    );
+    const parsed = parseConf([{ layer: 'default', text: '[st]\nTZ = UTC\n\n[st]\nKV_MODE = json' }], 'props.conf');
     const s = stanza(parsed, 'st');
     expect(s.layers).toEqual([{ layer: 'default', lineRange: { start: 1, end: 5 } }]);
     expect(s.directives.map((d) => d.key)).toEqual(['TZ', 'KV_MODE']);
@@ -212,7 +214,10 @@ describe('parseConf — stanza-level layer origins (#115)', () => {
 
   it('carries a stanza that exists in only one layer through unchanged', () => {
     const parsed = parseConf(
-      [{ layer: 'default', text: '[only_default]\nTZ = UTC' }, { layer: 'local', text: '[only_local]\nTZ = EST' }],
+      [
+        { layer: 'default', text: '[only_default]\nTZ = UTC' },
+        { layer: 'local', text: '[only_local]\nTZ = EST' },
+      ],
       'props.conf',
     );
     expect(stanza(parsed, 'only_default').layer).toBe('default');
@@ -224,7 +229,10 @@ describe('parseConf — stanza-level layer origins (#115)', () => {
 describe('parseConf — diagnostics name their layer (#115)', () => {
   it('attaches the layer to a parse warning so line numbers stay unambiguous', () => {
     const parsed = parseConf(
-      [{ layer: 'default', text: '[st]\nKV_MODE = json' }, { layer: 'local', text: '[st]\nkv_mode = none' }],
+      [
+        { layer: 'default', text: '[st]\nKV_MODE = json' },
+        { layer: 'local', text: '[st]\nkv_mode = none' },
+      ],
       'props.conf',
     );
     const warning = parsed.errors.find((e) => e.directiveKey === 'kv_mode')!;
@@ -234,7 +242,10 @@ describe('parseConf — diagnostics name their layer (#115)', () => {
 
   it('attaches the layer to a malformed-line error', () => {
     const parsed = parseConf(
-      [{ layer: 'default', text: '[st]\nTZ = UTC' }, { layer: 'local', text: '[st]\n; not a comment' }],
+      [
+        { layer: 'default', text: '[st]\nTZ = UTC' },
+        { layer: 'local', text: '[st]\n; not a comment' },
+      ],
       'props.conf',
     );
     const error = parsed.errors.find((e) => e.message.includes('Malformed'))!;
@@ -317,7 +328,10 @@ describe('runPipeline — accepts layered confs (#115)', () => {
 describe('getDirectiveValue — last definition in a stanza wins (#115)', () => {
   it('returns the higher layer’s value, not the one it overrode', () => {
     const parsed = parseConf(
-      [{ layer: 'default', text: '[st]\nTZ = UTC' }, { layer: 'local', text: '[st]\nTZ = EST' }],
+      [
+        { layer: 'default', text: '[st]\nTZ = UTC' },
+        { layer: 'local', text: '[st]\nTZ = EST' },
+      ],
       'props.conf',
     );
     expect(getDirectiveValue(matchStanzas(parsed.stanzas, META), 'TZ')).toBe('EST');

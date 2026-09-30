@@ -77,27 +77,31 @@ function checkStanzaHeader(
 ): string | null {
   const trimmed = line.trim();
   if (!STANZA_RE.test(line)) {
-    markers.push(lineMarker(
-      i,
-      8,
-      trimmed.endsWith(']')
-        ? 'Empty stanza header — expected "[name]"'
-        : 'Missing closing bracket "]" for stanza header',
-      1,
-      line.length + 1,
-    ));
+    markers.push(
+      lineMarker(
+        i,
+        8,
+        trimmed.endsWith(']')
+          ? 'Empty stanza header — expected "[name]"'
+          : 'Missing closing bracket "]" for stanza header',
+        1,
+        line.length + 1,
+      ),
+    );
     return null;
   }
 
   const stanzaName = trimmed.slice(1, -1).trim();
   if (seenStanzas.has(stanzaName)) {
-    markers.push(lineMarker(
-      i,
-      4,
-      `Duplicate stanza "${stanzaName}" — Splunk merges duplicate stanzas key-by-key (a later key overrides the same earlier key; keys only in the earlier stanza are kept)`,
-      1,
-      line.length + 1,
-    ));
+    markers.push(
+      lineMarker(
+        i,
+        4,
+        `Duplicate stanza "${stanzaName}" — Splunk merges duplicate stanzas key-by-key (a later key overrides the same earlier key; keys only in the earlier stanza are kept)`,
+        1,
+        line.length + 1,
+      ),
+    );
   }
   seenStanzas.add(stanzaName);
   return stanzaName;
@@ -118,7 +122,10 @@ function malformedLineMarker(line: string, i: number): DiagnosticMarker {
 }
 
 /** The registry entry for `key`, looking through a class-based key to its base. */
-function resolveDirectiveInfo(key: string, fileType: ConfFileType): { info: DirectiveInfo | undefined; baseKey: string } {
+function resolveDirectiveInfo(
+  key: string,
+  fileType: ConfFileType,
+): { info: DirectiveInfo | undefined; baseKey: string } {
   const info = getDirectiveInfo(key, fileType);
   if (info) return { info, baseKey: key };
   const parsed = getClassBasedDirectiveBase(key);
@@ -127,7 +134,12 @@ function resolveDirectiveInfo(key: string, fileType: ConfFileType): { info: Dire
 }
 
 /** The marker for a key the registry does not know, if it deserves one. */
-function unknownDirectiveMarker(key: string, fileType: ConfFileType, i: number, eqIdx: number): DiagnosticMarker | null {
+function unknownDirectiveMarker(
+  key: string,
+  fileType: ConfFileType,
+  i: number,
+  eqIdx: number,
+): DiagnosticMarker | null {
   // A case-only mismatch is a real attribute written in a casing Splunk
   // ignores, which is a different problem from a typo and has an exact fix.
   // Marked with MISCASED_MARKER_CODE so the quick fix can find it.
@@ -182,13 +194,15 @@ function checkStrftime(d: DirectiveLine, markers: DiagnosticMarker[]): void {
   const rawValue = d.line.substring(d.eqIdx + 1);
   const valueStartColumn = d.eqIdx + 2 + (rawValue.length - rawValue.trimStart().length);
   for (const { specifier, index } of unsupportedSpecifiers(d.value)) {
-    markers.push(lineMarker(
-      d.i,
-      2,
-      `${specifier} is not simulated — the preview treats it as literal text, so _time may not resolve here even if a real indexer parses it.`,
-      valueStartColumn + index,
-      valueStartColumn + index + specifier.length,
-    ));
+    markers.push(
+      lineMarker(
+        d.i,
+        2,
+        `${specifier} is not simulated — the preview treats it as literal text, so _time may not resolve here even if a real indexer parses it.`,
+        valueStartColumn + index,
+        valueStartColumn + index + specifier.length,
+      ),
+    );
   }
 }
 
@@ -227,24 +241,25 @@ function checkKnownDirective(info: DirectiveInfo, d: DirectiveLine, markers: Dia
   // Check for a real CAPTURING group — not an escaped `\(` literal and not a
   // non-capturing `(?:…)` / lookaround `(?=…)` group.
   if (baseKey === 'LINE_BREAKER' && value && !hasCapturingGroup(value)) {
-    markers.push(lineMarker(
-      i,
-      4,
-      'LINE_BREAKER regex should contain at least one capturing group () — the captured content defines the break point',
-      eqIdx + 2,
-      line.length + 1,
-    ));
+    markers.push(
+      lineMarker(
+        i,
+        4,
+        'LINE_BREAKER regex should contain at least one capturing group () — the captured content defines the break point',
+        eqIdx + 2,
+        line.length + 1,
+      ),
+    );
   }
 
   if (info.deprecated) {
-    markers.push(lineMarker(i, 2, `"${baseKey}" is deprecated — consider using the recommended alternative`, 1, eqIdx + 1));
+    markers.push(
+      lineMarker(i, 2, `"${baseKey}" is deprecated — consider using the recommended alternative`, 1, eqIdx + 1),
+    );
   }
 }
 
-export function computeDiagnostics(
-  model: editor.ITextModel,
-  fileType: ConfFileType
-): DiagnosticMarker[] {
+export function computeDiagnostics(model: editor.ITextModel, fileType: ConfFileType): DiagnosticMarker[] {
   const markers: DiagnosticMarker[] = [];
   const lineCount = model.getLineCount();
   const seenStanzas = new Set<string>();
@@ -403,7 +418,7 @@ function hasCapturingGroup(pattern: string): boolean {
 function checkBestPractices(
   stanzas: SeenStanza[],
   markers: DiagnosticMarker[],
-  fileType: 'props.conf' | 'transforms.conf'
+  fileType: 'props.conf' | 'transforms.conf',
 ): void {
   // Both rules are about props.conf directives; transforms.conf has no
   // LINE_BREAKER or TIME_PREFIX to reason about.
@@ -431,9 +446,7 @@ function checkBestPractices(
     const linemergeDisabled = shouldLinemerge ? !parseSplunkBool(shouldLinemerge.value, false) : false;
 
     if (lineBreaker && !linemergeDisabled) {
-      markers.push(
-        at(lineBreaker, 'Best practice: Set SHOULD_LINEMERGE = false when using a custom LINE_BREAKER'),
-      );
+      markers.push(at(lineBreaker, 'Best practice: Set SHOULD_LINEMERGE = false when using a custom LINE_BREAKER'));
     }
 
     if (timePrefix && !timeFormat) {

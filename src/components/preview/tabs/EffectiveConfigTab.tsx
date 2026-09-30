@@ -12,10 +12,7 @@ import { useMemo, useState } from 'react';
 import { useAppStore } from '../../../store/useAppStore';
 import { parseConf } from '../../../engine/parser/confParser';
 import { resolveStanzasForEvent } from '../../../engine/parser/stanzaMatcher';
-import {
-  resolveEffectiveConfig,
-  type EffectiveDirective,
-} from '../../../engine/parser/effectiveConfig';
+import { resolveEffectiveConfig, type EffectiveDirective } from '../../../engine/parser/effectiveConfig';
 import { revealInEditor } from '../../editor/revealInEditor';
 import { Icon } from '../../ui/Icon';
 import type { PipelineInputs } from './shared/usePipelineInputs';
@@ -47,9 +44,7 @@ function DirectiveRow({ directive }: { directive: EffectiveDirective }) {
         <div className="flex-1 min-w-0">
           <div className="flex items-baseline gap-2 flex-wrap">
             <span className="text-xs font-mono text-[var(--color-text-primary)]">{directive.key}</span>
-            <span className="text-xs font-mono text-[var(--color-text-secondary)] truncate">
-              = {directive.value}
-            </span>
+            <span className="text-xs font-mono text-[var(--color-text-secondary)] truncate">= {directive.value}</span>
           </div>
           <div className="flex items-center gap-2 mt-0.5 flex-wrap">
             <StanzaBadge type={directive.stanza.type} />
@@ -131,8 +126,8 @@ function PendingChangesNotice({ inputs, className }: { inputs: PipelineInputs; c
   if (livePropsConf === inputs.propsConf && liveMetadata === inputs.metadata) return null;
   const notice = (
     <p className="text-xs text-[var(--color-warning)]" role="status">
-      props.conf or the metadata has changed since the pipeline last ran. This shows the configuration that run
-      used; run the pipeline to resolve the changes.
+      props.conf or the metadata has changed since the pipeline last ran. This shows the configuration that run used;
+      run the pipeline to resolve the changes.
     </p>
   );
   return className ? <div className={className}>{notice}</div> : notice;
@@ -207,8 +202,8 @@ export function EffectiveConfigTab({ inputs }: EffectiveConfigTabProps) {
       </div>
 
       <p className="px-3 py-2 text-xs text-[var(--color-text-muted)]">
-        Resolved for the props.conf and metadata the pipeline last ran with, the same way the preview
-        resolves it. Stanza precedence is source:: over host:: over sourcetype over default.
+        Resolved for the props.conf and metadata the pipeline last ran with, the same way the preview resolves it.
+        Stanza precedence is source:: over host:: over sourcetype over default.
       </p>
     </div>
   );

@@ -53,11 +53,20 @@ export function TimePrefixDialog({
       title="Set TIME_PREFIX from selection"
       applyLabel="Set TIME_PREFIX"
       applyDisabled={!valid}
-      onApply={() => { if (valid) { onApply(trimmed); onClose(); } }}
+      onApply={() => {
+        if (valid) {
+          onApply(trimmed);
+          onClose();
+        }
+      }}
       onClose={onClose}
     >
       <div>
-        <label htmlFor="time-prefix-value" className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-secondary)' }}>
+        <label
+          htmlFor="time-prefix-value"
+          className="text-xs font-semibold uppercase tracking-wider"
+          style={{ color: 'var(--color-text-secondary)' }}
+        >
           TIME_PREFIX <span className="font-normal normal-case">(regex matching the text before the timestamp)</span>
         </label>
         <input
@@ -84,12 +93,19 @@ export function TimePrefixDialog({
       )}
 
       <div>
-        <div className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--color-text-secondary)' }}>
+        <div
+          className="text-xs font-semibold uppercase tracking-wider mb-1"
+          style={{ color: 'var(--color-text-secondary)' }}
+        >
           Adds to <code className="font-mono">[{stanza}]</code>
         </div>
         <pre
           className="text-xs font-mono rounded border p-2 overflow-x-auto whitespace-pre-wrap break-all"
-          style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-primary)', backgroundColor: 'var(--color-bg-secondary)' }}
+          style={{
+            borderColor: 'var(--color-border)',
+            color: 'var(--color-text-primary)',
+            backgroundColor: 'var(--color-bg-secondary)',
+          }}
         >
           {trimmed ? `TIME_PREFIX = ${trimmed}` : 'Enter the text that precedes the timestamp…'}
         </pre>
@@ -101,7 +117,9 @@ export function TimePrefixDialog({
 function PrefixMatchNote({ capture }: { capture: Capture }) {
   if (capture.state === 'empty') return null;
   const note = (color: string, text: ReactNode) => (
-    <div className="text-xs font-medium" style={{ color }}>{text}</div>
+    <div className="text-xs font-medium" style={{ color }}>
+      {text}
+    </div>
   );
   if (capture.state === 'invalid') return note('var(--color-error)', capture.reason ?? "Invalid regex — won't compile");
   if (capture.state === 'timeout') {
@@ -116,6 +134,11 @@ function PrefixMatchNote({ capture }: { capture: Capture }) {
   }
   return note(
     'var(--color-success)',
-    <>Matches <span className="font-mono" style={{ color: 'var(--color-text-primary)' }}>{capture.full}</span></>,
+    <>
+      Matches{' '}
+      <span className="font-mono" style={{ color: 'var(--color-text-primary)' }}>
+        {capture.full}
+      </span>
+    </>,
   );
 }

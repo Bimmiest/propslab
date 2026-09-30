@@ -234,7 +234,9 @@ test.describe('windowed field lists', () => {
     const table = page.getByRole('table');
     await expect.poll(async () => Number(await table.getAttribute('aria-rowcount'))).toBeGreaterThan(300);
     await expectNoViolations(page, 'Fields (windowed)');
-    await table.locator('xpath=..').evaluate((el) => { el.scrollTop = el.scrollHeight / 2; });
+    await table.locator('xpath=..').evaluate((el) => {
+      el.scrollTop = el.scrollHeight / 2;
+    });
     await expectNoViolations(page, 'Fields (windowed, scrolled)');
   });
 
@@ -242,9 +244,13 @@ test.describe('windowed field lists', () => {
     await openWideFields(page);
     await page.getByRole('tab', { name: /^Fields$/ }).click();
     await page.getByRole('button', { name: 'Expand all' }).click();
-    await page.getByRole('button', { name: /^Toggle g\d+$/ }).first().focus();
+    await page
+      .getByRole('button', { name: /^Toggle g\d+$/ })
+      .first()
+      .focus();
     // 60 parents of 6 rows each: the last toggle is far outside the first window.
-    const rowIndex = () => page.evaluate(() => Number(document.activeElement?.closest('tr')?.getAttribute('aria-rowindex')));
+    const rowIndex = () =>
+      page.evaluate(() => Number(document.activeElement?.closest('tr')?.getAttribute('aria-rowindex')));
     let previous = await rowIndex();
     for (let i = 1; i < 60; i++) {
       await page.keyboard.press('Tab');
@@ -262,7 +268,9 @@ test.describe('windowed field lists', () => {
     test.setTimeout(60_000);
     await openWideFields(page);
     await page.getByRole('tab', { name: /^Extractions$/ }).click();
-    const sidebar = page.getByRole('textbox', { name: 'Filter fields' }).locator('xpath=ancestor::div[contains(@class,"flex-col")][1]');
+    const sidebar = page
+      .getByRole('textbox', { name: 'Filter fields' })
+      .locator('xpath=ancestor::div[contains(@class,"flex-col")][1]');
     await sidebar.getByRole('button', { name: 'Expand all' }).click();
     const rows = sidebar.locator('[data-window-row]');
     await expect.poll(() => rows.count()).toBeGreaterThan(10);
@@ -275,7 +283,10 @@ test.describe('windowed field lists', () => {
     await expect(sidebar.locator('[data-field-row][tabindex="0"]')).toHaveCount(1);
 
     await rows.first().getByRole('button').focus();
-    const focusedIndex = () => page.evaluate(() => Number(document.activeElement?.closest<HTMLElement>('[data-window-index]')?.dataset['windowIndex']));
+    const focusedIndex = () =>
+      page.evaluate(() =>
+        Number(document.activeElement?.closest<HTMLElement>('[data-window-index]')?.dataset['windowIndex']),
+      );
     let previous = await focusedIndex();
     for (let i = 1; i < 45; i++) {
       await page.keyboard.press('ArrowDown');
@@ -285,7 +296,10 @@ test.describe('windowed field lists', () => {
     }
     // The roving stop followed the focus, and is still the only one.
     await expect(sidebar.locator('[data-field-row][tabindex="0"]')).toHaveCount(1);
-    await expect(sidebar.locator(`[data-window-index="${previous}"] [data-field-row]`)).toHaveAttribute('tabindex', '0');
+    await expect(sidebar.locator(`[data-window-index="${previous}"] [data-field-row]`)).toHaveAttribute(
+      'tabindex',
+      '0',
+    );
 
     // Tab leaves the tree rather than stepping to the next row.
     await page.keyboard.press('Tab');

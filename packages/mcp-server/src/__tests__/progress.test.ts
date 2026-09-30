@@ -1,12 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { RUN_STAGES } from '../../../../src/engine/runStages';
-import {
-  createProgressBuffer,
-  MAX_REPORTED_EVENTS,
-  progressWriter,
-  readProgress,
-  RUN_PHASES,
-} from '../progress';
+import { createProgressBuffer, MAX_REPORTED_EVENTS, progressWriter, readProgress, RUN_PHASES } from '../progress';
 
 describe('run progress (#488)', () => {
   it('reads as starting until the worker writes', () => {

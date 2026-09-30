@@ -51,18 +51,13 @@ function wireBytes(json: string): number {
 /** Bytes a payload whose compact JSON is `json` costs: both copies, and the text's quotes. */
 export const jsonResponseBytes = (json: string): number => wireBytes(json) + 2;
 
-export const responseBytes = (payload: unknown): number =>
-  jsonResponseBytes(JSON.stringify(payload));
+export const responseBytes = (payload: unknown): number => jsonResponseBytes(JSON.stringify(payload));
 
 /** Bytes one array element adds to a response: its JSON in both copies, plus a comma in each. */
 export const elementBytes = (value: unknown): number => wireBytes(JSON.stringify(value)) + 2;
 
 /** How many leading items fit in `budget`, given each one's cost, and what they cost. */
-function fit<T>(
-  items: readonly T[],
-  cost: (item: T) => number,
-  budget: number,
-): { count: number; used: number } {
+function fit<T>(items: readonly T[], cost: (item: T) => number, budget: number): { count: number; used: number } {
   let used = 0;
   let count = 0;
   for (const item of items) {
@@ -115,8 +110,7 @@ class Budget {
 
 const NOTE_DIGITS_SLACK = 256;
 
-const budgetAfter = (shell: object) =>
-  new Budget(MAX_PAYLOAD_BYTES - NOTE_DIGITS_SLACK - responseBytes(shell));
+const budgetAfter = (shell: object) => new Budget(MAX_PAYLOAD_BYTES - NOTE_DIGITS_SLACK - responseBytes(shell));
 
 /**
  * A response with one list, cut to fit: `build(kept)` makes the response

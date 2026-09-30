@@ -9,7 +9,15 @@ import { FieldTableRow } from './FieldTableRow';
  * of fields, and only the rows near the viewport are rendered.
  */
 export function FieldsTable({
-  rows, rowIds, childRowIds, childCounts, collapsedParents, eventCount, columnWidths, onToggle, header,
+  rows,
+  rowIds,
+  childRowIds,
+  childCounts,
+  collapsedParents,
+  eventCount,
+  columnWidths,
+  onToggle,
+  header,
 }: {
   /** The visible rows: every field not hidden under a collapsed parent. */
   rows: FieldRow[];
@@ -59,7 +67,7 @@ export function FieldsTable({
                 eventCount={eventCount}
                 columnWidths={columnWidths}
                 collapsed={collapsed}
-                childCount={field.isParent ? childCounts.get(field.name) ?? 0 : 0}
+                childCount={field.isParent ? (childCounts.get(field.name) ?? 0) : 0}
                 controls={controlledRowIds(childRowIds.get(field.name), collapsed, rendered)}
                 onToggle={onToggle}
               />

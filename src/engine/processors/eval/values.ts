@@ -109,10 +109,14 @@ export function arith(l: EvalArg, r: EvalArg, op: '-' | '*' | '/' | '%'): EvalVa
   const b = numArg(r);
   if (a === null || b === null) return null;
   switch (op) {
-    case '-': return a - b;
-    case '*': return a * b;
-    case '/': return b !== 0 ? a / b : null;
-    case '%': return b !== 0 ? a % b : null;
+    case '-':
+      return a - b;
+    case '*':
+      return a * b;
+    case '/':
+      return b !== 0 ? a / b : null;
+    case '%':
+      return b !== 0 ? a % b : null;
   }
 }
 
@@ -159,7 +163,10 @@ export function minMax(args: EvalValue[], which: 'min' | 'max'): EvalValue {
   for (const v of args.flatMap((a) => (Array.isArray(a) ? a : [a]))) {
     // NULLs are not candidates: min(null, 3) is 3, and min(null) is NULL.
     if (v === null) continue;
-    if (best === undefined) { best = v; continue; }
+    if (best === undefined) {
+      best = v;
+      continue;
+    }
     const cmp = compareEvalValues(v, best);
     if (which === 'min' ? cmp < 0 : cmp > 0) best = v;
   }
@@ -190,13 +197,21 @@ function compareScalars(left: EvalValue, right: EvalValue, op: string): boolean 
   const r = bothNumeric ? rightNum : toStr(right);
 
   switch (op) {
-    case '==': case '=': return l === r;
-    case '!=': return l !== r;
-    case '<': return l < r;
-    case '>': return l > r;
-    case '<=': return l <= r;
-    case '>=': return l >= r;
-    default: return false;
+    case '==':
+    case '=':
+      return l === r;
+    case '!=':
+      return l !== r;
+    case '<':
+      return l < r;
+    case '>':
+      return l > r;
+    case '<=':
+      return l <= r;
+    case '>=':
+      return l >= r;
+    default:
+      return false;
   }
 }
 

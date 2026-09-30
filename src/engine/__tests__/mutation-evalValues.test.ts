@@ -35,27 +35,66 @@ const value = (expr: string, fields: Record<string, string | string[]> = {}) =>
 
 describe('parseDecimal', () => {
   it.each([
-    ['7', 7], ['-7', -7], ['+7', 7], ['12.5', 12.5], ['12.', 12], ['.25', 0.25],
-    ['1e3', 1000], ['1E+3', 1000], ['2.5e-1', 0.25], ['10e10', 1e11], [' 42 ', 42],
+    ['7', 7],
+    ['-7', -7],
+    ['+7', 7],
+    ['12.5', 12.5],
+    ['12.', 12],
+    ['.25', 0.25],
+    ['1e3', 1000],
+    ['1E+3', 1000],
+    ['2.5e-1', 0.25],
+    ['10e10', 1e11],
+    [' 42 ', 42],
   ])('reads %j as %d', (s, n) => {
     expect(parseDecimal(s)).toBe(n);
   });
 
-  it.each(['', ' ', 'abc', '1a', 'a1', '1.2.3', '.', '+', '-', 'e5', '1e', '1e+', '--1', '1 2', '0x10', 'Infinity', '1e999'])(
-    'refuses %j',
-    (s) => {
-      expect(parseDecimal(s)).toBeNull();
-    },
-  );
+  it.each([
+    '',
+    ' ',
+    'abc',
+    '1a',
+    'a1',
+    '1.2.3',
+    '.',
+    '+',
+    '-',
+    'e5',
+    '1e',
+    '1e+',
+    '--1',
+    '1 2',
+    '0x10',
+    'Infinity',
+    '1e999',
+  ])('refuses %j', (s) => {
+    expect(parseDecimal(s)).toBeNull();
+  });
 });
 
 describe('toBool', () => {
   it.each([
-    [null, false], [undefined, false], [true, true], [false, false],
-    [0, false], [1, true], [-1, true], [0.5, true],
-    ['', false], ['0', false], ['false', false], ['FALSE', false], ['False', false],
-    ['1', true], ['no', true], ['true', true], [' ', true],
-    [[], false], [['0'], true], [['a', 'b'], true],
+    [null, false],
+    [undefined, false],
+    [true, true],
+    [false, false],
+    [0, false],
+    [1, true],
+    [-1, true],
+    [0.5, true],
+    ['', false],
+    ['0', false],
+    ['false', false],
+    ['FALSE', false],
+    ['False', false],
+    ['1', true],
+    ['no', true],
+    ['true', true],
+    [' ', true],
+    [[], false],
+    [['0'], true],
+    [['a', 'b'], true],
   ] as const)('reads %j as %s', (v, b) => {
     expect(toBool(v as never)).toBe(b);
   });
@@ -72,8 +111,17 @@ describe('toTri', () => {
 
 describe('toNum', () => {
   it.each([
-    [null, 0], [undefined, 0], [5, 5], [true, 1], [false, 0],
-    ['12', 12], ['abc', 0], ['', 0], [['3', '4'], 3], [[], 0], [['x'], 0],
+    [null, 0],
+    [undefined, 0],
+    [5, 5],
+    [true, 1],
+    [false, 0],
+    ['12', 12],
+    ['abc', 0],
+    ['', 0],
+    [['3', '4'], 3],
+    [[], 0],
+    [['x'], 0],
   ] as const)('reads %j as %d', (v, n) => {
     expect(toNum(v as never)).toBe(n);
   });
@@ -81,8 +129,18 @@ describe('toNum', () => {
 
 describe('numArg', () => {
   it.each([
-    [null, null], [undefined, null], [5, 5], [NaN, null], [Infinity, null], [true, 1], [false, 0],
-    ['12', 12], ['abc', null], [['3', '4'], 3], [[], null], [['x'], null],
+    [null, null],
+    [undefined, null],
+    [5, 5],
+    [NaN, null],
+    [Infinity, null],
+    [true, 1],
+    [false, 0],
+    ['12', 12],
+    ['abc', null],
+    [['3', '4'], 3],
+    [[], null],
+    [['x'], null],
   ] as const)('reads %j as %s', (v, n) => {
     expect(numArg(v as never)).toBe(n);
   });
@@ -142,8 +200,14 @@ describe('addOrConcat and arith', () => {
   });
 
   it.each([
-    ['-', 7, 2, 5], ['*', 7, 2, 14], ['/', 7, 2, 3.5], ['%', 7, 2, 1],
-    ['/', 7, 0, null], ['%', 7, 0, null], ['/', 0, 5, 0], ['%', 0, 5, 0],
+    ['-', 7, 2, 5],
+    ['*', 7, 2, 14],
+    ['/', 7, 2, 3.5],
+    ['%', 7, 2, 1],
+    ['/', 7, 0, null],
+    ['%', 7, 0, null],
+    ['/', 0, 5, 0],
+    ['%', 0, 5, 0],
   ] as const)('%s on %d and %d is %s', (op, a, b, out) => {
     expect(arith(a, b, op)).toBe(out);
   });
@@ -156,18 +220,34 @@ describe('addOrConcat and arith', () => {
 
 describe('compare', () => {
   it('is NULL when either side is NULL', () => {
-    for (const [l, r] of [[null, 1], [undefined, 1], [1, null], [1, undefined]] as const) {
+    for (const [l, r] of [
+      [null, 1],
+      [undefined, 1],
+      [1, null],
+      [1, undefined],
+    ] as const) {
       expect(compare(l, r, '==')).toBeNull();
     }
   });
 
   it.each([
-    ['==', 2, 2, true], ['=', 2, 2, true], ['==', 2, 3, false],
-    ['!=', 2, 3, true], ['!=', 2, 2, false],
-    ['<', 2, 3, true], ['<', 3, 3, false], ['<', 4, 3, false],
-    ['>', 4, 3, true], ['>', 3, 3, false], ['>', 2, 3, false],
-    ['<=', 3, 3, true], ['<=', 2, 3, true], ['<=', 4, 3, false],
-    ['>=', 3, 3, true], ['>=', 4, 3, true], ['>=', 2, 3, false],
+    ['==', 2, 2, true],
+    ['=', 2, 2, true],
+    ['==', 2, 3, false],
+    ['!=', 2, 3, true],
+    ['!=', 2, 2, false],
+    ['<', 2, 3, true],
+    ['<', 3, 3, false],
+    ['<', 4, 3, false],
+    ['>', 4, 3, true],
+    ['>', 3, 3, false],
+    ['>', 2, 3, false],
+    ['<=', 3, 3, true],
+    ['<=', 2, 3, true],
+    ['<=', 4, 3, false],
+    ['>=', 3, 3, true],
+    ['>=', 4, 3, true],
+    ['>=', 2, 3, false],
     ['~~', 1, 1, false],
   ] as const)('%s on %d and %d is %s', (op, l, r, out) => {
     expect(compare(l, r, op)).toBe(out);

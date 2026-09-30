@@ -9,14 +9,32 @@
 // colours in it would have no meaningful answer to give them.
 export const FIELD_COLORS = {
   light: [
-    '#1d4ed8', '#991b1b', '#166534', '#92400e', '#6d28d9',
-    '#9d174d', '#155e75', '#9a3412', '#115e59', '#4338ca',
-    '#7e22ce', '#3f6212',
+    '#1d4ed8',
+    '#991b1b',
+    '#166534',
+    '#92400e',
+    '#6d28d9',
+    '#9d174d',
+    '#155e75',
+    '#9a3412',
+    '#115e59',
+    '#4338ca',
+    '#7e22ce',
+    '#3f6212',
   ],
   dark: [
-    '#93c5fd', '#fca5a5', '#86efac', '#fcd34d', '#c4b5fd',
-    '#f9a8d4', '#67e8f9', '#fdba74', '#5eead4', '#b4befe',
-    '#d8b4fe', '#bef264',
+    '#93c5fd',
+    '#fca5a5',
+    '#86efac',
+    '#fcd34d',
+    '#c4b5fd',
+    '#f9a8d4',
+    '#67e8f9',
+    '#fdba74',
+    '#5eead4',
+    '#b4befe',
+    '#d8b4fe',
+    '#bef264',
   ],
 } as const satisfies Record<'light' | 'dark', readonly [string, ...string[]]>;
 

@@ -62,7 +62,9 @@ describe('RegexTab', () => {
 
   it('draws each character once when a group in a lookahead ends past the match (#430)', async () => {
     const raw = 'foo barbaz qux';
-    const { container } = render(<RegexTab items={[makeItem(raw)]} allEvents={[makeItem(raw)]} currentPage={1} eventsPerPage={10} />);
+    const { container } = render(
+      <RegexTab items={[makeItem(raw)]} allEvents={[makeItem(raw)]} currentPage={1} eventsPerPage={10} />,
+    );
     fireEvent.change(screen.getByPlaceholderText(/\\d\+/), { target: { value: 'bar(?=(?P<x>baz))' } });
     await screen.findByText(/Event #/);
     expect(container.querySelector('pre')!.textContent).toBe(raw);
@@ -155,7 +157,7 @@ describe('RegexTab — one-click Add to props.conf (#88)', () => {
 });
 
 describe('RegexTab — results follow the typed pattern (#315)', () => {
-  it('treats the previous pattern\'s results as pending until the new one is matched', async () => {
+  it("treats the previous pattern's results as pending until the new one is matched", async () => {
     useAppStore.setState(initialState, true);
     const { container } = render(<RegexTab {...defaultProps} />);
     const input = within(container).getByPlaceholderText(/\\d\+/);
@@ -278,14 +280,22 @@ class FakeWorker {
   onmessage: ((e: MessageEvent<RegexMatchResponse>) => void) | null = null;
   onerror: ((e: ErrorEvent) => void) | null = null;
   posted: unknown[] = [];
-  constructor() { FakeWorker.instances.push(this); }
-  postMessage(message: unknown) { this.posted.push(message); }
+  constructor() {
+    FakeWorker.instances.push(this);
+  }
+  postMessage(message: unknown) {
+    this.posted.push(message);
+  }
   terminate() {}
   /** The module has loaded: a timeout after this is the pattern's, not the load's. */
-  ready() { this.onmessage?.({ data: { type: 'ready' } } as unknown as MessageEvent<RegexMatchResponse>); }
+  ready() {
+    this.onmessage?.({ data: { type: 'ready' } } as unknown as MessageEvent<RegexMatchResponse>);
+  }
   respond() {
     const { request: req, inputs } = lastRequest<RegexMatchRequest, string[]>(this.posted, (r) => r.inputs);
-    this.onmessage?.({ data: { id: req.id, results: matchInputs(req.pattern, inputs) } } as MessageEvent<RegexMatchResponse>);
+    this.onmessage?.({
+      data: { id: req.id, results: matchInputs(req.pattern, inputs) },
+    } as MessageEvent<RegexMatchResponse>);
   }
 }
 const worker = () => FakeWorker.instances[FakeWorker.instances.length - 1]!;
@@ -309,13 +319,21 @@ describe('RegexTab — results follow the events they were matched over (#329)',
   });
 
   const cardTitles = (container: HTMLElement) =>
-    within(container).queryAllByText(/^Event #\d+$/).map((el) => el.textContent);
+    within(container)
+      .queryAllByText(/^Event #\d+$/)
+      .map((el) => el.textContent);
 
   it('keeps showing the previous results against their own events while the new ones are matched', () => {
     const { container, rerender } = render(<RegexTab {...defaultProps} />);
-    fireEvent.change(within(container).getByPlaceholderText(/\\d\+/), { target: { value: '\\d+\\.\\d+\\.\\d+\\.\\d+' } });
-    act(() => { vi.advanceTimersByTime(250); });
-    act(() => { worker().respond(); });
+    fireEvent.change(within(container).getByPlaceholderText(/\\d\+/), {
+      target: { value: '\\d+\\.\\d+\\.\\d+\\.\\d+' },
+    });
+    act(() => {
+      vi.advanceTimersByTime(250);
+    });
+    act(() => {
+      worker().respond();
+    });
     expect(cardTitles(container)).toEqual(['Event #1', 'Event #2']);
     expect(within(container).getByText('2/3 events matched')).toBeInTheDocument();
 
@@ -334,7 +352,9 @@ describe('RegexTab — results follow the events they were matched over (#329)',
     expect(within(container).getByText('Testing 2 more events on this page…')).toBeInTheDocument();
     expect(within(container).getByText(/2\/3 events matched/).textContent).toContain('updating');
 
-    act(() => { worker().respond(); });
+    act(() => {
+      worker().respond();
+    });
     expect(cardTitles(container)).toEqual(['Event #3', 'Event #4']);
     expect(within(container).getByText('2/4 events matched')).toBeInTheDocument();
     expect(container.textContent).not.toContain('updating');
@@ -355,8 +375,12 @@ describe('RegexTab — results follow the events they were matched over (#329)',
       <RegexTab items={all.slice(2, 4)} allEvents={all} currentPage={2} eventsPerPage={2} />,
     );
     fireEvent.change(within(container).getByPlaceholderText(/\\d\+/), { target: { value: '10\\.0\\.0\\.\\d' } });
-    act(() => { vi.advanceTimersByTime(250); });
-    act(() => { worker().respond(); });
+    act(() => {
+      vi.advanceTimersByTime(250);
+    });
+    act(() => {
+      worker().respond();
+    });
     expect(cardTitles(container)).toEqual(['Event #3', 'Event #4']);
     expect(within(container).getByText('4/4 events matched')).toBeInTheDocument();
 
@@ -376,7 +400,9 @@ describe('RegexTab — results follow the events they were matched over (#329)',
     expect(within(container).getByText('2/2 events matched')).toBeInTheDocument();
     expect(container.textContent).not.toContain('updating');
 
-    act(() => { worker().respond(); });
+    act(() => {
+      worker().respond();
+    });
     expect(cardTitles(container)).toEqual(['Event #1', 'Event #2']);
     expect(within(container).getByText('2/2 events matched')).toBeInTheDocument();
   });
@@ -384,13 +410,19 @@ describe('RegexTab — results follow the events they were matched over (#329)',
   it('shows the timeout, not stale results, when the re-run is stopped', () => {
     const { container, rerender } = render(<RegexTab {...defaultProps} />);
     fireEvent.change(within(container).getByPlaceholderText(/\\d\+/), { target: { value: 'GET' } });
-    act(() => { vi.advanceTimersByTime(250); });
-    act(() => { worker().respond(); });
+    act(() => {
+      vi.advanceTimersByTime(250);
+    });
+    act(() => {
+      worker().respond();
+    });
     expect(cardTitles(container)).toEqual(['Event #1']);
 
     const next = [...items, makeItem('GET /again')];
     rerender(<RegexTab items={next} allEvents={next} currentPage={1} eventsPerPage={10} />);
-    act(() => { vi.advanceTimersByTime(2_000); });
+    act(() => {
+      vi.advanceTimersByTime(2_000);
+    });
     expect(within(container).getByText(/too slow to evaluate/)).toBeInTheDocument();
     expect(cardTitles(container)).toEqual([]);
   });
@@ -417,8 +449,7 @@ describe('RegexTab — Add to props.conf waits for a settled match (#338)', () =
     vi.unstubAllGlobals();
   });
 
-  const addButton = (container: HTMLElement) =>
-    within(container).getByRole('button', { name: 'Add to props.conf' });
+  const addButton = (container: HTMLElement) => within(container).getByRole('button', { name: 'Add to props.conf' });
 
   function typePattern(container: HTMLElement, pattern: string) {
     fireEvent.change(within(container).getByPlaceholderText(/\\d\+/), { target: { value: pattern } });
@@ -430,8 +461,12 @@ describe('RegexTab — Add to props.conf waits for a settled match (#338)', () =
 
   /** Let the debounce elapse and answer the posted request. */
   function settle() {
-    act(() => { vi.advanceTimersByTime(250); });
-    act(() => { worker().respond(); });
+    act(() => {
+      vi.advanceTimersByTime(250);
+    });
+    act(() => {
+      worker().respond();
+    });
   }
 
   it('stays disabled through the debounce and while the match is pending', () => {
@@ -442,7 +477,9 @@ describe('RegexTab — Add to props.conf waits for a settled match (#338)', () =
     expect(addButton(container)).toHaveAccessibleDescription(/finish testing/);
 
     // Posted, not answered.
-    act(() => { vi.advanceTimersByTime(250); });
+    act(() => {
+      vi.advanceTimersByTime(250);
+    });
     expect(requestsIn<RegexMatchRequest>(worker().posted).at(-1)?.pattern).toBe('GET');
     expect(addButton(container)).toBeDisabled();
 
@@ -476,9 +513,15 @@ describe('RegexTab — Add to props.conf waits for a settled match (#338)', () =
   it('stays disabled on a timeout and says to simplify the pattern', () => {
     const { container } = render(<RegexTab {...defaultProps} />);
     typePattern(container, '(a|aa)+b');
-    act(() => { vi.advanceTimersByTime(250); });
-    act(() => { worker().ready(); });
-    act(() => { vi.advanceTimersByTime(2_000); });
+    act(() => {
+      vi.advanceTimersByTime(250);
+    });
+    act(() => {
+      worker().ready();
+    });
+    act(() => {
+      vi.advanceTimersByTime(2_000);
+    });
     expect(within(container).getByText(/too slow to evaluate/)).toBeInTheDocument();
 
     const add = addButton(container);

@@ -39,7 +39,9 @@ function Body({ onMount }: { onMount: () => void }) {
 
 describe('FieldSplitLayout — hiding and showing the sidebar (#497)', () => {
   let mounts = 0;
-  const onMount = () => { mounts++; };
+  const onMount = () => {
+    mounts++;
+  };
   const layout = (collapsed: boolean) => (
     <FieldSplitLayout storageKey={KEY} collapsed={collapsed} sidebar={<div>side</div>}>
       <Body onMount={onMount} />

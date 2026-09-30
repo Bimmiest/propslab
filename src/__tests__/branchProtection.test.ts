@@ -19,7 +19,10 @@ const fullClassic = {
   allow_deletions: { enabled: false },
 };
 
-const ok = <T>(value: T) => () => Promise.resolve(value);
+const ok =
+  <T>(value: T) =>
+  () =>
+    Promise.resolve(value);
 const fails = (status: number) => () => Promise.reject(new ApiError('/x', status));
 
 describe('evaluateMainProtection', () => {
@@ -79,7 +82,9 @@ describe('evaluateMainProtection', () => {
 
   it('requires at least one approving review, not merely a review rule', async () => {
     const rules = fullRules.map((rule) =>
-      rule.type === 'pull_request' ? { type: 'pull_request', parameters: { required_approving_review_count: 0 } } : rule,
+      rule.type === 'pull_request'
+        ? { type: 'pull_request', parameters: { required_approving_review_count: 0 } }
+        : rule,
     );
     const classic = { ...fullClassic, required_pull_request_reviews: { required_approving_review_count: 0 } };
     for (const [getRules, getClassic] of [

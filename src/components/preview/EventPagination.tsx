@@ -39,10 +39,7 @@ export function EventPagination({
 
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-1.5">
-          <label
-            htmlFor="events-per-page"
-            style={{ color: 'var(--color-text-muted)' }}
-          >
+          <label htmlFor="events-per-page" style={{ color: 'var(--color-text-muted)' }}>
             Per page:
           </label>
           <select
@@ -74,10 +71,7 @@ export function EventPagination({
             <Icon name="chevron-left" size={14} className="" />
           </button>
 
-          <span
-            className="px-1 tabular-nums"
-            style={{ color: 'var(--color-text-secondary)' }}
-          >
+          <span className="px-1 tabular-nums" style={{ color: 'var(--color-text-secondary)' }}>
             Page {currentPage} of {totalPages}
           </span>
 

@@ -35,7 +35,13 @@ export function detectTimestamp(lines: string[]): ScaffoldSuggestion[] {
   const ratio = best.count / sample.length;
   const confidence: Confidence = ratio >= 0.9 ? 'high' : ratio >= 0.5 ? 'medium' : 'low';
   const out: ScaffoldSuggestion[] = [
-    { key: 'TIME_FORMAT', value: bestFmt, confidence, evidence: `Matched in ${best.count}/${sample.length} sample lines`, enabledByDefault: true },
+    {
+      key: 'TIME_FORMAT',
+      value: bestFmt,
+      confidence,
+      evidence: `Matched in ${best.count}/${sample.length} sample lines`,
+      enabledByDefault: true,
+    },
   ];
 
   const matchEnd = best.match.end;

@@ -7,7 +7,11 @@ const metadataFields: { key: keyof EventMetadata; label: string; hint: string }[
   { key: 'index', label: 'index', hint: 'Splunk index where the event is stored' },
   { key: 'host', label: 'host', hint: 'Matches host:: stanzas in props.conf' },
   { key: 'source', label: 'source', hint: 'Matches source:: stanzas in props.conf' },
-  { key: 'sourcetype', label: 'sourcetype', hint: 'Matches [sourcetype] stanzas in props.conf — the most important field for pipeline matching' },
+  {
+    key: 'sourcetype',
+    label: 'sourcetype',
+    hint: 'Matches [sourcetype] stanzas in props.conf — the most important field for pipeline matching',
+  },
 ];
 
 export function MetadataPanel() {
@@ -29,7 +33,9 @@ export function MetadataPanel() {
           className={`w-3 h-3 text-[var(--color-text-muted)] transition-transform ${collapsed ? '-rotate-90' : ''}`}
         />
         <Icon name="tag" className="w-3.5 h-3.5 text-[var(--color-accent)]" />
-        <span className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">Metadata</span>
+        <span className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">
+          Metadata
+        </span>
       </button>
       {!collapsed && (
         <div className="flex flex-col gap-1.5 px-3 pb-3">

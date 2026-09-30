@@ -20,7 +20,11 @@ describe('applyFieldAliases — literal', () => {
   });
 
   it('ASNEW does not overwrite an existing target', () => {
-    const e = applyFieldAliases([event({ ip: '10.0.0.1', addr: 'keep' })], [dir('a', 'ip ASNEW addr')], runCtx(FIXED_NOW))[0]!;
+    const e = applyFieldAliases(
+      [event({ ip: '10.0.0.1', addr: 'keep' })],
+      [dir('a', 'ip ASNEW addr')],
+      runCtx(FIXED_NOW),
+    )[0]!;
     expect(e.fields['addr']).toBe('keep');
   });
 
@@ -61,7 +65,11 @@ describe('applyFieldAliases — wildcards are not supported (Splunk parity)', ()
 
 describe('applyFieldAliases — dotted (nested JSON) field names', () => {
   it('resolves a single-quoted dotted source field', () => {
-    const e = applyFieldAliases([event({ 'event.field': 'V' })], [dir('a', "'event.field' AS myfield")], runCtx(FIXED_NOW))[0]!;
+    const e = applyFieldAliases(
+      [event({ 'event.field': 'V' })],
+      [dir('a', "'event.field' AS myfield")],
+      runCtx(FIXED_NOW),
+    )[0]!;
     expect(e.fields['myfield']).toBe('V');
   });
 

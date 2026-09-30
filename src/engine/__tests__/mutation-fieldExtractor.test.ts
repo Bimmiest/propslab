@@ -18,10 +18,19 @@ function dir(className: string, value: string, line = 1): ConfDirective {
 describe('EXTRACT — a pattern that cannot be compiled', () => {
   it('warns once, names the class, and records a regex-invalid no-op on every event', () => {
     const diagnostics: ValidationDiagnostic[] = [];
-    const out = extractFields([event('a'), event('b')], [dir('broken', '(?<x>unclosed', 7)], runCtx(FIXED_NOW, diagnostics));
+    const out = extractFields(
+      [event('a'), event('b')],
+      [dir('broken', '(?<x>unclosed', 7)],
+      runCtx(FIXED_NOW, diagnostics),
+    );
 
     expect(diagnostics).toHaveLength(1);
-    expect(diagnostics[0]).toMatchObject({ level: 'warning', file: 'props.conf', line: 7, directiveKey: 'EXTRACT-broken' });
+    expect(diagnostics[0]).toMatchObject({
+      level: 'warning',
+      file: 'props.conf',
+      line: 7,
+      directiveKey: 'EXTRACT-broken',
+    });
     expect(diagnostics[0]!.message).toMatch(/^EXTRACT-broken was skipped/);
 
     for (const e of out) {
@@ -98,7 +107,11 @@ describe('EXTRACT — what a match leaves behind', () => {
   });
 
   it('explains a match that added nothing because every field was already set', () => {
-    const e = extractFields([event('status=500', { status: '200' })], [dir('s', 'status=(?<status>\\d+)')], runCtx(FIXED_NOW))[0]!;
+    const e = extractFields(
+      [event('status=500', { status: '200' })],
+      [dir('s', 'status=(?<status>\\d+)')],
+      runCtx(FIXED_NOW),
+    )[0]!;
     expect(e.processingTrace).toEqual([]);
     expect(e.noOps).toEqual([
       {
@@ -112,7 +125,11 @@ describe('EXTRACT — what a match leaves behind', () => {
   });
 
   it('reports only the fields that collided when some were new', () => {
-    const e = extractFields([event('a=1 b=2', { a: 'x' })], [dir('ab', 'a=(?<a>\\d) b=(?<b>\\d)')], runCtx(FIXED_NOW))[0]!;
+    const e = extractFields(
+      [event('a=1 b=2', { a: 'x' })],
+      [dir('ab', 'a=(?<a>\\d) b=(?<b>\\d)')],
+      runCtx(FIXED_NOW),
+    )[0]!;
     expect(e.fields).toEqual({ a: 'x', b: '2' });
     // A match that added something is not a no-op, even if part of it collided.
     expect(e.noOps).toBeUndefined();
@@ -125,7 +142,13 @@ describe('EXTRACT — what a match leaves behind', () => {
   });
 
   it('appends to no-ops already on the event rather than replacing them', () => {
-    const prior = { directive: 'X', file: 'props.conf' as const, line: 9, phase: 'search-time' as const, reason: { kind: 'no-match' as const } };
+    const prior = {
+      directive: 'X',
+      file: 'props.conf' as const,
+      line: 9,
+      phase: 'search-time' as const,
+      reason: { kind: 'no-match' as const },
+    };
     const ev = { ...event('zzz'), noOps: [prior] };
     const e = extractFields([ev], [dir('n', 'q=(?<q>\\d)')], runCtx(FIXED_NOW))[0]!;
     expect(e.noOps).toHaveLength(2);
@@ -150,7 +173,13 @@ describe('EXTRACT — what a match leaves behind', () => {
   });
 
   it('ignores directives that are not EXTRACT', () => {
-    const report: ConfDirective = { key: 'REPORT-a', value: 'a=(?<a>\\d)', line: 1, directiveType: 'REPORT', className: 'a' };
+    const report: ConfDirective = {
+      key: 'REPORT-a',
+      value: 'a=(?<a>\\d)',
+      line: 1,
+      directiveType: 'REPORT',
+      className: 'a',
+    };
     const e = extractFields([event('a=1')], [report, dir('b', 'a=(?<b>\\d)')], runCtx(FIXED_NOW))[0]!;
     expect(e.fields).toEqual({ b: '1' });
   });
@@ -158,7 +187,11 @@ describe('EXTRACT — what a match leaves behind', () => {
 
 describe('EXTRACT — reading from a named source field', () => {
   it('reads the first value of a multivalue source field', () => {
-    const e = extractFields([event('', { tags: ['id-7', 'id-9'] })], [dir('t', 'id-(?<n>\\d) in tags')], runCtx(FIXED_NOW))[0]!;
+    const e = extractFields(
+      [event('', { tags: ['id-7', 'id-9'] })],
+      [dir('t', 'id-(?<n>\\d) in tags')],
+      runCtx(FIXED_NOW),
+    )[0]!;
     expect(e.fields['n']).toBe('7');
   });
 

@@ -70,7 +70,7 @@ export const PROPS_CORE: DirectiveDefinition[] = [
     key: 'DATETIME_CONFIG',
     description:
       'The path to the datetime configuration file that Splunk uses for automatic timestamp recognition. ' +
-      'Set to CURRENT to use the event\'s receipt time as its timestamp. ' +
+      "Set to CURRENT to use the event's receipt time as its timestamp. " +
       'Set to NONE to disable automatic timestamp parsing entirely.',
     example: 'DATETIME_CONFIG = CURRENT',
     defaultValue: '/etc/datetime.xml',
@@ -662,7 +662,7 @@ export const PROPS_ADDITIONAL: DirectiveDefinition[] = [
     key: 'priority',
     description:
       'Sets the priority for stanza matching when a data input matches multiple stanzas. ' +
-      'Higher values take precedence. Used to control which stanza\'s settings are applied first.',
+      "Higher values take precedence. Used to control which stanza's settings are applied first.",
     example: 'priority = 10',
     defaultValue: '0',
     category: 'Data Input',

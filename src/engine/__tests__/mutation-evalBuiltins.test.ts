@@ -19,14 +19,40 @@ const value = (expr: string, fields: Record<string, string | string[]> = {}) =>
 
 describe('NULL in, NULL out', () => {
   it.each([
-    'lower(missing)', 'upper(missing)', 'len(missing)', 'substr(missing, 1)', 'replace(missing, "a", "b")',
-    'trim(missing)', 'ltrim(missing)', 'rtrim(missing)', 'urldecode(missing)', 'split(missing, ",")',
-    'mvjoin(missing, ",")', 'tostring(missing)', 'abs(missing)', 'ceiling(missing)', 'ceil(missing)',
-    'floor(missing)', 'round(missing)', 'sqrt(missing)', 'pow(missing, 2)', 'pow(2, missing)',
-    'log(missing)', 'log(8, missing)', 'ln(missing)', 'exp(missing)', 'mvcount(missing)', 'strftime(missing, "%Y")',
-    'abs("x")', 'sqrt("x")', 'null()',
+    'lower(missing)',
+    'upper(missing)',
+    'len(missing)',
+    'substr(missing, 1)',
+    'replace(missing, "a", "b")',
+    'trim(missing)',
+    'ltrim(missing)',
+    'rtrim(missing)',
+    'urldecode(missing)',
+    'split(missing, ",")',
+    'mvjoin(missing, ",")',
+    'tostring(missing)',
+    'abs(missing)',
+    'ceiling(missing)',
+    'ceil(missing)',
+    'floor(missing)',
+    'round(missing)',
+    'sqrt(missing)',
+    'pow(missing, 2)',
+    'pow(2, missing)',
+    'log(missing)',
+    'log(8, missing)',
+    'ln(missing)',
+    'exp(missing)',
+    'mvcount(missing)',
+    'strftime(missing, "%Y")',
+    'abs("x")',
+    'sqrt("x")',
+    'null()',
     // A NULL second or third argument is NULL too (#481), not "" or 0.
-    'split("a,b", missing)', 'substr("abc", 1, missing)', 'substr("abc", missing)', 'mvjoin(split("a,b", ","), missing)',
+    'split("a,b", missing)',
+    'substr("abc", 1, missing)',
+    'substr("abc", missing)',
+    'mvjoin(split("a,b", ","), missing)',
   ])('%s', (expr) => {
     expect(value(expr)).toBeNull();
   });
@@ -34,9 +60,21 @@ describe('NULL in, NULL out', () => {
 
 describe('the math functions compute what they name', () => {
   it.each([
-    ['abs(-3)', 3], ['ceiling(1.2)', 2], ['ceil(-1.2)', -1], ['floor(1.8)', 1], ['floor(-1.2)', -2],
-    ['sqrt(16)', 4], ['pow(2, 10)', 1024], ['log(100)', 2], ['log(8, 2)', 3], ['ln(1)', 0], ['exp(0)', 1],
-    ['round(2.5)', 3], ['round(-2.5)', -3], ['round(1.2345, 2)', 1.23], ['round(5, "x")', 5],
+    ['abs(-3)', 3],
+    ['ceiling(1.2)', 2],
+    ['ceil(-1.2)', -1],
+    ['floor(1.8)', 1],
+    ['floor(-1.2)', -2],
+    ['sqrt(16)', 4],
+    ['pow(2, 10)', 1024],
+    ['log(100)', 2],
+    ['log(8, 2)', 3],
+    ['ln(1)', 0],
+    ['exp(0)', 1],
+    ['round(2.5)', 3],
+    ['round(-2.5)', -3],
+    ['round(1.2345, 2)', 1.23],
+    ['round(5, "x")', 5],
   ] as const)('%s = %d', (expr, n) => {
     expect(value(expr)).toBeCloseTo(n, 10);
   });
@@ -84,9 +122,15 @@ describe('the trim family', () => {
 
 describe('string functions', () => {
   it.each([
-    ['lower("AbC")', 'abc'], ['upper("AbC")', 'ABC'], ['len("abc")', 3], ['len("")', 0],
-    ['urldecode("a%20b")', 'a b'], ['urldecode("100%")', '100%'],
-    ['nullif("a", "a")', null], ['nullif("a", "b")', 'a'], ['nullif(missing, "x")', null],
+    ['lower("AbC")', 'abc'],
+    ['upper("AbC")', 'ABC'],
+    ['len("abc")', 3],
+    ['len("")', 0],
+    ['urldecode("a%20b")', 'a b'],
+    ['urldecode("100%")', '100%'],
+    ['nullif("a", "a")', null],
+    ['nullif("a", "b")', 'a'],
+    ['nullif(missing, "x")', null],
   ] as const)('%s = %j', (expr, out) => {
     expect(value(expr)).toBe(out);
   });
@@ -99,11 +143,21 @@ describe('string functions', () => {
 
 describe('type functions', () => {
   it.each([
-    ['typeof(1)', 'Number'], ['typeof("a")', 'String'], ['typeof(1==1)', 'Bool'], ['typeof(missing)', 'Invalid'],
+    ['typeof(1)', 'Number'],
+    ['typeof("a")', 'String'],
+    ['typeof(1==1)', 'Bool'],
+    ['typeof(missing)', 'Invalid'],
     ['typeof(split("a,b", ","))', 'MultiValue'],
-    ['isnull(missing)', true], ['isnull("")', false], ['isnotnull(missing)', false], ['isnotnull("")', true],
-    ['isint("3")', true], ['isint("3.5")', false], ['isbool(1==1)', true], ['isbool(1)', false],
-    ['isstr("a")', true], ['isstr(1)', false],
+    ['isnull(missing)', true],
+    ['isnull("")', false],
+    ['isnotnull(missing)', false],
+    ['isnotnull("")', true],
+    ['isint("3")', true],
+    ['isint("3.5")', false],
+    ['isbool(1==1)', true],
+    ['isbool(1)', false],
+    ['isstr("a")', true],
+    ['isstr(1)', false],
   ] as const)('%s = %j', (expr, out) => {
     expect(value(expr)).toBe(out);
   });
@@ -131,10 +185,18 @@ describe('multivalue functions', () => {
   const mv = { m: ['a', 'b', 'c', 'd'] };
 
   it.each([
-    ['mvindex(m, 0)', 'a'], ['mvindex(m, 3)', 'd'], ['mvindex(m, -1)', 'd'], ['mvindex(m, -4)', 'a'],
-    ['mvindex(m, 4)', null], ['mvindex(m, -5)', null],
-    ['mvindex(m, 1, 2)', ['b', 'c']], ['mvindex(m, 1, -1)', ['b', 'c', 'd']], ['mvindex(m, 2, 2)', 'c'],
-    ['mvindex(m, 2, 1)', null], ['mvindex(m, 0, 4)', null], ['mvindex(m, 0, -5)', null],
+    ['mvindex(m, 0)', 'a'],
+    ['mvindex(m, 3)', 'd'],
+    ['mvindex(m, -1)', 'd'],
+    ['mvindex(m, -4)', 'a'],
+    ['mvindex(m, 4)', null],
+    ['mvindex(m, -5)', null],
+    ['mvindex(m, 1, 2)', ['b', 'c']],
+    ['mvindex(m, 1, -1)', ['b', 'c', 'd']],
+    ['mvindex(m, 2, 2)', 'c'],
+    ['mvindex(m, 2, 1)', null],
+    ['mvindex(m, 0, 4)', null],
+    ['mvindex(m, 0, -5)', null],
   ] as const)('%s = %j', (expr, out) => {
     expect(value(expr, mv)).toEqual(out);
   });

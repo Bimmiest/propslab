@@ -14,7 +14,8 @@ function dir(key: string, value: string): ConfDirective {
   return { key, value, line: 3, directiveType: key };
 }
 
-const raws = (raw: string, directives: ConfDirective[]) => breakLines(raw, directives, META, runCtx(FIXED_NOW)).map((e) => e._raw);
+const raws = (raw: string, directives: ConfDirective[]) =>
+  breakLines(raw, directives, META, runCtx(FIXED_NOW)).map((e) => e._raw);
 
 describe('input with nothing in it', () => {
   it('yields no events for an empty string', () => {
@@ -30,13 +31,18 @@ describe('line numbers', () => {
   it('gives each unmerged event its own line', () => {
     const events = breakLines('a\nb\nc', [dir('SHOULD_LINEMERGE', 'false')], META, runCtx(FIXED_NOW));
     expect(events.map((e) => e.lineNumbers)).toEqual([
-      { start: 1, end: 1 }, { start: 2, end: 2 }, { start: 3, end: 3 },
+      { start: 1, end: 1 },
+      { start: 2, end: 2 },
+      { start: 3, end: 3 },
     ]);
   });
 
   it('spans the lines a merged event covers', () => {
     const events = breakLines('2024-01-01 10:00:00 a\nx\ny\n2024-01-02 10:00:00 b', [], META, runCtx(FIXED_NOW));
-    expect(events.map((e) => e.lineNumbers)).toEqual([{ start: 1, end: 3 }, { start: 4, end: 4 }]);
+    expect(events.map((e) => e.lineNumbers)).toEqual([
+      { start: 1, end: 3 },
+      { start: 4, end: 4 },
+    ]);
   });
 });
 
@@ -69,7 +75,10 @@ describe('MUST_NOT_BREAK_AFTER', () => {
 
   it('suppresses date breaks from the line after a match to the end of the input', () => {
     const raw = [dated('a'), dated('b'), 'HOLD', dated('c'), dated('d')].join('\n');
-    expect(raws(raw, [dir('MUST_NOT_BREAK_AFTER', 'HOLD')])).toEqual([dated('a'), [dated('b'), 'HOLD', dated('c'), dated('d')].join('\n')]);
+    expect(raws(raw, [dir('MUST_NOT_BREAK_AFTER', 'HOLD')])).toEqual([
+      dated('a'),
+      [dated('b'), 'HOLD', dated('c'), dated('d')].join('\n'),
+    ]);
   });
 
   it('ends the suppression at a MUST_BREAK_AFTER match, which still forces its break', () => {
@@ -115,7 +124,13 @@ describe('the trace', () => {
     const raw = ['START a', 'b', 'c', 'START d'].join('\n');
     const events = breakLines(
       raw,
-      [dir('BREAK_ONLY_BEFORE', 'START'), dir('BREAK_ONLY_BEFORE_DATE', 'false'), dir('MUST_NOT_BREAK_AFTER', 'NEVER'), dir('MUST_BREAK_AFTER', 'NEVER'), dir('MAX_EVENTS', '1')],
+      [
+        dir('BREAK_ONLY_BEFORE', 'START'),
+        dir('BREAK_ONLY_BEFORE_DATE', 'false'),
+        dir('MUST_NOT_BREAK_AFTER', 'NEVER'),
+        dir('MUST_BREAK_AFTER', 'NEVER'),
+        dir('MAX_EVENTS', '1'),
+      ],
       META,
       runCtx(FIXED_NOW),
     );
@@ -133,7 +148,7 @@ describe('the trace', () => {
     }
   });
 
-  it('names MAX_EVENTS\' default when the default cap forced the break', () => {
+  it("names MAX_EVENTS' default when the default cap forced the break", () => {
     const raw = Array.from({ length: 258 }, (_, i) => `l${i}`).join('\n');
     const events = breakLines(raw, [], META, runCtx(FIXED_NOW));
     expect(events).toHaveLength(2);

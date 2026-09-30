@@ -37,12 +37,7 @@ import { resultText } from './resultText';
 import { parseConf } from '../../../../src/engine/parser/confParser';
 import { getDirectivesForFile } from '../../../../src/engine/directiveRegistry';
 import { validateRegex } from '../../../../src/utils/splunkRegex';
-import type {
-  ConfInput,
-  ProcessingResult,
-  SplunkEvent,
-  ValidationDiagnostic,
-} from '../../../../src/engine/types';
+import type { ConfInput, ProcessingResult, SplunkEvent, ValidationDiagnostic } from '../../../../src/engine/types';
 import { fcSeed } from './fcSeed';
 import { makeEvent } from '../../../../src/test/makeEvent';
 
@@ -57,8 +52,29 @@ type File = 'props.conf' | 'transforms.conf';
 
 /** Regex fragments; concatenated, they make valid, invalid and ReDoS-prone patterns alike. */
 const regexFragment = fc.constantFrom(
-  '(\\d+)', '(?<f>\\w+)', '(?P<g>[a-z]+)', '[\\r\\n]+', 'a|b', '\\s*', '^', '$', 'x{2,3}',
-  '(', ')', '[a', ']', '*', '+', '?', '{2,1}', '(?<1x>a)', '(?z)', '\\', '(a+)+', '(.*)*', '\\k<nope>',
+  '(\\d+)',
+  '(?<f>\\w+)',
+  '(?P<g>[a-z]+)',
+  '[\\r\\n]+',
+  'a|b',
+  '\\s*',
+  '^',
+  '$',
+  'x{2,3}',
+  '(',
+  ')',
+  '[a',
+  ']',
+  '*',
+  '+',
+  '?',
+  '{2,1}',
+  '(?<1x>a)',
+  '(?z)',
+  '\\',
+  '(a+)+',
+  '(.*)*',
+  '\\k<nope>',
 );
 const pattern = fc.array(regexFragment, { minLength: 1, maxLength: 4 }).map((fs) => fs.join(''));
 
@@ -72,25 +88,52 @@ const regexKeys = (file: File) =>
 const regexDirective = (file: File) =>
   fc.tuple(fc.constantFrom(...regexKeys(file)), pattern).map(([k, p]) => `${k} = ${p}`);
 
-const sedDirective = pattern
-  .filter((p) => !p.includes('/') && !p.endsWith('\\'))
-  .map((p) => `SEDCMD-s = s/${p}/x/g`);
+const sedDirective = pattern.filter((p) => !p.includes('/') && !p.endsWith('\\')).map((p) => `SEDCMD-s = s/${p}/x/g`);
 
 const otherLine = (file: File) =>
   fc.constantFrom(
     ...(file === 'props.conf'
-      ? ['SHOULD_LINEMERGE = false', 'SHOULD_LINEMERGE = maybe', 'TIME_FORMAT = %Y-%m-%d %H:%M:%S', 'TIME_PREFIX = ^',
-         'KV_MODE = json', 'TRUNCATE = 50', 'MAX_EVENTS = x', 'TRANSFORMS-t = t1', 'REPORT-r = t2, missing',
-         'EVAL-z = len(_raw) + 1', 'EVAL-bad = (', 'FIELDALIAS-a = f AS g', 'DATETIME_CONFIG = CURRENT']
-      : ['FORMAT = f::$1', 'FORMAT = $1', 'DEST_KEY = _raw', 'DEST_KEY = MetaData:Sourcetype', 'WRITE_META = true',
-         'MV_ADD = true', 'SOURCE_KEY = _raw', 'DELIMS = ",", "="', 'FIELDS = a, b', 'INGEST_EVAL = x = 1']),
-    'not a directive', '  INDENTED = 1', '# comment', '', 'LINE_BREAKER = \\', '[unclosed',
+      ? [
+          'SHOULD_LINEMERGE = false',
+          'SHOULD_LINEMERGE = maybe',
+          'TIME_FORMAT = %Y-%m-%d %H:%M:%S',
+          'TIME_PREFIX = ^',
+          'KV_MODE = json',
+          'TRUNCATE = 50',
+          'MAX_EVENTS = x',
+          'TRANSFORMS-t = t1',
+          'REPORT-r = t2, missing',
+          'EVAL-z = len(_raw) + 1',
+          'EVAL-bad = (',
+          'FIELDALIAS-a = f AS g',
+          'DATETIME_CONFIG = CURRENT',
+        ]
+      : [
+          'FORMAT = f::$1',
+          'FORMAT = $1',
+          'DEST_KEY = _raw',
+          'DEST_KEY = MetaData:Sourcetype',
+          'WRITE_META = true',
+          'MV_ADD = true',
+          'SOURCE_KEY = _raw',
+          'DELIMS = ",", "="',
+          'FIELDS = a, b',
+          'INGEST_EVAL = x = 1',
+        ]),
+    'not a directive',
+    '  INDENTED = 1',
+    '# comment',
+    '',
+    'LINE_BREAKER = \\',
+    '[unclosed',
   );
 
 const stanzaHeader = (file: File) =>
-  fc.constantFrom(...(file === 'props.conf'
-    ? ['[st]', '[default]', '[source::/var/log/*]', '[host::web*]', '[other]']
-    : ['[t1]', '[t2]', '[t3]']));
+  fc.constantFrom(
+    ...(file === 'props.conf'
+      ? ['[st]', '[default]', '[source::/var/log/*]', '[host::web*]', '[other]']
+      : ['[t1]', '[t2]', '[t3]']),
+  );
 
 const conf = (file: File) =>
   fc
@@ -107,10 +150,13 @@ const conf = (file: File) =>
 
 /** Flat, or split into default/local layers. */
 const confInput = (file: File): fc.Arbitrary<ConfInput> =>
-  fc.oneof(conf(file), fc.tuple(conf(file), conf(file)).map(([d, l]) => [
-    { layer: 'default', text: d },
-    { layer: 'local', text: l },
-  ]));
+  fc.oneof(
+    conf(file),
+    fc.tuple(conf(file), conf(file)).map(([d, l]) => [
+      { layer: 'default', text: d },
+      { layer: 'local', text: l },
+    ]),
+  );
 
 const sampleLine = fc.oneof(
   fc.constantFrom(
@@ -159,11 +205,7 @@ function regexBearing(input: ConfInput, file: File) {
   );
 }
 
-function expectEveryBadPatternReported(
-  input: ConfInput,
-  file: File,
-  diagnostics: ValidationDiagnostic[],
-): void {
+function expectEveryBadPatternReported(input: ConfInput, file: File, diagnostics: ValidationDiagnostic[]): void {
   for (const { d, pattern: p } of regexBearing(input, file)) {
     if (validateRegex(p) === null) continue;
     const reported = diagnostics.some(
@@ -276,9 +318,9 @@ describe('tool handlers — random input never throws out of the handler', () =>
             },
             WORKER_PATH,
           );
-          expect(
-            Buffer.byteLength(JSON.stringify({ result, jsonrpc: '2.0', id: 1 })),
-          ).toBeLessThanOrEqual(MAX_RESPONSE_BYTES);
+          expect(Buffer.byteLength(JSON.stringify({ result, jsonrpc: '2.0', id: 1 }))).toBeLessThanOrEqual(
+            MAX_RESPONSE_BYTES,
+          );
           const out = JSON.parse(text(result));
           // An error result is structured; the engine itself must not fail.
           if (result.isError) {
@@ -319,7 +361,15 @@ describe('tool handlers — random input never throws out of the handler', () =>
         fc.option(fc.constantFrom('st', 'other', 'x'), { nil: undefined }),
         async (file, input, sourcetype) => {
           const result = await handleExplainPrecedence(
-            { file, conf: input, sourcetype, index: 'main', host: 'web1', source: '/var/log/app.log', timeout_ms: 10_000 },
+            {
+              file,
+              conf: input,
+              sourcetype,
+              index: 'main',
+              host: 'web1',
+              source: '/var/log/app.log',
+              timeout_ms: 10_000,
+            },
             WORKER_PATH,
           );
           expect(result.isError).toBeUndefined();

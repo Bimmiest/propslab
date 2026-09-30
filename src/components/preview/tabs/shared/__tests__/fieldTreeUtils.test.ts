@@ -8,9 +8,7 @@ function colorMap(names: string[]): Map<string, string> {
 
 /** Collapse a tree to `name(child,child)` strings for concise structural assertions. */
 function shape(nodes: FieldNode[]): string[] {
-  return nodes.map((n) =>
-    n.children.length ? `${n.name}(${shape(n.children).join(',')})` : n.name,
-  );
+  return nodes.map((n) => (n.children.length ? `${n.name}(${shape(n.children).join(',')})` : n.name));
 }
 
 describe('buildFieldTree', () => {

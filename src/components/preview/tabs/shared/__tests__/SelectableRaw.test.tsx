@@ -19,7 +19,10 @@ function Harness({ onChange }: { onChange?: (s: RawSelection | null) => void }) 
       <SelectableRaw
         raw={RAW}
         selection={sel}
-        onChange={(s) => { setSel(s); onChange?.(s); }}
+        onChange={(s) => {
+          setSel(s);
+          onChange?.(s);
+        }}
       />
       <output data-testid="sel">{sel ? RAW.slice(sel.start, sel.end) : ''}</output>
     </>
