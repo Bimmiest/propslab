@@ -105,11 +105,6 @@ describe('applyDestKey — _raw replacement', () => {
 // An empty FORMAT expansion (destValue === '') must still route, rather
 // than being treated as "no routing" by a falsy check.
 describe('applyDestKey — empty destValue still routes', () => {
-  it('sets a target field to an empty string', () => {
-    const event = applyDestKey(baseEvent(), result('anon_field', ''));
-    expect(event.fields.anon_field).toBe('');
-  });
-
   it('blanks _raw when FORMAT expands to empty', () => {
     const event = applyDestKey(baseEvent(), result('_raw', ''));
     expect(event._raw).toBe('');
@@ -136,6 +131,27 @@ describe('applyDestKey — _meta (SEM-11)', () => {
     expect(again._meta.tag).toEqual(['a', 'b', 'c']);
     expect(event._meta.tag).toEqual(['a', 'b']); // the input event is not mutated
   });
+
+  it('never writes a _queue:: pair into the single-valued routing slot (#478)', () => {
+    // Only DEST_KEY = queue routes; `_queue` stays a string (types.ts), so a
+    // `=== 'nullQueue'` check downstream still reads it.
+    const queued = applyDestKey(baseEvent(), result('queue', 'nullQueue'));
+    const event = applyDestKey(queued, result('_meta', 'a::1 _queue::indexQueue b::2'));
+    expect(event._meta).toEqual({ _queue: 'nullQueue', a: '1', b: '2' });
+    expect(applyDestKey(baseEvent(), result('_meta', '_queue::indexQueue'))._meta).toEqual({});
+  });
+
+  it('keeps _queue a string through the pipeline when a _meta FORMAT names it (#478)', () => {
+    const props = '[syslog]\nSHOULD_LINEMERGE = false\nTRANSFORMS-q = drop, meta\n';
+    const transforms = [
+      '[drop]', 'REGEX = .', 'DEST_KEY = queue', 'FORMAT = nullQueue', '',
+      '[meta]', 'REGEX = (\\w+)', 'DEST_KEY = _meta', 'FORMAT = _queue::indexQueue word::$1', '',
+    ].join('\n');
+    const meta = { index: 'main', host: 'h', source: '/log', sourcetype: 'syslog' };
+    const { result: out } = runPipeline('hello', meta, props, transforms);
+    // Routed to nullQueue by DEST_KEY = queue; a _meta pair cannot undo that.
+    expect(out.events.map((e) => e._meta)).toEqual([{ _queue: 'nullQueue', word: 'hello' }]);
+  });
 });
 
 describe('applyDestKey — unsimulated routing keys are not written as fields (#75.3)', () => {
@@ -149,9 +165,22 @@ describe('applyDestKey — unsimulated routing keys are not written as fields (#
     expect(out.fields._INDEX_AND_FORWARD_ROUTING).toBeUndefined();
   });
 
-  it('still treats a genuinely unknown key as a field name', () => {
-    const out = applyDestKey(baseEvent(), result('my_custom_field', 'v'));
-    expect(out.fields.my_custom_field).toBe('v');
+  // Doc-derived: transforms.conf.spec lists the DEST_KEY values Splunk accepts,
+  // and gives an unlisted key no effect. Writing the value into a field named
+  // after the key would show a field Splunk never creates (#477). The extracted
+  // fields of the transform still apply.
+  it('leaves the event alone for a key outside the documented set', () => {
+    const before = baseEvent();
+    const out = applyDestKey(before, { ...result('my_custom_field', 'v'), fields: { kept: 'k' } });
+    expect(out.fields.my_custom_field).toBeUndefined();
+    expect(out.fields.kept).toBe('k');
+    expect(out._raw).toBe(before._raw);
+    expect(out.metadata).toEqual(before.metadata);
+    expect(out._meta).toEqual(before._meta);
+  });
+
+  it('leaves the event alone for an empty value under an unknown key too', () => {
+    expect(applyDestKey(baseEvent(), result('anon_field', '')).fields.anon_field).toBeUndefined();
   });
 });
 

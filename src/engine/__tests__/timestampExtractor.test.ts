@@ -312,6 +312,15 @@ describe('extractTimestamps — timezone resolution (#12)', () => {
     expect(diags).toHaveLength(0);
   });
 
+  it('reads TZ = CET as the zoneinfo zone, in summer time in July (#470)', () => {
+    // Doc-derived: TZ is a zoneinfo name, and zoneinfo's CET observes DST, as
+    // Europe/Paris does: 10:00 on 1 July is 08:00Z, not the fixed +01:00's 09:00Z.
+    const diags: ValidationDiagnostic[] = [];
+    const e = extractTimestamps([event('2026-07-01 10:00:00 x')], [fmt, dir('TZ', 'CET')], runCtx(diags))[0]!;
+    expect(iso(e._time)).toBe('2026-07-01T08:00:00.000Z');
+    expect(diags).toHaveLength(0);
+  });
+
   it('does not warn for a resolvable numeric TZ offset', () => {
     const diags: ValidationDiagnostic[] = [];
     const e = extractTimestamps([event('2024-01-15 10:00:00 x')], [fmt, dir('TZ', '-0500')], runCtx(diags))[0]!;

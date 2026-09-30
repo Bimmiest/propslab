@@ -1,3 +1,5 @@
+import type { RunLimits } from './runContext';
+
 export interface EventMetadata {
   index: string;
   host: string;
@@ -339,6 +341,13 @@ export interface PipelineOptions {
    * it runs once per stage, a few dozen times a run.
    */
   onStage?: (stage: import('./runStages').RunStage, events: number) => void;
+  /**
+   * Bounds on the run's work, each defaulting to `DEFAULT_LIMITS` in
+   * `runContext.ts`: the input size, the number of events, the no-match
+   * explanations per directive. A library caller with tighter budgets than the
+   * browser's lowers them here.
+   */
+  limits?: Partial<RunLimits>;
 }
 
 export type OutputTabId = 'preview' | 'cim' | 'fields' | 'transforms' | 'effective' | 'architecture';

@@ -26,8 +26,8 @@ export function ProgressBar({ value, label, variant = 'default' }: ProgressBarPr
         aria-valuetext="loading"
       >
         <div
-          className="h-full w-1/3"
-          style={{ backgroundColor: barColor, animation: 'indeterminate 1.4s ease-in-out infinite' }}
+          className="h-full w-1/3 progress-indeterminate"
+          style={{ backgroundColor: barColor }}
         />
       </div>
     );

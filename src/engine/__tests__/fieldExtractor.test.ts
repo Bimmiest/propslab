@@ -2,17 +2,10 @@ import { describe, it, expect } from 'vitest';
 import { extractFields, parseExtractValue } from '../processors/fieldExtractor';
 import type { SplunkEvent, ConfDirective } from '../types';
 import { runCtx } from './runCtx';
+import { makeEvent } from '../../test/makeEvent';
 
 function event(raw: string, fields: Record<string, string | string[]> = {}): SplunkEvent {
-  return {
-    _raw: raw,
-    _time: null,
-    _meta: {},
-    fields,
-    metadata: { index: 'main', host: 'h', source: 's', sourcetype: 'st' },
-    lineNumbers: { start: 1, end: 1 },
-    processingTrace: [],
-  };
+  return makeEvent(raw, { fields });
 }
 
 function dir(className: string, value: string): ConfDirective {

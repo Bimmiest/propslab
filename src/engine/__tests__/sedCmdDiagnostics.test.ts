@@ -59,6 +59,28 @@ describe('SEDCMD — an uncompilable pattern warns rather than vanishing (#122)'
   });
 });
 
+// Doc-derived: SEDCMD takes sed syntax, s/<regex>/<replacement>/<flags>, and
+// props.conf.spec gives no form without the closing delimiter.
+describe('SEDCMD — the closing delimiter is required (#477)', () => {
+  it.each(['s/foo/bar', 's/foo/', 's/foo', 'y/abc/xyz', 's/foo/bar\\/'])('rejects %s and says why', (value) => {
+    const { raw, diagnostics } = run(value, 'foo abc');
+    expect(raw).toBe('foo abc');
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0]!.message).toMatch(/is missing its closing delimiter "\/" and was ignored/);
+  });
+
+  it.each([
+    ['s/foo/bar/', 'bar abc'],
+    ['s/foo/bar/g', 'bar abc'],
+    ['s/foo//', ' abc'],
+    ['y/abc/xyz/', 'foo xyz'],
+  ])('still applies %s', (value, expected) => {
+    const { raw, diagnostics } = run(value, 'foo abc');
+    expect(raw).toBe(expected);
+    expect(diagnostics).toEqual([]);
+  });
+});
+
 // Ordinary values that merely start like a sed command are not read as one.
 describe('SEDCMD — command detection requires a real delimiter (#126)', () => {
   it('does not report "yes" as y/// transliteration', () => {

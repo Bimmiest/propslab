@@ -164,10 +164,15 @@ function parseTransliterate(
 
 /**
  * The fields of a sed expression after its verb and delimiter (`trimmed`
- * starts with both), split at each unescaped delimiter. Backslashes are kept
- * verbatim, so the `s///` pattern reaches the regex engine as written.
+ * starts with both), split at each unescaped delimiter, and how many of them a
+ * delimiter closed. Backslashes are kept verbatim, so the `s///` pattern
+ * reaches the regex engine as written.
+ *
+ * The expression is `s<d>regex<d>replacement<d>flags`: the regex and the
+ * replacement each end at a delimiter. Text after the last delimiter is the
+ * flags, so it does not count towards the two that must be closed.
  */
-function splitSedFields(trimmed: string, delimiter: string): string[] {
+function splitSedFields(trimmed: string, delimiter: string): { parts: string[]; closed: number } {
   const parts: string[] = [];
   let current = '';
   let escaped = false;
@@ -190,8 +195,9 @@ function splitSedFields(trimmed: string, delimiter: string): string[] {
     }
     current += trimmed[i]!;
   }
+  const closed = parts.length;
   if (current) parts.push(current);
-  return parts;
+  return { parts, closed };
 }
 
 /**
@@ -204,8 +210,8 @@ export function sedPattern(value: string): string | null {
   const trimmed = value.trim();
   const command = SED_COMMAND_RE.exec(trimmed);
   if (!command || command[1] === 'y') return null;
-  const parts = splitSedFields(trimmed, command[2] ?? '/');
-  return parts.length < 2 ? null : (parts[0] ?? '');
+  const { parts, closed } = splitSedFields(trimmed, command[2] ?? '/');
+  return closed < 2 ? null : (parts[0] ?? '');
 }
 
 /**
@@ -234,9 +240,9 @@ export function parseSedExpression(
   }
 
   const [, verb, delimiter] = command;
-  const parts = splitSedFields(trimmed, delimiter ?? '/');
+  const { parts, closed } = splitSedFields(trimmed, delimiter ?? '/');
 
-  if (parts.length < 2) {
+  if (closed < 2) {
     diagnostics?.push(
       sedWarning(
         dir,
@@ -304,9 +310,20 @@ export function applySedCommands(
 
   if (sedDirectives.length === 0) return events;
 
+  // The expressions are parsed on every call, and a call is made per clone
+  // (applyCloneIndexTime), so a malformed one would warn once per event. Route
+  // its parse warnings through the run's ledger, keyed by where the directive
+  // is and what it says, so each is reported once per run.
+  const parseSink: DiagnosticSink = {
+    push: (...found) => {
+      for (const d of found) {
+        diagnostics.report(`SEDCMD parse|${d.file}|${d.layer ?? ''}|${d.line ?? ''}|${d.message}`, d);
+      }
+    },
+  };
   const commands: (SedCommand & { directive: ConfDirective })[] = [];
   for (const dir of sedDirectives) {
-    const cmd = parseSedExpression(dir.value, dir, diagnostics);
+    const cmd = parseSedExpression(dir.value, dir, parseSink);
     if (cmd) {
       cmd.className = dir.className ?? '';
       commands.push({ ...cmd, directive: dir });

@@ -1,5 +1,7 @@
 import type { SplunkEvent, ConfDirective } from '../types';
-import { evaluateExpression, regexFailureMessage } from '../processors/evalProcessor';
+import { regexFailureMessage } from '../processors/evalProcessor';
+import { evalNode } from '../processors/eval/evaluator';
+import { type Node, parseExpression } from '../processors/eval/parser';
 import { stripLeadingUnderscoreForField } from '../utils/internalFields';
 import { deleteField, setField } from '../utils/fieldBag';
 import { atDirective } from '../parser/provenance';
@@ -83,18 +85,6 @@ function splitAssignment(expr: string): { fieldName: string; evalExpr: string } 
 }
 
 /**
- * The expression of each `field=expr` assignment in an INGEST_EVAL value,
- * split as `applyIngestEval` splits them. For callers that read the
- * expressions without running them (the MCP server's regex lint).
- */
-export function ingestEvalExpressions(value: string): string[] {
-  return splitAssignments(value).flatMap((expr) => {
-    const assignment = splitAssignment(expr);
-    return assignment ? [assignment.evalExpr] : [];
-  });
-}
-
-/**
  * The run-wide ledger keys INGEST_EVAL reports under. The transforms pass
  * calls applyIngestEval once per event, so a set local to the call would
  * forget between events. Warnings are keyed by message (stubs, regex
@@ -102,7 +92,13 @@ export function ingestEvalExpressions(value: string): string[] {
  * same key, since its stub warning reads the same as this one.
  */
 export const transformsMessageKey = (message: string) => `transforms message|${message}`;
-const errorKey = (fieldName: string) => `INGEST_EVAL error|${fieldName}`;
+/**
+ * Keyed by where the directive is as well as the field: two stanzas (or two
+ * layers) that assign the same field and both fail are two problems, and the
+ * second must not be hidden behind the first.
+ */
+const errorKey = (dir: ConfDirective, fieldName: string) =>
+  `INGEST_EVAL error|${dir.layer ?? ''}|${dir.line}|${fieldName}`;
 const stubKey = (fn: string) => `INGEST_EVAL stub|${fn}`;
 
 /**
@@ -149,6 +145,47 @@ function reportStub(
   });
 }
 
+/**
+ * One `field=expr` assignment of an INGEST_EVAL, parsed: its expression tree,
+ * or the error parsing it raised, which is reported when the assignment is
+ * reached (so it goes through the same ledger as an evaluation error).
+ */
+type CompiledAssignment =
+  | { fieldName: string; tree: Node; error?: undefined }
+  | { fieldName: string; tree?: undefined; error: unknown };
+
+interface CompiledIngestEval {
+  /** How many comma-separated expressions the directive holds, malformed ones included. */
+  expressionCount: number;
+  assignments: CompiledAssignment[];
+}
+
+/** Split and parse a directive's assignments; done once per run, not per event. */
+function compileIngestEval(dir: ConfDirective): CompiledIngestEval {
+  const expressions = splitAssignments(dir.value);
+  const assignments: CompiledAssignment[] = [];
+  for (const expr of expressions) {
+    const assignment = splitAssignment(expr);
+    if (!assignment) continue;
+    try {
+      assignments.push({ fieldName: assignment.fieldName, tree: parseExpression(assignment.evalExpr) });
+    } catch (error) {
+      assignments.push({ fieldName: assignment.fieldName, error });
+    }
+  }
+  return { expressionCount: expressions.length, assignments };
+}
+
+/**
+ * The expression tree of each `field=expr` assignment in an INGEST_EVAL
+ * directive that parses, compiled exactly as `applyIngestEval` compiles them.
+ * For callers that read the expressions without running them (the MCP
+ * server's regex lint and suspect list).
+ */
+export function ingestEvalTrees(dir: ConfDirective): Node[] {
+  return compileIngestEval(dir).assignments.flatMap((a) => (a.tree === undefined ? [] : [a.tree]));
+}
+
 export function applyIngestEval(
   events: SplunkEvent[],
   directives: ConfDirective[],
@@ -159,27 +196,26 @@ export function applyIngestEval(
   // A stanza may repeat INGEST_EVAL; Splunk's last-definition-wins rule means
   // only the final directive applies (each may still hold several comma-separated
   // assignments, all of which run).
-  const lastIngestEval = effectiveDirective(directives, 'INGEST_EVAL');
-  if (lastIngestEval === undefined) return events;
-  const ingestEvalDirs = [lastIngestEval];
+  const ingestEvalDir = effectiveDirective(directives, 'INGEST_EVAL');
+  if (ingestEvalDir === undefined) return events;
+  const { expressionCount, assignments } = ctx.memo.get('INGEST_EVAL', ingestEvalDir, () =>
+    compileIngestEval(ingestEvalDir),
+  );
 
   return events.map((event) => {
     const currentEvent = { ...event, fields: { ...event.fields } };
-    let totalExpressions = 0;
 
-    for (const ingestEvalDir of ingestEvalDirs) {
-      const expressions = splitAssignments(ingestEvalDir.value);
-      totalExpressions += expressions.length;
-
-      for (const expr of expressions) {
-        const assignment = splitAssignment(expr);
-        if (!assignment) continue;
-        const { fieldName, evalExpr } = assignment;
-
-        try {
-          const result = evaluateExpression(evalExpr, currentEvent, (fn) => {
+    for (const assignment of assignments) {
+      const { fieldName } = assignment;
+      try {
+        if (assignment.tree === undefined) throw assignment.error;
+        const result = evalNode(assignment.tree, {
+          event: currentEvent,
+          now,
+          onStubWarning: (fn) => {
             reportStub(fn, ingestEvalDir, diagnostics);
-          }, now, (fn, pattern) => {
+          },
+          onRegexError: (fn, pattern) => {
             const message = `INGEST_EVAL ${fieldName}: ${regexFailureMessage(fn, pattern)}`;
             diagnostics.report(transformsMessageKey(message), {
               level: 'warning',
@@ -188,56 +224,56 @@ export function applyIngestEval(
               ...atDirective(ingestEvalDir),
               directiveKey: ingestEvalDir.key,
             });
-          });
-          // Refused as in EVAL-: the assignment writes nothing, not "true".
-          if (typeof result === 'boolean') throw new Error(BOOLEAN_ASSIGNMENT_ERROR);
-          // INGEST_EVAL can rewrite the event's timestamp and raw text, not just
-          // add indexed fields. Route _time/_raw to the event rather than fields.
-          if (fieldName === '_time') {
-            assignTime(currentEvent, numArg(result), ingestEvalDir, diagnostics);
-          } else if (fieldName === '_raw') {
-            currentEvent._raw =
-              result === null ? '' : Array.isArray(result) ? result.join('\n') : String(result);
-          } else if (fieldName === 'queue') {
-            // `INGEST_EVAL = queue=if(match(_raw,"DEBUG"), "nullQueue", "indexQueue")`
-            // is Splunk's documented filtering idiom: assigning to `queue` routes
-            // the event exactly as `DEST_KEY = queue` does. Writing it as an
-            // ordinary field instead previewed dropped events as indexed — the
-            // opposite of what the config does. Copy `_meta` rather than mutating
-            // it: the shallow event copy still shares the input's object.
-            const queue = result === null ? '' : String(Array.isArray(result) ? result[0] : result);
-            currentEvent._meta = { ...currentEvent._meta, _queue: queue };
-          } else if (isMetadataKey(fieldName)) {
-            // index/host/source/sourcetype are the event's metadata, not indexed
-            // fields: assigning one rewrites it exactly as DEST_KEY =
-            // MetaData:<Key> does, so the event lands in the new index and — in
-            // per-event mode — is re-matched against the new sourcetype's
-            // stanzas. Written into `fields` instead, the routing would be
-            // untouched while the preview showed a field claiming otherwise.
-            // The value is bare: unlike FORMAT for DEST_KEY there is
-            // no `host::` prefix to strip. A null result has nothing to route
-            // to, and the event keeps the metadata it has, as it does when a
-            // DEST_KEY FORMAT lacks its prefix.
-            if (result !== null) {
-              const value = String(Array.isArray(result) ? result[0] ?? '' : result);
-              currentEvent.metadata = { ...currentEvent.metadata, [fieldName]: value };
-            }
-          } else if (result === null) {
-            deleteField(currentEvent.fields, fieldName);
-          } else if (Array.isArray(result)) {
-            setField(currentEvent.fields, fieldName, result);
-          } else {
-            setField(currentEvent.fields, fieldName, String(result));
+          },
+        });
+        // Refused as in EVAL-: the assignment writes nothing, not "true".
+        if (typeof result === 'boolean') throw new Error(BOOLEAN_ASSIGNMENT_ERROR);
+        // INGEST_EVAL can rewrite the event's timestamp and raw text, not just
+        // add indexed fields. Route _time/_raw to the event rather than fields.
+        if (fieldName === '_time') {
+          assignTime(currentEvent, numArg(result), ingestEvalDir, diagnostics);
+        } else if (fieldName === '_raw') {
+          currentEvent._raw =
+            result === null ? '' : Array.isArray(result) ? result.join('\n') : String(result);
+        } else if (fieldName === 'queue') {
+          // `INGEST_EVAL = queue=if(match(_raw,"DEBUG"), "nullQueue", "indexQueue")`
+          // is Splunk's documented filtering idiom: assigning to `queue` routes
+          // the event exactly as `DEST_KEY = queue` does. Writing it as an
+          // ordinary field instead previewed dropped events as indexed — the
+          // opposite of what the config does. Copy `_meta` rather than mutating
+          // it: the shallow event copy still shares the input's object.
+          const queue = result === null ? '' : String(Array.isArray(result) ? result[0] : result);
+          currentEvent._meta = { ...currentEvent._meta, _queue: queue };
+        } else if (isMetadataKey(fieldName)) {
+          // index/host/source/sourcetype are the event's metadata, not indexed
+          // fields: assigning one rewrites it exactly as DEST_KEY =
+          // MetaData:<Key> does, so the event lands in the new index and — in
+          // per-event mode — is re-matched against the new sourcetype's
+          // stanzas. Written into `fields` instead, the routing would be
+          // untouched while the preview showed a field claiming otherwise.
+          // The value is bare: unlike FORMAT for DEST_KEY there is
+          // no `host::` prefix to strip. A null result has nothing to route
+          // to, and the event keeps the metadata it has, as it does when a
+          // DEST_KEY FORMAT lacks its prefix.
+          if (result !== null) {
+            const value = String(Array.isArray(result) ? result[0] ?? '' : result);
+            currentEvent.metadata = { ...currentEvent.metadata, [fieldName]: value };
           }
-        } catch (err) {
-          diagnostics.report(errorKey(fieldName), {
-            level: 'error',
-            message: `INGEST_EVAL ${fieldName}: ${err instanceof Error ? err.message : String(err)}`,
-            file: 'transforms.conf',
-            ...atDirective(ingestEvalDir),
-            directiveKey: ingestEvalDir.key,
-          });
+        } else if (result === null) {
+          deleteField(currentEvent.fields, fieldName);
+        } else if (Array.isArray(result)) {
+          setField(currentEvent.fields, fieldName, result);
+        } else {
+          setField(currentEvent.fields, fieldName, String(result));
         }
+      } catch (err) {
+        diagnostics.report(errorKey(ingestEvalDir, fieldName), {
+          level: 'error',
+          message: `INGEST_EVAL ${fieldName}: ${err instanceof Error ? err.message : String(err)}`,
+          file: 'transforms.conf',
+          ...atDirective(ingestEvalDir),
+          directiveKey: ingestEvalDir.key,
+        });
       }
     }
 
@@ -247,7 +283,7 @@ export function applyIngestEval(
     // names each key as its DEST_KEY, as a DEST_KEY = MetaData:* step does.
     const changes = metadataChanges(event.metadata, currentEvent.metadata);
     const description =
-      `Evaluated ${totalExpressions} ingest-time expression(s)` +
+      `Evaluated ${expressionCount} ingest-time expression(s)` +
       (changes.length > 0
         ? `; set ${changes.map((c) => `${METADATA_DEST_KEYS[c.key]} "${c.from}" → "${c.to}"`).join(', ')}`
         : '');

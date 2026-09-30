@@ -1,0 +1,25 @@
+{
+  "modelName": "Splunk_CIM_Validation",
+  "objects": [
+    {
+      "objectName": "Missing_Extractions_All_Gadgets",
+      "parentName": "Gadgets",
+      "fields": [{ "fieldName": "serial" }, { "fieldName": "owner" }]
+    },
+    {
+      "objectName": "Missing_Extractions_All_Ticket_Managment",
+      "parentName": "Ticket_Management",
+      "fields": [{ "fieldName": "dest" }]
+    },
+    {
+      "objectName": "Missing_Extractions_Change",
+      "parentName": "Ticket_Management",
+      "fields": [{ "fieldName": "change_id" }]
+    },
+    {
+      "objectName": "Not_A_Check",
+      "parentName": "Widgets",
+      "fields": [{ "fieldName": "ignored" }]
+    }
+  ]
+}

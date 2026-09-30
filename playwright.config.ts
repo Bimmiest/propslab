@@ -14,7 +14,7 @@ const BASE_URL = `http://127.0.0.1:${PORT}`;
 const SKIP_BUILD = process.env.E2E_SKIP_BUILD === '1';
 
 /** The specs that assert timing budgets; they run in their own project. */
-const PERF_SPECS = /perf\.spec\.ts$/;
+const PERF_SPECS = /perf(-[\w-]+)?\.spec\.ts$/;
 
 /**
  * End-to-end smoke tests, run against a PRODUCTION build.
@@ -57,6 +57,9 @@ export default defineConfig({
     screenshot: 'only-on-failure',
     timezoneId: 'America/Los_Angeles',
     locale: 'en-GB',
+    // Playwright's default too, but stated, like the zone and locale above: a
+    // spec must not depend on what a future default says (#507).
+    colorScheme: 'light',
   },
   projects: [
     {
@@ -69,6 +72,7 @@ export default defineConfig({
     // than the budget" into "slower twice", and a regression that is only
     // sometimes over passes on the second try. No retries, so a run over budget
     // fails as measured. Run alone with `playwright test --project=perf`.
+    // `perf.spec.ts` and `perf-*.spec.ts` (the Web Vitals budgets) belong here.
     {
       name: 'perf',
       use: { ...devices['Desktop Chrome'] },

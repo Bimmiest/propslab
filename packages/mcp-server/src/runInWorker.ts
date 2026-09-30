@@ -146,7 +146,9 @@ export class WorkerCancelledError extends Error {
 /**
  * Per-worker V8 heap limits, sized from the worst input the schemas admit
  * rather than a typical one. The sample dominates: a 1MB sample of
- * one-character lines is 500,000 events, each carrying its own trace. The
+ * one-character lines was 500,000 events, each carrying its own trace, and
+ * the measurements below were taken then; the engine now stops line breaking
+ * at 25,000 (`RunLimits.maxEvents`), so they are a generous upper bound. The
  * conf side is bounded too — at most two million characters across every
  * layer of both files (`MAX_TOTAL_CONF_CHARS` in tools.ts), where the
  * per-field limits alone would admit forty million. Measured with both near

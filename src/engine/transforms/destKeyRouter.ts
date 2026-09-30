@@ -1,8 +1,29 @@
 import type { SplunkEvent } from '../types';
 import type { TransformResult } from './regexTransform';
-import { VALID_UNSIMULATED_DEST_KEYS } from './destKeys';
 import { addFieldValue } from '../utils/fieldBag';
 import { dateFromEpochSeconds } from '../utils/epochTime';
+
+/**
+ * `meta` with the `key::value` pairs of a DEST_KEY = _meta FORMAT added.
+ *
+ * The pairs are space-separated. Values may be quoted to contain spaces
+ * (key::"two words"), so parse with quote awareness rather than a naive
+ * whitespace split that would break a quoted value apart. Indexed fields are
+ * multivalue, so a repeated key (`tag::a tag::b`, or one pair per REPEAT_MATCH
+ * match) keeps every value rather than the last. `_queue` is the event's
+ * single-valued routing slot, not an indexed field, so a `_queue::` pair is
+ * not written into it: only DEST_KEY = queue routes.
+ */
+function withMetaPairs(meta: SplunkEvent['_meta'], destValue: string): SplunkEvent['_meta'] {
+  const out = { ...meta };
+  const pairRe = /(\S+?)::(?:"([^"]*)"|(\S+))/g;
+  let m: RegExpExecArray | null;
+  while ((m = pairRe.exec(destValue)) !== null) {
+    const key = m[1];
+    if (key !== undefined && key !== '_queue') addFieldValue(out, key, m[2] ?? m[3] ?? '');
+  }
+  return out;
+}
 
 export function applyDestKey(
   event: SplunkEvent,
@@ -31,21 +52,8 @@ export function applyDestKey(
     case '_raw':
       return { ...event, _raw: destValue, fields: { ...event.fields, ...result.fields } };
 
-    case '_meta': {
-      // _meta values are space-separated key::value pairs. Values may be quoted to
-      // contain spaces (key::"two words"), so parse with quote awareness rather than
-      // a naive whitespace split that would break a quoted value apart. Indexed
-      // fields are multivalue, so a repeated key (`tag::a tag::b`, or one pair
-      // per REPEAT_MATCH match) keeps every value rather than the last.
-      const meta = { ...event._meta };
-      const pairRe = /(\S+?)::(?:"([^"]*)"|(\S+))/g;
-      let m: RegExpExecArray | null;
-      while ((m = pairRe.exec(destValue)) !== null) {
-        const key = m[1];
-        if (key !== undefined) addFieldValue(meta, key, m[2] ?? m[3] ?? '');
-      }
-      return { ...event, _meta: meta, fields: { ...event.fields, ...result.fields } };
-    }
+    case '_meta':
+      return { ...event, _meta: withMetaPairs(event._meta, destValue), fields: { ...event.fields, ...result.fields } };
 
     case '_time': {
       const epoch = parseFloat(destValue);
@@ -115,17 +123,11 @@ export function applyDestKey(
       };
 
     default:
-      // A documented routing key this tool does not model (_TCP_ROUTING and
-      // friends) must not be written out as an event field — the config-time
-      // diagnostic already says the routing is unsimulated, and inventing a
-      // field named after the key would contradict it.
-      if (VALID_UNSIMULATED_DEST_KEYS.has(destKey)) {
-        return { ...event, fields: { ...event.fields, ...result.fields } };
-      }
-      // Treat as a field name
-      return {
-        ...event,
-        fields: { ...event.fields, ...result.fields, [destKey]: destValue },
-      };
+      // A key this tool does not model changes nothing on the event. That is
+      // true of a documented routing key (_TCP_ROUTING and friends) and of a
+      // key outside the documented set, which Splunk ignores: writing either
+      // out as a field named after the key would invent a field Splunk never
+      // creates. The config-time lint says which of the two it is.
+      return { ...event, fields: { ...event.fields, ...result.fields } };
   }
 }

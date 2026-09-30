@@ -79,3 +79,28 @@ describe('ActivityRail', () => {
     expect(screen.getByRole('tab', { name: 'Dictionary' })).toHaveAttribute('tabindex', '-1');
   });
 });
+
+describe('ActivityRail aria-controls (#495)', () => {
+  beforeEach(() => {
+    useAppStore.setState(initial, true);
+  });
+
+  it('points at the simulator panel, which is always mounted', () => {
+    renderRail();
+    expect(screen.getByRole('tab', { name: 'Simulator' })).toHaveAttribute('aria-controls', 'view-panel-simulator');
+  });
+
+  it('does not point at a dictionary panel that is not in the DOM yet', () => {
+    renderRail();
+    expect(screen.getByRole('tab', { name: 'Dictionary' })).not.toHaveAttribute('aria-controls');
+  });
+
+  it('points at the dictionary panel once it is mounted', () => {
+    render(
+      <RadixTooltip.Provider>
+        <ActivityRail dictionaryMounted />
+      </RadixTooltip.Provider>,
+    );
+    expect(screen.getByRole('tab', { name: 'Dictionary' })).toHaveAttribute('aria-controls', 'view-panel-dictionary');
+  });
+});

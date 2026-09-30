@@ -15,12 +15,6 @@ import type { RunContext, DiagnosticSink } from '../runContext';
 
 const XML_EXTRACTIONS = new Set(['xml', 'xmlkv', 'xmlkv-winevt']);
 
-/** How many capturing groups a pattern declares, or 0 if it will not compile. */
-function countCaptureGroups(pattern: string | undefined): number {
-  if (pattern === undefined) return 0;
-  return safeRegex(pattern)?.captureCount ?? 0;
-}
-
 /**
  * The raw, untrimmed value: the break patterns read through this are regexes,
  * where trailing whitespace is part of the pattern.
@@ -160,7 +154,24 @@ function resolveLineBreaker(
   diagnostics?: DiagnosticSink,
 ): string {
   if (declared === undefined) return DEFAULT_LINE_BREAKER;
-  if (countCaptureGroups(declared) > 0) return declared;
+  const compiled = safeRegex(declared);
+  // A pattern that does not compile is reported as that, with the engine's own
+  // error: telling the author of `([\r\n]+` (an unclosed group) to add
+  // parentheses would send them the wrong way. The group check only makes
+  // sense for a pattern that compiled.
+  if (compiled === null) {
+    diagnostics?.push({
+      level: 'warning',
+      message:
+        `LINE_BREAKER pattern (${declared}) does not compile (${validateRegex(declared) ?? 'invalid regex'}). ` +
+        'Events were broken on newlines instead.',
+      file: 'props.conf',
+      ...atDirective(effectiveDirective(directives, 'LINE_BREAKER')),
+      directiveKey: 'LINE_BREAKER',
+    });
+    return DEFAULT_LINE_BREAKER;
+  }
+  if (compiled.captureCount > 0) return declared;
   diagnostics?.push({
     level: 'warning',
     message:
@@ -192,6 +203,8 @@ export function splitSegments(
   pattern: string,
   directives: ConfDirective[],
   diagnostics?: DiagnosticSink,
+  /** Stop once this many segments are found; the rest of the input is not split. */
+  maxSegments = Infinity,
 ): Segment[] {
   const lineBreakerRegex = safeRegex(pattern);
   if (!lineBreakerRegex) {
@@ -257,6 +270,7 @@ export function splitSegments(
     }
 
     pushSegment(segmentStart, captureStart);
+    if (segments.length >= maxSegments) return segments;
     segmentStart = captureEnd;
     searchFrom = captureEnd;
   }
@@ -512,6 +526,19 @@ function traceMerge(
   }
 }
 
+/** Say that line breaking stopped at `RunLimits.maxEvents`, and where the dropped input starts. */
+function warnEventCap(maxEvents: number, firstDroppedLine: number, diagnostics: DiagnosticSink): void {
+  diagnostics.push({
+    level: 'warning',
+    message:
+      `Line breaking stopped at ${maxEvents.toLocaleString('en-US')} events, the most one run produces. ` +
+      `The input from line ${firstDroppedLine.toLocaleString('en-US')} on was not processed. ` +
+      'Check LINE_BREAKER if the input should break into fewer events.',
+    file: 'raw',
+    line: firstDroppedLine,
+  });
+}
+
 /**
  * Break raw data into SplunkEvent objects according to props.conf directives.
  *
@@ -533,18 +560,26 @@ export function breakLines(
   }
 
   const pattern = resolveLineBreaker(getDirective(directives, 'LINE_BREAKER'), directives, diagnostics);
-  const segments = splitSegments(rawData, pattern, directives, diagnostics);
+  const shouldLineMerge = shouldLineMergeFor(directives);
+  // Unmerged, each segment is an event, so splitting stops one past the cap:
+  // that one shows the cap was reached and where the dropped input starts.
+  const maxEvents = ctx.limits.maxEvents;
+  const segments = splitSegments(rawData, pattern, directives, diagnostics, shouldLineMerge ? Infinity : maxEvents + 1);
   const [firstSegment, ...restSegments] = segments;
   if (firstSegment === undefined) {
     return [];
   }
 
-  const shouldLineMerge = shouldLineMergeFor(directives);
   const { merged, maxEventsTriggered } = shouldLineMerge
     ? mergeSegments(firstSegment, restSegments, readMergeRules(directives, diagnostics))
     : { merged: segments.map(startEvent), maxEventsTriggered: false };
 
   const newlines = buildNewlineIndex(rawData);
+  const dropped = merged[maxEvents];
+  if (dropped !== undefined) {
+    merged.length = maxEvents;
+    warnEventCap(maxEvents, lineAtOffset(newlines, dropped.offset), diagnostics);
+  }
   const events = merged.map((seg) => toEvent(seg, newlines, metadata));
   if (shouldLineMerge && segments.length !== merged.length) {
     traceMerge(events, directives, segments.length, maxEventsTriggered);

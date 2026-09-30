@@ -295,15 +295,16 @@ describe('MCP server end to end', () => {
     for (const call of stuck) await expect(call).rejects.toThrow();
 
     // The client's cancellation reached the handler as extra.signal and
-    // terminated the workers. Had it not, every slot would stay held for ~30s
-    // and this call would queue far past the test's timeout.
-    const startedAt = Date.now();
+    // terminated the workers. Had it not, every slot would stay held for the
+    // full 30s budget and this call would queue behind them. No wall-clock
+    // assertion (#507): the bound is structural. The workers' budget (30s)
+    // exceeds this test's timeout (20s), so a slot that was not freed makes the
+    // call below overrun the test timeout and fail, whatever the machine's speed.
     const result = await client.callTool({
       name: 'validate',
       arguments: { props_conf: '[st]\nSHOULD_LINEMERGE = false\n' },
     });
     expect(result.isError).toBeFalsy();
-    expect(Date.now() - startedAt).toBeLessThan(5_000);
   }, 20_000);
 });
 
@@ -362,7 +363,11 @@ describe('client disconnect', () => {
     // would each hold their slot for the whole budget. Before, nothing closed
     // the transport at stdin EOF: the running workers ran to their budget and
     // then the queued call started its own.
-    const TIMEOUT_MS = 15_000;
+    // The longest budget a call may ask for, and longer than this test's own
+    // timeout below: workers that outlived the disconnect would hold the
+    // process open past it, so a prompt exit is proved by the test finishing
+    // rather than by a stopwatch (#507).
+    const TIMEOUT_MS = 30_000;
     const evilProps = [
       '[evil]',
       'SHOULD_LINEMERGE = false',
@@ -408,17 +413,15 @@ describe('client disconnect', () => {
       }
       // Let the workers start before disconnecting.
       await new Promise((r) => setTimeout(r, 1_000));
-      const closedAt = Date.now();
       child.stdin.end();
       // The process only exits once no worker is left running, so a prompt
       // exit shows the running workers were terminated and the queued call
       // never started one.
       expect(await exited).toBe(0);
-      expect(Date.now() - closedAt).toBeLessThan(5_000);
     } finally {
       child.kill('SIGKILL');
     }
-  }, 60_000);
+  }, 25_000);
 });
 
 describe('built launcher', () => {

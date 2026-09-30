@@ -23,7 +23,10 @@
 //   - a worker is never built while MAX_WORKER_LOAD_FAILURES loads in a row
 //     have failed, and `post` refuses only then: crashes never spend the cap;
 //   - no timer outlives its request, and a worker that has been replaced is
-//     deaf: its late events change nothing.
+//     deaf: its late events change nothing;
+//   - a load timer that fires when every request that waited on the loading
+//     worker has been forgotten changes nothing: no failure is counted and
+//     the worker, which may only be slow, is kept (#523).
 //
 // The "model" is the bookkeeping in `Sim`: the requests posted, which are
 // superseded, what each was told, and what the fake workers were sent. The
@@ -266,7 +269,8 @@ class Sim {
     const w = this.current();
     invariant(w !== null, 'a timer is pending with no worker');
     if (!w.ready) {
-      this.failLoad(() => vi.advanceTimersToNextTimer());
+      if (this.waitingOn(w).length > 0) this.failLoad(() => vi.advanceTimersToNextTimer());
+      else this.idleLoadTimer(w);
     } else {
       const [head, ...queued] = w.queue;
       invariant(head !== undefined, 'a watchdog is pending with nothing running');
@@ -283,10 +287,25 @@ class Sim {
     this.settle();
   }
 
+  /** The live requests waiting on a loading worker: posted to it, or deferred until it loads. */
+  private waitingOn(w: FakeWorker): number[] {
+    return [...this.liveIds(w.queue), ...this.liveIds(this.deferred)];
+  }
+
+  /** The load timer fires with nothing live waiting on the worker (#523). */
+  private idleLoadTimer(w: FakeWorker) {
+    this.begin({ kind: 'none' });
+    const before = this.workers.length;
+    vi.advanceTimersToNextTimer();
+    invariant(!w.terminated, 'a load timer nobody was waiting on terminated a loading worker');
+    invariant(this.workers.length === before, 'a load timer nobody was waiting on built a worker');
+    invariant(vi.getTimerCount() === 0, 'a load timer nobody was waiting on left a timer behind');
+  }
+
   private failLoad(trigger: () => void) {
     const w = this.current();
     invariant(w !== null, 'load failure with no worker');
-    const live = [...this.liveIds(w.queue), ...this.liveIds(this.deferred)];
+    const live = this.waitingOn(w);
     this.loadFailures += 1;
     this.deferred = [];
     this.begin({ kind: 'loadFailure', live });
@@ -368,13 +387,15 @@ class Sim {
 
     // No timer without a request: none with no worker; one watchdog (the
     // head's) on a loaded worker that has something to run; at most the load
-    // timer on one that is loading, and that when a request is waiting for it.
+    // timer on one that is loading, and always that when a live request is
+    // waiting for it. A load timer armed for requests since forgotten may
+    // still be pending; `expire` holds its firing to changing nothing.
     const timers = vi.getTimerCount();
     if (cur === null) invariant(timers === 0, `${timers} timers with no worker`);
     else if (cur.ready) invariant(timers === (cur.queue.length > 0 ? 1 : 0), `${timers} timers on a loaded worker with ${cur.queue.length} queued`);
     else {
       invariant(timers <= 1, `${timers} timers on a loading worker`);
-      if (cur.queue.length > 0 || this.deferred.length > 0) invariant(timers === 1, 'a loading worker has waiting requests and no load timer');
+      if (this.waitingOn(cur).length > 0) invariant(timers === 1, 'a loading worker has live requests waiting and no load timer');
     }
   }
 

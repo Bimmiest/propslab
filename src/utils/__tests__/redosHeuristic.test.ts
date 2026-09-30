@@ -84,3 +84,23 @@ describe('hasReDoSRisk — the verdict cache (#487)', () => {
     expect(hasReDoSRisk('(?<a>(b+)+)')).toBe(true);
   });
 });
+
+describe('hasReDoSRisk — very long patterns (#480)', () => {
+  // REDOS_ANALYSIS_MAX_LENGTH is 2000 and REDOS_PRESENCE_CHECK_MAX_LENGTH 5000.
+  const padded = (core: string, length: number) => core + 'x'.repeat(length - core.length);
+
+  it('runs only the presence check between the analysis cap and the length cap', () => {
+    expect(hasReDoSRisk(padded('(a+)+', 2001))).toBe(true);
+    expect(hasReDoSRisk(padded('(ab)', 2001))).toBe(false);
+    expect(hasReDoSRisk(padded('(ab)', 5000))).toBe(false);
+  });
+
+  it('assumes a pattern past the length cap is risky, without scanning it', () => {
+    expect(hasReDoSRisk(padded('(ab)', 5001))).toBe(true);
+    // Quadratic for REDOS_NESTED_GROUP: about 0.8 s when it was scanned.
+    const unclosed = '(' + '*'.repeat(30_000);
+    const start = performance.now();
+    expect(hasReDoSRisk(unclosed)).toBe(true);
+    expect(performance.now() - start).toBeLessThan(100);
+  });
+});

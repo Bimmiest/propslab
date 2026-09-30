@@ -23,7 +23,7 @@ import { getDirectiveInfo } from '../../../src/engine/directiveRegistry';
 import { parseExtractValue } from '../../../src/engine/processors/fieldExtractor';
 import { sedPattern } from '../../../src/engine/processors/sedCmd';
 import { parseExpression, type Node } from '../../../src/engine/processors/eval/parser';
-import { ingestEvalExpressions } from '../../../src/engine/transforms/ingestEval';
+import { ingestEvalTrees } from '../../../src/engine/transforms/ingestEval';
 import type { ConfDirective } from '../../../src/engine/types';
 
 export interface DirectivePattern {
@@ -68,19 +68,21 @@ function collectEvalRegexes(node: Node, out: DirectivePattern[]): void {
   for (const child of children(node)) collectEvalRegexes(child, out);
 }
 
-/** The literal regexes an eval expression passes to regex functions. */
-function evalRegexes(expression: string): DirectivePattern[] {
-  let ast: Node;
+/** The literal regexes the given eval trees pass to regex functions. */
+function evalRegexes(trees: Node[]): DirectivePattern[] {
+  const out: DirectivePattern[] = [];
+  for (const tree of trees) collectEvalRegexes(tree, out);
+  return out;
+}
+
+/** An eval expression's tree, or none: an expression that does not parse runs no regex. */
+function parsedTree(expression: string): Node[] {
   try {
-    ast = parseExpression(expression);
+    return [parseExpression(expression)];
   } catch {
-    // An expression that does not parse runs no regex; the engine's own
-    // lint reports the parse error.
+    // The engine's own lint reports the parse error.
     return [];
   }
-  const out: DirectivePattern[] = [];
-  collectEvalRegexes(ast, out);
-  return out;
 }
 
 /** The regexes `dir` runs, in the order they appear in its value; none for a directive that runs none. */
@@ -98,8 +100,8 @@ export function directivePatterns(
   }
   const valueType = getDirectiveInfo(baseKey, file)?.valueType;
   if (valueType === 'eval') {
-    const expressions = baseKey === 'INGEST_EVAL' ? ingestEvalExpressions(dir.value) : [dir.value.trim()];
-    return expressions.flatMap(evalRegexes);
+    // INGEST_EVAL through the engine's own compile, assignment by assignment.
+    return evalRegexes(baseKey === 'INGEST_EVAL' ? ingestEvalTrees(dir) : parsedTree(dir.value.trim()));
   }
   if (valueType !== 'regex') return [];
   const pattern = baseKey === 'EXTRACT' ? parseExtractValue(dir.value).pattern : dir.value.trim();

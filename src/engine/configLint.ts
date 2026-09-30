@@ -288,6 +288,12 @@ export function lintConfigs(
 export function lintMatchedDirectives(
   directives: ConfDirective[],
   diagnostics: ValidationDiagnostic[],
+  /**
+   * The directives search time reads: KV_MODE and AUTO_KV_JSON come from the
+   * stanzas as `rename` leaves them, while INDEXED_EXTRACTIONS comes from the
+   * ones the event was broken under. They differ only for a renamed sourcetype.
+   */
+  searchTimeDirectives: ConfDirective[] = directives,
 ): void {
   // Warn when INDEXED_EXTRACTIONS = json is paired with search-time JSON extraction.
   // Splunk extracts the fields at BOTH index time and search time, producing duplicate
@@ -295,11 +301,11 @@ export function lintMatchedDirectives(
   // so without this warning an operator could ship a config that misbehaves in Splunk.
   const indexedExtDir = effectiveDirective(directives, 'INDEXED_EXTRACTIONS');
   if (indexedExtDir?.value.trim().toLowerCase() === 'json') {
-    const kvModeDir = effectiveDirective(directives, 'KV_MODE');
+    const kvModeDir = effectiveDirective(searchTimeDirectives, 'KV_MODE');
     const kvMode = kvModeDir?.value.trim().toLowerCase();
     // Read exactly as applyKvMode reads it, so the warning fires only when the
     // search-time extraction it describes would actually run.
-    const autoKvJson = effectiveBool(directives, 'AUTO_KV_JSON', true);
+    const autoKvJson = effectiveBool(searchTimeDirectives, 'AUTO_KV_JSON', true);
     const searchTimeJson =
       kvMode === 'json' ||
       ((kvMode === undefined || kvMode === 'auto' || kvMode === 'auto_escaped') && autoKvJson);

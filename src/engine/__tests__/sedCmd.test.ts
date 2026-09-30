@@ -106,13 +106,15 @@ describe('sedPattern', () => {
   it('returns the s/// regex with its backslashes, for any delimiter', () => {
     expect(sedPattern(' s/\\d{4}/xxxx/g ')).toBe('\\d{4}');
     expect(sedPattern('s#a\\#b#c#')).toBe('a\\#b');
-    expect(sedPattern('s/a/b')).toBe('a');
+    expect(sedPattern('s/a/b/')).toBe('a');
   });
 
   it('returns null where there is no regex to compile', () => {
     expect(sedPattern('y/abc/xyz/')).toBeNull();
     expect(sedPattern('not sed')).toBeNull();
     expect(sedPattern('s/unclosed')).toBeNull();
+    // The replacement must be closed too (#477): parseSedExpression ignores this.
+    expect(sedPattern('s/a/b')).toBeNull();
     expect(sedPattern('')).toBeNull();
   });
 

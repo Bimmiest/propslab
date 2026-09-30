@@ -6,7 +6,7 @@ import { applyIngestEval } from '../transforms/ingestEval';
 import { evaluateStopCondition } from '../transforms/stopProcessing';
 import { byClassName } from '../utils/asciiCompare';
 import { appendTraceStep, metadataChanges } from '../utils/traceStep';
-import { SIMULATED_DEST_KEYS, VALID_UNSIMULATED_DEST_KEYS, normaliseDestKey } from '../transforms/destKeys';
+import { VALID_UNSIMULATED_DEST_KEYS, normaliseDestKey } from '../transforms/destKeys';
 import { atDirective, atStanza } from '../parser/provenance';
 import { effectiveDirective, parseSplunkBool } from '../utils/directiveValues';
 import { validateRegex } from '../../utils/splunkRegex';
@@ -252,7 +252,7 @@ function applyMatch(
     warnRawLoss(beforeRaw, routed._raw, stanzaName, transformStanza, diagnostics, warnKey(run, 'rawLoss', stanzaName));
   }
   if (result.destKey) {
-    warnUnknownDestKey(result.destKey, stanzaName, transformStanza, diagnostics, warnKey(run, 'unknownDestKey', stanzaName));
+    warnUnsimulatedDestKey(result.destKey, stanzaName, transformStanza, diagnostics, warnKey(run, 'unknownDestKey', stanzaName));
   }
   // DEST_KEY = _raw overwrites the whole event with the FORMAT output,
   // destroying field values by the same mechanism as SEDCMD. The
@@ -491,13 +491,13 @@ function warnSearchTimeNoFormat(
 }
 
 /**
- * Warn when DEST_KEY is set to something outside the documented Splunk key
- * set. The router falls back to treating an unknown key as a field name, so
- * a typo'd key silently "works" in the preview while doing nothing in Splunk.
- * `_TCP_ROUTING` / `_SYSLOG_ROUTING` are valid keys this tool just doesn't model;
- * they get an informational note rather than a warning. Fires once per stanza.
+ * Note a DEST_KEY that is a valid Splunk routing key this tool does not model
+ * (`_TCP_ROUTING` and friends). A key outside the documented set is not
+ * reported here: the config-time lint (`lintDestKeys`) already says it has no
+ * routing effect, and the router leaves the event alone for it, so a second,
+ * runtime warning could only repeat or contradict that one. Fires once per stanza.
  */
-function warnUnknownDestKey(
+function warnUnsimulatedDestKey(
   destKey: string,
   stanzaName: string,
   transformStanza: ParsedConf['stanzas'][number],
@@ -506,25 +506,12 @@ function warnUnknownDestKey(
 ): void {
   // Mirror the router's _MetaData:→MetaData: alias normalisation before comparing.
   const normalized = normaliseDestKey(destKey);
-  if (SIMULATED_DEST_KEYS.has(normalized) || !diagnostics.once(key)) return;
+  if (!VALID_UNSIMULATED_DEST_KEYS.has(normalized) || !diagnostics.once(key)) return;
 
   const line = effectiveDirective(transformStanza.directives, 'DEST_KEY')?.line ?? transformStanza.lineRange.start;
-  if (VALID_UNSIMULATED_DEST_KEYS.has(normalized)) {
-    diagnostics.push({
-      level: 'info',
-      message: `DEST_KEY = ${destKey} in transform "${stanzaName}" is a valid Splunk routing key but is not simulated here — the event is shown unchanged.`,
-      file: 'transforms.conf',
-      line,
-    });
-    return;
-  }
   diagnostics.push({
-    level: 'warning',
-    message:
-      `DEST_KEY = ${destKey} in transform "${stanzaName}" is not a recognized Splunk DEST_KEY ` +
-      '(expected one of queue, _raw, _meta, _time, MetaData:Host, MetaData:Index, MetaData:Source, ' +
-      'MetaData:Sourcetype, _TCP_ROUTING, _SYSLOG_ROUTING). The preview treats it as a field name, ' +
-      'but real Splunk ignores unknown DEST_KEY values.',
+    level: 'info',
+    message: `DEST_KEY = ${destKey} in transform "${stanzaName}" is a valid Splunk routing key but is not simulated here — the event is shown unchanged.`,
     file: 'transforms.conf',
     line,
   });

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyIngestEval, ingestEvalExpressions } from '../transforms/ingestEval';
+import { applyIngestEval, ingestEvalTrees } from '../transforms/ingestEval';
 import { runPipeline } from '../pipeline';
 import type { SplunkEvent, ConfDirective, EventMetadata, ValidationDiagnostic } from '../types';
 import { runCtx } from './runCtx';
@@ -306,6 +306,36 @@ describe('runPipeline — INGEST_EVAL reports each problem once per run (#418)',
   });
 });
 
+describe('INGEST_EVAL errors are keyed by where the directive is (#477)', () => {
+  const meta: EventMetadata = { index: 'main', host: 'h', source: 's', sourcetype: 'st' };
+
+  it('reports the errors of two stanzas that assign the same field, each once', () => {
+    const props = '[st]\nSHOULD_LINEMERGE = false\nTRANSFORMS-e = e1, e2\n';
+    const transforms = '[e1]\nINGEST_EVAL = x=1+\n[e2]\nINGEST_EVAL = x=nosuchfn(\n';
+    for (const perEventPipeline of [false, true]) {
+      const { diagnostics } = runPipeline('one\ntwo\nthree', meta, props, transforms, { perEventPipeline });
+      const errors = diagnostics.filter((d) => d.level === 'error' && d.message.startsWith('INGEST_EVAL x:'));
+      expect(errors).toHaveLength(2);
+      expect(new Set(errors.map((d) => d.line)).size).toBe(2);
+    }
+  });
+
+  it('keeps two layers of the same line and field apart', () => {
+    const ctx = runCtx();
+    const dir = (layer: string): ConfDirective[] =>
+      [{ key: 'INGEST_EVAL', value: 'x=1+', line: 4, layer, directiveType: 'INGEST_EVAL' }];
+    applyIngestEval([event('a'), event('b')], dir('default/transforms.conf'), ctx);
+    applyIngestEval([event('a'), event('b')], dir('local/transforms.conf'), ctx);
+    expect(ctx.diagnostics.list.map((d) => d.layer)).toEqual(['default/transforms.conf', 'local/transforms.conf']);
+  });
+
+  it("still reports one directive's error once however many events reach it", () => {
+    const ctx = runCtx();
+    applyIngestEval([event('a'), event('b'), event('c')], ingestDir('x=1+'), ctx);
+    expect(ctx.diagnostics.list).toHaveLength(1);
+  });
+});
+
 describe('runPipeline — CLONE_SOURCETYPE does not repeat INGEST_EVAL problems per clone (#452)', () => {
   // Each clone is its own applyTransforms call, so the warning ledgers have to
   // belong to the pipeline run, not the call.
@@ -320,18 +350,20 @@ describe('runPipeline — CLONE_SOURCETYPE does not repeat INGEST_EVAL problems 
   });
 });
 
-// Not Splunk behaviour: the engine's own accessor, pinned to split as
+// Not Splunk behaviour: the engine's own accessor, pinned to compile as
 // applyIngestEval does (top-level commas only; `=` and `:=`).
-describe('ingestEvalExpressions', () => {
-  it('returns each assignment’s expression, split at top-level commas only', () => {
-    expect(ingestEvalExpressions('a=upper(x), b:=if(y>1, "p,q", z) ,c = "s,t"')).toEqual([
-      'upper(x)',
-      'if(y>1, "p,q", z)',
-      '"s,t"',
+describe('ingestEvalTrees', () => {
+  const trees = (value: string) => ingestEvalTrees(ingestDir(value)[0]!);
+
+  it('returns each assignment’s parsed expression, split at top-level commas only', () => {
+    expect(trees('a=upper(x), b:=if(y>1, "p,q", z) ,c = "s,t"')).toEqual([
+      { kind: 'call', name: 'upper', args: [{ kind: 'field', name: 'x' }] },
+      expect.objectContaining({ kind: 'call', name: 'if' }),
+      { kind: 'lit', value: 's,t' },
     ]);
   });
 
-  it('skips a part that is not an assignment', () => {
-    expect(ingestEvalExpressions('justanexpression, =x, a=1')).toEqual(['1']);
+  it('skips a part that is not an assignment, and one that does not parse', () => {
+    expect(trees('justanexpression, =x, bad=1 +, a=1')).toEqual([{ kind: 'lit', value: 1 }]);
   });
 });
