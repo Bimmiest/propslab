@@ -1,23 +1,36 @@
 // ---------------------------------------------------------------------------
 // check-production-environment.mjs
 //
-// Asserts the two `production` environment settings the deploy workflow's
-// safety rests on, which live in repository settings and not in any file:
+// Asserts the settings the deploy workflow's safety rests on, which live in
+// repository settings and not in any file:
 //
 //   1. Deployments are limited to the `main` branch: custom branch policies,
 //      exactly one, of type branch, named main, and no tag patterns.
 //   2. AZURE_STATIC_WEB_APPS_API_TOKEN is an environment secret of
 //      `production` and not a repository secret, which any workflow on any
 //      branch could read.
+//   3. `main` is protected: a required status check, at least one required
+//      review, force-pushes blocked and deletion blocked, from repository
+//      rulesets (GET /rules/branches/main) or classic branch protection
+//      (GET /branches/main/protection), either source counting. The decision
+//      is scripts/lib/branchProtection.mjs, unit-tested with mocked responses.
+//      The rulesets endpoint is readable with the workflow's own token; the
+//      classic one needs "Administration: read", which no GITHUB_TOKEN can
+//      hold and answers HTTP 403 to. When only that source could have supplied
+//      a missing requirement the check is "skipped" with a warning annotation
+//      rather than failed or passed; protection expressed as a ruleset is
+//      always verified.
 //
-// The README states both as facts; this is what keeps them facts.
+// The README states these as facts; this is what keeps them facts.
 //
-// (1) reads with the workflow's GITHUB_TOKEN. (2) lists secret names, which
-// needs a token with the "Secrets" repository permission (read), and no
+// (1) and (3) read with the workflow's GITHUB_TOKEN. (2) lists secret names,
+// which needs a token with the "Secrets" repository permission (read), and no
 // GITHUB_TOKEN can be granted that; it comes from SECRETS_READ_TOKEN. Listing
 // returns names only, never values. Without that token (2) fails rather than
 // passing unverified.
 // ---------------------------------------------------------------------------
+
+import { ApiError, evaluateMainProtection } from './lib/branchProtection.mjs';
 
 const REPO = process.env.GITHUB_REPOSITORY ?? 'Bimmiest/propslab';
 const ENVIRONMENT = 'production';
@@ -33,7 +46,7 @@ const failures = [];
 
 async function get(path, token) {
   const response = await fetch(`https://api.github.com/repos/${REPO}${path}`, { headers: headersFor(token) });
-  if (!response.ok) throw new Error(`GET ${path} returned HTTP ${response.status}`);
+  if (!response.ok) throw new ApiError(path, response.status);
   return response.json();
 }
 
@@ -86,51 +99,27 @@ async function checkBranchProtection(token) {
     return;
   }
 
-  let protection;
-  try {
-    protection = await get('/branches/main/protection', token);
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('404')) {
-      failures.push('main branch has no protection rules configured.');
-      return;
-    }
-    // If the token lacks the scope for rulesets, report it and skip
-    if (error instanceof Error && error.message.includes('API returns access denied')) {
-      console.log(`  skipped  token lacks scope to check branch protection rules`);
-      return;
-    }
-    throw error;
-  }
+  const result = await evaluateMainProtection({
+    getRules: () => get('/rules/branches/main', token),
+    getClassic: () => get('/branches/main/protection', token),
+  });
+  const via = result.sources.join(' and ') || 'no readable source';
 
-  const checks = [];
-  if (!protection.required_status_checks) {
-    checks.push('required status checks');
-  } else if (!protection.required_status_checks.checks) {
-    checks.push('required status checks (none configured)');
+  if (result.status === 'ok') {
+    console.log(`  ok  main is protected (${via}): required reviews and status checks, no force-push, no deletion`);
+  } else if (result.status === 'skipped') {
+    // The rulesets do not provide everything and the classic rules, which may,
+    // need "Administration: read", which no GITHUB_TOKEN holds. Say so loudly
+    // without failing a check that cannot see the answer.
+    const message = `main branch protection could not be fully verified (${via}); not shown: ${result.missing.join(', ')}. ${result.notes.join('; ')}.`;
+    console.log(`  skipped  ${message}`);
+    console.log(`::warning title=main branch protection unverified::${message}`);
+  } else {
+    failures.push(
+      `main branch protection is incomplete (${via}); missing: ${result.missing.join(', ')}. ` +
+        'Add a ruleset or branch protection rule for main that requires them.',
+    );
   }
-
-  if (!protection.required_pull_request_reviews) {
-    checks.push('required pull request reviews');
-  } else if (protection.required_pull_request_reviews.required_approving_review_count < 1) {
-    checks.push('at least one required review');
-  }
-
-  const allowForcesPushes = protection.allow_force_pushes?.enabled;
-  const allowDeletions = protection.allow_deletions?.enabled;
-
-  if (allowForcesPushes) {
-    checks.push('force-pushes are blocked');
-  }
-  if (allowDeletions) {
-    checks.push('deletion is blocked');
-  }
-
-  if (checks.length > 0) {
-    failures.push(`main branch protection is incomplete; missing: ${checks.join(', ')}.`);
-    return;
-  }
-
-  console.log(`  ok  main branch is protected with required reviews and status checks`);
 }
 
 for (const [name, check] of [
