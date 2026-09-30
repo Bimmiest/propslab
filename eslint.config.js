@@ -2,6 +2,7 @@ import js from '@eslint/js'
 import globals from 'globals'
 import reactHooks from 'eslint-plugin-react-hooks'
 import reactRefresh from 'eslint-plugin-react-refresh'
+import vitest from '@vitest/eslint-plugin'
 import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
@@ -78,6 +79,28 @@ export default defineConfig([
     ],
     rules: {
       '@typescript-eslint/no-non-null-assertion': 'off',
+    },
+  },
+  {
+    // What makes a test a test. `expect-expect` fails a case that asserts
+    // nothing (it passes whatever the code does), `no-identical-title` a case
+    // whose name repeats a sibling's (one of the two is then unfindable in a
+    // report, and often a copy that was never edited), and `valid-expect` an
+    // `expect(...)` that is never finished or an async one that is not awaited
+    // (it asserts nothing, and passes). Playwright's specs are not vitest and
+    // stay out.
+    files: ['**/__tests__/**/*.{ts,tsx,mts}', '**/*.test.{ts,tsx,mts}'],
+    plugins: { vitest },
+    rules: {
+      // A helper that asserts on the test's behalf is named `expect…`, which
+      // the pattern covers, so a new one takes that name rather than an entry.
+      // `fc.assert` is the one other assertion: it throws with the shrunk
+      // counterexample when a property is false, whether the property asserts
+      // with `expect` or returns a boolean.
+      'vitest/expect-expect': ['error', { assertFunctionNames: ['expect', 'expect*', 'fc.assert'] }],
+      'vitest/no-identical-title': 'error',
+      // Vitest's expect takes a failure message as its second argument.
+      'vitest/valid-expect': ['error', { maxArgs: 2 }],
     },
   },
   {
