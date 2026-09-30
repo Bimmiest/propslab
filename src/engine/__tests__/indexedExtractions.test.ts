@@ -566,7 +566,10 @@ describe('applyIndexedExtractions — TIMESTAMP_FIELDS (#184)', () => {
 // ---------------------------------------------------------------------------
 // Header-side delimited overrides. Doc-derived: every assertion below
 // is read from the props.conf.spec 10.4.3 text for the attribute, since no
-// capture exercises any of the five.
+// capture exercises any of the five: FIELD_HEADER_REGEX, HEADER_FIELD_DELIMITER,
+// HEADER_FIELD_QUOTE, HEADER_FIELD_ACCEPTABLE_SPECIAL_CHARACTERS and
+// MISSING_VALUE_REGEX. The last describe of the group drives them through the
+// pipeline from a props.conf stanza.
 // ---------------------------------------------------------------------------
 
 describe('applyIndexedExtractions — FIELD_HEADER_REGEX (#272)', () => {
@@ -762,5 +765,43 @@ describe('applyIndexedExtractions — JSON_TRIM_BRACES_IN_ARRAY_NAMES (#274)', (
       { perEventPipeline: false, captureOffsets: false },
     );
     expect(result.events[0]!.fields['data.mount_point{}']).toEqual(['/', '/home']);
+  });
+});
+
+describe('header-side delimited overrides through the pipeline (#272)', () => {
+  /** A csv stanza with `body` appended; every event's fields, header line consumed. */
+  const fieldsOf = (raw: string, body: string) =>
+    runPipeline(
+      raw,
+      { index: 'main', host: 'h', source: 's', sourcetype: 'st' },
+      `[st]\nINDEXED_EXTRACTIONS = csv\n${body}`,
+      '',
+      { perEventPipeline: false, captureOffsets: false },
+    ).result.events.map((e) => e.fields);
+
+  it('FIELD_HEADER_REGEX takes the header from the line it matches', () => {
+    const [f] = fieldsOf('#Version: 1\n#Fields: a,b\n1,2\n', 'FIELD_HEADER_REGEX = ^#Fields:\\s\n');
+    expect(f).toMatchObject({ a: '1', b: '2' });
+  });
+
+  it('HEADER_FIELD_DELIMITER splits the header on its own delimiter', () => {
+    const [f] = fieldsOf('a\tb\tc\n1,2,3\n', 'HEADER_FIELD_DELIMITER = tab\n');
+    expect(f).toMatchObject({ a: '1', b: '2', c: '3' });
+  });
+
+  it('HEADER_FIELD_QUOTE gives the header its own quote character', () => {
+    const [f] = fieldsOf("'x,y',z\n1,2\n", "HEADER_FIELD_QUOTE = '\n");
+    expect(f).toMatchObject({ x_y: '1', z: '2' });
+  });
+
+  it('HEADER_FIELD_ACCEPTABLE_SPECIAL_CHARACTERS keeps the characters it names in field names', () => {
+    expect(fieldsOf('field.name\nv\n', '')[0]?.['field_name']).toBe('v');
+    expect(fieldsOf('field.name\nv\n', 'HEADER_FIELD_ACCEPTABLE_SPECIAL_CHARACTERS = .\n')[0]?.['field.name']).toBe('v');
+  });
+
+  it('MISSING_VALUE_REGEX extracts no field for a placeholder value', () => {
+    const [f] = fieldsOf('a,b\n1,-\n', 'MISSING_VALUE_REGEX = ^-$\n');
+    expect(f?.['a']).toBe('1');
+    expect(f?.['b']).toBeUndefined();
   });
 });

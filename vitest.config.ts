@@ -1,6 +1,24 @@
 import { createRequire } from 'node:module';
-import { defineConfig } from 'vitest/config';
+import { rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { configDefaults, defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
+
+// Where src/test/recordDirectiveEvidence.ts leaves what each test file fed to
+// runPipeline. This file is evaluated once, in the main process, and workers
+// inherit the environment, so every file of one invocation shares one
+// directory and two invocations never share one. The directory goes when the
+// main process does, whichever projects that run reached: a run of a single
+// test file writes into it too, and has no project to clean up after it.
+const evidenceDir = join(tmpdir(), `propslab-directive-evidence-${String(process.pid)}-${String(Date.now())}`);
+process.env.PROPSLAB_EVIDENCE_DIR = evidenceDir;
+process.once('exit', () => {
+  rmSync(evidenceDir, { recursive: true, force: true });
+});
+
+const UNIT_TESTS = ['src/**/*.test.{ts,tsx}'];
+const EVIDENCE_TEST = 'src/engine/__tests__/directiveEvidence.test.ts';
 
 export default defineConfig({
   plugins: [react()],
@@ -15,12 +33,35 @@ export default defineConfig({
     // Default to node for engine tests; component tests opt into jsdom via
     // a `// @vitest-environment jsdom` pragma at the top of the file.
     environment: 'node',
-    include: ['src/**/*.test.{ts,tsx}'],
-    setupFiles: ['src/test/setup.ts'],
+    setupFiles: ['src/test/setup.ts', 'src/test/recordDirectiveEvidence.ts'],
     restoreMocks: true,
     unstubGlobals: true,
     unstubEnvs: true,
     testTimeout: 20000,
+    // Two projects, run one after the other. `unit` is every test but one;
+    // `evidence` is the one test that reads what the others recorded, so it has
+    // to start after they have all finished. `groupOrder` is what guarantees
+    // that: projects in the same group run together, groups run lowest first.
+    // See src/test/recordDirectiveEvidence.ts.
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: 'unit',
+          include: UNIT_TESTS,
+          exclude: [...configDefaults.exclude, EVIDENCE_TEST],
+          sequence: { groupOrder: 0 },
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: 'evidence',
+          include: [EVIDENCE_TEST],
+          sequence: { groupOrder: 1 },
+        },
+      },
+    ],
     coverage: {
       provider: 'v8',
       // Text for a local run, lcov for anything that wants to ingest it, and
@@ -69,7 +110,7 @@ export default defineConfig({
       thresholds: {
         statements: 90,
         branches: 82,
-        functions: 87,
+        functions: 89,
         lines: 92,
         // The engine is held to a much higher bar than the app as a whole. It
         // is where correctness lives — a simulator whose UI is under-tested is
@@ -85,10 +126,10 @@ export default defineConfig({
           lines: 97,
         },
         'src/components/**': {
-          statements: 80,
+          statements: 82,
           branches: 73,
           functions: 78,
-          lines: 82,
+          lines: 85,
         },
         'src/hooks/**': {
           statements: 92,

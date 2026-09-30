@@ -100,6 +100,8 @@ All notable changes to Propslab are documented here, newest first. Entries say w
 
 ### Fixed
 
+- **"Every simulated directive is exercised" is measured, not searched for** ([#505](https://github.com/Bimmiest/propslab/issues/505)): the check records the directives tests actually pass to `runPipeline`, and each simulated directive needs a Splunk fixture or a spec-citing test. Twenty-two directives tested only at processor level now run end to end.
+- **The Monaco editor is tested against the real editor** ([#516](https://github.com/Bimmiest/propslab/issues/516)): mount and dispose leave nothing behind, each language provider is registered once across mounts, CRLF and LF survive `onChange`, and `SplunkEditor` has its first unit test.
 - **A run stops at 25,000 events** ([#479](https://github.com/Bimmiest/propslab/issues/479)), with a warning naming the first line not processed, so a `LINE_BREAKER` that breaks on every character can no longer turn a megabyte into a million events. Library callers can set their own bounds through `PipelineOptions.limits`.
 - **A line whose newline falls exactly at the input cap is kept**, and a `DEST_KEY = _meta` FORMAT containing `_queue::…` no longer turns the event's queue into a list ([#478](https://github.com/Bimmiest/propslab/issues/478)).
 - **The time-zone formatter cache is bounded** to 64 names, and the ReDoS heuristic flags patterns over 5,000 characters instead of scanning them ([#480](https://github.com/Bimmiest/propslab/issues/480)).

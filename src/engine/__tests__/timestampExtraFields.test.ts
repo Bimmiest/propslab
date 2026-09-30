@@ -162,6 +162,20 @@ describe('ADD_EXTRA_TIME_FIELDS (#273)', () => {
     );
     expect(result.events[0]?.fields.date_month).toBe('january');
   });
+
+  it('is read from the props.conf stanza by the pipeline', () => {
+    const at = (value: string) =>
+      runPipeline(
+        '2024-01-15 10:00:00 hello',
+        { index: 'main', host: 'h', source: 's', sourcetype: 'st' },
+        `[st]\nSHOULD_LINEMERGE = false\nTIME_FORMAT = %Y-%m-%d %H:%M:%S\nADD_EXTRA_TIME_FIELDS = ${value}\n`,
+        '',
+        { perEventPipeline: false, now: NOW.getTime() },
+      ).result.events[0]!;
+    expect(at('all').fields.date_month).toBe('january');
+    expect(at('none').fields.date_month).toBeUndefined();
+    expect(at('none').fields.timestartpos).toBeUndefined();
+  });
 });
 
 describe('DETERMINE_TIMESTAMP_DATE_WITH_SYSTEM_TIME (#273)', () => {
@@ -266,5 +280,20 @@ describe('DETERMINE_TIMESTAMP_DATE_WITH_SYSTEM_TIME (#273)', () => {
       dir('MAX_DAYS_AGO', '10000'),
     ]);
     expect(out[0]?._time?.toISOString()).toBe('2024-01-15T10:00:00.000Z');
+  });
+
+  it('is read from the props.conf stanza by the pipeline', () => {
+    const at = (value: string) =>
+      runPipeline(
+        RAWS.join('\n'),
+        { index: 'main', host: 'h', source: 's', sourcetype: 'st' },
+        '[st]\nSHOULD_LINEMERGE = false\nTIME_FORMAT = %H:%M:%S\n' +
+          `DETERMINE_TIMESTAMP_DATE_WITH_SYSTEM_TIME = ${value}\n`,
+        '',
+        { perEventPipeline: false, now: NOW.getTime() },
+      ).result.events.map((e) => e._time?.toISOString());
+    // The third line tells the strategies apart (see RAWS above).
+    expect(at('true')).toEqual(['2026-08-03T23:00:00.000Z', '2026-08-04T01:00:00.000Z', '2026-08-03T13:00:00.000Z']);
+    expect(at('false')).toEqual(['2026-08-03T23:00:00.000Z', '2026-08-04T01:00:00.000Z', '2026-08-04T13:00:00.000Z']);
   });
 });

@@ -94,6 +94,20 @@ describe('transforms.conf REGEX under its own stanza\'s limits', () => {
     expect(raised.fields['v']).toBe(DEEP);
   });
 
+  it('fails past the default MATCH_LIMIT and succeeds with a higher one', () => {
+    // DEPTH_LIMIT = 0 leaves depth unlimited, so it is MATCH_LIMIT alone that
+    // stops the first run. TRUNCATE = 0 keeps the long subject whole.
+    const long = 'ab'.repeat(60000);
+    const at = (transforms: string) =>
+      runPipeline(long, META, `${props}TRUNCATE = 0\n`, transforms).result.events[0]!;
+    const stopped = at(`[deep]\nREGEX = ${ALTERNATING}\nDEPTH_LIMIT = 0\n`);
+    expect(stopped.fields['v']).toBeUndefined();
+    expect(stopped.noOps?.some((n) => n.reason.kind === 'regex-limit')).toBe(true);
+
+    const raised = at(`[deep]\nREGEX = ${ALTERNATING}\nDEPTH_LIMIT = 0\nMATCH_LIMIT = 10000000\n`);
+    expect(raised.fields['v']).toBe(long);
+  });
+
   it('does not take the limits from the props.conf stanza', () => {
     const e = runPipeline(DEEP, META, `${props}DEPTH_LIMIT = 5000\n`, `[deep]\nREGEX = ${ALTERNATING}\n`).result
       .events[0]!;

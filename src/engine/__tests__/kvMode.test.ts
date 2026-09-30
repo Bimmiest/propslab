@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { applyKvMode } from '../processors/kvMode';
+import { runPipeline } from '../pipeline';
 import type { SplunkEvent, ConfDirective, ValidationDiagnostic } from '../types';
 import { runCtx } from './runCtx';
 
@@ -408,7 +409,7 @@ describe('applyKvMode — auto-KV key cleaning (#207)', () => {
 });
 
 describe('applyKvMode — KV_TRIM_SPACES (#274)', () => {
-  // Doc-derived: props.conf.spec 10.4.3. Default true strips the outer spaces
+  // Doc-derived: props.conf.spec 10.4.3, KV_TRIM_SPACES. Default true strips the outer spaces
   // from an automatic key=value value, false keeps them, tabs are never
   // trimmed, and it applies to KV_MODE auto and auto_escaped. No capture has a
   // quoted value with outer spaces, so none pins this.
@@ -444,6 +445,19 @@ describe('applyKvMode — KV_TRIM_SPACES (#274)', () => {
     const off = applyKvMode([event('msg=" say \\"hi\\" "')], [dir('auto_escaped'), trim('false')], runCtx())[0]!;
     expect(on.fields['msg']).toBe('say "hi"');
     expect(off.fields['msg']).toBe(' say "hi" ');
+  });
+
+  it('is read from the props.conf stanza by the pipeline', () => {
+    const at = (body: string) =>
+      runPipeline(
+        'myfield=" apples "',
+        { index: 'main', host: 'h', source: 's', sourcetype: 'st' },
+        `[st]\nSHOULD_LINEMERGE = false\nKV_MODE = auto\n${body}`,
+        '',
+        { perEventPipeline: false, captureOffsets: false },
+      ).result.events[0]!.fields['myfield'];
+    expect(at('')).toBe('apples');
+    expect(at('KV_TRIM_SPACES = false\n')).toBe(' apples ');
   });
 });
 

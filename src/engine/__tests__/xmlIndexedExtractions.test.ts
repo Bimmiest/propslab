@@ -2,7 +2,12 @@
 // INDEXED_EXTRACTIONS = xml / xmlkv / xmlkv-winevt and the XML_IE_* filters.
 //
 // Doc-derived throughout. No capture covers index-time XML, so what each
-// attribute does is read from props.conf.spec 10.4.3 and asserted narrowly.
+// attribute does is read from props.conf.spec 10.4.3 and asserted narrowly:
+// XML_INDEXED_EXTRACTIONS_PIPELINE, XML_IE_INCLUDE, XML_IE_INCLUDE_MV,
+// XML_IE_EXCLUDE, XML_IE_EXCLUDE_MV, XML_IE_EXCLUDE_VALS,
+// XML_IE_SKIP_XML_ENCODED_VALS, XML_IE_MAX_EXTRACTED_VALUE_SIZE and
+// extraction_cutoff. The last describe drives each through the pipeline from a
+// props.conf stanza.
 // Field *naming* is not in the spec at all: `xml` borrows KV_MODE = xml's
 // convention, `xmlkv` the xmlkv search command's, and `xmlkv-winevt` the
 // Windows event-log Name convention (see xmlIndexedExtractions.ts). If real
@@ -310,6 +315,60 @@ describe('INDEXED_EXTRACTIONS = xml through the pipeline (#271)', () => {
     const ev = result.events[0]!;
     expect(ev.fields['event.user']).toBe('alice');
     expect(ev.processingTrace.some((t) => t.processor === 'INDEXED_EXTRACTIONS(xml)')).toBe(true);
+  });
+});
+
+describe('the XML attributes through the pipeline (#271)', () => {
+  /** Fields of the one event `raw` becomes, written as `mode` with `body` after it. */
+  const fieldsOf = (raw: string, mode: string, body: string) =>
+    runPipeline(
+      raw,
+      { index: 'main', host: 'h', source: 's', sourcetype: 'st' },
+      `[st]\nSHOULD_LINEMERGE = false\nINDEXED_EXTRACTIONS = ${mode}\n` +
+        `XML_INDEXED_EXTRACTIONS_PIPELINE = typing\nKV_MODE = none\n${body}`,
+      '',
+      { perEventPipeline: false, captureOffsets: false },
+    ).result.events[0]!.fields;
+
+  const procs = '<e><ProcessName>a.exe</ProcessName><ParentProcessName>b.exe</ParentProcessName><EventID>1</EventID></e>';
+
+  it('XML_IE_INCLUDE and XML_IE_EXCLUDE choose which fields are kept', () => {
+    const f = fieldsOf(procs, 'xmlkv', 'XML_IE_INCLUDE = *Process*,Event*\nXML_IE_EXCLUDE = Parent*\n');
+    // punct and timestamp are the pipeline's own fields, not the XML walk's.
+    expect(Object.keys(f).filter((k) => k.endsWith('ID') || k.endsWith('Name')).sort()).toEqual([
+      'EventID',
+      'ProcessName',
+    ]);
+  });
+
+  it('XML_IE_INCLUDE_MV and XML_IE_EXCLUDE_MV choose which fields stay multivalue', () => {
+    const raw = '<r><ip>1</ip><ip>2</ip><port>80</port><port>443</port></r>';
+    expect(fieldsOf(raw, 'xmlkv', 'XML_IE_INCLUDE_MV = ip\n')).toMatchObject({ ip: ['1', '2'], port: '80' });
+    expect(fieldsOf(raw, 'xmlkv', 'XML_IE_EXCLUDE_MV = port\n')).toMatchObject({ ip: ['1', '2'], port: '80' });
+  });
+
+  it('XML_IE_EXCLUDE_VALS leaves out a matching value', () => {
+    const f = fieldsOf('<r><a>-</a><b>ok</b></r>', 'xmlkv', 'XML_IE_EXCLUDE_VALS = -\n');
+    expect(f['a']).toBeUndefined();
+    expect(f['b']).toBe('ok');
+  });
+
+  it('XML_IE_SKIP_XML_ENCODED_VALS = false indexes an encoded value xmlkv-winevt would skip', () => {
+    const raw = "<Event><EventData><Data Name='Cmd'>a &amp; b</Data></EventData></Event>";
+    expect(fieldsOf(raw, 'xmlkv-winevt', '')['Cmd']).toBeUndefined();
+    expect(fieldsOf(raw, 'xmlkv-winevt', 'XML_IE_SKIP_XML_ENCODED_VALS = false\n')['Cmd']).toBe('a & b');
+  });
+
+  it('XML_IE_MAX_EXTRACTED_VALUE_SIZE leaves out a value over the limit', () => {
+    const f = fieldsOf('<r><a>abcde</a><b>abcdef</b></r>', 'xmlkv', 'XML_IE_MAX_EXTRACTED_VALUE_SIZE = 5\n');
+    expect(f['a']).toBe('abcde');
+    expect(f['b']).toBeUndefined();
+  });
+
+  it('extraction_cutoff extracts only what is complete within the first N bytes', () => {
+    const f = fieldsOf('<r><a>1</a><b>2</b></r>', 'xmlkv', 'extraction_cutoff = 12\n');
+    expect(f['a']).toBe('1');
+    expect(f['b']).toBeUndefined();
   });
 });
 
