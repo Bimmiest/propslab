@@ -5,6 +5,17 @@
 export type EvalValue = string | number | boolean | null | string[];
 
 /**
+ * What an operand is known to be before it is evaluated, which decides how the
+ * comparison operators and `+` read it (#522, #446). A string literal, a `.`
+ * concatenation and a function that always produces text are a `string`; a
+ * number literal, arithmetic and a function that always produces a number are
+ * a `number`. A field is `dynamic`: at run time a value that looks numeric
+ * ({@link parseNumber}) is a number and anything else is text. A function that
+ * passes an operand through (if, coalesce, mvindex, ...) is `dynamic` too.
+ */
+export type StaticType = 'string' | 'number' | 'dynamic';
+
+/**
  * An argument slot that may not have been supplied. Splunk treats a missing eval
  * argument as NULL, which is exactly what every coercion helper below already
  * does with `undefined` — so builtins can index `args[n]` freely and let the
@@ -79,23 +90,31 @@ export function toStr(v: EvalArg): string {
   return String(v);
 }
 
+/** True when one side is statically text and the other statically a number: a type error in Splunk. */
+function textAgainstNumber(lt: StaticType, rt: StaticType): boolean {
+  return (lt === 'string' && rt === 'number') || (lt === 'number' && rt === 'string');
+}
+
 /**
- * The `+` operator. Splunk propagates NULL through arithmetic (null + x = null),
- * adds when both operands are numeric (`"5" + "1"` → 6), and CONCATENATES two
- * strings when either is not (`"5" + "abc"` → "5abc"). `.` is the dedicated
- * concat operator, but `+` falls back to concatenation rather than coercing
- * strings to 0. A number is never concatenated: beside a value that is not
- * numeric it is NULL, so `"abc" + 1` and `"inf" + 1` are NULL (#446).
+ * The `+` operator, by the operands' {@link StaticType}s. Splunk propagates
+ * NULL through arithmetic (null + x = null). A side that is statically text
+ * makes it a concatenation of the other side's text (`"5" + "1"` is "51" for
+ * two literals); a side that is statically a number makes it an addition, a
+ * field that is not numeric giving NULL (`c + 1` is NULL for c = abc). Two
+ * fields add when both look numeric and concatenate otherwise: fields holding
+ * 5 and 1 give 6, and 5 and abc give "5abc". Text against a number is a type
+ * error in Splunk, and NULL here. (#446, #522)
  */
-export function addOrConcat(l: EvalArg, r: EvalArg): EvalValue {
+export function addOrConcat(l: EvalArg, r: EvalArg, lt: StaticType = 'dynamic', rt: StaticType = 'dynamic'): EvalValue {
   if (l === null || l === undefined || r === null || r === undefined) return null;
+  if (textAgainstNumber(lt, rt)) return null;
   const left = oneValue(l);
   const right = oneValue(r);
+  if (lt === 'string' || rt === 'string') return toStr(left) + toStr(right);
   const a = numericValue(left);
   const b = numericValue(right);
   if (a !== null && b !== null) return a + b;
-  if (typeof left === 'number' || typeof right === 'number') return null;
-  return toStr(left) + toStr(right);
+  return lt === 'number' || rt === 'number' ? null : toStr(left) + toStr(right);
 }
 
 /**
@@ -223,23 +242,28 @@ export function toTri(v: EvalArg): boolean | null {
 }
 
 /**
- * Comparison of two single values. Against a number, the other side must be
- * numeric too (a number, or a string that parses as one), and the two compare
- * numerically: `"Infinity" > 5` is true. A value that is not numeric against a
- * number is NULL for every operator, never coerced to 0 or compared as text:
- * `"abc" > 5`, `"abc" == 5` and `"abc" != 5` are NULL (#446). Two strings
- * compare as text, numeric-looking or not: `"5" > "1"` holds and `"5" < "10"`
- * does not (#446).
+ * Comparison of two single values, by their {@link StaticType}s (#522, #446):
+ *
+ * - Against a side that is statically a number, the other is read as a number,
+ *   and a field that is not numeric is NULL for every operator: for fields
+ *   a = 10 and c = abc, `a > 9` is true and `5 < c` is NULL.
+ * - Against a side that is statically text, the other is compared as its text:
+ *   `a == "10"` is true, `a == "10.0"` false and `"9" < a` false.
+ * - Two fields compare as numbers when both look numeric and as text otherwise.
+ * - Text against a number is a type error in Splunk, and NULL here.
  */
-function compareScalars(left: EvalValue, right: EvalValue, op: string): boolean | null {
+function compareScalars(left: EvalValue, lt: StaticType, right: EvalValue, rt: StaticType, op: string): boolean | null {
+  if (textAgainstNumber(lt, rt)) return null;
+  const leftNum = numericValue(left);
+  const rightNum = numericValue(right);
+  const againstNumber = lt === 'number' || rt === 'number';
   let l: number | string = toStr(left);
   let r: number | string = toStr(right);
-  if (typeof left === 'number' || typeof right === 'number') {
-    const leftNum = numericValue(left);
-    const rightNum = numericValue(right);
-    if (leftNum === null || rightNum === null) return null;
+  if (leftNum !== null && rightNum !== null && (againstNumber || (lt === 'dynamic' && rt === 'dynamic'))) {
     l = leftNum;
     r = rightNum;
+  } else if (againstNumber) {
+    return null;
   }
 
   switch (op) {
@@ -269,25 +293,35 @@ const EQUALITY_OPS = new Set(['==', '=', '!=']);
  * on either side of the operator. Only equality is answered: `<`, `>`, `<=`
  * and `>=` are NULL (#522). Against a single value, `==` holds when ANY value
  * equals it (a field with values a and b satisfies `f == "a"`), never as the
- * space-joined string of them (#475); a number on the other side is NULL for
- * every operator, so `mv == 5` is NULL where `mv == "5"` matches (#522).
- * Between two multivalues, `==` holds when both hold the same values in the
- * same order (#522). `!=` is the complement of `==` rather than "some value
- * differs", so it agrees with NOT IN and with `NOT (f == "a")` (#522).
+ * space-joined string of them (#475); a side that is statically a number is
+ * NULL for every operator, so `mv == 5` is NULL where `mv == "5"` matches
+ * (#522). Between two multivalues, `==` holds when both hold the same values
+ * in the same order (#522). `!=` is the complement of `==` rather than "some
+ * value differs", so it agrees with NOT IN and with `NOT (f == "a")` (#522).
  */
-function compareMultivalue(values: string[], other: EvalValue, op: string): boolean | null {
+function compareMultivalue(values: string[], other: EvalValue, otherType: StaticType, op: string): boolean | null {
   if (!EQUALITY_OPS.has(op)) return null;
   let equal: boolean;
   if (Array.isArray(other)) {
     equal = values.length === other.length && values.every((v, i) => v === other[i]);
   } else {
-    if (typeof other === 'number') return null;
-    equal = values.some((v) => compareScalars(v, other, '==') === true);
+    if (otherType === 'number') return null;
+    equal = values.some((v) => compareScalars(v, 'dynamic', other, otherType, '==') === true);
   }
   return op === '!=' ? !equal : equal;
 }
 
-export function compare(left: EvalArg, right: EvalArg, op: string): boolean | null {
+/**
+ * A comparison operator, given each operand's value and {@link StaticType}. An
+ * operand whose type is not given is read the way a field is.
+ */
+export function compare(
+  left: EvalArg,
+  right: EvalArg,
+  op: string,
+  lt: StaticType = 'dynamic',
+  rt: StaticType = 'dynamic',
+): boolean | null {
   // Any comparison involving NULL is NULL, not a comparison against "", so a
   // guard written to test a field's value (`missing != "a"`) does not fire on
   // events that do not have the field at all. NULL is falsy wherever a condition is read, and
@@ -297,7 +331,7 @@ export function compare(left: EvalArg, right: EvalArg, op: string): boolean | nu
   if ((Array.isArray(left) && left.length === 0) || (Array.isArray(right) && right.length === 0)) return null;
   const l = oneValue(left);
   const r = oneValue(right);
-  if (Array.isArray(l)) return compareMultivalue(l, r, op);
-  if (Array.isArray(r)) return compareMultivalue(r, l, op);
-  return compareScalars(l, r, op);
+  if (Array.isArray(l)) return compareMultivalue(l, r, rt, op);
+  if (Array.isArray(r)) return compareMultivalue(r, l, lt, op);
+  return compareScalars(l, lt, r, rt, op);
 }

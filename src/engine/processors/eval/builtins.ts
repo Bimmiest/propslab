@@ -7,7 +7,18 @@
 import type { SplunkEvent } from '../../types';
 import { safeRegex, validateRegex, type RegexMatch, type SplunkRegex } from '../../../utils/splunkRegex';
 import { formatStrftime } from '../../../utils/strftime';
-import { type EvalValue, isNumericValue, minMax, numArg, parseDecimal, strArg, toMv, toNum, toStr } from './values';
+import {
+  type EvalValue,
+  type StaticType,
+  isNumericValue,
+  minMax,
+  numArg,
+  parseDecimal,
+  strArg,
+  toMv,
+  toNum,
+  toStr,
+} from './values';
 
 // The engine type-checks against ES2022 alone; the UTF-8 encoder is not ES but
 // is a global in browsers, Web Workers and Node alike (see truncator.ts).
@@ -486,6 +497,64 @@ const BUILTINS = new Map<string, Builtin>(
     ...OTHER_BUILTINS,
   }),
 );
+
+/** Functions whose result is always text, whatever their arguments. */
+const TEXT_RESULT = new Set([
+  'tostring',
+  'upper',
+  'lower',
+  'substr',
+  'replace',
+  'trim',
+  'ltrim',
+  'rtrim',
+  'urldecode',
+  'printf',
+  'mvjoin',
+  'strftime',
+  'typeof',
+  'md5',
+  'sha1',
+  'sha256',
+  'sha512',
+]);
+
+/** Functions whose result is always a number (or NULL), whatever their arguments. */
+const NUMBER_RESULT = new Set([
+  'len',
+  'abs',
+  'ceiling',
+  'ceil',
+  'floor',
+  'round',
+  'sqrt',
+  'pow',
+  'log',
+  'ln',
+  'exp',
+  'pi',
+  'random',
+  'exact',
+  'sigfig',
+  'tonumber',
+  'mvcount',
+  'mvfind',
+  'now',
+  'time',
+  'relative_time',
+]);
+
+/**
+ * The {@link StaticType} of a call to `fn`: text or a number for a function
+ * that always produces one, and dynamic for the rest. The branching and
+ * multivalue functions pass an operand through (if, case, coalesce, nullif,
+ * validate, mvindex, mvappend, ...), so their result keeps whatever that
+ * operand was, as does an unknown function, which is NULL anyway (#522).
+ */
+export function resultType(fn: string): StaticType {
+  if (TEXT_RESULT.has(fn)) return 'string';
+  return NUMBER_RESULT.has(fn) ? 'number' : 'dynamic';
+}
 
 /** The name of every non-branching function, for the registry-level fidelity test. */
 export function builtinNames(): string[] {

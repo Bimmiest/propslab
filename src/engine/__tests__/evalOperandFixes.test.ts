@@ -143,7 +143,7 @@ describe('a multivalue operand under an ordering operator, or against a number, 
 
   it('keeps comparing two single values as before', () => {
     expect(value('"b" > "a"')).toBe(true);
-    expect(value('5 == "5"')).toBe(true);
+    expect(value('5 == x', { x: '5' })).toBe(true);
     expect(value('x > 3', { x: '5' })).toBe(true);
   });
 
@@ -158,6 +158,13 @@ describe('a multivalue operand under an ordering operator, or against a number, 
     // Against a multivalue of two values, it is the single value matched.
     expect(value('split("b", ",") == mv', mv)).toBe(true);
     expect(value('mv == split("c", ",")', mv)).toBe(false);
+  });
+
+  it('matches each value of a multivalue field against another field as fields compare', () => {
+    // Both look numeric, so they compare as numbers: 10 is 10.0.
+    expect(value('m == x', { m: ['10', '20'], x: '10.0' })).toBe(true);
+    // Against static text, as text.
+    expect(value('m == "10.0"', { m: ['10', '20'] })).toBe(false);
   });
 
   it.each([
@@ -237,8 +244,9 @@ describe('exponent literals (#485)', () => {
     expect(value(expr)).toBe(n);
   });
 
-  it('agrees with the coercion of the same text as a string', () => {
-    expect(value('"1e3" + 1')).toBe(value('1e3 + 1'));
+  it('agrees with the coercion of the same text in a field', () => {
+    // A string literal beside a number is a type error, NULL here (#522).
+    expect(value('x + 1', { x: '1e3' })).toBe(value('1e3 + 1'));
   });
 
   it('an e with no digits after it is not an exponent', () => {

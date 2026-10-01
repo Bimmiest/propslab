@@ -214,24 +214,39 @@ describe('addOrConcat and arith', () => {
     expect(addOrConcat('a', undefined)).toBeNull();
   });
 
-  it('adds numbers and numeric strings, and concatenates two strings otherwise', () => {
+  // Operands of unknown static type are read as fields are.
+  it('adds two fields that look numeric, and concatenates two fields otherwise', () => {
     expect(addOrConcat('2', 3)).toBe(5);
     expect(addOrConcat('2', '3')).toBe(5);
     expect(addOrConcat('a', 'b')).toBe('ab');
-    // Whichever side is not numeric turns the sum of two strings into a concatenation.
+    // Whichever side is not numeric turns the sum into a concatenation.
     expect(addOrConcat('5', 'a')).toBe('5a');
     expect(addOrConcat('a', '5')).toBe('a5');
   });
 
-  // #446 corrected the old reading, which concatenated these too ("a3", "3a").
-  it('is NULL for a number beside a value that is not numeric', () => {
-    expect(addOrConcat('a', 3)).toBeNull();
-    expect(addOrConcat(3, 'a')).toBeNull();
-    expect(addOrConcat(['5', '6'], 1)).toBeNull();
+  it('concatenates the text of both sides beside a side that is statically text (#522)', () => {
+    expect(addOrConcat('5', '1', 'string', 'string')).toBe('51');
+    expect(addOrConcat('5', '1', 'string', 'dynamic')).toBe('51');
+    expect(addOrConcat('5', '1', 'dynamic', 'string')).toBe('51');
+  });
+
+  // #446 and #522 corrected the old reading, which concatenated a number
+  // beside text ("a3").
+  it('adds beside a side that is statically a number, NULL for a field that is not numeric', () => {
+    expect(addOrConcat('2', 3, 'dynamic', 'number')).toBe(5);
+    expect(addOrConcat(3, '2', 'number', 'dynamic')).toBe(5);
+    expect(addOrConcat('a', 3, 'dynamic', 'number')).toBeNull();
+    expect(addOrConcat(3, 'a', 'number', 'dynamic')).toBeNull();
+    expect(addOrConcat(['5', '6'], 1, 'dynamic', 'number')).toBeNull();
+  });
+
+  it('is NULL for static text beside a static number, a type error in Splunk (#522)', () => {
+    expect(addOrConcat('5', 1, 'string', 'number')).toBeNull();
+    expect(addOrConcat(1, '5', 'number', 'string')).toBeNull();
   });
 
   it('reads a multivalue with one value as that value', () => {
-    expect(addOrConcat(['5'], 1)).toBe(6);
+    expect(addOrConcat(['5'], 1, 'dynamic', 'number')).toBe(6);
     expect(addOrConcat('a', ['b'])).toBe('ab');
   });
 
@@ -295,23 +310,39 @@ describe('compare', () => {
     expect(compare(l, r, op)).toBe(out);
   });
 
-  // #446 corrected the old readings: two numeric strings compared as numbers
-  // ("10" > "9" was true), and a non-numeric string against a number compared
-  // as text ("abc" > 10 was true).
-  it('compares numerically against a number, and as text between two strings', () => {
-    expect(compare('10', 9, '>')).toBe(true);
+  // Operands of unknown static type are read as fields are.
+  it('compares two fields as numbers when both look numeric, and as text otherwise', () => {
+    // Numerically 10 > 9; as text "10" < "9".
+    expect(compare('10', '9', '>')).toBe(true);
     expect(compare(10, '9', '<')).toBe(false);
-    // As text, "10" sorts before "9".
-    expect(compare('10', '9', '>')).toBe(false);
     expect(compare('10', 'x9', '<')).toBe(true);
-    expect(compare('5', '1', '>')).toBe(true);
+    expect(compare('10', 'abc', '>')).toBe(false);
+    expect(compare('abc', '10', '==')).toBe(false);
   });
 
-  it('is NULL for a number against a value that is not numeric', () => {
-    expect(compare(10, 'abc', '==')).toBeNull();
-    expect(compare('abc', 10, '!=')).toBeNull();
-    expect(compare('abc', 10, '>')).toBeNull();
-    expect(compare(true, 1, '==')).toBeNull();
+  // #446 and #522 corrected the old reading, under which a non-numeric string
+  // against a number was compared as text ("abc" > 10 was true).
+  it('reads a field as a number against a static number, NULL when it is not numeric (#522)', () => {
+    expect(compare('10', 9, '>', 'dynamic', 'number')).toBe(true);
+    expect(compare(10, '10.0', '==', 'number', 'dynamic')).toBe(true);
+    expect(compare(9, 10, '<', 'number', 'number')).toBe(true);
+    expect(compare('abc', 5, '<', 'dynamic', 'number')).toBeNull();
+    expect(compare(5, 'abc', '!=', 'number', 'dynamic')).toBeNull();
+    expect(compare(true, 1, '==', 'dynamic', 'number')).toBeNull();
+  });
+
+  it('compares a field as its text against static text (#522)', () => {
+    expect(compare('10', '9', '>', 'dynamic', 'string')).toBe(false);
+    expect(compare('9', '10', '<', 'string', 'dynamic')).toBe(false);
+    expect(compare('10', '10.0', '==', 'dynamic', 'string')).toBe(false);
+    expect(compare('10', '10', '==', 'dynamic', 'string')).toBe(true);
+    expect(compare('10', '9', '>', 'string', 'string')).toBe(false);
+    expect(compare('5', '1', '>', 'string', 'string')).toBe(true);
+  });
+
+  it('is NULL for static text against a static number, a type error in Splunk (#522)', () => {
+    expect(compare('10', 9, '>', 'string', 'number')).toBeNull();
+    expect(compare(9, '9', '==', 'number', 'string')).toBeNull();
   });
 });
 

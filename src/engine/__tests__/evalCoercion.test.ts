@@ -68,8 +68,12 @@ describe('eval reads strings as decimal numbers only (#358)', () => {
     }
   });
 
-  it('compares numeric strings numerically', () => {
-    expect(value('"1e3" == 1000')).toBe(true);
+  // A field holding numeric text is read as a number against one. A string
+  // literal against a number is a type error, NULL here, since #522 and #446
+  // corrected the old reading, under which `"1e3" == 1000` was true.
+  it('compares a numeric field numerically', () => {
+    expect(value('x == 1000', { x: '1e3' })).toBe(true);
+    expect(value('"1e3" == 1000')).toBeNull();
     expect(value('".5" < "5"')).toBe(true);
   });
 

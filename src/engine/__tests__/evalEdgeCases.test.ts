@@ -1,8 +1,9 @@
 // Eval edge cases settled by #446: what the math functions and arithmetic give
-// when a result is not an ordinary number, which strings + and the comparison
-// operators read as numbers, tostring()'s Boolean and radix formats, the
-// multivalue functions on NULL, and characters counted as code points. A test
-// whose behaviour the Search Reference states says so; the rest cite #446.
+// when a result is not an ordinary number, which text reads as a non-finite
+// number, tostring()'s Boolean and radix formats, the multivalue functions on
+// NULL, and characters counted as code points. A test whose behaviour the
+// Search Reference states says so; the rest cite #446. How + and the
+// comparison operators type their operands is in evalOperandTypes.test.ts.
 import { describe, it, expect } from 'vitest';
 import { evaluateExpression } from '../processors/eval/evaluator';
 import { runPipeline } from '../pipeline';
@@ -215,51 +216,6 @@ describe('the text of a non-finite number reads as that number (#446)', () => {
   it('so an infinity written to a field reads back as a number', () => {
     const f = ingest('a=exp(1000), b=a+1, t=typeof(a+1)');
     expect(f).toMatchObject({ a: 'Infinity', b: 'Infinity', t: 'Number' });
-  });
-});
-
-describe('+ adds numbers, concatenates strings, and is NULL for a number beside text (#446)', () => {
-  it.each([
-    ['"5" + "1"', 6],
-    ['"5" + 1', 6],
-    ['1 + "5"', 6],
-    ['"1e3" + 1', 1001],
-    ['"abc" + "def"', 'abcdef'],
-    ['"5" + "abc"', '5abc'],
-    ['"abc" + 1', null],
-    ['1 + "abc"', null],
-    ['"inf" + 1', null],
-  ] as const)('%s is %j', (expr, out) => {
-    expect(value(expr)).toBe(out);
-  });
-
-  it('writes no field for a number beside text', () => {
-    const f = fieldsOf('EVAL-r = _raw + 1\nEVAL-c = _raw + "1"\n', '', 'abc');
-    expect(f['r']).toBeUndefined();
-    expect(f['c']).toBe('abc1');
-  });
-});
-
-describe('comparisons between strings and numbers (#446)', () => {
-  it.each([
-    ['"abc" > 5', null],
-    ['"abc" == 5', null],
-    ['"abc" != 5', null],
-    ['5 < "abc"', null],
-    ['"5" > "1"', true],
-    ['"5" < "10"', false],
-    ['"10" < "5"', true],
-    ['"5" == "5.0"', false],
-    ['"5" == 5.0', true],
-    ['"10" > 5', true],
-    ['"Infinity" > 5', true],
-  ] as const)('%s is %j', (expr, out) => {
-    expect(value(expr)).toBe(out);
-  });
-
-  it('takes the else branch of if() for a NULL comparison', () => {
-    expect(value('if("abc" != 5, "y", "n")')).toBe('n');
-    expect(value('if(NOT ("abc" == 5), "y", "n")')).toBe('n');
   });
 });
 
