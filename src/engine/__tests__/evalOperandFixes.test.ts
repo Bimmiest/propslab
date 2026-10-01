@@ -2,8 +2,8 @@
 // comparisons and IN (#475), and the expression parser's limits and literals
 // (#485).
 //
-// Doc-derived (Splunk eval function and operator reference), not captured; no
-// fixture covers eval, so each assertion is kept to the documented behaviour.
+// Doc-derived (Splunk eval function and operator reference), so each assertion
+// is kept to the documented behaviour.
 import { describe, it, expect } from 'vitest';
 import { evaluateExpression } from '../processors/eval/evaluator';
 import type { SplunkEvent } from '../types';

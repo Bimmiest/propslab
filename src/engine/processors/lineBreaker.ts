@@ -332,9 +332,9 @@ function compileBreakPattern(
 
 function readMergeRules(directives: ConfDirective[], diagnostics?: DiagnosticSink): MergeRules {
   // Not anchored: a line that matches anywhere starts a new event, and the
-  // event starts at the beginning of that line, not at the match (checked on
-  // Splunk 10.4.0). The merge rules below all follow recorded Splunk behaviour;
-  // see docs/adr/0007-line-breaking-follows-recorded-splunk-behaviour.md.
+  // event starts at the beginning of that line, not at the match. The merge
+  // rules below follow observed Splunk behaviour where it departs from the
+  // spec's prose; see docs/adr/0007-line-breaking-follows-recorded-splunk-behaviour.md.
   const breakOnlyBefore = compileBreakPattern('BREAK_ONLY_BEFORE', directives, diagnostics);
   // Splunk default: BREAK_ONLY_BEFORE_DATE=true when SHOULD_LINEMERGE=true.
   // Only disabled when explicitly set to a false spelling.
@@ -343,13 +343,13 @@ function readMergeRules(directives: ConfDirective[], diagnostics?: DiagnosticSin
   const mustBreakAfter = compileBreakPattern('MUST_BREAK_AFTER', directives, diagnostics);
 
   // The negative half of the merging rules. MUST_NOT_BREAK_BEFORE is
-  // deliberately NOT read: the linebreak-must-not-break-before captures show
-  // Splunk 10.4.0 breaking anyway, so the faithful simulation is no effect.
+  // deliberately NOT read: Splunk breaks anyway, so the faithful simulation is
+  // no effect (ADR 0007).
   const mustNotBreakAfter = compileBreakPattern('MUST_NOT_BREAK_AFTER', directives, diagnostics);
 
   // MAX_EVENTS caps how many CONTINUATION lines may be merged into an event,
   // not how many lines the event may total: MAX_EVENTS = 3 produces a
-  // four-line event, as the `linebreak-max-events` capture records.
+  // four-line event (ADR 0007).
   const maxEventsStr = getDirective(directives, 'MAX_EVENTS');
   const parsedMaxEvents = maxEventsStr !== undefined ? parseInt(maxEventsStr.trim(), 10) : 256;
   const maxContinuationLines = Number.isFinite(parsedMaxEvents) && parsedMaxEvents > 0 ? parsedMaxEvents : 256;
@@ -401,10 +401,9 @@ function breakReason(seg: Segment, segLines: number, rules: MergeRules, state: M
   else if (rules.breakOnlyBeforeDate && rules.lineStartsWithDate(seg.text)) reason = 'date';
 
   // MUST_NOT_BREAK_AFTER suppression: every rule-driven break is
-  // suppressed until MUST_BREAK_AFTER matches, exactly the stateful span
-  // the capture `linebreak-must-not-break-after-span` records — dated
-  // lines inside the span stay merged. MAX_EVENTS is a hard cap the
-  // suppression does not defeat.
+  // suppressed until MUST_BREAK_AFTER matches, the stateful span the spec
+  // describes — dated lines inside the span stay merged. MAX_EVENTS is a hard
+  // cap the suppression does not defeat.
   if (reason !== null && reason !== 'max-events' && state.suppressBreaks) {
     reason = overCap ? 'max-events' : null;
   }

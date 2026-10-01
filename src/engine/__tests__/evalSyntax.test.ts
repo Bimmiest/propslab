@@ -6,8 +6,7 @@
 //
 // Doc-derived: the SPL eval operator table (`.` concatenation; comparison
 // operators including LIKE with SQL wildcards `%` and `_`; boolean operators
-// AND, OR, NOT, XOR, with XOR at OR's precedence). No fidelity fixture covers
-// eval, so the assertions are narrow.
+// AND, OR, NOT, XOR, with XOR at OR's precedence). The assertions are narrow.
 // ---------------------------------------------------------------------------
 
 import { describe, it, expect } from 'vitest';

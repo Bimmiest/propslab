@@ -206,7 +206,7 @@ describe('DETERMINE_TIMESTAMP_DATE_WITH_SYSTEM_TIME (#273)', () => {
 
   it('advances a carried date past midnight when the time of day goes back (#471)', () => {
     // Doc-derived: Splunk advances the date when a dateless time of day goes
-    // backwards across midnight. Only that is asserted; no capture covers it.
+    // backwards across midnight. Only that is asserted.
     const out = run(['23:59:59 b', '00:00:01 c'], [TIME_ONLY]);
     expect(out.map((e) => e._time?.toISOString())).toEqual(['2026-08-03T23:59:59.000Z', '2026-08-04T00:00:01.000Z']);
     const step = out[1]?.processingTrace.find((s) => s.processor === 'timestampExtractor');

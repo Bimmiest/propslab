@@ -4,8 +4,7 @@
 // like `%` does.
 //
 // Doc-derived: like(TEXT, PATTERN) is true when TEXT matches PATTERN, with `%`
-// for any run of characters and `_` for exactly one. No fidelity fixture covers
-// eval, so the assertions are narrow.
+// for any run of characters and `_` for exactly one. The assertions are narrow.
 // ---------------------------------------------------------------------------
 
 import { describe, it, expect, vi, afterEach } from 'vitest';

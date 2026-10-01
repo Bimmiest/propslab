@@ -328,8 +328,8 @@ export interface PipelineOptions {
    * Everything in the simulation that Splunk measures against the clock reads
    * this instead: the MAX_DAYS_AGO / MAX_DAYS_HENCE timestamp bounds, the year
    * a yearless TIME_FORMAT is given, the index-time `_time` an event falls back
-   * to, and eval's `now()` / `time()`. A caller replaying recorded data — a test
-   * fixture, a saved sample — passes the moment it was recorded, so the verdict
+   * to, and eval's `now()` / `time()`. A caller replaying recorded data, such as
+   * a saved sample, passes the moment it was recorded, so the verdict
    * does not change as the real clock moves on.
    */
   now?: number;

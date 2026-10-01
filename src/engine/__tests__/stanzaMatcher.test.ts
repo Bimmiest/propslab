@@ -185,7 +185,7 @@ describe('matchStanzas — host case-insensitivity without the `i` flag (#118)',
 });
 
 // Doc-derived (props.conf.spec, [source::<source>]): "`|` is equivalent to
-// 'or'. `( )` are used to limit scope of `|`." Not a captured fixture.
+// 'or'. `( )` are used to limit scope of `|`."
 describe('matchStanzas — `|` alternation and `( )` scoping (#284)', () => {
   const source = (pattern: string): ConfStanza => ({
     name: `source::${pattern}`,
@@ -257,7 +257,7 @@ describe('matchStanzas — `|` alternation and `( )` scoping (#284)', () => {
 });
 
 // Doc-derived (props.conf.spec, stanza pattern syntax): "\\ = matches a literal
-// backslash '\'". Not checked against a capture.
+// backslash '\'".
 describe('matchStanzas — a doubled backslash matches one literal backslash (#303)', () => {
   const source = (pattern: string): ConfStanza => ({
     name: `source::${pattern}`,

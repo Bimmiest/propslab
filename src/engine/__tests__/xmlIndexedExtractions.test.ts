@@ -1,8 +1,8 @@
 // ---------------------------------------------------------------------------
 // INDEXED_EXTRACTIONS = xml / xmlkv / xmlkv-winevt and the XML_IE_* filters.
 //
-// Doc-derived throughout. No capture covers index-time XML, so what each
-// attribute does is read from props.conf.spec 10.4.3 and asserted narrowly:
+// Doc-derived throughout: what each attribute does is read from
+// props.conf.spec 10.4.3 and asserted narrowly:
 // XML_INDEXED_EXTRACTIONS_PIPELINE, XML_IE_INCLUDE, XML_IE_INCLUDE_MV,
 // XML_IE_EXCLUDE, XML_IE_EXCLUDE_MV, XML_IE_EXCLUDE_VALS,
 // XML_IE_SKIP_XML_ENCODED_VALS, XML_IE_MAX_EXTRACTED_VALUE_SIZE and

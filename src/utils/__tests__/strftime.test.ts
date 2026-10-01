@@ -162,7 +162,7 @@ describe('#159 — IANA zone names resolve against real zone data', () => {
     // 02:30 does not exist on either day; it reads at the offset before the
     // gap, landing on 03:30 after it. Resolution used to depend on the zone
     // being east of UTC, putting New York's 02:30 at 01:30 EST. Convention-
-    // derived (the strptime/Temporal "compatible" reading); no capture covers DST.
+    // derived (the strptime/Temporal "compatible" reading).
     expect(iso('2026-03-08 02:30:00', FMT, 'America/New_York')).toBe('2026-03-08T07:30:00.000Z');
     expect(iso('2026-03-29 02:30:00', FMT, 'Europe/Berlin')).toBe('2026-03-29T01:30:00.000Z');
   });
@@ -295,7 +295,7 @@ describe('strftime — the year of a yearless timestamp (#356)', () => {
   const at = (text: string, now: string, format = SYSLOG) =>
     parseTimestamp(text, format, undefined, undefined, undefined, new Date(now))?.toISOString() ?? null;
 
-  // Convention-derived, not captured: syslog readers place a yearless RFC 3164
+  // Convention-derived: syslog readers place a yearless RFC 3164
   // stamp in the most recent year that does not put it in the future.
   it('rolls back to last year a date that would otherwise be in the future', () => {
     expect(at('Dec 31 23:59:00', '2026-01-01T00:30:00Z')).toBe('2025-12-31T23:59:00.000Z');

@@ -94,7 +94,7 @@ describe('truncateEvents', () => {
 // Doc-derived (props.conf.spec): TRUNCATE is "the default maximum line length",
 // and LINE_BREAKER is what delimits a line — "the start of the first capturing
 // group [is] the end of the previous line". So a line is a LINE_BREAKER segment,
-// before merging, and may contain newlines. Not a captured fixture.
+// before merging, and may contain newlines.
 describe('#287 — TRUNCATE caps LINE_BREAKER segments, not newline-separated pieces', () => {
   const META = { index: 'main', host: 'h', source: 's', sourcetype: 'st' };
   const d = (key: string, value: string): ConfDirective => ({ key, value, line: 1, directiveType: key });

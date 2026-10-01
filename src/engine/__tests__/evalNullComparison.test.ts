@@ -4,7 +4,7 @@
 // about a field's value (`missing != "a"`, `missing IN ("")`) does not fire on
 // events that do not have the field.
 //
-// Doc-derived, not captured — no fidelity fixture covers eval. The SPL Search
+// Doc-derived. The SPL Search
 // Reference treats NULL as unknown: a comparison with a NULL operand is NULL,
 // NULL is not true wherever a condition is read (if(), case(), where), and
 // isnull()/isnotnull()/coalesce() are how an expression asks about absence.

@@ -7,17 +7,15 @@
  * the signature reflects the event as indexed — after SEDCMD and index-time
  * transforms have rewritten `_raw`.
  *
- * The signature rules are pinned by the `punct-*` captures from Splunk 10.4.0:
- *  - letters and digits are dropped, every other character survives in order
- *    (`punct-basic`);
- *  - a space becomes `_` (`punct-basic`);
- *  - a tab becomes the literal letter `t`, and a newline is dropped entirely
- *    (`punct-whitespace-and-multiline`) — measured, and not what the
- *    widely-repeated `\t`/`\n` escape-sequence folklore says;
- *  - the signature caps at exactly 50 characters (`punct-cap`).
+ * The signature rules follow observed Splunk behaviour:
+ *  - letters and digits are dropped, every other character survives in order;
+ *  - a space becomes `_`;
+ *  - a tab becomes the literal letter `t`, and a newline is dropped entirely —
+ *    not what the widely-repeated `\t`/`\n` escape-sequence folklore says;
+ *  - the signature caps at exactly 50 characters.
  *
- * Carriage returns are dropped like newlines; that half is inferred from the
- * newline measurement rather than pinned by a capture of its own.
+ * Carriage returns are dropped like newlines, by analogy with them rather than
+ * from an observation of their own.
  */
 
 import type { ConfDirective, SplunkEvent } from '../types';

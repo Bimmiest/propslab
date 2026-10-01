@@ -108,9 +108,8 @@ export function lintInertTransformSettings(
 /**
  * Report values that are not the type their directive documents.
  *
- * Deliberately conservative. The registry's metadata is hand-maintained, the
- * fidelity captures have already shown Splunk to be
- * fussier than its own documentation in places, and a false positive on correct
+ * Deliberately conservative. The registry's metadata is hand-maintained,
+ * Splunk is fussier than its own documentation in places, and a false positive on correct
  * config is worse here than a missed one: a user who is told their working
  * config is wrong stops trusting every other diagnostic. So this checks only
  * what cannot be argued with — a boolean that is not a boolean literal, a

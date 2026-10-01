@@ -676,7 +676,7 @@ export function parseTimestampDetailed(
   if (!yearless) return current;
 
   // A date written without a year is the most recent one it can be (the syslog
-  // convention; no capture covers it). A stamp slightly ahead of the clock
+  // convention). A stamp slightly ahead of the clock
   // (skew) stays in this year. See
   // docs/adr/0005-yearless-timestamps-take-the-most-recent-year.md.
   const latest = now.getTime() + YEARLESS_FUTURE_TOLERANCE_MS;

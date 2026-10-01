@@ -564,8 +564,8 @@ describe('applyIndexedExtractions — TIMESTAMP_FIELDS (#184)', () => {
 
 // ---------------------------------------------------------------------------
 // Header-side delimited overrides. Doc-derived: every assertion below
-// is read from the props.conf.spec 10.4.3 text for the attribute, since no
-// capture exercises any of the five: FIELD_HEADER_REGEX, HEADER_FIELD_DELIMITER,
+// is read from the props.conf.spec 10.4.3 text for the attribute, for all
+// five: FIELD_HEADER_REGEX, HEADER_FIELD_DELIMITER,
 // HEADER_FIELD_QUOTE, HEADER_FIELD_ACCEPTABLE_SPECIAL_CHARACTERS and
 // MISSING_VALUE_REGEX. The last describe of the group drives them through the
 // pipeline from a props.conf stanza.
@@ -717,9 +717,8 @@ describe('applyIndexedExtractions — MISSING_VALUE_REGEX (#272)', () => {
   });
 });
 
-// Doc-derived (props.conf.spec 10.4.3, JSON_TRIM_BRACES_IN_ARRAY_NAMES): no
-// capture pins this attribute, so the assertions stay close to the spec's own
-// example and the default.
+// Doc-derived (props.conf.spec 10.4.3, JSON_TRIM_BRACES_IN_ARRAY_NAMES): the
+// assertions stay close to the spec's own example and the default.
 describe('applyIndexedExtractions — JSON_TRIM_BRACES_IN_ARRAY_NAMES (#274)', () => {
   const raw = '{"data":{"mount_point":["/","/home"]}}';
 

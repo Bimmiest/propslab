@@ -9,10 +9,8 @@ import { effectiveDirective, parseSplunkBool } from '../utils/directiveValues';
  * CLEAN_KEYS "key cleaning": replace every non-alphanumeric character with an
  * underscore, then strip leading underscores and digits.
  *
- * Both halves are pinned by a capture from Splunk 10.4.0
- * (`report-delims-field-and-value`), where `DELIMS = ";", "="` over
- * `2026-01-15T10:00:00Z a=1;…` yields the field `T10_00_00Z_a`:
- * `2026-01-15T10:00:00Z a` → `2026_01_15T10_00_00Z_a` → `T10_00_00Z_a`.
+ * Both halves are transforms.conf.spec's description of CLEAN_KEYS:
+ * `9.x-y` → `9_x_y` → `x_y`.
  *
  * Interior underscores survive — only a LEADING run is stripped — which is why
  * a FIELDS name like `col_a` comes back unchanged.

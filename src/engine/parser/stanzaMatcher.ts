@@ -163,9 +163,8 @@ export function matchStanzas(stanzas: ConfStanza[], metadata: EventMetadata): Co
   // carrying a worked example.
   //
   // A full tie falls to the ASCII order of the stanza name, where the stanza
-  // sorting first takes precedence — the spec's rule for colliding patterns, and
-  // what the `precedence-ascii-order` capture records (`...fx_a...` beats
-  // `...fx_z...`). File order must not decide it: reordering two stanzas in
+  // sorting first takes precedence — the spec's rule for colliding patterns.
+  // File order must not decide it: reordering two stanzas in
   // props.conf does not change which one wins.
   matched.sort((a, b) => {
     if (a.priority !== b.priority) return b.priority - a.priority;

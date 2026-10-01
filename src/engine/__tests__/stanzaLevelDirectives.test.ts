@@ -9,8 +9,8 @@
 // alone.
 //
 // Doc-derived (props.conf.spec): `disabled` switches a stanza off, and `rename`
-// gives a sourcetype another name at search time. No fixture covers either, so
-// what they do is read from the spec text and asserted narrowly.
+// gives a sourcetype another name at search time. What they do is read from
+// the spec text and asserted narrowly.
 // ---------------------------------------------------------------------------
 
 import { describe, it, expect } from 'vitest';

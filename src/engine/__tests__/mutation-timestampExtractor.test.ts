@@ -4,7 +4,7 @@
 // which zone a dateless stamp's "today" is read in, and what the trace says
 // when no timestamp was read.
 //
-// The bounds and their defaults are props.conf.spec's; doc-derived, no capture.
+// The bounds and their defaults are props.conf.spec's; doc-derived.
 import { describe, it, expect } from 'vitest';
 import { extractTimestamps } from '../processors/timestampExtractor';
 import type { SplunkEvent, ConfDirective, ValidationDiagnostic } from '../types';

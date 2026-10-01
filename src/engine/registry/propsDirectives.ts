@@ -196,11 +196,11 @@ export const PROPS_CORE: DirectiveDefinition[] = [
   {
     key: 'MUST_NOT_BREAK_BEFORE',
     description:
-      'Documented as preventing an event break before a line matching the regex. Measured against ' +
-      'Splunk 10.4.0, the suppression never happens: breaks driven by BREAK_ONLY_BEFORE_DATE, ' +
-      'BREAK_ONLY_BEFORE and MUST_BREAK_AFTER all stand with this set (three captures). The ' +
-      'simulator mirrors the measured behaviour, so the setting has no effect here either. For a ' +
-      'no-break span that does work, see MUST_NOT_BREAK_AFTER.',
+      'Documented as preventing an event break before a line matching the regex. In practice ' +
+      'Splunk does not perform the suppression: breaks driven by BREAK_ONLY_BEFORE_DATE, ' +
+      'BREAK_ONLY_BEFORE and MUST_BREAK_AFTER all stand with this set. The simulator follows ' +
+      'that behaviour, so the setting has no effect here either. For a no-break span that does ' +
+      'work, see MUST_NOT_BREAK_AFTER.',
     example: 'MUST_NOT_BREAK_BEFORE = ^\\s+at ',
     defaultValue: '',
     category: 'Event Breaking',

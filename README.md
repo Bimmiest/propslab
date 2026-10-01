@@ -286,7 +286,7 @@ A simulator's correctness oracle is "matches real Splunk", which is a closed-sou
 - Line-breaker lookbehind across chunk boundaries (`LINE_BREAKER_LOOKBEHIND`)
 - Stub eval functions (`md5()`, `sha1()`, `sha256()`, `sha512()`; `searchmatch()`, `relative_time()`, `strptime()`, `mvfilter()`, `sigfig()`, `exact()` are partial stubs)
 
-Engine tests assert against the documentation and say so. A separate fidelity suite, which compares the engine with output recorded from Splunk Enterprise, is maintained outside this repository and is not part of it or its releases; nothing here depends on it ([ADR 0016](docs/adr/0016-recorded-splunk-output-is-kept-outside-the-repository.md)).
+Recorded outputs from Splunk Enterprise are not distributed with Propslab and are not part of its source, test suite, build, CI or releases. Engine tests assert against the documentation and say so ([ADR 0016](docs/adr/0016-recorded-splunk-output-is-not-distributed.md)).
 
 Every directive the registry knows about carries one of three support levels, declared in [`src/engine/directiveSupport.ts`](src/engine/directiveSupport.ts):
 

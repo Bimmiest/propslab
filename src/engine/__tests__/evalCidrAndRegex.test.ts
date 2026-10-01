@@ -4,8 +4,8 @@
 // will not compile.
 //
 // Doc-derived: cidrmatch("X", Y) is documented as true when IP address Y is in
-// the subnet X, for IPv4 and IPv6. No fidelity fixture covers eval, so these
-// assertions are narrow — membership, family, and the malformed cases.
+// the subnet X, for IPv4 and IPv6. The assertions are narrow — membership,
+// family, and the malformed cases.
 // ---------------------------------------------------------------------------
 
 import { describe, it, expect } from 'vitest';
@@ -88,7 +88,7 @@ describe('cidrmatch() (#291)', () => {
   // NULL propagates through the comparison operators, like() and match(), and
   // cidrmatch() follows them: the result is NULL, so the EVAL writes no field,
   // and an if() guard still takes its else branch. Doc-derived (NULL is falsy
-  // in a condition), not captured.
+  // in a condition).
   it('yields NULL for an absent address, as the comparison operators do (#343)', () => {
     const r = applyEvalExpressions([event()], [evalDir('r', 'cidrmatch("10.0.0.0/8", nope)')], runCtx(FIXED_NOW))[0]!;
     expect(r.fields['r']).toBeUndefined();

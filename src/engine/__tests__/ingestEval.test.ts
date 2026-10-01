@@ -95,8 +95,8 @@ describe('applyIngestEval — queue assignment routes the event (#58)', () => {
 //
 // Uncertain, and deliberately not asserted: the spec describes `=` on an
 // indexed field that already exists as ADDING a value (making it multivalue)
-// rather than replacing it. The simulator replaces on `=`; no fidelity fixture
-// covers INGEST_EVAL to settle it.
+// rather than replacing it. The simulator replaces on `=`, and nothing here
+// settles it.
 // ---------------------------------------------------------------------------
 
 describe('applyIngestEval — metadata keys rewrite the event metadata (#327)', () => {

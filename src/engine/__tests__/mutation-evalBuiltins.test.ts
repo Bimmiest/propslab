@@ -3,8 +3,8 @@
 // tried: the NULL-in/NULL-out rule on every string and math function, the
 // boundaries of substr() and mvindex(), and the trim family's custom sets.
 //
-// Doc-derived (Splunk eval function reference), not captured; no fixture
-// covers eval, so each assertion is kept to the documented behaviour.
+// Doc-derived (Splunk eval function reference), so each assertion is kept to
+// the documented behaviour.
 import { describe, it, expect, vi } from 'vitest';
 import { evaluateExpression } from '../processors/eval/evaluator';
 import type { SplunkEvent } from '../types';

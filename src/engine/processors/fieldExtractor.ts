@@ -145,10 +145,8 @@ function warnStrippedSourceRef(
 
 /**
  * Splunk trims leading and trailing whitespace from an EXTRACT value, and an
- * empty result creates no field. Checked on Splunk 10.4.0 (#411): `"  abc"`,
- * `"abc  "` and tab-wrapped `abc` all gave `abc`, `" a b "` gave `a b`, and
- * `"   "` and `""` gave no field. Spaces and tabs were observed; the rest of
- * ASCII whitespace is trimmed with them. Whether non-ASCII spaces such as
+ * empty result creates no field, as observed in Splunk (#411). Spaces and tabs
+ * were observed; the rest of ASCII whitespace is trimmed with them. Whether non-ASCII spaces such as
  * U+00A0 are trimmed is unchecked, so they are kept.
  */
 const LEADING_WHITESPACE = /^[ \t\n\v\f\r]+/;
@@ -267,11 +265,10 @@ export function parseExtractValue(value: string): { pattern: string; sourceField
 
 /**
  * The value `in <field>` reads: from `fields`, which holds what the event
- * arrived with plus what earlier EXTRACTs in this pass produced. Checked on
- * Splunk 10.4.0 (#410): with EXTRACT-m_src producing `src`, EXTRACT-z_… in src
- * matched and EXTRACT-a_… in src, whose class sorts first, found nothing.
- * Fields from KV_MODE are not here, because automatic extraction runs after
- * every EXTRACT (the extract-in-source-field fixture).
+ * arrived with plus what earlier EXTRACTs in this pass produced, in class-name
+ * order, as observed in Splunk (#410): an EXTRACT whose class sorts before the
+ * one producing the field finds nothing. Fields from KV_MODE are not here,
+ * because automatic extraction runs after every EXTRACT.
  */
 function getFieldValue(event: SplunkEvent, fields: SplunkEvent['fields'], fieldName: string): string | undefined {
   if (fieldName === '_raw') return event._raw;
