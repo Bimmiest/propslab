@@ -49,7 +49,7 @@ export function indexedFields(meta: SplunkEvent['_meta']): Record<string, string
 }
 
 /** Serialise `_meta` back to the space-separated `key::value` form Splunk stores. */
-function serialiseMeta(meta: SplunkEvent['_meta']): string {
+export function serialiseMeta(meta: SplunkEvent['_meta']): string {
   return Object.entries(indexedFields(meta))
     .flatMap(([key, values]) =>
       (Array.isArray(values) ? values : [values]).map((value) =>

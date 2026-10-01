@@ -55,7 +55,11 @@ function splitOnAnyChar(value: string, delims: string): string[] {
  *  - Two DELIMS sets → field/value pairs: first set splits pairs, second splits
  *    key from value (on the first key-delimiter occurrence).
  *  - One DELIMS set + FIELDS → positional values named by FIELDS.
- * Keys/values are trimmed; empty values are dropped (KEEP_EMPTY_VALS default false).
+ * Keys/values are trimmed, and a pair whose value is empty is dropped whatever
+ * KEEP_EMPTY_VALS says. The spec does not make that exception — it describes
+ * KEEP_EMPTY_VALS for search-time extractions in general — but Splunk drops the
+ * empty value of a DELIMS extraction under both settings (#450), while a
+ * REGEX-based one honours it (regexTransform.ts).
  * `sourceValue` is the SOURCE_KEY value, resolved by the caller as for REGEX.
  */
 export function applyDelimsExtraction(

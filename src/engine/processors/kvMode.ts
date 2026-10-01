@@ -31,6 +31,8 @@ export function applyKvMode(events: SplunkEvent[], directives: ConfDirective[], 
     const added: string[] = [];
     let depthWarning = false;
     let parseError: string | undefined;
+    /** Fields the key=value pass would have found past KV_MAXCHARS. */
+    let missedPastCap: string[] = [];
 
     switch (mode) {
       case 'json': {
@@ -55,14 +57,15 @@ export function applyKvMode(events: SplunkEvent[], directives: ConfDirective[], 
           if (whole.kind === 'parsed') depthWarning = flattenParsed(whole.value, newFields, added);
           else if (whole.kind === 'invalid') parseError = whole.error;
         }
-        extractKeyValue(event._raw, newFields, added, mode === 'auto_escaped', trimSpaces);
+        missedPastCap = extractKeyValueCapped(event._raw, newFields, added, mode === 'auto_escaped', trimSpaces);
         break;
       }
     }
 
     if (parseError) parseFailures.push({ line: event.lineNumbers.start, error: parseError });
+    reportCap(diagnostics, mode, event.lineNumbers.start, missedPastCap);
 
-    if (added.length === 0) return event;
+    if (added.length === 0 && missedPastCap.length === 0) return event;
 
     return {
       ...event,
@@ -72,7 +75,7 @@ export function applyKvMode(events: SplunkEvent[], directives: ConfDirective[], 
         {
           processor: `KV_MODE(${mode})`,
           phase: 'search-time' as const,
-          description: `Extracted ${added.length} fields via KV_MODE=${mode}${depthWarning ? ' (depth limit reached — deeply nested fields omitted)' : ''}`,
+          description: `Extracted ${added.length} fields via KV_MODE=${mode}${depthWarning ? ' (depth limit reached — deeply nested fields omitted)' : ''}${capNote(missedPastCap)}`,
           fieldsAdded: added,
         },
       ],
@@ -289,6 +292,73 @@ function extractXml(raw: string, fields: Record<string, string | string[]>, adde
   for (const el of roots) {
     for (const { name, value } of walkXmlFields(el, 'xml')) addMvField(fields, added, seen, name, value);
   }
+}
+
+/**
+ * limits.conf `[kv] maxchars`: "When non-zero, truncate _raw to this size and
+ * then do auto KV." Its default is 10240 characters. The simulator reads no
+ * limits.conf, so the default is what it applies, and it cannot be changed
+ * here. It cuts the key=value pass of KV_MODE = auto and auto_escaped, taken
+ * literally: a pair that starts past the cut is not extracted, and a value
+ * that runs across it keeps the part before it. KV_MODE = json is not cut, and
+ * neither is the JSON pass AUTO_KV_JSON adds to auto; `[spath]
+ * extraction_cutoff` (5000) does not cap KV_MODE = json either (#451).
+ */
+const KV_MAXCHARS = 10_240;
+
+/** How many of the fields the cap cost are named in the trace and diagnostic; the rest are counted. */
+const MISSED_NAMED = 10;
+
+function nameMissed(missed: string[]): string {
+  const named = missed.slice(0, MISSED_NAMED).join(', ');
+  return missed.length > MISSED_NAMED ? `${named} and ${missed.length - MISSED_NAMED} more` : named;
+}
+
+/** The trace's note on the fields the cap cost, empty when it cost none. */
+function capNote(missed: string[]): string {
+  return missed.length > 0
+    ? `; not extracted after character ${KV_MAXCHARS} (limits.conf [kv] maxchars): ${nameMissed(missed)}`
+    : '';
+}
+
+/**
+ * Say, once per run, that the cap cost an event fields, so a field missing
+ * from a long event has an explanation. Information rather than a warning:
+ * the simulator is doing what Splunk does by default.
+ */
+function reportCap(diagnostics: RunContext['diagnostics'], mode: string, line: number, missed: string[]): void {
+  if (missed.length === 0) return;
+  diagnostics.report('kvMode|maxchars', {
+    level: 'info',
+    file: 'raw',
+    line,
+    message:
+      `KV_MODE = ${mode}: automatic key=value extraction reads only the first ${KV_MAXCHARS} characters of an ` +
+      `event (limits.conf [kv] maxchars), so pairs after that are not extracted (here: ${nameMissed(missed)}). ` +
+      'The simulator applies that default and cannot change it; in Splunk, raising maxchars extracts them.',
+  });
+}
+
+/**
+ * The key=value pass of KV_MODE = auto over the first KV_MAXCHARS characters of
+ * `raw`. Returns the fields that only a pass over the whole event would have
+ * added — what the cap cost — so the trace and the diagnostic can name them:
+ * the second pass starts from what the first extracted, so it adds nothing
+ * the first already has.
+ */
+function extractKeyValueCapped(
+  raw: string,
+  fields: Record<string, string | string[]>,
+  added: string[],
+  escaped: boolean,
+  trimSpaces: boolean,
+): string[] {
+  const head = raw.slice(0, KV_MAXCHARS);
+  extractKeyValue(head, fields, added, escaped, trimSpaces);
+  if (head.length === raw.length) return [];
+  const missed: string[] = [];
+  extractKeyValue(raw, { ...fields }, missed, escaped, trimSpaces);
+  return missed;
 }
 
 function extractKeyValue(

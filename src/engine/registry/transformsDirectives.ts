@@ -88,7 +88,9 @@ export const TRANSFORMS_CORE: DirectiveDefinition[] = [
       'Commonly used for index-time transforms such as routing events. ' +
       'Special values include queue (for routing), MetaData:Index, MetaData:Host, MetaData:Source, and MetaData:Sourcetype. ' +
       'For MetaData:Host/Source/Sourcetype, FORMAT must carry the host::, source:: or sourcetype:: prefix; ' +
-      'for _MetaData:Index, FORMAT is the bare index name (FORMAT = my_index).',
+      'for _MetaData:Index, FORMAT is the bare index name (FORMAT = my_index). ' +
+      'DEST_KEY = _meta replaces _meta with the FORMAT output, dropping indexed fields already written: start ' +
+      'FORMAT with $0 to keep them, or use WRITE_META = true instead, which appends.',
     example: 'DEST_KEY = MetaData:Index',
     defaultValue: '',
     category: 'Field Extraction',
@@ -322,8 +324,10 @@ export const TRANSFORMS_CORE: DirectiveDefinition[] = [
   {
     key: 'KEEP_EMPTY_VALS',
     description:
-      'When set to true, fields that match the REGEX but capture an empty string are still created with an empty value. ' +
-      'When false, empty captures are discarded.',
+      'When set to true, a search-time REGEX extraction keeps a field whose captured value is an empty string, ' +
+      'with an empty value. When false (the default), the empty pair is discarded. A DELIMS extraction discards ' +
+      'empty values either way, and automatic key/value extraction (KV_MODE) always ignores them. ' +
+      'Search-time field extractions only.',
     example: 'KEEP_EMPTY_VALS = true',
     defaultValue: 'false',
     category: 'Field Extraction',
