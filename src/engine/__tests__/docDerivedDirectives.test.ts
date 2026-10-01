@@ -312,10 +312,22 @@ describe('PREAMBLE_REGEX through the pipeline', () => {
 });
 
 // Doc-derived (props.conf.spec, TIMESTAMP_FIELDS): names the field or fields
-// that hold the timestamp in structured data.
+// that hold the timestamp in structured data. "Some CSV and structured files
+// have their timestamp encompass multiple fields in the event separated by
+// delimiters. This setting tells Splunk software to specify all such fields
+// which constitute the timestamp in a comma-separated fashion." So the fields
+// together make one timestamp; it is not the first of them that has a value.
 describe('TIMESTAMP_FIELDS through the pipeline', () => {
   it('takes _time from the named field', () => {
     const events = csv('msg,when\nhello,2026-01-15T10:00:00Z', 'TIMESTAMP_FIELDS = when\n');
+    expect(time(events)).toBe('2026-01-15T10:00:00.000Z');
+  });
+
+  it('reads a timestamp spread over several fields from all of them', () => {
+    const events = csv(
+      'date,time,user\n2026-01-15,10:00:00,alice',
+      'TIMESTAMP_FIELDS = date, time\nTIME_FORMAT = %Y-%m-%d %H:%M:%S\nTZ = UTC\n',
+    );
     expect(time(events)).toBe('2026-01-15T10:00:00.000Z');
   });
 });

@@ -517,24 +517,35 @@ describe('applyIndexedExtractions — TIMESTAMP_FIELDS (#184)', () => {
     expect(events[0]!._time?.toISOString()).toBe('2026-01-15T10:00:00.000Z');
   });
 
-  it('leaves _time alone when the named fields are absent', () => {
+  // #444 corrected this. It read that a row whose named fields are missing
+  // kept the _time the timestamp stage gave it; Splunk treats missing fields
+  // like a value that does not parse, and the first row then gets the time of
+  // indexing.
+  it('gives the first row the time of indexing when the named fields are absent', () => {
     const events = applyIndexedExtractions(
       [event('a,b'), event('1,2')],
       [dir('csv'), dirOf('TIMESTAMP_FIELDS', 'nope'), dirOf('TIME_FORMAT', '%Y-%m-%d')],
       runCtx(FIXED_NOW),
     );
-    expect(events[0]!._time).toBeNull();
+    expect(events[0]!._time?.getTime()).toBe(FIXED_NOW);
   });
 
-  // #416: the probe falls back to the clock rather than returning null.
-  it('keeps the prior _time and adds no trace when the fields do not parse', () => {
+  // #444 corrected this. It read that a value which does not parse left the
+  // timestamp stage's _time in place, which that stage may have read from
+  // anywhere in the row; Splunk does not search the row, and the first row
+  // gets the time of indexing.
+  it('gives the first row the time of indexing when its value does not parse', () => {
     const prior = new Date('2020-05-01T00:00:00Z');
     const [e] = applyIndexedExtractions(
       [event('ts,user'), { ...event('not-a-time,alice'), _time: prior }],
       [dir('csv'), dirOf('TIMESTAMP_FIELDS', 'ts'), dirOf('TIME_FORMAT', '%Y-%m-%d'), dirOf('TZ', 'UTC')],
       runCtx(new Date('2020-05-02T00:00:00Z')),
     );
-    expect(e!._time).toBe(prior);
+    expect(e!._time?.toISOString()).toBe('2020-05-02T00:00:00.000Z');
+    expect(e!.processingTrace.at(-1)).toMatchObject({
+      processor: 'INDEXED_EXTRACTIONS(TIMESTAMP_FIELDS)',
+      timeSource: 'current-time',
+    });
     expect(e!.processingTrace.some((s) => s.description.includes('parsed from'))).toBe(false);
   });
 
@@ -557,6 +568,150 @@ describe('applyIndexedExtractions — TIMESTAMP_FIELDS (#184)', () => {
       [event('ts'), event('2010-01-01'), event('2010-01-02')],
       [dir('csv'), dirOf('TIMESTAMP_FIELDS', 'ts'), dirOf('TIME_FORMAT', '%Y-%m-%d'), dirOf('TZ', 'UTC')],
       runCtx(new Date('2020-01-01T00:00:00Z'), diagnostics),
+    );
+    expect(diagnostics.filter((d) => d.message.includes('so it was not used'))).toHaveLength(1);
+  });
+});
+
+// TIMESTAMP_FIELDS for every structured format, and what happens when its
+// value does not parse (#444).
+describe('TIMESTAMP_FIELDS beyond the delimited formats, and its fallback (#444)', () => {
+  /** Events for one `[st]` stanza, judged against a clock later than every stamp below. */
+  const run = (raw: string, props: string) =>
+    runPipeline(raw, { index: 'main', host: 'h', source: 's', sourcetype: 'st' }, `[st]\n${props}`, '', {
+      perEventPipeline: false,
+      captureOffsets: false,
+      now: Date.parse('2026-10-01T00:00:00Z'),
+    }).result.events;
+  const times = (events: SplunkEvent[]) => events.map((e) => e._time?.toISOString());
+  const step = (e: SplunkEvent | undefined) =>
+    e?.processingTrace.find((s) => s.processor === 'INDEXED_EXTRACTIONS(TIMESTAMP_FIELDS)');
+
+  const json = '{"created":"2026-01-01T00:00:00","when":"2026-01-15T10:00:00","user":"alice"}';
+
+  it('is honoured for json, which otherwise takes the first timestamp in the event', () => {
+    expect(times(run(json, 'INDEXED_EXTRACTIONS = json\nTZ = UTC\nTIMESTAMP_FIELDS = when\n'))).toEqual([
+      '2026-01-15T10:00:00.000Z',
+    ]);
+    expect(times(run(json, 'INDEXED_EXTRACTIONS = json\nTZ = UTC\n'))).toEqual(['2026-01-01T00:00:00.000Z']);
+  });
+
+  it('reads a nested json value by its flattened name', () => {
+    const nested = '{"created":"2026-01-01T00:00:00","meta":{"when":"2026-01-15T10:00:00"},"user":"alice"}';
+    expect(times(run(nested, 'INDEXED_EXTRACTIONS = json\nTZ = UTC\nTIMESTAMP_FIELDS = meta.when\n'))).toEqual([
+      '2026-01-15T10:00:00.000Z',
+    ]);
+  });
+
+  it('is honoured for w3c', () => {
+    const w3c = '#Version: 1.0\n#Fields: created when user\n2026-01-01T00:00:00 2026-01-15T10:00:00 alice';
+    const events = run(w3c, 'INDEXED_EXTRACTIONS = w3c\nTZ = UTC\nTIMESTAMP_FIELDS = when\n');
+    expect(times(events)).toEqual(['2026-01-15T10:00:00.000Z']);
+    expect(events[0]!.fields['user']).toBe('alice');
+  });
+
+  const csv = 'when,user,created\n2026-01-15T10:00:00,alice,2026-03-01T00:00:00\ngarbage,bob,2026-02-01T00:00:00\n';
+
+  it.each([
+    ['without TIME_FORMAT', '', 'auto-recognition'],
+    ['with TIME_FORMAT', 'TIME_FORMAT = %Y-%m-%dT%H:%M:%S\n', 'TIME_FORMAT'],
+  ])(
+    "gives a value that does not parse the previous event's _time, %s, and searches the row no further",
+    (_, timeFormat, source) => {
+      const events = run(csv, `INDEXED_EXTRACTIONS = csv\nTZ = UTC\nTIMESTAMP_FIELDS = when\n${timeFormat}`);
+      expect(times(events)).toEqual(['2026-01-15T10:00:00.000Z', '2026-01-15T10:00:00.000Z']);
+      expect(step(events[1])?.timeSource).toBe('previous-event');
+      expect(step(events[1])?.description).toMatch(/^No timestamp read from when \("garbage"\): /);
+      expect(step(events[0])).toMatchObject({
+        timeSource: source,
+        description: '_time parsed from when ("2026-01-15T10:00:00")',
+      });
+    },
+  );
+
+  it('names the fields and the value it read, leaving out a field that is missing or empty', () => {
+    const [e] = run(
+      '{"date":"2026-01-15","time":""}',
+      'INDEXED_EXTRACTIONS = json\nTZ = UTC\nTIMESTAMP_FIELDS = date, nope, time\nTIME_FORMAT = %Y-%m-%d\n',
+    );
+    expect(e!._time?.toISOString()).toBe('2026-01-15T00:00:00.000Z');
+    expect(step(e)).toEqual({
+      processor: 'INDEXED_EXTRACTIONS(TIMESTAMP_FIELDS)',
+      phase: 'index-time',
+      description: '_time parsed from date, nope, time ("2026-01-15")',
+      timeSource: 'TIME_FORMAT',
+      fieldsAdded: [],
+      fieldsModified: ['_time'],
+    });
+  });
+
+  // TIME_PREFIX and MAX_TIMESTAMP_LOOKAHEAD say where a timestamp sits in the
+  // raw event; the value TIMESTAMP_FIELDS names is the timestamp itself.
+  it.each([['TIME_PREFIX = nowhere\n'], ['MAX_TIMESTAMP_LOOKAHEAD = 4\n']])('ignores %s', (setting) => {
+    const events = run(
+      'user,when\nalice,2026-01-15T10:00:00\n',
+      `INDEXED_EXTRACTIONS = csv\nTZ = UTC\nTIMESTAMP_FIELDS = when\n${setting}`,
+    );
+    expect(times(events)).toEqual(['2026-01-15T10:00:00.000Z']);
+  });
+
+  it('gives the first row the time of indexing when its value does not parse', () => {
+    const events = run(
+      'when,user,created\ngarbage,bob,2026-02-01T00:00:00\n',
+      'INDEXED_EXTRACTIONS = csv\nTZ = UTC\nTIMESTAMP_FIELDS = when\n',
+    );
+    expect(times(events)).toEqual(['2026-10-01T00:00:00.000Z']);
+    expect(step(events[0])?.timeSource).toBe('current-time');
+  });
+
+  it('treats a row with none of the fields as one whose value does not parse', () => {
+    const events = run(
+      'when,user,created\n2026-01-15T10:00:00,alice,2026-03-01T00:00:00\n,bob,2026-02-01T00:00:00\n',
+      'INDEXED_EXTRACTIONS = csv\nTZ = UTC\nTIMESTAMP_FIELDS = when\n',
+    );
+    expect(times(events)).toEqual(['2026-01-15T10:00:00.000Z', '2026-01-15T10:00:00.000Z']);
+  });
+
+  // Doc-derived: the ADD_EXTRA_TIME_FIELDS conventions in props.conf.spec. An
+  // event whose _time was not read from its text has timestamp=none and no
+  // date_* fields, so a row that fell back loses the ones the timestamp stage
+  // wrote for the stamp it found elsewhere in the row.
+  it('replaces the time fields of a row that fell back', () => {
+    const [read, fellBack] = run(csv, 'INDEXED_EXTRACTIONS = csv\nTZ = UTC\nTIMESTAMP_FIELDS = when\n');
+    expect(read!.fields['date_month']).toBe('january');
+    expect(read!.fields['timestamp']).toBeUndefined();
+    expect(fellBack!.fields['timestamp']).toBe('none');
+    for (const name of ['date_month', 'date_mday', 'timestartpos', 'timeendpos']) {
+      expect(fellBack!.fields[name]).toBeUndefined();
+    }
+    expect(fellBack!.fields).toMatchObject({ user: 'bob', created: '2026-02-01T00:00:00' });
+  });
+
+  it('keeps a column that shares a time field name', () => {
+    const [e] = run(
+      'timestamp,date_year,when,created\nfoo,1999,garbage,2026-02-01T00:00:00\n',
+      'INDEXED_EXTRACTIONS = csv\nTZ = UTC\nTIMESTAMP_FIELDS = when\n',
+    );
+    expect(e!.fields).toMatchObject({ timestamp: 'foo', date_year: '1999' });
+    expect(e!.fields['date_month']).toBeUndefined();
+  });
+
+  it('adds no timestamp field to a row that fell back when ADD_EXTRA_TIME_FIELDS = none', () => {
+    const [, fellBack] = run(
+      csv,
+      'INDEXED_EXTRACTIONS = csv\nTZ = UTC\nTIMESTAMP_FIELDS = when\nADD_EXTRA_TIME_FIELDS = none\n',
+    );
+    expect(fellBack!.fields['timestamp']).toBeUndefined();
+    expect(fellBack!._time?.toISOString()).toBe('2026-01-15T10:00:00.000Z');
+  });
+
+  it('does not repeat a warning the timestamp stage already gave', () => {
+    const { diagnostics } = runPipeline(
+      'ts\n2010-01-01\n',
+      { index: 'main', host: 'h', source: 's', sourcetype: 'st' },
+      '[st]\nINDEXED_EXTRACTIONS = csv\nTZ = UTC\nTIMESTAMP_FIELDS = ts\nTIME_FORMAT = %Y-%m-%d\n',
+      '',
+      { perEventPipeline: false, captureOffsets: false, now: Date.parse('2020-01-01T00:00:00Z') },
     );
     expect(diagnostics.filter((d) => d.message.includes('so it was not used'))).toHaveLength(1);
   });

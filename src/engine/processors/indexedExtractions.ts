@@ -1,17 +1,17 @@
-import type { ConfDirective, SplunkEvent, ValidationDiagnostic } from '../types';
+import type { ConfDirective, SplunkEvent } from '../types';
 import { flattenJson, flattenArray } from '../utils/flattenJson';
-import { getField, setField } from '../utils/fieldBag';
+import { deleteField, getField, setField } from '../utils/fieldBag';
 import { safeRegex, validateRegex, type SplunkRegex } from '../../utils/splunkRegex';
 import { atDirective } from '../parser/provenance';
-import { extractTimestamps } from './timestampExtractor';
+import { EXTRA_TIME_FIELD_NAMES, extractTimestamps } from './timestampExtractor';
 import { extractXmlIndexed } from './xmlIndexedExtractions';
 import { effectiveBool, effectiveDirective } from '../utils/directiveValues';
-import { createCollector, withDiagnostics, type RunContext, type DiagnosticSink } from '../runContext';
+import { withDiagnostics, type RunContext, type DiagnosticSink } from '../runContext';
 
 export function applyIndexedExtractions(
   events: SplunkEvent[],
   directives: ConfDirective[],
-  /** `ctx.now` is the index time TIMESTAMP_FIELDS parsing uses. */
+  /** `ctx.now` is the index time TIMESTAMP_FIELDS parsing uses, and falls back to. */
   ctx: RunContext,
 ): SplunkEvent[] {
   const extractionDir = effectiveDirective(directives, 'INDEXED_EXTRACTIONS');
@@ -29,7 +29,7 @@ export function applyIndexedExtractions(
     case 'psv':
       return extractDelimited(events, directives, '|', 'psv', ctx);
     case 'w3c':
-      return extractW3c(events);
+      return extractW3c(events, directives, ctx);
     case 'xml':
     case 'xmlkv':
     case 'xmlkv-winevt':
@@ -91,7 +91,7 @@ function extractJsonFields(events: SplunkEvent[], directives: ConfDirective[], c
       suggestion: 'Check for unquoted values, trailing commas, or placeholders like <ID>.',
     });
   }
-  return result;
+  return applyTimestampFields(result, directives, ctx);
 }
 
 /**
@@ -143,8 +143,6 @@ interface DelimitedOptions extends LineSyntax {
   headerLineNumber: number;
   /** PREAMBLE_REGEX: leading lines matching this are not data. */
   preambleRegex: SplunkRegex | null;
-  /** TIMESTAMP_FIELDS: extracted fields that together hold the timestamp. */
-  timestampFields: string[] | null;
 }
 
 /**
@@ -225,7 +223,6 @@ function delimitedOptions(
     fieldNames: null,
     headerLineNumber: 0,
     preambleRegex: null,
-    timestampFields: null,
   };
 
   const namesDir = find('FIELD_NAMES');
@@ -241,12 +238,6 @@ function delimitedOptions(
   }
 
   opts.preambleRegex = compileOption(find('PREAMBLE_REGEX'), 'No preamble lines were skipped.', diagnostics);
-
-  const timestampDir = find('TIMESTAMP_FIELDS');
-  if (timestampDir) {
-    const names = parseNameList(timestampDir.value);
-    if (names.length > 0) opts.timestampFields = names;
-  }
 
   return opts;
 }
@@ -299,55 +290,106 @@ function compileOption(
 }
 
 /**
- * Compose `_time` from TIMESTAMP_FIELDS: the named fields' values, joined with
- * spaces in the declared order, parsed with the stanza's TIME_FORMAT/TZ. The
- * composed value starts at offset 0, so TIME_PREFIX and the lookahead — which
- * position a timestamp inside a raw event — do not apply to it.
+ * TIMESTAMP_FIELDS: `_time` read from the named fields rather than from the
+ * event. props.conf.spec: "Some CSV and structured files have their timestamp
+ * encompass multiple fields in the event separated by delimiters", so the
+ * values are joined with a space in the declared order, then parsed with the
+ * stanza's TIME_FORMAT and TZ. The joined value starts at offset 0, so
+ * TIME_PREFIX and the lookahead, which place a timestamp inside a raw event, do
+ * not apply to it.
+ *
+ * It applies to json and w3c as it does to the delimited formats. When the
+ * value does not parse, or none of the fields has one, the event takes the
+ * previous event's `_time`, or the time of indexing when there is no previous
+ * event, and the rest of the event is not searched for another timestamp
+ * (#444). The values are parsed as one batch so that each inherits from the
+ * one before it, as the timestamp stage's events do.
  */
-function applyTimestampFields(
-  event: SplunkEvent,
-  timestampFields: string[] | null,
-  directives: ConfDirective[],
-  ctx: RunContext,
-  diagnostics: (d: ValidationDiagnostic) => void,
-): SplunkEvent {
-  if (!timestampFields) return event;
+function applyTimestampFields(events: SplunkEvent[], directives: ConfDirective[], ctx: RunContext): SplunkEvent[] {
+  const names = parseNameList(effectiveDirective(directives, 'TIMESTAMP_FIELDS')?.value ?? '');
+  if (names.length === 0) return events;
 
+  const probes = events.map((event) => ({
+    ...event,
+    _raw: timestampFieldsValue(event.fields, names),
+    _time: null,
+    fields: {},
+    processingTrace: [],
+  }));
+  const probeDirectives = directives.filter((d) => d.key !== 'TIME_PREFIX' && d.key !== 'MAX_TIMESTAMP_LOOKAHEAD');
+  // The timestamp stage has already said what is wrong with the stanza's
+  // timestamp settings (an unknown TZ, a stamp out of bounds); parsing the
+  // named values does not say it again.
+  const quiet = withDiagnostics(ctx, ctx.diagnostics.deduplicating(ctx.diagnostics.list));
+  const placed = extractTimestamps(probes, probeDirectives, quiet);
+  return events.map((event, i) => {
+    const probe = placed[i];
+    return probe ? settleTimestamp(event, probe, names) : event;
+  });
+}
+
+/** The named fields' values, joined with a space in the order named. A field with no value is left out. */
+function timestampFieldsValue(fields: SplunkEvent['fields'], names: string[]): string {
   const parts: string[] = [];
-  for (const name of timestampFields) {
-    const value = getField(event.fields, name);
+  for (const name of names) {
+    const value = getField(fields, name);
     const first = Array.isArray(value) ? value[0] : value;
     if (first !== undefined && first !== '') parts.push(first);
   }
-  if (parts.length === 0) return event;
-  const composed = parts.join(' ');
+  return parts.join(' ');
+}
 
-  const probe: SplunkEvent = { ...event, _raw: composed, _time: null, processingTrace: [] };
-  const probeDirectives = directives.filter((d) => d.key !== 'TIME_PREFIX' && d.key !== 'MAX_TIMESTAMP_LOOKAHEAD');
-  const probeDiagnostics: ValidationDiagnostic[] = [];
-  const [result] = extractTimestamps([probe], probeDirectives, withDiagnostics(ctx, createCollector(probeDiagnostics)));
-  probeDiagnostics.forEach(diagnostics);
-  // extractTimestamps always places an event, falling back to the clock. Only
-  // a stamp read out of the composed value replaces the _time the timestamp
-  // stage already gave the event.
-  const source = result?.processingTrace.find((s) => s.timeSource !== undefined)?.timeSource;
-  const parsed = result?._time ?? null;
-  if (!parsed || (source !== 'TIME_FORMAT' && source !== 'auto-recognition')) return event;
-
+/**
+ * `event` with the `_time` parsing its TIMESTAMP_FIELDS value (`probe`)
+ * settled on. A value that gave no timestamp fell back the way the timestamp
+ * stage does, and the event then carries the fallback's time fields
+ * (`timestamp=none`) in place of the ones the stage wrote for a timestamp it
+ * found elsewhere in the event.
+ */
+function settleTimestamp(event: SplunkEvent, probe: SplunkEvent, names: string[]): SplunkEvent {
+  const [step] = probe.processingTrace;
+  const read = step?.timeSource === 'TIME_FORMAT' || step?.timeSource === 'auto-recognition';
+  const named = names.join(', ');
   return {
     ...event,
-    _time: parsed,
+    _time: probe._time,
+    fields: read ? event.fields : withTimeFields(event, probe.fields),
     processingTrace: [
       ...event.processingTrace,
       {
         processor: 'INDEXED_EXTRACTIONS(TIMESTAMP_FIELDS)',
         phase: 'index-time' as const,
-        description: `_time parsed from ${timestampFields.join(', ')} ("${composed}")`,
+        description: read
+          ? `_time parsed from ${named} ("${probe._raw}")`
+          : `No timestamp read from ${named} ("${probe._raw}"): ${step?.description}`,
+        timeSource: step?.timeSource,
         fieldsAdded: [],
         fieldsModified: ['_time'],
       },
     ],
   };
+}
+
+/**
+ * `event`'s fields with the timestamp stage's time fields replaced by
+ * `timeFields`. What the stage wrote describes a timestamp it read from the
+ * whole event, which TIMESTAMP_FIELDS overrules. A column the extraction wrote
+ * under one of those names is data, and stays.
+ */
+function withTimeFields(event: SplunkEvent, timeFields: SplunkEvent['fields']): SplunkEvent['fields'] {
+  const extracted = new Set(
+    event.processingTrace
+      .filter((step) => step.processor.startsWith('INDEXED_EXTRACTIONS('))
+      .flatMap((step) => step.fieldsAdded ?? []),
+  );
+  const fields = { ...event.fields };
+  for (const name of EXTRA_TIME_FIELD_NAMES) {
+    if (!extracted.has(name)) deleteField(fields, name);
+  }
+  for (const [name, value] of Object.entries(timeFields)) {
+    if (!extracted.has(name)) setField(fields, name, value);
+  }
+  return fields;
 }
 
 function extractDelimited(
@@ -358,15 +400,8 @@ function extractDelimited(
   ctx: RunContext,
 ): SplunkEvent[] {
   if (events.length === 0) return events;
-  const { diagnostics } = ctx;
 
-  const opts = delimitedOptions(directives, defaultDelimiter, diagnostics);
-  // TIMESTAMP_FIELDS probes each event on its own, so a config-level warning
-  // (every stamp out of bounds, an unknown TZ) would repeat once per row. Keep
-  // the first of each, ignoring the stamp itself.
-  const probeDiagnostics = (d: ValidationDiagnostic) => {
-    diagnostics.report(`TIMESTAMP_FIELDS probe|${d.message.replace(/\d{4}-\d{2}-\d{2}T[\d:.]+Z/g, '')}`, d);
-  };
+  const opts = delimitedOptions(directives, defaultDelimiter, ctx.diagnostics);
 
   // PREAMBLE_REGEX: a leading run of matching lines is not data. Only the
   // leading run — the attribute exists for banners before the header, and
@@ -419,7 +454,7 @@ function extractDelimited(
 
   // The header row (and any preamble before it) is consumed as metadata —
   // Splunk does not index it as an event.
-  return working.slice(dataStart).map((event) => {
+  const rows = working.slice(dataStart).map((event) => {
     const values = parseDelimitedLine(event._raw, opts);
 
     const fields = { ...event.fields };
@@ -436,7 +471,7 @@ function extractDelimited(
       }
     }
 
-    const extracted: SplunkEvent = {
+    return {
       ...event,
       fields,
       processingTrace: [
@@ -449,12 +484,11 @@ function extractDelimited(
         },
       ],
     };
-
-    return applyTimestampFields(extracted, opts.timestampFields, directives, ctx, probeDiagnostics);
   });
+  return applyTimestampFields(rows, directives, ctx);
 }
 
-function extractW3c(events: SplunkEvent[]): SplunkEvent[] {
+function extractW3c(events: SplunkEvent[], directives: ConfDirective[], ctx: RunContext): SplunkEvent[] {
   // W3C format: header line starts with #Fields:
   let headers: string[] = [];
 
@@ -474,7 +508,7 @@ function extractW3c(events: SplunkEvent[]): SplunkEvent[] {
   // Drop W3C directive/comment lines (#Version, #Fields, #Software, …) — they
   // are not indexed as events. A merged event carries its directive lines
   // inline, so test every line rather than only the first.
-  return events
+  const rows = events
     .filter((event) => !isW3cDirectiveOnly(event._raw))
     .map((event) => {
       const values = parseW3cLine(event._raw);
@@ -503,6 +537,7 @@ function extractW3c(events: SplunkEvent[]): SplunkEvent[] {
         ],
       };
     });
+  return applyTimestampFields(rows, directives, ctx);
 }
 
 /** True for a line that carries data — not blank, not a `#` comment/directive. */
