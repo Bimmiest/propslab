@@ -235,6 +235,26 @@ describe('FIELDALIAS through the pipeline', () => {
   });
 });
 
+// Doc-derived (props.conf.spec, FIELDALIAS): with AS, "If the <orig_field_name>
+// field has no value or does not exist, the <new_field_name> is removed"; with
+// ASNEW, "If the <orig_field_name> field has no value or does not exist, the
+// <new_field_name> is kept" (#445). Automatic key/value extraction supplies
+// `src`; nothing supplies `src_ip`.
+describe('FIELDALIAS through the pipeline, when the original field does not exist', () => {
+  const raw = '2026-01-15T10:00:00Z src=1.2.3.4 action=allowed';
+
+  it('removes the new field with AS', () => {
+    const f = fields(run(raw, `${ONE_PER_LINE}FIELDALIAS-x = src_ip AS src\n`));
+    expect(f['src']).toBeUndefined();
+    expect(f['action']).toBe('allowed');
+  });
+
+  it('keeps the new field with ASNEW', () => {
+    const f = fields(run(raw, `${ONE_PER_LINE}FIELDALIAS-x = src_ip ASNEW src\n`));
+    expect(f['src']).toBe('1.2.3.4');
+  });
+});
+
 // Doc-derived (props.conf.spec, EVAL): the eval statement is run and its value
 // assigned to the field the directive names, a calculated field.
 describe('EVAL through the pipeline', () => {

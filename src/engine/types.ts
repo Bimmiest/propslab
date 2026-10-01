@@ -54,6 +54,9 @@ export interface ProcessingStep {
    * — the step deleted the text the extraction anchors on. Distinct from
    * `fieldsModified`: the remedy differs (the extraction is broken, not just
    * devalued), so the two are never merged.
+   *
+   * FIELDALIAS steps use it for the alias targets they deleted: with `AS`, a
+   * source field that has no value removes the target.
    */
   fieldsRemoved?: string[];
   /**

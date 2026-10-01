@@ -54,6 +54,16 @@ const PHASE_HINTS: Record<string, string> = {
     'Runs at query time — EXTRACT, KV_MODE, REPORT, FIELDALIAS, EVAL. Results are computed fresh for each search.',
 };
 
+/**
+ * Why a step removed a field. FIELDALIAS removes an alias target outright;
+ * every other step that reports one rewrote the `_raw` an extraction reads.
+ */
+function removedFieldHint(processor: string, field: string): string {
+  return processor === 'FIELDALIAS'
+    ? `The alias's source field has no value, so FIELDALIAS … AS removed "${field}". ASNEW would have kept it.`
+    : `This step deleted the text "${field}" is extracted from, so the field no longer extracts at all. The extraction itself is not at fault.`;
+}
+
 function StepSection({ title, steps, phaseColor }: { title: string; steps: StepSummary[]; phaseColor: string }) {
   if (steps.length === 0) return null;
 
@@ -122,10 +132,7 @@ function StepSection({ title, steps, phaseColor }: { title: string; steps: StepS
                     </Tooltip>
                   ))}
                   {step.fieldsRemoved.map((f) => (
-                    <Tooltip
-                      key={`-${f}`}
-                      content={`This step deleted the text "${f}" is extracted from, so the field no longer extracts at all. The extraction itself is not at fault.`}
-                    >
+                    <Tooltip key={`-${f}`} content={removedFieldHint(step.processor, f)}>
                       <span className="px-1.5 py-0.5 text-xs rounded bg-[var(--color-error)]/10 text-[var(--color-error)] cursor-default">
                         −{f}
                       </span>

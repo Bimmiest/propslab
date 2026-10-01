@@ -380,7 +380,8 @@ export const PROPS_CORE: DirectiveDefinition[] = [
     description:
       'Creates an alias for an existing field at search time. ' +
       'Allows you to reference the same field value by an alternative name without duplicating the data. ' +
-      'Syntax is FIELDALIAS-<class> = <original_field> AS <alias_field>. Multiple aliases can be comma-separated.',
+      'Syntax is FIELDALIAS-<class> = <original_field> AS <alias_field>. Multiple aliases can be comma-separated. ' +
+      'With AS, an original field that has no value removes the alias field; ASNEW keeps it, and never overwrites an alias field that already exists.',
     example: 'FIELDALIAS-src = src_ip AS src',
     defaultValue: '',
     category: 'Field Extraction',
