@@ -475,8 +475,8 @@ function extractDelimited(
     // on that line, not the nth event, and the lines before it are not
     // indexed. A header line that is preamble extracts nothing: the lines after
     // the preamble are indexed with no fields. A blank one, which no event starts on,
-    // names no fields, and the lines after it are rows whose values are named
-    // by column (below). A line past the end of the input leaves no line to
+    // names no fields, so every value of the lines after it is named by its
+    // column (below). A line past the end of the input leaves no line to
     // index.
     const line = opts.headerLineNumber;
     const headerIndex = events.findIndex((e) => e.lineNumbers.start === line);
@@ -495,21 +495,19 @@ function extractDelimited(
     dataStart = skip + headerIndex + 1;
   }
 
-  // A header that names no field (a blank header line) leaves each value to
-  // be named by its column: EXTRA_FIELD_1, EXTRA_FIELD_2, and so on (#449).
-  const named = headers.some(Boolean);
-
   // The header row (and any preamble before it) is consumed as metadata —
   // Splunk does not index it as an event.
   const rows = rejoinQuotedRows(events.slice(dataStart), opts, source).map((event) => {
     const values = parseDelimitedLine(event._raw, opts);
-    const names = named ? headers : values.map((_, i) => `EXTRA_FIELD_${i + 1}`);
 
     const fields = { ...event.fields };
     const added: string[] = [];
 
-    for (const [i, header] of names.entries()) {
-      const value = values[i];
+    for (const [i, value] of values.entries()) {
+      // A value past the end of the header is named by its column,
+      // EXTRA_FIELD_4 for the fourth; one under an empty header name is not
+      // extracted at all (#449).
+      const header = headers[i] ?? `EXTRA_FIELD_${i + 1}`;
       // MISSING_VALUE_REGEX names the placeholder a source writes for "no
       // value"; indexing the placeholder would make an absent value
       // searchable as if it were data.
@@ -768,10 +766,11 @@ function splitDelimitedLine(line: string, opts: LineSyntax, inQuotes: boolean): 
         current += ch;
         i++;
       } else inQuotes = false;
-    } else if (ch === opts.quote && current === '') {
-      // A quote opens a quoted value only at the start of a field, at the
-      // start of the line or just after a delimiter. Anywhere else it is a
+    } else if (ch === opts.quote && /^[ \t]*$/.test(current)) {
+      // A quote opens a quoted value only at the start of a field, after any
+      // spaces or tabs, which are not part of the value. Anywhere else it is a
       // literal character, as in 5'10" (#449).
+      current = '';
       inQuotes = true;
       fieldQuoted = true;
     } else if (isDelimiter(ch)) {

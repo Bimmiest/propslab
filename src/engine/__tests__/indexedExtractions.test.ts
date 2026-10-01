@@ -1069,6 +1069,25 @@ describe('HEADER_FIELD_LINE_NUMBER counts the lines of the input (#449)', () => 
 // specified regular expression in the structured data file, it considers the
 // value for the field in the row to be empty." The match is of the whole
 // value, not of part of it.
+describe('values without a header name (#449)', () => {
+  it('names a value past the end of the header by its column', () => {
+    const [e] = csvEvents('ts,user,status\n2026-01-15T10:00:00Z,alice,200,extra4,extra5\n');
+    expect(e!.fields).toMatchObject({
+      ts: '2026-01-15T10:00:00Z',
+      user: 'alice',
+      status: '200',
+      EXTRA_FIELD_4: 'extra4',
+      EXTRA_FIELD_5: 'extra5',
+    });
+  });
+
+  it('extracts nothing for a column whose header name is empty', () => {
+    const [e] = csvEvents('ts,,status\n2026-01-15T10:00:00Z,alice,200\n');
+    expect(e!.fields).toMatchObject({ ts: '2026-01-15T10:00:00Z', status: '200' });
+    expect(Object.values(e!.fields)).not.toContain('alice');
+  });
+});
+
 describe('MISSING_VALUE_REGEX matches the whole value (#449)', () => {
   // A value matched in the middle, at the start only, at the end only, and not at all.
   const raw = 'ts,code,note,lead,trail,other\n2026-01-15,-,a-b,-a,a-,x\n';
@@ -1140,9 +1159,24 @@ describe('a quoted value that holds a line break stays in its row (#449)', () =>
     expect(events.map((e) => e.fields['user'])).toEqual(['alice', 'bob', 'carol']);
   });
 
-  it('keeps a quote that follows a closed quoted value, or a space after the delimiter, as a literal', () => {
-    const [e] = csvEvents('a,b,c\n"x"y"z, "w",v\n');
-    expect(e!.fields).toMatchObject({ a: 'xy"z', b: '"w"', c: 'v' });
+  it('keeps a quote that follows a closed quoted value as a literal', () => {
+    const [e] = csvEvents('a,b\n"x"y"z,v\n');
+    expect(e!.fields).toMatchObject({ a: 'xy"z', b: 'v' });
+  });
+
+  // #449: spaces or tabs before the opening quote are allowed, and are not
+  // part of the value.
+  it.each([
+    ['a space', ' '],
+    ['a tab', '\t'],
+  ])('opens a quoted value after %s at the start of the field', (_, gap) => {
+    const [e] = csvEvents(`ts,user,msg,tail\n2026-01-15T10:00:00Z,alice,${gap}"b,c",end\n`);
+    expect(e!.fields).toMatchObject({ user: 'alice', msg: 'b,c', tail: 'end' });
+  });
+
+  it('keeps the row together when a quoted value opened after a space holds a line break', () => {
+    const events = csvEvents('a,msg\n1, "one\ntwo"\n2,x\n');
+    expect(events.map((e) => e.fields['msg'])).toEqual(['one\ntwo', 'x']);
   });
 
   it('runs to the end of the input when the quote never closes', () => {
