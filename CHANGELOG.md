@@ -101,6 +101,7 @@ All notable changes to Propslab are documented here, newest first. Entries say w
 
 ### Fixed
 
+- **A deploy no longer trusts a stale CI-run lookup.** GitHub's list of CI runs sometimes lags, and twice it named a two-month-old commit as the newest green one. The deploy now requires the commit it resolves to contain both the commit whose CI triggered it and the commit production serves. It retries for about two minutes, and deploys nothing if the lookup never catches up. A rollback with `sha` set is unaffected.
 - **The weekly environment check matches how `main` is protected** ([#520](https://github.com/Bimmiest/propslab/issues/520)): it requires the pull-request rule rather than an approval count (a sole maintainer cannot approve their own PRs), the core CI checks by name, and an empty bypass list on every ruleset covering `main`.
 - **No unit test times itself any more** ([#507](https://github.com/Bimmiest/propslab/issues/507)). Linear-time regressions are caught by counting the work done when the input doubles, and the MCP server's cancellation, busy-refusal and event-loop tests assert ordering or parse counts. The XML reader no longer copies the remaining source for every text run, and the AppShell and MobileShell tests run the real pipeline hook and panels.
 - **The CI check scripts' logic is unit-tested, and ESLint enforces import order** ([#510](https://github.com/Bimmiest/propslab/issues/510)). `exactOptionalPropertyTypes` stays off; `tsconfig.app.json` records what enabling it would cost.
