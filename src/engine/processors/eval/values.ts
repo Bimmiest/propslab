@@ -93,17 +93,24 @@ export function strArg(v: EvalArg): string | null {
  * Numeric operand for arithmetic and math functions. Unlike {@link toNum} it
  * does NOT coerce a non-numeric value to 0 — it returns null so the caller can
  * propagate NULL the way Splunk does (`"abc" * 2` and `abs("foo")` are null, not
- * 0). Booleans still coerce (true→1, false→0), matching Splunk.
+ * 0). Booleans still coerce (true→1, false→0), matching Splunk. A number is
+ * taken as it is, Infinity and NaN included: they are numbers, not NULL (#446).
  */
 export function numArg(v: EvalArg): number | null {
   if (v === null || v === undefined) return null;
-  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+  if (typeof v === 'number') return v;
   if (typeof v === 'boolean') return v ? 1 : 0;
   if (Array.isArray(v)) return v.length > 0 ? numArg(v[0]) : null;
   return parseDecimal(v);
 }
 
-/** `-`, `*`, `/`, `%` with NULL propagation (null or non-numeric operand → null). */
+/**
+ * `-`, `*`, `/`, `%` with NULL propagation (null or non-numeric operand → null).
+ * Division by zero is NULL, as the Search Reference's eval page says. Otherwise
+ * the result is what floating point gives, special values included: `1e308 * 10`
+ * is Infinity and `exp(1000) - exp(1000)` is NaN, numbers that a field shows as
+ * "Infinity" and "NaN" (#446; the eval page names them "inf" and "nan").
+ */
 export function arith(l: EvalArg, r: EvalArg, op: '-' | '*' | '/' | '%'): EvalValue {
   const a = numArg(l);
   const b = numArg(r);
@@ -129,7 +136,8 @@ export function toMv(v: EvalArg): string[] {
 /**
  * True when the value is genuinely numeric — a number, or a string that parses
  * cleanly as one. Used by isnum()/isint(); unlike toNum() it does not coerce
- * non-numeric input to 0 (which made isnum("abc") wrongly return true).
+ * non-numeric input to 0 (which made isnum("abc") wrongly return true). Every
+ * number counts, Infinity and NaN included, which typeof() calls "Number" (#446).
  */
 export function isNumericValue(v: EvalArg): boolean {
   return numericValue(v) !== null;
@@ -137,7 +145,7 @@ export function isNumericValue(v: EvalArg): boolean {
 
 /** The number a genuinely numeric value (see {@link isNumericValue}) stands for, or null. */
 function numericValue(v: EvalArg): number | null {
-  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+  if (typeof v === 'number') return v;
   return typeof v === 'string' ? parseDecimal(v) : null;
 }
 

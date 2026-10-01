@@ -132,8 +132,10 @@ describe('numArg', () => {
     [null, null],
     [undefined, null],
     [5, 5],
-    [NaN, null],
-    [Infinity, null],
+    // A number is taken as it is (#446). The old reading turned NaN and
+    // Infinity into NULL; Splunk keeps both as numbers.
+    [NaN, NaN],
+    [Infinity, Infinity],
     [true, 1],
     [false, 0],
     ['12', 12],
@@ -172,9 +174,11 @@ describe('toStr, strArg and toMv', () => {
 });
 
 describe('isNumericValue', () => {
-  it('accepts finite numbers and decimal strings only', () => {
+  it('accepts numbers and decimal strings only', () => {
     expect(isNumericValue(3)).toBe(true);
-    expect(isNumericValue(NaN)).toBe(false);
+    // NaN and Infinity are numbers (#446), which the old reading refused.
+    expect(isNumericValue(NaN)).toBe(true);
+    expect(isNumericValue(-Infinity)).toBe(true);
     expect(isNumericValue('3')).toBe(true);
     expect(isNumericValue('x')).toBe(false);
     expect(isNumericValue(true)).toBe(false);

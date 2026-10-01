@@ -8,7 +8,8 @@
 //
 // Doc-derived (Splunk Enterprise Search Reference, "Evaluation functions"), so
 // every row cites the page section it relies on and is kept to what that
-// section says.
+// section says. Where the page is silent, a row may instead cite the issue
+// that settled the behaviour (#446), and says so.
 // A row whose documented behaviour is unclear is a TODO with the reason, never
 // an assertion of whatever the simulator happens to do.
 import { describe, it, expect } from 'vitest';
@@ -39,8 +40,11 @@ const TIME = `${BASE} > Date and Time functions`;
 const CRYPTO = `${BASE} > Cryptographic functions`;
 /** The general rule for an argument that is NULL. */
 const NULL_RULE = `${BASE} overview: a function given a NULL (nonexistent) field returns NULL`;
-/** The rule the Math functions page states for a result that is not a number (see #446). */
-const NOT_A_NUMBER = `${MATH}: no numeric result is NULL (Splunk shows no NaN or Infinity); #446`;
+/** The eval command's page on numeric calculations. */
+const DIV_ZERO = 'eval command: division by zero results in a null field';
+/** Settled by #446, where the pages are silent. */
+const UNDEFINED_IS_NULL = '#446: a math function undefined at its argument is NULL';
+const OVERFLOW = '#446: an overflow is the number Infinity, not NULL';
 
 // ── Rows ────────────────────────────────────────────────
 
@@ -93,13 +97,16 @@ todo('upper', 'upper(mv)', MV_UNDOCUMENTED, MV_AB);
 nulls('len', ['len(missing)']);
 row('len', 'len("")', 0, `${TEXT} > len(X)`);
 row('len', 'len("abc")', 3, `${TEXT} > len(X)`);
-todo('len', 'len("😀")', 'documented as characters (1); the simulator counts UTF-16 units (2): #446 item 4');
+row('len', 'len("😀")', 1, `${TEXT} > len(X): a count of the UTF-8 code points`);
+row('len', 'len("😀abc")', 4, `${TEXT} > len(X): a count of the UTF-8 code points`);
 todo('len', 'len(mv)', MV_UNDOCUMENTED, MV_AB);
 
 nulls('substr', ['substr(missing, 1)', 'substr("abc", missing)', 'substr("abc", 1, missing)']);
 row('substr', 'substr("", 1)', '', `${TEXT} > substr(X,Y,Z)`);
 row('substr', 'substr("abc", 2, 1)', 'b', `${TEXT} > substr(X,Y,Z): 1-based start`);
-todo('substr', 'substr("😀abc", 2)', 'documented as characters; the simulator slices UTF-16 units: #446 item 4');
+row('substr', 'substr("😀abc", 2)', 'abc', '#446: positions count code points, as len() does');
+row('substr', 'substr("😀abc", 1, 1)', '😀', '#446: positions count code points, as len() does');
+row('substr', 'substr("ab😀", -1)', '😀', '#446: positions count code points, as len() does');
 todo('substr', 'substr(mv, 1)', MV_UNDOCUMENTED, MV_AB);
 todo('substr', 'substr("abc", mv)', MV_UNDOCUMENTED, MV_AB);
 todo('substr', 'substr("abc", 1, mv)', MV_UNDOCUMENTED, MV_AB);
@@ -123,6 +130,8 @@ for (const fn of ['trim', 'ltrim', 'rtrim']) {
   todo(fn, `${fn}(mv)`, MV_UNDOCUMENTED, MV_AB);
   todo(fn, `${fn}("abc", mv)`, MV_UNDOCUMENTED, MV_AB);
 }
+// 😁 is not in the set, though its leading UTF-16 unit is the same as 😀's.
+row('trim', 'trim("😁x😁", "😀")', '😁x😁', `${TEXT} > trim(X,Y): removes the characters in Y`);
 row('trim', 'trim("xyyx", "x")', 'yy', `${TEXT} > trim(X,Y): removes the characters in Y from both sides`);
 row('ltrim', 'ltrim("xyyx", "x")', 'yyx', `${TEXT} > ltrim(X,Y)`);
 row('rtrim', 'rtrim("xyyx", "x")', 'xyy', `${TEXT} > rtrim(X,Y)`);
@@ -135,6 +144,12 @@ todo('urldecode', 'urldecode(mv)', MV_UNDOCUMENTED, MV_AB);
 nulls('split', ['split(missing, ",")', 'split("a,b", missing)']);
 row('split', 'split("a😀b", "😀")', ['a', 'b'], `${MV} > split(X,"Y")`);
 row('split', 'split("a,b", ",")', ['a', 'b'], `${MV} > split(X,"Y")`);
+row(
+  'split',
+  'split("😀ab", "")',
+  ['\uFFFD', '\uFFFD', '\uFFFD', '\uFFFD', 'a', 'b'],
+  '#446: an empty delimiter splits into UTF-8 bytes, each byte of a multi-byte character shown as U+FFFD',
+);
 todo('split', 'split("", ",")', 'the docs do not say whether an empty string gives no values or one empty value');
 todo('split', 'split(mv, ",")', MV_UNDOCUMENTED, MV_AB);
 todo('split', 'split("a,b", mv)', MV_UNDOCUMENTED, MV_AB);
@@ -170,7 +185,16 @@ nulls('tostring', ['tostring(missing)']);
 row('tostring', 'tostring("")', '', `${CONV} > tostring(X,Y)`);
 row('tostring', 'tostring("😀")', '😀', `${CONV} > tostring(X,Y)`);
 row('tostring', 'tostring(5)', '5', `${CONV} > tostring(X,Y)`);
-todo('tostring', 'tostring(1==1)', 'documented "True"; the simulator gives "true": #446 item 2');
+row('tostring', 'tostring(1==1)', 'True', `${CONV} > tostring(X,Y): a Boolean is "True" or "False"`);
+row('tostring', 'tostring(1==2)', 'False', `${CONV} > tostring(X,Y): a Boolean is "True" or "False"`);
+row('tostring', 'tostring(15, "hex")', '0xF', `${CONV} > tostring(X,Y): the "hex" example`);
+row('tostring', 'tostring(255, "hex")', '0xFF', `${CONV} > tostring(X,Y): "hex"`);
+row('tostring', 'tostring(-255, "hex")', '0xFFFFFFFFFFFFFF01', "#446: a negative is its 64-bit two's complement");
+row('tostring', 'tostring(15.7, "hex")', null, '#446: "hex" of a number with a fraction is NULL');
+row('tostring', 'tostring(9, "binary")', '1001', `${CONV} > tostring(X,Y): the "binary" example`);
+row('tostring', 'tostring(-9, "binary")', null, '#446: "binary" of a negative is NULL');
+row('tostring', 'tostring(12345.6789, "commas")', '12,345.68', `${CONV} > tostring(X,Y): the "commas" example`);
+row('tostring', 'tostring(615, "duration")', '00:10:15', `${CONV} > tostring(X,Y): the "duration" example`);
 todo('tostring', 'tostring(255, missing)', 'the docs do not say what a NULL format gives');
 todo('tostring', 'tostring(mv)', MV_UNDOCUMENTED, MV_AB);
 
@@ -179,7 +203,9 @@ todo('tostring', 'tostring(mv)', MV_UNDOCUMENTED, MV_AB);
 row('typeof', 'typeof(missing)', 'Invalid', `${INFO} > typeof(X): a nonexistent field is Invalid`);
 row('typeof', 'typeof("")', 'String', `${INFO} > typeof(X)`);
 row('typeof', 'typeof("😀")', 'String', `${INFO} > typeof(X)`);
-row('typeof', 'typeof(sqrt(-1))', 'Invalid', NOT_A_NUMBER);
+row('typeof', 'typeof(sqrt(-1))', 'Invalid', UNDEFINED_IS_NULL);
+row('typeof', 'typeof(exp(1000))', 'Number', OVERFLOW);
+row('typeof', 'typeof(exp(1000) - exp(1000))', 'Number', '#446: NaN from arithmetic is a number');
 todo(
   'typeof',
   'typeof(mv)',
@@ -189,12 +215,13 @@ todo(
 
 row('isnull', 'isnull(missing)', true, `${INFO} > isnull(X)`);
 row('isnull', 'isnull("")', false, `${INFO} > isnull(X): an empty string is a value`);
-row('isnull', 'isnull(sqrt(-1))', true, NOT_A_NUMBER);
+row('isnull', 'isnull(sqrt(-1))', true, UNDEFINED_IS_NULL);
+row('isnull', 'isnull(exp(1000))', false, OVERFLOW);
 row('isnull', 'isnull(mv)', false, `${INFO} > isnull(X): a field with values is not NULL`, MV_AB);
 
 row('isnotnull', 'isnotnull(missing)', false, `${INFO} > isnotnull(X)`);
 row('isnotnull', 'isnotnull("")', true, `${INFO} > isnotnull(X): an empty string is a value`);
-row('isnotnull', 'isnotnull(sqrt(-1))', false, NOT_A_NUMBER);
+row('isnotnull', 'isnotnull(sqrt(-1))', false, UNDEFINED_IS_NULL);
 row('isnotnull', 'isnotnull(mv)', true, `${INFO} > isnotnull(X)`, MV_AB);
 
 for (const [fn, yes] of [
@@ -210,7 +237,7 @@ for (const [fn, yes] of [
 }
 row('isnum', 'isnum("")', false, `${INFO} > isnum(X)`);
 row('isnum', 'isnum("😀")', false, `${INFO} > isnum(X)`);
-row('isnum', 'isnum(sqrt(-1))', false, NOT_A_NUMBER);
+row('isnum', 'isnum(sqrt(-1))', false, UNDEFINED_IS_NULL);
 row('isint', 'isint("")', false, `${INFO} > isint(X)`);
 row('isstr', 'isstr("")', true, `${INFO} > isstr(X)`);
 row('isstr', 'isstr("😀")', true, `${INFO} > isstr(X)`);
@@ -239,19 +266,23 @@ row('sqrt', 'sqrt(16)', 4, `${MATH} > sqrt(X)`);
 row('exp', 'exp(0)', 1, `${MATH} > exp(X)`);
 row('ln', 'ln(1)', 0, `${MATH} > ln(X)`);
 
-row('sqrt', 'sqrt(-1)', null, NOT_A_NUMBER);
-row('ln', 'ln(0)', null, NOT_A_NUMBER);
-row('ln', 'ln(-1)', null, NOT_A_NUMBER);
-row('exp', 'exp(1000)', null, NOT_A_NUMBER);
-row('round', 'round(1, 400)', null, NOT_A_NUMBER);
-row('log', 'log(0)', null, NOT_A_NUMBER);
-row('log', 'log(-1)', null, NOT_A_NUMBER);
-row('log', 'log(10, 1)', null, NOT_A_NUMBER);
-row('pow', 'pow(0, -1)', null, NOT_A_NUMBER);
-row('pow', 'pow(-8, 0.5)', null, NOT_A_NUMBER);
-row('pow', 'pow(10, 1000)', null, NOT_A_NUMBER);
-row('abs', 'abs(sqrt(-1))', null, NOT_A_NUMBER);
-row('sqrt', 'sqrt(-1) + 1', null, `${NOT_A_NUMBER}; NULL propagates through arithmetic`);
+row('sqrt', 'sqrt(-1)', null, UNDEFINED_IS_NULL);
+row('ln', 'ln(0)', null, UNDEFINED_IS_NULL);
+row('ln', 'ln(-1)', null, UNDEFINED_IS_NULL);
+row('round', 'round(1.5, 400)', null, UNDEFINED_IS_NULL);
+row('log', 'log(0)', null, UNDEFINED_IS_NULL);
+row('log', 'log(-1)', null, UNDEFINED_IS_NULL);
+row('pow', 'pow(-8, 0.5)', null, UNDEFINED_IS_NULL);
+row('abs', 'abs(sqrt(-1))', null, `${UNDEFINED_IS_NULL}, and ${NULL_RULE}`);
+row('sqrt', 'sqrt(-1) + 1', null, `${UNDEFINED_IS_NULL}; NULL propagates through arithmetic`);
+row('log', 'log(10, 1)', null, `${DIV_ZERO}: base 1 divides by ln(1), which is 0`);
+row('pow', 'pow(0, -1)', null, `${DIV_ZERO}: 0 to the power -1 is 1/0`);
+// #446 corrected the old reading, which made every result that was not a
+// finite number NULL, overflows included (exp(1000) and pow(10, 1000) were NULL).
+row('exp', 'exp(1000)', Infinity, OVERFLOW);
+row('exp', '-1 * exp(1000)', -Infinity, OVERFLOW);
+row('exp', 'exp(1000) - exp(1000)', NaN, '#446: NaN from arithmetic is a number, not NULL');
+row('pow', 'pow(10, 400)', Infinity, OVERFLOW);
 
 nulls('pow', ['pow(missing, 2)', 'pow(2, missing)']);
 nulls('pow', ['pow("", 2)', 'pow(2, "😀")'], `${MATH} > pow(X,Y): a non-numeric argument is NULL`);
@@ -283,7 +314,7 @@ row('min', 'min("", "a")', '', `${COND} > min(X,...): strings compare lexicograp
 row('max', 'max("", "a")', 'a', `${COND} > max(X,...): strings compare lexicographically`);
 row('max', 'max("😀", "a")', '😀', `${COND} > max(X,...): strings compare lexicographically`);
 row('min', 'min(1, "a")', 1, `${COND} > min(X,...): numbers order before strings`);
-row('max', 'max(sqrt(-1), 2)', 2, `${NOT_A_NUMBER}; a NULL is not a candidate`);
+row('max', 'max(sqrt(-1), 2)', 2, `${UNDEFINED_IS_NULL}; a NULL is not a candidate`);
 todo('min', 'min(mv)', 'the docs do not say whether the values of a multivalue field are candidates', MV_AB);
 todo('max', 'max(mv, "z")', 'the docs do not say whether the values of a multivalue field are candidates', MV_AB);
 todo('exact', 'exact(1.1 + 2.2)', 'not simulated (returns the value unrounded, with a warning)');
@@ -316,12 +347,13 @@ todo('mvfilter', 'mvfilter(mv != "a")', 'not simulated (returns the field unfilt
 
 row('mvappend', 'mvappend(mv, "c")', ['a', 'b', 'c'], `${MV} > mvappend(...)`, MV_AB);
 row('mvappend', 'mvappend("😀", "a")', ['😀', 'a'], `${MV} > mvappend(...)`);
-todo('mvappend', 'mvappend(missing)', 'whether a NULL-only append is NULL or an empty multivalue is open: #446 item 3');
+row('mvappend', 'mvappend(missing, missing)', null, '#446: nothing to append is NULL, not an empty multivalue');
+row('mvappend', 'mvappend(missing, "a")', ['a'], '#446: a NULL argument adds no values');
 todo('mvappend', 'mvappend("", "a")', 'the docs do not say whether an empty string is appended as a value');
 
 row('mvdedup', 'mvdedup(split("a,b,a", ","))', ['a', 'b'], `${MV} > mvdedup(MVFIELD): duplicates removed, order kept`);
 row('mvdedup', 'mvdedup(split("😀,😀", ","))', ['😀'], `${MV} > mvdedup(MVFIELD)`);
-todo('mvdedup', 'mvdedup(missing)', 'whether a NULL argument is NULL or an empty multivalue is open: #446 item 3');
+row('mvdedup', 'mvdedup(missing)', null, '#446: a NULL argument is NULL, not an empty multivalue');
 todo('mvdedup', 'mvdedup("")', 'the docs do not say what a single empty string gives');
 
 row('mvsort', 'mvsort(split("b,a", ","))', ['a', 'b'], `${MV} > mvsort(X): lexicographic order`);
@@ -334,7 +366,7 @@ row(
   ['10', '100', '70', '9'],
   `${MV} > mvsort(X): numbers are sorted based on the first digit`,
 );
-todo('mvsort', 'mvsort(missing)', 'whether a NULL argument is NULL or an empty multivalue is open: #446 item 3');
+row('mvsort', 'mvsort(missing)', null, '#446: a NULL argument is NULL, not an empty multivalue');
 todo('mvsort', 'mvsort("")', 'the docs do not say what a single empty string gives');
 
 row('mvfind', 'mvfind(missing, "a")', null, `${MV} > mvfind(MVFIELD,"REGEX"): no match is NULL`);
@@ -353,7 +385,8 @@ row('mvzip', 'mvzip(a, b)', ['1,x', '2,y'], `${MV} > mvzip(MVFIELD_X,MVFIELD_Y,"
   b: ['x', 'y'],
 });
 row('mvzip', 'mvzip("😀", "b", "")', ['😀b'], `${MV} > mvzip(MVFIELD_X,MVFIELD_Y,"Z")`);
-todo('mvzip', 'mvzip(missing, "b")', 'whether a NULL argument is NULL or an empty multivalue is open: #446 item 3');
+row('mvzip', 'mvzip(missing, "b")', null, '#446: a NULL argument is NULL, not an empty multivalue');
+row('mvzip', 'mvzip(mv, missing)', null, '#446: a NULL argument is NULL, not an empty multivalue', MV_AB);
 todo('mvzip', 'mvzip(mv, mv, missing)', 'the docs do not say what a NULL delimiter gives', MV_AB);
 
 // Cryptographic and time (not simulated / clock) ──────────
@@ -389,7 +422,7 @@ nulls('like', ['like(missing, "%")', 'like("a", missing)']);
 row('like', 'like("", "%")', true, `${COND} > like(TEXT,PATTERN): % matches any run, including none`);
 row('like', 'like("", "_")', false, `${COND} > like(TEXT,PATTERN): _ matches exactly one character`);
 row('like', 'like("abc", "a_c")', true, `${COND} > like(TEXT,PATTERN)`);
-todo('like', 'like("😀", "_")', 'one character or two UTF-16 units: the same open question as #446 item 4');
+todo('like', 'like("😀", "_")', 'one character or two UTF-16 units: #446 settled it for len() and substr() only');
 todo('like', 'like(mv, "a")', MV_UNDOCUMENTED, MV_AB);
 todo('like', 'like("a", mv)', MV_UNDOCUMENTED, MV_AB);
 
@@ -397,7 +430,7 @@ nulls('match', ['match(missing, "a")', 'match("a", missing)']);
 row('match', 'match("", "^$")', true, `${COND} > match(SUBJECT,"REGEX")`);
 row('match', 'match("a😀b", "😀")', true, `${COND} > match(SUBJECT,"REGEX")`);
 row('match', 'match("abc", "^b")', false, `${COND} > match(SUBJECT,"REGEX")`);
-todo('match', 'match("😀", "^.$")', 'one character or two UTF-16 units: the same open question as #446 item 4');
+todo('match', 'match("😀", "^.$")', 'one character or two UTF-16 units: #446 settled it for len() and substr() only');
 todo('match', 'match(mv, "a")', MV_UNDOCUMENTED, MV_AB);
 todo('match', 'match("a", mv)', MV_UNDOCUMENTED, MV_AB);
 
