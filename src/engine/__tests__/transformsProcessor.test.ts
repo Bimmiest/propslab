@@ -737,3 +737,136 @@ describe('#450 — an empty value at search time', () => {
     expect(step).toMatchObject({ description: 'Transform matched; it extracted no fields', fieldsAdded: [] });
   });
 });
+
+// #451: DEST_KEY = _meta without $0 replaces _meta, so an indexed field an
+// earlier WRITE_META transform wrote is gone; with `$0` at the start of FORMAT
+// both survive. punct, which is not written through _meta, is unaffected.
+describe('#451 — DEST_KEY = _meta replaces what came before it', () => {
+  const zone = stanza('t_zone', { REGEX: 'zone (\\w+)', FORMAT: 'zone::$1', WRITE_META: 'true' });
+  const tier = (format: string, extra: Record<string, string> = {}) =>
+    stanza('t_tier', { REGEX: 'tier (\\w+)', FORMAT: format, DEST_KEY: '_meta', ...extra });
+  const list = [classDir('m', 't_zone, t_tier')];
+  const raw = '2026-01-15T10:00:00Z zone dmz tier web';
+  const apply = (format: string, diags: ValidationDiagnostic[] = [], extra: Record<string, string> = {}) =>
+    applyTransforms(
+      [event(raw)],
+      list,
+      multiTransformsConf(zone, tier(format, extra)),
+      'index-time',
+      runCtx(FIXED_NOW, diags),
+    )[0]!;
+  const tierStep = (e: SplunkEvent) => e.processingTrace.find((s) => s.processor === 'TRANSFORMS-m:t_tier');
+
+  it('writes a WRITE_META field to _meta as well as to the event', () => {
+    const e = applyTransforms(
+      [event(raw)],
+      [classDir('m', 't_zone')],
+      multiTransformsConf(zone),
+      'index-time',
+      runCtx(FIXED_NOW),
+    )[0]!;
+    expect(e._meta).toEqual({ zone: 'dmz' });
+    expect(e.fields['zone']).toBe('dmz');
+  });
+
+  it('drops the earlier indexed field without $0, and says so in the trace and a warning', () => {
+    const diags: ValidationDiagnostic[] = [];
+    const e = apply('tier::$1', diags);
+    expect(e._meta).toEqual({ tier: 'web' });
+    expect(e.fields['zone']).toBeUndefined();
+    expect(tierStep(e)?.description).toBe(
+      'Transform replaced _meta, dropping the indexed fields written before it: zone',
+    );
+    const warnings = diags.filter((d) => d.message.includes('replaced _meta'));
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatchObject({ level: 'warning', file: 'transforms.conf' });
+    expect(warnings[0]?.message).toBe(
+      'DEST_KEY = _meta in transform "t_tier" replaced _meta, dropping the indexed fields written before it ' +
+        '(zone). Start FORMAT with $0 to keep them, or set WRITE_META = true in place of DEST_KEY = _meta, ' +
+        'which appends.',
+    );
+  });
+
+  it('names every field it dropped, and points the warning at FORMAT', () => {
+    const { result, diagnostics } = runPipeline(
+      `${raw}\n`,
+      metadata,
+      '[my_app]\nSHOULD_LINEMERGE = false\nKV_MODE = none\nTRANSFORMS-m = t_both, t_tier\n',
+      [
+        '[t_both]',
+        'REGEX = zone (\\w+) tier (\\w+)',
+        'FORMAT = zone::$1 was::$2',
+        'WRITE_META = true',
+        '',
+        '[t_tier]',
+        'REGEX = tier (\\w+)',
+        'DEST_KEY = _meta',
+        'FORMAT = tier::$1',
+      ].join('\n'),
+      { perEventPipeline: false, captureOffsets: false, now: FIXED_NOW },
+    );
+    expect(result.events[0]?._meta).toEqual({ tier: 'web' });
+    expect(tierStep(result.events[0]!)?.description).toMatch(/written before it: zone, was$/);
+    const warning = diagnostics.find((d) => d.message.includes('replaced _meta'));
+    expect(warning?.message).toContain('(zone, was)');
+    expect(warning).toMatchObject({ file: 'transforms.conf', line: 9 });
+  });
+
+  it('keeps it with $0 at the start of FORMAT, and does not warn', () => {
+    const diags: ValidationDiagnostic[] = [];
+    const e = apply('$0 tier::$1', diags);
+    expect(e._meta).toEqual({ zone: 'dmz', tier: 'web' });
+    expect(e.fields['zone']).toBe('dmz');
+    expect(tierStep(e)?.description).toBe('Transform routed to _meta');
+    expect(diags.filter((d) => d.message.includes('replaced _meta'))).toEqual([]);
+  });
+
+  it('appends rather than replaces when the stanza also sets WRITE_META', () => {
+    const e = apply('tier::$1', [], { WRITE_META: 'true' });
+    expect(e._meta).toEqual({ zone: 'dmz', tier: 'web' });
+    expect(e.fields['zone']).toBe('dmz');
+  });
+
+  it('warns once per stanza however many events it reaches', () => {
+    const diags: ValidationDiagnostic[] = [];
+    applyTransforms(
+      [event(raw), event(raw)],
+      list,
+      multiTransformsConf(zone, tier('tier::$1')),
+      'index-time',
+      runCtx(FIXED_NOW, diags),
+    );
+    expect(diags.filter((d) => d.message.includes('replaced _meta'))).toHaveLength(1);
+  });
+
+  it('writes nothing to _meta from a REPORT, where WRITE_META is inert', () => {
+    const reportDir: ConfDirective[] = [
+      { key: 'REPORT-x', value: 't_zone', line: 1, directiveType: 'REPORT', className: 'x' },
+    ];
+    const e = applyTransforms([event(raw)], reportDir, multiTransformsConf(zone), 'search-time', runCtx(FIXED_NOW))[0]!;
+    expect(e.fields['zone']).toBe('dmz');
+    expect(e._meta).toEqual({});
+  });
+
+  it('matches the documented outcome through the pipeline, leaving punct alone', () => {
+    const run = (transformsList: string, format = '') =>
+      runPipeline(
+        `${raw}\n`,
+        metadata,
+        `[my_app]\nSHOULD_LINEMERGE = false\nKV_MODE = none\n${transformsList}`,
+        `[t_zone]\nREGEX = zone (\\w+)\nFORMAT = zone::$1\nWRITE_META = true\n\n` +
+          `[t_tier]\nREGEX = tier (\\w+)\nFORMAT = ${format}\nDEST_KEY = _meta\n`,
+        { perEventPipeline: false, captureOffsets: false, now: FIXED_NOW },
+      ).result.events[0]!;
+    const punct = run('').fields['punct'];
+    expect(punct).toBeDefined();
+    const replaced = run('TRANSFORMS-m = t_zone, t_tier\n', 'tier::$1');
+    expect(replaced._meta).toEqual({ tier: 'web' });
+    expect(replaced.fields['zone']).toBeUndefined();
+    expect(replaced.fields['punct']).toBe(punct);
+    const kept = run('TRANSFORMS-m = t_zone, t_tier\n', '$0 tier::$1');
+    expect(kept._meta).toEqual({ zone: 'dmz', tier: 'web' });
+    expect(kept.fields['zone']).toBe('dmz');
+    expect(kept.fields['punct']).toBe(punct);
+  });
+});

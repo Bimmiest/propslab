@@ -826,3 +826,34 @@ describe('#450 — KEEP_EMPTY_VALS', () => {
     expect(searchTime(event(raw), keep({ DELIMS: '";", "="' }, value)).fields).toEqual({ a: '1', c: '3' });
   });
 });
+
+// Doc-derived (transforms.conf.spec, DEST_KEY): "$0 represents the DEST_KEY
+// value before Splunk software performs the REGEX (in other words, _meta)"
+// (#451).
+describe('#451 — $0 with DEST_KEY = _meta', () => {
+  const withMeta = (raw: string, meta: SplunkEvent['_meta']) => ({ ...event(raw), _meta: meta });
+
+  it('stands for the indexed fields written so far, as key::value pairs', () => {
+    const r = applyRegexTransform(
+      withMeta('tier web', { zone: 'dmz', tag: ['a', 'two words'], _queue: 'nullQueue' }),
+      stanza('t', { REGEX: 'tier (\\w+)', FORMAT: '$0 tier::$1', DEST_KEY: '_meta' }),
+    );
+    expect(r.destValue).toBe('zone::dmz tag::a tag::"two words" tier::web');
+  });
+
+  it('is empty when nothing has been written', () => {
+    const r = applyRegexTransform(
+      event('tier web'),
+      stanza('t', { REGEX: 'tier (\\w+)', FORMAT: '$0 tier::$1', DEST_KEY: '_meta' }),
+    );
+    expect(r.destValue).toBe(' tier::web');
+  });
+
+  it('is carried once, by the first match, under REPEAT_MATCH', () => {
+    const r = applyRegexTransform(
+      withMeta('123', { zone: 'dmz' }),
+      stanza('t', { REGEX: '(\\d)', FORMAT: '$0 d::$1', DEST_KEY: '_meta', REPEAT_MATCH: 'true' }),
+    );
+    expect(r.destValue).toBe('zone::dmz d::1\n d::2\n d::3');
+  });
+});

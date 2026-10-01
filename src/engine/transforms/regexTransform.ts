@@ -8,7 +8,7 @@ import { extractionLimits, safeRegex, validateRegex, type RegexMatch, type Splun
 import { explainNoMatch, type NoOpReason } from '../noOpExplainer';
 import { getField, hasField, setField, addFieldValue } from '../utils/fieldBag';
 import { stripLeadingUnderscoreForField } from '../utils/internalFields';
-import { getSourceKeyValue } from '../utils/metadataFields';
+import { getSourceKeyValue, serialiseMeta } from '../utils/metadataFields';
 import { effectiveDirective, effectiveValue, parseSplunkBool } from '../utils/directiveValues';
 import { expandFormat, parseFormatPairs } from './format';
 import { keyCleaner } from './keyCleaning';
@@ -86,6 +86,11 @@ function resolvePriorDestValue(event: SplunkEvent, destKey: string | undefined):
   if (!destKey) return undefined;
   if (destKey === '_raw') return event._raw;
   switch (normaliseDestKey(destKey)) {
+    case '_meta':
+      // transforms.conf.spec: "$0 represents the DEST_KEY value before Splunk
+      // software performs the REGEX (in other words, _meta)" — the indexed
+      // fields written so far, in the `key::value` form `_meta` holds them.
+      return serialiseMeta(event._meta);
     case 'MetaData:Host':
       return event.metadata.host;
     case 'MetaData:Index':
@@ -253,9 +258,11 @@ function writeDestKey(run: MatchedRun, format: string, destKey: string, priorDes
   }
   // DEST_KEY=<field> or _meta: one value per match, accumulated as a
   // multi-value field or a run of `key::value` pairs — under REPEAT_MATCH
-  // only, since without it the REGEX runs once.
+  // only, since without it the REGEX runs once. The matches build one value
+  // between them, so what DEST_KEY held before (`$0`) is carried once, by the
+  // first match, rather than repeated by every match.
   const matches = run.settings.repeatMatch ? run.compiled.matchAll(run.sourceValue) : [firstMatch];
-  const values = matches.map((m) => expandFormat(format, m, priorDestValue));
+  const values = matches.map((m, i) => expandFormat(format, m, i === 0 ? priorDestValue : ''));
   if (values.length > 0) {
     result.destKey = destKey;
     result.destValue = values.join('\n');

@@ -453,6 +453,34 @@ describe('WRITE_META through the pipeline', () => {
   });
 });
 
+// Doc-derived (transforms.conf.spec, DEST_KEY): "If DEST_KEY = _meta (not
+// recommended) you should also add $0 to the start of your FORMAT setting. $0
+// represents the DEST_KEY value before Splunk software performs the REGEX (in
+// other words, _meta)." Getting Data In adds: "Each matching transform can
+// overwrite _meta, so use WRITE_META = true to append _meta. If you don't use
+// WRITE_META, then start your FORMAT with $0."
+describe('DEST_KEY = _meta through the pipeline', () => {
+  const meta = (format: string) =>
+    run(
+      'zone dmz tier web',
+      `${NO_AUTO_KV}TRANSFORMS-m = zone, tier\n`,
+      `[zone]\nREGEX = zone (\\w+)\nFORMAT = zone::$1\nWRITE_META = true\n\n` +
+        `[tier]\nREGEX = tier (\\w+)\nFORMAT = ${format}\nDEST_KEY = _meta\n`,
+    )[0];
+
+  it('overwrites what WRITE_META appended when FORMAT does not start with $0', () => {
+    const e = meta('tier::$1');
+    expect(e?._meta).toEqual({ tier: 'web' });
+    expect(e?.fields['zone']).toBeUndefined();
+  });
+
+  it('keeps it when FORMAT starts with $0', () => {
+    const e = meta('$0 tier::$1');
+    expect(e?._meta).toEqual({ zone: 'dmz', tier: 'web' });
+    expect(e?.fields['zone']).toBe('dmz');
+  });
+});
+
 // Doc-derived (transforms.conf.spec, REPEAT_MATCH): runs the REGEX again from
 // where the last match stopped until it finds no more; only valid at index
 // time, default false.

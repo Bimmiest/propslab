@@ -1,7 +1,8 @@
 import type { SplunkEvent } from '../types';
 import type { TransformResult } from './regexTransform';
-import { addFieldValue } from '../utils/fieldBag';
+import { addFieldValue, deleteField, getField, hasField, setField } from '../utils/fieldBag';
 import { dateFromEpochSeconds } from '../utils/epochTime';
+import { indexedFields } from '../utils/metadataFields';
 import { normaliseDestKey } from './destKeys';
 
 /**
@@ -26,21 +27,68 @@ function withMetaPairs(meta: SplunkEvent['_meta'], destValue: string): SplunkEve
   return out;
 }
 
+/**
+ * `meta` with a WRITE_META transform's fields appended. Splunk writes them to
+ * `_meta`, where a later `$0` or `SOURCE_KEY = _meta` reads them and a later
+ * DEST_KEY = _meta can replace them; the event shows them as fields too.
+ */
+function withMetaFields(meta: SplunkEvent['_meta'], fields: TransformResult['fields']): SplunkEvent['_meta'] {
+  const out = { ...meta };
+  for (const [key, value] of Object.entries(fields)) {
+    for (const v of Array.isArray(value) ? value : [value]) addFieldValue(out, key, v);
+  }
+  return out;
+}
+
+/**
+ * DEST_KEY = _meta without WRITE_META: the FORMAT's pairs become the whole of
+ * `_meta`, so the indexed fields earlier transforms wrote are gone unless FORMAT
+ * carries them over with `$0` (#451). transforms.conf.spec: "If DEST_KEY = _meta
+ * (not recommended) you should also add $0 to the start of your FORMAT
+ * setting"; Getting Data In: "Each matching transform can overwrite _meta, so
+ * use WRITE_META = true to append _meta."
+ *
+ * A field the event shows because a WRITE_META transform wrote it to `_meta`
+ * follows `_meta`: it goes when `_meta` drops it, and takes `_meta`'s values
+ * when FORMAT writes the key again. Every other field is left alone, and so is
+ * the simulator's `_queue` slot, which is not part of `_meta` in Splunk.
+ */
+function replaceMeta(event: SplunkEvent, destValue: string): Pick<SplunkEvent, '_meta' | 'fields'> {
+  const { _queue } = event._meta;
+  const meta = withMetaPairs(_queue === undefined ? {} : { _queue }, destValue);
+  const fields = { ...event.fields };
+  for (const key of Object.keys(indexedFields(event._meta))) {
+    if (!hasField(fields, key)) continue;
+    const value = getField(meta, key);
+    if (value === undefined) deleteField(fields, key);
+    else setField(fields, key, value);
+  }
+  return { _meta: meta, fields };
+}
+
+export interface DestKeyOptions {
+  /**
+   * The transform has WRITE_META = true and runs at index time: its fields are
+   * also written to `_meta`, and a DEST_KEY = _meta FORMAT is appended to
+   * `_meta` rather than replacing it.
+   */
+  writeMeta?: boolean;
+  /** Called with a DEST_KEY = _time value no Date can hold; `_time` is kept. */
+  onTimeOutOfRange?: (value: string) => void;
+}
+
 export function applyDestKey(
   event: SplunkEvent,
   result: TransformResult,
-  /** Called with a DEST_KEY = _time value no Date can hold; `_time` is kept. */
-  onTimeOutOfRange?: (value: string) => void,
+  { writeMeta = false, onTimeOutOfRange }: DestKeyOptions = {},
 ): SplunkEvent {
   if (!result.matched || result.destKey === undefined || result.destValue === undefined) {
     // No routing, just add extracted fields.
     // Test for `undefined` rather than falsiness: a FORMAT that legitimately
     // expands to "" (e.g. blanking _raw, or anonymising a field to empty) must
     // still route — only an absent destKey/destValue means "no routing".
-    return {
-      ...event,
-      fields: { ...event.fields, ...result.fields },
-    };
+    const fields = { ...event.fields, ...result.fields };
+    return writeMeta ? { ...event, _meta: withMetaFields(event._meta, result.fields), fields } : { ...event, fields };
   }
 
   // _MetaData:X → MetaData:X (Splunk alias); built-in keys like _raw, _meta
@@ -52,8 +100,17 @@ export function applyDestKey(
     case '_raw':
       return { ...event, _raw: destValue, fields: { ...event.fields, ...result.fields } };
 
-    case '_meta':
-      return { ...event, _meta: withMetaPairs(event._meta, destValue), fields: { ...event.fields, ...result.fields } };
+    case '_meta': {
+      if (writeMeta) {
+        return {
+          ...event,
+          _meta: withMetaPairs(event._meta, destValue),
+          fields: { ...event.fields, ...result.fields },
+        };
+      }
+      const replaced = replaceMeta(event, destValue);
+      return { ...event, _meta: replaced._meta, fields: { ...replaced.fields, ...result.fields } };
+    }
 
     case '_time': {
       const epoch = parseFloat(destValue);

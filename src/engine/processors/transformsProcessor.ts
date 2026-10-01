@@ -11,6 +11,8 @@ import { atDirective, atStanza } from '../parser/provenance';
 import { effectiveDirective, parseSplunkBool } from '../utils/directiveValues';
 import { validateRegex } from '../../utils/splunkRegex';
 import { epochOutOfRangeMessage } from '../utils/epochTime';
+import { indexedFields } from '../utils/metadataFields';
+import { hasField } from '../utils/fieldBag';
 import type { DiagnosticsCollector, RunContext } from '../runContext';
 
 // A DEST_KEY=_raw transform that shrinks the event by at least this fraction is
@@ -180,9 +182,22 @@ function warnMatched(
   }
 }
 
+/** The indexed fields `before` held that `after` does not: what a DEST_KEY = _meta replacement dropped. */
+function droppedMetaFields(before: SplunkEvent, after: SplunkEvent): string[] {
+  return Object.keys(indexedFields(before._meta)).filter((key) => !hasField(after._meta, key));
+}
+
 /** The trace text for a transform that matched. */
-function describeMatch(result: TransformResult, discardedFields: string[], cloneType: string | undefined): string {
+function describeMatch(
+  result: TransformResult,
+  discardedFields: string[],
+  cloneType: string | undefined,
+  metaDropped: string[],
+): string {
   const extracted = Object.keys(result.fields);
+  if (metaDropped.length > 0) {
+    return `Transform replaced _meta, dropping the indexed fields written before it: ${metaDropped.join(', ')}`;
+  }
   if (result.destKey) return `Transform routed to ${result.destKey}`;
   if (discardedFields.length > 0) {
     return `Transform matched, but without WRITE_META = true or a DEST_KEY its fields are not stored: ${discardedFields.join(', ')}`;
@@ -244,17 +259,23 @@ function applyMatch(
   // the event — a later transform in the list can still overwrite the queue
   // (last-wins). nullQueue events are flagged (and shown as dropped) only
   // after the whole list runs; they are never removed mid-list.
-  const routed = applyDestKey(state.event, effective, (value) => {
-    diagnostics.report(warnKey(run, 'timeOutOfRange', stanzaName), {
-      level: 'warning',
-      message: epochOutOfRangeMessage(`DEST_KEY = _time in transform "${stanzaName}"`, value),
-      file: 'transforms.conf',
-      ...positionOfKeyOrStanza(transformStanza, 'DEST_KEY'),
-    });
+  const routed = applyDestKey(state.event, effective, {
+    // WRITE_META is index-time only: a REPORT- stanza that sets it writes nothing to _meta.
+    writeMeta: phase === 'index-time' && stanzaWritesMeta(transformStanza),
+    onTimeOutOfRange: (value) => {
+      diagnostics.report(warnKey(run, 'timeOutOfRange', stanzaName), {
+        level: 'warning',
+        message: epochOutOfRangeMessage(`DEST_KEY = _time in transform "${stanzaName}"`, value),
+        file: 'transforms.conf',
+        ...positionOfKeyOrStanza(transformStanza, 'DEST_KEY'),
+      });
+    },
   });
   if (result.destKey === '_raw') {
     warnRawLoss(beforeRaw, routed._raw, stanzaName, transformStanza, diagnostics, warnKey(run, 'rawLoss', stanzaName));
   }
+  const metaDropped = droppedMetaFields(state.event, routed);
+  warnMetaReplaced(metaDropped, stanzaName, transformStanza, diagnostics, warnKey(run, 'metaReplaced', stanzaName));
   if (result.destKey) {
     warnUnsimulatedDestKey(
       result.destKey,
@@ -279,7 +300,7 @@ function applyMatch(
   const step: ProcessingStep = {
     processor,
     phase,
-    description: describeMatch(result, discardedFields, cloneType),
+    description: describeMatch(result, discardedFields, cloneType, metaDropped),
     fieldsAdded: Object.keys(effective.fields),
     ...(metaChanges.length > 0 ? { metadataChanges: metaChanges } : {}),
   };
@@ -532,6 +553,30 @@ function warnUnsimulatedDestKey(
     message: `DEST_KEY = ${destKey} in transform "${stanzaName}" is a valid Splunk routing key but is not simulated here — the event is shown unchanged.`,
     file: 'transforms.conf',
     line,
+  });
+}
+
+/**
+ * Warn when a DEST_KEY = _meta transform replaced `_meta` and so dropped indexed
+ * fields an earlier transform wrote — the spec calls DEST_KEY = _meta "not
+ * recommended" for exactly this reason. Fires at most once per stanza.
+ */
+function warnMetaReplaced(
+  dropped: string[],
+  stanzaName: string,
+  transformStanza: ParsedConf['stanzas'][number],
+  diagnostics: DiagnosticsCollector,
+  key: string,
+): void {
+  if (dropped.length === 0) return;
+  diagnostics.report(key, {
+    level: 'warning',
+    message:
+      `DEST_KEY = _meta in transform "${stanzaName}" replaced _meta, dropping the indexed fields written before it ` +
+      `(${dropped.join(', ')}). Start FORMAT with $0 to keep them, or set WRITE_META = true in place of ` +
+      'DEST_KEY = _meta, which appends.',
+    file: 'transforms.conf',
+    ...positionOfKeyOrStanza(transformStanza, 'FORMAT'),
   });
 }
 
