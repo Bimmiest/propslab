@@ -1,15 +1,19 @@
 // ---------------------------------------------------------------------------
 // evalLike.test.ts
 // like()'s wildcard translation: a run of `%` is one `.*`, so `%%` matches
-// like `%` does.
+// like `%` does; and `%` and `_` match newlines, with no match before a final
+// newline (#447).
 //
 // Doc-derived: like(TEXT, PATTERN) is true when TEXT matches PATTERN, with `%`
 // for any run of characters and `_` for exactly one. The assertions are narrow.
+// The newline behaviour cites #447, where the documentation is silent.
 // ---------------------------------------------------------------------------
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import * as splunkRegex from '../../utils/splunkRegex';
 import { applyEvalExpressions } from '../processors/evalProcessor';
+import { evaluateExpression } from '../processors/eval/evaluator';
+import { runPipeline } from '../pipeline';
 import type { SplunkEvent, ConfDirective, ValidationDiagnostic } from '../types';
 import { runCtx, FIXED_NOW } from './runCtx';
 import { makeEvent } from '../../test/makeEvent';
@@ -84,7 +88,66 @@ describe('like() reports a pattern the guard refuses (#303)', () => {
     expect(out[0]!.fields['r']).toBe('false');
     expect(diagnostics).toHaveLength(1);
     expect(diagnostics[0]).toMatchObject({ level: 'warning', directiveKey: 'EVAL-r', line: 3 });
-    expect(diagnostics[0]?.message).toContain('like() pattern "^a.*$"');
+    // `(?s)^…\z` since #447; the regex like() built was `^a.*$` before.
+    expect(diagnostics[0]?.message).toContain('like() pattern "(?s)^a.*\\z"');
     expect(diagnostics[0]?.message).toContain('evaluated to false');
+  });
+
+  it('reports the LIKE operator the same way, since it is the same function', () => {
+    vi.mocked(splunkRegex.safeRegex).mockReturnValue(null);
+    const diagnostics: ValidationDiagnostic[] = [];
+    const out = applyEvalExpressions(
+      [event({ s: 'abc' })],
+      [evalDir('r', 'if(s LIKE "a%", "true", "false")')],
+      runCtx(FIXED_NOW, diagnostics),
+    );
+    expect(out[0]!.fields['r']).toBe('false');
+    expect(diagnostics.map((d) => d.message)).toEqual([
+      'EVAL-r: like() pattern "(?s)^a.*\\z" could not be compiled (invalid regex), so it evaluated to false.',
+    ]);
+  });
+});
+
+describe('like() and LIKE on text with newlines (#447)', () => {
+  const value = (expr: string, s: string) => evaluateExpression(expr, event({ s }), undefined, FIXED_NOW);
+
+  it.each([
+    ['first\nERROR here\nlast', '%ERROR%', true],
+    ['a\nb', 'a_b', true],
+    ['a\r\nb', 'a__b', true],
+    ['a\nb', 'a%', true],
+    ['abc\n', 'abc', false],
+    ['abc\n', 'abc%', true],
+    ['abc\n', 'abc_', true],
+    ['abc\n\n', 'abc_', false],
+    ['\nabc', 'abc', false],
+    ['first\nlast', 'last', false],
+  ] as const)('like(%j, %j) is %s, and so is LIKE', (s, pattern, expected) => {
+    expect(value(`like(s, "${pattern}")`, s)).toBe(expected);
+    expect(value(`s LIKE "${pattern}"`, s)).toBe(expected);
+  });
+
+  it('leaves match() as it was: its `.` does not match a newline', () => {
+    expect(value('match(s, "^a.b$")', 'a\nb')).toBe(false);
+    expect(value('match(s, "^a.b$")', 'a-b')).toBe(true);
+  });
+
+  it('finds ERROR in a multi-line event through the pipeline', () => {
+    const raw = 'START first\nERROR here\nlast\nSTART second\nfine';
+    const props =
+      '[st]\nSHOULD_LINEMERGE = true\nBREAK_ONLY_BEFORE = ^START\nBREAK_ONLY_BEFORE_DATE = false\n' +
+      'EVAL-fn = if(like(_raw, "%ERROR%"), "y", "n")\n' +
+      'EVAL-op = if(_raw LIKE "%ERROR%", "y", "n")\n' +
+      'EVAL-re = if(match(_raw, "^START.*last$"), "y", "n")\n';
+    const { result } = runPipeline(raw, { index: 'main', host: 'h', source: 's', sourcetype: 'st' }, props, '', {
+      perEventPipeline: false,
+      captureOffsets: false,
+      now: FIXED_NOW,
+    });
+    expect(result.events.map((e) => e._raw)).toEqual(['START first\nERROR here\nlast', 'START second\nfine']);
+    expect(result.events.map((e) => [e.fields['fn'], e.fields['op'], e.fields['re']])).toEqual([
+      ['y', 'y', 'n'],
+      ['n', 'n', 'n'],
+    ]);
   });
 });

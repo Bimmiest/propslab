@@ -92,6 +92,7 @@ describe('substr', () => {
     ['substr("hello", -3, 2)', 'll'],
     ['substr("hello", 2, 0)', ''],
     ['substr("hello", 2, -1)', ''],
+    ['substr("hello", 1, -1)', ''],
     ['substr("hello", 9)', ''],
   ])('%s = %j', (expr, s) => {
     expect(value(expr)).toBe(s);
@@ -163,7 +164,9 @@ describe('type functions', () => {
   });
 
   it.each([
-    ['tostring(255, "hex")', '0xff'],
+    // Upper case since #446, which corrected the old lower-case reading: the
+    // Search Reference's own example is tostring(15,"hex") → "0xF".
+    ['tostring(255, "hex")', '0xFF'],
     ['tostring(1234567.891, "commas")', '1,234,567.89'],
     ['tostring(90061, "duration")', '1+01:01:01'],
     ['tostring(3661, "duration")', '01:01:01'],

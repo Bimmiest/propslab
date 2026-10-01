@@ -99,7 +99,8 @@ describe('priority — orders stanzas within a kind, and cannot reach across kin
 
   it('orders two stanzas of the same kind by priority', () => {
     // Both are source:: stanzas, so priority is free to decide. Without it the
-    // more specific pattern would win, which makes this a real inversion.
+    // literal stanza would win on its default of 100, which makes this a real
+    // inversion.
     const names = matchedNames(
       '[source::/var/log/app.log]\nEVAL-a = 1\n\n[source::...log...]\npriority = 500\nEVAL-b = 1\n',
     );

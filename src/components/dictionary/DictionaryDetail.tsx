@@ -326,7 +326,7 @@ function StanzaDetail({ stanza }: { stanza: StanzaEntryInfo }) {
                       </span>
                       {/* The registry writes these with backtick spans; render
                           the literal text rather than pulling in a Markdown
-                          parser for three bullet points. */}
+                          parser for a few bullet points. */}
                       <span>{line.replace(/`/g, '')}</span>
                     </li>
                   ))}

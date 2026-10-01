@@ -122,7 +122,9 @@ describe('applyDestKey — _meta (SEM-11)', () => {
   it('keeps every value of a repeated key, since indexed fields are multivalue (#359)', () => {
     const event = applyDestKey(baseEvent(), result('_meta', 'tag::a tag::b'));
     expect(event._meta['tag']).toEqual(['a', 'b']);
-    const again = applyDestKey(event, result('_meta', 'tag::c'));
+    // A second write appends only under WRITE_META. This test used to append
+    // without it; #451 corrected that, since DEST_KEY = _meta replaces _meta.
+    const again = applyDestKey(event, result('_meta', 'tag::c'), { writeMeta: true });
     expect(again._meta['tag']).toEqual(['a', 'b', 'c']);
     expect(event._meta['tag']).toEqual(['a', 'b']); // the input event is not mutated
   });
@@ -154,6 +156,74 @@ describe('applyDestKey — _meta (SEM-11)', () => {
     const { result: out } = runPipeline('hello', meta, props, transforms);
     // Routed to nullQueue by DEST_KEY = queue; a _meta pair cannot undo that.
     expect(out.events.map((e) => e._meta)).toEqual([{ _queue: 'nullQueue', word: 'hello' }]);
+  });
+});
+
+// Doc-derived (transforms.conf.spec, DEST_KEY): "If DEST_KEY = _meta (not
+// recommended) you should also add $0 to the start of your FORMAT setting";
+// Getting Data In: "Each matching transform can overwrite _meta, so use
+// WRITE_META = true to append _meta." Without WRITE_META the FORMAT's pairs
+// replace _meta (#451).
+describe('applyDestKey — DEST_KEY = _meta replaces _meta (#451)', () => {
+  const withMeta = (meta: SplunkEvent['_meta'], fields: SplunkEvent['fields'] = {}) => ({
+    ...baseEvent(),
+    _meta: meta,
+    fields,
+  });
+
+  it('drops the indexed fields written before it, and their fields, leaving other fields alone', () => {
+    const out = applyDestKey(withMeta({ zone: 'dmz' }, { zone: 'dmz', user: 'alice' }), result('_meta', 'tier::web'));
+    // Strict: a dropped key must be gone, not left holding undefined.
+    expect(out._meta).toStrictEqual({ tier: 'web' });
+    expect(out.fields).toStrictEqual({ user: 'alice' });
+  });
+
+  it("keeps the simulator's queue slot, which is not part of _meta", () => {
+    const out = applyDestKey(withMeta({ _queue: 'nullQueue', zone: 'dmz' }), result('_meta', 'tier::web'));
+    expect(out._meta).toEqual({ _queue: 'nullQueue', tier: 'web' });
+  });
+
+  it('gives a field written to _meta the value FORMAT writes the key with', () => {
+    const out = applyDestKey(withMeta({ zone: 'dmz' }, { zone: 'dmz' }), result('_meta', 'zone::lan zone::wan'));
+    expect(out.fields['zone']).toEqual(['lan', 'wan']);
+  });
+
+  it('does not turn a pair that is only in _meta into a field', () => {
+    const out = applyDestKey(withMeta({ tier: 'web' }), result('_meta', 'tier::db'));
+    expect(out._meta).toEqual({ tier: 'db' });
+    expect(out.fields).toEqual({});
+  });
+
+  it('keeps what it replaced when FORMAT carries it over', () => {
+    const out = applyDestKey(withMeta({ zone: 'dmz' }, { zone: 'dmz' }), result('_meta', 'zone::dmz tier::web'));
+    expect(out._meta).toEqual({ zone: 'dmz', tier: 'web' });
+    expect(out.fields).toEqual({ zone: 'dmz' });
+  });
+
+  it('appends instead under WRITE_META', () => {
+    const out = applyDestKey(withMeta({ zone: 'dmz' }, { zone: 'dmz' }), result('_meta', 'tier::web'), {
+      writeMeta: true,
+    });
+    expect(out._meta).toEqual({ zone: 'dmz', tier: 'web' });
+    expect(out.fields).toEqual({ zone: 'dmz' });
+  });
+});
+
+describe('applyDestKey — WRITE_META writes its fields to _meta (#451)', () => {
+  const extracted = (fields: TransformResult['fields']): TransformResult => ({ fields, matched: true });
+
+  it('appends each field, every value of a multivalue one, to _meta and adds it to the event', () => {
+    const event = { ...baseEvent(), _meta: { n: '0' } };
+    const out = applyDestKey(event, extracted({ n: ['1', '2'], zone: 'dmz' }), { writeMeta: true });
+    expect(out._meta).toEqual({ n: ['0', '1', '2'], zone: 'dmz' });
+    expect(out.fields).toEqual({ n: ['1', '2'], zone: 'dmz' });
+    expect(event._meta).toEqual({ n: '0' }); // the input event is not mutated
+  });
+
+  it('leaves _meta alone without it', () => {
+    const out = applyDestKey(baseEvent(), extracted({ zone: 'dmz' }));
+    expect(out._meta).toEqual({});
+    expect(out.fields).toEqual({ zone: 'dmz' });
   });
 });
 
@@ -192,21 +262,25 @@ describe('applyDestKey — _time out of the Date range (#417)', () => {
 
   it.each(['100000000000000', '1e20', '-1e300', '1e400'])('keeps the previous _time for %s', (value) => {
     const seen: string[] = [];
-    const out = applyDestKey({ ...baseEvent(), _time: at }, result('_time', value), (v) => seen.push(v));
+    const out = applyDestKey({ ...baseEvent(), _time: at }, result('_time', value), {
+      onTimeOutOfRange: (v) => seen.push(v),
+    });
     expect(out._time).toBe(at);
     expect(seen).toEqual([value]);
   });
 
   it('sets an in-range epoch and reports nothing', () => {
     const seen: string[] = [];
-    const out = applyDestKey(baseEvent(), result('_time', '1767323045'), (v) => seen.push(v));
+    const out = applyDestKey(baseEvent(), result('_time', '1767323045'), { onTimeOutOfRange: (v) => seen.push(v) });
     expect(out._time?.toISOString()).toBe('2026-01-02T03:04:05.000Z');
     expect(seen).toEqual([]);
   });
 
   it('ignores a non-numeric value silently, as before', () => {
     const seen: string[] = [];
-    const out = applyDestKey({ ...baseEvent(), _time: at }, result('_time', 'soon'), (v) => seen.push(v));
+    const out = applyDestKey({ ...baseEvent(), _time: at }, result('_time', 'soon'), {
+      onTimeOutOfRange: (v) => seen.push(v),
+    });
     expect(out._time).toBe(at);
     expect(seen).toEqual([]);
   });

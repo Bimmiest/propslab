@@ -24,20 +24,31 @@ const value = (expr: string, fields: Record<string, string> = {}) =>
   evaluateExpression(expr, event(fields), undefined, 0);
 
 describe('eval reads strings as decimal numbers only (#358)', () => {
+  // A non-numeric string beside a number is NULL under + and every
+  // comparison since #446, which corrected the old readings: `"0x10" + 1` was
+  // the concatenation "0x101", and `" " == 0` was false.
   it('agrees between + and * on a hex-looking string: neither is a number', () => {
-    expect(value('"0x10" + 1')).toBe('0x101'); // concatenation, as for any non-number
+    expect(value('"0x10" + 1')).toBeNull();
     expect(value('"0x10" * 1')).toBeNull();
+    expect(value('"0x10" + "1"')).toBe('0x101'); // two strings concatenate
   });
 
   it('does not read a blank string as 0', () => {
     expect(value('isnum(" ")')).toBe(false);
-    expect(value('" " == 0')).toBe(false);
+    expect(value('" " == 0')).toBeNull();
     expect(value('" " * 2')).toBeNull();
   });
 
-  it('does not read binary, octal-prefixed or Infinity spellings', () => {
-    for (const s of ['0b11', '0o7', 'Infinity', '1_000']) {
+  it('does not read binary, octal-prefixed or other infinity spellings', () => {
+    for (const s of ['0b11', '0o7', '1_000', 'inf', 'nan', 'infinity', 'INFINITY', '+Infinity']) {
       expect(value(`isnum("${s}")`), s).toBe(false);
+      expect(value(`tonumber("${s}")`), s).toBeNull();
+    }
+  });
+
+  it('reads the text of a non-finite number as that number, except in tonumber() (#446)', () => {
+    for (const s of ['Infinity', '-Infinity', 'NaN']) {
+      expect(value(`isnum("${s}")`), s).toBe(true);
       expect(value(`tonumber("${s}")`), s).toBeNull();
     }
   });
@@ -57,8 +68,12 @@ describe('eval reads strings as decimal numbers only (#358)', () => {
     }
   });
 
-  it('compares numeric strings numerically', () => {
-    expect(value('"1e3" == 1000')).toBe(true);
+  // A field holding numeric text is read as a number against one. A string
+  // literal against a number is a type error, NULL here, since #522 and #446
+  // corrected the old reading, under which `"1e3" == 1000` was true.
+  it('compares a numeric field numerically', () => {
+    expect(value('x == 1000', { x: '1e3' })).toBe(true);
+    expect(value('"1e3" == 1000')).toBeNull();
     expect(value('".5" < "5"')).toBe(true);
   });
 

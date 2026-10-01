@@ -54,6 +54,9 @@ export interface ProcessingStep {
    * — the step deleted the text the extraction anchors on. Distinct from
    * `fieldsModified`: the remedy differs (the extraction is broken, not just
    * devalued), so the two are never merged.
+   *
+   * FIELDALIAS steps use it for the alias targets they deleted: with `AS`, a
+   * source field that has no value removes the target.
    */
   fieldsRemoved?: string[];
   /**
@@ -108,8 +111,9 @@ export interface SplunkEvent {
   _raw: string;
   _time: Date | null;
   /**
-   * Indexed fields written through `DEST_KEY = _meta` — multivalue, like
-   * `fields` — plus the single-valued `_queue` routing slot.
+   * Indexed fields written by an index-time transform, through WRITE_META or
+   * `DEST_KEY = _meta` — multivalue, like `fields` — plus the single-valued
+   * `_queue` routing slot. A WRITE_META transform's fields are in `fields` too.
    */
   _meta: { _queue?: string } & Record<string, string | string[]>;
   fields: Record<string, string | string[]>;

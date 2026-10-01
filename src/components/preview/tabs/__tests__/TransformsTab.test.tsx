@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import type React from 'react';
 import { describe, it, expect, beforeEach } from 'vitest';
-import { render as rtlRender, fireEvent, within } from '@testing-library/react';
+import { render as rtlRender, fireEvent, within, act } from '@testing-library/react';
 import * as RadixTooltip from '@radix-ui/react-tooltip';
 import { TransformsTab } from '../TransformsTab';
 import { useAppStore } from '../../../../store/useAppStore';
@@ -117,5 +117,23 @@ describe('TransformsTab', () => {
     const style = badge.getAttribute('style') ?? '';
     expect(style).toContain('color-mix(in srgb, var(--color-warning) 13%, transparent)');
     expect(style).not.toMatch(/\)[0-9a-f]{2}\b/);
+  });
+
+  // A removed field means different things per step: a rewrite of _raw broke
+  // its extraction, or FIELDALIAS removed an alias target whose source had no
+  // value (#445). The hint must not blame the text for the second.
+  it.each([
+    ['SEDCMD-mask', 'index-time', /deleted the text "f" is extracted from/],
+    ['FIELDALIAS', 'search-time', /source field has no value, so FIELDALIAS … AS removed "f"/],
+  ] as const)('explains a field %s removed', (processor, phase, hint) => {
+    useAppStore.setState({
+      processingResult: resultOf([eventWithTrace([{ processor, phase, description: 'd', fieldsRemoved: ['f'] }])]),
+    });
+    const { container } = render(<TransformsTab />);
+    const chip = within(container).getByText('−f');
+    act(() => {
+      fireEvent.focus(chip);
+    });
+    expect(within(document.body).getAllByText(hint).length).toBeGreaterThan(0);
   });
 });

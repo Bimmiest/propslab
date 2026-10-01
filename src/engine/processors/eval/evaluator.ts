@@ -6,9 +6,20 @@
 import type { SplunkEvent } from '../../types';
 import { getMetadataField } from '../../utils/metadataFields';
 import { getField as getOwnField } from '../../utils/fieldBag';
-import { type EvalValue, addOrConcat, arith, compare, numArg, toBool, toStr, toTri } from './values';
+import {
+  type EvalValue,
+  type StaticType,
+  addOrConcat,
+  arith,
+  compare,
+  isNumericValue,
+  numArg,
+  toBool,
+  toStr,
+  toTri,
+} from './values';
 import { type Node, parseExpression } from './parser';
-import { type EvalCtx, evalBuiltin } from './builtins';
+import { type EvalCtx, evalBuiltin, resultType } from './builtins';
 
 function getField(event: SplunkEvent, name: string): EvalValue {
   if (name === '_raw') return event._raw;
@@ -22,6 +33,49 @@ function getField(event: SplunkEvent, name: string): EvalValue {
 }
 
 type NodeOf<K extends Node['kind']> = Extract<Node, { kind: K }>;
+
+/** Each node's static type, worked out once: a `+` chain is as deep as it is long. */
+const staticTypes = new WeakMap<Node, StaticType>();
+
+/**
+ * What a node is known to be before it runs (see {@link StaticType}): a string
+ * literal, a concatenation or a text function is text; a number literal,
+ * arithmetic or a numeric function is a number. `+` is text if either side is,
+ * a number if either side is, and otherwise depends on the fields it adds. A
+ * field, a pass-through function and a condition are dynamic.
+ */
+function staticType(node: Node): StaticType {
+  let type = staticTypes.get(node);
+  if (type === undefined) {
+    type = computeStaticType(node);
+    staticTypes.set(node, type);
+  }
+  return type;
+}
+
+function computeStaticType(node: Node): StaticType {
+  switch (node.kind) {
+    case 'lit':
+      return typeof node.value === 'string' ? 'string' : typeof node.value === 'number' ? 'number' : 'dynamic';
+    case 'concat':
+      return 'string';
+    case 'neg':
+      return 'number';
+    case 'arith': {
+      if (node.op !== '+') return 'number';
+      const types = [staticType(node.left), staticType(node.right)];
+      return types.includes('string') ? 'string' : types.includes('number') ? 'number' : 'dynamic';
+    }
+    case 'call':
+      return resultType(node.name.toLowerCase());
+    case 'field':
+    case 'compare':
+    case 'logical':
+    case 'not':
+    case 'in':
+      return 'dynamic';
+  }
+}
 
 /**
  * Splunk propagates null through the dot operator: concatenating against a
@@ -72,9 +126,12 @@ function evalIn(node: NodeOf<'in'>, ctx: EvalCtx): EvalValue {
   if (left === null) return null;
   // A multivalue field with no values is as absent as a missing one.
   if (Array.isArray(left) && left.length === 0) return null;
-  // A multivalue value is in the list when any of its values is (see compare).
+  // A multivalue value is in the list when any of its values is (see compare);
+  // a number in the list never matches one of two or more values, so
+  // `mv IN (5)` is false where `mv IN ("5")` may be true (#522).
   // `some` stops at the first match — no need to evaluate the rest of the list.
-  const match = node.list.some((n) => compare(left, evalNode(n, ctx), '=') === true);
+  const type = staticType(node.value);
+  const match = node.list.some((n) => compare(left, evalNode(n, ctx), '=', type, staticType(n)) === true);
   return node.negate ? !match : match;
 }
 
@@ -89,10 +146,18 @@ export function evalNode(node: Node, ctx: EvalCtx): EvalValue {
     case 'arith': {
       const l = evalNode(node.left, ctx);
       const r = evalNode(node.right, ctx);
-      return node.op === '+' ? addOrConcat(l, r) : arith(l, r, node.op as '-' | '*' | '/' | '%');
+      return node.op === '+'
+        ? addOrConcat(l, r, staticType(node.left), staticType(node.right))
+        : arith(l, r, node.op as '-' | '*' | '/' | '%');
     }
     case 'compare':
-      return compare(evalNode(node.left, ctx), evalNode(node.right, ctx), node.op);
+      return compare(
+        evalNode(node.left, ctx),
+        evalNode(node.right, ctx),
+        node.op,
+        staticType(node.left),
+        staticType(node.right),
+      );
     case 'neg': {
       // NULL and non-numeric operands propagate as NULL (Splunk): -null, -"abc" = null.
       const n = numArg(evalNode(node.operand, ctx));
@@ -160,6 +225,17 @@ function evalCall(name: string, argNodes: Node[], ctx: EvalCtx): EvalValue {
         if (v !== null) return v;
       }
       return null;
+    case 'typeof': {
+      // The only function that needs its operand's static type: a field, or a
+      // function passing one through, holding numeric-looking text is a Number
+      // (typeof(a) for a = 10), while a string literal or a text function's
+      // result is a String whatever it holds (#522).
+      const args = argNodes.map((n) => evalNode(n, ctx));
+      const [node] = argNodes;
+      const [value] = args;
+      if (node !== undefined && staticType(node) === 'dynamic' && isNumericValue(value)) return 'Number';
+      return evalBuiltin(fn, args, ctx);
+    }
     default:
       return evalBuiltin(
         fn,

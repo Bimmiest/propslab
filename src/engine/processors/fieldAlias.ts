@@ -3,7 +3,7 @@ import type { NoOpReason } from '../noOpExplainer';
 import { isInternalField } from '../utils/internalFields';
 import { byClassName } from '../utils/asciiCompare';
 import { getMetadataField } from '../utils/metadataFields';
-import { getField, hasField, setField } from '../utils/fieldBag';
+import { deleteField, getField, hasField, setField } from '../utils/fieldBag';
 import { unquoteFieldName, isQuotedFieldName, fieldNameNeedsQuoting, fieldQuotingWarning } from '../utils/fieldRef';
 import { atDirective } from '../parser/provenance';
 import type { RunContext, DiagnosticSink } from '../runContext';
@@ -32,7 +32,10 @@ export function applyFieldAliases(events: SplunkEvent[], directives: ConfDirecti
   return events.map((event) => {
     const newFields = { ...event.fields };
     // Structured, so consumers never have to parse `description` back apart.
-    const created: { target: string; source: string }[] = [];
+    // Keyed by target: a later alias that writes or removes the same field
+    // supersedes an earlier one, and the trace reports where the field ended up.
+    const created = new Map<string, string>();
+    const removed = new Map<string, string>();
 
     const noOps: DirectiveNoOp[] = [];
     const noteNoOp = (alias: { directive: ConfDirective }, reason: NoOpReason) => {
@@ -49,11 +52,20 @@ export function applyFieldAliases(events: SplunkEvent[], directives: ConfDirecti
       // `FIELDALIAS-cim = host AS dvc` is one of the most common CIM mappings:
       // the metadata-backed default fields are aliasable like any other.
       const sourceValue = getField(event.fields, alias.source) ?? getMetadataField(event, alias.source);
-      if (sourceValue === undefined) {
+      if (!hasValue(sourceValue)) {
         maybeWarnStrippedRef(alias, event, diagnostics, reportedStrippedRefs);
-        // An alias of a field that does not exist on this event is the FIELDALIAS
-        // equivalent of a regex that never matched: nothing appears, and nothing
-        // says why.
+        // props.conf.spec: with AS, "If the <orig_field_name> field has no
+        // value or does not exist, the <new_field_name> is removed"; with
+        // ASNEW it "is kept".
+        if (alias.mode === 'AS' && hasField(newFields, alias.target)) {
+          deleteField(newFields, alias.target);
+          created.delete(alias.target);
+          removed.set(alias.target, alias.source);
+          continue;
+        }
+        // Otherwise an alias of a field that does not exist on this event is
+        // the FIELDALIAS equivalent of a regex that never matched: nothing
+        // appears, and nothing says why.
         noteNoOp(alias, { kind: 'source-key-empty', sourceKey: alias.source });
         continue;
       }
@@ -64,11 +76,23 @@ export function applyFieldAliases(events: SplunkEvent[], directives: ConfDirecti
       }
 
       setField(newFields, alias.target, sourceValue);
-      created.push({ target: alias.target, source: alias.source });
+      removed.delete(alias.target);
+      created.set(alias.target, alias.source);
     }
 
     const withNoOps = noOps.length > 0 ? { noOps: [...(event.noOps ?? []), ...noOps] } : {};
-    if (created.length === 0) return { ...event, ...withNoOps };
+    if (created.size === 0 && removed.size === 0) return { ...event, ...withNoOps };
+
+    const fieldAliases = [...created].map(([target, source]) => ({ target, source }));
+    const description: string[] = [];
+    if (created.size > 0) {
+      description.push(`Created aliases: ${fieldAliases.map((a) => `${a.target} (from ${a.source})`).join(', ')}`);
+    }
+    if (removed.size > 0) {
+      description.push(
+        `Removed ${[...removed].map(([target, source]) => `${target} (${source} has no value)`).join(', ')}`,
+      );
+    }
 
     return {
       ...event,
@@ -79,13 +103,23 @@ export function applyFieldAliases(events: SplunkEvent[], directives: ConfDirecti
         {
           processor: 'FIELDALIAS',
           phase: 'search-time' as const,
-          description: `Created aliases: ${created.map((a) => `${a.target} (from ${a.source})`).join(', ')}`,
-          fieldsAdded: created.map((a) => a.target),
-          fieldAliases: created,
+          description: description.join('; '),
+          fieldsAdded: [...created.keys()],
+          ...(removed.size > 0 ? { fieldsRemoved: [...removed.keys()] } : {}),
+          fieldAliases,
         },
       ],
     };
   });
+}
+
+/**
+ * Whether an alias source has a value: present, and neither the empty string
+ * nor a multivalue field with no values.
+ */
+function hasValue(value: string | string[] | undefined): value is string | string[] {
+  if (value === undefined) return false;
+  return Array.isArray(value) ? value.length > 0 : value !== '';
 }
 
 function compileAliases(aliasDirectives: ConfDirective[], diagnostics?: DiagnosticSink): CompiledAlias[] {

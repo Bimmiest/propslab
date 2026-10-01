@@ -235,6 +235,26 @@ describe('FIELDALIAS through the pipeline', () => {
   });
 });
 
+// Doc-derived (props.conf.spec, FIELDALIAS): with AS, "If the <orig_field_name>
+// field has no value or does not exist, the <new_field_name> is removed"; with
+// ASNEW, "If the <orig_field_name> field has no value or does not exist, the
+// <new_field_name> is kept" (#445). Automatic key/value extraction supplies
+// `src`; nothing supplies `src_ip`.
+describe('FIELDALIAS through the pipeline, when the original field does not exist', () => {
+  const raw = '2026-01-15T10:00:00Z src=1.2.3.4 action=allowed';
+
+  it('removes the new field with AS', () => {
+    const f = fields(run(raw, `${ONE_PER_LINE}FIELDALIAS-x = src_ip AS src\n`));
+    expect(f['src']).toBeUndefined();
+    expect(f['action']).toBe('allowed');
+  });
+
+  it('keeps the new field with ASNEW', () => {
+    const f = fields(run(raw, `${ONE_PER_LINE}FIELDALIAS-x = src_ip ASNEW src\n`));
+    expect(f['src']).toBe('1.2.3.4');
+  });
+});
+
 // Doc-derived (props.conf.spec, EVAL): the eval statement is run and its value
 // assigned to the field the directive names, a calculated field.
 describe('EVAL through the pipeline', () => {
@@ -293,8 +313,10 @@ describe('FIELD_NAMES through the pipeline', () => {
   });
 });
 
-// Doc-derived (props.conf.spec, HEADER_FIELD_LINE_NUMBER): the line number of
-// the line holding the header fields.
+// Doc-derived (props.conf.spec, HEADER_FIELD_LINE_NUMBER): "The line number of
+// the line within the specified file or source that contains the header
+// fields." A line of the input, then, not an event; #449 confirms that blank
+// and preamble lines count.
 describe('HEADER_FIELD_LINE_NUMBER through the pipeline', () => {
   it('reads the header from the named line', () => {
     const events = csv('exported by tool\na,b\n1,2', 'HEADER_FIELD_LINE_NUMBER = 2\n');
@@ -312,10 +334,22 @@ describe('PREAMBLE_REGEX through the pipeline', () => {
 });
 
 // Doc-derived (props.conf.spec, TIMESTAMP_FIELDS): names the field or fields
-// that hold the timestamp in structured data.
+// that hold the timestamp in structured data. "Some CSV and structured files
+// have their timestamp encompass multiple fields in the event separated by
+// delimiters. This setting tells Splunk software to specify all such fields
+// which constitute the timestamp in a comma-separated fashion." So the fields
+// together make one timestamp; it is not the first of them that has a value.
 describe('TIMESTAMP_FIELDS through the pipeline', () => {
   it('takes _time from the named field', () => {
     const events = csv('msg,when\nhello,2026-01-15T10:00:00Z', 'TIMESTAMP_FIELDS = when\n');
+    expect(time(events)).toBe('2026-01-15T10:00:00.000Z');
+  });
+
+  it('reads a timestamp spread over several fields from all of them', () => {
+    const events = csv(
+      'date,time,user\n2026-01-15,10:00:00,alice',
+      'TIMESTAMP_FIELDS = date, time\nTIME_FORMAT = %Y-%m-%d %H:%M:%S\nTZ = UTC\n',
+    );
     expect(time(events)).toBe('2026-01-15T10:00:00.000Z');
   });
 });
@@ -407,19 +441,36 @@ describe('CLEAN_KEYS through the pipeline', () => {
   });
 });
 
-// Doc-derived (transforms.conf.spec, KEEP_EMPTY_VALS): whether a pair whose
-// value is an empty string is kept; default false. Only the default is
-// asserted here.
+// Doc-derived (transforms.conf.spec, KEEP_EMPTY_VALS): it "controls whether
+// Splunk software keeps field/value pairs when the value is an empty string",
+// default false, and "does not apply to field/value pairs that are generated
+// by Splunk software autokv extraction. Autokv ignores field/value pairs with
+// empty values." Asserted for REGEX extractions; DELIMS is an exception the
+// spec does not state (#450, in transformsProcessor.test.ts).
 describe('KEEP_EMPTY_VALS through the pipeline', () => {
-  const delims = '[t]\nDELIMS = " ", "="\n';
+  const raw = '2026-01-15T10:00:00Z;a=1;b=;c=3';
+  const pairs = '[t]\nREGEX = (\\w+)=(\\w*)\nFORMAT = $1::$2\n';
+  const named = '[t]\nREGEX = b=(?<b>\\w*);\n';
 
   it.each([
-    ['unset', delims],
-    ['false', `${delims}KEEP_EMPTY_VALS = false\n`],
-  ])('drops an empty value when %s', (_, transforms) => {
-    const f = report('a= b=2', transforms);
-    expect(f['b']).toBe('2');
-    expect(f['a']).toBeUndefined();
+    ['unset', ''],
+    ['false', 'KEEP_EMPTY_VALS = false\n'],
+  ])('drops an empty value when %s', (_, setting) => {
+    const f = report(raw, pairs + setting);
+    expect(f).toMatchObject({ a: '1', c: '3' });
+    expect(f).not.toHaveProperty('b');
+    expect(report(raw, named + setting)).not.toHaveProperty('b');
+  });
+
+  it('keeps it, as an empty string, when true', () => {
+    expect(report(raw, `${pairs}KEEP_EMPTY_VALS = true\n`)).toMatchObject({ a: '1', b: '', c: '3' });
+    expect(report(raw, `${named}KEEP_EMPTY_VALS = true\n`)).toMatchObject({ b: '' });
+  });
+
+  it('leaves automatic key/value extraction ignoring an empty value', () => {
+    const f = fields(run('2026-01-15T10:00:00Z a=1 b= c=3', `${ONE_PER_LINE}KV_MODE = auto\n`));
+    expect(f).toMatchObject({ a: '1', c: '3' });
+    expect(f).not.toHaveProperty('b');
   });
 });
 
@@ -433,6 +484,34 @@ describe('WRITE_META through the pipeline', () => {
   it('writes the FORMAT pairs as indexed fields', () => {
     const e = indexTime('user=alice', '[t]\nREGEX = user=(\\w+)\nFORMAT = user::$1\nWRITE_META = true\n');
     expect(e?.fields['user'] ?? e?._meta['user']).toBe('alice');
+  });
+});
+
+// Doc-derived (transforms.conf.spec, DEST_KEY): "If DEST_KEY = _meta (not
+// recommended) you should also add $0 to the start of your FORMAT setting. $0
+// represents the DEST_KEY value before Splunk software performs the REGEX (in
+// other words, _meta)." Getting Data In adds: "Each matching transform can
+// overwrite _meta, so use WRITE_META = true to append _meta. If you don't use
+// WRITE_META, then start your FORMAT with $0."
+describe('DEST_KEY = _meta through the pipeline', () => {
+  const meta = (format: string) =>
+    run(
+      'zone dmz tier web',
+      `${NO_AUTO_KV}TRANSFORMS-m = zone, tier\n`,
+      `[zone]\nREGEX = zone (\\w+)\nFORMAT = zone::$1\nWRITE_META = true\n\n` +
+        `[tier]\nREGEX = tier (\\w+)\nFORMAT = ${format}\nDEST_KEY = _meta\n`,
+    )[0];
+
+  it('overwrites what WRITE_META appended when FORMAT does not start with $0', () => {
+    const e = meta('tier::$1');
+    expect(e?._meta).toEqual({ tier: 'web' });
+    expect(e?.fields['zone']).toBeUndefined();
+  });
+
+  it('keeps it when FORMAT starts with $0', () => {
+    const e = meta('$0 tier::$1');
+    expect(e?._meta).toEqual({ zone: 'dmz', tier: 'web' });
+    expect(e?.fields['zone']).toBe('dmz');
   });
 });
 
@@ -483,5 +562,41 @@ describe('LOOKAHEAD through the pipeline', () => {
 
   it('does not find one past it', () => {
     expect(indexed(indexTime(raw, t('20')))).toBeUndefined();
+  });
+});
+
+// ---- Stanza patterns ---------------------------------------------------------
+
+/** Events run under a props.conf of whole stanzas, from the given source and host. */
+function runAt(sourcePath: string, props: string, hostName = 'h'): SplunkEvent[] {
+  return runPipeline('n=4', { ...META, source: sourcePath, host: hostName }, props, '', {
+    perEventPipeline: false,
+    captureOffsets: false,
+    now: NOW,
+  }).result.events;
+}
+
+// Doc-derived (props.conf.spec, [source::<source>] and [host::<host>], with EVAL
+// as the directive they carry): "Match expressions are based on a full
+// implementation of Perl-compatible regular expressions (PCRE) with the
+// translation of "...", "*", and "."", and "[host::<host>] stanzas match in a
+// case-insensitive manner". A stanza whose header is such a regex applies its
+// EVAL to an event whose source or host it matches, and to no other.
+describe('EVAL in a stanza with a regex pattern, through the pipeline', () => {
+  const rotated = '[source::.../app.log(.\\d+)?]\nEVAL-rotated = "yes"\n';
+
+  it('applies to a source the regex matches', () => {
+    expect(fields(runAt('/var/log/app.log.3', rotated))['rotated']).toBe('yes');
+    expect(fields(runAt('/var/log/app.log', rotated))['rotated']).toBe('yes');
+  });
+
+  it('does not apply to a source the regex does not match', () => {
+    expect(fields(runAt('/var/log/app.logX', rotated))['rotated']).toBeUndefined();
+  });
+
+  it('applies a host regex case-insensitively', () => {
+    const props = '[host::web-\\d+]\nEVAL-web = "yes"\n';
+    expect(fields(runAt('s', props, 'WEB-12'))['web']).toBe('yes');
+    expect(fields(runAt('s', props, 'web-ab'))['web']).toBeUndefined();
   });
 });

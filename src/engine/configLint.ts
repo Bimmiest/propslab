@@ -5,6 +5,7 @@ import { getDirectiveSupport, isUndocumentedAttribute } from './directiveSupport
 import { wrongFileCanonical, WRONG_FILE_MESSAGE } from './directiveRegistry';
 import { lintInertTransformSettings, lintDirectiveValues } from './directiveLint';
 import { effectiveBool, effectiveDirective } from './utils/directiveValues';
+import { stanzaPatternProblem } from './parser/stanzaMatcher';
 
 // Config lint: the diagnostics `runPipeline` reports about the conf files
 // themselves, split out of the pipeline so that file reads as the order of
@@ -255,9 +256,29 @@ function lintUnreferencedTransforms(
 }
 
 /**
- * Lint that depends on the conf text alone — unsimulated and unknown
- * directives, DEST_KEY/FORMAT pairing, dangling and unreferenced transforms,
- * inert settings and mistyped values.
+ * A `[source::…]` or `[host::…]` header whose pattern PCRE rejects matches no
+ * event, so nothing in its stanza ever applies. Nothing downstream can report
+ * that: a stanza that never matches never reaches a processor.
+ */
+function lintStanzaPatterns(propsConf: ParsedConf, diagnostics: ValidationDiagnostic[]): void {
+  for (const stanza of propsConf.stanzas) {
+    const problem = stanzaPatternProblem(stanza);
+    if (!problem) continue;
+    diagnostics.push({
+      level: 'warning',
+      message:
+        `[${stanza.name}] never matches: its pattern reads as the regular expression ${problem.regex}, ` +
+        `which does not compile (${problem.error}). None of the stanza's settings apply.`,
+      file: 'props.conf',
+      ...atStanza(stanza),
+    });
+  }
+}
+
+/**
+ * Lint that depends on the conf text alone — stanza patterns that cannot
+ * match, unsimulated and unknown directives, DEST_KEY/FORMAT pairing, dangling
+ * and unreferenced transforms, inert settings and mistyped values.
  */
 export function lintConfigs(
   propsConf: ParsedConf,
@@ -265,6 +286,7 @@ export function lintConfigs(
   diagnostics: ValidationDiagnostic[],
 ): void {
   lintLookups(propsConf, diagnostics);
+  lintStanzaPatterns(propsConf, diagnostics);
   for (const [file, conf] of [
     ['props.conf', propsConf],
     ['transforms.conf', transformsConf],
