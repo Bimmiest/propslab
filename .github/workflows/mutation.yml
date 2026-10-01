@@ -162,12 +162,14 @@ jobs:
       # cost (#508). Monthly, they are run. Their score is reported, not gated:
       # the break floor was measured without them, and nobody has yet measured
       # what it should be with them. Once a run has, a floor for this run
-      # belongs in stryker.config.mjs.
+      # belongs in stryker.config.mjs. MUTATION_STATIC is what includes them:
+      # Stryker's `--ignoreStatic` flag can only turn the option on.
       - name: Mutation test (whole engine, static mutants included)
         if: github.event.schedule == '0 9 1 * *' || inputs.static
         env:
           MUTATION_REPORT_ONLY: '1'
-        run: npm run test:mutation -- --ignoreStatic false
+          MUTATION_STATIC: '1'
+        run: npm run test:mutation
 
       - name: Upload mutation report
         if: ${{ !cancelled() && (github.event_name != 'pull_request' || steps.changed.outputs.files != '') }}
