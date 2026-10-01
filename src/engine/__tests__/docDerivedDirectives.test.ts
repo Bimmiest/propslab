@@ -485,3 +485,39 @@ describe('LOOKAHEAD through the pipeline', () => {
     expect(indexed(indexTime(raw, t('20')))).toBeUndefined();
   });
 });
+
+// ---- Stanza patterns ---------------------------------------------------------
+
+/** Events run under a props.conf of whole stanzas, from the given source and host. */
+function runAt(sourcePath: string, props: string, hostName = 'h'): SplunkEvent[] {
+  return runPipeline('n=4', { ...META, source: sourcePath, host: hostName }, props, '', {
+    perEventPipeline: false,
+    captureOffsets: false,
+    now: NOW,
+  }).result.events;
+}
+
+// Doc-derived (props.conf.spec, [source::<source>] and [host::<host>], with EVAL
+// as the directive they carry): "Match expressions are based on a full
+// implementation of Perl-compatible regular expressions (PCRE) with the
+// translation of "...", "*", and "."", and "[host::<host>] stanzas match in a
+// case-insensitive manner". A stanza whose header is such a regex applies its
+// EVAL to an event whose source or host it matches, and to no other.
+describe('EVAL in a stanza with a regex pattern, through the pipeline', () => {
+  const rotated = '[source::.../app.log(.\\d+)?]\nEVAL-rotated = "yes"\n';
+
+  it('applies to a source the regex matches', () => {
+    expect(fields(runAt('/var/log/app.log.3', rotated))['rotated']).toBe('yes');
+    expect(fields(runAt('/var/log/app.log', rotated))['rotated']).toBe('yes');
+  });
+
+  it('does not apply to a source the regex does not match', () => {
+    expect(fields(runAt('/var/log/app.logX', rotated))['rotated']).toBeUndefined();
+  });
+
+  it('applies a host regex case-insensitively', () => {
+    const props = '[host::web-\\d+]\nEVAL-web = "yes"\n';
+    expect(fields(runAt('s', props, 'WEB-12'))['web']).toBe('yes');
+    expect(fields(runAt('s', props, 'web-ab'))['web']).toBeUndefined();
+  });
+});

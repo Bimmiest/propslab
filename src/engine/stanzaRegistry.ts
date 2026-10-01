@@ -55,7 +55,9 @@ const HOST_KIND: StanzaKind = {
   rank: 2,
   precedence: 'Overrides [sourcetype] and [default]; overridden by [source::*].',
   patternSyntax: [
-    '`*` matches any characters',
+    'A PCRE regular expression, matched against the whole host name',
+    '`*` matches any characters except `/` and `\\`, `...` matches any characters, and `.` matches a period',
+    'Case-insensitive; `(?-i)` in the pattern makes it case-sensitive',
     'Among matching host stanzas of equal `priority`, the name first in ASCII order wins',
   ],
   example: '[host::web-*.example.com]',
@@ -69,8 +71,10 @@ const SOURCE_KIND: StanzaKind = {
   rank: 3,
   precedence: 'Highest — overrides all other stanza types.',
   patternSyntax: [
-    '`*` matches any characters within a path segment',
-    '`...` matches any path segments (recursive wildcard)',
+    'With `*` or `...` in it, a PCRE regular expression matched against the whole source',
+    '`*` matches any characters within a path segment, `...` matches across segments, and `.` matches a period',
+    'With neither, compared with the source exactly as written',
+    'Case-sensitive',
     'Among matching source stanzas of equal `priority`, the name first in ASCII order wins',
   ],
   example: '[source::/var/log/.../*.log]',
