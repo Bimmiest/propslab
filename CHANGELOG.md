@@ -102,6 +102,25 @@ All notable changes to Propslab are documented here, newest first. Entries say w
 
 ### Fixed
 
+- **`[source::]` and `[host::]` patterns are read as Splunk reads them** ([#442](https://github.com/Bimmiest/propslab/issues/442), [#443](https://github.com/Bimmiest/propslab/issues/443)). A source pattern containing `*` or `...` is PCRE with only `...`, `*` and `.` translated, so `(.\d+)?`, `\d`, character classes and lookbehind work; one without a wildcard is compared as written. A host pattern is always PCRE, case-insensitive unless it carries `(?-i)`. Stanzas of one kind and priority are ordered by ASCII name alone, without the literal-character specificity step. The conf lint flags a pattern PCRE rejects.
+- **Eval edge cases match Splunk** ([#446](https://github.com/Bimmiest/propslab/issues/446), [#447](https://github.com/Bimmiest/propslab/issues/447), [#522](https://github.com/Bimmiest/propslab/issues/522)).
+  - Domain errors such as `sqrt(-1)` and `ln(0)` are NULL, while overflow stays `Infinity`.
+  - `tostring` gives `True`/`False`, upper-case hex and a `binary` format.
+  - Multivalue functions of a missing field are NULL.
+  - `len` and `substr` count characters, not UTF-16 units.
+  - `like()` and `LIKE` match across newlines.
+  - Operands are typed as Splunk types them: a field is compared as a number against a number and as text against a string, and two numeric fields compare as numbers. `+` follows the same rule, and a non-numeric string beside a number is NULL.
+  - Ordering operators on a multivalue are NULL, and `!=` stays the complement of `==`.
+- **Structured data** ([#444](https://github.com/Bimmiest/propslab/issues/444), [#449](https://github.com/Bimmiest/propslab/issues/449)).
+  - `TIMESTAMP_FIELDS` applies to `json` and `w3c`. A value that does not parse takes the previous event's time rather than a timestamp found elsewhere in the row.
+  - `HEADER_FIELD_LINE_NUMBER` counts raw lines, including blank and preamble lines.
+  - `MISSING_VALUE_REGEX` matches whole values.
+  - A quoted value containing a line break stays in one row, and a quote opens a value only at the start of a field.
+  - `FIELD_NAMES` names columns by position, and a value past the last name is named `EXTRA_FIELD_<column>`.
+- **`FIELDALIAS … AS` removes the target when the source has no value** ([#445](https://github.com/Bimmiest/propslab/issues/445)). `ASNEW` keeps it.
+- **A JSON number keeps the text the event wrote** ([#448](https://github.com/Bimmiest/propslab/issues/448)): `10.50`, `1e3` and integers past 2^53 are no longer rounded through a double.
+- **`KEEP_EMPTY_VALS` is honoured by a REGEX-based `REPORT`** ([#450](https://github.com/Bimmiest/propslab/issues/450)), and an empty capture is dropped by default. A DELIMS-based `REPORT` drops empty values whatever it says.
+- **`DEST_KEY = _meta` replaces `_meta` unless `FORMAT` starts with `$0`, and automatic key=value extraction stops at limits.conf's 10,240-character `[kv] maxchars`** ([#451](https://github.com/Bimmiest/propslab/issues/451)). The trace names the fields either one costs.
 - **A deploy no longer trusts a stale CI-run lookup.** GitHub's list of CI runs sometimes lags, and twice it named a two-month-old commit as the newest green one. The deploy now requires the commit it resolves to contain both the commit whose CI triggered it and the commit production serves. It retries for about two minutes, and deploys nothing if the lookup never catches up. A rollback with `sha` set is unaffected.
 - **The weekly environment check matches how `main` is protected** ([#520](https://github.com/Bimmiest/propslab/issues/520)): it requires the pull-request rule rather than an approval count (a sole maintainer cannot approve their own PRs), the core CI checks by name, and an empty bypass list on every ruleset covering `main`.
 - **No unit test times itself any more** ([#507](https://github.com/Bimmiest/propslab/issues/507)). Linear-time regressions are caught by counting the work done when the input doubles, and the MCP server's cancellation, busy-refusal and event-loop tests assert ordering or parse counts. The XML reader no longer copies the remaining source for every text run, and the AppShell and MobileShell tests run the real pipeline hook and panels.

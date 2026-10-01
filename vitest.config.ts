@@ -109,7 +109,7 @@ export default defineConfig({
       // worker tests do instantiate them, so they are measured like the rest.
       thresholds: {
         statements: 92,
-        branches: 84,
+        branches: 86,
         functions: 91,
         lines: 94,
         // The engine is held to a much higher bar than the app as a whole. It
@@ -121,7 +121,7 @@ export default defineConfig({
         // engine and would hide a fall in any one of them.
         'src/engine/**': {
           statements: 96,
-          branches: 89,
+          branches: 91,
           functions: 98,
           lines: 97,
         },
