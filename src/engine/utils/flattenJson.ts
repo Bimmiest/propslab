@@ -3,6 +3,67 @@ import { addFieldValue } from './fieldBag';
 const MAX_DEPTH = 10;
 
 /**
+ * A JSON number, carried as the text the event wrote it as.
+ *
+ * Splunk's JSON extraction keeps a number as written (#448): `10.50` stays
+ * `10.50`, `1E+3` stays `1E+3`, and an integer past 2^53 keeps every digit.
+ * A JS number would round each of them through a double first.
+ */
+class JsonNumber {
+  readonly source: string;
+  constructor(source: string) {
+    this.source = source;
+  }
+}
+
+/** The third argument `JSON.parse` passes a reviver, where the runtime has source text access. */
+interface ReviverContext {
+  source?: string;
+}
+
+type Reviver = (key: string, value: unknown, context?: ReviverContext) => unknown;
+
+/** `JSON.parse`'s shape, so a test can stand in a runtime without source text access. */
+export type JsonParse = (text: string, reviver?: Reviver) => unknown;
+
+function numberAsWritten(_key: string, value: unknown, context?: ReviverContext): unknown {
+  return typeof value === 'number' && context?.source !== undefined ? new JsonNumber(context.source) : value;
+}
+
+/** Whether `parse` hands its reviver each value's source text. */
+function hasSourceText(parse: JsonParse): boolean {
+  let source: string | undefined;
+  parse('1', (_key, value, context) => {
+    source = context?.source;
+    return value;
+  });
+  return source === '1';
+}
+
+/**
+ * A JSON parser for the flatteners below. Where `parse` gives a reviver the
+ * source text, each number keeps it; where it does not, numbers stay JS
+ * numbers and are rendered as JS renders them. The check runs once, here,
+ * and a runtime without source text parses with no reviver at all.
+ */
+export function createJsonParser(parse: JsonParse): (text: string) => unknown {
+  const reviver = hasSourceText(parse) ? numberAsWritten : undefined;
+  return (text) => {
+    const value = parse(text, reviver);
+    // A bare number is no container, so nothing is extracted from it, and
+    // callers recognise that by its not being an object.
+    return value instanceof JsonNumber ? Number(value.source) : value;
+  };
+}
+
+/**
+ * Parse JSON for field extraction. Every JSON extraction (KV_MODE = json,
+ * automatic JSON under KV_MODE = auto, INDEXED_EXTRACTIONS = json) parses
+ * through this one function, so they cannot disagree on a value.
+ */
+export const parseJson = createJsonParser((text, reviver) => JSON.parse(text, reviver));
+
+/**
  * Flattens parsed JSON into Splunk-style dot/brace notation fields, matching
  * how Splunk's `spath` / `KV_MODE=json` / `INDEXED_EXTRACTIONS=json` name fields:
  *
@@ -12,7 +73,8 @@ const MAX_DEPTH = 10;
  * - Arrays use the `{}` marker and collapse across elements into a multivalue field:
  *     `{"tags":["a","b"]}`            → `tags{}`        = [a, b]
  *     `{"items":[{"id":1},{"id":2}]}` → `items{}.id`    = [1, 2]
- * - Scalars become strings; JSON `null` yields an empty value.
+ * - Scalars become strings, a number as the event wrote it; JSON `null` yields
+ *   an empty value.
  * - Arrays nested directly inside arrays are stringified (Splunk's deeper `{}{}`
  *   notation is not simulated).
  * - A subtree nested deeper than the limit is skipped on its own; its siblings
@@ -53,15 +115,29 @@ function addValue(fields: Record<string, string | string[]>, added: string[], na
 }
 
 /**
- * A JSON leaf that has a meaningful string form.
+ * The field value of a JSON leaf, or undefined for anything else.
  *
- * Everything reaching the flatteners comes from `JSON.parse`, so once null,
+ * Everything reaching the flatteners comes from `parseJson`, so once null,
  * arrays and objects are ruled out only these remain. Saying so keeps `String()`
  * off values whose default stringification is "[object Object]" — a field value
  * that looks extracted but carries nothing.
  */
-function isJsonScalar(value: unknown): value is string | number | boolean {
-  return typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean';
+function leafText(value: unknown): string | undefined {
+  if (value instanceof JsonNumber) return value.source;
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return undefined;
+}
+
+/** JSON text for a parsed value, with each number as the event wrote it. */
+function stringifyJson(value: unknown): string {
+  if (value instanceof JsonNumber) return value.source;
+  if (Array.isArray(value)) return `[${value.map(stringifyJson).join(',')}]`;
+  if (typeof value === 'object' && value !== null) {
+    return `{${Object.entries(value)
+      .map(([key, item]) => `${JSON.stringify(key)}:${stringifyJson(item)}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value);
 }
 
 /** Dispatch a single JSON value to the right handler. Returns true if depth limit hit. */
@@ -77,14 +153,16 @@ function flattenValue(
     addValue(fields, added, name, '');
     return false;
   }
+  const text = leafText(value);
+  if (text !== undefined) {
+    addValue(fields, added, name, text);
+    return false;
+  }
   if (Array.isArray(value)) {
     return flattenArray(value, fields, added, name, depth, options);
   }
   if (typeof value === 'object') {
     return flattenJson(value as Record<string, unknown>, fields, added, name, depth + 1, options);
-  }
-  if (isJsonScalar(value)) {
-    addValue(fields, added, name, String(value));
   }
   return false;
 }
@@ -110,15 +188,16 @@ export function flattenArray(
   let limited = false;
   for (const item of arr) {
     if (item === null || item === undefined) continue;
-    if (Array.isArray(item)) {
+    const text = leafText(item);
+    if (text !== undefined) {
+      addValue(fields, added, arrayName, text);
+    } else if (Array.isArray(item)) {
       // Array-of-arrays: stringify (Splunk's `{}{}` notation is not simulated).
-      addValue(fields, added, arrayName, JSON.stringify(item));
+      addValue(fields, added, arrayName, stringifyJson(item));
     } else if (typeof item === 'object') {
       if (flattenJson(item as Record<string, unknown>, fields, added, arrayName, depth + 1, options)) {
         limited = true;
       }
-    } else if (isJsonScalar(item)) {
-      addValue(fields, added, arrayName, String(item));
     }
   }
   return limited;

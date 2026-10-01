@@ -1,5 +1,5 @@
 import type { SplunkEvent, ConfDirective } from '../types';
-import { flattenJson, flattenArray } from '../utils/flattenJson';
+import { flattenJson, flattenArray, parseJson } from '../utils/flattenJson';
 import { hasField, setField, addFieldValue } from '../utils/fieldBag';
 import { cleanFieldKey } from '../transforms/regexTransform';
 import { effectiveBool, effectiveValue } from '../utils/directiveValues';
@@ -188,7 +188,7 @@ function parseWholeJson(raw: string): WholeJsonResult {
   const looksLikeJson = trimmed.startsWith('{') || (/^\[\s*[{["\d\-tfn\]]/.test(trimmed) && trimmed.endsWith(']'));
   if (!looksLikeJson) return { kind: 'notJson' };
   try {
-    return { kind: 'parsed', value: JSON.parse(trimmed) };
+    return { kind: 'parsed', value: parseJson(trimmed) };
   } catch (e) {
     return { kind: 'invalid', error: e instanceof Error ? e.message : 'invalid JSON' };
   }
@@ -229,7 +229,7 @@ function extractJson(raw: string, fields: Record<string, string | string[]>, add
   const candidate = jsonObjectCandidates(raw).next().value;
   if (candidate !== undefined) {
     try {
-      const obj: unknown = JSON.parse(candidate);
+      const obj = parseJson(candidate);
       if (typeof obj === 'object' && obj !== null && !Array.isArray(obj)) {
         return { depthLimited: flattenJson(obj as Record<string, unknown>, fields, added) };
       }

@@ -1,5 +1,5 @@
 import type { ConfDirective, SplunkEvent, ValidationDiagnostic } from '../types';
-import { flattenJson, flattenArray } from '../utils/flattenJson';
+import { flattenJson, flattenArray, parseJson } from '../utils/flattenJson';
 import { getField, setField } from '../utils/fieldBag';
 import { safeRegex, validateRegex, type SplunkRegex } from '../../utils/splunkRegex';
 import { atDirective } from '../parser/provenance';
@@ -104,7 +104,7 @@ function extractJsonFields(events: SplunkEvent[], directives: ConfDirective[], c
 function parseJsonEvent(raw: string): { kind: 'parsed'; value: unknown } | { kind: 'invalid'; error: string } {
   const text = raw.replace(/^\uFEFF/, '').trim();
   try {
-    return { kind: 'parsed', value: JSON.parse(text) };
+    return { kind: 'parsed', value: parseJson(text) };
   } catch (e) {
     return { kind: 'invalid', error: e instanceof Error ? e.message : 'invalid JSON' };
   }
