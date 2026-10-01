@@ -1027,12 +1027,41 @@ describe('HEADER_FIELD_LINE_NUMBER counts the lines of the input (#449)', () => 
     }
   });
 
-  // Not established: what Splunk does when no line can be the header. The
-  // engine treats it as it does a preamble header line.
-  it('extracts nothing when no event starts on the numbered line', () => {
-    const events = csvEvents('Report\n\nts,user\n2026-01-15T10:00:00Z,alice\n', 'HEADER_FIELD_LINE_NUMBER = 2\n');
+  it('extracts nothing when the numbered line is the first line and is preamble', () => {
+    const events = csvEvents(
+      ';one\nts,user\n2026-01-15T10:00:00Z,alice\n',
+      'PREAMBLE_REGEX = ^;\nHEADER_FIELD_LINE_NUMBER = 1\n',
+    );
     expect(events.map((e) => e._raw)).toEqual(['ts,user', '2026-01-15T10:00:00Z,alice']);
-    for (const e of events) expect(e.fields['user']).toBeUndefined();
+    expect(events[1]!.fields['user']).toBeUndefined();
+  });
+
+  it('names every value by its column when the numbered line is blank', () => {
+    const events = csvEvents(
+      'Report\n\nts,user,status\n2026-01-15T10:00:00Z,alice,200\n',
+      'HEADER_FIELD_LINE_NUMBER = 2\n',
+    );
+    expect(events.map((e) => e._raw)).toEqual(['ts,user,status', '2026-01-15T10:00:00Z,alice,200']);
+    expect(events[0]!.fields).toMatchObject({ EXTRA_FIELD_1: 'ts', EXTRA_FIELD_2: 'user', EXTRA_FIELD_3: 'status' });
+    expect(events[1]!.fields).toMatchObject({
+      EXTRA_FIELD_1: '2026-01-15T10:00:00Z',
+      EXTRA_FIELD_2: 'alice',
+      EXTRA_FIELD_3: '200',
+    });
+    expect(events[0]!.fields['ts']).toBeUndefined();
+  });
+
+  // The two rules above together: the preamble is still not indexed, and the
+  // blank header line still names nothing.
+  it('names values by column after a preamble when the numbered line is blank', () => {
+    const events = csvEvents(';by tool\n\nts,user\n', 'PREAMBLE_REGEX = ^;\nHEADER_FIELD_LINE_NUMBER = 2\n');
+    expect(events.map((e) => e.fields)).toEqual([
+      expect.objectContaining({ EXTRA_FIELD_1: 'ts', EXTRA_FIELD_2: 'user' }),
+    ]);
+  });
+
+  it('indexes nothing when the numbered line is past the end of the input', () => {
+    expect(csvEvents('ts,user\n2026-01-15T10:00:00Z,alice\n', 'HEADER_FIELD_LINE_NUMBER = 9\n')).toEqual([]);
   });
 });
 
@@ -1099,6 +1128,21 @@ describe('a quoted value that holds a line break stays in its row (#449)', () =>
     const [e, next] = csvEvents('a,msg\n1,"say ""hi""\nthere"\n2,x\n');
     expect(e!.fields['msg']).toBe('say "hi"\nthere');
     expect(next!.fields['msg']).toBe('x');
+  });
+
+  // #449: only a quote at the start of a field opens a quoted value.
+  it('keeps a quote in the middle of a field as a literal, which joins no rows', () => {
+    const events = csvEvents(
+      'ts,height,user\n2026-01-15T10:00:00Z,5\'10",alice\n2026-01-15T11:00:00Z,6,bob\n2026-01-15T12:00:00Z,7,carol\n',
+    );
+    expect(events).toHaveLength(3);
+    expect(events.map((e) => e.fields['height'])).toEqual(['5\'10"', '6', '7']);
+    expect(events.map((e) => e.fields['user'])).toEqual(['alice', 'bob', 'carol']);
+  });
+
+  it('keeps a quote that follows a closed quoted value, or a space after the delimiter, as a literal', () => {
+    const [e] = csvEvents('a,b,c\n"x"y"z, "w",v\n');
+    expect(e!.fields).toMatchObject({ a: 'xy"z', b: '"w"', c: 'v' });
   });
 
   it('runs to the end of the input when the quote never closes', () => {

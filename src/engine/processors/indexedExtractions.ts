@@ -473,14 +473,17 @@ function extractDelimited(
     // HEADER_FIELD_LINE_NUMBER counts the lines of the input, blank lines and
     // preamble lines included (#449), so the header is the event that starts
     // on that line, not the nth event, and the lines before it are not
-    // indexed. When that line is preamble, or no event starts on it, there is
-    // no header: the lines after it are indexed with no fields.
+    // indexed. A header line that is preamble extracts nothing: the lines after
+    // the preamble are indexed with no fields. A blank one, which no event starts on,
+    // names no fields, and the lines after it are rows whose values are named
+    // by column (below). A line past the end of the input leaves no line to
+    // index.
     const line = opts.headerLineNumber;
     const headerIndex = events.findIndex((e) => e.lineNumbers.start === line);
-    const headerEvent = headerIndex < skip ? undefined : events[headerIndex];
-    if (headerEvent === undefined) return working.filter((e) => e.lineNumbers.start > line);
-    headers = headerFrom(headerEvent._raw);
-    dataStart = headerIndex + 1;
+    if (headerIndex >= 0 && headerIndex < skip) return working;
+    const headerEvent = events[headerIndex];
+    headers = headerEvent ? headerFrom(headerEvent._raw) : [];
+    dataStart = Math.max(skip, events.filter((e) => e.lineNumbers.start <= line).length);
   } else {
     const fieldHeaderRegex = opts.fieldHeaderRegex;
     const headerIndex = fieldHeaderRegex
@@ -492,17 +495,20 @@ function extractDelimited(
     dataStart = skip + headerIndex + 1;
   }
 
-  if (headers.length === 0) return events;
+  // A header that names no field (a blank header line) leaves each value to
+  // be named by its column: EXTRA_FIELD_1, EXTRA_FIELD_2, and so on (#449).
+  const named = headers.some(Boolean);
 
   // The header row (and any preamble before it) is consumed as metadata —
   // Splunk does not index it as an event.
-  const rows = rejoinQuotedRows(events.slice(dataStart), opts.quote, source).map((event) => {
+  const rows = rejoinQuotedRows(events.slice(dataStart), opts, source).map((event) => {
     const values = parseDelimitedLine(event._raw, opts);
+    const names = named ? headers : values.map((_, i) => `EXTRA_FIELD_${i + 1}`);
 
     const fields = { ...event.fields };
     const added: string[] = [];
 
-    for (const [i, header] of headers.entries()) {
+    for (const [i, header] of names.entries()) {
       const value = values[i];
       // MISSING_VALUE_REGEX names the placeholder a source writes for "no
       // value"; indexing the placeholder would make an absent value
@@ -540,11 +546,12 @@ interface PendingRow {
 /**
  * The data rows, with a row whose quoted value holds a line break put back
  * together (#449). Line breaking runs before this and splits such a row at
- * the break, so while a quote is open the next event continues the row, joined
- * by the line break the input had there. A quote that never closes runs to the
- * end of the input.
+ * the break, so while a quoted value is open the next event continues the
+ * row, joined by the line break the input had there. A quoted value that
+ * never closes runs to the end of the input; a quote in the middle of a field
+ * opens nothing (see `splitDelimitedLine`).
  */
-function rejoinQuotedRows(events: SplunkEvent[], quote: string | null, source: DelimitedSource): SplunkEvent[] {
+function rejoinQuotedRows(events: SplunkEvent[], syntax: LineSyntax, source: DelimitedSource): SplunkEvent[] {
   const lines = source.input === undefined ? null : { text: source.input, starts: lineStartsOf(source.input) };
   const rows: SplunkEvent[] = [];
   let row: PendingRow | null = null;
@@ -556,7 +563,7 @@ function rejoinQuotedRows(events: SplunkEvent[], quote: string | null, source: D
       row.raw += lineBreakBefore(lines, row.raw, event) + event._raw;
       row.last = event;
     }
-    if (hasOddQuotes(event._raw, quote)) open = !open;
+    open = splitDelimitedLine(event._raw, syntax, open).open;
     if (!open) {
       rows.push(joinedRow(row, source.mode));
       row = null;
@@ -564,20 +571,6 @@ function rejoinQuotedRows(events: SplunkEvent[], quote: string | null, source: D
   }
   if (row !== null) rows.push(joinedRow(row, source.mode));
   return rows;
-}
-
-/**
- * Whether `text` leaves a quote open. `parseDelimitedLine` opens or closes a
- * quote at each quote character, and reads a doubled one inside quotes as a
- * literal that leaves it open, so a quote is left open exactly when the count
- * is odd. With FIELD_QUOTE = none (`null`) nothing is quoted.
- */
-function hasOddQuotes(text: string, quote: string | null): boolean {
-  let odd = false;
-  for (const ch of text) {
-    if (ch === quote) odd = !odd;
-  }
-  return odd;
 }
 
 /** One event for a row, spanning the lines of every event it was put back together from. */
@@ -742,11 +735,19 @@ function parseW3cLine(line: string): string[] {
 }
 
 function parseDelimitedLine(line: string, opts: LineSyntax): string[] {
+  return splitDelimitedLine(line, opts, false).fields;
+}
+
+/**
+ * `line`'s fields, and whether a quoted value is still open at its end, which
+ * is what makes the next line part of the same row. `inQuotes` starts the
+ * line inside a quoted value an earlier line opened.
+ */
+function splitDelimitedLine(line: string, opts: LineSyntax, inQuotes: boolean): { fields: string[]; open: boolean } {
   const fields: string[] = [];
   let current = '';
-  let inQuotes = false;
   // Quoted fields preserve their interior whitespace; unquoted fields are trimmed.
-  let fieldQuoted = false;
+  let fieldQuoted = inQuotes;
 
   const pushField = () => {
     fields.push(fieldQuoted ? current : current.trim());
@@ -759,15 +760,21 @@ function parseDelimitedLine(line: string, opts: LineSyntax): string[] {
   for (let i = 0; i < line.length; i++) {
     const ch = line.charAt(i);
 
-    if (opts.quote !== null && ch === opts.quote) {
-      if (inQuotes && line[i + 1] === opts.quote) {
-        current += opts.quote;
+    if (inQuotes) {
+      // Inside a quoted value a doubled quote is a literal one, and a single
+      // quote closes the value.
+      if (ch !== opts.quote) current += ch;
+      else if (line.charAt(i + 1) === opts.quote) {
+        current += ch;
         i++;
-      } else {
-        inQuotes = !inQuotes;
-        if (inQuotes) fieldQuoted = true;
-      }
-    } else if (isDelimiter(ch) && !inQuotes) {
+      } else inQuotes = false;
+    } else if (ch === opts.quote && current === '') {
+      // A quote opens a quoted value only at the start of a field, at the
+      // start of the line or just after a delimiter. Anywhere else it is a
+      // literal character, as in 5'10" (#449).
+      inQuotes = true;
+      fieldQuoted = true;
+    } else if (isDelimiter(ch)) {
       // A whitespace delimiter separates on the RUN: consecutive delimiter
       // characters (and a leading run) do not produce empty fields.
       if (!opts.whitespaceDelimiter || current.length > 0 || fieldQuoted) pushField();
@@ -777,5 +784,5 @@ function parseDelimitedLine(line: string, opts: LineSyntax): string[] {
   }
 
   if (!opts.whitespaceDelimiter || current.length > 0 || fieldQuoted) pushField();
-  return fields;
+  return { fields, open: inQuotes };
 }
