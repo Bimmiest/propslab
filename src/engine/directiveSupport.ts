@@ -140,7 +140,8 @@ export const DIRECTIVE_SUPPORT: Record<string, SupportEntry> = {
 
   // ---- Structured data (INDEXED_EXTRACTIONS options) --------------------
   // All eleven apply to the delimited formats (csv/tsv/psv). W3C keeps its own
-  // #Fields header mechanism, which none of these override there.
+  // #Fields header mechanism, which none of these override there, except
+  // TIMESTAMP_FIELDS: it applies to json and w3c too.
   FIELD_DELIMITER: { support: 'simulated' },
   FIELD_QUOTE: { support: 'simulated' },
   FIELD_NAMES: { support: 'simulated' },

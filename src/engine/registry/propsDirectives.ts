@@ -572,7 +572,8 @@ export const PROPS_ADDITIONAL: DirectiveDefinition[] = [
     key: 'HEADER_FIELD_LINE_NUMBER',
     description:
       'For structured data types (INDEXED_EXTRACTIONS), names which line carries the header — ' +
-      'counting from 1. At 0, the default, the header is located automatically.',
+      'counting from 1, with every line of the file counted, blank and preamble lines included. ' +
+      'The lines before it are not indexed. At 0, the default, the header is located automatically.',
     example: 'HEADER_FIELD_LINE_NUMBER = 2',
     defaultValue: '0',
     category: 'Structured Data',
@@ -610,8 +611,9 @@ export const PROPS_ADDITIONAL: DirectiveDefinition[] = [
   {
     key: 'TIMESTAMP_FIELDS',
     description:
-      'A comma-separated list of field names that contain timestamp data in structured data (INDEXED_EXTRACTIONS). ' +
-      'Splunk uses the value of the first non-empty field found as the event timestamp.',
+      'A comma-separated list of the fields that hold the event timestamp in structured data (INDEXED_EXTRACTIONS). ' +
+      'For a timestamp spread over several fields, list them all: their values are joined with a space, in the ' +
+      'order listed, and parsed as one timestamp.',
     example: 'TIMESTAMP_FIELDS = event_time, created_at',
     defaultValue: '',
     category: 'Structured Data',

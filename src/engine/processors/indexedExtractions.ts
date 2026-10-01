@@ -1,18 +1,24 @@
-import type { ConfDirective, SplunkEvent, ValidationDiagnostic } from '../types';
+import type { ConfDirective, SplunkEvent } from '../types';
 import { flattenJson, flattenArray, parseJson } from '../utils/flattenJson';
-import { getField, setField } from '../utils/fieldBag';
+import { deleteField, getField, setField } from '../utils/fieldBag';
 import { safeRegex, validateRegex, type SplunkRegex } from '../../utils/splunkRegex';
 import { atDirective } from '../parser/provenance';
-import { extractTimestamps } from './timestampExtractor';
+import { EXTRA_TIME_FIELD_NAMES, extractTimestamps } from './timestampExtractor';
 import { extractXmlIndexed } from './xmlIndexedExtractions';
 import { effectiveBool, effectiveDirective } from '../utils/directiveValues';
-import { createCollector, withDiagnostics, type RunContext, type DiagnosticSink } from '../runContext';
+import { withDiagnostics, type RunContext, type DiagnosticSink } from '../runContext';
 
 export function applyIndexedExtractions(
   events: SplunkEvent[],
   directives: ConfDirective[],
-  /** `ctx.now` is the index time TIMESTAMP_FIELDS parsing uses. */
+  /** `ctx.now` is the index time TIMESTAMP_FIELDS parsing uses, and falls back to. */
   ctx: RunContext,
+  /**
+   * The text `events` were broken from, which their line numbers point into.
+   * The delimited formats read back from it the line break inside a quoted
+   * value that line breaking removed.
+   */
+  input?: string,
 ): SplunkEvent[] {
   const extractionDir = effectiveDirective(directives, 'INDEXED_EXTRACTIONS');
   if (!extractionDir) return events;
@@ -23,13 +29,13 @@ export function applyIndexedExtractions(
     case 'json':
       return extractJsonFields(events, directives, ctx);
     case 'csv':
-      return extractDelimited(events, directives, ',', 'csv', ctx);
+      return extractDelimited(events, directives, { delimiter: ',', mode: 'csv', input }, ctx);
     case 'tsv':
-      return extractDelimited(events, directives, '\t', 'tsv', ctx);
+      return extractDelimited(events, directives, { delimiter: '\t', mode: 'tsv', input }, ctx);
     case 'psv':
-      return extractDelimited(events, directives, '|', 'psv', ctx);
+      return extractDelimited(events, directives, { delimiter: '|', mode: 'psv', input }, ctx);
     case 'w3c':
-      return extractW3c(events);
+      return extractW3c(events, directives, ctx);
     case 'xml':
     case 'xmlkv':
     case 'xmlkv-winevt':
@@ -91,7 +97,7 @@ function extractJsonFields(events: SplunkEvent[], directives: ConfDirective[], c
       suggestion: 'Check for unquoted values, trailing commas, or placeholders like <ID>.',
     });
   }
-  return result;
+  return applyTimestampFields(result, directives, ctx);
 }
 
 /**
@@ -135,16 +141,14 @@ interface DelimitedOptions extends LineSyntax {
   fieldHeaderRegex: SplunkRegex | null;
   /** HEADER_FIELD_ACCEPTABLE_SPECIAL_CHARACTERS: characters header cleaning keeps. */
   acceptableSpecialChars: string;
-  /** MISSING_VALUE_REGEX: a value matching this is absent, not a value. */
-  missingValueRegex: SplunkRegex | null;
+  /** MISSING_VALUE_REGEX: true for a value that is absent, not a value. */
+  isMissingValue: ((value: string) => boolean) | null;
   /** FIELD_NAMES: explicit header, for data with no header line. */
   fieldNames: string[] | null;
   /** HEADER_FIELD_LINE_NUMBER: 1-based header line; 0 locates it automatically. */
   headerLineNumber: number;
   /** PREAMBLE_REGEX: leading lines matching this are not data. */
   preambleRegex: SplunkRegex | null;
-  /** TIMESTAMP_FIELDS: extracted fields that together hold the timestamp. */
-  timestampFields: string[] | null;
 }
 
 /**
@@ -221,11 +225,12 @@ function delimitedOptions(
     acceptableSpecialChars: Array.from(find('HEADER_FIELD_ACCEPTABLE_SPECIAL_CHARACTERS')?.value.trim() ?? '')
       .filter((ch) => ch.charCodeAt(0) < 128)
       .join(''),
-    missingValueRegex: compileOption(find('MISSING_VALUE_REGEX'), 'No value was treated as missing.', diagnostics),
+    isMissingValue: wholeValueTest(
+      compileOption(find('MISSING_VALUE_REGEX'), 'No value was treated as missing.', diagnostics),
+    ),
     fieldNames: null,
     headerLineNumber: 0,
     preambleRegex: null,
-    timestampFields: null,
   };
 
   const namesDir = find('FIELD_NAMES');
@@ -241,12 +246,6 @@ function delimitedOptions(
   }
 
   opts.preambleRegex = compileOption(find('PREAMBLE_REGEX'), 'No preamble lines were skipped.', diagnostics);
-
-  const timestampDir = find('TIMESTAMP_FIELDS');
-  if (timestampDir) {
-    const names = parseNameList(timestampDir.value);
-    if (names.length > 0) opts.timestampFields = names;
-  }
 
   return opts;
 }
@@ -299,50 +298,98 @@ function compileOption(
 }
 
 /**
- * Compose `_time` from TIMESTAMP_FIELDS: the named fields' values, joined with
- * spaces in the declared order, parsed with the stanza's TIME_FORMAT/TZ. The
- * composed value starts at offset 0, so TIME_PREFIX and the lookahead — which
- * position a timestamp inside a raw event — do not apply to it.
+ * MISSING_VALUE_REGEX matches a whole value, not part of one (#449). Getting
+ * Data In: "If Splunk software finds data that matches the specified regular
+ * expression in the structured data file, it considers the value for the field
+ * in the row to be empty." So with `-`, a lone dash is missing while
+ * `2026-01-15` and `a-b` are values. The pattern is anchored at both ends; one
+ * that cannot be wrapped in an anchored group (an unterminated `\Q`, say)
+ * must instead match from the first character to the last.
  */
-function applyTimestampFields(
-  event: SplunkEvent,
-  timestampFields: string[] | null,
-  directives: ConfDirective[],
-  ctx: RunContext,
-  diagnostics: (d: ValidationDiagnostic) => void,
-): SplunkEvent {
-  if (!timestampFields) return event;
+function wholeValueTest(regex: SplunkRegex | null): ((value: string) => boolean) | null {
+  if (!regex) return null;
+  const anchored = safeRegex(`\\A(?:${regex.source})\\z`, regex.flags);
+  if (anchored) return (value) => anchored.test(value);
+  return (value) => {
+    const m = regex.exec(value);
+    return m?.index === 0 && m.end === value.length;
+  };
+}
 
+/**
+ * TIMESTAMP_FIELDS: `_time` read from the named fields rather than from the
+ * event. props.conf.spec: "Some CSV and structured files have their timestamp
+ * encompass multiple fields in the event separated by delimiters", so the
+ * values are joined with a space in the declared order, then parsed with the
+ * stanza's TIME_FORMAT and TZ. The joined value starts at offset 0, so
+ * TIME_PREFIX and the lookahead, which place a timestamp inside a raw event, do
+ * not apply to it.
+ *
+ * It applies to json and w3c as it does to the delimited formats. When the
+ * value does not parse, or none of the fields has one, the event takes the
+ * previous event's `_time`, or the time of indexing when there is no previous
+ * event, and the rest of the event is not searched for another timestamp
+ * (#444). The values are parsed as one batch so that each inherits from the
+ * one before it, as the timestamp stage's events do.
+ */
+function applyTimestampFields(events: SplunkEvent[], directives: ConfDirective[], ctx: RunContext): SplunkEvent[] {
+  const names = parseNameList(effectiveDirective(directives, 'TIMESTAMP_FIELDS')?.value ?? '');
+  if (names.length === 0) return events;
+
+  const probes = events.map((event) => ({
+    ...event,
+    _raw: timestampFieldsValue(event.fields, names),
+    _time: null,
+    fields: {},
+    processingTrace: [],
+  }));
+  const probeDirectives = directives.filter((d) => d.key !== 'TIME_PREFIX' && d.key !== 'MAX_TIMESTAMP_LOOKAHEAD');
+  // The timestamp stage has already said what is wrong with the stanza's
+  // timestamp settings (an unknown TZ, a stamp out of bounds); parsing the
+  // named values does not say it again.
+  const quiet = withDiagnostics(ctx, ctx.diagnostics.deduplicating(ctx.diagnostics.list));
+  const placed = extractTimestamps(probes, probeDirectives, quiet);
+  return events.map((event, i) => {
+    const probe = placed[i];
+    return probe ? settleTimestamp(event, probe, names) : event;
+  });
+}
+
+/** The named fields' values, joined with a space in the order named. A field with no value is left out. */
+function timestampFieldsValue(fields: SplunkEvent['fields'], names: string[]): string {
   const parts: string[] = [];
-  for (const name of timestampFields) {
-    const value = getField(event.fields, name);
+  for (const name of names) {
+    const value = getField(fields, name);
     const first = Array.isArray(value) ? value[0] : value;
     if (first !== undefined && first !== '') parts.push(first);
   }
-  if (parts.length === 0) return event;
-  const composed = parts.join(' ');
+  return parts.join(' ');
+}
 
-  const probe: SplunkEvent = { ...event, _raw: composed, _time: null, processingTrace: [] };
-  const probeDirectives = directives.filter((d) => d.key !== 'TIME_PREFIX' && d.key !== 'MAX_TIMESTAMP_LOOKAHEAD');
-  const probeDiagnostics: ValidationDiagnostic[] = [];
-  const [result] = extractTimestamps([probe], probeDirectives, withDiagnostics(ctx, createCollector(probeDiagnostics)));
-  probeDiagnostics.forEach(diagnostics);
-  // extractTimestamps always places an event, falling back to the clock. Only
-  // a stamp read out of the composed value replaces the _time the timestamp
-  // stage already gave the event.
-  const source = result?.processingTrace.find((s) => s.timeSource !== undefined)?.timeSource;
-  const parsed = result?._time ?? null;
-  if (!parsed || (source !== 'TIME_FORMAT' && source !== 'auto-recognition')) return event;
-
+/**
+ * `event` with the `_time` parsing its TIMESTAMP_FIELDS value (`probe`)
+ * settled on. A value that gave no timestamp fell back the way the timestamp
+ * stage does, and the event then carries the fallback's time fields
+ * (`timestamp=none`) in place of the ones the stage wrote for a timestamp it
+ * found elsewhere in the event.
+ */
+function settleTimestamp(event: SplunkEvent, probe: SplunkEvent, names: string[]): SplunkEvent {
+  const [step] = probe.processingTrace;
+  const read = step?.timeSource === 'TIME_FORMAT' || step?.timeSource === 'auto-recognition';
+  const named = names.join(', ');
   return {
     ...event,
-    _time: parsed,
+    _time: probe._time,
+    fields: read ? event.fields : withTimeFields(event, probe.fields),
     processingTrace: [
       ...event.processingTrace,
       {
         processor: 'INDEXED_EXTRACTIONS(TIMESTAMP_FIELDS)',
         phase: 'index-time' as const,
-        description: `_time parsed from ${timestampFields.join(', ')} ("${composed}")`,
+        description: read
+          ? `_time parsed from ${named} ("${probe._raw}")`
+          : `No timestamp read from ${named} ("${probe._raw}"): ${step?.description}`,
+        timeSource: step?.timeSource,
         fieldsAdded: [],
         fieldsModified: ['_time'],
       },
@@ -350,37 +397,59 @@ function applyTimestampFields(
   };
 }
 
+/**
+ * `event`'s fields with the timestamp stage's time fields replaced by
+ * `timeFields`. What the stage wrote describes a timestamp it read from the
+ * whole event, which TIMESTAMP_FIELDS overrules. A column the extraction wrote
+ * under one of those names is data, and stays.
+ */
+function withTimeFields(event: SplunkEvent, timeFields: SplunkEvent['fields']): SplunkEvent['fields'] {
+  const extracted = new Set(
+    event.processingTrace
+      .filter((step) => step.processor.startsWith('INDEXED_EXTRACTIONS('))
+      .flatMap((step) => step.fieldsAdded ?? []),
+  );
+  const fields = { ...event.fields };
+  for (const name of EXTRA_TIME_FIELD_NAMES) {
+    if (!extracted.has(name)) deleteField(fields, name);
+  }
+  for (const [name, value] of Object.entries(timeFields)) {
+    if (!extracted.has(name)) setField(fields, name, value);
+  }
+  return fields;
+}
+
+/** What one delimited format needs besides the stanza: its default delimiter, its name, and the input. */
+interface DelimitedSource {
+  delimiter: string;
+  mode: string;
+  /** See `applyIndexedExtractions`. */
+  input: string | undefined;
+}
+
 function extractDelimited(
   events: SplunkEvent[],
   directives: ConfDirective[],
-  defaultDelimiter: string,
-  mode: string,
+  source: DelimitedSource,
   ctx: RunContext,
 ): SplunkEvent[] {
   if (events.length === 0) return events;
-  const { diagnostics } = ctx;
+  const { mode } = source;
 
-  const opts = delimitedOptions(directives, defaultDelimiter, diagnostics);
-  // TIMESTAMP_FIELDS probes each event on its own, so a config-level warning
-  // (every stamp out of bounds, an unknown TZ) would repeat once per row. Keep
-  // the first of each, ignoring the stamp itself.
-  const probeDiagnostics = (d: ValidationDiagnostic) => {
-    diagnostics.report(`TIMESTAMP_FIELDS probe|${d.message.replace(/\d{4}-\d{2}-\d{2}T[\d:.]+Z/g, '')}`, d);
-  };
+  const opts = delimitedOptions(directives, source.delimiter, ctx.diagnostics);
 
   // PREAMBLE_REGEX: a leading run of matching lines is not data. Only the
   // leading run — the attribute exists for banners before the header, and
   // dropping matching lines from the middle of the data would silently lose
   // records.
-  let working = events;
+  let skip = 0;
   if (opts.preambleRegex) {
-    let skip = 0;
-    for (const e of working) {
+    for (const e of events) {
       if (!opts.preambleRegex.test(e._raw)) break;
       skip++;
     }
-    working = working.slice(skip);
   }
+  const working = events.slice(skip);
 
   // Where the field names come from decides how much of the input is data:
   // FIELD_NAMES names them directly and consumes nothing;
@@ -395,15 +464,26 @@ function extractDelimited(
   const headerFrom = (raw: string) =>
     parseDelimitedLine(stripHeaderPrefix(raw, opts.fieldHeaderRegex), opts.header).map(clean);
   let headers: string[];
+  // Where the data rows start, as an index into `events`.
   let dataStart: number;
   if (opts.fieldNames) {
     headers = opts.fieldNames.map(clean);
-    dataStart = 0;
+    dataStart = skip;
   } else if (opts.headerLineNumber > 0) {
-    const headerEvent = working[opts.headerLineNumber - 1];
-    if (headerEvent === undefined) return events;
-    headers = headerFrom(headerEvent._raw);
-    dataStart = opts.headerLineNumber;
+    // HEADER_FIELD_LINE_NUMBER counts the lines of the input, blank lines and
+    // preamble lines included (#449), so the header is the event that starts
+    // on that line, not the nth event, and the lines before it are not
+    // indexed. A header line that is preamble extracts nothing: the lines after
+    // the preamble are indexed with no fields. A blank one, which no event starts on,
+    // names no fields, so every value of the lines after it is named by its
+    // column (below). A line past the end of the input leaves no line to
+    // index.
+    const line = opts.headerLineNumber;
+    const headerIndex = events.findIndex((e) => e.lineNumbers.start === line);
+    if (headerIndex >= 0 && headerIndex < skip) return working;
+    const headerEvent = events[headerIndex];
+    headers = headerEvent ? headerFrom(headerEvent._raw) : [];
+    dataStart = Math.max(skip, events.filter((e) => e.lineNumbers.start <= line).length);
   } else {
     const fieldHeaderRegex = opts.fieldHeaderRegex;
     const headerIndex = fieldHeaderRegex
@@ -412,31 +492,32 @@ function extractDelimited(
     const headerEvent = working[headerIndex];
     if (headerEvent === undefined) return events;
     headers = headerFrom(headerEvent._raw);
-    dataStart = headerIndex + 1;
+    dataStart = skip + headerIndex + 1;
   }
-
-  if (headers.length === 0) return events;
 
   // The header row (and any preamble before it) is consumed as metadata —
   // Splunk does not index it as an event.
-  return working.slice(dataStart).map((event) => {
+  const rows = rejoinQuotedRows(events.slice(dataStart), opts, source).map((event) => {
     const values = parseDelimitedLine(event._raw, opts);
 
     const fields = { ...event.fields };
     const added: string[] = [];
 
-    for (const [i, header] of headers.entries()) {
-      const value = values[i];
+    for (const [i, value] of values.entries()) {
+      // A value past the end of the header is named by its column,
+      // EXTRA_FIELD_4 for the fourth; one under an empty header name is not
+      // extracted at all (#449).
+      const header = headers[i] ?? `EXTRA_FIELD_${i + 1}`;
       // MISSING_VALUE_REGEX names the placeholder a source writes for "no
       // value"; indexing the placeholder would make an absent value
       // searchable as if it were data.
-      if (header && value && !opts.missingValueRegex?.test(value)) {
+      if (header && value && !opts.isMissingValue?.(value)) {
         setField(fields, header, value);
         added.push(header);
       }
     }
 
-    const extracted: SplunkEvent = {
+    return {
       ...event,
       fields,
       processingTrace: [
@@ -449,12 +530,101 @@ function extractDelimited(
         },
       ],
     };
-
-    return applyTimestampFields(extracted, opts.timestampFields, directives, ctx, probeDiagnostics);
   });
+  return applyTimestampFields(rows, directives, ctx);
 }
 
-function extractW3c(events: SplunkEvent[]): SplunkEvent[] {
+/** A row being put back together from the events line breaking split it into. */
+interface PendingRow {
+  first: SplunkEvent;
+  last: SplunkEvent;
+  raw: string;
+}
+
+/**
+ * The data rows, with a row whose quoted value holds a line break put back
+ * together (#449). Line breaking runs before this and splits such a row at
+ * the break, so while a quoted value is open the next event continues the
+ * row, joined by the line break the input had there. A quoted value that
+ * never closes runs to the end of the input; a quote in the middle of a field
+ * opens nothing (see `splitDelimitedLine`).
+ */
+function rejoinQuotedRows(events: SplunkEvent[], syntax: LineSyntax, source: DelimitedSource): SplunkEvent[] {
+  const lines = source.input === undefined ? null : { text: source.input, starts: lineStartsOf(source.input) };
+  const rows: SplunkEvent[] = [];
+  let row: PendingRow | null = null;
+  let open = false;
+  for (const event of events) {
+    if (row === null) {
+      row = { first: event, last: event, raw: event._raw };
+    } else {
+      row.raw += lineBreakBefore(lines, row.raw, event) + event._raw;
+      row.last = event;
+    }
+    open = splitDelimitedLine(event._raw, syntax, open).open;
+    if (!open) {
+      rows.push(joinedRow(row, source.mode));
+      row = null;
+    }
+  }
+  if (row !== null) rows.push(joinedRow(row, source.mode));
+  return rows;
+}
+
+/** One event for a row, spanning the lines of every event it was put back together from. */
+function joinedRow(row: PendingRow, mode: string): SplunkEvent {
+  const { first, last } = row;
+  if (last === first) return first;
+  const lineNumbers = { start: first.lineNumbers.start, end: last.lineNumbers.end };
+  return {
+    ...first,
+    _raw: row.raw,
+    lineNumbers,
+    processingTrace: [
+      ...first.processingTrace,
+      {
+        processor: `INDEXED_EXTRACTIONS(${mode})`,
+        phase: 'index-time' as const,
+        description: `Lines ${lineNumbers.start}-${lineNumbers.end} are one row: a quoted value spans the line break`,
+        fieldsAdded: [],
+      },
+    ],
+  };
+}
+
+/** Where each line of `text` starts. */
+function lineStartsOf(text: string): number[] {
+  const starts = [0];
+  for (let at = text.indexOf('\n'); at !== -1; at = text.indexOf('\n', at + 1)) starts.push(at + 1);
+  return starts;
+}
+
+const isLineBreak = (ch: string) => ch === '\r' || ch === '\n';
+
+/**
+ * The line break the input had just before `event`, which continues the row
+ * `row` holds so far: the run of `\r` and `\n` that ends where `event`'s line
+ * starts, less what of it `row` already ends with (a LINE_BREAKER that leaves
+ * the `\r` of a `\r\n` in the event). Without the input, or when `event` is
+ * not where its line number puts it, the row is joined with `\n`, as line
+ * merging joins lines.
+ */
+function lineBreakBefore(
+  lines: { text: string; starts: readonly number[] } | null,
+  row: string,
+  event: SplunkEvent,
+): string {
+  if (lines === null) return '\n';
+  const at = lines.starts[event.lineNumbers.start - 1];
+  if (at === undefined || !lines.text.startsWith(event._raw, at)) return '\n';
+  let start = at;
+  while (isLineBreak(lines.text.charAt(start - 1))) start--;
+  let kept = 0;
+  while (isLineBreak(row.charAt(row.length - 1 - kept))) kept++;
+  return lines.text.slice(start + kept, at);
+}
+
+function extractW3c(events: SplunkEvent[], directives: ConfDirective[], ctx: RunContext): SplunkEvent[] {
   // W3C format: header line starts with #Fields:
   let headers: string[] = [];
 
@@ -474,7 +644,7 @@ function extractW3c(events: SplunkEvent[]): SplunkEvent[] {
   // Drop W3C directive/comment lines (#Version, #Fields, #Software, …) — they
   // are not indexed as events. A merged event carries its directive lines
   // inline, so test every line rather than only the first.
-  return events
+  const rows = events
     .filter((event) => !isW3cDirectiveOnly(event._raw))
     .map((event) => {
       const values = parseW3cLine(event._raw);
@@ -503,6 +673,7 @@ function extractW3c(events: SplunkEvent[]): SplunkEvent[] {
         ],
       };
     });
+  return applyTimestampFields(rows, directives, ctx);
 }
 
 /** True for a line that carries data — not blank, not a `#` comment/directive. */
@@ -562,11 +733,19 @@ function parseW3cLine(line: string): string[] {
 }
 
 function parseDelimitedLine(line: string, opts: LineSyntax): string[] {
+  return splitDelimitedLine(line, opts, false).fields;
+}
+
+/**
+ * `line`'s fields, and whether a quoted value is still open at its end, which
+ * is what makes the next line part of the same row. `inQuotes` starts the
+ * line inside a quoted value an earlier line opened.
+ */
+function splitDelimitedLine(line: string, opts: LineSyntax, inQuotes: boolean): { fields: string[]; open: boolean } {
   const fields: string[] = [];
   let current = '';
-  let inQuotes = false;
   // Quoted fields preserve their interior whitespace; unquoted fields are trimmed.
-  let fieldQuoted = false;
+  let fieldQuoted = inQuotes;
 
   const pushField = () => {
     fields.push(fieldQuoted ? current : current.trim());
@@ -579,15 +758,22 @@ function parseDelimitedLine(line: string, opts: LineSyntax): string[] {
   for (let i = 0; i < line.length; i++) {
     const ch = line.charAt(i);
 
-    if (opts.quote !== null && ch === opts.quote) {
-      if (inQuotes && line[i + 1] === opts.quote) {
-        current += opts.quote;
+    if (inQuotes) {
+      // Inside a quoted value a doubled quote is a literal one, and a single
+      // quote closes the value.
+      if (ch !== opts.quote) current += ch;
+      else if (line.charAt(i + 1) === opts.quote) {
+        current += ch;
         i++;
-      } else {
-        inQuotes = !inQuotes;
-        if (inQuotes) fieldQuoted = true;
-      }
-    } else if (isDelimiter(ch) && !inQuotes) {
+      } else inQuotes = false;
+    } else if (ch === opts.quote && /^[ \t]*$/.test(current)) {
+      // A quote opens a quoted value only at the start of a field, after any
+      // spaces or tabs, which are not part of the value. Anywhere else it is a
+      // literal character, as in 5'10" (#449).
+      current = '';
+      inQuotes = true;
+      fieldQuoted = true;
+    } else if (isDelimiter(ch)) {
       // A whitespace delimiter separates on the RUN: consecutive delimiter
       // characters (and a leading run) do not produce empty fields.
       if (!opts.whitespaceDelimiter || current.length > 0 || fieldQuoted) pushField();
@@ -597,5 +783,5 @@ function parseDelimitedLine(line: string, opts: LineSyntax): string[] {
   }
 
   if (!opts.whitespaceDelimiter || current.length > 0 || fieldQuoted) pushField();
-  return fields;
+  return { fields, open: inQuotes };
 }

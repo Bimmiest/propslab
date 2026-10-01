@@ -218,10 +218,12 @@ function runIndexTime(rawData: string, run: PipelineRun): SplunkEvent[] {
 
   // Stage 4: Indexed extractions. Batch-shaped: CSV's header row names the
   // fields of every row after it. The XML modes catch per event themselves.
+  // It reads the input too, for the line break inside a quoted CSV value that
+  // line breaking took out.
   events = safeProcessor(
     'INDEXED_EXTRACTIONS',
     events,
-    (batch, c) => applyIndexedExtractions(batch, directives, c),
+    (batch, c) => applyIndexedExtractions(batch, directives, c, rawData),
     ctx,
     'props.conf',
     'batch',

@@ -230,7 +230,8 @@ export const PROPS_SPEC_COMPLETENESS: DirectiveDefinition[] = [
     key: 'MISSING_VALUE_REGEX',
     description:
       'The placeholder that marks an absent value in structured data, so an empty column ' +
-      'can be told apart from one holding a literal dash or NULL.',
+      'can be told apart from one holding a literal dash or NULL. It must match the whole ' +
+      'value: with "-", a lone dash is missing but 2026-01-15 is kept.',
     example: 'MISSING_VALUE_REGEX = ^-$',
     defaultValue: '',
     category: 'Structured Data',
