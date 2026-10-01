@@ -257,9 +257,13 @@ jobs:
   # each test's fixed default, #513). The vitest config is used as is, without
   # the coverage floor, which is not a property of the ordering. The step prints
   # the seed and the command that replays the run.
+  #
+  # The name carries no matrix expression: GitHub appends the matrix values
+  # itself on a run, and on a pull request, where the job is skipped before the
+  # matrix expands, an expression in the name is shown unevaluated.
   randomised:
     if: github.event_name == 'schedule'
-    name: ${{ format('unit tests, randomised ({0}, {1})', matrix.tz, matrix.lang) }}
+    name: unit tests, randomised
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
