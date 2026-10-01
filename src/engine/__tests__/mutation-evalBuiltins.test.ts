@@ -92,6 +92,7 @@ describe('substr', () => {
     ['substr("hello", -3, 2)', 'll'],
     ['substr("hello", 2, 0)', ''],
     ['substr("hello", 2, -1)', ''],
+    ['substr("hello", 1, -1)', ''],
     ['substr("hello", 9)', ''],
   ])('%s = %j', (expr, s) => {
     expect(value(expr)).toBe(s);
