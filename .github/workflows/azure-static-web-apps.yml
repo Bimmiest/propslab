@@ -155,10 +155,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     name: Build
-    # `actions: read` is for the Resolve commit step, which lists CI runs.
+    # `actions: read` is for the Resolve commit step, which lists CI runs, and
+    # `deployments: read` for the same step, which reads what production serves.
     permissions:
       contents: read
       actions: read
+      deployments: read
     outputs:
       sha: ${{ steps.verify.outputs.sha }}
     steps:
@@ -178,6 +180,24 @@ jobs:
             echo "::error::Dispatch this workflow on main, not $REF. To roll back, dispatch on main and put the commit in the 'sha' input; it must be a commit main has contained."
             exit 1
           fi
+
+      # main, not the target: resolving the target and the ancestry check
+      # below both need main's history, and the target is checked out from it
+      # only once it has passed.
+      # persist-credentials: false — no later step fetches from the remote
+      # with git, and the build runs dependency code that has no business
+      # finding a token in .git/config.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: main
+          lfs: false
+          persist-credentials: false
+          # Full history, so the ancestry checks below can connect the target
+          # commit to main. A shallow clone has neither side's parents and
+          # `merge-base` could only ever answer "no". With fetch-depth 0,
+          # checkout also fetches every branch into refs/remotes/origin/*, so
+          # origin/main is present without a second, credentialed fetch.
+          fetch-depth: 0
 
       # Under workflow_run, `github.sha` is the default branch's head when this
       # run was queued — not the commit CI graded, and possibly one CI has not
@@ -202,6 +222,17 @@ jobs:
       # $GITHUB_OUTPUT, including the SHA `gh` returns, passes the same check
       # first. The API only ever returns a full hash, so that one is held to
       # exactly 40 hex characters; anything else is a failed lookup.
+      #
+      # The run list can lag. On 30 September and 1 October 2026 it returned
+      # runs from two months earlier as the newest success, and the deploy
+      # built those commits; only the wasm check stopped them, because they
+      # predated the package. So the lookup is not taken on trust: the commit
+      # it returns must contain the commit whose CI triggered this run and the
+      # commit production is serving now (the newest `production` deployment).
+      # A newer green commit contains both; a stale answer contains neither.
+      # The lookup is retried for about two minutes until it passes, and the
+      # job fails, deploying nothing, if it never does. A dispatch with `sha`
+      # set is exempt, because a rollback goes backwards on purpose.
       - name: Resolve commit
         id: target
         shell: bash
@@ -209,6 +240,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           INPUT_SHA: ${{ inputs.sha }}
+          TRIGGER_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           if [ -n "$INPUT_SHA" ]; then
             if [[ ! $INPUT_SHA =~ ^[0-9a-fA-F]{7,40}$ ]]; then
@@ -217,31 +249,34 @@ jobs:
             fi
             sha="$INPUT_SHA"
           else
-            sha=$(gh run list --workflow ci.yml --branch main --event push \
-              --status success --limit 1 --json headSha --jq '.[0].headSha')
-            if [[ ! $sha =~ ^[0-9a-f]{40}$ ]]; then
-              echo "::error::Could not resolve a commit to deploy: no successful push CI run on main, or the lookup returned something that is not a commit hash."
+            # Commits the answer must contain (see above).
+            floor=()
+            if [[ $TRIGGER_SHA =~ ^[0-9a-f]{40}$ ]]; then floor+=("$TRIGGER_SHA"); fi
+            live=$(gh api "repos/$GH_REPO/deployments?environment=production&per_page=1" --jq '.[0].sha // ""')
+            if [[ $live =~ ^[0-9a-f]{40}$ && $live != "$TRIGGER_SHA" ]]; then floor+=("$live"); fi
+            sha=''
+            for attempt in 1 2 3 4 5 6 7; do
+              found=$(gh run list --workflow ci.yml --branch main --event push \
+                --status success --limit 1 --json headSha --jq '.[0].headSha')
+              if [[ $found =~ ^[0-9a-f]{40}$ ]]; then
+                ok=1
+                for f in "${floor[@]}"; do
+                  git merge-base --is-ancestor "$f" "$found" 2>/dev/null || ok=0
+                done
+                if [ "$ok" = 1 ]; then
+                  sha=$found
+                  break
+                fi
+                echo "Attempt $attempt: the lookup returned $found, which does not contain ${floor[*]}; asking again."
+              fi
+              if [ "$attempt" -lt 7 ]; then sleep 20; fi
+            done
+            if [ -z "$sha" ]; then
+              echo "::error::Could not resolve a commit to deploy: the lookup found no successful push CI run on main that contains the commit whose CI triggered this run and the commit production serves. The run list may still be lagging. Nothing was deployed; re-run this workflow, or dispatch it with 'sha' set."
               exit 1
             fi
           fi
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
-
-      # main, not the target: the ancestry check below needs main's history,
-      # and the target is checked out from it only once it has passed.
-      # persist-credentials: false — nothing after this step talks to
-      # the remote, and the build runs dependency code that has no business
-      # finding a token in .git/config.
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          ref: main
-          lfs: false
-          persist-credentials: false
-          # Full history, so the ancestry check below can connect the target
-          # commit to main. A shallow clone has neither side's parents and
-          # `merge-base` could only ever answer "no". With fetch-depth 0,
-          # checkout also fetches every branch into refs/remotes/origin/*, so
-          # origin/main is present without a second, credentialed fetch.
-          fetch-depth: 0
 
       # Rollback stays possible, but only to a commit that was once main: a
       # merged, reviewed state, not whatever a branch or tag happens to point
