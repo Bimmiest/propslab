@@ -272,40 +272,6 @@ describe('applyKvMode — multi (multikv)', () => {
   });
 });
 
-// Capture-derived: `kvmode-auto-repeated-key` (Splunk 10.4.0) shows the first
-// occurrence of a repeated key wins and the rest are discarded — not the
-// accumulation postfix/Cisco-style logs might suggest.
-describe('applyKvMode — a repeated key keeps its first value (#169, was #64)', () => {
-  it('keeps the first of a repeated bare key', () => {
-    const out = applyKvMode([event('user=alice user=bob')], [dir('auto')], runCtx(FIXED_NOW))[0]!;
-    expect(out.fields['user']).toBe('alice');
-  });
-
-  it('keeps the first of a repeated quoted key', () => {
-    const out = applyKvMode([event('msg="first one" msg="second one"')], [dir('auto')], runCtx(FIXED_NOW))[0]!;
-    expect(out.fields['msg']).toBe('first one');
-  });
-
-  it('reads "first" positionally, not by which quoting style is scanned first', () => {
-    // The quoted sweep runs before the bare one so it can blank its spans out
-    // of the bare scan; without ordering by position the later quoted pair
-    // would beat the earlier bare one.
-    const out = applyKvMode([event('user=alice user="bob smith"')], [dir('auto')], runCtx(FIXED_NOW))[0]!;
-    expect(out.fields['user']).toBe('alice');
-  });
-
-  it('keeps a single occurrence scalar', () => {
-    const out = applyKvMode([event('user=alice')], [dir('auto')], runCtx(FIXED_NOW))[0]!;
-    expect(out.fields['user']).toBe('alice');
-  });
-
-  it('does not append to a field an earlier processor already extracted', () => {
-    const ev = { ...event('user=bob'), fields: { user: 'from-indexed-extraction' } };
-    const out = applyKvMode([ev], [dir('auto')], runCtx(FIXED_NOW))[0]!;
-    expect(out.fields['user']).toBe('from-indexed-extraction');
-  });
-});
-
 describe('applyKvMode — a value may contain = (#170)', () => {
   it('splits on the first = and keeps the rest of the token', () => {
     const out = applyKvMode([event('filter=a=b query=x=y=z plain=ok')], [dir('auto')], runCtx(FIXED_NOW))[0]!;
@@ -333,15 +299,6 @@ describe('applyKvMode — purely numeric field names are rejected (#166)', () =>
     expect(out.fields['1']).toBeUndefined();
     expect(out.fields['2']).toBeUndefined();
   });
-
-  it('strips the leading digits from a name that merely starts with them', () => {
-    // Capture-derived: autokv-key-edge-names (2fa=on is indexed as `fa`):
-    // auto-KV applies the same leading-digit strip as transforms key cleaning.
-    const out = applyKvMode([event('1st=first 2nd=second')], [dir('auto')], runCtx(FIXED_NOW))[0]!;
-    expect(out.fields['st']).toBe('first');
-    expect(out.fields['nd']).toBe('second');
-    expect(out.fields['1st']).toBeUndefined();
-  });
 });
 
 describe('applyKvMode — extraction never mutates the input event (#63)', () => {
@@ -360,44 +317,6 @@ describe('applyKvMode — extraction never mutates the input event (#63)', () =>
     const ev = { ...event(TABLE), fields: { NAME: ['zero'] } };
     const out = applyKvMode([ev], [dir('multi')], runCtx(FIXED_NOW))[0]!;
     expect(out.fields['NAME']).toEqual(['zero', 'a', 'b']);
-  });
-});
-
-describe('applyKvMode — auto-KV key cleaning (#207)', () => {
-  // Pinned by the autokv-key-punctuation and autokv-key-edge-names captures
-  // from Splunk 10.4.0: keys go through full transforms-style cleaning
-  // (punctuation to underscores, leading digits/underscores stripped), except
-  // that a colon is not cleaned — it re-anchors the key.
-  it('sanitizes a hyphenated key the way Splunk indexes it', () => {
-    const r = applyKvMode([event('2026-01-15T10:00:00Z zone-found=dmz')], [dir('auto')], runCtx(FIXED_NOW))[0]!;
-    expect(r.fields['zone_found']).toBe('dmz');
-    expect(r.fields['zone-found']).toBeUndefined();
-  });
-
-  it('sanitizes a dotted key, and re-anchors at a colon rather than cleaning it', () => {
-    const r = applyKvMode([event('user.name=alice ip:port=1.2.3.4')], [dir('auto')], runCtx(FIXED_NOW))[0]!;
-    expect(r.fields['user_name']).toBe('alice');
-    expect(r.fields['port']).toBe('1.2.3.4');
-    expect(r.fields['ip_port']).toBeUndefined();
-  });
-
-  it('cleans quoted-pair keys through the same rule', () => {
-    const r = applyKvMode([event('x-forwarded-for="1.2.3.4, 5.6.7.8"')], [dir('auto')], runCtx(FIXED_NOW))[0]!;
-    expect(r.fields['x_forwarded_for']).toBe('1.2.3.4, 5.6.7.8');
-  });
-
-  it('strips leading digits, and drops a key that cleans to nothing', () => {
-    const r = applyKvMode([event('2fa=on --=x 7=lucky')], [dir('auto')], runCtx(FIXED_NOW))[0]!;
-    expect(r.fields['fa']).toBe('on');
-    expect(r.fields['2fa']).toBeUndefined();
-    expect(Object.keys(r.fields)).not.toContain('__');
-    expect(Object.values(r.fields)).not.toContain('lucky');
-  });
-
-  it('applies first-occurrence-wins on the CLEANED name', () => {
-    // Two raw spellings that clean to the same field: the first in the event wins.
-    const r = applyKvMode([event('a-b=1 a_b=2')], [dir('auto')], runCtx(FIXED_NOW))[0]!;
-    expect(r.fields['a_b']).toBe('1');
   });
 });
 

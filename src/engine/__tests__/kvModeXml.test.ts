@@ -4,8 +4,9 @@
 // closest to the worker the pipeline really runs in, and one test pins that no
 // DOM is present: neither a Web Worker nor Node has `DOMParser`.
 //
-// Beyond the dotted-path naming (pinned by the `kvmode-xml` capture), these are
-// doc-derived: they follow the XML 1.0 spec, not a Splunk capture.
+// Fields are named by their dotted path from the document root (`a.b.c`).
+// What these tests pin is the XML handling itself, which is doc-derived: it
+// follows the XML 1.0 spec.
 // ---------------------------------------------------------------------------
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
@@ -29,17 +30,6 @@ function fieldsOf(raw: string, props = 'SHOULD_LINEMERGE = false\nKV_MODE = xml\
 }
 
 describe('KV_MODE = xml', () => {
-  it('names a field by its dotted path from the document root (#171)', () => {
-    const fields = fieldsOf('<event><ts>2026-01-15T10:00:00Z</ts><user>alice</user><status>200</status></event>');
-    // The wrapper element is part of the name -- `event.user`, not `user`. This
-    // is what the Splunk 10.4.0 capture records.
-    expect(fields).toMatchObject({
-      'event.ts': '2026-01-15T10:00:00Z',
-      'event.user': 'alice',
-      'event.status': '200',
-    });
-  });
-
   it('carries the whole ancestor chain, not just the parent', () => {
     const fields = fieldsOf('<a><b><c>deep</c></b></a>');
     expect(fields['a.b.c']).toBe('deep');

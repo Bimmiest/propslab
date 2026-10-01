@@ -3,7 +3,7 @@
 // `PipelineOptions.now` stands in for the wall clock everywhere the simulation
 // reads the current time. Each case asserts one consumer, so a stage
 // that quietly goes back to `Date.now()` fails here by name rather than as a
-// fidelity fixture going red years from now.
+// replay of recorded data going red years from now.
 //
 // Doc-derived: the bounds are props.conf.spec's MAX_DAYS_AGO / MAX_DAYS_HENCE
 // defaults, and now()/time() are the eval functions of the same names.

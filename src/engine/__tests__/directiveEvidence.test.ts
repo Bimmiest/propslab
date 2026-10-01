@@ -2,21 +2,21 @@
 // directiveEvidence.test.ts
 // What backs each directive that DIRECTIVE_SUPPORT calls `simulated`.
 //
-// A `simulated` directive is a claim that the engine reproduces Splunk. Three
-// things can stand behind it, strongest first:
+// A `simulated` directive is a claim that the engine reproduces Splunk. Two
+// things can stand behind it, stronger first:
 //
-//   fixture   a recorded Splunk capture names it (fixtures/, replayed by
-//             splunkFidelity.test.ts). The corpus is closed, so this can only
-//             stay as it is.
 //   cited     a test that really runs it through the pipeline, in a file whose
 //             comments say the expectation was derived from the spec ("Doc-derived",
 //             the .spec file, and the directive's name in one comment).
 //   exercised a test runs it through the pipeline, and nothing more is said.
 //
-// A directive with none of the three is a claim with no evidence, and this file
-// fails on it. A directive with only "exercised" must be reclassified
-// `documented` in directiveSupport.ts, or sit in DOC_UNCITED below, which can
-// only shrink.
+// A directive with neither is a claim with no evidence, and this file fails on
+// it. A directive with only "exercised" must be reclassified `documented` in
+// directiveSupport.ts, or sit in DOC_UNCITED below, which can only shrink.
+//
+// Only this repository's own tests count. An optional suite overlaid into
+// src/engine/__tests__/private/ (git-ignored; see .gitignore) is left out, so
+// the verdict here is the same with or without it.
 //
 // HOW "EXERCISED" IS DECIDED (#505)
 //
@@ -46,7 +46,7 @@
 // WHICH TESTS COUNT. Only tests under src/engine/, and not the ones listed in
 // META_TESTS: those call `runPipeline` to test the linter, the registry or this
 // table itself, and a directive that only they run is not simulated by
-// anything they show.
+// anything they show. Nothing under PRIVATE_DIR counts either (see above).
 // ---------------------------------------------------------------------------
 
 import { describe, it, expect } from 'vitest';
@@ -63,10 +63,6 @@ interface Recording {
   keys: string[];
 }
 
-interface FixtureWithDirectives {
-  directives?: string[];
-}
-
 /**
  * Test files whose `runPipeline` calls are about something other than a
  * directive's behaviour, so what they feed it is not evidence.
@@ -80,22 +76,24 @@ const META_TESTS: Record<string, string> = {
   'src/engine/__tests__/directiveRegistry.test.ts': 'asserts registry metadata',
 };
 
+/** Where an optional suite is overlaid; never part of the repository. */
+const PRIVATE_DIR = 'src/engine/__tests__/private/';
+
 /**
- * Simulated directives that are exercised and have no documentation-citing test
- * and no fixture. Each is a claim resting on a test that says nothing about
+ * Simulated directives that are exercised and have no documentation-citing
+ * test. Each is a claim resting on a test that says nothing about
  * where its expectation came from. Fix an entry by adding the citation (see
  * `isCitedIn`) or by reclassifying the directive `documented`, and delete it
  * here. The list may not grow: DOC_UNCITED_CEILING is its length today.
+ *
+ * MUST_NOT_BREAK_BEFORE is simulated as having no effect, which is observed
+ * behaviour rather than what props.conf.spec describes, so no test written from
+ * the documentation can assert it (directiveSupport.ts has the note).
  */
-const DOC_UNCITED: string[] = [];
-const DOC_UNCITED_CEILING = 0;
+const DOC_UNCITED: string[] = ['MUST_NOT_BREAK_BEFORE'];
+const DOC_UNCITED_CEILING = 1;
 
 // ---- Inputs ----------------------------------------------------------------
-
-/** Fixture files, for the directives each names. */
-const FIXTURE_MODULES = import.meta.glob<{ default: FixtureWithDirectives }>('./fixtures/splunk-*/*.json', {
-  eager: true,
-});
 
 /** Every engine test source, as text, keyed by repository path. */
 const ENGINE_TEST_SOURCES = new Map(
@@ -141,21 +139,14 @@ const simulated = Object.entries(DIRECTIVE_SUPPORT)
   .map(([key]) => key);
 
 const recordings = readRecordings();
-const counted = recordings.filter((r) => r.testFile.startsWith('src/engine/') && !(r.testFile in META_TESTS));
+const counted = recordings.filter(
+  (r) => r.testFile.startsWith('src/engine/') && !r.testFile.startsWith(PRIVATE_DIR) && !(r.testFile in META_TESTS),
+);
 
 /** key -> test files that ran it through the pipeline. */
 const exercisedBy = new Map<string, string[]>();
 for (const r of counted) {
   for (const key of r.keys) exercisedBy.set(key, [...(exercisedBy.get(key) ?? []), r.testFile]);
-}
-
-const fixtureBacked = new Set<string>();
-for (const [path, mod] of Object.entries(FIXTURE_MODULES)) {
-  if (path.endsWith('/manifest.json')) continue;
-  for (const directive of mod.default.directives ?? []) {
-    // A class-based directive is named with its trailing dash: `EXTRACT-`.
-    fixtureBacked.add(directive.endsWith('-') ? directive.slice(0, -1) : directive);
-  }
 }
 
 const cited = new Set(simulated.filter((key) => (exercisedBy.get(key) ?? []).some((file) => isCitedIn(file, key))));
@@ -171,36 +162,26 @@ describe('simulated directive evidence (#505)', () => {
         'src/test/recordDirectiveEvidence.ts records while the `unit` project runs',
     ).toBeGreaterThan(0);
     expect(
-      recordings.map((r) => r.testFile),
-      'the fidelity replay must be among the recordings, or the recorder is not seeing runPipeline',
-    ).toContain('src/engine/__tests__/splunkFidelity.test.ts');
+      counted.map((r) => r.testFile),
+      'docDerivedDirectives.test.ts must be among the recordings, or the recorder is not seeing runPipeline',
+    ).toContain('src/engine/__tests__/docDerivedDirectives.test.ts');
   });
 
-  it('records every directive a fixture names as run by the fidelity replay', () => {
-    // A fixture that names a directive its own conf never contains is evidence
-    // for nothing.
-    const replayed = new Set(
-      recordings.find((r) => r.testFile === 'src/engine/__tests__/splunkFidelity.test.ts')?.keys ?? [],
-    );
-    const unreplayed = [...fixtureBacked].filter((key) => !replayed.has(key));
-    expect(unreplayed, 'fixtures name these, but replaying them never reached the pipeline with them').toEqual([]);
-  });
-
-  it('runs every simulated directive through the pipeline in at least one test, or has a fixture', () => {
-    const unexercised = simulated.filter((key) => !fixtureBacked.has(key) && !exercisedBy.has(key));
+  it('runs every simulated directive through the pipeline in at least one test', () => {
+    const unexercised = simulated.filter((key) => !exercisedBy.has(key));
     expect(
       unexercised,
-      'declared simulated, but no engine test passes them to runPipeline (and no fixture names them): ' +
-        'either they are not really simulated -- reclassify them in directiveSupport.ts -- or the behaviour is unasserted',
+      'declared simulated, but no engine test passes them to runPipeline: either they are not really ' +
+        'simulated -- reclassify them in directiveSupport.ts -- or the behaviour is unasserted',
     ).toEqual([]);
   });
 
-  it('backs every simulated directive with a fixture or a test that cites the documentation', () => {
-    const uncited = simulated.filter((key) => !fixtureBacked.has(key) && !cited.has(key));
+  it('backs every simulated directive with a test that cites the documentation', () => {
+    const uncited = simulated.filter((key) => !cited.has(key));
     const unlisted = uncited.filter((key) => !DOC_UNCITED.includes(key));
     expect(
       unlisted,
-      'no fixture names these and no test that runs them has a comment citing the spec. Either add one -- ' +
+      'no test that runs these has a comment citing the spec. Either add one -- ' +
         'a comment block with "Doc-derived", the .spec file (props.conf.spec / transforms.conf.spec) and the ' +
         'directive name, beside a test that asserts the documented behaviour -- or reclassify the directive ' +
         '`documented` in directiveSupport.ts. Adding it to DOC_UNCITED is not the answer: that list only shrinks.',
@@ -208,31 +189,20 @@ describe('simulated directive evidence (#505)', () => {
   });
 
   it('keeps DOC_UNCITED to directives that still lack a citation', () => {
-    const stale = DOC_UNCITED.filter((key) => fixtureBacked.has(key) || cited.has(key) || !simulated.includes(key));
-    expect(
-      stale,
-      'these now have a fixture or a citation, or are no longer simulated -- delete them from DOC_UNCITED',
-    ).toEqual([]);
+    const stale = DOC_UNCITED.filter((key) => cited.has(key) || !simulated.includes(key));
+    expect(stale, 'these now have a citation, or are no longer simulated -- delete them from DOC_UNCITED').toEqual([]);
   });
 
   it('does not grow DOC_UNCITED', () => {
     expect(DOC_UNCITED.length).toBeLessThanOrEqual(DOC_UNCITED_CEILING);
   });
 
-  // Pin the fixture-backed count with a ratchet; the corpus is closed, so it
-  // should not fall (a fixture removed or renamed) and cannot usefully grow.
-  it('fixture-backed directive count does not regress', () => {
-    // Current count: 44 simulated directives are named by a fixture.
-    expect(simulated.filter((key) => fixtureBacked.has(key)).length).toBeGreaterThanOrEqual(44);
-  });
-
   it('evidence classification summary', () => {
     const only = (pred: (key: string) => boolean) => simulated.filter(pred);
     const summary = [
       'Simulated directive evidence:',
-      `  - Fixture-backed: ${only((k) => fixtureBacked.has(k)).length}`,
-      `  - Doc-cited test (no fixture): ${only((k) => !fixtureBacked.has(k) && cited.has(k)).length}`,
-      `  - Exercised only: ${only((k) => !fixtureBacked.has(k) && !cited.has(k) && exercisedBy.has(k)).length}`,
+      `  - Doc-cited test: ${only((k) => cited.has(k)).length}`,
+      `  - Exercised only: ${only((k) => !cited.has(k) && exercisedBy.has(k)).length}`,
       `  - Total: ${simulated.length}`,
     ].join('\n');
 
@@ -241,8 +211,7 @@ describe('simulated directive evidence (#505)', () => {
       console.info(summary);
     }
     expect(
-      only((k) => fixtureBacked.has(k) || cited.has(k) || exercisedBy.has(k)).length +
-        only((k) => !fixtureBacked.has(k) && !cited.has(k) && !exercisedBy.has(k)).length,
+      only((k) => cited.has(k) || exercisedBy.has(k)).length + only((k) => !cited.has(k) && !exercisedBy.has(k)).length,
     ).toBe(simulated.length);
   });
 });

@@ -61,9 +61,7 @@ const WEEKDAY_NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', '
 /**
  * The index-time timestamp fields for a timestamp read out of `_raw`.
  *
- * Doc-derived, not captured: the fidelity capture excluded every one of these
- * (`manifest.json`, `excludedFields`), so no fixture pins them. They follow
- * Splunk's documented default-field conventions:
+ * Doc-derived. They follow Splunk's documented default-field conventions:
  *  - the date_* values describe the timestamp as written in the event -- its own
  *    wall clock, not `_time` converted to some other zone -- which is why they
  *    are read from `wallAsUtcMs` with the UTC accessors;

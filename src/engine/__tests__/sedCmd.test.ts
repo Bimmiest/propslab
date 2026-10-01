@@ -60,15 +60,6 @@ describe('applySedCommands', () => {
     expect(e._raw).toBe('Z');
   });
 
-  // Capture-derived: the Splunk 10.4.0 capture `sedcmd-transliterate`.
-  it('applies y/// transliteration to every occurrence', () => {
-    const diags: ValidationDiagnostic[] = [];
-    const e = applySedCommands([event('abcdef abc')], [sedDir('x', 'y/abc/ABC/')], runCtx(FIXED_NOW, diags))[0]!;
-    // Inside a longer word as well as standalone, and `def` untouched.
-    expect(e._raw).toBe('ABCdef ABC');
-    expect(diags).toHaveLength(0);
-  });
-
   it('ignores a y/// whose two sets are different lengths, and says so', () => {
     const diags: ValidationDiagnostic[] = [];
     const e = applySedCommands([event('abc')], [sedDir('x', 'y/abc/XY/')], runCtx(FIXED_NOW, diags))[0]!;

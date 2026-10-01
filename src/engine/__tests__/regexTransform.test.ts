@@ -185,16 +185,6 @@ describe('applyRegexTransform — REPEAT_MATCH / MV_ADD', () => {
     expect(result.fields['num']).toBe('1');
   });
 
-  it('MV_ADD without REPEAT_MATCH still sees every match at search time', () => {
-    // Capture-derived: REPEAT_MATCH is inert at search time — the
-    // report-transform-search-time capture (10.4.0) extracts repeated matches
-    // with MV_ADD and no REPEAT_MATCH — so named groups scan the same matches
-    // the FORMAT path does.
-    const s = stanza('nums', { REGEX: '(?<num>\\d+)', MV_ADD: 'true' });
-    const result = searchTime(event('1 2 3'), s);
-    expect(result.fields['num']).toEqual(['1', '2', '3']);
-  });
-
   it('REPEAT_MATCH + MV_ADD builds multivalue across multiple named groups', () => {
     const s = stanza('kv', { REGEX: '(?<k>\\w+)=(?<v>\\d+)', REPEAT_MATCH: 'true', MV_ADD: 'true' });
     const result = searchTime(event('a=1 b=2 c=3'), s);
@@ -517,14 +507,6 @@ describe('applyRegexTransform — search-time-only attributes are ignored index-
 });
 
 describe('applyRegexTransform — CLEAN_KEYS', () => {
-  it('rewrites punctuation to underscores and strips the leading run', () => {
-    // Pinned by the Splunk 10.4.0 capture in report-delims-field-and-value:
-    // `2026-01-15T10:00:00Z a` comes back as `T10_00_00Z_a`.
-    const s = stanza('pairs', { DELIMS: '";", "="' });
-    const result = searchTime(event('2026-01-15T10:00:00Z a=1;b=2'), s);
-    expect(Object.keys(result.fields).sort()).toEqual(['T10_00_00Z_a', 'b']);
-  });
-
   it('keeps interior underscores', () => {
     const s = stanza('cols', { DELIMS: '","', FIELDS: '"col_a", "col_b"' });
     expect(Object.keys(searchTime(event('x,y'), s).fields).sort()).toEqual(['col_a', 'col_b']);
@@ -610,9 +592,9 @@ describe('#174 — MV_ADD in the FORMAT-pairs path', () => {
 
 // Doc-derived (transforms.conf.spec, REPEAT_MATCH): default false, "only valid
 // for index-time field extractions". At index time the REGEX therefore runs
-// once unless it is set. Search time is pinned by the report-repeat-match and
-// report-transform-search-time captures, which show every match extracted
-// regardless.
+// once unless it is set. At search time the setting is inert, and the
+// extractor keeps matching across the event, which MV_ADD's description ("when
+// it finds a field which already exists") presupposes.
 describe('#285 — REPEAT_MATCH gates repeated matching at index time only', () => {
   it('runs a FORMAT-pairs REGEX once at index time without REPEAT_MATCH', () => {
     const r = applyRegexTransform(

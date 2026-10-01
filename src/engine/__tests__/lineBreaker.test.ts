@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { breakLines } from '../processors/lineBreaker';
+import { runPipeline } from '../pipeline';
 import type { ConfDirective, EventMetadata, ValidationDiagnostic } from '../types';
 import { runCtx, FIXED_NOW } from './runCtx';
 
@@ -28,17 +29,6 @@ describe('breakLines — basic LINE_BREAKER', () => {
 });
 
 describe('breakLines — MAX_EVENTS line cap (SEM-5)', () => {
-  it('caps a merged event at MAX_EVENTS *continuation* lines', () => {
-    // Date-less lines would all merge into one event by default. MAX_EVENTS
-    // bounds the continuation lines merged in, not the event's total line
-    // count, so MAX_EVENTS=3 yields four-line events -- pinned by the Splunk
-    // 10.4.0 capture `linebreak-max-events`.
-    const raw = Array.from({ length: 12 }, (_, i) => `line${i}`).join('\n');
-    const events = breakLines(raw, [dir('MAX_EVENTS', '3')], META, runCtx(FIXED_NOW));
-    expect(events).toHaveLength(3);
-    expect(events[0]!._raw.split('\n')).toHaveLength(4);
-  });
-
   it('defaults to 256 lines (no cap for small inputs)', () => {
     const raw = Array.from({ length: 10 }, (_, i) => `line${i}`).join('\n');
     const events = breakLines(raw, [], META, runCtx(FIXED_NOW));
@@ -153,32 +143,6 @@ describe('breakLines — BREAK_ONLY_BEFORE', () => {
     expect(events).toHaveLength(2);
     expect(events[0]!._raw).toContain('continuation');
     expect(events[1]!._raw).toContain('continuation2');
-  });
-
-  // Checked on Splunk 10.4.0, not doc-derived (#323). The stanza below, with
-  // this input sent through receivers/simple, produced these four events:
-  // the pattern is searched for anywhere in a line, and the event starts at
-  // the beginning of the matching line, leading whitespace and all.
-  it('breaks before a line that matches anywhere, not only at its start', () => {
-    const raw =
-      'EVENT 1 starts here\ncontinuation of 1\na EVENT 2 is mid-line\ncontinuation of 2\n  EVENT 3 after two spaces\nEVENT 4 starts here\n';
-    const events = breakLines(
-      raw,
-      [
-        dir('SHOULD_LINEMERGE', 'true'),
-        dir('BREAK_ONLY_BEFORE', 'EVENT'),
-        dir('BREAK_ONLY_BEFORE_DATE', 'false'),
-        dir('DATETIME_CONFIG', 'CURRENT'),
-      ],
-      META,
-      runCtx(FIXED_NOW),
-    );
-    expect(events.map((e) => e._raw)).toEqual([
-      'EVENT 1 starts here\ncontinuation of 1',
-      'a EVENT 2 is mid-line\ncontinuation of 2',
-      '  EVENT 3 after two spaces',
-      'EVENT 4 starts here',
-    ]);
   });
 });
 
@@ -389,37 +353,6 @@ describe('#161 — MUST_BREAK_AFTER does not license merging', () => {
 });
 
 describe('breakLines — MUST_NOT_BREAK_BEFORE / MUST_NOT_BREAK_AFTER (#190)', () => {
-  it('MUST_NOT_BREAK_BEFORE is inert: a BREAK_ONLY_BEFORE break still stands', () => {
-    // Pinned by the capture `linebreak-must-not-break-before-explicit`: the
-    // spec sentence describes a suppression measured Splunk does not perform.
-    const events = breakLines(
-      'EVENT one\ndetail\nEVENT protected\nEVENT two',
-      [
-        dir('SHOULD_LINEMERGE', 'true'),
-        dir('BREAK_ONLY_BEFORE', '^EVENT'),
-        dir('MUST_NOT_BREAK_BEFORE', '^EVENT protected'),
-      ],
-      META,
-      runCtx(FIXED_NOW),
-    );
-    expect(events.map((e) => e._raw)).toEqual(['EVENT one\ndetail', 'EVENT protected', 'EVENT two']);
-  });
-
-  it('MUST_NOT_BREAK_BEFORE is inert against a BREAK_ONLY_BEFORE_DATE break too', () => {
-    // Mirrors the fixture `linebreak-must-not-break-before`.
-    const events = breakLines(
-      '2026-01-15T10:00:00Z first\n2026-01-15T10:00:01Z suppressed break\n2026-01-15T10:00:02Z second',
-      [
-        dir('SHOULD_LINEMERGE', 'true'),
-        dir('BREAK_ONLY_BEFORE_DATE', 'true'),
-        dir('MUST_NOT_BREAK_BEFORE', '^2026-01-15T10:00:01Z'),
-      ],
-      META,
-      runCtx(FIXED_NOW),
-    );
-    expect(events).toHaveLength(3);
-  });
-
   it('does not defeat the MAX_EVENTS cap', () => {
     const raw = Array.from({ length: 6 }, (_, i) => `line${i}`).join('\n');
     const events = breakLines(
@@ -430,6 +363,20 @@ describe('breakLines — MUST_NOT_BREAK_BEFORE / MUST_NOT_BREAK_AFTER (#190)', (
     );
     expect(events).toHaveLength(2);
     expect(events[0]!._raw.split('\n')).toHaveLength(3);
+  });
+
+  it('reaches the line breaker from a parsed conf, with the MAX_EVENTS cap still standing', () => {
+    // The pipeline-level run of the test above, so MUST_NOT_BREAK_BEFORE is also
+    // exercised from a conf. It has no doc-derived test: see DOC_UNCITED in
+    // directiveEvidence.test.ts.
+    const raw = Array.from({ length: 6 }, (_, i) => `line${i}`).join('\n');
+    const props = '[myapp]\nSHOULD_LINEMERGE = true\nMAX_EVENTS = 2\nMUST_NOT_BREAK_BEFORE = .*\n';
+    const { result } = runPipeline(raw, META, props, '', {
+      perEventPipeline: false,
+      captureOffsets: false,
+      now: FIXED_NOW,
+    });
+    expect(result.events).toHaveLength(2);
   });
 
   it('MUST_NOT_BREAK_AFTER suppresses date breaks until MUST_BREAK_AFTER matches', () => {

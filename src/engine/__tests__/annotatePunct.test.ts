@@ -2,8 +2,9 @@
 // annotatePunct.test.ts
 // ANNOTATE_PUNCT and the punct signature.
 //
-// Capture-derived: the punct-* captures from Splunk 10.4.0 (tab encodes as the
-// letter `t`, newlines are dropped, the cap is 50 characters).
+// Doc-derived: the signature shape follows the worked example in Splunk's
+// search documentation, and props.conf.spec's ANNOTATE_PUNCT (default true)
+// decides whether the punct field is created at all.
 // ---------------------------------------------------------------------------
 
 import { describe, it, expect } from 'vitest';
@@ -26,19 +27,6 @@ describe('buildPunct', () => {
   it('drops letters and digits, keeps punctuation, maps spaces to underscores', () => {
     // The shape of the worked example in Splunk's search documentation.
     expect(buildPunct('172.26.34.223 - - [01/Jul/2005:12:05:27 -0700]')).toBe('..._-_-_[//:::_-]');
-  });
-
-  it('maps a tab to the literal letter t (punct-whitespace-and-multiline)', () => {
-    expect(buildPunct('\tat com.example.Main(Main.java:1)')).toBe('t_..(.:)');
-  });
-
-  it('drops newlines entirely (punct-whitespace-and-multiline)', () => {
-    expect(buildPunct('a=1\nb=2')).toBe('==');
-  });
-
-  it('caps the signature at 50 characters (punct-cap)', () => {
-    const punct = buildPunct('.'.repeat(100));
-    expect(punct).toBe('.'.repeat(50));
   });
 
   it('is empty for a purely alphanumeric event', () => {

@@ -120,7 +120,7 @@ describe('#159 — IANA zone names resolve against real zone data', () => {
   const FMT = '%Y-%m-%d %H:%M:%S';
 
   it('applies a named zone rather than assuming UTC', () => {
-    // The fidelity capture: 10:00 in New York in January is 15:00Z.
+    // 10:00 in New York in January (EST, UTC-5) is 15:00Z.
     expect(iso('2026-01-15 10:00:00', FMT, 'America/New_York')).toBe('2026-01-15T15:00:00.000Z');
   });
 

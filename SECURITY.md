@@ -26,7 +26,7 @@ The repository also contains [`packages/mcp-server`](packages/mcp-server/README.
 
 ## Out of scope
 
-- **Simulation fidelity bugs.** Output that disagrees with real Splunk is a correctness bug — please file it as a normal issue, ideally with a fixture. It is not a vulnerability, even if the disagreement could lead to incorrect conclusions about config safety.
+- **Simulation fidelity bugs.** Output that disagrees with real Splunk is a correctness bug — please file it as a normal issue, ideally with a minimal reproduction. It is not a vulnerability, even if the disagreement could lead to incorrect conclusions about config safety.
 - **Anything requiring the user to paste attacker-supplied config and then trust the result.** Reading untrusted config is the application's entire purpose; the guarantee is that doing so cannot execute code or leak data, not that the displayed output is trustworthy advice.
 - **Findings against the deployed host's headers or TLS** that are configuration of Azure Static Web Apps rather than of this repository — though a report is still welcome if something looks wrong.
 - **Self-XSS** requiring the user to paste content into their own devtools console.
