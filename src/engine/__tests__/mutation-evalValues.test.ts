@@ -15,6 +15,7 @@ import {
   minMax,
   numArg,
   parseDecimal,
+  parseNumber,
   strArg,
   toBool,
   toMv,
@@ -70,6 +71,19 @@ describe('parseDecimal', () => {
     '1e999',
   ])('refuses %j', (s) => {
     expect(parseDecimal(s)).toBeNull();
+  });
+});
+
+describe('parseNumber', () => {
+  it('reads a decimal, and the exact text of a non-finite number (#446)', () => {
+    expect(parseNumber(' 42 ')).toBe(42);
+    expect(parseNumber('Infinity')).toBe(Infinity);
+    expect(parseNumber('-Infinity')).toBe(-Infinity);
+    expect(parseNumber('NaN')).toBe(NaN);
+  });
+
+  it.each(['inf', '-inf', 'nan', 'infinity', 'NAN', ' Infinity', 'abc', ''])('refuses %j', (s) => {
+    expect(parseNumber(s)).toBeNull();
   });
 });
 
@@ -195,12 +209,20 @@ describe('addOrConcat and arith', () => {
     expect(addOrConcat(1, undefined)).toBeNull();
   });
 
-  it('adds numbers and numeric strings, and concatenates otherwise', () => {
+  it('adds numbers and numeric strings, and concatenates two strings otherwise', () => {
     expect(addOrConcat('2', 3)).toBe(5);
-    expect(addOrConcat('a', 3)).toBe('a3');
-    // Whichever side is not numeric turns the sum into a concatenation.
-    expect(addOrConcat(3, 'a')).toBe('3a');
+    expect(addOrConcat('2', '3')).toBe(5);
     expect(addOrConcat('a', 'b')).toBe('ab');
+    // Whichever side is not numeric turns the sum of two strings into a concatenation.
+    expect(addOrConcat('5', 'a')).toBe('5a');
+    expect(addOrConcat('a', '5')).toBe('a5');
+  });
+
+  // #446 corrected the old reading, which concatenated these too ("a3", "3a").
+  it('is NULL for a number beside a value that is not numeric', () => {
+    expect(addOrConcat('a', 3)).toBeNull();
+    expect(addOrConcat(3, 'a')).toBeNull();
+    expect(addOrConcat(['5', '6'], 1)).toBeNull();
   });
 
   it.each([
@@ -258,15 +280,23 @@ describe('compare', () => {
     expect(compare(l, r, op)).toBe(out);
   });
 
-  it('compares numerically only when both sides are numeric', () => {
-    // Numerically 10 > 9; as strings "10" < "9".
-    expect(compare('10', '9', '>')).toBe(true);
+  // #446 corrected the old readings: two numeric strings compared as numbers
+  // ("10" > "9" was true), and a non-numeric string against a number compared
+  // as text ("abc" > 10 was true).
+  it('compares numerically against a number, and as text between two strings', () => {
+    expect(compare('10', 9, '>')).toBe(true);
+    expect(compare(10, '9', '<')).toBe(false);
+    // As text, "10" sorts before "9".
+    expect(compare('10', '9', '>')).toBe(false);
     expect(compare('10', 'x9', '<')).toBe(true);
-    expect(compare(10, 'abc', '==')).toBe(false);
-    // A non-numeric left side against a number is a string comparison too, not
-    // a comparison of 0 with the number: "abc" sorts after "10".
-    expect(compare('abc', 10, '>')).toBe(true);
-    expect(compare('abc', 10, '<')).toBe(false);
+    expect(compare('5', '1', '>')).toBe(true);
+  });
+
+  it('is NULL for a number against a value that is not numeric', () => {
+    expect(compare(10, 'abc', '==')).toBeNull();
+    expect(compare('abc', 10, '!=')).toBeNull();
+    expect(compare('abc', 10, '>')).toBeNull();
+    expect(compare(true, 1, '==')).toBeNull();
   });
 });
 

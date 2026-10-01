@@ -1,8 +1,8 @@
 // Eval edge cases settled by #446: what the math functions and arithmetic give
-// when a result is not an ordinary number, tostring()'s Boolean and radix
-// formats, the multivalue functions on NULL, and characters counted as code
-// points. A test whose behaviour the Search Reference states says so; the rest
-// cite #446.
+// when a result is not an ordinary number, which strings + and the comparison
+// operators read as numbers, tostring()'s Boolean and radix formats, the
+// multivalue functions on NULL, and characters counted as code points. A test
+// whose behaviour the Search Reference states says so; the rest cite #446.
 import { describe, it, expect } from 'vitest';
 import { evaluateExpression } from '../processors/eval/evaluator';
 import { runPipeline } from '../pipeline';
@@ -33,7 +33,7 @@ const ingest = (assignments: string, raw = 'x') =>
   fieldsOf('TRANSFORMS-t = t\n', `[t]\nINGEST_EVAL = ${assignments}\n`, raw);
 
 describe('a math function undefined at its argument is NULL (#446)', () => {
-  it.each(['sqrt(-1)', 'ln(0)', 'ln(-1)', 'log(0)', 'log(-1)', 'log(0, 10)', 'round(1.5, 400)', 'pow(-8, 0.5)'])(
+  it.each(['sqrt(-1)', 'ln(0)', 'ln(-1)', 'log(0)', 'log(-1)', 'log(0, 10)', 'log(8, 0)', 'round(1.5, 400)'])(
     '%s',
     (expr) => {
       expect(value(expr)).toBeNull();
@@ -55,25 +55,33 @@ describe('a math function undefined at its argument is NULL (#446)', () => {
     expect(f['y']).toBe('null');
   });
 
-  it('still computes the logarithm of a positive number, in any positive base but 1', () => {
+  it('computes the logarithm of a positive number in a positive base, base 1 giving an infinity', () => {
     expect(value('ln(1)')).toBe(0);
     expect(value('log(1000)')).toBeCloseTo(3, 12);
     expect(value('log(8, 2)')).toBeCloseTo(3, 12);
     expect(value('log(0.25, 0.5)')).toBeCloseTo(2, 12);
+    expect(value('log(1, 2)')).toBe(0);
     expect(value('log(8, -2)')).toBeNull();
+    expect(value('log(8, 1)')).toBe(Infinity);
+    expect(value('log(0.5, 1)')).toBe(-Infinity);
+  });
+});
+
+describe('pow() gives what floating point gives (#446)', () => {
+  it.each([
+    ['pow(0, -1)', Infinity],
+    ['pow(0, -0.5)', Infinity],
+    ['pow(-8, 0.5)', NaN],
+    ['pow(0, 2)', 0],
+    ['pow(0, 0)', 1],
+    ['pow(2, -1)', 0.5],
+  ] as const)('%s is %s', (expr, n) => {
+    expect(value(expr)).toBe(n);
+    expect(value(`typeof(${expr})`)).toBe('Number');
   });
 
-  // Doc-derived (Search Reference, eval command): division by zero results in
-  // a null field. Zero to a negative power, and a logarithm to base 1, are
-  // divisions by zero, so they are NULL rather than the Infinity JS gives.
-  it('is NULL where the function divides by zero', () => {
-    expect(value('pow(0, -1)')).toBeNull();
-    expect(value('pow(0, -0.5)')).toBeNull();
-    expect(value('log(10, 1)')).toBeNull();
-    expect(value('pow(0, 2)')).toBe(0);
-    expect(value('pow(0, 0)')).toBe(1);
-    expect(value('pow(2, -1)')).toBe(0.5);
-    expect(value('log(1, 2)')).toBe(0);
+  it('writes NaN into a field rather than writing no field', () => {
+    expect(fieldsOf('EVAL-r = pow(-8, 0.5)\nEVAL-i = pow(0, -1)\n')).toMatchObject({ r: 'NaN', i: 'Infinity' });
   });
 });
 
@@ -110,6 +118,14 @@ describe('an overflow is the number Infinity, and arithmetic keeps NaN (#446)', 
     // As strings, "-Infinity" sorts after "-5".
     expect(value('-1 * exp(1000) < -5')).toBe(true);
     expect(value('exp(1000) == exp(1000)')).toBe(true);
+  });
+
+  it('compares NaN as unequal to everything, itself included, and as neither greater nor less', () => {
+    const nan = '(exp(1000) - exp(1000))';
+    expect(value(`${nan} == ${nan}`)).toBe(false);
+    expect(value(`${nan} != ${nan}`)).toBe(true);
+    expect(value(`${nan} > 1`)).toBe(false);
+    expect(value(`${nan} < 1`)).toBe(false);
   });
 
   // Doc-derived (Search Reference, eval command): division by zero results in a null field.
@@ -149,11 +165,101 @@ describe('tostring() (#446)', () => {
     expect(fieldsOf('EVAL-h = tostring(15.7, "hex")\n')['h']).toBeUndefined();
   });
 
-  it('passes a non-numeric value, or an infinity, through the numeric formats', () => {
+  it('passes a non-numeric value through the numeric formats', () => {
     expect(value('tostring("abc", "binary")')).toBe('abc');
-    expect(value('tostring(exp(1000), "commas")')).toBe('Infinity');
-    expect(value('tostring(exp(1000), "duration")')).toBe('Infinity');
+    expect(value('tostring("abc", "duration")')).toBe('abc');
+  });
+
+  it('writes an infinity as its text, grouped as if digits by "commas", as seconds by "duration"', () => {
     expect(value('tostring(exp(1000))')).toBe('Infinity');
+    expect(value('tostring(exp(1000), "commas")')).toBe('In,fin,ity');
+    expect(value('tostring(-1 * exp(1000), "commas")')).toBe('-In,fin,ity');
+    expect(value('tostring(exp(1000), "duration")')).toBe('00:00:Infinity');
+    expect(value('tostring("Infinity", "commas")')).toBe('In,fin,ity');
+    expect(fieldsOf('EVAL-c = tostring(exp(1000), "commas")\n')['c']).toBe('In,fin,ity');
+  });
+
+  it('wraps an integer past 64 bits in hex', () => {
+    expect(value('tostring(pow(2, 64) + 5, "hex")')).toBe('0x0');
+  });
+});
+
+describe('the text of a non-finite number reads as that number (#446)', () => {
+  it.each([
+    ['s + 1', 'Infinity', Infinity],
+    ['s * 2', 'Infinity', Infinity],
+    ['s + 1', '-Infinity', -Infinity],
+    ['s + 1', 'NaN', NaN],
+    ['abs(s)', '-Infinity', Infinity],
+  ] as const)('%s with s = %j is %s', (expr, s, n) => {
+    expect(value(expr, { s })).toBe(n);
+    expect(value(`typeof(${expr})`, { s })).toBe('Number');
+  });
+
+  it('in comparisons and isnum(), but not in tonumber()', () => {
+    expect(value('s > 5', { s: 'Infinity' })).toBe(true);
+    expect(value('isnum(s)', { s: 'Infinity' })).toBe(true);
+    expect(value('isnum(s)', { s: 'NaN' })).toBe(true);
+    expect(value('tonumber(s)', { s: 'Infinity' })).toBeNull();
+    expect(value('tonumber(s)', { s: 'NaN' })).toBeNull();
+  });
+
+  it('only in that exact spelling', () => {
+    for (const s of ['inf', 'nan', 'infinity', '-inf']) {
+      expect(value('s + 1', { s }), s).toBeNull();
+      expect(value('isnum(s)', { s }), s).toBe(false);
+      expect(value('tonumber(s)', { s }), s).toBeNull();
+    }
+  });
+
+  it('so an infinity written to a field reads back as a number', () => {
+    const f = ingest('a=exp(1000), b=a+1, t=typeof(a+1)');
+    expect(f).toMatchObject({ a: 'Infinity', b: 'Infinity', t: 'Number' });
+  });
+});
+
+describe('+ adds numbers, concatenates strings, and is NULL for a number beside text (#446)', () => {
+  it.each([
+    ['"5" + "1"', 6],
+    ['"5" + 1', 6],
+    ['1 + "5"', 6],
+    ['"1e3" + 1', 1001],
+    ['"abc" + "def"', 'abcdef'],
+    ['"5" + "abc"', '5abc'],
+    ['"abc" + 1', null],
+    ['1 + "abc"', null],
+    ['"inf" + 1', null],
+  ] as const)('%s is %j', (expr, out) => {
+    expect(value(expr)).toBe(out);
+  });
+
+  it('writes no field for a number beside text', () => {
+    const f = fieldsOf('EVAL-r = _raw + 1\nEVAL-c = _raw + "1"\n', '', 'abc');
+    expect(f['r']).toBeUndefined();
+    expect(f['c']).toBe('abc1');
+  });
+});
+
+describe('comparisons between strings and numbers (#446)', () => {
+  it.each([
+    ['"abc" > 5', null],
+    ['"abc" == 5', null],
+    ['"abc" != 5', null],
+    ['5 < "abc"', null],
+    ['"5" > "1"', true],
+    ['"5" < "10"', false],
+    ['"10" < "5"', true],
+    ['"5" == "5.0"', false],
+    ['"5" == 5.0', true],
+    ['"10" > 5', true],
+    ['"Infinity" > 5', true],
+  ] as const)('%s is %j', (expr, out) => {
+    expect(value(expr)).toBe(out);
+  });
+
+  it('takes the else branch of if() for a NULL comparison', () => {
+    expect(value('if("abc" != 5, "y", "n")')).toBe('n');
+    expect(value('if(NOT ("abc" == 5), "y", "n")')).toBe('n');
   });
 });
 

@@ -40,11 +40,11 @@ const TIME = `${BASE} > Date and Time functions`;
 const CRYPTO = `${BASE} > Cryptographic functions`;
 /** The general rule for an argument that is NULL. */
 const NULL_RULE = `${BASE} overview: a function given a NULL (nonexistent) field returns NULL`;
-/** The eval command's page on numeric calculations. */
-const DIV_ZERO = 'eval command: division by zero results in a null field';
 /** Settled by #446, where the pages are silent. */
 const UNDEFINED_IS_NULL = '#446: a math function undefined at its argument is NULL';
 const OVERFLOW = '#446: an overflow is the number Infinity, not NULL';
+const POW_AS_IS = '#446: pow() gives what floating point gives, NaN and Infinity included';
+const NON_FINITE_TEXT = '#446: the text "Infinity", "-Infinity" or "NaN" is a number, but not to tonumber()';
 
 // ── Rows ────────────────────────────────────────────────
 
@@ -177,7 +177,9 @@ row('tonumber', 'tonumber("😀")', null, `${CONV} > tonumber(NUMSTR,BASE): no n
 row('tonumber', 'tonumber("1e3")', 1000, `${CONV} > tonumber(NUMSTR,BASE)`);
 row('tonumber', 'tonumber("ff", 16)', 255, `${CONV} > tonumber(NUMSTR,BASE)`);
 todo('tonumber', 'tonumber("ff", missing)', 'the docs do not say what a NULL base gives');
-todo('tonumber', 'tonumber("Infinity")', 'the docs do not say whether the text Infinity or NaN is a number');
+row('tonumber', 'tonumber("Infinity")', null, NON_FINITE_TEXT);
+row('tonumber', 'tonumber("NaN")', null, NON_FINITE_TEXT);
+row('tonumber', 'tonumber("inf")', null, NON_FINITE_TEXT);
 todo('tonumber', 'tonumber(mv)', MV_UNDOCUMENTED, MV_AB);
 todo('tonumber', 'tonumber("ff", mv)', MV_UNDOCUMENTED, MV_AB);
 
@@ -195,6 +197,9 @@ row('tostring', 'tostring(9, "binary")', '1001', `${CONV} > tostring(X,Y): the "
 row('tostring', 'tostring(-9, "binary")', null, '#446: "binary" of a negative is NULL');
 row('tostring', 'tostring(12345.6789, "commas")', '12,345.68', `${CONV} > tostring(X,Y): the "commas" example`);
 row('tostring', 'tostring(615, "duration")', '00:10:15', `${CONV} > tostring(X,Y): the "duration" example`);
+row('tostring', 'tostring(exp(1000))', 'Infinity', OVERFLOW);
+row('tostring', 'tostring(exp(1000), "commas")', 'In,fin,ity', '#446: "commas" groups the text of Infinity');
+row('tostring', 'tostring(exp(1000), "duration")', '00:00:Infinity', '#446: "duration" of Infinity');
 todo('tostring', 'tostring(255, missing)', 'the docs do not say what a NULL format gives');
 todo('tostring', 'tostring(mv)', MV_UNDOCUMENTED, MV_AB);
 
@@ -238,6 +243,8 @@ for (const [fn, yes] of [
 row('isnum', 'isnum("")', false, `${INFO} > isnum(X)`);
 row('isnum', 'isnum("😀")', false, `${INFO} > isnum(X)`);
 row('isnum', 'isnum(sqrt(-1))', false, UNDEFINED_IS_NULL);
+row('isnum', 'isnum("Infinity")', true, NON_FINITE_TEXT);
+row('isnum', 'isnum("inf")', false, NON_FINITE_TEXT);
 row('isint', 'isint("")', false, `${INFO} > isint(X)`);
 row('isstr', 'isstr("")', true, `${INFO} > isstr(X)`);
 row('isstr', 'isstr("😀")', true, `${INFO} > isstr(X)`);
@@ -272,13 +279,17 @@ row('ln', 'ln(-1)', null, UNDEFINED_IS_NULL);
 row('round', 'round(1.5, 400)', null, UNDEFINED_IS_NULL);
 row('log', 'log(0)', null, UNDEFINED_IS_NULL);
 row('log', 'log(-1)', null, UNDEFINED_IS_NULL);
-row('pow', 'pow(-8, 0.5)', null, UNDEFINED_IS_NULL);
 row('abs', 'abs(sqrt(-1))', null, `${UNDEFINED_IS_NULL}, and ${NULL_RULE}`);
 row('sqrt', 'sqrt(-1) + 1', null, `${UNDEFINED_IS_NULL}; NULL propagates through arithmetic`);
-row('log', 'log(10, 1)', null, `${DIV_ZERO}: base 1 divides by ln(1), which is 0`);
-row('pow', 'pow(0, -1)', null, `${DIV_ZERO}: 0 to the power -1 is 1/0`);
+row('log', 'log(8, 0)', null, '#446: a base of zero or below is NULL');
+row('log', 'log(8, -2)', null, '#446: a base of zero or below is NULL');
 // #446 corrected the old reading, which made every result that was not a
-// finite number NULL, overflows included (exp(1000) and pow(10, 1000) were NULL).
+// finite number NULL: exp(1000), pow(10, 1000), pow(0, -1), pow(-8, 0.5) and
+// log(10, 1) were all NULL.
+row('log', 'log(8, 1)', Infinity, '#446: base 1 divides by ln(1), which is 0, giving Infinity');
+row('pow', 'pow(0, -1)', Infinity, POW_AS_IS);
+row('pow', 'pow(-8, 0.5)', NaN, POW_AS_IS);
+row('typeof', 'typeof(pow(-8, 0.5))', 'Number', POW_AS_IS);
 row('exp', 'exp(1000)', Infinity, OVERFLOW);
 row('exp', '-1 * exp(1000)', -Infinity, OVERFLOW);
 row('exp', 'exp(1000) - exp(1000)', NaN, '#446: NaN from arithmetic is a number, not NULL');

@@ -60,9 +60,9 @@ const onString =
 
 /**
  * A math function's result. A function that is undefined at its argument is
- * NULL rather than NaN: sqrt(-1), pow(-8, 0.5) and round(1.5, 400) (#446). An
- * overflow is not: exp(1000) and pow(10, 400) are the number Infinity, as
- * `1e308 * 10` is (#446).
+ * NULL rather than NaN: sqrt(-1) and round(1.5, 400) (#446). An overflow is
+ * not: exp(1000) is the number Infinity, as `1e308 * 10` is (#446). pow() does
+ * not go through this; see its own note.
  */
 const defined = (n: number): EvalValue => (Number.isNaN(n) ? null : n);
 
@@ -215,6 +215,9 @@ function tonumber(args: EvalValue[]): EvalValue {
 }
 
 function formatDuration(val: number): string {
+  // A non-finite value has no whole hours or minutes, and its seconds are the
+  // value itself: tostring(exp(1000), "duration") is "00:00:Infinity" (#446).
+  if (!Number.isFinite(val)) return `00:00:${val}`;
   const pad = (n: number) => String(n).padStart(2, '0');
   const total = Math.floor(Math.abs(val));
   const days = Math.floor(total / 86400);
@@ -224,6 +227,15 @@ function formatDuration(val: number): string {
   const sign = val < 0 ? '-' : '';
   const hms = `${pad(h)}:${pad(m)}:${pad(s)}`;
   return days > 0 ? `${sign}${days}+${hms}` : `${sign}${hms}`;
+}
+
+/**
+ * "commas" for a number with no digits to group. Its text is grouped in threes
+ * as if it were digits, after any sign: "In,fin,ity" and "-In,fin,ity" (#446).
+ */
+function groupTextInThrees(text: string): string {
+  const sign = text.startsWith('-') ? '-' : '';
+  return sign + text.slice(sign.length).replace(/(?!^)(?=(?:.{3})+$)/g, ',');
 }
 
 /**
@@ -251,15 +263,15 @@ function tostring(args: EvalValue[]): EvalValue {
   if (args[1] !== undefined && val !== null) {
     const format = toStr(args[1]);
     if (format === 'hex' || format === 'binary') return integerString(val, format);
-    // Infinity and NaN have no digits to group and no hours to count, so they
-    // pass through like a non-numeric value rather than print as "∞".
-    if (format === 'commas' && Number.isFinite(val)) {
+    if (format === 'commas') {
       // Thousands separators, up to two decimals. Splunk shows no decimals
       // for integers (e.g. 12,345) but keeps fractional precision (rounded
       // to 2 places) when present.
-      return val.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+      return Number.isFinite(val)
+        ? val.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+        : groupTextInThrees(String(val));
     }
-    if (format === 'duration' && Number.isFinite(val)) return formatDuration(val);
+    if (format === 'duration') return formatDuration(val);
   }
   return toStr(value);
 }
@@ -305,17 +317,16 @@ const MATH_BUILTINS: Record<string, Builtin> = {
   pow: (args) => {
     const base = numArg(args[0]);
     const exp = numArg(args[1]);
-    if (base === null || exp === null) return null;
-    // Zero to a negative power is 1 divided by zero, which is NULL as `/` by
-    // zero is, not the Infinity JS gives.
-    return base === 0 && exp < 0 ? null : defined(Math.pow(base, exp));
+    // Whatever floating point gives, as arithmetic does: pow(0, -1) is
+    // Infinity and pow(-8, 0.5) is NaN, numbers rather than NULL (#446).
+    return base === null || exp === null ? null : Math.pow(base, exp);
   },
   log: (args) => {
     const val = numArg(args[0]);
     const base = args[1] !== undefined ? numArg(args[1]) : 10;
-    if (val === null || base === null) return null;
-    // Base 1 divides by ln(1), which is zero: NULL, as `/` by zero is.
-    return base === 1 ? null : defined(logOf(val) / logOf(base));
+    // A value or a base of zero or below is NULL; base 1 divides by ln(1),
+    // which is 0, so log(8, 1) is Infinity (#446).
+    return val === null || base === null ? null : defined(logOf(val) / logOf(base));
   },
   ln: onNumber(logOf),
   exp: onNumber(Math.exp),

@@ -23,18 +23,36 @@ export const BOOLEAN_ASSIGNMENT_ERROR =
 const DECIMAL_NUMBER = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/;
 
 /**
- * The one string → number coercion eval uses: arithmetic, comparisons,
- * isnum()/isint() and tonumber() without a base all read a string through
- * this, so they can never disagree about whether it is a number. Decimal
- * only — JS `Number()` also accepts `0x10`, `0b11`, `Infinity` and a blank
- * string (as 0), none of which Splunk reads as a number. Surrounding
- * whitespace is tolerated, as `Number()` did.
+ * A decimal number in a string, as tonumber() without a base reads it.
+ * Decimal only — JS `Number()` also accepts `0x10`, `0b11`, `Infinity` and a
+ * blank string (as 0), none of which Splunk reads as a number. Surrounding
+ * whitespace is tolerated, as `Number()` did. Arithmetic, comparisons and
+ * isnum() read a string through {@link parseNumber}, which adds the text of a
+ * non-finite number.
  */
 export function parseDecimal(s: string): number | null {
   const t = s.trim();
   if (!DECIMAL_NUMBER.test(t)) return null;
   const n = Number(t);
   return Number.isFinite(n) ? n : null;
+}
+
+/** The text a field shows for each non-finite number, and only that spelling. */
+const NON_FINITE_TEXT: ReadonlyMap<string, number> = new Map([
+  ['Infinity', Infinity],
+  ['-Infinity', -Infinity],
+  ['NaN', NaN],
+]);
+
+/**
+ * A string read as a number by arithmetic, comparisons, isnum() and the math
+ * functions: a decimal ({@link parseDecimal}), or exactly "Infinity",
+ * "-Infinity" or "NaN", the text a non-finite result is shown as. So a field
+ * holding "Infinity" reads back as the number, while "inf" and "nan" are not
+ * numbers. tonumber() reads none of the three (#446).
+ */
+export function parseNumber(s: string): number | null {
+  return NON_FINITE_TEXT.get(s) ?? parseDecimal(s);
 }
 
 export function toBool(v: EvalArg): boolean {
@@ -63,15 +81,18 @@ export function toStr(v: EvalArg): string {
 
 /**
  * The `+` operator. Splunk propagates NULL through arithmetic (null + x = null),
- * adds when both operands are numeric, and otherwise CONCATENATES strings
- * (`"a" + "b"` → "ab"). `.` is the dedicated concat operator, but `+` falls back
- * to concatenation rather than coercing strings to 0.
+ * adds when both operands are numeric (`"5" + "1"` → 6), and CONCATENATES two
+ * strings when either is not (`"5" + "abc"` → "5abc"). `.` is the dedicated
+ * concat operator, but `+` falls back to concatenation rather than coercing
+ * strings to 0. A number is never concatenated: beside a value that is not
+ * numeric it is NULL, so `"abc" + 1` and `"inf" + 1` are NULL (#446).
  */
 export function addOrConcat(l: EvalArg, r: EvalArg): EvalValue {
   if (l === null || l === undefined || r === null || r === undefined) return null;
   const a = numericValue(l);
   const b = numericValue(r);
   if (a !== null && b !== null) return a + b;
+  if (typeof l === 'number' || typeof r === 'number') return null;
   return toStr(l) + toStr(r);
 }
 
@@ -101,7 +122,7 @@ export function numArg(v: EvalArg): number | null {
   if (typeof v === 'number') return v;
   if (typeof v === 'boolean') return v ? 1 : 0;
   if (Array.isArray(v)) return v.length > 0 ? numArg(v[0]) : null;
-  return parseDecimal(v);
+  return parseNumber(v);
 }
 
 /**
@@ -146,7 +167,7 @@ export function isNumericValue(v: EvalArg): boolean {
 /** The number a genuinely numeric value (see {@link isNumericValue}) stands for, or null. */
 function numericValue(v: EvalArg): number | null {
   if (typeof v === 'number') return v;
-  return typeof v === 'string' ? parseDecimal(v) : null;
+  return typeof v === 'string' ? parseNumber(v) : null;
 }
 
 /**
@@ -192,17 +213,24 @@ export function toTri(v: EvalArg): boolean | null {
 }
 
 /**
- * Comparison of two single values: numerically when BOTH are numeric (a number
- * or a string that parses cleanly as one), otherwise as strings. This avoids
- * coercing a non-numeric operand to 0 — `"abc" == 0` must be false.
+ * Comparison of two single values. Against a number, the other side must be
+ * numeric too (a number, or a string that parses as one), and the two compare
+ * numerically: `"Infinity" > 5` is true. A value that is not numeric against a
+ * number is NULL for every operator, never coerced to 0 or compared as text:
+ * `"abc" > 5`, `"abc" == 5` and `"abc" != 5` are NULL (#446). Two strings
+ * compare as text, numeric-looking or not: `"5" > "1"` holds and `"5" < "10"`
+ * does not (#446).
  */
-function compareScalars(left: EvalValue, right: EvalValue, op: string): boolean {
-  const leftNum = numericValue(left);
-  const rightNum = numericValue(right);
-  const bothNumeric = leftNum !== null && rightNum !== null;
-
-  const l = bothNumeric ? leftNum : toStr(left);
-  const r = bothNumeric ? rightNum : toStr(right);
+function compareScalars(left: EvalValue, right: EvalValue, op: string): boolean | null {
+  let l: number | string = toStr(left);
+  let r: number | string = toStr(right);
+  if (typeof left === 'number' || typeof right === 'number') {
+    const leftNum = numericValue(left);
+    const rightNum = numericValue(right);
+    if (leftNum === null || rightNum === null) return null;
+    l = leftNum;
+    r = rightNum;
+  }
 
   switch (op) {
     case '==':
@@ -249,7 +277,7 @@ export function compare(left: EvalArg, right: EvalArg, op: string): boolean | nu
     const single = Array.isArray(left) ? right : left;
     if (!Array.isArray(single) && (typeof single === 'number' || !EQUALITY_OPS.has(op))) return null;
     const positive = op === '!=' ? '==' : op;
-    const any = lefts.some((l) => rights.some((r) => compareScalars(l, r, positive)));
+    const any = lefts.some((l) => rights.some((r) => compareScalars(l, r, positive) === true));
     return op === '!=' ? !any : any;
   }
   return compareScalars(left, right, op);
