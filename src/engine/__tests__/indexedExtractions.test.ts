@@ -722,6 +722,101 @@ describe('TIMESTAMP_FIELDS beyond the delimited formats, and its fallback (#444)
     );
     expect(diagnostics.filter((d) => d.message.includes('so it was not used'))).toHaveLength(1);
   });
+
+  // Without TIMESTAMP_FIELDS, w3c reads its timestamp from the date and time
+  // columns and does not scan the row. props.conf.spec does not document this
+  // default; #444 established it.
+  describe('w3c without TIMESTAMP_FIELDS reads date and time', () => {
+    const w3c = 'INDEXED_EXTRACTIONS = w3c\nTZ = UTC\n';
+
+    it('behaves as if TIMESTAMP_FIELDS = date, time were set', () => {
+      const log =
+        '#Fields: date x-ts time c-ip\n2026-01-15 2026-03-01T00:00:00 10:00:00 1.2.3.4\ngarbage - nope 1.2.3.5\n';
+      const unset = run(log, w3c);
+      const set = run(log, `${w3c}TIMESTAMP_FIELDS = date, time\n`);
+      expect(times(unset)).toEqual(times(set));
+      expect(unset.map((e) => e.fields)).toEqual(set.map((e) => e.fields));
+      expect(unset.map((e) => step(e)?.timeSource)).toEqual(set.map((e) => step(e)?.timeSource));
+    });
+
+    it('reads each row from its date and time columns', () => {
+      const events = run(
+        '#Version: 1.0\n#Fields: date time c-ip cs-uri-stem\n2026-01-15 10:00:00 1.2.3.4 /a\n2026-01-15 11:30:45 1.2.3.5 /b\n',
+        w3c,
+      );
+      expect(times(events)).toEqual(['2026-01-15T10:00:00.000Z', '2026-01-15T11:30:45.000Z']);
+      expect(step(events[1])).toEqual({
+        processor: 'INDEXED_EXTRACTIONS(TIMESTAMP_FIELDS)',
+        phase: 'index-time',
+        description: '_time parsed from date, time (w3c default) ("2026-01-15 11:30:45")',
+        timeSource: 'auto-recognition',
+        fieldsAdded: [],
+        fieldsModified: ['_time'],
+      });
+    });
+
+    it('joins date then time wherever the columns sit, ignoring another timestamp in the row', () => {
+      const [e] = run('#Fields: c-ip date x-ts time\n1.2.3.4 2026-01-15 2026-03-01T00:00:00 10:00:00\n', w3c);
+      expect(e!._time?.toISOString()).toBe('2026-01-15T10:00:00.000Z');
+      expect(e!.fields['x_ts']).toBe('2026-03-01T00:00:00');
+    });
+
+    it.each([['date'], ['time']])('reads the %s column alone when it is the only one', (column) => {
+      const [e] = run(`#Fields: ${column} c-ip\n2026-01-15T10:00:00 1.2.3.4\n`, w3c);
+      expect(e!._time?.toISOString()).toBe('2026-01-15T10:00:00.000Z');
+      expect(step(e)?.description).toBe('_time parsed from date, time (w3c default) ("2026-01-15T10:00:00")');
+    });
+
+    it.each([
+      ['without TIME_FORMAT', ''],
+      ['with TIME_FORMAT', 'TIME_FORMAT = %Y-%m-%dT%H:%M:%S\n'],
+    ])('gives a row with neither column the time of indexing, %s', (_, timeFormat) => {
+      const [e] = run('#Fields: x-ts c-ip\n2026-01-15T10:00:00 1.2.3.4\n', `${w3c}${timeFormat}`);
+      expect(e!._time?.toISOString()).toBe('2026-10-01T00:00:00.000Z');
+      expect(e!.fields['timestamp']).toBe('none');
+      expect(step(e)?.timeSource).toBe('current-time');
+    });
+
+    it("gives a date and time that do not parse the previous event's _time", () => {
+      const events = run('#Fields: date time c-ip\n2026-01-15 10:00:00 1.2.3.4\ngarbage nope 1.2.3.5\n', w3c);
+      expect(times(events)).toEqual(['2026-01-15T10:00:00.000Z', '2026-01-15T10:00:00.000Z']);
+      expect(step(events[1])?.timeSource).toBe('previous-event');
+      expect(step(events[1])?.description).toMatch(
+        /^No timestamp read from date, time \(w3c default\) \("garbage nope"\): /,
+      );
+      expect(events[1]!.fields['timestamp']).toBe('none');
+    });
+
+    it('gives way to an explicit TIMESTAMP_FIELDS', () => {
+      const [e] = run(
+        '#Fields: date time when\n2026-01-15 10:00:00 2026-02-01T00:00:00\n',
+        `${w3c}TIMESTAMP_FIELDS = when\n`,
+      );
+      expect(e!._time?.toISOString()).toBe('2026-02-01T00:00:00.000Z');
+      expect(step(e)?.description).toBe('_time parsed from when ("2026-02-01T00:00:00")');
+    });
+
+    it.each([
+      ['csv', ','],
+      ['tsv', '\t'],
+      ['psv', '|'],
+    ])('is not the default for %s, which keeps the timestamp the row starts with', (mode, sep) => {
+      const header = ['created', 'user', 'date', 'time'].join(sep) + '\n';
+      const row = ['2026-03-01T00:00:00', 'alice', '2026-01-15', '10:00:00'].join(sep) + '\n';
+      const [e] = run(header + row, `INDEXED_EXTRACTIONS = ${mode}\nTZ = UTC\n`);
+      expect(e!._time?.toISOString()).toBe('2026-03-01T00:00:00.000Z');
+      expect(step(e)).toBeUndefined();
+    });
+
+    it('is not the default for json', () => {
+      const [e] = run(
+        '{"created":"2026-03-01T00:00:00","date":"2026-01-15","time":"10:00:00"}',
+        'INDEXED_EXTRACTIONS = json\nTZ = UTC\n',
+      );
+      expect(e!._time?.toISOString()).toBe('2026-03-01T00:00:00.000Z');
+      expect(step(e)).toBeUndefined();
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -1240,10 +1335,13 @@ describe('the trace step each format records', () => {
     });
   });
 
+  // #444 put a step after this one: w3c reads its timestamp from the date and
+  // time columns without TIMESTAMP_FIELDS, so the extraction is no longer the
+  // last step of a w3c row.
   it('w3c names the fields it extracted, leaving out a value of -', () => {
     const [e] = applyIndexedExtractions(lines('#Fields: a b c', '1 - 3'), [dir('w3c')], runCtx(FIXED_NOW));
     expect(e!.fields['b']).toBeUndefined();
-    expect(extraction(e)).toEqual({
+    expect(e!.processingTrace.at(-2)).toEqual({
       processor: 'INDEXED_EXTRACTIONS(w3c)',
       phase: 'index-time',
       description: 'Extracted 2 W3C fields',

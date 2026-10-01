@@ -205,9 +205,13 @@ describe('locating the header and the data', () => {
   });
 });
 
+// #444 corrected two of these. They read that a w3c row carries only its
+// columns; without TIMESTAMP_FIELDS, w3c reads its timestamp from the date and
+// time columns, so a row with neither has `timestamp=none` and a trace step
+// after the extraction's.
 describe('INDEXED_EXTRACTIONS = w3c', () => {
   it('reads #Fields names separated by any run of spaces', () => {
-    expect(fieldsOf(extract('w3c', ['#Fields: a  b', '1 2']))).toEqual([{ a: '1', b: '2' }]);
+    expect(fieldsOf(extract('w3c', ['#Fields: a  b', '1 2']))).toEqual([{ a: '1', b: '2', timestamp: 'none' }]);
   });
 
   it('leaves the events alone when there is no #Fields line', () => {
@@ -218,8 +222,8 @@ describe('INDEXED_EXTRACTIONS = w3c', () => {
   it('skips "-" and empty values, and describes its step', () => {
     const [e, ...rest] = extract('w3c', ['#Fields: a b c d', '1 "" - 4']);
     expect(rest).toEqual([]);
-    expect(e?.fields).toEqual({ a: '1', d: '4' });
-    expect(e?.processingTrace.at(-1)).toEqual({
+    expect(e?.fields).toEqual({ a: '1', d: '4', timestamp: 'none' });
+    expect(e?.processingTrace.at(-2)).toEqual({
       processor: 'INDEXED_EXTRACTIONS(w3c)',
       phase: 'index-time',
       description: 'Extracted 2 W3C fields',
