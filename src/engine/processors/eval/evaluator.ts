@@ -72,7 +72,9 @@ function evalIn(node: NodeOf<'in'>, ctx: EvalCtx): EvalValue {
   if (left === null) return null;
   // A multivalue field with no values is as absent as a missing one.
   if (Array.isArray(left) && left.length === 0) return null;
-  // A multivalue value is in the list when any of its values is (see compare).
+  // A multivalue value is in the list when any of its values is (see compare);
+  // a number in the list never matches one, so `mv IN (5)` is false where
+  // `mv IN ("5")` may be true (#522).
   // `some` stops at the first match — no need to evaluate the rest of the list.
   const match = node.list.some((n) => compare(left, evalNode(n, ctx), '=') === true);
   return node.negate ? !match : match;

@@ -223,6 +223,9 @@ function compareScalars(left: EvalValue, right: EvalValue, op: string): boolean 
   }
 }
 
+/** The operators a multivalue operand answers against a single value (see {@link compare}). */
+const EQUALITY_OPS = new Set(['==', '=', '!=']);
+
 export function compare(left: EvalArg, right: EvalArg, op: string): boolean | null {
   // Any comparison involving NULL is NULL, not a comparison against "", so a
   // guard written to test a field's value (`missing != "a"`) does not fire on
@@ -234,11 +237,17 @@ export function compare(left: EvalArg, right: EvalArg, op: string): boolean | nu
   // values a and b satisfies `f == "a"`), and never as the space-joined
   // string of them (#475). An operand with no values is NULL. `!=` is the
   // complement of `==` rather than "some value differs", so it agrees with
-  // NOT IN and with `NOT (f == "a")`.
+  // NOT IN and with `NOT (f == "a")` (#522).
   if (Array.isArray(left) || Array.isArray(right)) {
     const lefts = Array.isArray(left) ? left : [left];
     const rights = Array.isArray(right) ? right : [right];
     if (lefts.length === 0 || rights.length === 0) return null;
+    // Against a single value, a multivalue is only ever tested for equality
+    // with a string. `<`, `>`, `<=` and `>=` are NULL, and so is every
+    // operator when the other side is a number: `mv == 5` is NULL where
+    // `mv == "5"` matches (#522). Two multivalues keep the any-match rule.
+    const single = Array.isArray(left) ? right : left;
+    if (!Array.isArray(single) && (typeof single === 'number' || !EQUALITY_OPS.has(op))) return null;
     const positive = op === '!=' ? '==' : op;
     const any = lefts.some((l) => rights.some((r) => compareScalars(l, r, positive)));
     return op === '!=' ? !any : any;

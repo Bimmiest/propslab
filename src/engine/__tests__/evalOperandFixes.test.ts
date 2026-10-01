@@ -1,11 +1,13 @@
 // Eval operand handling: trim's character set (#474), multivalue operands in
-// comparisons and IN (#475), and the expression parser's limits and literals
-// (#485).
+// comparisons and IN (#475, #522), and the expression parser's limits and
+// literals (#485).
 //
 // Doc-derived (Splunk eval function and operator reference), so each assertion
-// is kept to the documented behaviour.
+// is kept to the documented behaviour. The multivalue operators the reference
+// does not cover cite #522.
 import { describe, it, expect } from 'vitest';
 import { evaluateExpression } from '../processors/eval/evaluator';
+import { runPipeline } from '../pipeline';
 import type { SplunkEvent } from '../types';
 import { makeEvent } from '../../test/makeEvent';
 
@@ -52,7 +54,7 @@ describe('multivalue operands match when any value does (#475)', () => {
     ['"a" == mv', true],
     ['mv = "a"', true],
     ['mv != "c"', true],
-    // != is the complement of ==, not "some value differs".
+    // != is the complement of ==, not "some value differs" (#522 confirmed it).
     ['mv != "a"', false],
     ['mv IN ("a")', true],
     ['mv IN ("c", "b")', true],
@@ -67,6 +69,7 @@ describe('multivalue operands match when any value does (#475)', () => {
   it('a multivalue field with no values compares as NULL, like a missing field', () => {
     const empty = { mv: [] as string[] };
     expect(value('mv == "a"', empty)).toBeNull();
+    expect(value('"a" == mv', empty)).toBeNull();
     expect(value('mv != "a"', empty)).toBeNull();
     expect(value('mv IN ("a")', empty)).toBeNull();
     expect(value('mv NOT IN ("a")', empty)).toBeNull();
@@ -74,6 +77,81 @@ describe('multivalue operands match when any value does (#475)', () => {
 
   it('a multivalue result of a function is compared the same way', () => {
     expect(value('split("a,b", ",") == "b"')).toBe(true);
+  });
+});
+
+// #522 corrected the old reading, under which `<`, `>`, `<=` and `>=` held when
+// any value satisfied them (`mv > "a"` was true for a, b), and a number on the
+// other side was compared like a string (`n == 5` was true for 1, 5).
+describe('a multivalue operand under an ordering operator, or against a number, is NULL (#522)', () => {
+  const mv = { mv: ['a', 'b'] };
+  const n = { n: ['1', '5'] };
+
+  it.each(['mv > "a"', 'mv < "c"', 'mv >= "a"', 'mv <= "b"', '"a" < mv', '"c" > mv', '"a" <= mv', '"b" >= mv'])(
+    '%s is NULL',
+    (expr) => {
+      expect(value(expr, mv)).toBeNull();
+    },
+  );
+
+  it.each([
+    ['n == 5', null],
+    ['n != 5', null],
+    ['n > 3', null],
+    ['5 == n', null],
+    ['n = 1', null],
+    ['n == 2 + 3', null],
+    ['n == "5"', true],
+    ['n != "5"', false],
+    ['n == "3"', false],
+    ['n != "3"', true],
+    ['n IN (5)', false],
+    ['n IN (5, "1")', true],
+    ['n IN ("5")', true],
+    ['n NOT IN ("5")', false],
+  ] as const)('with n = 1, 5: %s is %j', (expr, out) => {
+    expect(value(expr, n)).toBe(out);
+  });
+
+  it('where and if() treat the NULL as not true', () => {
+    expect(value('if(mv > "a", "y", "n")', mv)).toBe('n');
+    expect(value('if(NOT (mv > "a"), "y", "n")', mv)).toBe('n');
+    expect(value('if(n == 5, "y", "n")', n)).toBe('n');
+    expect(value('NOT mv IN ("a")', mv)).toBe(false);
+  });
+
+  it('takes the else branch of an EVAL- through the pipeline', () => {
+    const props =
+      '[st]\nSHOULD_LINEMERGE = false\n' +
+      'EVAL-gt = if(split(_raw, ",") > "a", "y", "n")\n' +
+      'EVAL-num = if(split(_raw, ",") == 5, "y", "n")\n' +
+      'EVAL-str = if(split(_raw, ",") == "5", "y", "n")\n' +
+      'EVAL-cmp = split(_raw, ",") > "a"\n';
+    const { result, diagnostics } = runPipeline(
+      'a,5',
+      { index: 'main', host: 'h', source: 's', sourcetype: 'st' },
+      props,
+      '',
+      { perEventPipeline: false, captureOffsets: false, now: 0 },
+    );
+    expect(result.events[0]!.fields).toMatchObject({ gt: 'n', num: 'n', str: 'y' });
+    // A NULL comparison assigned directly writes no field and raises nothing.
+    expect(result.events[0]!.fields['cmp']).toBeUndefined();
+    expect(diagnostics.filter((d) => d.message.includes('EVAL-cmp'))).toEqual([]);
+  });
+
+  it('keeps comparing two single values as before', () => {
+    expect(value('"b" > "a"')).toBe(true);
+    expect(value('5 == "5"')).toBe(true);
+    expect(value('x > 3', { x: '5' })).toBe(true);
+  });
+
+  it('keeps the any-match rule between two multivalues', () => {
+    expect(value('mv == other', { ...mv, other: ['c', 'b'] })).toBe(true);
+    expect(value('mv != other', { ...mv, other: ['c', 'b'] })).toBe(false);
+    expect(value('mv > other', { ...mv, other: ['A', 'c'] })).toBe(true);
+    expect(value('mv > other', { ...mv, other: ['c', 'd'] })).toBe(false);
+    expect(value('mv <= other', { ...mv, other: ['A', 'B'] })).toBe(false);
   });
 });
 
