@@ -54,7 +54,10 @@ const HOST_KIND: StanzaKind = {
     'Host-based stanza matching a hostname pattern. Use it to apply settings to data from particular machines regardless of sourcetype.',
   rank: 2,
   precedence: 'Overrides [sourcetype] and [default]; overridden by [source::*].',
-  patternSyntax: ['`*` matches any characters', 'More specific patterns take precedence'],
+  patternSyntax: [
+    '`*` matches any characters',
+    'Among matching host stanzas of equal `priority`, the name first in ASCII order wins',
+  ],
   example: '[host::web-*.example.com]',
 };
 
@@ -68,7 +71,7 @@ const SOURCE_KIND: StanzaKind = {
   patternSyntax: [
     '`*` matches any characters within a path segment',
     '`...` matches any path segments (recursive wildcard)',
-    'More specific patterns take precedence over less specific ones',
+    'Among matching source stanzas of equal `priority`, the name first in ASCII order wins',
   ],
   example: '[source::/var/log/.../*.log]',
 };

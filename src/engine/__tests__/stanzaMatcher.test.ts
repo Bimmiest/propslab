@@ -18,6 +18,37 @@ const META: EventMetadata = {
   sourcetype: 'access_combined',
 };
 
+/** A `[source::<pattern>]` stanza, as parseConf would build it. */
+function source(pattern: string): ConfStanza {
+  return {
+    name: `source::${pattern}`,
+    type: 'source',
+    sourcePattern: pattern,
+    directives: [],
+    lineRange: { start: 1, end: 2 },
+  };
+}
+
+/** A `[host::<pattern>]` stanza, as parseConf would build it. */
+function host(pattern: string): ConfStanza {
+  return {
+    name: `host::${pattern}`,
+    type: 'host',
+    hostPattern: pattern,
+    directives: [],
+    lineRange: { start: 1, end: 2 },
+  };
+}
+
+const at = (path: string): EventMetadata => ({ ...META, source: path });
+const onHost = (name: string): EventMetadata => ({ ...META, host: name });
+
+/** Whether `stanza` matches an event with `meta`. */
+const matches = (stanza: ConfStanza, meta: EventMetadata): boolean => matchStanzas([stanza], meta).length === 1;
+
+/** Names of the matching stanzas, in precedence order. */
+const order = (stanzas: ConfStanza[], meta: EventMetadata): string[] => matchStanzas(stanzas, meta).map((s) => s.name);
+
 describe('matchStanzas — precedence ordering', () => {
   it('source wins over host, sourcetype, and default', () => {
     const stanzas = [
@@ -103,28 +134,11 @@ describe('matchStanzas — wildcard patterns', () => {
     expect(result).toHaveLength(1);
   });
 
-  // A literal `.` is part of the pattern (only `*`, `?`, `...` are
-  // wildcards), so it must count toward specificity.
-  it('counts literal dots toward host specificity', () => {
-    const meta = { ...META, host: 'a.b.c.d' };
-    const literal: ConfStanza = {
-      name: 'host::a.b.c.d',
-      type: 'host',
-      hostPattern: 'a.b.c.d',
-      directives: [],
-      lineRange: { start: 1, end: 2 },
-    };
-    const wild: ConfStanza = {
-      name: 'host::a?b?c?d',
-      type: 'host',
-      hostPattern: 'a?b?c?d',
-      directives: [],
-      lineRange: { start: 1, end: 2 },
-    };
-    // Wildcard listed first: a tie (dots uncounted) would leave it ahead. The
-    // literal must rank first because its four literal dots make it more specific.
-    const result = matchStanzas([wild, literal], meta);
-    expect(result.map((s) => s.name)).toEqual(['host::a.b.c.d', 'host::a?b?c?d']);
+  // Doc-derived (props.conf.spec, stanza patterns): "." matches a period.
+  it('reads `.` as a literal period, not any character', () => {
+    expect(matches(host('a.b.c.d'), onHost('a.b.c.d'))).toBe(true);
+    expect(matches(host('a.b.c.d'), onHost('aXbXcXd'))).toBe(false);
+    expect(matches(source('/var/log/*.log'), at('/var/log/appXlog'))).toBe(false);
   });
 });
 
@@ -187,15 +201,6 @@ describe('matchStanzas — host case-insensitivity without the `i` flag (#118)',
 // Doc-derived (props.conf.spec, [source::<source>]): "`|` is equivalent to
 // 'or'. `( )` are used to limit scope of `|`."
 describe('matchStanzas — `|` alternation and `( )` scoping (#284)', () => {
-  const source = (pattern: string): ConfStanza => ({
-    name: `source::${pattern}`,
-    type: 'source',
-    sourcePattern: pattern,
-    directives: [],
-    lineRange: { start: 1, end: 2 },
-  });
-  const at = (path: string): EventMetadata => ({ ...META, source: path });
-
   it('matches either branch of a scoped alternation', () => {
     const s = source('/var/log/(messages|secure)');
     expect(matchStanzas([s], at('/var/log/secure'))).toHaveLength(1);
@@ -241,32 +246,11 @@ describe('matchStanzas — `|` alternation and `( )` scoping (#284)', () => {
       'source::/var/log/(messages|secure)',
     ]);
   });
-
-  it('scores an alternation by its least specific branch, not by every branch', () => {
-    // Both are pattern stanzas at priority 0, so specificity decides. The
-    // alternation guarantees 15 literal characters (`/var/log/` + `secure`);
-    // `/var/log/message?` guarantees 16. Counting both spelled-out branches,
-    // plus the parentheses and `|`, scored the alternation 26 and put it first.
-    const alt = source('/var/log/(messages|secure)');
-    const wild = source('/var/log/message?');
-    expect(matchStanzas([alt, wild], at('/var/log/messages')).map((s) => s.name)).toEqual([
-      'source::/var/log/message?',
-      'source::/var/log/(messages|secure)',
-    ]);
-  });
 });
 
 // Doc-derived (props.conf.spec, stanza pattern syntax): "\\ = matches a literal
 // backslash '\'".
 describe('matchStanzas — a doubled backslash matches one literal backslash (#303)', () => {
-  const source = (pattern: string): ConfStanza => ({
-    name: `source::${pattern}`,
-    type: 'source',
-    sourcePattern: pattern,
-    directives: [],
-    lineRange: { start: 1, end: 2 },
-  });
-  const at = (path: string): EventMetadata => ({ ...META, source: path });
   // The conf text `C:\\logs\\app.log`, i.e. written the way the spec says.
   const SPEC_WINDOWS = 'C:\\\\logs\\\\app.log';
 
@@ -304,18 +288,6 @@ describe('matchStanzas — a doubled backslash matches one literal backslash (#3
     ]);
   });
 
-  it('scores an escaped pair as the one character it matches', () => {
-    // Both pattern stanzas at priority 0, so specificity decides. `C:\\logs\\*.log`
-    // guarantees 12 literal characters and `C:\logs\a*.log` 13. Counting both
-    // characters of each pair would score the first 14 and put it ahead.
-    const escaped = source('C:\\\\logs\\\\*.log');
-    const lone = source('C:\\logs\\a*.log');
-    expect(matchStanzas([escaped, lone], at('C:\\logs\\app.log')).map((s) => s.name)).toEqual([
-      'source::C:\\logs\\a*.log',
-      'source::C:\\\\logs\\\\*.log',
-    ]);
-  });
-
   it('survives the conf parser: the stanza header keeps its backslashes', () => {
     const conf = parseConf('[source::C:\\\\logs\\\\app.log]\nTRUNCATE = 5\n', 'props.conf');
     expect(matchStanzas(conf.stanzas, at('C:\\logs\\app.log'))).toHaveLength(1);
@@ -348,11 +320,39 @@ describe('matchStanzas — ASCII order breaks a full tie (#318)', () => {
     expect(result[0]).toContain('...APP_A...');
   });
 
-  it('does not override priority or specificity', () => {
+  it('does not override priority', () => {
     const stanzas = parseConf(
       '[source::...app_a...]\nSEDCMD-who = s/M/a/\n\n[source::...app_z...]\npriority = 5\nSEDCMD-who = s/M/z/\n',
       'props.conf',
     ).stanzas;
     expect(matchStanzas(stanzas, meta)[0]!.name).toContain('...app_z...');
+  });
+});
+
+// Doc-derived (props.conf.spec, [<spec>] stanza patterns): "suppose two [<spec>]
+// stanzas supply the same setting. In this case, Splunk software chooses the
+// value to apply based on the ASCII order of the patterns in question." #443
+// established that nothing comes before it: the more specific pattern does not
+// win.
+describe('matchStanzas — no specificity rule before ASCII order (#443)', () => {
+  it('lets the ASCII-first pattern win over a more specific one', () => {
+    // #443 corrected this. The stanza with more literal characters used to
+    // rank first, so `/var/log/x443/...` won.
+    const stanzas = [source('/var/log/x443/...'), source('.../app443.log')];
+    const expected = ['source::.../app443.log', 'source::/var/log/x443/...'];
+    expect(order(stanzas, at('/var/log/x443/sub/app443.log'))).toEqual(expected);
+    expect(order([...stanzas].reverse(), at('/var/log/x443/sub/app443.log'))).toEqual(expected);
+  });
+
+  it('lets the shorter of two nested directory patterns win when it sorts first', () => {
+    const stanzas = [source('/var/log/b/sub/...'), source('/var/log/b/...')];
+    expect(order(stanzas, at('/var/log/b/sub/f.log'))).toEqual([
+      'source::/var/log/b/...',
+      'source::/var/log/b/sub/...',
+    ]);
+  });
+
+  it('orders host patterns the same way', () => {
+    expect(order([host('web-01.*'), host('w*')], onHost('web-01.example'))).toEqual(['host::w*', 'host::web-01.*']);
   });
 });

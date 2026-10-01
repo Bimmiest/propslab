@@ -91,7 +91,6 @@ export function matchStanzas(stanzas: ConfStanza[], metadata: EventMetadata): Co
     stanza: ConfStanza;
     explicitPriority: number;
     priority: number;
-    specificity: number;
   }[] = [];
 
   for (const stanza of stanzas) {
@@ -99,47 +98,24 @@ export function matchStanzas(stanzas: ConfStanza[], metadata: EventMetadata): Co
 
     switch (stanza.type) {
       case 'default':
-        matched.push({
-          stanza,
-          explicitPriority: stanzaPriority(stanza),
-          priority: STANZA_PRIORITY.default,
-          specificity: 0,
-        });
+        matched.push({ stanza, explicitPriority: stanzaPriority(stanza), priority: STANZA_PRIORITY.default });
         break;
 
       case 'sourcetype':
         if (metadata.sourcetype && stanza.name === metadata.sourcetype) {
-          matched.push({
-            stanza,
-            explicitPriority: stanzaPriority(stanza),
-            priority: STANZA_PRIORITY.sourcetype,
-            specificity: stanza.name.length,
-          });
+          matched.push({ stanza, explicitPriority: stanzaPriority(stanza), priority: STANZA_PRIORITY.sourcetype });
         }
         break;
 
       case 'host':
         if (metadata.host && matchPattern(metadata.host, stanza.hostPattern ?? stanza.name, true)) {
-          const specificity = getPatternSpecificity(stanza.hostPattern ?? stanza.name);
-          matched.push({
-            stanza,
-            explicitPriority: stanzaPriority(stanza),
-            priority: STANZA_PRIORITY.host,
-            specificity,
-          });
+          matched.push({ stanza, explicitPriority: stanzaPriority(stanza), priority: STANZA_PRIORITY.host });
         }
         break;
 
       case 'source':
-        // source:: matching is case-sensitive in Splunk
         if (metadata.source && matchPattern(metadata.source, stanza.sourcePattern ?? stanza.name, false)) {
-          const specificity = getPatternSpecificity(stanza.sourcePattern ?? stanza.name);
-          matched.push({
-            stanza,
-            explicitPriority: stanzaPriority(stanza),
-            priority: STANZA_PRIORITY.source,
-            specificity,
-          });
+          matched.push({ stanza, explicitPriority: stanzaPriority(stanza), priority: STANZA_PRIORITY.source });
         }
         break;
     }
@@ -153,8 +129,7 @@ export function matchStanzas(stanzas: ConfStanza[], metadata: EventMetadata): Co
   //
   // So `priority` orders stanzas WITHIN a kind — which is where it earns its
   // keep, deciding between two `source::` stanzas that both match, or letting a
-  // wildcard stanza beat a literal one by declaring above 100. Specificity then
-  // breaks ties among stanzas sharing a priority.
+  // wildcard stanza beat a literal one by declaring above 100.
   //
   // One caveat, recorded because the spec argues with itself: a paragraph
   // earlier it says priority "can also be used to resolve collisions between
@@ -162,14 +137,17 @@ export function matchStanzas(stanzas: ConfStanza[], metadata: EventMetadata): Co
   // claim. The statement implemented here is the explicit one, and the one
   // carrying a worked example.
   //
-  // A full tie falls to the ASCII order of the stanza name, where the stanza
-  // sorting first takes precedence — the spec's rule for colliding patterns.
-  // File order must not decide it: reordering two stanzas in
+  // Equal priority falls to the ASCII order of the stanza name, the stanza
+  // sorting first taking precedence. props.conf.spec: "suppose two [<spec>]
+  // stanzas supply the same setting. In this case, Splunk software chooses the
+  // value to apply based on the ASCII order of the patterns in question." There
+  // is no rule before it ranking the more specific pattern higher (#443):
+  // `[source::.../app.log]` beats `[source::/var/log/x/...]` for a source both
+  // match. File order must not decide it either: reordering two stanzas in
   // props.conf does not change which one wins.
   matched.sort((a, b) => {
     if (a.priority !== b.priority) return b.priority - a.priority;
     if (a.explicitPriority !== b.explicitPriority) return b.explicitPriority - a.explicitPriority;
-    if (a.specificity !== b.specificity) return b.specificity - a.specificity;
     return asciiCompare(a.stanza.name, b.stanza.name);
   });
 
@@ -277,8 +255,8 @@ type PatternNode =
   | { kind: 'group'; alternatives: PatternNode[][] };
 
 /**
- * Parse a `source::`/`host::` pattern once, so matching, specificity and the
- * literal/pattern test all read the same tokenisation: a second syntax is a
+ * Parse a `source::`/`host::` pattern once, so matching and the
+ * literal/pattern test both read the same tokenisation: a second syntax is a
  * second chance to disagree.
  *
  * props.conf.spec: "`|` is equivalent to 'or'. `( )` are used to limit scope
@@ -334,8 +312,7 @@ function parseStanzaPattern(pattern: string): PatternNode[][] {
         // A single backslash not followed by another stays a literal backslash:
         // the spec defines no other escape, and configs written
         // `C:\logs\app.log` match, so reading a lone `\` as an escape would
-        // break them for no gain. One node, so the pair scores one
-        // literal character of specificity -- the one it matches.
+        // break them for no gain.
         current.push({ kind: 'literal', char: '\\' });
         pos += 2;
       } else {
@@ -371,35 +348,6 @@ function alternativesToRegex(alternatives: PatternNode[][]): string {
 
 function patternToRegex(pattern: string): string {
   return alternativesToRegex(parseStanzaPattern(pattern));
-}
-
-/**
- * Score literal characters; wildcards contribute nothing. Only `*`, `?`, and
- * the `...` multi-segment wildcard are wildcards — a lone `.` is a LITERAL dot
- * (Splunk source::/host:: syntax), so it must count. Otherwise `host::a.b.c.d`
- * scores below a shorter all-literal pattern and can wrongly lose precedence.
- *
- * Grouping parentheses and `|` are syntax, not text, and score nothing. An
- * alternation scores its LEAST specific branch: the literal text every match is
- * guaranteed to carry. Summing the branches would let `/var/log/(messages|secure)`
- * outrank a stanza it is no more specific than, merely for spelling out options
- * the event did not take.
- */
-function alternativesSpecificity(alternatives: PatternNode[][]): number {
-  let least = Infinity;
-  for (const sequence of alternatives) {
-    let score = 0;
-    for (const node of sequence) {
-      if (node.kind === 'literal') score++;
-      else if (node.kind === 'group') score += alternativesSpecificity(node.alternatives);
-    }
-    least = Math.min(least, score);
-  }
-  return least;
-}
-
-function getPatternSpecificity(pattern: string): number {
-  return alternativesSpecificity(parseStanzaPattern(pattern));
 }
 
 /**
