@@ -422,6 +422,8 @@ nulls('like', ['like(missing, "%")', 'like("a", missing)']);
 row('like', 'like("", "%")', true, `${COND} > like(TEXT,PATTERN): % matches any run, including none`);
 row('like', 'like("", "_")', false, `${COND} > like(TEXT,PATTERN): _ matches exactly one character`);
 row('like', 'like("abc", "a_c")', true, `${COND} > like(TEXT,PATTERN)`);
+row('like', 'like(s, "%ERROR%")', true, '#447: % matches across newlines', { s: 'first\nERROR here\nlast' });
+row('like', 'like(s, "abc")', false, '#447: a trailing newline defeats an exact match', { s: 'abc\n' });
 todo('like', 'like("😀", "_")', 'one character or two UTF-16 units: #446 settled it for len() and substr() only');
 todo('like', 'like(mv, "a")', MV_UNDOCUMENTED, MV_AB);
 todo('like', 'like("a", mv)', MV_UNDOCUMENTED, MV_AB);

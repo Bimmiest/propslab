@@ -419,11 +419,14 @@ function like(args: EvalValue[], ctx: EvalCtx): EvalValue {
     .replace(/[.+*?^${}()|[\]\\]/g, '\\$&')
     .replace(/%+/g, '.*')
     .replace(/_/g, '.');
-  // Splunk's like() is case-sensitive. Compiled through evalRegex so that a
-  // pattern that fails is reported like replace()/match()/mvfind() are,
-  // rather than failing without a word; the message quotes the regex like()
-  // built, since that is what failed to compile.
-  const regex = evalRegex(ctx, 'like', `^${pattern}$`);
+  // `%` and `_` match a newline too, so `%ERROR%` finds ERROR anywhere in a
+  // multi-line event, and the match must run to the very end of the text: `\z`,
+  // because `$` also matches before a final newline, and like("abc\n", "abc")
+  // is false (#447). Splunk's like() is case-sensitive. Compiled through
+  // evalRegex so that a pattern that fails is reported like
+  // replace()/match()/mvfind() are, rather than failing without a word; the
+  // message quotes the regex like() built, since that is what failed to compile.
+  const regex = evalRegex(ctx, 'like', `(?s)^${pattern}\\z`);
   return regex ? regex.test(value) : false;
 }
 
