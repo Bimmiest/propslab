@@ -89,6 +89,9 @@
     "@radix-ui/react-use-layout-effect": "1.1.4",
     "typed-rest-client": {
       "qs": "6.16.0"
+    },
+    "monaco-editor": {
+      "dompurify": "3.4.16"
     }
   }
 }
