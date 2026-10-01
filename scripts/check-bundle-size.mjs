@@ -46,7 +46,9 @@ const BUDGETS_KB = {
   'pipeline.js': 33, // 29.5
   'editorRuntime.js': 11, // 9.7
   // Workers: off the startup path, but each is a whole download of its own.
-  'pipelineWorker.js': 70, // 62.9
+  // 70.0 kB; 62.9 kB before the fidelity answers (#442–#451, #522) added the
+  // stanza-pattern tokenizer, eval operand typing and the CSV row rejoining.
+  'pipelineWorker.js': 77,
   'editor.worker.js': 97, // 92.8
   // PCRE2, the regex engine every user pattern runs on. The page and each
   // worker fetch and compile it for themselves.
