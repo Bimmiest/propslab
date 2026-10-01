@@ -61,8 +61,16 @@ describe('KV_MODE auto — long events (#427)', () => {
     }, 4_000);
     const raw = eventOf(32_000);
     const r = applyKvMode([ev(raw)], kv('auto'), runCtx(FIXED_NOW))[0]!;
-    expect(r.fields['k31999']).toBe('v x31999=31999');
-    expect(r.fields['tail']).toBe('end');
+    expect(r.fields['k5']).toBe('v x5=5');
     expect(r.fields).not.toHaveProperty('x5');
+    // Until #451 this asserted k31999 and tail too. They lie past the first
+    // 10240 characters, which is all automatic KV reads (limits.conf [kv]
+    // maxchars), so they are counted as not extracted instead. A pass over the
+    // whole event finds them, and it blanks the quoted spans as well: the
+    // count is the 32,000 k<n> pairs and tail, less those extracted, with no
+    // x<n> from inside a quoted value.
+    const step = r.processingTrace.at(-1);
+    const more = Number(/and (\d+) more$/.exec(step?.description ?? '')?.[1]);
+    expect(10 + more).toBe(32_001 - (step?.fieldsAdded?.length ?? 0));
   });
 });
