@@ -293,8 +293,10 @@ describe('FIELD_NAMES through the pipeline', () => {
   });
 });
 
-// Doc-derived (props.conf.spec, HEADER_FIELD_LINE_NUMBER): the line number of
-// the line holding the header fields.
+// Doc-derived (props.conf.spec, HEADER_FIELD_LINE_NUMBER): "The line number of
+// the line within the specified file or source that contains the header
+// fields." A line of the input, then, not an event; #449 confirms that blank
+// and preamble lines count.
 describe('HEADER_FIELD_LINE_NUMBER through the pipeline', () => {
   it('reads the header from the named line', () => {
     const events = csv('exported by tool\na,b\n1,2', 'HEADER_FIELD_LINE_NUMBER = 2\n');

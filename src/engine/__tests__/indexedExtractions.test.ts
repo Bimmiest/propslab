@@ -13,6 +13,11 @@ function dir(value: string): ConfDirective {
   return { key: 'INDEXED_EXTRACTIONS', value, line: 1, directiveType: 'INDEXED_EXTRACTIONS' };
 }
 
+/** One event per line, each numbered with the line it starts on, as line breaking numbers them. */
+function lines(...raws: string[]): SplunkEvent[] {
+  return raws.map((raw, i) => makeEvent(raw, { lineNumbers: { start: i + 1, end: i + 1 } }));
+}
+
 describe('applyIndexedExtractions — JSON', () => {
   it('extracts top-level JSON fields', () => {
     const events = applyIndexedExtractions(
@@ -469,9 +474,11 @@ describe('applyIndexedExtractions — FIELD_NAMES (#184)', () => {
 });
 
 describe('applyIndexedExtractions — HEADER_FIELD_LINE_NUMBER (#184)', () => {
+  // The header is the event that starts on the line (#449), so these events
+  // carry the line numbers line breaking would give them.
   it('takes the header from the declared 1-based line', () => {
     const events = applyIndexedExtractions(
-      [event('Report for January'), event('a,b'), event('1,2')],
+      lines('Report for January', 'a,b', '1,2'),
       [dir('csv'), dirOf('HEADER_FIELD_LINE_NUMBER', '2')],
       runCtx(FIXED_NOW),
     );
@@ -740,7 +747,7 @@ describe('applyIndexedExtractions — FIELD_HEADER_REGEX (#272)', () => {
 
   it('strips the prefix from the line HEADER_FIELD_LINE_NUMBER names', () => {
     const events = applyIndexedExtractions(
-      [event('banner'), event('>> a,b'), event('1,2')],
+      lines('banner', '>> a,b', '1,2'),
       [dir('csv'), dirOf('HEADER_FIELD_LINE_NUMBER', '2'), dirOf('FIELD_HEADER_REGEX', '^>>\\s*')],
       runCtx(FIXED_NOW),
     );
@@ -962,5 +969,217 @@ describe('header-side delimited overrides through the pipeline (#272)', () => {
     const [f] = fieldsOf('a,b\n1,-\n', 'MISSING_VALUE_REGEX = ^-$\n');
     expect(f?.['a']).toBe('1');
     expect(f?.['b']).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Where the header is, which values are missing, and rows that span lines
+// (#449).
+// ---------------------------------------------------------------------------
+
+/** Events for a csv stanza with `body` appended. */
+const csvEvents = (raw: string, body = '') =>
+  runPipeline(
+    raw,
+    { index: 'main', host: 'h', source: 's', sourcetype: 'st' },
+    `[st]\nINDEXED_EXTRACTIONS = csv\nTZ = UTC\n${body}`,
+    '',
+    { perEventPipeline: false, captureOffsets: false, now: Date.parse('2026-10-01T00:00:00Z') },
+  ).result.events;
+
+describe('HEADER_FIELD_LINE_NUMBER counts the lines of the input (#449)', () => {
+  const row = { ts: '2026-01-15T10:00:00Z', user: 'alice', status: '200' };
+
+  it('counts a blank line', () => {
+    const events = csvEvents(
+      'Report\n\nts,user,status\n2026-01-15T10:00:00Z,alice,200\n',
+      'HEADER_FIELD_LINE_NUMBER = 3\n',
+    );
+    expect(events).toHaveLength(1);
+    expect(events[0]!.fields).toMatchObject(row);
+  });
+
+  it('counts a preamble line', () => {
+    const events = csvEvents(
+      ';exported by tool\nts,user,status\n2026-01-15T10:00:00Z,alice,200\n',
+      'PREAMBLE_REGEX = ^;\nHEADER_FIELD_LINE_NUMBER = 2\n',
+    );
+    expect(events).toHaveLength(1);
+    expect(events[0]!.fields).toMatchObject(row);
+  });
+
+  it('does not index the lines before the header', () => {
+    const events = csvEvents(
+      'Report\nfor January\nts,user\n2026-01-15T10:00:00Z,alice\n',
+      'HEADER_FIELD_LINE_NUMBER = 3\n',
+    );
+    expect(events.map((e) => e._raw)).toEqual(['2026-01-15T10:00:00Z,alice']);
+  });
+
+  it('extracts nothing when the numbered line is preamble, and indexes every line after it', () => {
+    const events = csvEvents(
+      ';one\n;two\nts,user,status\n2026-01-15T10:00:00Z,alice,200\n',
+      'PREAMBLE_REGEX = ^;\nHEADER_FIELD_LINE_NUMBER = 2\n',
+    );
+    expect(events.map((e) => e._raw)).toEqual(['ts,user,status', '2026-01-15T10:00:00Z,alice,200']);
+    for (const e of events) {
+      expect(e.processingTrace.some((step) => step.processor === 'INDEXED_EXTRACTIONS(csv)')).toBe(false);
+    }
+  });
+
+  // Not established: what Splunk does when no line can be the header. The
+  // engine treats it as it does a preamble header line.
+  it('extracts nothing when no event starts on the numbered line', () => {
+    const events = csvEvents('Report\n\nts,user\n2026-01-15T10:00:00Z,alice\n', 'HEADER_FIELD_LINE_NUMBER = 2\n');
+    expect(events.map((e) => e._raw)).toEqual(['ts,user', '2026-01-15T10:00:00Z,alice']);
+    for (const e of events) expect(e.fields['user']).toBeUndefined();
+  });
+});
+
+// #449, and Getting Data In: "If Splunk software finds data that matches the
+// specified regular expression in the structured data file, it considers the
+// value for the field in the row to be empty." The match is of the whole
+// value, not of part of it.
+describe('MISSING_VALUE_REGEX matches the whole value (#449)', () => {
+  // A value matched in the middle, at the start only, at the end only, and not at all.
+  const raw = 'ts,code,note,lead,trail,other\n2026-01-15,-,a-b,-a,a-,x\n';
+
+  it.each([
+    ['a plain pattern', '-'],
+    // Cannot be wrapped in an anchored group, so the match must span the value.
+    ['a pattern with an unterminated \\Q', '\\Q-'],
+    ['an extended-mode pattern ending in a comment', '(?x) - # a dash'],
+  ])('drops a value it matches entirely and keeps one it matches in part, for %s', (_, pattern) => {
+    const [e] = csvEvents(raw, `MISSING_VALUE_REGEX = ${pattern}\n`);
+    expect(e!.fields['code']).toBeUndefined();
+    expect(e!.fields).toMatchObject({ ts: '2026-01-15', note: 'a-b', lead: '-a', trail: 'a-', other: 'x' });
+  });
+
+  it('anchors every alternative, not only the first that matches', () => {
+    const [e] = csvEvents('a,b,c\n--,-,---\n', 'MISSING_VALUE_REGEX = -|--\n');
+    expect(e!.fields['a']).toBeUndefined();
+    expect(e!.fields['b']).toBeUndefined();
+    expect(e!.fields['c']).toBe('---');
+  });
+
+  it('keeps the inline options the pattern sets', () => {
+    const [e] = csvEvents('a,b\nNULL,nullable\n', 'MISSING_VALUE_REGEX = (?i)null\n');
+    expect(e!.fields['a']).toBeUndefined();
+    expect(e!.fields['b']).toBe('nullable');
+  });
+});
+
+describe('a quoted value that holds a line break stays in its row (#449)', () => {
+  it.each([
+    ['CRLF', '\r\n'],
+    ['LF', '\n'],
+  ])('keeps the %s line break inside one event and in the value', (_, nl) => {
+    const raw = `ts,user,msg${nl}2026-01-15T10:00:00Z,alice,"line one${nl}line two"${nl}2026-01-15T11:00:00Z,bob,plain${nl}`;
+    const events = csvEvents(raw);
+    expect(events.map((e) => e._raw)).toEqual([
+      `2026-01-15T10:00:00Z,alice,"line one${nl}line two"`,
+      '2026-01-15T11:00:00Z,bob,plain',
+    ]);
+    expect(events[0]!.fields).toMatchObject({ user: 'alice', msg: `line one${nl}line two` });
+    expect(events[1]!.fields).toMatchObject({ user: 'bob', msg: 'plain' });
+    expect(events[0]!.lineNumbers).toEqual({ start: 2, end: 3 });
+    expect(events[0]!.processingTrace.map((s) => s.description)).toContain(
+      'Lines 2-3 are one row: a quoted value spans the line break',
+    );
+    expect(events[1]!.processingTrace.some((s) => s.description.includes('one row'))).toBe(false);
+  });
+
+  it('keeps a blank line inside the value, which line breaking had collapsed', () => {
+    const [e] = csvEvents('a,msg\n1,"one\n\ntwo"\n');
+    expect(e!._raw).toBe('1,"one\n\ntwo"');
+    expect(e!.fields['msg']).toBe('one\n\ntwo');
+  });
+
+  it('reads a doubled quote as a literal, not as the end of the value', () => {
+    const [e, next] = csvEvents('a,msg\n1,"say ""hi""\nthere"\n2,x\n');
+    expect(e!.fields['msg']).toBe('say "hi"\nthere');
+    expect(next!.fields['msg']).toBe('x');
+  });
+
+  it('runs to the end of the input when the quote never closes', () => {
+    const events = csvEvents('a,b\n1,"x\n2,y\n3,z\n');
+    expect(events.map((e) => e._raw)).toEqual(['1,"x\n2,y\n3,z']);
+  });
+
+  it('honours FIELD_QUOTE', () => {
+    const [e] = csvEvents("a,msg\n1,'one\ntwo'\n", "FIELD_QUOTE = '\n");
+    expect(e!.fields['msg']).toBe('one\ntwo');
+  });
+
+  it('joins nothing when FIELD_QUOTE = none', () => {
+    expect(csvEvents('a,b\n1,"x\ny"\n', 'FIELD_QUOTE = none\n').map((e) => e._raw)).toEqual(['1,"x', 'y"']);
+  });
+
+  it.each([['\r\n'], ['\r\r\n']])('does not double the \\r a LINE_BREAKER left in the event (%j)', (nl) => {
+    const [e] = csvEvents(`a,msg${nl}1,"one${nl}two"${nl}`, 'LINE_BREAKER = (\\n)\n');
+    expect(e!._raw).toBe(`1,"one${nl}two"${nl.slice(0, -1)}`);
+  });
+
+  it('joins with \\n when it is not given the input', () => {
+    const [e] = applyIndexedExtractions(lines('a,msg', '1,"one', 'two"'), [dir('csv')], runCtx(FIXED_NOW));
+    expect(e!._raw).toBe('1,"one\ntwo"');
+  });
+
+  it('joins with \\n when the events are not where their line numbers put them in the input', () => {
+    const ctx = runCtx(FIXED_NOW);
+    const elsewhere = applyIndexedExtractions(lines('a,msg', '1,"one', 'two"'), [dir('csv')], ctx, 'a,msg\r\nX\r\nY');
+    expect(elsewhere[0]!._raw).toBe('1,"one\ntwo"');
+    const pastTheEnd = applyIndexedExtractions(lines('a,msg', '1,"one', 'two"'), [dir('csv')], ctx, 'two"');
+    expect(pastTheEnd[0]!._raw).toBe('1,"one\ntwo"');
+  });
+});
+
+describe('the trace step each format records', () => {
+  const extraction = (e: SplunkEvent | undefined) => e?.processingTrace.at(-1);
+
+  it.each([
+    ['csv', 'a,b\n1,2', 'CSV'],
+    ['tsv', 'a\tb\n1\t2', 'TSV'],
+    ['psv', 'a|b\n1|2', 'PSV'],
+  ])('%s names the fields it extracted', (mode, raw, upper) => {
+    const events = applyIndexedExtractions(lines(...raw.split('\n')), [dir(mode)], runCtx(FIXED_NOW));
+    expect(events[0]!.fields).toMatchObject({ a: '1', b: '2' });
+    expect(extraction(events[0])).toEqual({
+      processor: `INDEXED_EXTRACTIONS(${mode})`,
+      phase: 'index-time',
+      description: `Extracted 2 fields from ${upper}`,
+      fieldsAdded: ['a', 'b'],
+    });
+  });
+
+  it('json names the fields it extracted', () => {
+    const [e] = applyIndexedExtractions([event('{"a":"1","b":{"c":"2"}}')], [dir('json')], runCtx(FIXED_NOW));
+    expect(extraction(e)).toEqual({
+      processor: 'INDEXED_EXTRACTIONS(json)',
+      phase: 'index-time',
+      description: 'Extracted 2 JSON fields',
+      fieldsAdded: ['a', 'b.c'],
+    });
+  });
+
+  it('w3c names the fields it extracted, leaving out a value of -', () => {
+    const [e] = applyIndexedExtractions(lines('#Fields: a b c', '1 - 3'), [dir('w3c')], runCtx(FIXED_NOW));
+    expect(e!.fields['b']).toBeUndefined();
+    expect(extraction(e)).toEqual({
+      processor: 'INDEXED_EXTRACTIONS(w3c)',
+      phase: 'index-time',
+      description: 'Extracted 2 W3C fields',
+      fieldsAdded: ['a', 'c'],
+    });
+  });
+
+  it('a row put back together says which lines it spans', () => {
+    const rows = applyIndexedExtractions(lines('a,msg', '1,"one', 'two"'), [dir('csv')], runCtx(FIXED_NOW));
+    expect(rows[0]!.processingTrace[0]).toEqual({
+      processor: 'INDEXED_EXTRACTIONS(csv)',
+      phase: 'index-time',
+      description: 'Lines 2-3 are one row: a quoted value spans the line break',
+      fieldsAdded: [],
+    });
   });
 });

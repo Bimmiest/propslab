@@ -13,6 +13,12 @@ export function applyIndexedExtractions(
   directives: ConfDirective[],
   /** `ctx.now` is the index time TIMESTAMP_FIELDS parsing uses, and falls back to. */
   ctx: RunContext,
+  /**
+   * The text `events` were broken from, which their line numbers point into.
+   * The delimited formats read back from it the line break inside a quoted
+   * value that line breaking removed.
+   */
+  input?: string,
 ): SplunkEvent[] {
   const extractionDir = effectiveDirective(directives, 'INDEXED_EXTRACTIONS');
   if (!extractionDir) return events;
@@ -23,11 +29,11 @@ export function applyIndexedExtractions(
     case 'json':
       return extractJsonFields(events, directives, ctx);
     case 'csv':
-      return extractDelimited(events, directives, ',', 'csv', ctx);
+      return extractDelimited(events, directives, { delimiter: ',', mode: 'csv', input }, ctx);
     case 'tsv':
-      return extractDelimited(events, directives, '\t', 'tsv', ctx);
+      return extractDelimited(events, directives, { delimiter: '\t', mode: 'tsv', input }, ctx);
     case 'psv':
-      return extractDelimited(events, directives, '|', 'psv', ctx);
+      return extractDelimited(events, directives, { delimiter: '|', mode: 'psv', input }, ctx);
     case 'w3c':
       return extractW3c(events, directives, ctx);
     case 'xml':
@@ -135,8 +141,8 @@ interface DelimitedOptions extends LineSyntax {
   fieldHeaderRegex: SplunkRegex | null;
   /** HEADER_FIELD_ACCEPTABLE_SPECIAL_CHARACTERS: characters header cleaning keeps. */
   acceptableSpecialChars: string;
-  /** MISSING_VALUE_REGEX: a value matching this is absent, not a value. */
-  missingValueRegex: SplunkRegex | null;
+  /** MISSING_VALUE_REGEX: true for a value that is absent, not a value. */
+  isMissingValue: ((value: string) => boolean) | null;
   /** FIELD_NAMES: explicit header, for data with no header line. */
   fieldNames: string[] | null;
   /** HEADER_FIELD_LINE_NUMBER: 1-based header line; 0 locates it automatically. */
@@ -219,7 +225,9 @@ function delimitedOptions(
     acceptableSpecialChars: Array.from(find('HEADER_FIELD_ACCEPTABLE_SPECIAL_CHARACTERS')?.value.trim() ?? '')
       .filter((ch) => ch.charCodeAt(0) < 128)
       .join(''),
-    missingValueRegex: compileOption(find('MISSING_VALUE_REGEX'), 'No value was treated as missing.', diagnostics),
+    isMissingValue: wholeValueTest(
+      compileOption(find('MISSING_VALUE_REGEX'), 'No value was treated as missing.', diagnostics),
+    ),
     fieldNames: null,
     headerLineNumber: 0,
     preambleRegex: null,
@@ -287,6 +295,25 @@ function compileOption(
     });
   }
   return compiled;
+}
+
+/**
+ * MISSING_VALUE_REGEX matches a whole value, not part of one (#449). Getting
+ * Data In: "If Splunk software finds data that matches the specified regular
+ * expression in the structured data file, it considers the value for the field
+ * in the row to be empty." So with `-`, a lone dash is missing while
+ * `2026-01-15` and `a-b` are values. The pattern is anchored at both ends; one
+ * that cannot be wrapped in an anchored group (an unterminated `\Q`, say)
+ * must instead match from the first character to the last.
+ */
+function wholeValueTest(regex: SplunkRegex | null): ((value: string) => boolean) | null {
+  if (!regex) return null;
+  const anchored = safeRegex(`\\A(?:${regex.source})\\z`, regex.flags);
+  if (anchored) return (value) => anchored.test(value);
+  return (value) => {
+    const m = regex.exec(value);
+    return m?.index === 0 && m.end === value.length;
+  };
 }
 
 /**
@@ -392,30 +419,37 @@ function withTimeFields(event: SplunkEvent, timeFields: SplunkEvent['fields']): 
   return fields;
 }
 
+/** What one delimited format needs besides the stanza: its default delimiter, its name, and the input. */
+interface DelimitedSource {
+  delimiter: string;
+  mode: string;
+  /** See `applyIndexedExtractions`. */
+  input: string | undefined;
+}
+
 function extractDelimited(
   events: SplunkEvent[],
   directives: ConfDirective[],
-  defaultDelimiter: string,
-  mode: string,
+  source: DelimitedSource,
   ctx: RunContext,
 ): SplunkEvent[] {
   if (events.length === 0) return events;
+  const { mode } = source;
 
-  const opts = delimitedOptions(directives, defaultDelimiter, ctx.diagnostics);
+  const opts = delimitedOptions(directives, source.delimiter, ctx.diagnostics);
 
   // PREAMBLE_REGEX: a leading run of matching lines is not data. Only the
   // leading run — the attribute exists for banners before the header, and
   // dropping matching lines from the middle of the data would silently lose
   // records.
-  let working = events;
+  let skip = 0;
   if (opts.preambleRegex) {
-    let skip = 0;
-    for (const e of working) {
+    for (const e of events) {
       if (!opts.preambleRegex.test(e._raw)) break;
       skip++;
     }
-    working = working.slice(skip);
   }
+  const working = events.slice(skip);
 
   // Where the field names come from decides how much of the input is data:
   // FIELD_NAMES names them directly and consumes nothing;
@@ -430,15 +464,23 @@ function extractDelimited(
   const headerFrom = (raw: string) =>
     parseDelimitedLine(stripHeaderPrefix(raw, opts.fieldHeaderRegex), opts.header).map(clean);
   let headers: string[];
+  // Where the data rows start, as an index into `events`.
   let dataStart: number;
   if (opts.fieldNames) {
     headers = opts.fieldNames.map(clean);
-    dataStart = 0;
+    dataStart = skip;
   } else if (opts.headerLineNumber > 0) {
-    const headerEvent = working[opts.headerLineNumber - 1];
-    if (headerEvent === undefined) return events;
+    // HEADER_FIELD_LINE_NUMBER counts the lines of the input, blank lines and
+    // preamble lines included (#449), so the header is the event that starts
+    // on that line, not the nth event, and the lines before it are not
+    // indexed. When that line is preamble, or no event starts on it, there is
+    // no header: the lines after it are indexed with no fields.
+    const line = opts.headerLineNumber;
+    const headerIndex = events.findIndex((e) => e.lineNumbers.start === line);
+    const headerEvent = headerIndex < skip ? undefined : events[headerIndex];
+    if (headerEvent === undefined) return working.filter((e) => e.lineNumbers.start > line);
     headers = headerFrom(headerEvent._raw);
-    dataStart = opts.headerLineNumber;
+    dataStart = headerIndex + 1;
   } else {
     const fieldHeaderRegex = opts.fieldHeaderRegex;
     const headerIndex = fieldHeaderRegex
@@ -447,14 +489,14 @@ function extractDelimited(
     const headerEvent = working[headerIndex];
     if (headerEvent === undefined) return events;
     headers = headerFrom(headerEvent._raw);
-    dataStart = headerIndex + 1;
+    dataStart = skip + headerIndex + 1;
   }
 
   if (headers.length === 0) return events;
 
   // The header row (and any preamble before it) is consumed as metadata —
   // Splunk does not index it as an event.
-  const rows = working.slice(dataStart).map((event) => {
+  const rows = rejoinQuotedRows(events.slice(dataStart), opts.quote, source).map((event) => {
     const values = parseDelimitedLine(event._raw, opts);
 
     const fields = { ...event.fields };
@@ -465,7 +507,7 @@ function extractDelimited(
       // MISSING_VALUE_REGEX names the placeholder a source writes for "no
       // value"; indexing the placeholder would make an absent value
       // searchable as if it were data.
-      if (header && value && !opts.missingValueRegex?.test(value)) {
+      if (header && value && !opts.isMissingValue?.(value)) {
         setField(fields, header, value);
         added.push(header);
       }
@@ -486,6 +528,109 @@ function extractDelimited(
     };
   });
   return applyTimestampFields(rows, directives, ctx);
+}
+
+/** A row being put back together from the events line breaking split it into. */
+interface PendingRow {
+  first: SplunkEvent;
+  last: SplunkEvent;
+  raw: string;
+}
+
+/**
+ * The data rows, with a row whose quoted value holds a line break put back
+ * together (#449). Line breaking runs before this and splits such a row at
+ * the break, so while a quote is open the next event continues the row, joined
+ * by the line break the input had there. A quote that never closes runs to the
+ * end of the input.
+ */
+function rejoinQuotedRows(events: SplunkEvent[], quote: string | null, source: DelimitedSource): SplunkEvent[] {
+  const lines = source.input === undefined ? null : { text: source.input, starts: lineStartsOf(source.input) };
+  const rows: SplunkEvent[] = [];
+  let row: PendingRow | null = null;
+  let open = false;
+  for (const event of events) {
+    if (row === null) {
+      row = { first: event, last: event, raw: event._raw };
+    } else {
+      row.raw += lineBreakBefore(lines, row.raw, event) + event._raw;
+      row.last = event;
+    }
+    if (hasOddQuotes(event._raw, quote)) open = !open;
+    if (!open) {
+      rows.push(joinedRow(row, source.mode));
+      row = null;
+    }
+  }
+  if (row !== null) rows.push(joinedRow(row, source.mode));
+  return rows;
+}
+
+/**
+ * Whether `text` leaves a quote open. `parseDelimitedLine` opens or closes a
+ * quote at each quote character, and reads a doubled one inside quotes as a
+ * literal that leaves it open, so a quote is left open exactly when the count
+ * is odd. With FIELD_QUOTE = none (`null`) nothing is quoted.
+ */
+function hasOddQuotes(text: string, quote: string | null): boolean {
+  let odd = false;
+  for (const ch of text) {
+    if (ch === quote) odd = !odd;
+  }
+  return odd;
+}
+
+/** One event for a row, spanning the lines of every event it was put back together from. */
+function joinedRow(row: PendingRow, mode: string): SplunkEvent {
+  const { first, last } = row;
+  if (last === first) return first;
+  const lineNumbers = { start: first.lineNumbers.start, end: last.lineNumbers.end };
+  return {
+    ...first,
+    _raw: row.raw,
+    lineNumbers,
+    processingTrace: [
+      ...first.processingTrace,
+      {
+        processor: `INDEXED_EXTRACTIONS(${mode})`,
+        phase: 'index-time' as const,
+        description: `Lines ${lineNumbers.start}-${lineNumbers.end} are one row: a quoted value spans the line break`,
+        fieldsAdded: [],
+      },
+    ],
+  };
+}
+
+/** Where each line of `text` starts. */
+function lineStartsOf(text: string): number[] {
+  const starts = [0];
+  for (let at = text.indexOf('\n'); at !== -1; at = text.indexOf('\n', at + 1)) starts.push(at + 1);
+  return starts;
+}
+
+const isLineBreak = (ch: string) => ch === '\r' || ch === '\n';
+
+/**
+ * The line break the input had just before `event`, which continues the row
+ * `row` holds so far: the run of `\r` and `\n` that ends where `event`'s line
+ * starts, less what of it `row` already ends with (a LINE_BREAKER that leaves
+ * the `\r` of a `\r\n` in the event). Without the input, or when `event` is
+ * not where its line number puts it, the row is joined with `\n`, as line
+ * merging joins lines.
+ */
+function lineBreakBefore(
+  lines: { text: string; starts: readonly number[] } | null,
+  row: string,
+  event: SplunkEvent,
+): string {
+  if (lines === null) return '\n';
+  const at = lines.starts[event.lineNumbers.start - 1];
+  if (at === undefined || !lines.text.startsWith(event._raw, at)) return '\n';
+  let start = at;
+  while (isLineBreak(lines.text.charAt(start - 1))) start--;
+  let kept = 0;
+  while (isLineBreak(row.charAt(row.length - 1 - kept))) kept++;
+  return lines.text.slice(start + kept, at);
 }
 
 function extractW3c(events: SplunkEvent[], directives: ConfDirective[], ctx: RunContext): SplunkEvent[] {

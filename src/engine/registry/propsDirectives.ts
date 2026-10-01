@@ -571,7 +571,8 @@ export const PROPS_ADDITIONAL: DirectiveDefinition[] = [
     key: 'HEADER_FIELD_LINE_NUMBER',
     description:
       'For structured data types (INDEXED_EXTRACTIONS), names which line carries the header — ' +
-      'counting from 1. At 0, the default, the header is located automatically.',
+      'counting from 1, with every line of the file counted, blank and preamble lines included. ' +
+      'The lines before it are not indexed. At 0, the default, the header is located automatically.',
     example: 'HEADER_FIELD_LINE_NUMBER = 2',
     defaultValue: '0',
     category: 'Structured Data',
