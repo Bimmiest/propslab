@@ -64,13 +64,43 @@ describe('runPipeline — DEST_KEY validation (SEM-11)', () => {
   it('warns that _TCP_ROUTING is valid but not simulated', () => {
     const transforms = '[route]\nREGEX = (.*)\nDEST_KEY = _TCP_ROUTING\nFORMAT = group1';
     const { diagnostics } = runPipeline('a log line', PLAIN_META, props, transforms);
-    expect(diagnostics.some((d) => d.message.includes('not simulated'))).toBe(true);
+    // The conf lint's warning, not the router's note that it left the event alone.
+    const about = diagnostics.filter((d) => d.message.startsWith('DEST_KEY = _TCP_ROUTING is'));
+    expect(about.map((d) => [d.level, d.file, d.line])).toEqual([['warning', 'transforms.conf', 3]]);
+    expect(about[0]?.message).toBe(
+      'DEST_KEY = _TCP_ROUTING is a valid Splunk routing key but is not simulated — events will not be cloned/routed in the preview.',
+    );
   });
 
   it('does NOT warn for a documented key like queue', () => {
     const transforms = '[route]\nREGEX = (.*)\nDEST_KEY = queue\nFORMAT = indexQueue';
     const { diagnostics } = runPipeline('a log line', PLAIN_META, props, transforms);
     expect(diagnostics.some((d) => d.message.includes('DEST_KEY'))).toBe(false);
+  });
+});
+
+describe('runPipeline — transforms references', () => {
+  const PLAIN_META: EventMetadata = { index: 'main', host: '', source: '', sourcetype: 'st' };
+  const transforms =
+    '[default]\nCLEAN_KEYS = true\n\n[route]\nREGEX = (.)\nFORMAT = c::$1\n\n[unused]\nREGEX = (.)\nFORMAT = u::$1\n';
+  const lint = (props: string) => runPipeline('a log line', PLAIN_META, props, transforms).diagnostics;
+
+  it('reports a stanza the list names that transforms.conf lacks, as an error at the directive', () => {
+    const missing = lint('[st]\nTRANSFORMS-t = route, nope\n').filter((d) => d.message.includes('not found'));
+    expect(missing.map((d) => [d.level, d.file, d.line, d.message])).toEqual([
+      ['error', 'props.conf', 2, 'Referenced transform stanza "nope" not found in transforms.conf'],
+    ]);
+  });
+
+  it('reports neither a stanza that exists nor an empty entry in the list', () => {
+    expect(lint('[st]\nTRANSFORMS-t = route, ,\n').filter((d) => d.message.includes('not found'))).toEqual([]);
+  });
+
+  it('reports an unreferenced stanza as a warning at that stanza, but not [default]', () => {
+    const unreferenced = lint('[st]\nTRANSFORMS-t = route\n').filter((d) => d.message.includes('never referenced'));
+    expect(unreferenced.map((d) => [d.level, d.file, d.line, d.message])).toEqual([
+      ['warning', 'transforms.conf', 8, 'Transform stanza "unused" is defined but never referenced from props.conf'],
+    ]);
   });
 });
 
