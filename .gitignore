@@ -37,6 +37,5 @@ coverage/
 .stryker-tmp/
 /reports/
 
-# The optional fidelity suite, held outside this repository. When it is
-# overlaid onto a checkout it lives here, and must never be committed.
+# Local-only tests. Never committed.
 /src/engine/__tests__/private/

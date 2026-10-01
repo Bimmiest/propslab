@@ -14,9 +14,9 @@
 // it. A directive with only "exercised" must be reclassified `documented` in
 // directiveSupport.ts, or sit in DOC_UNCITED below, which can only shrink.
 //
-// Only this repository's own tests count. An optional suite overlaid into
-// src/engine/__tests__/private/ (git-ignored; see .gitignore) is left out, so
-// the verdict here is the same with or without it.
+// Only tests committed to this repository count. Anything under
+// src/engine/__tests__/private/ (git-ignored, for local-only tests) is left
+// out, so the verdict here is the one CI gives.
 //
 // HOW "EXERCISED" IS DECIDED (#505)
 //
@@ -76,7 +76,7 @@ const META_TESTS: Record<string, string> = {
   'src/engine/__tests__/directiveRegistry.test.ts': 'asserts registry metadata',
 };
 
-/** Where an optional suite is overlaid; never part of the repository. */
+/** Git-ignored local-only tests; never part of the repository. */
 const PRIVATE_DIR = 'src/engine/__tests__/private/';
 
 /**

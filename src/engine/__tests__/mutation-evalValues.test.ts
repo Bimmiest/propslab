@@ -5,7 +5,7 @@
 // yielding Infinity, `max("b", "a")` picking the first argument. These pin the
 // rules directly, and then through the expressions a user writes.
 //
-// Doc-derived (Splunk eval documentation), not captured; no fixture covers eval.
+// Doc-derived (Splunk eval documentation).
 import { describe, it, expect } from 'vitest';
 import {
   addOrConcat,

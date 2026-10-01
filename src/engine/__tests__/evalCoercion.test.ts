@@ -2,11 +2,10 @@
 // evalCoercion.test.ts
 // One string → number reading for eval, and the boolean-assignment error.
 //
-// Doc-derived, not captured: Splunk's eval reads numbers in decimal (tonumber()
+// Doc-derived: Splunk's eval reads numbers in decimal (tonumber()
 // takes an explicit base for anything else), substr() takes a start and a
 // length, and assigning a comparison to a field is the documented error
-// "Fields cannot be assigned a boolean result". No fidelity fixture covers
-// eval, so the assertions are narrow.
+// "Fields cannot be assigned a boolean result". The assertions are narrow.
 // ---------------------------------------------------------------------------
 
 import { describe, it, expect } from 'vitest';

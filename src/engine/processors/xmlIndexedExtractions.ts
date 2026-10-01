@@ -9,7 +9,7 @@
  *                    by dotted element path from the root, root included;
  *                    attributes by bare name; a `Name` attribute names the
  *                    leaf it sits on and is also kept as `<tag>_Name`. The
- *                    path rule is the one part a capture (kvmode-xml) pins.
+ *                    path rule is the one part that follows observed Splunk.
  *   xmlkv         -- the `xmlkv` search command's convention: a leaf is named
  *                    by its own tag, `<foo>bar</foo>` giving foo=bar.
  *                    Attributes by bare name, as above.

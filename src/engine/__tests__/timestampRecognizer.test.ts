@@ -123,7 +123,7 @@ const CORPUS: Case[] = [
  * Common layouts read to the instant they write, not a truncation of it: the
  * log4j comma fraction, a 12-hour clock, a zone named after the time, Apache's
  * stamp without its zone, and date(1)'s zone before the year. Convention-
- * derived (strftime and datetime.xml readings); no capture covers these.
+ * derived (strftime and datetime.xml readings).
  */
 const FIDELITY: Case[] = [
   { line: '2026-01-15 10:00:00,123 INFO x', format: '%Y-%m-%d %H:%M:%S,%3N', iso: '2026-01-15T10:00:00.123Z' },

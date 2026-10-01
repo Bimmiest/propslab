@@ -67,7 +67,7 @@ describe('breakLines — SHOULD_LINEMERGE defaults', () => {
 
 // Doc-derived (props.conf.spec, BREAK_ONLY_BEFORE_DATE: "creates a new event
 // only if it encounters a new line with a date", recognised the way timestamps
-// are — within MAX_TIMESTAMP_LOOKAHEAD). Not a captured fixture.
+// are — within MAX_TIMESTAMP_LOOKAHEAD).
 describe('#287 — BREAK_ONLY_BEFORE_DATE finds a date anywhere in the lookahead window', () => {
   const raws = (raw: string, extra: ConfDirective[] = []) =>
     breakLines(raw, extra, META, runCtx(FIXED_NOW)).map((e) => e._raw);
@@ -531,8 +531,7 @@ describe('breakLines — BREAK_ONLY_BEFORE_DATE honours the stanza timestamp set
   // Doc-derived: props.conf.spec says BREAK_ONLY_BEFORE_DATE starts an event
   // "only if it encounters a new line with a date", and that the setting is not
   // meaningful when DATETIME_CONFIG stops timestamps being identified — so the
-  // date is the one the stanza's timestamp settings recognise. No capture
-  // covers a custom TIME_FORMAT with line merging.
+  // date is the one the stanza's timestamp settings recognise.
   it('breaks before each line TIME_FORMAT recognises, and merges the rest', () => {
     const raw = '15.01.2026 10:00:01 a\n15.01.2026 10:00:02 b\n  continuation\n15.01.2026 10:00:03 c';
     const events = breakLines(raw, [dir('TIME_FORMAT', '%d.%m.%Y %H:%M:%S')], META, runCtx(FIXED_NOW));

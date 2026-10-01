@@ -73,15 +73,15 @@ export const DIRECTIVE_SUPPORT: Record<string, SupportEntry> = {
   MUST_NOT_BREAK_BEFORE: {
     support: 'simulated',
     note:
-      'Measured inert: three 10.4.0 captures show the documented suppression never happening — ' +
+      'Simulated as having no effect: Splunk does not perform the documented suppression — ' +
       'date, BREAK_ONLY_BEFORE and MUST_BREAK_AFTER breaks all stand — so the faithful ' +
       'simulation is no effect.',
   },
   MUST_NOT_BREAK_AFTER: {
     support: 'simulated',
     note:
-      'After a matching line, rule-driven breaks are suppressed until MUST_BREAK_AFTER matches ' +
-      '(pinned by capture); MAX_EVENTS still caps the merge.',
+      'After a matching line, rule-driven breaks are suppressed until MUST_BREAK_AFTER matches; ' +
+      'MAX_EVENTS still caps the merge.',
   },
   LINE_BREAKER_LOOKBEHIND: {
     support: 'documented',
@@ -148,8 +148,8 @@ export const DIRECTIVE_SUPPORT: Record<string, SupportEntry> = {
   HEADER_FIELD_ACCEPTABLE_SPECIAL_CHARACTERS: {
     support: 'simulated',
     note:
-      'Header cleaning replaces spaces as well, although the spec wording exempts them; no capture ' +
-      'settles it. Naming a space here keeps it.',
+      'Header cleaning replaces spaces as well, although the spec wording exempts them; nothing ' +
+      'observed settles it. Naming a space here keeps it.',
   },
   MISSING_VALUE_REGEX: { support: 'simulated' },
   // The XML values of INDEXED_EXTRACTIONS. The spec gives what each
@@ -357,7 +357,7 @@ export const DIRECTIVE_SUPPORT: Record<string, SupportEntry> = {
   ADD_EXTRA_TIME_FIELDS: {
     support: 'simulated',
     note:
-      'The field values follow the documented conventions; no capture recorded them. Only an event whose ' +
+      'The field values follow the documented conventions. Only an event whose ' +
       'timestamp was read from its text gets date_*; the rest get timestamp=none.',
   },
   DETERMINE_TIMESTAMP_DATE_WITH_SYSTEM_TIME: {
@@ -497,8 +497,8 @@ export const DIRECTIVE_SUPPORT: Record<string, SupportEntry> = {
  *
  * Names only, deliberately. Value types, defaults and valid values are
  * structural facts belonging to Splunk's `.spec` files; a half-remembered
- * default committed here would be exactly the kind of confident wrong answer
- * the fidelity corpus was built to catch. Naming a directive is enough to stop
+ * default committed here would be a confident wrong answer that no test here
+ * would catch. Naming a directive is enough to stop
  * claiming it works -- classify it properly in the registry when the facts are
  * to hand.
  */

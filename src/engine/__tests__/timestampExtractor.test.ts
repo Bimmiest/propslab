@@ -180,8 +180,8 @@ describe('extractTimestamps — range validation (#12)', () => {
 //
 // Every assertion here is DOC-DERIVED, from the props.conf.spec description of
 // TZ_ALIAS and its own example (`TZ_ALIAS = EST=GMT-5:00,METT=GMT+1:00`).
-// They are a reading of the documentation rather than a recording of Splunk,
-// and they are kept narrow for that reason. The one place the spec
+// They are a reading of the documentation, and they are kept narrow for that
+// reason. The one place the spec
 // is silent — whether the table also rewrites the stanza's own TZ — is asserted
 // as "it does not", which is the reading the spec's wording ("timezone strings
 // extracted from events") supports.
@@ -474,7 +474,7 @@ describe('#85 — timestamp sanity bounds', () => {
   // props.conf.spec says an event beyond MAX_DIFF_SECS_AGO is accepted "only if
   // it has the same exact time format as the majority of timestamps from the
   // source" — and under an explicit TIME_FORMAT every timestamp has that
-  // format, so it is kept. Doc-derived; no fixture covers it.
+  // format, so it is kept. Doc-derived.
   it('keeps a jump backwards beyond MAX_DIFF_SECS_AGO when it is in the TIME_FORMAT', () => {
     const out = extractTimestamps(
       [event('2026-08-03 10:00:00 first'), event('2026-08-03 08:00:00 two hours earlier')],
@@ -663,8 +663,7 @@ describe('#286 — a TIME_PREFIX that does not compile', () => {
 describe('extractTimestamps — auto-recognition keeps the zone (#353)', () => {
   // Doc-derived: ISO 8601 allows any number of fraction digits before the
   // offset, and a zone written in the event places it ahead of TZ, which
-  // props.conf.spec applies only to timestamps without one. No capture covers
-  // these shapes.
+  // props.conf.spec applies only to timestamps without one.
   const auto = (raw: string, directives: ConfDirective[] = []) =>
     iso(extractTimestamps([event(raw)], directives, runCtx(NOW))[0]!._time);
 

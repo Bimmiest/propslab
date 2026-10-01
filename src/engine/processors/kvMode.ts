@@ -312,9 +312,8 @@ function extractKeyValue(
   //
   // Key character class includes hyphen and dot (x-forwarded-for=..., both are
   // rewritten to underscores by key cleaning) but NOT colon: a colon re-anchors
-  // the key, so `ip:port=1.2.3.4` names the field `port` — pinned by the
-  // autokv-key-punctuation capture, and why `:` sits in the boundary class
-  // instead. In auto_escaped mode the quoted branches allow backslash escapes
+  // the key, so `ip:port=1.2.3.4` names the field `port` — observed Splunk
+  // behaviour, and why `:` sits in the boundary class instead. In auto_escaped mode the quoted branches allow backslash escapes
   // inside the value (e.g. key="say \"hi\""), which Splunk's auto_escaped
   // KV_MODE honours.
   const quoted = escaped
@@ -338,8 +337,8 @@ function extractKeyValue(
   // Splunk's automatic KV extraction keeps the FIRST occurrence of a repeated
   // key and discards the rest -- `label=a label=b` is `label = "a"`, not a
   // multivalue field. Worth stating plainly because the opposite is the more
-  // common intuition, and it is what this code did until the Splunk 10.4.0
-  // capture (`kvmode-auto-repeated-key`) settled it.
+  // common intuition, and it is what this code did until observed Splunk
+  // behaviour settled it (#169).
   //
   // The "already extracted" guard still has to distinguish a key this pass has
   // seen from one an EARLIER processor wrote: automatic KV must not overwrite a
@@ -348,9 +347,9 @@ function extractKeyValue(
   const record = (rawKey: string, value: string): void => {
     // Auto-KV names the field through the same key cleaning transforms use:
     // punctuation to underscores, then leading digits and underscores
-    // stripped. Pinned by the autokv-key captures from 10.4.0:
-    // `zone-found` becomes `zone_found`, `2fa` becomes `fa`, and a key that
-    // cleans to nothing — including a purely numeric one — is discarded.
+    // stripped, as observed in Splunk: `user-agent` becomes `user_agent`,
+    // `9lives` becomes `lives`, and a key that cleans to nothing — including a
+    // purely numeric one — is discarded.
     const key = cleanFieldKey(rawKey);
     if (!key) return;
     if (seenHere.has(key)) return; // first occurrence wins
@@ -379,9 +378,7 @@ function extractKeyValue(
       // `myfield=" apples "` is `apples`, and false keeps ` apples `. Spaces
       // only -- the spec says tabs are not trimmed, so the class is a literal
       // space rather than \s. Only a quoted value can have outer spaces: a bare
-      // one ends at the first. No capture has a padded quoted value, so the
-      // default is the spec's word; the captured quoted values (`note="not
-      // found"`, `quoted="a b"`) have none to trim and are unchanged by it.
+      // one ends at the first.
       if (trimSpaces) value = value.replace(/^ +| +$/g, '');
       candidates.push({ at: start, key, value });
     }

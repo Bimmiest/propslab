@@ -526,10 +526,9 @@ function isW3cDirectiveOnly(raw: string): boolean {
  *
  * `acceptable` is HEADER_FIELD_ACCEPTABLE_SPECIAL_CHARACTERS: characters that
  * survive cleaning. The spec's wording exempts a space by default too; this
- * still replaces it, because no capture settles the point and changing every
- * spaced header name on a doc reading alone is the kind of confident wrong
- * answer the fixtures exist to prevent. Naming a space in the attribute keeps
- * it.
+ * still replaces it: nothing observed settles the point, and changing every
+ * spaced header name on a doc reading alone risks a confident wrong answer.
+ * Naming a space in the attribute keeps it.
  */
 function sanitizeHeaderName(name: string, acceptable = ''): string {
   let out = '';

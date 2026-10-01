@@ -6,9 +6,9 @@
 // position, a multivalue in each argument position, a non-finite result, an
 // empty string and a non-BMP character.
 //
-// Doc-derived (Splunk Enterprise Search Reference, "Evaluation functions"),
-// not captured from a running Splunk; no fixture covers eval, so every row
-// cites the page section it relies on and is kept to what that section says.
+// Doc-derived (Splunk Enterprise Search Reference, "Evaluation functions"), so
+// every row cites the page section it relies on and is kept to what that
+// section says.
 // A row whose documented behaviour is unclear is a TODO with the reason, never
 // an assertion of whatever the simulator happens to do.
 import { describe, it, expect } from 'vitest';

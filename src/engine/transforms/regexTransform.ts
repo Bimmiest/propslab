@@ -160,10 +160,8 @@ function readRegexSettings(transformStanza: ConfStanza, phase: Phase): RegexSett
     repeatMatch,
     // REPEAT_MATCH is documented as index-time only, and there it is the
     // switch: without it the REGEX runs once. At search time it is inert, yet
-    // Splunk still extracts every match — the report-repeat-match and
-    // report-transform-search-time captures (10.4.0) both show repeated
-    // extraction, the first with REPEAT_MATCH set but irrelevant and the second
-    // without it — and MV_ADD alone decides whether the later values are kept.
+    // Splunk still extracts every match, with or without REPEAT_MATCH set, and
+    // MV_ADD alone decides whether the later values are kept.
     scanAll: phase === 'search-time' || repeatMatch,
     mvAdd: phase === 'search-time' && flag('MV_ADD'),
   };
@@ -362,8 +360,7 @@ function extractNamedGroups(run: MatchedRun): void {
  *
  * The search-time default is empty: a REPORT- with only numbered groups
  * and no FORMAT extracts nothing, rather than inventing a field named after the
- * stanza. Named groups still extract there — the
- * report-named-groups-without-format capture (10.4.0) pins that.
+ * stanza. Named groups still extract there, as observed in Splunk.
  */
 function resolveFormat(transformStanza: ConfStanza, run: MatchedRun): string | undefined {
   const hasNamedGroups = run.firstMatch.groups !== undefined;

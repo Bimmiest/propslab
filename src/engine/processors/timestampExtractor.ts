@@ -424,7 +424,7 @@ class TimestampBatch {
   /**
    * Give a timestamp that has a time and no date its date, per
    * DETERMINE_TIMESTAMP_DATE_WITH_SYSTEM_TIME (props.conf.spec 10.4.3, as the
-   * registry describes it -- doc-derived, no capture covers a dateless stamp).
+   * registry describes it -- doc-derived).
    *
    * False, the default, carries the date forward from the last timestamp that
    * parsed. True reads it off the clock: today in the stamp's own zone, unless
@@ -588,8 +588,8 @@ export function extractTimestamps(
   /**
    * `ctx.now` stands in for index time: the MAX_DAYS_AGO/HENCE bounds are
    * measured from it, a yearless format takes its year, and the fallback tail of
-   * the chain lands on it. `runPipeline` passes `PipelineOptions.now` so a
-   * recorded fixture keeps being judged against the day it was captured.
+   * the chain lands on it. `runPipeline` passes `PipelineOptions.now` so
+   * replayed data keeps being judged against the day it was recorded.
    */
   ctx: RunContext,
 ): SplunkEvent[] {

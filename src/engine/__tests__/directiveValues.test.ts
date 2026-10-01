@@ -6,7 +6,7 @@
 // that each directive accepts every one of Splunk's boolean spellings,
 // trimmed, and points its diagnostic at the effective definition. The
 // spellings are Splunk's conf booleans as splunk.util.normalizeBoolean reads
-// them — doc-derived; no capture exercises an alternative spelling.
+// them — doc-derived.
 // ---------------------------------------------------------------------------
 
 import { describe, it, expect } from 'vitest';

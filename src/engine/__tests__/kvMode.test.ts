@@ -134,7 +134,7 @@ describe('applyKvMode — json', () => {
 });
 
 describe('applyKvMode — a leading [ is not by itself JSON (#289)', () => {
-  // Not from a capture: this is about when the simulator's own warning fires,
+  // Not a claim about Splunk: this is about when the simulator's own warning fires,
   // which Splunk has no counterpart for.
   it.each(['json', 'auto'])('does not warn about a bracketed log prefix under KV_MODE = %s', (mode) => {
     const diagnostics: ValidationDiagnostic[] = [];
@@ -323,8 +323,7 @@ describe('applyKvMode — extraction never mutates the input event (#63)', () =>
 describe('applyKvMode — KV_TRIM_SPACES (#274)', () => {
   // Doc-derived: props.conf.spec 10.4.3, KV_TRIM_SPACES. Default true strips the outer spaces
   // from an automatic key=value value, false keeps them, tabs are never
-  // trimmed, and it applies to KV_MODE auto and auto_escaped. No capture has a
-  // quoted value with outer spaces, so none pins this.
+  // trimmed, and it applies to KV_MODE auto and auto_escaped.
   const trim = (value: string): ConfDirective => ({
     key: 'KV_TRIM_SPACES',
     value,
