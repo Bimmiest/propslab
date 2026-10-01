@@ -684,3 +684,56 @@ describe('applyTransforms — FORMAT is expanded in one pass (#365)', () => {
     expect(e.fields['f']).toBe('x-y');
   });
 });
+
+// #450: KEEP_EMPTY_VALS decides an empty capture's fate for a REGEX-based
+// REPORT, but a DELIMS-based one drops the empty value under both settings,
+// and so does EXTRACT, which KEEP_EMPTY_VALS does not reach.
+describe('#450 — an empty value at search time', () => {
+  const raw = '2026-01-15T10:00:00Z;a=1;b=;c=3\n';
+  /** The fields named in the event: a, b and c, leaving out the timestamp's and punct. */
+  const searchTime = (props: string, transforms = '') => {
+    const fields =
+      runPipeline(raw, metadata, `[my_app]\nSHOULD_LINEMERGE = false\nKV_MODE = none\n${props}`, transforms, {
+        perEventPipeline: false,
+        captureOffsets: false,
+        now: FIXED_NOW,
+      }).result.events[0]?.fields ?? {};
+    return Object.fromEntries(Object.entries(fields).filter(([k]) => ['a', 'b', 'c'].includes(k)));
+  };
+  const report = (body: string, keep: string) =>
+    searchTime('REPORT-kev = kev\n', `[kev]\n${body}KEEP_EMPTY_VALS = ${keep}\n`);
+
+  const regex = 'REGEX = (\\w+)=(\\w*)\nFORMAT = $1::$2\nMV_ADD = false\n';
+  const named = 'REGEX = b=(?<b>\\w*);\n';
+  const delims = 'DELIMS = ";", "="\n';
+
+  it('drops it from a REGEX REPORT under false and keeps it under true', () => {
+    expect(report(regex, 'false')).toEqual({ a: '1', c: '3' });
+    expect(report(regex, 'true')).toEqual({ a: '1', b: '', c: '3' });
+  });
+
+  it('does the same for a named group without FORMAT', () => {
+    expect(report(named, 'false')).toEqual({});
+    expect(report(named, 'true')).toEqual({ b: '' });
+  });
+
+  it.each(['false', 'true'])('drops it from a DELIMS REPORT under %s', (keep) => {
+    expect(report(delims, keep)).toEqual({ a: '1', c: '3' });
+  });
+
+  it('drops it from an EXTRACT', () => {
+    expect(searchTime('EXTRACT-e = b=(?<b>\\w*);\n')).toEqual({});
+  });
+
+  it('says the transform matched and extracted nothing when every value was empty', () => {
+    const events = runPipeline(
+      raw,
+      metadata,
+      '[my_app]\nSHOULD_LINEMERGE = false\nKV_MODE = none\nREPORT-kev = kev\n',
+      `[kev]\n${named}`,
+      { perEventPipeline: false, captureOffsets: false, now: FIXED_NOW },
+    ).result.events;
+    const step = events[0]?.processingTrace.find((s) => s.processor === 'REPORT-kev:kev');
+    expect(step).toMatchObject({ description: 'Transform matched; it extracted no fields', fieldsAdded: [] });
+  });
+});

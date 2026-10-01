@@ -407,19 +407,36 @@ describe('CLEAN_KEYS through the pipeline', () => {
   });
 });
 
-// Doc-derived (transforms.conf.spec, KEEP_EMPTY_VALS): whether a pair whose
-// value is an empty string is kept; default false. Only the default is
-// asserted here.
+// Doc-derived (transforms.conf.spec, KEEP_EMPTY_VALS): it "controls whether
+// Splunk software keeps field/value pairs when the value is an empty string",
+// default false, and "does not apply to field/value pairs that are generated
+// by Splunk software autokv extraction. Autokv ignores field/value pairs with
+// empty values." Asserted for REGEX extractions; DELIMS is an exception the
+// spec does not state (#450, in transformsProcessor.test.ts).
 describe('KEEP_EMPTY_VALS through the pipeline', () => {
-  const delims = '[t]\nDELIMS = " ", "="\n';
+  const raw = '2026-01-15T10:00:00Z;a=1;b=;c=3';
+  const pairs = '[t]\nREGEX = (\\w+)=(\\w*)\nFORMAT = $1::$2\n';
+  const named = '[t]\nREGEX = b=(?<b>\\w*);\n';
 
   it.each([
-    ['unset', delims],
-    ['false', `${delims}KEEP_EMPTY_VALS = false\n`],
-  ])('drops an empty value when %s', (_, transforms) => {
-    const f = report('a= b=2', transforms);
-    expect(f['b']).toBe('2');
-    expect(f['a']).toBeUndefined();
+    ['unset', ''],
+    ['false', 'KEEP_EMPTY_VALS = false\n'],
+  ])('drops an empty value when %s', (_, setting) => {
+    const f = report(raw, pairs + setting);
+    expect(f).toMatchObject({ a: '1', c: '3' });
+    expect(f).not.toHaveProperty('b');
+    expect(report(raw, named + setting)).not.toHaveProperty('b');
+  });
+
+  it('keeps it, as an empty string, when true', () => {
+    expect(report(raw, `${pairs}KEEP_EMPTY_VALS = true\n`)).toMatchObject({ a: '1', b: '', c: '3' });
+    expect(report(raw, `${named}KEEP_EMPTY_VALS = true\n`)).toMatchObject({ b: '' });
+  });
+
+  it('leaves automatic key/value extraction ignoring an empty value', () => {
+    const f = fields(run('2026-01-15T10:00:00Z a=1 b= c=3', `${ONE_PER_LINE}KV_MODE = auto\n`));
+    expect(f).toMatchObject({ a: '1', c: '3' });
+    expect(f).not.toHaveProperty('b');
   });
 });
 

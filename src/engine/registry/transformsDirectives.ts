@@ -322,8 +322,10 @@ export const TRANSFORMS_CORE: DirectiveDefinition[] = [
   {
     key: 'KEEP_EMPTY_VALS',
     description:
-      'When set to true, fields that match the REGEX but capture an empty string are still created with an empty value. ' +
-      'When false, empty captures are discarded.',
+      'When set to true, a search-time REGEX extraction keeps a field whose captured value is an empty string, ' +
+      'with an empty value. When false (the default), the empty pair is discarded. A DELIMS extraction discards ' +
+      'empty values either way, and automatic key/value extraction (KV_MODE) always ignores them. ' +
+      'Search-time field extractions only.',
     example: 'KEEP_EMPTY_VALS = true',
     defaultValue: 'false',
     category: 'Field Extraction',

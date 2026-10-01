@@ -129,7 +129,12 @@ export const DIRECTIVE_SUPPORT: Record<string, SupportEntry> = {
   INGEST_EVAL: { support: 'simulated' },
   MV_ADD: { support: 'simulated' },
   CLEAN_KEYS: { support: 'simulated' },
-  KEEP_EMPTY_VALS: { support: 'simulated' },
+  KEEP_EMPTY_VALS: {
+    support: 'simulated',
+    note:
+      'Honoured by REGEX extractions. A DELIMS extraction drops an empty value whether it is true or ' +
+      'false, as Splunk does.',
+  },
   DEFAULT_VALUE: { support: 'simulated' },
   LOOKAHEAD: { support: 'simulated' },
 

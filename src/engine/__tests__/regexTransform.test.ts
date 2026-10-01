@@ -363,6 +363,45 @@ describe('applyRegexTransform — DELIMS / FIELDS', () => {
   });
 });
 
+describe('applyRegexTransform — DELIMS / FIELDS parsing', () => {
+  const delims = (raw: string, directives: Record<string, string>) => searchTime(event(raw), stanza('d', directives));
+
+  it('takes exactly the pairs that carry a kv delimiter', () => {
+    expect(delims('a=1|justtext|=2|b=', { DELIMS: '"|", "="' })).toMatchObject({ fields: { a: '1' }, matched: true });
+    expect(delims('a=1|justtext|=2|b=', { DELIMS: '"|", "="' }).fields).toEqual({ a: '1' });
+  });
+
+  it('decodes \\r, \\" and \\\\ in a quoted set', () => {
+    expect(delims('a"1\rb"2', { DELIMS: '"\\r", "\\""' }).fields).toEqual({ a: '1', b: '2' });
+    expect(delims('a=1\\b=2', { DELIMS: '"\\\\", "="' }).fields).toEqual({ a: '1', b: '2' });
+  });
+
+  it('reads an unquoted list, skipping empty entries and decoding escapes', () => {
+    expect(delims('a=1|b=2', { DELIMS: '|, , =' }).fields).toEqual({ a: '1', b: '2' });
+    expect(delims('a=1\tb=2', { DELIMS: '\\t, =' }).fields).toEqual({ a: '1', b: '2' });
+  });
+
+  it('keeps the whole source as one pair when the pair set is empty', () => {
+    expect(delims('a=1|b=2', { DELIMS: '"", "="' }).fields).toEqual({ a: '1|b=2' });
+  });
+
+  it('extracts nothing, and reports no match, from an empty source, an empty list or a set without FIELDS', () => {
+    for (const r of [
+      delims('', { DELIMS: '"|", "="' }),
+      delims('x,y', { DELIMS: ',', FIELDS: '"a"' }),
+      delims('x,y', { DELIMS: '","' }),
+      delims('nothing here', { DELIMS: '"|", "="' }),
+    ]) {
+      expect(r).toEqual({ fields: {}, matched: false });
+    }
+  });
+
+  it('names as many values as it has both names and values for, skipping an empty value', () => {
+    expect(delims('x,,z,extra', { DELIMS: '","', FIELDS: '"a", "b", "c"' }).fields).toEqual({ a: 'x', c: 'z' });
+    expect(delims('x', { DELIMS: '","', FIELDS: '"a", "b"' }).fields).toEqual({ a: 'x' });
+  });
+});
+
 describe('applyRegexTransform — no match', () => {
   it('returns matched=false when regex does not match', () => {
     const s = stanza('test', { REGEX: 'NO_MATCH_SENTINEL_XYZ' });
@@ -732,5 +771,58 @@ describe('applyRegexTransform — DEFAULT_VALUE (#183)', () => {
     );
     expect(r.matched).toBe(false);
     expect(Object.keys(r.fields)).toEqual([]);
+  });
+});
+
+// #450: at search time an empty value makes no field unless KEEP_EMPTY_VALS =
+// true, in every way a REGEX can name one; a DELIMS stanza drops it either way.
+describe('#450 — KEEP_EMPTY_VALS', () => {
+  const raw = 'a=1;b=;c=3';
+  const keep = (directives: Record<string, string>, value?: string) =>
+    stanza('kev', value === undefined ? directives : { ...directives, KEEP_EMPTY_VALS: value });
+
+  it.each([undefined, 'false', 'nonsense'])('drops an empty FORMAT value when KEEP_EMPTY_VALS is %s', (value) => {
+    const r = searchTime(event(raw), keep({ REGEX: '(\\w+)=(\\w*)', FORMAT: '$1::$2' }, value));
+    expect(r.fields).toEqual({ a: '1', c: '3' });
+    expect(r.matched).toBe(true);
+  });
+
+  it('keeps an empty FORMAT value when true', () => {
+    const r = searchTime(event(raw), keep({ REGEX: '(\\w+)=(\\w*)', FORMAT: '$1::$2' }, 'true'));
+    expect(r.fields).toEqual({ a: '1', b: '', c: '3' });
+  });
+
+  it('drops an empty named group, and keeps it when true', () => {
+    expect(searchTime(event(raw), keep({ REGEX: 'b=(?<b>\\w*);' })).fields).toEqual({});
+    expect(searchTime(event(raw), keep({ REGEX: 'b=(?<b>\\w*);' }, 'true')).fields).toEqual({ b: '' });
+  });
+
+  it('drops an empty _VAL_ capture, and keeps it when true', () => {
+    const dynamic = { REGEX: '(?<_KEY_1>\\w+)=(?<_VAL_1>\\w*)' };
+    expect(searchTime(event(raw), keep(dynamic)).fields).toEqual({ a: '1', c: '3' });
+    expect(searchTime(event(raw), keep(dynamic, 'true')).fields).toEqual({ a: '1', b: '', c: '3' });
+  });
+
+  it('lets a later non-empty value fill a field whose first value was dropped', () => {
+    const r = searchTime(event('b= b=2'), keep({ REGEX: '(\\w+)=(\\w*)', FORMAT: '$1::$2' }));
+    expect(r.fields).toEqual({ b: '2' });
+    const named = searchTime(event('b= b=2'), keep({ REGEX: 'b=(?<b>\\w*)' }));
+    expect(named.fields).toEqual({ b: '2' });
+  });
+
+  it('keeps the first value, empty, when true and MV_ADD is false', () => {
+    const r = searchTime(event('b= b=2'), keep({ REGEX: '(\\w+)=(\\w*)', FORMAT: '$1::$2' }, 'true'));
+    expect(r.fields).toEqual({ b: '' });
+  });
+
+  it('does not filter an index-time extraction, where KEEP_EMPTY_VALS is inert', () => {
+    const r = applyRegexTransform(event(raw), keep({ REGEX: 'b=(\\w*);', FORMAT: 'b::$1', WRITE_META: 'true' }));
+    expect(r.fields).toEqual({ b: '' });
+    const named = applyRegexTransform(event(raw), keep({ REGEX: 'b=(?<b>\\w*);', WRITE_META: 'true' }));
+    expect(named.fields).toEqual({ b: '' });
+  });
+
+  it.each(['false', 'true'])('drops an empty DELIMS value when KEEP_EMPTY_VALS is %s', (value) => {
+    expect(searchTime(event(raw), keep({ DELIMS: '";", "="' }, value)).fields).toEqual({ a: '1', c: '3' });
   });
 });

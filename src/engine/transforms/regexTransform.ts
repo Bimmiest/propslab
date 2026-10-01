@@ -131,6 +131,8 @@ interface RegexSettings {
   /** Whether REGEX is run across the whole source or once. */
   scanAll: boolean;
   mvAdd: boolean;
+  /** Whether a pair whose value is an empty string is discarded. */
+  dropEmpty: boolean;
 }
 
 function readRegexSettings(transformStanza: ConfStanza, phase: Phase): RegexSettings {
@@ -164,6 +166,12 @@ function readRegexSettings(transformStanza: ConfStanza, phase: Phase): RegexSett
     // MV_ADD alone decides whether the later values are kept.
     scanAll: phase === 'search-time' || repeatMatch,
     mvAdd: phase === 'search-time' && flag('MV_ADD'),
+    // KEEP_EMPTY_VALS (transforms.conf.spec): "Controls whether Splunk software
+    // keeps field/value pairs when the value is an empty string", default
+    // false, so at search time an empty capture makes no field unless it is
+    // true (#450). Like MV_ADD it is search-time only; an index-time
+    // extraction is not filtered by it and writes the empty value.
+    dropEmpty: phase === 'search-time' && !flag('KEEP_EMPTY_VALS'),
   };
 }
 
@@ -276,6 +284,8 @@ function extractFormatPairs(run: MatchedRun, format: string): void {
       // the key is only as well-formed as whatever the capture group caught.
       const field = cleanName(expandFormat(pair.key, m));
       if (!field) continue;
+      const value = expandFormat(pair.value, m);
+      if (value === '' && settings.dropEmpty) continue;
       // MV_ADD governs this path too, not just the named-capture-group one:
       // at its default of false Splunk keeps the first match and discards
       // the rest rather than building a multivalue field. It is a
@@ -284,7 +294,7 @@ function extractFormatPairs(run: MatchedRun, format: string): void {
       // gating both phases on it would make MV_ADD do something where
       // Splunk ignores it entirely.
       if (keepFirstMatchOnly && hasField(result.fields, field)) continue;
-      addMultiValue(result.fields, field, expandFormat(pair.value, m));
+      addMultiValue(result.fields, field, value);
     }
   }
 }
@@ -312,6 +322,7 @@ function extractNamedGroups(run: MatchedRun): void {
   // underscore strip, _KEY_ names the full key cleaning, below.
   const assignField = (fieldName: string, value: string) => {
     if (!fieldName) return;
+    if (value === '' && settings.dropEmpty) return;
     if (!hasField(result.fields, fieldName)) {
       setField(result.fields, fieldName, value);
     } else if (accumulate) {
