@@ -106,7 +106,9 @@ The module lives in its own repository, [`Bimmiest/pcre2-wasm-utf16`](https://gi
 
 The exact `@radix-ui/*` pins in `package.json`'s `overrides` dedupe the Radix primitives ([#147](https://github.com/Bimmiest/propslab/issues/147), [#152](https://github.com/Bimmiest/propslab/pull/152)). `cmdk` asks for older ranges of them than `react-dialog`, `react-tooltip` and `react-context-menu` resolve to, and without the overrides npm hoisted cmdk's copies and nested a second copy of each primitive under every current Radix package — both shipped, since they are distinct files (about 12 kB gzip at the time). The pinned versions are the ones `@radix-ui/react-dialog` pins exactly, directly or through its own dependencies. When you bump a Radix package, move the overrides to the versions it pins, and check with `npm ls @radix-ui/react-primitive` that there is still one copy.
 
-One override is not Radix: `typed-rest-client` → `qs`. `@stryker-mutator/core` 10 asks for `typed-rest-client ~2.3.0`, which pins `qs` 6.15.1 exactly, and that version carries denial-of-service advisories (GHSA-q8mj-m7cp-5q26, GHSA-x5fp-wj9c-mxmx, GHSA-4mjr-xmp4-gh2g). The override lifts it to a fixed release; drop it once Stryker depends on a `typed-rest-client` whose own `qs` is fixed.
+Two overrides are not Radix. One is `typed-rest-client` → `qs`. `@stryker-mutator/core` 10 asks for `typed-rest-client ~2.3.0`, which pins `qs` 6.15.1 exactly, and that version carries denial-of-service advisories (GHSA-q8mj-m7cp-5q26, GHSA-x5fp-wj9c-mxmx, GHSA-4mjr-xmp4-gh2g). The override lifts it to a fixed release; drop it once Stryker depends on a `typed-rest-client` whose own `qs` is fixed.
+
+Nor is `monaco-editor` → `dompurify`. `monaco-editor` 0.57 pins `dompurify` 3.4.15 exactly, and that version carries GHSA-p98j-92pf-mc4p. The override lifts it to the fixed 3.4.16, and because it is an exact pin Dependabot cannot do that on its own. Drop the override once a `monaco-editor` release depends on a fixed `dompurify`.
 
 ## Adding or changing a simulated directive
 

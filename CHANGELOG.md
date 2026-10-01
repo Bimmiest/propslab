@@ -52,6 +52,7 @@ All notable changes to Propslab are documented here, newest first. Entries say w
 
 ### Changed
 
+- **`dompurify` is lifted to 3.4.16, past GHSA-p98j-92pf-mc4p.** `monaco-editor` 0.57 pins 3.4.15 exactly, so the fix is an override scoped to it; `npm audit` reports zero vulnerabilities again.
 - **Recorded Splunk output is no longer distributed** ([ADR 0016](docs/adr/0016-recorded-splunk-output-is-not-distributed.md)). The fidelity fixtures, their replay suite and the unit tests built on observed output are removed from the source tree and its releases. Engine behaviour is unchanged. `docDerivedDirectives.test.ts` adds pipeline-level tests, written from the spec, for the directives that relied on a fixture.
 - **Every CI install runs with `--ignore-scripts`, and the wasm checksum is verified in every job and in the MCP build** ([#504](https://github.com/Bimmiest/propslab/issues/504)). `pcre2-wasm-utf16` is pinned by commit ([#518](https://github.com/Bimmiest/propslab/issues/518)); a weekly job runs the suite shuffled under a non-UTC zone and locale, and the MCP job runs on Windows and macOS too.
 - **Deploy hardening** ([#509](https://github.com/Bimmiest/propslab/issues/509)): the CSP test pins every directive's exact sources, a post-deploy step checks the served headers and wasm MIME type, `Strict-Transport-Security` is sent, and the Trusted Types policy is installed by a side-effect module imported first.
