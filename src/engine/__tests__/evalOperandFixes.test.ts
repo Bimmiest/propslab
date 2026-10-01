@@ -81,8 +81,9 @@ describe('multivalue operands match when any value does (#475)', () => {
 });
 
 // #522 corrected the old reading, under which `<`, `>`, `<=` and `>=` held when
-// any value satisfied them (`mv > "a"` was true for a, b), and a number on the
-// other side was compared like a string (`n == 5` was true for 1, 5).
+// any value satisfied them (`mv > "a"` was true for a, b), a number on the
+// other side was compared like a string (`n == 5` was true for 1, 5), and two
+// multivalues were equal when any pair of their values was.
 describe('a multivalue operand under an ordering operator, or against a number, is NULL (#522)', () => {
   const mv = { mv: ['a', 'b'] };
   const n = { n: ['1', '5'] };
@@ -146,12 +147,35 @@ describe('a multivalue operand under an ordering operator, or against a number, 
     expect(value('x > 3', { x: '5' })).toBe(true);
   });
 
-  it('keeps the any-match rule between two multivalues', () => {
-    expect(value('mv == other', { ...mv, other: ['c', 'b'] })).toBe(true);
-    expect(value('mv != other', { ...mv, other: ['c', 'b'] })).toBe(false);
-    expect(value('mv > other', { ...mv, other: ['A', 'c'] })).toBe(true);
-    expect(value('mv > other', { ...mv, other: ['c', 'd'] })).toBe(false);
-    expect(value('mv <= other', { ...mv, other: ['A', 'B'] })).toBe(false);
+  it('compares a multivalue with exactly one value as that value', () => {
+    expect(value('split("5", ",") == 5')).toBe(true);
+    expect(value('split("5", ",") > 3')).toBe(true);
+    expect(value('3 < split("5", ",")')).toBe(true);
+    expect(value('split("5", ",") != 5')).toBe(false);
+    expect(value('split("b", ",") > "a"')).toBe(true);
+    expect(value('one == 5', { one: ['5'] })).toBe(true);
+    expect(value('one IN (5)', { one: ['5'] })).toBe(true);
+    // Against a multivalue of two values, it is the single value matched.
+    expect(value('split("b", ",") == mv', mv)).toBe(true);
+    expect(value('mv == split("c", ",")', mv)).toBe(false);
+  });
+
+  it.each([
+    [['a', 'b'], ['a', 'b'], true],
+    [['a', 'b'], ['b', 'a'], false],
+    [['a', 'b'], ['a', 'b', 'c'], false],
+    [['a', 'b', 'c'], ['a', 'b'], false],
+    [['a', 'b'], ['a', 'c'], false],
+  ] as const)('between two multivalues, %j == %j is %s: the same values in the same order', (x, y, equal) => {
+    const fields = { x: [...x], y: [...y] };
+    expect(value('x == y', fields)).toBe(equal);
+    expect(value('x = y', fields)).toBe(equal);
+    expect(value('x != y', fields)).toBe(!equal);
+  });
+
+  it('is NULL between two multivalues under an ordering operator', () => {
+    const fields = { x: ['a', 'b'], y: ['c', 'd'] };
+    for (const op of ['<', '>', '<=', '>=']) expect(value(`x ${op} y`, fields), op).toBeNull();
   });
 });
 

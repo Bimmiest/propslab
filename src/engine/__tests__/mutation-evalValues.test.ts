@@ -225,6 +225,11 @@ describe('addOrConcat and arith', () => {
     expect(addOrConcat(['5', '6'], 1)).toBeNull();
   });
 
+  it('reads a multivalue with one value as that value', () => {
+    expect(addOrConcat(['5'], 1)).toBe(6);
+    expect(addOrConcat('a', ['b'])).toBe('ab');
+  });
+
   it.each([
     ['-', 7, 2, 5],
     ['*', 7, 2, 14],
