@@ -337,10 +337,22 @@ function wholeValueTest(regex: SplunkRegex | null): ((value: string) => boolean)
  * event, and the rest of the event is not searched for another timestamp
  * (#444). The values are parsed as one batch so that each inherits from the
  * one before it, as the timestamp stage's events do.
+ *
+ * `defaults` are the fields a format reads when TIMESTAMP_FIELDS names none,
+ * which the trace labels as the format's default. Only w3c has any; the other
+ * formats then keep the timestamp the timestamp stage found in the event.
  */
-function applyTimestampFields(events: SplunkEvent[], directives: ConfDirective[], ctx: RunContext): SplunkEvent[] {
-  const names = parseNameList(effectiveDirective(directives, 'TIMESTAMP_FIELDS')?.value ?? '');
+function applyTimestampFields(
+  events: SplunkEvent[],
+  directives: ConfDirective[],
+  ctx: RunContext,
+  defaults?: { mode: string; names: readonly string[] },
+): SplunkEvent[] {
+  const listed = parseNameList(effectiveDirective(directives, 'TIMESTAMP_FIELDS')?.value ?? '');
+  const names = listed.length > 0 ? listed : (defaults?.names ?? []);
   if (names.length === 0) return events;
+  const named =
+    defaults && names === defaults.names ? `${names.join(', ')} (${defaults.mode} default)` : names.join(', ');
 
   const probes = events.map((event) => ({
     ...event,
@@ -357,12 +369,12 @@ function applyTimestampFields(events: SplunkEvent[], directives: ConfDirective[]
   const placed = extractTimestamps(probes, probeDirectives, quiet);
   return events.map((event, i) => {
     const probe = placed[i];
-    return probe ? settleTimestamp(event, probe, names) : event;
+    return probe ? settleTimestamp(event, probe, named) : event;
   });
 }
 
 /** The named fields' values, joined with a space in the order named. A field with no value is left out. */
-function timestampFieldsValue(fields: SplunkEvent['fields'], names: string[]): string {
+function timestampFieldsValue(fields: SplunkEvent['fields'], names: readonly string[]): string {
   const parts: string[] = [];
   for (const name of names) {
     const value = getField(fields, name);
@@ -377,12 +389,11 @@ function timestampFieldsValue(fields: SplunkEvent['fields'], names: string[]): s
  * settled on. A value that gave no timestamp fell back the way the timestamp
  * stage does, and the event then carries the fallback's time fields
  * (`timestamp=none`) in place of the ones the stage wrote for a timestamp it
- * found elsewhere in the event.
+ * found elsewhere in the event. `named` says which fields were read.
  */
-function settleTimestamp(event: SplunkEvent, probe: SplunkEvent, names: string[]): SplunkEvent {
+function settleTimestamp(event: SplunkEvent, probe: SplunkEvent, named: string): SplunkEvent {
   const [step] = probe.processingTrace;
   const read = step?.timeSource === 'TIME_FORMAT' || step?.timeSource === 'auto-recognition';
-  const named = names.join(', ');
   return {
     ...event,
     _time: probe._time,
@@ -630,6 +641,13 @@ function lineBreakBefore(
   return lines.text.slice(start + kept, at);
 }
 
+/**
+ * W3C extended log format. Without TIMESTAMP_FIELDS the timestamp is read from
+ * the `date` and `time` columns, joined in that order wherever they sit in the
+ * row, as if `TIMESTAMP_FIELDS = date, time` were set. props.conf.spec does
+ * not document this default (#444). A row with neither column gets no
+ * timestamp from elsewhere in it, whatever TIME_FORMAT says.
+ */
 function extractW3c(events: SplunkEvent[], directives: ConfDirective[], ctx: RunContext): SplunkEvent[] {
   // W3C format: header line starts with #Fields:
   let headers: string[] = [];
@@ -679,7 +697,7 @@ function extractW3c(events: SplunkEvent[], directives: ConfDirective[], ctx: Run
         ],
       };
     });
-  return applyTimestampFields(rows, directives, ctx);
+  return applyTimestampFields(rows, directives, ctx, { mode: 'w3c', names: ['date', 'time'] });
 }
 
 /** True for a line that carries data — not blank, not a `#` comment/directive. */
