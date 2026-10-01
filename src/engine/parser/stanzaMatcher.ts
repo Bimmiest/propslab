@@ -1,5 +1,6 @@
 import type { ConfStanza, EventMetadata } from '../types';
-import { escapeRegex } from '../../utils/splunkRegex';
+import { DEFAULT_DEPTH_LIMIT, DEFAULT_MATCH_LIMIT, safeRegex, validateRegex } from '../../utils/splunkRegex';
+import { detached } from '../../utils/redosHeuristic';
 import { effectiveDirective, parseSplunkBool } from '../utils/directiveValues';
 import { asciiCompare } from '../utils/asciiCompare';
 
@@ -28,18 +29,26 @@ const LITERAL_DEFAULT_PRIORITY = 100;
 const PATTERN_DEFAULT_PRIORITY = 0;
 
 /**
- * Whether a `source::`/`host::` pattern matches literally.
- *
- * Splunk's stanza pattern syntax is `...`, `*` and `?` for wildcards plus `|`
- * for alternation and `()` to scope it. A pattern carrying none of those matches
- * one exact string; `\\` is an escape for one literal backslash, so it does not
- * make a pattern. Note a lone `.` is a literal dot in this syntax rather than
- * a regex any-char, and a parenthesis with no partner is a literal character
- * too — all three fall out of parseStanzaPattern.
+ * Whether a `source::` pattern is a regex. Splunk reads it as PCRE only when it
+ * contains `*` or `...` somewhere, and otherwise compares it with the source as
+ * written (#442) — see {@link compileStanzaPattern}.
  */
-function isLiteralPattern(pattern: string): boolean {
-  const alternatives = parseStanzaPattern(pattern);
-  return alternatives.length === 1 && (alternatives[0] ?? []).every((node) => node.kind === 'literal');
+function isSourceRegex(pattern: string): boolean {
+  return pattern.includes('*') || pattern.includes('...');
+}
+
+/** PCRE syntax other than `.`, which a stanza pattern reads as a literal period. */
+const REGEX_SYNTAX = new Set('\\^$|()[]{}?*+');
+
+/**
+ * Whether a `host::` pattern names one host. It is always matched as a regex
+ * (#442), but with no wildcard and no regex syntax beyond the `.` it reads as a
+ * period, it can only match the one name it spells, in any case.
+ */
+function isLiteralHost(pattern: string): boolean {
+  if (pattern.includes('...')) return false;
+  for (const c of pattern) if (REGEX_SYNTAX.has(c)) return false;
+  return true;
 }
 
 /** The default `priority` a stanza carries when it declares none. */
@@ -49,11 +58,9 @@ function defaultPriority(stanza: ConfStanza): number {
     case 'sourcetype':
       return LITERAL_DEFAULT_PRIORITY;
     case 'host':
-      return isLiteralPattern(stanza.hostPattern ?? stanza.name) ? LITERAL_DEFAULT_PRIORITY : PATTERN_DEFAULT_PRIORITY;
+      return isLiteralHost(stanza.hostPattern ?? stanza.name) ? LITERAL_DEFAULT_PRIORITY : PATTERN_DEFAULT_PRIORITY;
     case 'source':
-      return isLiteralPattern(stanza.sourcePattern ?? stanza.name)
-        ? LITERAL_DEFAULT_PRIORITY
-        : PATTERN_DEFAULT_PRIORITY;
+      return isSourceRegex(stanza.sourcePattern ?? stanza.name) ? PATTERN_DEFAULT_PRIORITY : LITERAL_DEFAULT_PRIORITY;
     // `[default]` is the global fallback rather than a match of either kind. It
     // is last by stanza type regardless, so this value only orders it against
     // other `[default]` stanzas, of which a conf should have at most one.
@@ -91,7 +98,6 @@ export function matchStanzas(stanzas: ConfStanza[], metadata: EventMetadata): Co
     stanza: ConfStanza;
     explicitPriority: number;
     priority: number;
-    specificity: number;
   }[] = [];
 
   for (const stanza of stanzas) {
@@ -99,47 +105,24 @@ export function matchStanzas(stanzas: ConfStanza[], metadata: EventMetadata): Co
 
     switch (stanza.type) {
       case 'default':
-        matched.push({
-          stanza,
-          explicitPriority: stanzaPriority(stanza),
-          priority: STANZA_PRIORITY.default,
-          specificity: 0,
-        });
+        matched.push({ stanza, explicitPriority: stanzaPriority(stanza), priority: STANZA_PRIORITY.default });
         break;
 
       case 'sourcetype':
         if (metadata.sourcetype && stanza.name === metadata.sourcetype) {
-          matched.push({
-            stanza,
-            explicitPriority: stanzaPriority(stanza),
-            priority: STANZA_PRIORITY.sourcetype,
-            specificity: stanza.name.length,
-          });
+          matched.push({ stanza, explicitPriority: stanzaPriority(stanza), priority: STANZA_PRIORITY.sourcetype });
         }
         break;
 
       case 'host':
-        if (metadata.host && matchPattern(metadata.host, stanza.hostPattern ?? stanza.name, true)) {
-          const specificity = getPatternSpecificity(stanza.hostPattern ?? stanza.name);
-          matched.push({
-            stanza,
-            explicitPriority: stanzaPriority(stanza),
-            priority: STANZA_PRIORITY.host,
-            specificity,
-          });
+        if (metadata.host && stanzaPattern('host', stanza.hostPattern ?? stanza.name).test(metadata.host)) {
+          matched.push({ stanza, explicitPriority: stanzaPriority(stanza), priority: STANZA_PRIORITY.host });
         }
         break;
 
       case 'source':
-        // source:: matching is case-sensitive in Splunk
-        if (metadata.source && matchPattern(metadata.source, stanza.sourcePattern ?? stanza.name, false)) {
-          const specificity = getPatternSpecificity(stanza.sourcePattern ?? stanza.name);
-          matched.push({
-            stanza,
-            explicitPriority: stanzaPriority(stanza),
-            priority: STANZA_PRIORITY.source,
-            specificity,
-          });
+        if (metadata.source && stanzaPattern('source', stanza.sourcePattern ?? stanza.name).test(metadata.source)) {
+          matched.push({ stanza, explicitPriority: stanzaPriority(stanza), priority: STANZA_PRIORITY.source });
         }
         break;
     }
@@ -153,8 +136,7 @@ export function matchStanzas(stanzas: ConfStanza[], metadata: EventMetadata): Co
   //
   // So `priority` orders stanzas WITHIN a kind — which is where it earns its
   // keep, deciding between two `source::` stanzas that both match, or letting a
-  // wildcard stanza beat a literal one by declaring above 100. Specificity then
-  // breaks ties among stanzas sharing a priority.
+  // wildcard stanza beat a literal one by declaring above 100.
   //
   // One caveat, recorded because the spec argues with itself: a paragraph
   // earlier it says priority "can also be used to resolve collisions between
@@ -162,14 +144,17 @@ export function matchStanzas(stanzas: ConfStanza[], metadata: EventMetadata): Co
   // claim. The statement implemented here is the explicit one, and the one
   // carrying a worked example.
   //
-  // A full tie falls to the ASCII order of the stanza name, where the stanza
-  // sorting first takes precedence — the spec's rule for colliding patterns.
-  // File order must not decide it: reordering two stanzas in
+  // Equal priority falls to the ASCII order of the stanza name, the stanza
+  // sorting first taking precedence. props.conf.spec: "suppose two [<spec>]
+  // stanzas supply the same setting. In this case, Splunk software chooses the
+  // value to apply based on the ASCII order of the patterns in question." There
+  // is no rule before it ranking the more specific pattern higher (#443):
+  // `[source::.../app.log]` beats `[source::/var/log/x/...]` for a source both
+  // match. File order must not decide it either: reordering two stanzas in
   // props.conf does not change which one wins.
   matched.sort((a, b) => {
     if (a.priority !== b.priority) return b.priority - a.priority;
     if (a.explicitPriority !== b.explicitPriority) return b.explicitPriority - a.explicitPriority;
-    if (a.specificity !== b.specificity) return b.specificity - a.specificity;
     return asciiCompare(a.stanza.name, b.stanza.name);
   });
 
@@ -235,171 +220,163 @@ export function getRenamedSourcetype(matchedStanzas: ConfStanza[]): string | und
 }
 
 /**
- * Case-insensitive matching lower-cases both sides rather than compiling with
- * `'i'`, which is equivalent here and keeps the regex eligible for V8's
- * linear-time fallback — that engine cannot compile a pattern carrying `d`, `i`
- * or `u`, and stanza matching runs per event.
- *
- * Equivalent *here* specifically because `patternToRegex` can only emit `.*`,
- * `[^/\\]*`, `[^/\\]`, `(?:`, `|`, `)` and `escapeRegex(char)`, and
- * `escapeRegex` only ever backslashes a metacharacter — none of which are
- * letters. So there is no case-bearing escape (`\w`, `\W`, `\s`, `\S`) for
- * lower-casing to invert — a risk that would be real if this built patterns
- * from arbitrary regex source.
- *
- * The residue is Unicode case folding: `toLowerCase()` and the `'i'` flag
- * disagree on a handful of characters (Turkish dotless i, `ß`/`SS`). Splunk
- * `source::`/`host::` specs are host names and file paths, so this is theory
- * rather than practice — but it is the reason to keep it to this function.
+ * Why a `[source::…]` or `[host::…]` stanza can never match: its pattern is a
+ * regex PCRE rejects. `regex` is the pattern as translated (see
+ * {@link compileStanzaPattern}), which is what PCRE's offsets count into. Null
+ * for any other stanza.
  */
-function matchPattern(value: string, pattern: string, caseInsensitive: boolean): boolean {
-  const subject = caseInsensitive ? value.toLowerCase() : value;
-  const spec = caseInsensitive ? pattern.toLowerCase() : pattern;
-  // The group matters: a top-level `a|b` would otherwise anchor only `a` at the
-  // start and only `b` at the end.
-  // A wildcard pattern the engine builds itself, not a user's regex, so a JS
-  // regex serves; it cannot fail to compile, but a literal comparison is the
-  // safe answer if it ever did.
-  try {
-    return new RegExp(`^(?:${patternToRegex(spec)})$`).test(subject);
-  } catch {
-    return subject === spec;
+export function stanzaPatternProblem(stanza: ConfStanza): { regex: string; error: string } | null {
+  switch (stanza.type) {
+    case 'host':
+      return stanzaPattern('host', stanza.hostPattern ?? stanza.name).problem;
+    case 'source':
+      return stanzaPattern('source', stanza.sourcePattern ?? stanza.name).problem;
+    case 'sourcetype':
+    case 'default':
+      return null;
   }
+}
+
+/** A stanza pattern ready to test names against, or the reason it never matches. */
+interface StanzaPattern {
+  test(name: string): boolean;
+  problem: { regex: string; error: string } | null;
+}
+
+const NEVER = (): boolean => false;
+
+/** Splunk's default MATCH_LIMIT and DEPTH_LIMIT; see {@link compileStanzaPattern}. */
+const STANZA_PATTERN_LIMITS = { matchLimit: DEFAULT_MATCH_LIMIT, depthLimit: DEFAULT_DEPTH_LIMIT };
+
+/**
+ * Compiled patterns, keyed on kind and pattern: stanza resolution runs for each
+ * distinct event metadata, over every stanza. Bounded, so the patterns of confs
+ * typed in the editor or sent by an MCP client do not accumulate; an evicted
+ * pattern is compiled again, to the same answer.
+ */
+const STANZA_PATTERN_CACHE_LIMIT = 256;
+const stanzaPatterns = new Map<string, StanzaPattern>();
+
+/** How many compiled stanza patterns the cache holds; for the cache-bound test. */
+export function cachedStanzaPatternCount(): number {
+  return stanzaPatterns.size;
+}
+
+function stanzaPattern(kind: 'source' | 'host', pattern: string): StanzaPattern {
+  const hit = stanzaPatterns.get(`${kind}\u0000${pattern}`);
+  if (hit) return hit;
+  // A copy of its own, because the pattern is cut out of the conf text and,
+  // kept as a key, a view of it would keep the whole text alive.
+  const own = detached(pattern);
+  const compiled = compileStanzaPattern(kind, own);
+  if (stanzaPatterns.size >= STANZA_PATTERN_CACHE_LIMIT) {
+    const oldest = stanzaPatterns.keys().next();
+    if (!oldest.done) stanzaPatterns.delete(oldest.value);
+  }
+  stanzaPatterns.set(`${kind}\u0000${own}`, compiled);
+  return compiled;
 }
 
 /**
- * One element of a parsed stanza pattern. A pattern is a list of alternatives
- * (split on `|`), each a sequence of these.
- */
-type PatternNode =
-  | { kind: 'literal'; char: string }
-  | { kind: 'wildcard'; regex: string }
-  | { kind: 'group'; alternatives: PatternNode[][] };
-
-/**
- * Parse a `source::`/`host::` pattern once, so matching, specificity and the
- * literal/pattern test all read the same tokenisation: a second syntax is a
- * second chance to disagree.
+ * How Splunk reads a stanza pattern. props.conf.spec: "Match expressions must
+ * match the entire name, not just a substring. Match expressions are based on
+ * a full implementation of Perl-compatible regular expressions (PCRE) with the
+ * translation of "...", "*", and "." Thus, "." matches a period, "*" matches
+ * non-directory separators, and "..." matches any number of any characters."
  *
- * props.conf.spec: "`|` is equivalent to 'or'. `( )` are used to limit scope
- * of `|`." So `[source::/var/log/(messages|secure)]` matches
- * `/var/log/secure`, not a file literally named `(messages|secure)`.
+ * - A `host::` pattern is always that regex, wildcard or not, and matches
+ *   case-insensitively unless it carries `(?-i)`, which PCRE honours inline.
+ *   The spec: "[host::<host>] stanzas match in a case-insensitive manner" and
+ *   "To force a [host::<host>] stanza to match in a case-sensitive manner use
+ *   the "(?-i)" option in its pattern."
+ * - A `source::` pattern is that regex, case-sensitive, only when it contains
+ *   `*` or `...` (#442). Without either it is compared with the source exactly
+ *   as written: `?`, `\d`, `[0-9]` and `(a)` are plain characters, and `\\` is
+ *   two backslashes where in a regex it is one. A literal pattern containing
+ *   `|` matches nothing, neither as an alternation nor as text (#442).
  *
- * Parentheses are paired up front. One with no partner — `app(1.log` — is kept
- * as a literal character rather than rejected, because a stanza header is not
- * the place to throw: an unmatchable stanza would silently drop every setting
- * in it, while a literal reading at worst matches exactly what was written.
+ * A regex PCRE rejects matches nothing, and `problem` says why, for the conf
+ * lint. A match is bounded by Splunk's default MATCH_LIMIT and DEPTH_LIMIT,
+ * which no pattern written for a path or a host name comes near: the Effective
+ * config and Timestamp tabs resolve stanzas on the page's own thread, where an
+ * unbounded backtrack would freeze it.
  */
-function parseStanzaPattern(pattern: string): PatternNode[][] {
-  const pairs = new Map<number, number>();
-  const open: number[] = [];
-  for (let i = 0; i < pattern.length; i++) {
-    if (pattern[i] === '(') open.push(i);
-    else if (pattern[i] === ')') {
-      const start = open.pop();
-      if (start !== undefined) pairs.set(start, i);
-    }
+function compileStanzaPattern(kind: 'source' | 'host', pattern: string): StanzaPattern {
+  if (kind === 'source' && !isSourceRegex(pattern)) {
+    return { test: pattern.includes('|') ? NEVER : (name) => name === pattern, problem: null };
   }
-
-  let pos = 0;
-  // Parse up to (not including) `end`; the caller steps over a group's `)`.
-  function parseAlternatives(end: number): PatternNode[][] {
-    const alternatives: PatternNode[][] = [];
-    let current: PatternNode[] = [];
-    alternatives.push(current);
-    while (pos < end) {
-      const closer = pairs.get(pos);
-      if (closer !== undefined) {
-        pos++;
-        current.push({ kind: 'group', alternatives: parseAlternatives(closer) });
-        pos = closer + 1;
-      } else if (pattern.startsWith('...', pos)) {
-        current.push({ kind: 'wildcard', regex: '.*' });
-        pos += 3;
-      } else if (pattern[pos] === '*') {
-        current.push({ kind: 'wildcard', regex: '[^/\\\\]*' });
-        pos++;
-      } else if (pattern[pos] === '?') {
-        current.push({ kind: 'wildcard', regex: '[^/\\\\]' });
-        pos++;
-      } else if (pattern[pos] === '|') {
-        current = [];
-        alternatives.push(current);
-        pos++;
-      } else if (pattern.startsWith('\\\\', pos)) {
-        // props.conf.spec: "\\ = matches a literal backslash '\'". So a Windows
-        // path written the way the spec says, `[source::C:\\logs\\app.log]`,
-        // matches `C:\logs\app.log`.
-        //
-        // A single backslash not followed by another stays a literal backslash:
-        // the spec defines no other escape, and configs written
-        // `C:\logs\app.log` match, so reading a lone `\` as an escape would
-        // break them for no gain. One node, so the pair scores one
-        // literal character of specificity -- the one it matches.
-        current.push({ kind: 'literal', char: '\\' });
-        pos += 2;
-      } else {
-        // Includes an unpaired `(` or `)` — see above. A paired `)` is never
-        // reached here: the group that owns it stops just before it.
-        current.push({ kind: 'literal', char: pattern.charAt(pos) });
-        pos++;
-      }
-    }
-    return alternatives;
-  }
-  return parseAlternatives(pattern.length);
-}
-
-function alternativesToRegex(alternatives: PatternNode[][]): string {
-  return alternatives
-    .map((sequence) =>
-      sequence
-        .map((node) => {
-          switch (node.kind) {
-            case 'literal':
-              return escapeRegex(node.char);
-            case 'wildcard':
-              return node.regex;
-            case 'group':
-              return `(?:${alternativesToRegex(node.alternatives)})`;
-          }
-        })
-        .join(''),
-    )
-    .join('|');
-}
-
-function patternToRegex(pattern: string): string {
-  return alternativesToRegex(parseStanzaPattern(pattern));
+  const regex = translateStanzaPattern(pattern);
+  // Checked bare, not only anchored: inside the anchoring group an unbalanced
+  // `)` followed by an unbalanced `(` would close and reopen it, and compile
+  // into some other pattern.
+  const error = validateRegex(regex);
+  if (error !== null) return { test: NEVER, problem: { regex, error } };
+  // Null only where the wrapping is read as part of the pattern — an `(?x)`
+  // comment or an unterminated `\Q` running to its end — and then the stanza
+  // matches nothing.
+  const anchored = safeRegex(`\\A(?:${regex})\\z`, kind === 'host' ? 'i' : '', STANZA_PATTERN_LIMITS);
+  return { test: anchored ? (name) => anchored.test(name) : NEVER, problem: null };
 }
 
 /**
- * Score literal characters; wildcards contribute nothing. Only `*`, `?`, and
- * the `...` multi-segment wildcard are wildcards — a lone `.` is a LITERAL dot
- * (Splunk source::/host:: syntax), so it must count. Otherwise `host::a.b.c.d`
- * scores below a shorter all-literal pattern and can wrongly lose precedence.
- *
- * Grouping parentheses and `|` are syntax, not text, and score nothing. An
- * alternation scores its LEAST specific branch: the literal text every match is
- * guaranteed to carry. Summing the branches would let `/var/log/(messages|secure)`
- * outrank a stanza it is no more specific than, merely for spelling out options
- * the event did not take.
+ * A stanza pattern as the PCRE it stands for: `...` becomes `.*`, `*` becomes
+ * `[^/\\]*` and `.` becomes `\.`, and everything else is left to PCRE. Only
+ * where PCRE would read them as syntax, though: an escape (`\.`, `\*`) and the
+ * inside of a character class (`[.*]`) already mean those characters
+ * literally, and are copied as written.
  */
-function alternativesSpecificity(alternatives: PatternNode[][]): number {
-  let least = Infinity;
-  for (const sequence of alternatives) {
-    let score = 0;
-    for (const node of sequence) {
-      if (node.kind === 'literal') score++;
-      else if (node.kind === 'group') score += alternativesSpecificity(node.alternatives);
+function translateStanzaPattern(pattern: string): string {
+  let out = '';
+  let i = 0;
+  while (i < pattern.length) {
+    if (pattern[i] === '\\') {
+      out += pattern.slice(i, i + 2);
+      i += 2;
+    } else if (pattern[i] === '[') {
+      const end = classEnd(pattern, i);
+      out += pattern.slice(i, end);
+      i = end;
+    } else if (pattern.startsWith('...', i)) {
+      out += '.*';
+      i += 3;
+    } else if (pattern[i] === '*') {
+      out += '[^/\\\\]*';
+      i++;
+    } else if (pattern[i] === '.') {
+      out += '\\.';
+      i++;
+    } else {
+      out += pattern.charAt(i);
+      i++;
     }
-    least = Math.min(least, score);
   }
-  return least;
+  return out;
 }
 
-function getPatternSpecificity(pattern: string): number {
-  return alternativesSpecificity(parseStanzaPattern(pattern));
+/**
+ * Where the character class opening at `start` ends: just past its closing
+ * `]`, read as PCRE reads it. A `]` first in the class (after any `^`) is a
+ * member; an escape is skipped whole; and a POSIX class such as `[:digit:]`
+ * is skipped to its `:]`, PCRE's rule being that one with a `]` before that is
+ * not a POSIX class. An unterminated class runs to the end of the pattern,
+ * which PCRE then rejects.
+ */
+function classEnd(pattern: string, start: number): number {
+  let i = start + 1;
+  if (pattern[i] === '^') i++;
+  if (pattern[i] === ']') i++;
+  while (i < pattern.length) {
+    if (pattern[i] === ']') return i + 1;
+    if (pattern[i] === '\\') {
+      i += 2;
+    } else if (pattern.startsWith('[:', i)) {
+      const close = pattern.indexOf(':]', i + 2);
+      i = close !== -1 && !pattern.slice(i + 2, close).includes(']') ? close + 2 : i + 1;
+    } else {
+      i++;
+    }
+  }
+  return pattern.length;
 }
 
 /**

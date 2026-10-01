@@ -14,10 +14,11 @@
  *   knowable here, and `like()` builds its own from a LIKE pattern.
  * - Anything else the registry types `regex`: the trimmed value.
  *
- * `[source::…]` and `[host::…]` stanza patterns are not directives' regexes:
- * they are wildcard specs the engine turns into regexes of a fixed shape,
- * which cannot fail to compile and run on V8's linear-time fallback
- * (stanzaMatcher.ts), so neither list has anything to say about them.
+ * `[source::…]` and `[host::…]` stanza patterns are regexes too, but not
+ * directives' (stanzaMatcher.ts). Validate reports one that will not compile
+ * through the engine's conf lint (configLint.ts). The suspect list leaves them
+ * out: each is matched against a source or host name rather than event text,
+ * and under Splunk's default match limits.
  */
 import { getDirectiveInfo } from '../../../src/engine/directiveRegistry';
 import { parseExtractValue } from '../../../src/engine/processors/fieldExtractor';
