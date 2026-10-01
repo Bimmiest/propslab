@@ -231,11 +231,11 @@ function formatDuration(val: number): string {
 
 /**
  * "commas" for a number with no digits to group. Its text is grouped in threes
- * as if it were digits, after any sign: "In,fin,ity" and "-In,fin,ity" (#446).
+ * from the end as if it were digits: "In,fin,ity" and "-In,fin,ity" (#446).
+ * Those, and "NaN", are the only texts it is given.
  */
 function groupTextInThrees(text: string): string {
-  const sign = text.startsWith('-') ? '-' : '';
-  return sign + text.slice(sign.length).replace(/(?!^)(?=(?:.{3})+$)/g, ',');
+  return text.replace(/(?!^)(?=(?:.{3})+$)/g, ',');
 }
 
 /**

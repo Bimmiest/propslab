@@ -207,6 +207,11 @@ describe('addOrConcat and arith', () => {
     expect(addOrConcat(undefined, 1)).toBeNull();
     expect(addOrConcat(1, null)).toBeNull();
     expect(addOrConcat(1, undefined)).toBeNull();
+    // Beside a string too: NULL is not "" to concatenate.
+    expect(addOrConcat(null, 'a')).toBeNull();
+    expect(addOrConcat(undefined, 'a')).toBeNull();
+    expect(addOrConcat('a', null)).toBeNull();
+    expect(addOrConcat('a', undefined)).toBeNull();
   });
 
   it('adds numbers and numeric strings, and concatenates two strings otherwise', () => {
@@ -256,6 +261,11 @@ describe('compare', () => {
       [undefined, 1],
       [1, null],
       [1, undefined],
+      // Against a string too: NULL is not "".
+      [null, ''],
+      [undefined, ''],
+      ['', null],
+      ['', undefined],
     ] as const) {
       expect(compare(l, r, '==')).toBeNull();
     }
