@@ -10,9 +10,8 @@
 // name, a directive dropped when stanzas merge) would show. It is also what
 // directiveEvidence.test.ts counts as the pipeline-level exercise of them.
 //
-// Doc-derived (props.conf.spec) throughout: no fidelity capture covers any of
-// these directives, the corpus is closed, and the assertions are kept to what
-// the spec states.
+// Doc-derived (props.conf.spec) throughout, and the assertions are kept to
+// what the spec states.
 //   - DATETIME_CONFIG: CURRENT and NONE stand for the event's receipt time
 //     instead of a timestamp read from the text.
 //   - MAX_DAYS_AGO / MAX_DAYS_HENCE: a timestamp further than this many days

@@ -324,9 +324,8 @@ describe('matchStanzas — a doubled backslash matches one literal backslash (#3
 
 describe('matchStanzas — ASCII order breaks a full tie (#318)', () => {
   // Doc-derived: props.conf.spec resolves colliding patterns of equal priority
-  // by the ASCII order of the stanza, the one sorting first winning — the
-  // captured `precedence-ascii-order` fixture agrees (`...fx_a...` beats
-  // `...fx_z...`). What this pins is that file order does not decide it.
+  // by the ASCII order of the stanza, the one sorting first winning. What this
+  // pins is that file order does not decide it.
   const tied = (first: string, second: string) =>
     parseConf(
       `[source::${first}]\nSEDCMD-who = s/M/${first}/\n\n[source::${second}]\nSEDCMD-who = s/M/${second}/\n`,

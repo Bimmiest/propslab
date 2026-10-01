@@ -4,11 +4,8 @@
 //
 // Doc-derived throughout. The modes and the dateless-date rules are read from
 // props.conf.spec 10.4.3 (as summarised in the registry descriptions); the
-// field values follow Splunk's documented default-field conventions. No capture
-// pins any of it: the fidelity capture excluded every date_* / timestartpos /
-// timeendpos / timestamp field (see fixtures/splunk-10.4.0/manifest.json), and
-// no captured case has a dateless timestamp. Assertions are kept to what those
-// documents actually state.
+// field values follow Splunk's documented default-field conventions.
+// Assertions are kept to what those documents actually state.
 // ---------------------------------------------------------------------------
 
 import { describe, it, expect } from 'vitest';

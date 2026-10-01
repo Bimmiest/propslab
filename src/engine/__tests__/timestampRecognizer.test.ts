@@ -7,10 +7,9 @@ import type { ConfDirective, EventMetadata, SplunkEvent } from '../types';
 import { runCtx, FIXED_NOW } from './runCtx';
 import { makeEvent } from '../../test/makeEvent';
 
-// Doc- and convention-derived, not captured: the Splunk 10.4.0 fixtures only
-// pin ISO 8601 with a Z zone, at the start of a line. What these tests pin is
-// that the three consumers of the recogniser -- line breaking, extraction and
-// the scaffold -- give the same answer for a line, whatever that answer is.
+// Doc- and convention-derived. What these tests pin is that the three
+// consumers of the recogniser -- line breaking, extraction and the scaffold --
+// give the same answer for a line, whatever that answer is.
 
 const NOW = new Date('2026-01-20T00:00:00.000Z');
 const META: EventMetadata = { index: 'main', host: 'h', source: 's', sourcetype: 'st' };

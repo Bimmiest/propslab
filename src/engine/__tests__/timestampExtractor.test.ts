@@ -179,10 +179,9 @@ describe('extractTimestamps — range validation (#12)', () => {
 // TZ_ALIAS remaps an ambiguous zone abbreviation read out of the event.
 //
 // Every assertion here is DOC-DERIVED, from the props.conf.spec description of
-// TZ_ALIAS and its own example (`TZ_ALIAS = EST=GMT-5:00,METT=GMT+1:00`). No
-// fidelity capture backs them: the fixture corpus is closed (see the fixtures
-// README), so these are a reading of the documentation rather than a recording
-// of Splunk, and they are kept narrow for that reason. The one place the spec
+// TZ_ALIAS and its own example (`TZ_ALIAS = EST=GMT-5:00,METT=GMT+1:00`).
+// They are a reading of the documentation rather than a recording of Splunk,
+// and they are kept narrow for that reason. The one place the spec
 // is silent — whether the table also rewrites the stanza's own TZ — is asserted
 // as "it does not", which is the reading the spec's wording ("timezone strings
 // extracted from events") supports.

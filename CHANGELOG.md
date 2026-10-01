@@ -10,7 +10,7 @@ All notable changes to Propslab are documented here, newest first. Entries say w
 
 - **An entry-graph gate and an initial-load budget** ([#467](https://github.com/Bimmiest/propslab/issues/467)). `check-entry-graph.mjs` fails the build if the startup path reaches the Monaco chunk; `check-bundle-size.mjs` budgets the modulepreload set and the codicon font.
 - **Governance files** ([#520](https://github.com/Bimmiest/propslab/issues/520)): CODEOWNERS, issue forms (bug, fidelity question, enhancement), a PR template, a code of conduct, and a release process in CONTRIBUTING; the environment check now asserts `main`'s branch protection.
-- **Directive evidence test** ([#505](https://github.com/Bimmiest/propslab/issues/505)). Every simulated directive must be backed by a Splunk fixture or a test that sets it; the fixture-backed count is ratcheted, and the fidelity suite can no longer skip silently.
+- **Directive evidence test** ([#505](https://github.com/Bimmiest/propslab/issues/505)). Every simulated directive must be run through the pipeline by a test, and backed by a test that cites the documentation unless it is on a list that may only shrink.
 - **Table-driven eval builtin fidelity test** ([#512](https://github.com/Bimmiest/propslab/issues/512)), a model-based property test of the worker lifecycle ([#513](https://github.com/Bimmiest/propslab/issues/513)), a lint/editor diagnostics parity property ([#500](https://github.com/Bimmiest/propslab/issues/500)), a Monaco `fakeModel` contract test and a grammar/parser agreement property ([#516](https://github.com/Bimmiest/propslab/issues/516)), and a docs consistency test ([#519](https://github.com/Bimmiest/propslab/issues/519)).
 
 - **A weekly check of the `production` environment** ([#456](https://github.com/Bimmiest/propslab/issues/456)). `environment.yml` verifies through the API that deploys come from `main` only and that the deployment token is an environment secret; the secret check needs a read-only `SECRETS_READ_TOKEN`.
@@ -52,6 +52,7 @@ All notable changes to Propslab are documented here, newest first. Entries say w
 
 ### Changed
 
+- **Recorded Splunk output is no longer part of the repository** ([ADR 0016](docs/adr/0016-recorded-splunk-output-is-kept-outside-the-repository.md)). The fidelity fixtures, their replay suite and the unit tests built on observed output are maintained separately and are not in the source tree or its releases. Engine behaviour is unchanged. `docDerivedDirectives.test.ts` adds pipeline-level tests, written from the spec, for the directives that relied on a fixture.
 - **Every CI install runs with `--ignore-scripts`, and the wasm checksum is verified in every job and in the MCP build** ([#504](https://github.com/Bimmiest/propslab/issues/504)). `pcre2-wasm-utf16` is pinned by commit ([#518](https://github.com/Bimmiest/propslab/issues/518)); a weekly job runs the suite shuffled under a non-UTC zone and locale, and the MCP job runs on Windows and macOS too.
 - **Deploy hardening** ([#509](https://github.com/Bimmiest/propslab/issues/509)): the CSP test pins every directive's exact sources, a post-deploy step checks the served headers and wasm MIME type, `Strict-Transport-Security` is sent, and the Trusted Types policy is installed by a side-effect module imported first.
 - **Test hygiene** ([#507](https://github.com/Bimmiest/propslab/issues/507)): property seeds come from `FC_SEED` when set, mocks and globals are restored per test, Playwright pins a time zone and locale and never reuses a stale server.
@@ -380,7 +381,7 @@ Entries #280–#300, and follow-ups #303 and #304, came from one review of the w
 
 - **`@types/node` follows `.nvmrc` in both trees, and Dependabot stops proposing its majors** ([#243](https://github.com/Bimmiest/propslab/pull/243), [#265](https://github.com/Bimmiest/propslab/pull/265)). Both trees are back on the Node 24 types; the pin moves together with `.nvmrc`.
 - **Lockstep peers are grouped for major updates** ([#260](https://github.com/Bimmiest/propslab/pull/260), #215, #217). vitest with `@vitest/coverage-v8`, and vite with `@vitejs/plugin-react`, now arrive as one installable PR.
-- **The fixture capture script and its guide are removed; the committed fixtures stay.** The Splunk General Terms do not permit the capture it described, so CONTRIBUTING makes "assert against the documentation and say so" the rule; the fixtures README records their provenance.
+- **The fixture capture script and its guide are removed; the committed fixtures stay.** CONTRIBUTING makes "assert against the documentation and say so" the rule, and the fixtures README records their provenance.
 - **The Azure deploy action is excluded from Dependabot** ([#219](https://github.com/Bimmiest/propslab/pull/219)). Dependabot resolves `v1` to a frozen 2021 tag rather than the maintained branch the workflow pins.
 - **Node moves from 22 to 24, the Active LTS line.** `.nvmrc`, both `engines` floors and the MCP server's build target move; the MCP server's V8 regex fallback flags still work on 24.
   - Re-check those experimental V8 flags on every Node major.

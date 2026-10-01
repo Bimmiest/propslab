@@ -16,7 +16,7 @@ runPipeline(rawData, metadata, propsConfInput, transformsConfInput, options?)
 | `limits` | `DEFAULT_LIMITS` | Bounds on the run's work (`RunLimits` in `runContext.ts`), any subset of: `maxRawChars` (1,000,000; longer input is cut back to the last complete line), `maxEvents` (25,000; line breaking stops there and the rest of the input is dropped), `explanationsPerDirective` (50; missed events a directive's no-match is analysed for). Each cut is reported as a warning diagnostic. |
 | `onStage` | — | `(stage, events) => void`, called as each stage starts with its name (one of `RUN_STAGES` in `runStages.ts`) and how many events it is given. For watching a run from outside; the MCP server uses it to say where a run it stopped had got to. It must not throw. |
 
-**Pass `now` when replaying recorded data.** A sample captured today carries absolute timestamps; replayed against the real clock years later, `MAX_DAYS_AGO` (2000 days by default) starts rejecting them and the output changes for no reason but the date. Pinning `now` to the moment of capture keeps the verdict fixed — the fidelity suite passes each fixture's `capturedAt` for exactly this reason.
+**Pass `now` when replaying recorded data.** A sample captured today carries absolute timestamps; replayed against the real clock years later, `MAX_DAYS_AGO` (2000 days by default) starts rejecting them and the output changes for no reason but the date. Pinning `now` to the moment of capture keeps the verdict fixed.
 
 ## Conf layers (`default/` vs `local/`)
 

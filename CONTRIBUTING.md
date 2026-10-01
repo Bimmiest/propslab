@@ -114,21 +114,19 @@ This is the part with rules of its own, because the project's whole claim is tha
 
 1. **Implement it in `src/engine/`**, with a unit test that asserts the behaviour.
 2. **Classify it in `directiveSupport.ts`** as `simulated`, `documented` or `ignored`. This is not optional — a test fails if a registry key is unclassified, and another fails if a `simulated` key never reaches `runPipeline` in an engine test (measured from the confs the tests pass in, not searched for in their source). Anything `ignored` needs a tracking issue.
-3. **Assert against the documentation, and say so.** `src/engine/__tests__/fixtures/` holds cases whose ground truth was recorded from a real Splunk instance, and several long-standing bugs were reasonable readings of `props.conf.spec` that real Splunk contradicts — so a doc-derived test can encode a wrong answer confidently. Even so, no new fixtures are being captured: the Splunk General Terms that govern the free edition and the `splunk/splunk` container do not permit it, and [the fixtures README](src/engine/__tests__/fixtures/README.md) names the clauses. Write the unit test from the documentation, note in its comment that it is doc-derived, and keep the assertion narrow. Put the citation in one comment block that says "Doc-derived", names the spec (`props.conf.spec` or `transforms.conf.spec`) and names the directive, in a test file that runs the directive through `runPipeline`: `directiveEvidence.test.ts` fails on a `simulated` directive that has neither a fixture nor such a citation, and the only alternatives are to reclassify it `documented` or to sit in its `DOC_UNCITED` list, which may not grow.
+3. **Assert against the documentation, and say so.** Several long-standing bugs were reasonable readings of `props.conf.spec` that real Splunk contradicts, so a doc-derived test can encode a wrong answer confidently; keep the assertion narrow. Put the citation in one comment block that says "Doc-derived", names the spec (`props.conf.spec` or `transforms.conf.spec`) and names the directive, in a test file that runs the directive through `runPipeline` (`docDerivedDirectives.test.ts` is the pipeline-level home for these). `directiveEvidence.test.ts` fails on a `simulated` directive with no such citation, and the only alternatives are to reclassify it `documented` or to sit in its `DOC_UNCITED` list, which may not grow.
 4. **If real Splunk contradicts a doc-derived test,** open an issue with the input, the stanza and what Splunk produced. That is genuinely useful on its own, and it is how a wrong reading gets corrected without a capture.
-
-The existing fixture corpus is closed to new cases; the README in that directory says why and what would reopen it.
 
 ## Changing behaviour a test already asserts
 
-If a captured fixture disagrees with an existing test, the fixture wins. Update the test, and leave a comment saying which capture corrected it and what the old reading was. Several tests carry exactly that note.
+If an issue shows Splunk producing something an existing doc-derived test contradicts, change the engine and the test together, and leave a comment saying which issue corrected it and what the old reading was. Several tests carry exactly that note.
 
 ## Recipes
 
 ### Add a directive
 1. Add a `DirectiveInfo` entry to the props or transforms data file under `src/engine/registry/` (the `*SpecDirectives.ts` files hold the spec-completeness sweep; anything new goes in `propsDirectives.ts` or `transformsDirectives.ts`). `directiveRegistry.ts` assembles them, and autocomplete, hover, linting and the dictionary pick it up.
 2. If it needs processing logic: create or edit a processor in `src/engine/processors/` and wire it into `src/engine/pipeline.ts` at the correct position, wrapped in `safeProcessor()`. It reads the run's clock, limits and diagnostics from the `RunContext` (`src/engine/runContext.ts`) it is passed, never from defaults of its own; a warning that should appear once per run goes through `ctx.diagnostics.report(key, …)`, not a set local to the call.
-3. Follow the classification and fixture rules above — the support-table tests enforce them.
+3. Follow the classification and citation rules above — the support-table tests enforce them.
 
 ### Add an eval function
 Add a `case` to the `evalBuiltin` switch in `src/engine/processors/eval/builtins.ts`. A function that must evaluate only some of its arguments (like `if` or `coalesce`) goes in `evalCall` in `eval/evaluator.ts` instead.
