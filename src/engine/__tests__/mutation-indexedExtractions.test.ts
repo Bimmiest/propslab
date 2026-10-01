@@ -109,8 +109,17 @@ describe('FIELD_NAMES — the list', () => {
     expect(fieldsOf(extract('csv', ['1,2'], { FIELD_NAMES: '" a ", b' }))).toEqual([{ a: '1', b: '2' }]);
   });
 
-  it('skips empty entries rather than naming a column nothing', () => {
-    expect(fieldsOf(extract('csv', ['1,2,3'], { FIELD_NAMES: 'a,,b' }))).toEqual([{ a: '1', b: '2' }]);
+  // #449 corrected this: an empty entry was skipped, shifting `b` onto the
+  // second column. Each entry names its own column, so the empty one leaves
+  // the second column unnamed and `b` names the third.
+  it('leaves the column of an empty entry unnamed', () => {
+    expect(fieldsOf(extract('csv', ['1,2,3'], { FIELD_NAMES: 'a,,b' }))).toEqual([{ a: '1', b: '3' }]);
+  });
+
+  it('names a value past the end of the list by its column', () => {
+    expect(fieldsOf(extract('csv', ['1,2,3'], { FIELD_NAMES: 'a,b' }))).toEqual([
+      { a: '1', b: '2', EXTRA_FIELD_3: '3' },
+    ]);
   });
 
   it('is ignored when it names nothing, so the header line still names the fields', () => {
@@ -173,14 +182,16 @@ describe('locating the header and the data', () => {
     ]);
   });
 
-  it('extracts nothing when HEADER_FIELD_LINE_NUMBER is past the input', () => {
+  // #449 corrected this: the input came back unextracted. Every line falls
+  // before a header past the end of the input, and none is indexed.
+  it('indexes nothing when HEADER_FIELD_LINE_NUMBER is past the input', () => {
     const input = [makeEvent('a,b'), makeEvent('1,2')];
     const events = applyIndexedExtractions(
       input,
       [directive('INDEXED_EXTRACTIONS', 'csv'), directive('HEADER_FIELD_LINE_NUMBER', '5')],
       runCtx(FIXED_NOW),
     );
-    expect(events).toBe(input);
+    expect(events).toEqual([]);
   });
 
   it('extracts no field for an unnamed column or an empty value', () => {

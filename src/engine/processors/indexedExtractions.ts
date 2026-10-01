@@ -184,15 +184,19 @@ function decodeDelimiterChar(raw: string): { char?: string; whitespace?: true; n
   return unquoted.length > 0 ? { char: unquoted.charAt(0) } : null;
 }
 
-/** A comma-separated list of names, each optionally double-quoted. */
-function parseNameList(raw: string): string[] {
+/**
+ * A comma-separated list of names, each optionally double-quoted. Empty entries
+ * are dropped unless `positional`, where each entry names a column and an empty
+ * one leaves its column unnamed.
+ */
+function parseNameList(raw: string, positional = false): string[] {
   const out: string[] = [];
   for (const part of raw.split(',')) {
     const name = part
       .trim()
       .replace(/^"(.*)"$/, '$1')
       .trim();
-    if (name) out.push(name);
+    if (name || positional) out.push(name);
   }
   return out;
 }
@@ -235,8 +239,10 @@ function delimitedOptions(
 
   const namesDir = find('FIELD_NAMES');
   if (namesDir) {
-    const names = parseNameList(namesDir.value);
-    if (names.length > 0) opts.fieldNames = names;
+    // Positional, as a header line is: `FIELD_NAMES = ts,,b` leaves the second
+    // column unnamed, so it extracts nothing, and names the third `b` (#449).
+    const names = parseNameList(namesDir.value, true);
+    if (names.some((name) => name !== '')) opts.fieldNames = names;
   }
 
   const headerLineDir = find('HEADER_FIELD_LINE_NUMBER');
