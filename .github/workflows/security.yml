@@ -1,0 +1,53 @@
+name: Security
+
+# Secrets in the history and vulnerabilities in the tree, from the shared
+# workflow (#549). Separate from CI for the reason `audit` is a job of its own
+# there: a red run here against a green one there says immediately which kind
+# of thing broke, and neither waits on the other to fail fast.
+#
+# The schedule is the part that is not decoration. Both checks go red without
+# anybody having pushed anything: an advisory is published upstream, or a
+# secret that has been in the history for months is finally recognised by a
+# newer rule. A workflow that only runs on commits learns about those on
+# whatever day somebody happens to open a pull request.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    # Monday morning UTC, off the hour, and clear of ci.yml's weekly run at
+    # 06:00: the top of an hour is when every scheduled workflow on GitHub
+    # starts at once and runs get delayed.
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+# A new push supersedes an in-flight run for the same ref. Never cancel main:
+# its result is the record of whether the default branch is clean.
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+jobs:
+  # The checks are named `security / gitleaks` and `security / trivy`. gitleaks
+  # scans every commit, with no severity floor, because there is no such thing
+  # as an unactionable hit: a secret in history is rotated whatever the
+  # finding's confidence. Trivy scans both lockfiles and the tree at CRITICAL
+  # and HIGH with unfixed advisories ignored, the same bar as `audit`'s
+  # production gate. Both were dry-run against all 288 commits and both
+  # lockfiles before this file was added: no findings, so there is no
+  # `.gitleaks.toml` or `.trivyignore.yaml` yet. The first false positive gets
+  # one, with its reason beside it, as repo-template's show.
+  security:
+    uses: Bimmiest/shared-workflows/.github/workflows/security.yml@3e31d07ba1f4472f7526ed8f738318287dd85642 # v1.0.0
+    # `pull-requests: read` because on a pull request gitleaks lists the PR's
+    # commits to work out what to scan, and the restricted token 403s without
+    # it. Read, not write: the findings are in the job summary, and a job
+    # whose purpose is reading history for secrets should not hold a token
+    # that can write.
+    permissions:
+      contents: read
+      pull-requests: read
