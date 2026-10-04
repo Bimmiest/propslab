@@ -9,9 +9,10 @@ import { ApiError, evaluateMainProtection, REQUIRED_CHECKS } from '../../scripts
 const RULESET = 18484915;
 const checks = (...names: string[]) => names.map((context) => ({ context, integration_id: 15368 }));
 
-// main's ruleset as the API returned it on 2026-09-30: a pull request with no
+// main's ruleset as the API returned it on 2026-10-04: a pull request with no
 // approvals (a sole maintainer cannot approve their own PRs), squash only, the
-// CI checks, no force-push, no deletion.
+// CI checks and the two Security workflow checks (#549), no force-push, no
+// deletion.
 const liveRules = [
   { type: 'deletion', ruleset_id: RULESET },
   { type: 'non_fast_forward', ruleset_id: RULESET },
@@ -31,6 +32,8 @@ const liveRules = [
         'workflow-lint',
         'Analyze (actions)',
         'Analyze (javascript-typescript)',
+        'security / gitleaks',
+        'security / trivy',
       ),
     },
   },
@@ -85,7 +88,9 @@ describe('evaluateMainProtection', () => {
       getClassic: fails(404),
       getRuleset: ok(noBypass),
     });
-    expect(result.missing).toEqual(['required status checks: audit, mcp-server, workflow-lint']);
+    expect(result.missing).toEqual([
+      'required status checks: audit, mcp-server, workflow-lint, security / gitleaks, security / trivy',
+    ]);
   });
 
   it('treats an empty required-status-checks list as none required', async () => {
@@ -154,7 +159,7 @@ describe('evaluateMainProtection', () => {
       'changes only through a pull request',
       'force-pushes blocked',
       'no bypass actors',
-      'required status checks: audit, mcp-server, workflow-lint',
+      'required status checks: audit, mcp-server, workflow-lint, security / gitleaks, security / trivy',
     ]);
   });
 
@@ -167,7 +172,10 @@ describe('evaluateMainProtection', () => {
         parameters: { required_status_checks: checks('ci', 'audit') },
       },
     ];
-    const classic = { ...fullClassic, required_status_checks: { contexts: ['mcp-server', 'workflow-lint'] } };
+    const classic = {
+      ...fullClassic,
+      required_status_checks: { contexts: ['mcp-server', 'workflow-lint', 'security / gitleaks', 'security / trivy'] },
+    };
     const result = await evaluateMainProtection({
       getRules: ok(rules),
       getClassic: ok(classic),
