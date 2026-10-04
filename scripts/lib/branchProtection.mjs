@@ -41,8 +41,19 @@ function hasStatus(error, ...statuses) {
   return error instanceof ApiError && statuses.includes(error.status);
 }
 
-/** The CI checks `main` must require by name: the jobs of ci.yml that run on every pull request. */
-export const REQUIRED_CHECKS = ['ci', 'audit', 'mcp-server', 'workflow-lint'];
+/**
+ * The checks `main` must require by name: the jobs of ci.yml that run on every
+ * pull request, and the two jobs of the Security workflow (#549), whose check
+ * names carry the calling job's name because the workflow is a reusable one.
+ */
+export const REQUIRED_CHECKS = [
+  'ci',
+  'audit',
+  'mcp-server',
+  'workflow-lint',
+  'security / gitleaks',
+  'security / trivy',
+];
 
 /** The required checks among `names` that are missing. */
 function missingChecks(names) {
