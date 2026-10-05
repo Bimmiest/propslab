@@ -38,7 +38,7 @@
     "pcre2-wasm-utf16": "github:Bimmiest/pcre2-wasm-utf16#e3b48c1087bf70410fc4cb0d65c2ec4bbbf5850b",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
-    "react-resizable-panels": "^4.13.3",
+    "react-resizable-panels": "^4.14.1",
     "zustand": "^5.0.15"
   },
   "devDependencies": {
