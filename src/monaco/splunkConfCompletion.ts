@@ -10,8 +10,8 @@ import { describeTimeFormat, renderTimeFormatPreview } from './timeFormatPreview
 // suggestion with the wrong icon.
 const CIK = monacoLanguages.CompletionItemKind;
 
-// Monaco CompletionItemInsertTextRule — 4 = InsertAsSnippet
-const InsertAsSnippet = 4;
+// The same goes for the insert-text rules.
+const InsertAsSnippet = monacoLanguages.CompletionItemInsertTextRule.InsertAsSnippet;
 
 export function createCompletionProvider(fileType: 'props.conf' | 'transforms.conf'): languages.CompletionItemProvider {
   return {
