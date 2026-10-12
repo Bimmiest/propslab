@@ -5,6 +5,7 @@ import { useAppStore } from '../../store/useAppStore';
 import { MonacoEditor } from './MonacoEditor';
 import { registerEditor, unregisterEditor } from './editorRegistry';
 import { computeDiagnostics } from '../../monaco/splunkConfDiagnostics';
+import { toMarkerData } from '../../monaco/markerData';
 import { ensureSplunkMonaco, PROPS_LANGUAGE_ID, TRANSFORMS_LANGUAGE_ID } from './splunkMonacoSetup';
 
 interface SplunkEditorProps {
@@ -74,7 +75,7 @@ export function SplunkEditor({ value, onChange, fileType = 'props.conf', languag
     if (!model) return;
 
     const markers = computeDiagnostics(model, fileType);
-    monaco.editor.setModelMarkers(model, 'splunk-linter', markers);
+    monaco.editor.setModelMarkers(model, 'splunk-linter', toMarkerData(markers));
   }, [fileType]);
 
   const handleMount = (editorInstance: editor.IStandaloneCodeEditor) => {
