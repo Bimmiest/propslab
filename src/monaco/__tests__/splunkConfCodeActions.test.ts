@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 // ---------------------------------------------------------------------------
 // splunkConfCodeActions.test.ts
 // The mis-cased-attribute quick fix.
@@ -8,8 +9,10 @@
 
 import { describe, it, expect } from 'vitest';
 import type { editor, languages, Range } from 'monaco-editor';
+import { languages as monacoLanguages } from 'monaco-editor/editor';
 import { createCodeActionProvider } from '../splunkConfCodeActions';
 import { computeDiagnostics, MISCASED_MARKER_CODE } from '../splunkConfDiagnostics';
+import { toMarkerData } from '../markerData';
 import { fakeModel } from '../../test/fakeModel';
 
 /**
@@ -19,10 +22,10 @@ import { fakeModel } from '../../test/fakeModel';
  */
 function actionsFor(text: string, fileType: 'props.conf' | 'transforms.conf' = 'props.conf') {
   const model = fakeModel(text);
-  const markers: editor.IMarkerData[] = computeDiagnostics(model, fileType);
+  const markers: editor.IMarkerData[] = toMarkerData(computeDiagnostics(model, fileType));
   const wholeFile = { startLineNumber: 1, startColumn: 1, endLineNumber: 1, endColumn: 1 } as Range;
 
-  const context: languages.CodeActionContext = { markers, trigger: 1 };
+  const context: languages.CodeActionContext = { markers, trigger: monacoLanguages.CodeActionTriggerType.Invoke };
   const provider = createCodeActionProvider(fileType);
   const result = provider.provideCodeActions(model, wholeFile, context, {
     isCancellationRequested: false,

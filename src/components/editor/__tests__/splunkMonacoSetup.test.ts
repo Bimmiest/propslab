@@ -41,6 +41,7 @@ vi.mock('monaco-editor/editor', () => ({
     registerHoverProvider: monaco.registerHoverProvider,
     registerCodeActionProvider: monaco.registerCodeActionProvider,
     CompletionItemKind: { Enum: 15, Value: 13, Snippet: 28, Constant: 14, Property: 9 },
+    CompletionItemInsertTextRule: { InsertAsSnippet: 4 },
     FoldingRangeKind: { Region: { value: 'region' }, Comment: { value: 'comment' } },
   },
 }));
