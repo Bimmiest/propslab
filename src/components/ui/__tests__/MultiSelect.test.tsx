@@ -34,6 +34,16 @@ describe('MultiSelect', () => {
     expect(screen.getAllByRole('checkbox')).toHaveLength(2);
   });
 
+  it('renders only the options near the viewport when there are thousands (#565)', () => {
+    const fields = Array.from({ length: 3000 }, (_, i) => `field_${i}`);
+    render(<MultiSelect label="Fields" options={fields} selected={new Set(['field_2'])} onChange={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: /Fields/ }));
+    const boxes = screen.getAllByRole('checkbox');
+    expect(boxes.length).toBeGreaterThan(0);
+    expect(boxes.length).toBeLessThan(200);
+    expect(screen.getByRole('checkbox', { name: 'field_2' })).toBeChecked();
+  });
+
   it('closes on Escape and returns focus to the trigger', () => {
     const { trigger } = setup();
     fireEvent.click(trigger);
