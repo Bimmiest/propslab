@@ -1,5 +1,5 @@
-export const CHECK_PACKAGES: string[];
 type LockPackages = Record<string, { dependencies?: Record<string, string> }>;
+export function radixPackages(lockPackages: Record<string, unknown>): string[];
 export function radixDependencies(
   lockPackages: LockPackages,
   checkPackages?: string[],

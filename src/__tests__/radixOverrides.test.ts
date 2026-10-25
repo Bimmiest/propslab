@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { CHECK_PACKAGES, overrideMismatches, radixDependencies } from '../../scripts/lib/radixOverrides.mjs';
+import { overrideMismatches, radixDependencies, radixPackages } from '../../scripts/lib/radixOverrides.mjs';
 
 // The comparison behind scripts/check-radix-overrides.mjs: an override that
 // pins a @radix-ui package to a version its dependents do not ask for. Reading
@@ -11,8 +11,8 @@ const lock = {
   'node_modules/@radix-ui/react-tooltip': {
     dependencies: { '@radix-ui/react-portal': '1.1.0', '@radix-ui/react-popper': '1.2.0' },
   },
-  // Not among the checked packages: what it asks for is not read.
-  'node_modules/@radix-ui/react-select': { dependencies: { '@radix-ui/react-portal': '0.9.0' } },
+  // Nested under another package, so not a top-level Radix package: not read.
+  'node_modules/cmdk/node_modules/@radix-ui/react-select': { dependencies: { '@radix-ui/react-portal': '0.9.0' } },
 };
 
 describe('radixDependencies', () => {
@@ -36,13 +36,17 @@ describe('radixDependencies', () => {
   });
 
   it('checks the packages it is given', () => {
-    expect(Object.keys(radixDependencies(lock, ['@radix-ui/react-select']))).toEqual(['@radix-ui/react-portal']);
+    expect(Object.keys(radixDependencies(lock, ['@radix-ui/react-tooltip']))).toEqual([
+      '@radix-ui/react-portal',
+      '@radix-ui/react-popper',
+    ]);
   });
+});
 
-  it('defaults to the three packages the app uses', () => {
-    expect(CHECK_PACKAGES).toEqual([
+describe('radixPackages', () => {
+  it('lists every top-level @radix-ui package, and nothing nested or unscoped (#622)', () => {
+    expect(radixPackages({ ...lock, 'node_modules/react': {}, '': {} })).toEqual([
       '@radix-ui/react-dialog',
-      '@radix-ui/react-context-menu',
       '@radix-ui/react-tooltip',
     ]);
   });
@@ -93,5 +97,29 @@ describe('overrideMismatches', () => {
 
   it('has nothing to say without overrides', () => {
     expect(overrideMismatches({}, lock)).toEqual([]);
+  });
+});
+
+describe('overrideMismatches — overrides only other Radix packages ask for (#622)', () => {
+  it('compares an override against a transitive Radix dependent', () => {
+    const transitive = {
+      'node_modules/@radix-ui/react-dialog': { dependencies: { '@radix-ui/react-dismissable-layer': '1.2.0' } },
+      'node_modules/@radix-ui/react-dismissable-layer': {
+        dependencies: { '@radix-ui/react-use-callback-ref': '1.1.6' },
+      },
+    };
+    expect(
+      overrideMismatches(
+        { '@radix-ui/react-dismissable-layer': '1.2.0', '@radix-ui/react-use-callback-ref': '1.1.5' },
+        transitive,
+      ),
+    ).toEqual([
+      {
+        package: '@radix-ui/react-use-callback-ref',
+        override: '1.1.5',
+        dependency: '1.1.6',
+        dependentPackage: '@radix-ui/react-dismissable-layer',
+      },
+    ]);
   });
 });
