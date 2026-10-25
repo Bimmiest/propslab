@@ -5,7 +5,7 @@
 // because they decide which argument nodes to evaluate at all.
 
 import type { SplunkEvent } from '../../types';
-import { safeRegex, validateRegex, type RegexMatch, type SplunkRegex } from '../../../utils/splunkRegex';
+import { escapeRegex, safeRegex, validateRegex, type RegexMatch, type SplunkRegex } from '../../../utils/splunkRegex';
 import { formatStrftime } from '../../../utils/strftime';
 import {
   type EvalValue,
@@ -437,10 +437,7 @@ function like(args: EvalValue[], ctx: EvalCtx): EvalValue {
   // Escape regex metacharacters first, then translate SQL-style wildcards.
   // A run of `%` collapses to ONE `.*`: it means the same thing, and
   // `.*.*` backtracks for nothing.
-  const pattern = likePattern
-    .replace(/[.+*?^${}()|[\]\\]/g, '\\$&')
-    .replace(/%+/g, '.*')
-    .replace(/_/g, '.');
+  const pattern = escapeRegex(likePattern).replace(/%+/g, '.*').replace(/_/g, '.');
   // `%` and `_` match a newline too, so `%ERROR%` finds ERROR anywhere in a
   // multi-line event, and the match must run to the very end of the text: `\z`,
   // because `$` also matches before a final newline, and like("abc\n", "abc")

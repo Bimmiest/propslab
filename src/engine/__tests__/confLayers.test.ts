@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { parseConf } from '../parser/confParser';
-import { getDirectiveValue, matchStanzas, mergeDirectives } from '../parser/stanzaMatcher';
+import { matchStanzas, mergeDirectives } from '../parser/stanzaMatcher';
+import { effectiveDirective } from '../utils/directiveValues';
 import { runPipeline } from '../pipeline';
 import type { ConfStanza, EventMetadata } from '../types';
 
@@ -325,7 +326,9 @@ describe('runPipeline — accepts layered confs (#115)', () => {
   });
 });
 
-describe('getDirectiveValue — last definition in a stanza wins (#115)', () => {
+describe('the merged value of a key — last definition in a stanza wins (#115)', () => {
+  const value = (stanzas: ConfStanza[], key: string) => effectiveDirective(mergeDirectives(stanzas), key)?.value;
+
   it('returns the higher layer’s value, not the one it overrode', () => {
     const parsed = parseConf(
       [
@@ -334,16 +337,16 @@ describe('getDirectiveValue — last definition in a stanza wins (#115)', () => 
       ],
       'props.conf',
     );
-    expect(getDirectiveValue(matchStanzas(parsed.stanzas, META), 'TZ')).toBe('EST');
+    expect(value(matchStanzas(parsed.stanzas, META), 'TZ')).toBe('EST');
   });
 
   it('returns the last of a key repeated within one flat file', () => {
     const parsed = parseConf('[st]\nTZ = UTC\nTZ = GMT', 'props.conf');
-    expect(getDirectiveValue(matchStanzas(parsed.stanzas, META), 'TZ')).toBe('GMT');
+    expect(value(matchStanzas(parsed.stanzas, META), 'TZ')).toBe('GMT');
   });
 
   it('still prefers a higher-precedence stanza over a lower one', () => {
     const parsed = parseConf('[default]\nTZ = GMT\n[st]\nTZ = UTC', 'props.conf');
-    expect(getDirectiveValue(matchStanzas(parsed.stanzas, META), 'TZ')).toBe('UTC');
+    expect(value(matchStanzas(parsed.stanzas, META), 'TZ')).toBe('UTC');
   });
 });

@@ -1,7 +1,7 @@
 import type { SplunkEvent, ConfDirective } from '../types';
 import { flattenJson, flattenArray, parseJson } from '../utils/flattenJson';
 import { hasField, setField, addFieldValue } from '../utils/fieldBag';
-import { cleanFieldKey } from '../transforms/regexTransform';
+import { cleanFieldKey } from '../transforms/keyCleaning';
 import { effectiveBool, effectiveValue } from '../utils/directiveValues';
 import { parseXmlDocument, xmlChildElements } from '../utils/xmlReader';
 import { walkXmlFields } from '../utils/xmlFields';
