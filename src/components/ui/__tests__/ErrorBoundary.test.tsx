@@ -85,8 +85,13 @@ describe('ErrorBoundary', () => {
 });
 
 describe('RootErrorBoundary', () => {
-  it('copies props, transforms and raw data to the clipboard', async () => {
-    useAppStore.setState({ rawData: 'raw line', propsConf: '[st]\nA = 1', transformsConf: '[t]\nREGEX = x' });
+  it('copies the metadata, props, transforms and raw data to the clipboard (#621)', async () => {
+    useAppStore.setState({
+      metadata: { index: 'main', host: 'web01', source: '/var/log/app.log', sourcetype: 'my:st' },
+      rawData: 'raw line',
+      propsConf: '[st]\nA = 1',
+      transformsConf: '[t]\nREGEX = x',
+    });
     const writeText = vi.fn(() => Promise.resolve());
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
 
@@ -102,7 +107,8 @@ describe('RootErrorBoundary', () => {
       await Promise.resolve();
     });
     expect(writeText).toHaveBeenCalledWith(
-      '# props.conf\n[st]\nA = 1\n\n# transforms.conf\n[t]\nREGEX = x\n\n# Raw data\nraw line',
+      '# Metadata\nindex = main\nhost = web01\nsource = /var/log/app.log\nsourcetype = my:st\n\n' +
+        '# props.conf\n[st]\nA = 1\n\n# transforms.conf\n[t]\nREGEX = x\n\n# Raw data\nraw line',
     );
     expect(screen.getByRole('button', { name: 'Copied' })).toBeInTheDocument();
   });
