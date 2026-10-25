@@ -57,6 +57,15 @@ describe('isCommentOnly', () => {
     expect(isCommentOnly(file, disabled, disabled.replace('all', 'ArithmeticOperator'))).toBe(false);
   });
 
+  it('is false when a Stryker directive moved, its text unchanged (#571)', () => {
+    const two = 'export const a = 1;\nexport const b = 2;\n';
+    const onA = `// Stryker disable next-line all\n${two}`;
+    const onB = two.replace('export const b', '// Stryker disable next-line all\nexport const b');
+    expect(isCommentOnly(file, onA, onB)).toBe(false);
+    // Text around it is still free to change.
+    expect(isCommentOnly(file, onA, onA.replace('next-line all', 'next-line all\n// why'))).toBe(true);
+  });
+
   it('is not fooled by comment markers inside string, template and regex literals', () => {
     const before = "export const r = /https?:\\/\\//;\nexport const s = '/* x */';\nexport const t = `//${1}`;\n";
     expect(isCommentOnly(file, before, before.replace('`//${1}`', '`//${2}`'))).toBe(false);
