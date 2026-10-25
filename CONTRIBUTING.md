@@ -68,7 +68,7 @@ A few things worth knowing:
 Coverage says a line ran; it does not say a test would notice the line being wrong. [Stryker](https://stryker-mutator.io/) answers that by making small edits to `src/engine/**`, the two utils it runs on (`strftime.ts`, `splunkRegex.ts`), and three pure modules of the MCP server (`requestId.ts`, `messageLimit.ts`, `serialize.ts`), the worker lifecycle (`src/hooks/workerLifecycle.ts`) and the store (`src/store`) — flipping a `<`, emptying a string, deleting a call — and rerunning the tests that reach each one. A mutant no test fails on has *survived*, and marks behaviour nothing asserts.
 
 ```bash
-npm run test:mutation                  # full run; about 75 minutes on 4 cores
+npm run test:mutation                  # full run; about 2½ hours on 4 cores (12,713 mutants in October 2026)
 npm run test:mutation -- --mutate src/engine/processors/kvMode.ts   # one file, a few minutes
 npm run test:mutation -- --mutate packages/mcp-server/src/requestId.ts
 ```
