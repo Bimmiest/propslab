@@ -38,7 +38,7 @@ import { parseConf } from '../../../../src/engine/parser/confParser';
 import { getDirectivesForFile } from '../../../../src/engine/directiveRegistry';
 import { validateRegex } from '../../../../src/utils/splunkRegex';
 import type { ConfInput, ProcessingResult, SplunkEvent, ValidationDiagnostic } from '../../../../src/engine/types';
-import { fcSeed } from './fcSeed';
+import { fcSeed } from '../../../../src/test/fcSeed';
 import { makeEvent } from '../../../../src/test/makeEvent';
 
 fc.configureGlobal({ seed: fcSeed(371), numRuns: 100 });

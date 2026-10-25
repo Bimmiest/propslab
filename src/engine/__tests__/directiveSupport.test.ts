@@ -17,6 +17,7 @@ import { DIRECTIVE_SUPPORT, UNDOCUMENTED_ATTRIBUTES } from '../directiveSupport'
 import type { SupportEntry } from '../directiveSupport';
 import { runPipeline } from '../pipeline';
 import type { EventMetadata } from '../types';
+import { FIXED_NOW } from './runCtx';
 
 describe('directive support classification (#153)', () => {
   it('classifies every directive in the registry', () => {
@@ -114,6 +115,7 @@ function diagnosticsFor(props: string, transforms = '') {
   return runPipeline('2026-01-15T10:00:00Z hello\n', metadata, `[st]\n${props}`, transforms, {
     perEventPipeline: false,
     captureOffsets: false,
+    now: FIXED_NOW,
   }).diagnostics;
 }
 

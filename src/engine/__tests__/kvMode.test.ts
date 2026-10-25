@@ -369,7 +369,7 @@ describe('applyKvMode — KV_TRIM_SPACES (#274)', () => {
         { index: 'main', host: 'h', source: 's', sourcetype: 'st' },
         `[st]\nSHOULD_LINEMERGE = false\nKV_MODE = auto\n${body}`,
         '',
-        { perEventPipeline: false, captureOffsets: false },
+        { perEventPipeline: false, captureOffsets: false, now: FIXED_NOW },
       ).result.events[0]!.fields['myfield'];
     expect(at('')).toBe('apples');
     expect(at('KV_TRIM_SPACES = false\n')).toBe(' apples ');

@@ -4,6 +4,7 @@ import { matchStanzas, mergeDirectives } from '../parser/stanzaMatcher';
 import { effectiveDirective } from '../utils/directiveValues';
 import { runPipeline } from '../pipeline';
 import type { ConfStanza, EventMetadata } from '../types';
+import { AT_FIXED_NOW } from './runCtx';
 
 const META: EventMetadata = { index: 'main', host: '', source: '', sourcetype: 'st' };
 
@@ -272,6 +273,7 @@ describe('runPipeline — accepts layered confs (#115)', () => {
         { layer: 'local', text: '[st]\nKV_MODE = auto' },
       ],
       '',
+      AT_FIXED_NOW,
     );
     expect(result.events[0]!.fields['user']).toBe('alice');
   });
@@ -285,6 +287,7 @@ describe('runPipeline — accepts layered confs (#115)', () => {
         { layer: 'local', text: '[st]\nTZ = UTC' },
       ],
       '',
+      AT_FIXED_NOW,
     );
     expect(result.events[0]!.fields['user']).toBeUndefined();
   });
@@ -298,6 +301,7 @@ describe('runPipeline — accepts layered confs (#115)', () => {
         { layer: 'local', text: '[st]\nTRANSFORMS-x = nope' },
       ],
       '',
+      AT_FIXED_NOW,
     );
     const missing = diagnostics.find((d) => d.message.includes('not found in transforms.conf'))!;
     expect(missing.layer).toBe('local');
@@ -314,6 +318,7 @@ describe('runPipeline — accepts layered confs (#115)', () => {
         { layer: 'default', text: '[extract_user]\nREGEX = user=(?<user>\\w+)' },
         { layer: 'local', text: '[extract_user]\nREGEX = action=(?<action>\\w+)' },
       ],
+      AT_FIXED_NOW,
     );
     // local replaces the REGEX attribute outright, so only `action` extracts.
     expect(result.events[0]!.fields['action']).toBe('login');
@@ -321,7 +326,7 @@ describe('runPipeline — accepts layered confs (#115)', () => {
   });
 
   it('still accepts plain strings', () => {
-    const { result } = runPipeline(RAW, META, '[st]\nKV_MODE = auto', '');
+    const { result } = runPipeline(RAW, META, '[st]\nKV_MODE = auto', '', AT_FIXED_NOW);
     expect(result.events[0]!.fields['user']).toBe('alice');
   });
 });

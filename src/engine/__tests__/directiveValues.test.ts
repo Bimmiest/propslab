@@ -28,7 +28,7 @@ import { applyRegexTransform } from '../transforms/regexTransform';
 import { lintMatchedDirectives } from '../configLint';
 import { runPipeline } from '../pipeline';
 import type { ConfDirective, ConfStanza, EventMetadata, SplunkEvent, ValidationDiagnostic } from '../types';
-import { runCtx, FIXED_NOW } from './runCtx';
+import { runCtx, FIXED_NOW, AT_FIXED_NOW } from './runCtx';
 import { makeEvent } from '../../test/makeEvent';
 
 const META: EventMetadata = { index: 'main', host: 'h', source: 's', sourcetype: 'st' };
@@ -196,7 +196,7 @@ describe('default-true settings accept every false spelling (was: exactly "false
   describe('the INDEXED_EXTRACTIONS = json duplicate warning under rename', () => {
     const props = (renamed: string) => `[raw]\nINDEXED_EXTRACTIONS = json\nrename = r2\n[r2]\n${renamed}\n`;
     const dup = (conf: string) =>
-      runPipeline('{"a":1}', { ...META, sourcetype: 'raw' }, conf, '').diagnostics.filter((x) =>
+      runPipeline('{"a":1}', { ...META, sourcetype: 'raw' }, conf, '', AT_FIXED_NOW).diagnostics.filter((x) =>
         x.message.includes('extracts them again at search time'),
       );
 
@@ -227,6 +227,7 @@ describe('transforms diagnostics point at the definition that took effect (was: 
     runPipeline('hello world\n', META, '[st]\nTRANSFORMS-x = t1\n', transforms, {
       perEventPipeline: false,
       captureOffsets: false,
+      now: FIXED_NOW,
     }).diagnostics;
 
   it('an unknown DEST_KEY is reported on the line that set it', () => {

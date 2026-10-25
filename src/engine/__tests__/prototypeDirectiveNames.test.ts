@@ -7,6 +7,7 @@ import { runPipeline } from '../pipeline';
 import { computeDiagnostics } from '../../monaco/splunkConfDiagnostics';
 import type { EventMetadata } from '../types';
 import { fakeModel } from '../../test/fakeModel';
+import { FIXED_NOW } from './runCtx';
 
 const PROTO_NAMES = Object.getOwnPropertyNames(Object.prototype);
 
@@ -16,6 +17,7 @@ function engineMessages(props: string, transforms: string): string[] {
   return runPipeline('2026-01-15T10:00:00Z hello world\n', metadata, props, transforms, {
     perEventPipeline: false,
     captureOffsets: false,
+    now: FIXED_NOW,
   }).diagnostics.map((d) => d.message);
 }
 

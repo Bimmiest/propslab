@@ -5,6 +5,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { runPipeline } from '../pipeline';
+import { FIXED_NOW } from './runCtx';
 
 const parses = vi.hoisted(() => ({ count: 0 }));
 vi.mock('../processors/eval/parser', async (importOriginal) => {
@@ -31,6 +32,7 @@ describe('STOP_PROCESSING_IF', () => {
       transforms,
       {
         perEventPipeline: false,
+        now: FIXED_NOW,
       },
     );
     expect(result.events).toHaveLength(50);

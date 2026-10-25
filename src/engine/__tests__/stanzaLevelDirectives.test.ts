@@ -18,6 +18,7 @@ import { runPipeline } from '../pipeline';
 import { matchStanzas } from '../parser/stanzaMatcher';
 import { parseConf } from '../parser/confParser';
 import type { EventMetadata } from '../types';
+import { FIXED_NOW } from './runCtx';
 
 const metadata: EventMetadata = {
   index: 'main',
@@ -30,6 +31,7 @@ function run(props: string, meta: Partial<EventMetadata> = {}) {
   return runPipeline('2026-01-15T10:00:00Z user=alice\n', { ...metadata, ...meta }, props, '', {
     perEventPipeline: false,
     captureOffsets: false,
+    now: FIXED_NOW,
   });
 }
 

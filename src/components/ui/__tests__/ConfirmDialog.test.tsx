@@ -4,6 +4,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { ConfirmDialog } from '../ConfirmDialog';
+import { pressOutside } from '../../../test/pressOutside';
 
 function renderDialog(props: { onConfirm?: () => void; onCancel?: () => void } = {}) {
   return render(
@@ -38,18 +39,23 @@ describe('ConfirmDialog', () => {
   it('does not dismiss on a click outside the dialog', async () => {
     const onCancel = vi.fn();
     renderDialog({ onCancel });
-    // Radix arms its outside-press listener on the next tick.
-    await new Promise((resolve) => setTimeout(resolve, 10));
-    fireEvent.pointerDown(document.body, { pointerType: 'mouse', button: 0 });
-    fireEvent.click(document.body);
+    const press = await pressOutside();
+    // The alertdialog cancels the dismissal Radix would otherwise perform.
+    expect(press.defaultPrevented).toBe(true);
     expect(onCancel).not.toHaveBeenCalled();
   });
 
-  it('cancels on Escape and on the Cancel button', () => {
+  it('cancels on Escape', () => {
     const onCancel = vi.fn();
     renderDialog({ onCancel });
     fireEvent.keyDown(screen.getByRole('alertdialog'), { key: 'Escape' });
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('cancels on the Cancel button', () => {
+    const onCancel = vi.fn();
+    renderDialog({ onCancel });
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-    expect(onCancel).toHaveBeenCalledTimes(2);
+    expect(onCancel).toHaveBeenCalledTimes(1);
   });
 });

@@ -16,7 +16,7 @@ import { extractFields } from '../processors/fieldExtractor';
 import { runPipeline } from '../pipeline';
 import { describeNoOp } from '../noOpExplainer';
 import type { ConfDirective, EventMetadata, SplunkEvent } from '../types';
-import { runCtx, FIXED_NOW } from './runCtx';
+import { runCtx, FIXED_NOW, AT_FIXED_NOW } from './runCtx';
 import { makeEvent } from '../../test/makeEvent';
 
 const META: EventMetadata = { index: 'main', host: 'h', source: 's', sourcetype: 'st' };
@@ -78,7 +78,7 @@ describe("transforms.conf REGEX under its own stanza's limits", () => {
   const props = '[st]\nREPORT-v = deep\n';
 
   it('fails at the default DEPTH_LIMIT and succeeds with a higher one', () => {
-    const at = (transforms: string) => runPipeline(DEEP, META, props, transforms).result.events[0]!;
+    const at = (transforms: string) => runPipeline(DEEP, META, props, transforms, AT_FIXED_NOW).result.events[0]!;
     const stopped = at(`[deep]\nREGEX = ${ALTERNATING}\n`);
     expect(stopped.fields['v']).toBeUndefined();
     expect(stopped.noOps?.some((n) => n.reason.kind === 'regex-limit')).toBe(true);
@@ -91,7 +91,8 @@ describe("transforms.conf REGEX under its own stanza's limits", () => {
     // DEPTH_LIMIT = 0 leaves depth unlimited, so it is MATCH_LIMIT alone that
     // stops the first run. TRUNCATE = 0 keeps the long subject whole.
     const long = 'ab'.repeat(60000);
-    const at = (transforms: string) => runPipeline(long, META, `${props}TRUNCATE = 0\n`, transforms).result.events[0]!;
+    const at = (transforms: string) =>
+      runPipeline(long, META, `${props}TRUNCATE = 0\n`, transforms, AT_FIXED_NOW).result.events[0]!;
     const stopped = at(`[deep]\nREGEX = ${ALTERNATING}\nDEPTH_LIMIT = 0\n`);
     expect(stopped.fields['v']).toBeUndefined();
     expect(stopped.noOps?.some((n) => n.reason.kind === 'regex-limit')).toBe(true);
@@ -101,8 +102,8 @@ describe("transforms.conf REGEX under its own stanza's limits", () => {
   });
 
   it('does not take the limits from the props.conf stanza', () => {
-    const e = runPipeline(DEEP, META, `${props}DEPTH_LIMIT = 5000\n`, `[deep]\nREGEX = ${ALTERNATING}\n`).result
-      .events[0]!;
+    const e = runPipeline(DEEP, META, `${props}DEPTH_LIMIT = 5000\n`, `[deep]\nREGEX = ${ALTERNATING}\n`, AT_FIXED_NOW)
+      .result.events[0]!;
     expect(e.fields['v']).toBeUndefined();
   });
 });

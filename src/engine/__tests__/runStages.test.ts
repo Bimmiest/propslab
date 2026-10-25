@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { runPipeline } from '../pipeline';
 import { RUN_STAGES, type RunStage } from '../runStages';
 import type { EventMetadata } from '../types';
+import { FIXED_NOW } from './runCtx';
 
 // Not a Splunk behaviour: `onStage` is the engine's own progress hook, so
 // these pin its contract (names, order, event counts) rather than any
@@ -18,6 +19,7 @@ function stagesOf(perEventPipeline: boolean): [RunStage, number][] {
   runPipeline(RAW, META, PROPS, '', {
     perEventPipeline,
     onStage: (stage, events) => seen.push([stage, events]),
+    now: FIXED_NOW,
   });
   return seen;
 }
@@ -39,13 +41,13 @@ describe('PipelineOptions.onStage', () => {
   });
 
   it('is optional', () => {
-    const { result } = runPipeline(RAW, META, PROPS, '', { perEventPipeline: false });
+    const { result } = runPipeline(RAW, META, PROPS, '', { perEventPipeline: false, now: FIXED_NOW });
     expect(result.events.map((e) => e.fields['k'])).toEqual(['a', 'b', 'c']);
   });
 
   it('reports nothing for an empty sample, which runs no stage', () => {
     const seen: string[] = [];
-    runPipeline('  \n', META, PROPS, '', { perEventPipeline: false, onStage: (s) => seen.push(s) });
+    runPipeline('  \n', META, PROPS, '', { perEventPipeline: false, onStage: (s) => seen.push(s), now: FIXED_NOW });
     expect(seen).toEqual([]);
   });
 });

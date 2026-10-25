@@ -59,7 +59,7 @@ describe('INDEXED_EXTRACTIONS = xml and KV_MODE = xml share one walk (#483)', ()
       { index: 'main', host: 'h', source: 's', sourcetype: 'x' },
       '[x]\nSHOULD_LINEMERGE = false\nKV_MODE = xml\n',
       '',
-      { perEventPipeline: false, captureOffsets: false },
+      { perEventPipeline: false, captureOffsets: false, now: FIXED_NOW },
     );
     const searchTime = result.events[0]!.fields;
     for (const [name, value] of Object.entries(indexed)) expect(searchTime[name]).toEqual(value);
@@ -333,7 +333,7 @@ describe('INDEXED_EXTRACTIONS = xml through the pipeline (#271)', () => {
       { index: 'main', host: 'h', source: 's', sourcetype: 'st' },
       '[st]\nINDEXED_EXTRACTIONS = xml\nXML_INDEXED_EXTRACTIONS_PIPELINE = typing\nKV_MODE = none\n',
       '',
-      { perEventPipeline: false, captureOffsets: false },
+      { perEventPipeline: false, captureOffsets: false, now: FIXED_NOW },
     );
     const ev = result.events[0]!;
     expect(ev.fields['event.user']).toBe('alice');
@@ -350,7 +350,7 @@ describe('the XML attributes through the pipeline (#271)', () => {
       `[st]\nSHOULD_LINEMERGE = false\nINDEXED_EXTRACTIONS = ${mode}\n` +
         `XML_INDEXED_EXTRACTIONS_PIPELINE = typing\nKV_MODE = none\n${body}`,
       '',
-      { perEventPipeline: false, captureOffsets: false },
+      { perEventPipeline: false, captureOffsets: false, now: FIXED_NOW },
     ).result.events[0]!.fields;
 
   const procs =
@@ -407,6 +407,7 @@ describe('INDEXED_EXTRACTIONS xml family — line merging (#271)', () => {
       '[st]\nINDEXED_EXTRACTIONS = xml\nXML_INDEXED_EXTRACTIONS_PIPELINE = typing\nBREAK_ONLY_BEFORE = <Event>\n';
     const { result } = runPipeline(raw, { index: 'main', host: 'h', source: 's', sourcetype: 'st' }, props, '', {
       perEventPipeline: false,
+      now: FIXED_NOW,
     });
     expect(result.events).toHaveLength(2);
     expect(result.events.map((e) => e.fields['Event.user'])).toEqual(['bob', 'amy']);

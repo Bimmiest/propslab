@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { runPipeline } from '../pipeline';
 import type { ProcessingStep } from '../types';
+import { AT_FIXED_NOW, FIXED_NOW } from './runCtx';
 
 const meta = { index: 'main', host: 'h', source: 's', sourcetype: 'st' };
 
@@ -12,7 +13,7 @@ function stepFor(
   match: (s: ProcessingStep) => boolean,
   transformsConf = '',
 ): ProcessingStep {
-  const { result } = runPipeline(raw, meta, propsConf, transformsConf);
+  const { result } = runPipeline(raw, meta, propsConf, transformsConf, AT_FIXED_NOW);
   const step = result.events[0]!.processingTrace.find(match);
   if (!step) throw new Error('expected step not found in trace');
   return step;
@@ -91,6 +92,7 @@ describe('SEDCMD field attribution', () => {
         'EXTRACT-card = card=(?<card>\\S+)',
       ),
       '',
+      AT_FIXED_NOW,
     );
     const steps = result.events[0]!.processingTrace.filter((s) => s.processor.startsWith('SEDCMD'));
 
@@ -112,7 +114,7 @@ describe('SEDCMD field attribution', () => {
       meta,
       props('SEDCMD-mask = s/\\d{3}-\\d{2}-\\d{4}/XXX-XX-XXXX/', 'EXTRACT-ssn = ssn=(?<ssn>\\S+)'),
       '',
-      { perEventPipeline: true },
+      { perEventPipeline: true, now: FIXED_NOW },
     );
     const step = result.events[0]!.processingTrace.find((s) => s.processor.startsWith('SEDCMD'));
 
@@ -125,6 +127,7 @@ describe('SEDCMD field attribution', () => {
       meta,
       props('SEDCMD-mask = s/\\d{3}-\\d{2}-\\d{4}/XXX-XX-XXXX/'),
       '',
+      AT_FIXED_NOW,
     );
 
     expect(result.events[0]).not.toHaveProperty('rawMutations');
