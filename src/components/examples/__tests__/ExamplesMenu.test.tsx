@@ -29,7 +29,7 @@ describe('ExamplesMenu', () => {
     for (const sample of SAMPLE_CONFIGS) {
       const group = within(popup).getByRole('region', { name: sample.category });
       expect(
-        within(group).getByRole('button', { name: new RegExp(sample.name.replace(/[()]/g, '\\$&')) }),
+        within(group).getByRole('button', { name: (accessibleName) => accessibleName.startsWith(sample.name) }),
       ).toBeInTheDocument();
     }
   });
