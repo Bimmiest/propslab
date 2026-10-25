@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, type ReactNode } from 'react';
 import { Panel, Group, Separator } from 'react-resizable-panels';
 import { RawPanel } from '../raw/RawPanel';
 import { PropsConfEditor } from '../editor/PropsConfEditor';
@@ -23,6 +23,20 @@ function ResizeHandle({ direction = 'vertical' }: { direction?: 'horizontal' | '
         `}
       />
     </Separator>
+  );
+}
+
+/**
+ * The Output panel's boundary, reset by each new result so that fixing the
+ * input recovers a panel a render error took down (#563). A leaf of its own,
+ * so a run re-renders it alone: its children are SimulatorView's element.
+ */
+function OutputBoundary({ children }: { children: ReactNode }) {
+  const result = useAppStore((s) => s.processingResult);
+  return (
+    <ErrorBoundary panelName="Output" resetKeys={[result]}>
+      {children}
+    </ErrorBoundary>
   );
 }
 
@@ -121,9 +135,9 @@ export const SimulatorView = memo(function SimulatorView() {
 
       {/* Right side: Output (Preview + CIM + Fields + Transforms + Validation + Architecture) */}
       <Panel defaultSize="62" minSize="30" id="output-panel">
-        <ErrorBoundary panelName="Output">
+        <OutputBoundary>
           <PreviewPanel />
-        </ErrorBoundary>
+        </OutputBoundary>
       </Panel>
     </Group>
   );

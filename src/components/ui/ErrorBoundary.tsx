@@ -14,6 +14,16 @@ interface Props {
   variant?: 'panel' | 'inline';
   /** Offers a Close button that clears the error and calls this, e.g. to shut a broken overlay. */
   onDismiss?: () => void;
+  /**
+   * Values whose change clears an error caught on an earlier render, as "Try
+   * Again" does: the Output panel passes the run's result, so a fixed input
+   * brings the panel back by itself (#563).
+   */
+  resetKeys?: readonly unknown[];
+}
+
+function keysChanged(a: readonly unknown[] = [], b: readonly unknown[] = []): boolean {
+  return a.length !== b.length || a.some((v, i) => !Object.is(v, b[i]));
 }
 
 interface State {
@@ -33,6 +43,14 @@ export class ErrorBoundary extends Component<Props, State> {
 
   override componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error(`[${this.props.panelName ?? 'Unknown'}] Error caught by boundary:`, error, errorInfo);
+  }
+
+  override componentDidUpdate(prevProps: Props, prevState: State) {
+    // Only an error from an earlier render: one the same update threw is not
+    // cured by the keys that update brought.
+    if (prevState.hasError && this.state.hasError && keysChanged(prevProps.resetKeys, this.props.resetKeys)) {
+      this.handleReset();
+    }
   }
 
   handleReset = () => {
