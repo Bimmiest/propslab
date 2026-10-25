@@ -219,6 +219,29 @@ describe('applyIngestEval — the trace says what was rewritten (#346)', () => {
     expect(step(out).metadataChanges).toEqual([{ key: 'index', from: 'main', to: 'b' }]);
   });
 
+  it.each(['len(_raw)>=5', 'a!="x"', 'len(_raw) > 5'])(
+    'reports %s as not an assignment and writes no field (#612)',
+    (expr) => {
+      const diags: ValidationDiagnostic[] = [];
+      const out = applyIngestEval([event('hello world')], ingestDir(expr), runCtx(FIXED_NOW, diags))[0]!;
+      expect(Object.keys(out.fields)).toEqual([]);
+      expect(diags.map((d) => d.message)).toEqual([
+        `INGEST_EVAL ${expr}: not a <field>=<expression> assignment, so it does nothing`,
+      ]);
+      expect(step(out).description).toBe('Evaluated 0 ingest-time expression(s)');
+    },
+  );
+
+  it('runs the assignments beside one that is not, and counts only those (#612)', () => {
+    const diags: ValidationDiagnostic[] = [];
+    const out = applyIngestEval([event('x')], ingestDir('a=1, upper(b)'), runCtx(FIXED_NOW, diags))[0]!;
+    expect(out.fields).toEqual({ a: '1' });
+    expect(diags.map((d) => d.message)).toEqual([
+      'INGEST_EVAL upper(b): not a <field>=<expression> assignment, so it does nothing',
+    ]);
+    expect(step(out).description).toBe('Evaluated 1 ingest-time expression(s)');
+  });
+
   it('records nothing for an assignment that leaves the metadata as it was', () => {
     const out = applyIngestEval([event('x')], ingestDir('index="main", host=null(), tag="t"'), runCtx(FIXED_NOW))[0]!;
     expect(step(out).metadataChanges).toBeUndefined();
