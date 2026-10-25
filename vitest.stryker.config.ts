@@ -79,7 +79,8 @@ export default defineConfig({
     exclude: [
       ...(base.test?.exclude ?? []),
       'src/engine/__tests__/workerReady.test.ts',
-      'src/engine/__tests__/timestampMatchWorker.test.ts',
+      // Every worker entry's own test, by name, so the next one is excluded too.
+      'src/engine/__tests__/*Worker.test.ts',
       'src/engine/__tests__/directiveEvidence.test.ts',
     ],
   },
