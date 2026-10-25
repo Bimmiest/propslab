@@ -153,7 +153,8 @@ function resolveLineBreaker(
   directives: ConfDirective[],
   diagnostics?: DiagnosticSink,
 ): string {
-  if (declared === undefined) return DEFAULT_LINE_BREAKER;
+  // An empty assignment resets LINE_BREAKER to its default, like any setting.
+  if (declared === undefined || declared.trim() === '') return DEFAULT_LINE_BREAKER;
   const compiled = safeRegex(declared);
   // A pattern that does not compile is reported as that, with the engine's own
   // error: telling the author of `([\r\n]+` (an unclosed group) to add
