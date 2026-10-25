@@ -143,8 +143,9 @@ function ResultSummary() {
       )}
       {/* Last, and muted: a bug report needs to be able to name the build it
           came from, but the version is not something a user is looking for. */}
-      <span style={{ color: 'var(--color-text-muted)' }} title={`Propslab ${__APP_VERSION__}`}>
+      <span style={{ color: 'var(--color-text-muted)' }} title={`Propslab ${__APP_VERSION__}, build ${__APP_COMMIT__}`}>
         v{__APP_VERSION__}
+        <span className="sr-only">, build {__APP_COMMIT__}</span>
       </span>
     </div>
   );

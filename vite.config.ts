@@ -1,8 +1,18 @@
+import { execFileSync } from 'node:child_process';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import pkg from './package.json' with { type: 'json' };
 import swa from './public/staticwebapp.config.json' with { type: 'json' };
+
+/** The short hash of the commit being built, or `unknown` outside a git checkout. */
+function buildCommit(): string {
+  try {
+    return execFileSync('git', ['rev-parse', '--short', 'HEAD'], { encoding: 'utf8' }).trim();
+  } catch {
+    return 'unknown';
+  }
+}
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
@@ -11,6 +21,9 @@ export default defineConfig({
   // place a release number is written.
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
+    // The version alone names a release, and every deploy between two releases
+    // shares it; the commit names the build (#648).
+    __APP_COMMIT__: JSON.stringify(buildCommit()),
   },
   // Serve the deployed headers from `vite preview` too, so the e2e suite runs
   // the workers under the same CSP they get in production (a worker ignores the

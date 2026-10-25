@@ -32,6 +32,11 @@ body:
       description: What should have happened?
     validations:
       required: true
+  - type: input
+    id: build
+    attributes:
+      label: Version and build
+      description: Hover the version at the right of the status bar, for example "Propslab 1.3.0, build 9f9744f".
   - type: textarea
     id: context
     attributes:
