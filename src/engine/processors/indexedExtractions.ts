@@ -386,18 +386,22 @@ function timestampFieldsValue(fields: SplunkEvent['fields'], names: readonly str
 
 /**
  * `event` with the `_time` parsing its TIMESTAMP_FIELDS value (`probe`)
- * settled on. A value that gave no timestamp fell back the way the timestamp
- * stage does, and the event then carries the fallback's time fields
- * (`timestamp=none`) in place of the ones the stage wrote for a timestamp it
- * found elsewhere in the event. `named` says which fields were read.
+ * settled on, and the probe's time fields in place of the ones the timestamp
+ * stage wrote for a timestamp it found elsewhere in the event, which can be a
+ * different date (#618). A value that gave no timestamp fell back the way the
+ * timestamp stage does, and its fields say so (`timestamp=none`). The probe's
+ * `timestartpos` and `timeendpos` are offsets into the joined value, not into
+ * `_raw`, so a value that parsed leaves them out. `named` says which fields
+ * were read.
  */
 function settleTimestamp(event: SplunkEvent, probe: SplunkEvent, named: string): SplunkEvent {
   const [step] = probe.processingTrace;
   const read = step?.timeSource === 'TIME_FORMAT' || step?.timeSource === 'auto-recognition';
+  const { timestartpos: _start, timeendpos: _end, ...readFields } = probe.fields;
   return {
     ...event,
     _time: probe._time,
-    fields: read ? event.fields : withTimeFields(event, probe.fields),
+    fields: withTimeFields(event, read ? readFields : probe.fields),
     processingTrace: [
       ...event.processingTrace,
       {

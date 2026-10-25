@@ -683,6 +683,20 @@ describe('TIMESTAMP_FIELDS beyond the delimited formats, and its fallback (#444)
   // event whose _time was not read from its text has timestamp=none and no
   // date_* fields, so a row that fell back loses the ones the timestamp stage
   // wrote for the stamp it found elsewhere in the row.
+  it('replaces the time fields of an event whose value parsed, when the event held another date (#618)', () => {
+    const [e] = run(
+      '{"msg":"started 2026-01-14 08:00:00","when":"2026-01-15 10:30:00"}',
+      'INDEXED_EXTRACTIONS = json\nTZ = UTC\nTIMESTAMP_FIELDS = when\n',
+    );
+    expect(e?._time?.toISOString()).toBe('2026-01-15T10:30:00.000Z');
+    expect(e?.fields['date_mday']).toBe('15');
+    expect(e?.fields['date_hour']).toBe('10');
+    // Offsets into the joined value would point at the wrong text in _raw.
+    expect(e?.fields['timestartpos']).toBeUndefined();
+    expect(e?.fields['timeendpos']).toBeUndefined();
+    expect(e?.fields['timestamp']).toBeUndefined();
+  });
+
   it('replaces the time fields of a row that fell back', () => {
     const [read, fellBack] = run(csv, 'INDEXED_EXTRACTIONS = csv\nTZ = UTC\nTIMESTAMP_FIELDS = when\n');
     expect(read!.fields['date_month']).toBe('january');
