@@ -5,7 +5,7 @@
 // loaded at any time, and the empty output shows one as its invitation.
 // ---------------------------------------------------------------------------
 
-import { useCallback, useId, useRef, useState } from 'react';
+import { useCallback, useId, useLayoutEffect, useRef, useState } from 'react';
 import { SAMPLE_CONFIGS, type SampleConfig } from '../../engine/sampleData';
 import { usePopoverDismiss } from '../../hooks/usePopoverDismiss';
 import { Icon, type IconName } from '../ui/Icon';
@@ -31,6 +31,22 @@ const GROUPS: [string, SampleConfig[]][] = [
 ];
 
 /**
+ * The height the list can take below its button: down to the bottom of the
+ * window, or of the nearest container that scrolls or clips it, less the gap
+ * above the list and a margin below it.
+ */
+function roomBelow(trigger: HTMLElement): number {
+  let bottom = window.innerHeight;
+  for (let el = trigger.parentElement; el; el = el.parentElement) {
+    if (getComputedStyle(el).overflowY !== 'visible') {
+      bottom = Math.min(bottom, el.getBoundingClientRect().bottom);
+      break;
+    }
+  }
+  return bottom - trigger.getBoundingClientRect().bottom - 12;
+}
+
+/**
  * A disclosure, not a menu: the popup is a list of buttons that Tab walks,
  * like MultiSelect's, and `aria-haspopup="menu"` would promise an arrow-key
  * model it does not have.
@@ -43,6 +59,18 @@ export function ExamplesMenu({ prominent = false }: { prominent?: boolean }) {
   const close = useCallback(() => setOpen(false), []);
   const dismiss = usePopoverDismiss(ref, triggerRef, open, close);
   const { replace, confirm } = useReplaceInputs();
+  const [room, setRoom] = useState<number>();
+
+  // Before paint, so the list never shows at a height that runs off the page.
+  useLayoutEffect(() => {
+    if (!open) return;
+    const fit = () => {
+      if (triggerRef.current) setRoom(roomBelow(triggerRef.current));
+    };
+    fit();
+    window.addEventListener('resize', fit);
+    return () => window.removeEventListener('resize', fit);
+  }, [open]);
 
   const load = (sample: SampleConfig) => {
     close();
@@ -80,7 +108,12 @@ export function ExamplesMenu({ prominent = false }: { prominent?: boolean }) {
             'absolute top-full mt-1 z-50 w-[22rem] max-w-[calc(100vw-2rem)] max-h-[70vh] overflow-y-auto py-1 rounded-lg border shadow-lg text-left',
             prominent ? 'left-1/2 -translate-x-1/2' : 'right-0',
           ].join(' ')}
-          style={{ backgroundColor: 'var(--color-bg-elevated)', borderColor: 'var(--color-border)' }}
+          style={{
+            backgroundColor: 'var(--color-bg-elevated)',
+            borderColor: 'var(--color-border)',
+            // A floor of about two examples, so a cramped window still shows a list to scroll.
+            ...(room !== undefined && { maxHeight: `min(70vh, ${Math.max(room, 160)}px)` }),
+          }}
         >
           {GROUPS.map(([category, samples]) => (
             <section key={category} aria-label={category}>
