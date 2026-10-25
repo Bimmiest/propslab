@@ -271,7 +271,7 @@ Two facts in the README have a test. `src/engine/__tests__/directiveSupport.test
 
 | Document | Update it when |
 |---|---|
-| `CHANGELOG.md`, under `Unreleased` | A user can see the change. Write one or two sentences, with the issue link. |
+| `CHANGELOG.md`, under `Unreleased` | A user can see the change. Write one or two sentences, with the issue link. The `pr-hygiene` check fails when a change to `src/`, `packages/mcp-server/src/`, `public/` or `index.html` has no entry. If no user can see the change, add the `no-changelog` label. |
 | `README.md` | A capability is added or changes shape, or a caveat stops being true |
 | `docs/*.md` | The topic of the file changes |
 | `docs/adr/` | A decision stays true after the pull request: add a new record **and** its row in the index |

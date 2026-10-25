@@ -6,8 +6,9 @@ name: PR hygiene
 # branches. A warning would have joined the prose.
 #
 # `edited` because fixing the description is how most failures get fixed, and
-# `labeled`/`unlabeled` because `no-issue` changes the verdict; without them a
-# corrected pull request would stay red until its next push.
+# `labeled`/`unlabeled` because `no-issue` and `no-changelog` change the
+# verdict; without them a corrected pull request would stay red until its next
+# push.
 on:
   pull_request:
     types: [opened, edited, synchronize, reopened, labeled, unlabeled]
@@ -42,4 +43,12 @@ jobs:
       # touches `.github/workflows/`. The rules themselves are the action's,
       # pinned by sha; `dependabot[bot]` is exempt by author, and the
       # `no-issue` label exempts a change from the issue rules.
-      - uses: Bimmiest/shared-workflows/.github/actions/pr-hygiene@8918b365c38c0dcff8f00597b1d7c194dc238cea # v1.2.0
+      - uses: Bimmiest/shared-workflows/.github/actions/pr-hygiene@db6586f85d7ffaade83ee996799ebf8f3fe43aae # v1.3.0
+
+      # CONTRIBUTING asks for a CHANGELOG entry for a change a user can see
+      # (#577). These are the files that reach a user: the app, the MCP
+      # server and the static files. Tests are ignored by the action's
+      # default; the `no-changelog` label exempts a change no user can see.
+      - uses: Bimmiest/shared-workflows/.github/actions/changelog-check@db6586f85d7ffaade83ee996799ebf8f3fe43aae # v1.3.0
+        with:
+          paths: src/**,packages/mcp-server/src/**,public/**,index.html
