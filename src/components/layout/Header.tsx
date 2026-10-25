@@ -6,6 +6,7 @@ import { Icon, type IconName } from '../ui/Icon';
 import { ClearButton } from '../editor/ClearButton';
 import { Tooltip } from '../ui/Tooltip';
 import { countByLevel } from '../../utils/diagnosticCounts';
+import { ExamplesMenu } from '../examples/ExamplesMenu';
 
 /** Detect whether the platform is Apple (Mac, iOS, iPad, etc.). */
 function isApplePlatform(): boolean {
@@ -102,6 +103,7 @@ export function Header() {
           </h1>
         </div>
         <div className="flex items-center gap-2">
+          <ExamplesMenu />
           <Tooltip content={`Command palette (${modifierName}+K)`} side="bottom">
             {/* The name is the visible text, "Commands" and the shortcut (WCAG
                 2.5.3, label in name), so a speech user who says what they see

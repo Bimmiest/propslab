@@ -6,6 +6,10 @@ All notable changes to Propslab are documented here, newest first. Entries say w
 
 ## Unreleased
 
+### Added
+
+- **Seven more examples, one for each part of the pipeline** ([#666](https://github.com/Bimmiest/propslab/issues/666)). Linux SSH auth, Windows Security XML, AWS CloudTrail JSON, Cisco ASA, a multi-line Java log, a CSV file with no header row, and FortiGate traffic. An **Examples** button in the header opens them all, grouped by data source, at any time; the empty output has the same button. The user guide lists what each one shows.
+
 ### Changed
 
 - **SECURITY.md gives a timeline and a fallback contact** ([#576](https://github.com/Bimmiest/propslab/issues/576)). A valid report gets a fix within 90 days. If private reporting is not available, open an issue that asks for a contact. The MCP server is supported from `main` only.
@@ -16,6 +20,7 @@ All notable changes to Propslab are documented here, newest first. Entries say w
 
 ### Fixed
 
+- **The Apache Access Log example loads with no warning** ([#666](https://github.com/Bimmiest/propslab/issues/666)). Its dates were in 2000, so `MAX_DAYS_AGO` rejected them. Both existing examples now use documentation addresses, and they map more fields to the CIM.
 - **A fast Tab no longer leaves a long Fields table or field list** ([#572](https://github.com/Bimmiest/propslab/issues/572)). The list now shows the rows next to the focused row before it scrolls. Before, a second Tab that came before the scroll found no next row, and focus left the list.
 - **The explanation of a regex that does not match reads a POSIX class, a leading `]` and `\k<name>` correctly** ([#561](https://github.com/Bimmiest/propslab/issues/561)). Before, `[[:digit:]]+x` against `123y` said that nothing matched, but `[[:digit:]]+` matches `123`.
 - **The preview's Fields filter opens promptly on an event with thousands of fields, and the Timestamp tab no longer re-renders on each config keystroke** ([#565](https://github.com/Bimmiest/propslab/issues/565)). The filter rendered a checkbox row for every field; it now renders the rows near the viewport, as the Fields table does.

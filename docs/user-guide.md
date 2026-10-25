@@ -31,6 +31,24 @@ Below 768px, the labelled tab strip of `MobileShell` replaces the rail. The rail
 - the error and warning counts
 - a "Per-event pipeline" chip, when that setting is on.
 
+
+## Examples
+
+The **Examples** button in the header opens the example library, which groups the examples by the kind of data source. The empty output has the same button, and the command palette lists the examples too. If you edited the inputs, the app asks before an example replaces them. Each example loads a raw log, its metadata, `props.conf` and `transforms.conf`, and shows a different part of the pipeline. The data is invented: the addresses are documentation or private ranges, and the domains are `example.com`. The configurations are written from the `.spec` files.
+
+| Example | Sourcetype | What it shows |
+|---|---|---|
+| Apache Access Log | `access_combined` | `EXTRACT`, a `REPORT` transform on an extracted field, `EVAL`, and aliases for the CIM Web model |
+| Palo Alto Firewall | `pan:traffic` | One `REPORT` regex over a CSV-like line, `FIELDALIAS` and `EVAL` for the CIM Network Traffic model |
+| Linux SSH Auth | `linux_secure` | A syslog timestamp with no year, and `EXTRACT` and `EVAL` for the CIM Authentication model |
+| Windows Security (XML) | `XmlWinEventLog:Security` | `KV_MODE = xml`: each named `Data` element is a field, and `Data_Name` is multivalue |
+| AWS CloudTrail (JSON) | `aws:cloudtrail` | `INDEXED_EXTRACTIONS = json`, with the timestamp from `TIMESTAMP_FIELDS` |
+| Cisco ASA | `cisco:asa` | `REPORT` transforms that read the ASA message ID, for the CIM Network Traffic model |
+| Java App (Multi-line) | `java:app` | A `LINE_BREAKER` with a lookahead, so that a stack trace stays with its event |
+| CSV Export | `vpn:sessions:csv` | `INDEXED_EXTRACTIONS = csv` for a file with no header row, with the columns named by `FIELD_NAMES` |
+| FortiGate Traffic | `fgt_traffic` | `KV_MODE = auto` for `key=value` pairs, with aliases for the CIM Network Traffic model |
+
+The examples are dated October 2026. Until 2032 they are inside the default `MAX_DAYS_AGO` of 2000 days, so they load with no warning.
 ## Output tabs
 
 **Top-level tabs:** Preview, CIM Models, Fields, Pipeline, Effective config, Architecture.

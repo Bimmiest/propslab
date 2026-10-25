@@ -112,7 +112,9 @@ export async function openApp(page: Page): Promise<void> {
  * end-to-end suite can have.
  */
 export async function loadExample(page: Page, name: RegExp): Promise<void> {
-  await page.getByRole('button', { name }).first().click();
+  // The header's library opens on every page, data loaded or not (#666).
+  await page.getByRole('banner').getByRole('button', { name: 'Examples' }).click();
+  await page.getByRole('group', { name: 'Examples' }).getByRole('button', { name }).click();
   await expect(page.getByText(/^[1-9]\d* events?$/)).toBeVisible({ timeout: 30_000 });
 }
 

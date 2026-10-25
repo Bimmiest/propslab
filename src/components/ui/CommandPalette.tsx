@@ -1,13 +1,13 @@
-import { useEffect, useCallback, useState } from 'react';
+import { useEffect, useCallback } from 'react';
 import type React from 'react';
 import { Command } from 'cmdk';
-import { useAppStore, selectSessionDirty, EMPTY_INPUTS, type SessionInputs } from '../../store/useAppStore';
+import { useAppStore, EMPTY_INPUTS, type SessionInputs } from '../../store/useAppStore';
 import { SAMPLE_CONFIGS } from '../../engine/sampleData';
 import { getAllDirectives } from '../../engine/directiveRegistry';
 import type { OutputTabId } from '../../engine/types';
 import { Icon } from './Icon';
 import { Overlay } from './Overlay';
-import { ConfirmDialog } from './ConfirmDialog';
+import { useReplaceInputs } from './useReplaceInputs';
 
 // Static registry, so the lookup list is built once rather than per keystroke.
 // Deduplicated because a few keys (MATCH_LIMIT, DEPTH_LIMIT) are registered once
@@ -40,17 +40,10 @@ type RunCommand = (fn: () => void) => void;
 /** Replaces all four inputs at once (a sample, or empty ones), asking first if that loses work. */
 type ReplaceInputs = (inputs: SessionInputs, confirmLabel: string, what: string) => void;
 
-interface PendingReplace {
-  inputs: SessionInputs;
-  confirmLabel: string;
-  what: string;
-}
-
 export function CommandPalette() {
   const open = useAppStore((s) => s.commandPaletteOpen);
   const toggleCommandPalette = useAppStore((s) => s.toggleCommandPalette);
-  const loadInputs = useAppStore((s) => s.loadInputs);
-  const [pending, setPending] = useState<PendingReplace | null>(null);
+  const { replace, confirm } = useReplaceInputs();
 
   const close = useCallback(() => {
     if (open) toggleCommandPalette();
@@ -89,34 +82,13 @@ export function CommandPalette() {
     [close],
   );
 
-  // Read at selection time, not subscribed: the palette has no reason to
-  // re-render on every keystroke in an editor.
+  // The palette closes either way: on a load, or to show the question.
   const replaceInputs = useCallback<ReplaceInputs>(
     (inputs, confirmLabel, what) => {
-      if (selectSessionDirty(useAppStore.getState())) {
-        close();
-        setPending({ inputs, confirmLabel, what });
-      } else {
-        run(() => loadInputs(inputs));
-      }
+      close();
+      replace(inputs, confirmLabel, what);
     },
-    [close, run, loadInputs],
-  );
-
-  const confirm = pending && (
-    <ConfirmDialog
-      open
-      title="Replace your current work?"
-      confirmLabel={pending.confirmLabel}
-      onConfirm={() => {
-        loadInputs(pending.inputs);
-        setPending(null);
-      }}
-      onCancel={() => setPending(null)}
-    >
-      {pending.what} replaces the raw data, props.conf, transforms.conf and metadata you have now. Your changes are not
-      saved anywhere else.
-    </ConfirmDialog>
+    [close, replace],
   );
 
   if (!open) return confirm || null;

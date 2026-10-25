@@ -61,6 +61,9 @@ test.describe('trusted types', () => {
     expect(response?.headers()['content-security-policy']).toContain("require-trusted-types-for 'script'");
     await expect(page.locator('.monaco-editor').nth(2)).toBeVisible({ timeout: 30_000 });
     await loadExample(page, APACHE);
+    // Room for the editor beside the diagnostics list the typed lines open,
+    // and for the hover above them.
+    await page.setViewportSize({ width: 1280, height: 1200 });
 
     // Typing, the suggest widget and the lint squiggles.
     const props = page.locator('.monaco-editor').nth(1);
@@ -69,6 +72,11 @@ test.describe('trusted types', () => {
     await page.keyboard.type('\n[tt]\nSHOULD_LINEMERGE = notabool\nTIME_PRE');
     await expect(page.locator('.suggest-widget')).toBeVisible();
     await page.keyboard.press('Escape');
+    // The diagnostics the typed lines raise open a list that shrinks the
+    // editor, which keeps its scroll position. Once the list is open, moving
+    // the cursor reveals the typed lines, where the squiggles are, again.
+    await expect(page.getByText(/takes a boolean, and "notabool" is not one/)).toBeVisible();
+    await page.keyboard.press('Control+End');
     await expect(page.locator('.squiggly-warning, .squiggly-error, .squiggly-info').first()).toBeVisible({
       timeout: 15_000,
     });
@@ -572,14 +580,14 @@ test.describe('split panels', () => {
  *
  * All three use the Apache example: its props.conf sets `TIME_PREFIX = \[`
  * and `TIME_FORMAT = %d/%b/%Y:%H:%M:%S %z`, and its first event's timestamp
- * is `10/Oct/2000:13:55:36 -0700`, i.e. 2000-10-10T20:55:36Z in any browser
+ * is `25/Oct/2026:13:55:36 -0700`, i.e. 2026-10-25T20:55:36Z in any browser
  * time zone.
  */
 test.describe('match workers', () => {
   const REGEX_WORKER = /\/regexMatchWorker[^/]*\.js$/;
   const TIMESTAMP_WORKER = /\/timestampMatchWorker[^/]*\.js$/;
-  const FIRST_EVENT_TIME = '10/Oct/2000:13:55:36 -0700';
-  const FIRST_EVENT_ISO = '2000-10-10T20:55:36.000Z';
+  const FIRST_EVENT_TIME = '25/Oct/2026:13:55:36 -0700';
+  const FIRST_EVENT_ISO = '2026-10-25T20:55:36.000Z';
 
   test.beforeEach(async ({ page }) => {
     await recordWorkerReplies(page);
@@ -629,8 +637,8 @@ test.describe('match workers', () => {
     await openApp(page);
     await loadExample(page, APACHE);
 
-    // At the default 720px height the example's lint warning squeezes the
-    // props.conf editor to about one line, and line 3 is never rendered.
+    // At the default 720px height the props.conf editor shares the column with
+    // three others, and line 3 is not always rendered.
     await page.setViewportSize({ width: 1280, height: 1200 });
     const props = page.locator('.monaco-editor').nth(1);
     const key = props.getByText('TIME_FORMAT', { exact: true }).first();

@@ -35,6 +35,7 @@ describe('PreviewPanel', () => {
   it('runs an example loaded from the empty state in manual-apply mode (#492)', () => {
     useAppStore.setState({ settings: { perEventPipeline: false, manualApply: true } });
     render(<PreviewPanel />);
+    fireEvent.click(screen.getByRole('button', { name: 'Load an example' }));
     fireEvent.click(screen.getByRole('button', { name: /Apache Access Log/ }));
     expect(useAppStore.getState().manualRunTick).toBe(1);
   });
@@ -71,6 +72,7 @@ describe('PreviewPanel', () => {
   // unedited example is not work the command palette should warn about.
   it('loads an example from the empty state as a clean session', () => {
     render(<PreviewPanel />);
+    fireEvent.click(screen.getByRole('button', { name: 'Load an example' }));
     fireEvent.click(screen.getByRole('button', { name: /Apache Access Log/ }));
     const state = useAppStore.getState();
     expect(state.rawData).toBe(SAMPLE_CONFIGS[0]!.rawData);

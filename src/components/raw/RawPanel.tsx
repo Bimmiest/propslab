@@ -103,7 +103,7 @@ export function RawPanel() {
             <Icon name="terminal" className="w-8 h-8 text-[var(--color-border)]" />
             <div className="text-center">
               <p className="text-sm font-medium text-[var(--color-text-muted)]">Paste raw log data here</p>
-              <p className="text-xs text-[var(--color-text-muted)] mt-1">Or load an example from the Output panel →</p>
+              <p className="text-xs text-[var(--color-text-muted)] mt-1">Or load an example from the Examples menu</p>
             </div>
           </div>
         )}
