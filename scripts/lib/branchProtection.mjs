@@ -42,9 +42,11 @@ function hasStatus(error, ...statuses) {
 }
 
 /**
- * The checks `main` must require by name: the jobs of ci.yml that run on every
- * pull request, and the two jobs of the Security workflow (#549), whose check
- * names carry the calling job's name because the workflow is a reusable one.
+ * The checks `main` must require by name: ci.yml's `ci`, which passes only when
+ * every job of that workflow did (#573), with two of its jobs by their own
+ * names as before; audit.yml's job; and the two jobs of the Security workflow
+ * (#549), whose check names carry the calling job's name because the workflow
+ * is a reusable one.
  */
 export const REQUIRED_CHECKS = [
   'ci',

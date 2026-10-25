@@ -4,13 +4,18 @@ This file describes the path from a commit to production: the CI jobs, the deplo
 
 ## CI
 
-`ci.yml` runs on each PR, on each push to main, weekly and on demand. It has these independent jobs:
+`ci.yml` runs on each PR, on each push to main, weekly and on demand. These jobs run at the same time:
 
-- `ci`: lint → build (`tsc -b && vite build`) → per-chunk gzip budgets (`scripts/check-bundle-size.mjs`) → tests with coverage → e2e smoke.
-- `mcp-server`: the typecheck, the bundle and the tests of the MCP server.
-- `audit`: `npm audit` over both lockfiles. A high-severity advisory in a production dependency makes it fail. An advisory in a dev-only dependency does not make it fail, and the job only reports it.
+- `static checks`: lint, the format check, the build (`tsc -b && vite build`), the per-chunk gzip budgets (`scripts/check-bundle-size.mjs`), the entry graph, the documentation check and the licences.
+- `unit tests`: the tests with coverage, and the coverage ratchet.
+- `e2e`: the Playwright suite against a production build.
+- `mcp-server`: the typecheck, the bundle and the tests of the MCP server, on Linux, Windows and macOS.
 - `workflow-lint`: actionlint and zizmor over `.github/`.
 - `dependency-review`, on PRs only.
+
+The job `ci` passes only when all of these jobs pass. It is the check that `main` requires, so a PR cannot merge while one of these jobs fails. The deploy waits until the whole CI run passes, so it uses the same jobs.
+
+`audit.yml` is a separate workflow. It runs `npm audit` over both lockfiles. A high-severity advisory in a production dependency makes it fail. An advisory in a dev-only dependency does not make it fail, and the job only reports it. `main` requires the `audit` check, so a failure stops a merge. It does not stop a deploy, because the deploy waits only for CI.
 
 CodeQL uses the default code-scanning setup of GitHub, not a workflow file. [`security.yml`](../.github/workflows/security.yml) is a separate workflow, and it calls the reusable workflow in [`Bimmiest/shared-workflows`](https://github.com/Bimmiest/shared-workflows). It runs gitleaks over the whole history, and Trivy over the tree and both lockfiles. It runs on each PR, on each push to main and weekly.
 

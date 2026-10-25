@@ -38,4 +38,4 @@ npm run check:overrides # Verify the @radix-ui overrides match what the Radix pa
 - **The Node version is too old:** Read `.nvmrc`. To change to that version, run `nvm use` or `fnm use`.
 - **The Playwright browser is not installed:** Run `npx playwright install chromium`. The first e2e run needs it.
 - **`node_modules` is not current:** Run `rm -rf node_modules && npm install`.
-- **An old `dist/` causes E2E failures:** Run `rm -rf dist/ && E2E_SKIP_BUILD=0 npm run test:e2e`.
+- **An old `dist/` causes E2E failures:** Run `rm -rf dist/ && npm run test:e2e`.
