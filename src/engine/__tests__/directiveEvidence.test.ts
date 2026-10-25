@@ -40,8 +40,9 @@
 // Neither depends on timing or on the order files happen to be scheduled in.
 //
 // Consequence: this test needs the whole `unit` project to have run in the same
-// invocation. `vitest run` and `npm test` do that; running this file alone
-// finds nothing recorded and says so, rather than passing on an empty set.
+// invocation. `vitest run` and `npm test` do that. vitest.config.ts records only
+// for such a full run (and always on CI); on any other run, this file alone or
+// a shard, nothing is recorded and this test skips (#569).
 //
 // WHICH TESTS COUNT. Only tests under src/engine/, and not the ones listed in
 // META_TESTS: those call `runPipeline` to test the linter, the registry or this
@@ -102,12 +103,15 @@ const ENGINE_TEST_SOURCES = new Map(
   ),
 );
 
+const proc = (
+  globalThis as unknown as {
+    process: { env: Record<string, string | undefined>; getBuiltinModule: (id: 'node:fs') => Fs };
+  }
+).process;
+/** Set by vitest.config.ts for a full run only. */
+const recording = proc.env['PROPSLAB_EVIDENCE_DIR'] !== undefined;
+
 function readRecordings(): Recording[] {
-  const proc = (
-    globalThis as unknown as {
-      process: { env: Record<string, string | undefined>; getBuiltinModule: (id: 'node:fs') => Fs };
-    }
-  ).process;
   const dir = proc.env['PROPSLAB_EVIDENCE_DIR'];
   const fs = proc.getBuiltinModule('node:fs');
   if (!dir || !fs.existsSync(dir)) return [];
@@ -151,11 +155,13 @@ for (const r of counted) {
 
 const cited = new Set(simulated.filter((key) => (exercisedBy.get(key) ?? []).some((file) => isCitedIn(file, key))));
 
-describe('simulated directive evidence (#505)', () => {
+describe.skipIf(!recording)('simulated directive evidence (#505)', () => {
   it('has the recordings it reads', () => {
     // Guards the reader, not the engine. An empty set here would make every
     // check below vacuous or every directive "unexercised"; either way the
     // cause is that the `unit` project did not run first in this invocation.
+    // A partial run records nothing and skips this file, so this fires only
+    // when a full run (or CI) recorded nothing at all.
     expect(
       recordings.length,
       'nothing was recorded: run the whole suite (`npm test`), not this file alone -- ' +
@@ -195,23 +201,5 @@ describe('simulated directive evidence (#505)', () => {
 
   it('does not grow DOC_UNCITED', () => {
     expect(DOC_UNCITED.length).toBeLessThanOrEqual(DOC_UNCITED_CEILING);
-  });
-
-  it('evidence classification summary', () => {
-    const only = (pred: (key: string) => boolean) => simulated.filter(pred);
-    const summary = [
-      'Simulated directive evidence:',
-      `  - Doc-cited test: ${only((k) => cited.has(k)).length}`,
-      `  - Exercised only: ${only((k) => !cited.has(k) && exercisedBy.has(k)).length}`,
-      `  - Total: ${simulated.length}`,
-    ].join('\n');
-
-    if (import.meta.env['SHOW_EVIDENCE']) {
-      // eslint-disable-next-line no-console
-      console.info(summary);
-    }
-    expect(
-      only((k) => cited.has(k) || exercisedBy.has(k)).length + only((k) => !cited.has(k) && !exercisedBy.has(k)).length,
-    ).toBe(simulated.length);
   });
 });
