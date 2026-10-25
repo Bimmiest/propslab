@@ -7,6 +7,7 @@ import { type Node, parseExpression } from './eval/parser';
 import { evalNode } from './eval/evaluator';
 import { regexFailureMessage } from './eval/builtins';
 import type { RunContext, DiagnosticSink } from '../runContext';
+import { RegexDeadlineError } from '../../utils/splunkRegex';
 
 // EVAL- as a props processor: which directives run, how their results land on
 // the event, and the diagnostics they raise. The expression language itself is
@@ -149,6 +150,7 @@ function evaluateAll(event: SplunkEvent, compiled: CompiledEval[], reporter: Eva
       if (typeof value === 'boolean') throw new Error(BOOLEAN_ASSIGNMENT_ERROR);
       results.set(c.fieldName, { value, expression: c.dir.value.trim() });
     } catch (err) {
+      if (err instanceof RegexDeadlineError) throw err;
       reporter.error(c.dir, c.fieldName, err instanceof Error ? err.message : String(err));
     }
   }

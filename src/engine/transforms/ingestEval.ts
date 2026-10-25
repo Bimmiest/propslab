@@ -10,6 +10,7 @@ import { appendTraceStep, metadataChanges } from '../utils/traceStep';
 import { BOOLEAN_ASSIGNMENT_ERROR, numArg } from '../processors/eval/values';
 import { dateFromEpochSeconds, epochOutOfRangeMessage } from '../utils/epochTime';
 import type { DiagnosticsCollector, RunContext } from '../runContext';
+import { RegexDeadlineError } from '../../utils/splunkRegex';
 
 // Split "field=expr, field2=fn(a,b)" on top-level commas only — not inside parens
 // and not inside a string literal (e.g. msg="a,b" must stay one assignment).
@@ -274,6 +275,7 @@ export function applyIngestEval(
           setField(currentEvent._meta, fieldName, value);
         }
       } catch (err) {
+        if (err instanceof RegexDeadlineError) throw err;
         diagnostics.report(errorKey(ingestEvalDir, fieldName), {
           level: 'error',
           message: `INGEST_EVAL ${fieldName}: ${err instanceof Error ? err.message : String(err)}`,

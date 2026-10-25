@@ -27,6 +27,7 @@ import { attributeRawMutations } from './processors/rawMutationAttribution';
 import { lintConfigs, lintMatchedDirectives } from './configLint';
 import { createRunContext, withDiagnostics, type RunContext, type RunLimits } from './runContext';
 import type { RunStage } from './runStages';
+import { RegexDeadlineError, withRegexDeadline } from '../utils/splunkRegex';
 
 type Stage = (batch: SplunkEvent[], ctx: RunContext) => SplunkEvent[];
 
@@ -46,6 +47,10 @@ const errorText = (err: unknown) => (err instanceof Error ? err.message : 'Unkno
  * `_time`, a CSV header row), and a retry one event at a time would be a
  * different computation, so it falls back to `events` unchanged as a whole.
  * See docs/adr/0001-stage-failures-degrade-to-diagnostics.md.
+ *
+ * Once the run's time budget is spent, the stage stops at its next regex call,
+ * and every stage after it passes its events through unrun.
+ * See docs/adr/0019-a-run-stops-at-its-time-budget.md.
  */
 function safeProcessor(
   name: RunStage,
@@ -55,12 +60,15 @@ function safeProcessor(
   file: ValidationDiagnostic['file'] = 'props.conf',
   shape: 'per-event' | 'batch' = 'per-event',
 ): SplunkEvent[] {
+  if (Date.now() > ctx.deadline) return stopped(name, events, ctx, file);
   ctx.onStage?.(name, events.length);
   const { diagnostics } = ctx;
   const start = diagnostics.list.length;
+  const run = (batch: SplunkEvent[], c: RunContext) => withRegexDeadline(ctx.deadline, () => fn(batch, c));
   try {
-    return fn(events, ctx);
+    return run(events, ctx);
   } catch (err) {
+    if (err instanceof RegexDeadlineError) return stopped(name, events, ctx, file);
     if (shape === 'batch' || events.length <= 1) {
       diagnostics.push({ level: 'error', message: `Processor "${name}" failed: ${errorText(err)}`, file });
       return events; // Return unmodified events on failure
@@ -71,8 +79,9 @@ function safeProcessor(
   const failures: { line: number; error: string }[] = [];
   const out = events.flatMap((event) => {
     try {
-      return fn([event], retry);
+      return run([event], retry);
     } catch (err) {
+      if (err instanceof RegexDeadlineError) return stopped(name, [event], ctx, file);
       failures.push({ line: event.lineNumbers.start, error: errorText(err) });
       return [event];
     }
@@ -88,6 +97,24 @@ function safeProcessor(
     });
   }
   return out;
+}
+
+/** Say, once per run, that the stages stopped at `name` on the time budget; pass `events` through. */
+function stopped(
+  name: RunStage,
+  events: SplunkEvent[],
+  ctx: RunContext,
+  file: ValidationDiagnostic['file'],
+): SplunkEvent[] {
+  ctx.diagnostics.report('maxRunMs', {
+    level: 'error',
+    message:
+      `The run stopped at stage "${name}" because it used its time budget of ` +
+      `${ctx.limits.maxRunMs.toLocaleString()} ms. Events pass through that stage and the stages after it ` +
+      'unchanged. A pattern that backtracks a lot is the usual cause.',
+    file,
+  });
+  return events;
 }
 
 /**

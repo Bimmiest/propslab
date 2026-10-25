@@ -5,6 +5,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { createServer } from '../server';
 import { MAX_TOTAL_CONF_CHARS } from '../tools';
 import { resultText } from './resultText';
+import { STALLING_RAW, stallingStanza } from './stallingConf';
 
 /**
  * The adversarial suite (#517): input at the schemas' limits, of the shapes
@@ -145,19 +146,13 @@ describe('adversarial input at the schema limits (#517)', () => {
   }, 120_000);
 
   it('a flood of 20 concurrent calls: each answered, or refused with busy, in time', async () => {
-    const evil = [
-      '[evil]',
-      'SHOULD_LINEMERGE = false',
-      'MATCH_LIMIT = 0',
-      'DEPTH_LIMIT = 0',
-      'EXTRACT-boom = ^(?<boom>(a|aa)+)(?=b)$',
-    ].join('\n');
+    const evil = stallingStanza();
     const outs = await Promise.all(
       Array.from({ length: 20 }, (_, i) =>
         i % 2 === 0
           ? expectAnswered(
               'simulate',
-              { raw: `${'a'.repeat(200)}\n`, sourcetype: 'evil', props_conf: evil, timeout_ms: 500 },
+              { raw: STALLING_RAW, sourcetype: 'evil', props_conf: evil, timeout_ms: 500 },
               // Queued calls wait for the ones ahead: at most four budgets
               // (and start-ups) per slot, bounded by the queue.
               5 * (500 + 1_000),

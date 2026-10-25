@@ -9,6 +9,7 @@ import type { JsonSchemaType } from '@modelcontextprotocol/sdk/validation';
 import { createServer } from '../server';
 import { DEFAULT_MAX_CONCURRENT_WORKERS, DEFAULT_MAX_QUEUED_CALLS } from '../runInWorker';
 import { resultText } from './resultText';
+import { STALLING_RAW, stallingStanza } from './stallingConf';
 
 /**
  * End to end through the SDK: a real Client talking to the server from
@@ -267,22 +268,15 @@ describe('MCP server end to end', () => {
 
   it('frees sandbox slots when the client cancels a call', async () => {
     // Occupy every slot of the process-wide concurrency cap with a run that
-    // would hold it for its whole 30s budget: (a|aa)+ with the PCRE limits
-    // switched off (see tools.test.ts).
-    const evilProps = [
-      '[evil]',
-      'SHOULD_LINEMERGE = false',
-      'MATCH_LIMIT = 0',
-      'DEPTH_LIMIT = 0',
-      'EXTRACT-boom = ^(?<boom>(a|aa)+)(?=b)$',
-    ].join('\n');
+    // would hold it for its whole 30s budget (stallingConf.ts).
+    const evilProps = stallingStanza();
     const controller = new AbortController();
     const stuck = Array.from({ length: DEFAULT_MAX_CONCURRENT_WORKERS }, () =>
       client.callTool(
         {
           name: 'simulate',
           arguments: {
-            raw: `${'a'.repeat(200)}\n`,
+            raw: STALLING_RAW,
             sourcetype: 'evil',
             props_conf: evilProps,
             timeout_ms: 30_000,
@@ -314,13 +308,7 @@ describe('MCP server end to end', () => {
 
 describe('a flood of calls (#490)', () => {
   it('refuses what the queue cannot hold with `busy`, at once, and serves the rest', async () => {
-    const evilProps = [
-      '[evil]',
-      'SHOULD_LINEMERGE = false',
-      'MATCH_LIMIT = 0',
-      'DEPTH_LIMIT = 0',
-      'EXTRACT-boom = ^(?<boom>(a|aa)+)(?=b)$',
-    ].join('\n');
+    const evilProps = stallingStanza();
     const held = DEFAULT_MAX_CONCURRENT_WORKERS + DEFAULT_MAX_QUEUED_CALLS;
     const extra = 3;
     const controller = new AbortController();
@@ -328,7 +316,7 @@ describe('a flood of calls (#490)', () => {
       client.callTool(
         {
           name: 'simulate',
-          arguments: { raw: `${'a'.repeat(200)}\n`, sourcetype: 'evil', props_conf: evilProps, timeout_ms: 30_000 },
+          arguments: { raw: STALLING_RAW, sourcetype: 'evil', props_conf: evilProps, timeout_ms: 30_000 },
         },
         undefined,
         { signal: controller.signal, timeout: 60_000 },
@@ -386,13 +374,7 @@ describe('client disconnect', () => {
     // process open past it, so a prompt exit is proved by the test finishing
     // rather than by a stopwatch (#507).
     const TIMEOUT_MS = 30_000;
-    const evilProps = [
-      '[evil]',
-      'SHOULD_LINEMERGE = false',
-      'MATCH_LIMIT = 0',
-      'DEPTH_LIMIT = 0',
-      'EXTRACT-boom = ^(?<boom>(a|aa)+)(?=b)$',
-    ].join('\n');
+    const evilProps = stallingStanza();
     const launcher = fileURLToPath(new URL('../../dist/index.js', import.meta.url));
     const child = spawn(process.execPath, [launcher], { stdio: ['pipe', 'pipe', 'ignore'] });
     const exited = new Promise<number | null>((resolve) => child.once('exit', (code) => resolve(code)));
@@ -419,7 +401,7 @@ describe('client disconnect', () => {
           params: {
             name: 'simulate',
             arguments: {
-              raw: `${'a'.repeat(200)}\n`,
+              raw: STALLING_RAW,
               sourcetype: 'evil',
               props_conf: evilProps,
               timeout_ms: TIMEOUT_MS,

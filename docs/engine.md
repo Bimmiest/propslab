@@ -8,13 +8,13 @@ runPipeline(rawData, metadata, propsConfInput, transformsConfInput, options?)
 
 `options` is `PipelineOptions`:
 
-| Option | Default | What it does |
-|---|---|---|
-| `perEventPipeline` | — | Resolve stanzas per event rather than once for the batch, so metadata rewritten mid-pipeline takes effect downstream. |
-| `captureOffsets` | `true` | Record capture spans for positional EXTRACTs into `fieldOffsets`. |
-| `now` | `Date.now()` | The current time, in epoch milliseconds, for everything Splunk measures against the clock: the `MAX_DAYS_AGO` / `MAX_DAYS_HENCE` timestamp bounds, the year given to a yearless `TIME_FORMAT`, the index-time `_time` an event with no usable timestamp falls back to, and eval's `now()` / `time()` (in `EVAL-` and `INGEST_EVAL`). |
-| `limits` | `DEFAULT_LIMITS` | Bounds on the run's work (`RunLimits` in `runContext.ts`), any subset of: `maxRawChars` (1,000,000; longer input is cut back to the last complete line), `maxEvents` (25,000; line breaking stops there and the rest of the input is dropped), `explanationsPerDirective` (50; missed events a directive's no-match is analysed for). Each cut is reported as a warning diagnostic. |
-| `onStage` | — | `(stage, events) => void`, called as each stage starts with its name (one of `RUN_STAGES` in `runStages.ts`) and how many events it is given. For watching a run from outside; the MCP server uses it to say where a run it stopped had got to. It must not throw. |
+| Option             | Default          | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| ------------------ | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `perEventPipeline` | —                | Resolve stanzas per event rather than once for the batch, so metadata rewritten mid-pipeline takes effect downstream.                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `captureOffsets`   | `true`           | Record capture spans for positional EXTRACTs into `fieldOffsets`.                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `now`              | `Date.now()`     | The current time, in epoch milliseconds, for everything Splunk measures against the clock: the `MAX_DAYS_AGO` / `MAX_DAYS_HENCE` timestamp bounds, the year given to a yearless `TIME_FORMAT`, the index-time `_time` an event with no usable timestamp falls back to, and eval's `now()` / `time()` (in `EVAL-` and `INGEST_EVAL`).                                                                                                                                                                                   |
+| `limits`           | `DEFAULT_LIMITS` | Bounds on the run's work (`RunLimits` in `runContext.ts`), any subset of: `maxRawChars` (1,000,000; longer input is cut back to the last complete line), `maxEvents` (25,000; line breaking stops there and the rest of the input is dropped), `explanationsPerDirective` (50; missed events a directive's no-match is analysed for), `maxRunMs` (no bound; after this many milliseconds, the stages stop at the next regex call). Each cut is reported as a warning diagnostic, and a stop on `maxRunMs` as an error. |
+| `onStage`          | —                | `(stage, events) => void`, called as each stage starts with its name (one of `RUN_STAGES` in `runStages.ts`) and how many events it is given. For watching a run from outside; the MCP server uses it to say where a run it stopped had got to. It must not throw.                                                                                                                                                                                                                                                     |
 
 **Pass `now` when replaying recorded data.** A sample captured today carries absolute timestamps; replayed against the real clock years later, `MAX_DAYS_AGO` (2000 days by default) starts rejecting them and the output changes for no reason but the date. Pinning `now` to the moment of capture keeps the verdict fixed.
 
@@ -31,12 +31,21 @@ runPipeline(rawData, metadata, propsConfInput, transformsConfInput, options?)
 ```ts
 import { runPipeline } from './src/engine/pipeline';
 
-runPipeline(raw, metadata,
-  [{ layer: 'default', text: defaultProps }, { layer: 'local', text: localProps }],
-  [{ layer: 'default', text: defaultTransforms }, { layer: 'local', text: localTransforms }]);
+runPipeline(
+  raw,
+  metadata,
+  [
+    { layer: 'default', text: defaultProps },
+    { layer: 'local', text: localProps },
+  ],
+  [
+    { layer: 'default', text: defaultTransforms },
+    { layer: 'local', text: localTransforms },
+  ],
+);
 ```
 
-`layer` is a free-form label the engine only carries through as provenance (`app/local`, `system/local`, … are all fine); precedence comes from list order, since only the caller knows how its layers rank. Merging is per *attribute* within a stanza, not per file: a `local` stanza replaces only the attributes it names and the rest of the `default` stanza survives. That falls straight out of concatenating the layers in precedence order, because a repeated key in a stanza already resolves last-definition-wins.
+`layer` is a free-form label the engine only carries through as provenance (`app/local`, `system/local`, … are all fine); precedence comes from list order, since only the caller knows how its layers rank. Merging is per _attribute_ within a stanza, not per file: a `local` stanza replaces only the attributes it names and the rest of the `default` stanza survives. That falls straight out of concatenating the layers in precedence order, because a repeated key in a stanza already resolves last-definition-wins.
 
 What layered input adds to the result is provenance that parsing would otherwise destroy:
 
@@ -47,7 +56,7 @@ What layered input adds to the result is provenance that parsing would otherwise
 
 A plain string gives the same result as before, with no provenance fields. One layer makes the merge a no-op. Layered input and stanza precedence ([pipeline.md](pipeline.md#stanza-precedence)) are the two halves of what `btool … --debug` prints: which stanza won, and from which file.
 
-This is within-stanza only — a directive that wins its stanza can still lose to a higher-precedence *stanza*, which `matchStanzas`/`mergeDirectives` resolve separately.
+This is within-stanza only — a directive that wins its stanza can still lose to a higher-precedence _stanza_, which `matchStanzas`/`mergeDirectives` resolve separately.
 
 ## The regex engine
 
@@ -110,7 +119,9 @@ Treat the pattern language as the common PCRE1/PCRE2 subset, and verify anything
 
 ### Bounding the work
 
-PCRE2's limits bound each match. They do not bound a run: many events, several patterns each, every match within its limits, can still add up to seconds, and a stanza may set `MATCH_LIMIT = 0`. **So a consumer that executes patterns it did not write still needs a thread it can terminate**, with a wall-clock budget — which is what the browser app does (the pipeline, the Regex and Timestamp tabs and the `TIME_FORMAT` hover all run in watchdog-guarded workers) and what the MCP server does. The structural ReDoS heuristic that used to refuse patterns before compiling them no longer gates anything: refusing a valid pattern is not what Splunk does, and the limits stop the runaway cases it was guarding against. It survives as an advisory ranking in the MCP server's timeout report (`src/utils/redosHeuristic.ts`).
+PCRE2's limits bound each match, but not a run. Many events with several patterns each can take seconds, while each match stays in its limits. Set `limits.maxRunMs` to bound a run. After the budget, the stages stop at the next regex call, and an error diagnostic names the stage ([ADR 0019](adr/0019-a-run-stops-at-its-time-budget.md)). A `MATCH_LIMIT` or `DEPTH_LIMIT` of 0, or above 10,000,000, becomes 10,000,000, so one match takes about 0.2 s at most.
+
+**A consumer that runs patterns it did not write must still use a thread that it can stop.** A run can go past its budget by one match and by work that uses no regex. The browser app sets `maxRunMs` to 4 s. It runs the pipeline, the Regex and Timestamp tabs and the `TIME_FORMAT` hover in workers, each with a watchdog. The MCP server stops its sandbox worker at the `timeout_ms` of the call. The structural ReDoS heuristic does not refuse patterns, because Splunk does not refuse a valid pattern. The MCP server uses it only to rank the patterns in its timeout report (`src/utils/redosHeuristic.ts`).
 
 Measured on a 20,000-event synthetic key-value input (EXTRACT ×2, a `REPORT` with `MV_ADD`, `SEDCMD`, `TIME_PREFIX`) in Node, the pipeline took 2.3 s on PCRE2 against 1.7 s on V8's irregexp; on the two bundled examples scaled to the 1 MB input cap, 0–25% slower. A typical `EXTRACT` costs about 1.8 µs per event against irregexp's 1.4 µs. In the browser, the end-to-end suite's 20,000-event paste (`e2e/perf.spec.ts`) ran its pipeline in about 2.7 s against 2.5 s before, on the same machine.
 

@@ -1,6 +1,6 @@
 # Simulation fidelity
 
-The correctness oracle of a simulator is "matches real Splunk". That target is closed-source, versioned and partly undocumented. Thus it is not possible to *prove* that the fidelity is complete, but it is possible to give it a boundary. This file gives that boundary in one place:
+The correctness oracle of a simulator is "matches real Splunk". That target is closed-source, versioned and partly undocumented. Thus it is not possible to _prove_ that the fidelity is complete, but it is possible to give it a boundary. This file gives that boundary in one place:
 
 - what Propslab simulates
 - what it does not simulate, on purpose
@@ -58,7 +58,7 @@ All of them are simulated now. `OPTIMIZE_IE_EXTRACT` and `CAN_OPTIMIZE_IE` moved
 
 ## Stubbed eval functions
 
-The directive levels above do not apply to eval *functions*. The functions have their own boundary:
+The directive levels above do not apply to eval _functions_. The functions have their own boundary:
 
 - **Crypto functions.** `md5()`, `sha1()`, `sha256()` and `sha512()` return a placeholder string (for example, `[md5() not simulated]`), and they emit a warning.
 - **Partial stubs.** `searchmatch()`, `relative_time()`, `strptime()`, `mvfilter()` and `sigfig()` / `exact()` have simplified implementations. `mvfilter()` returns its input without a filter. `sigfig()` and `exact()` return the value, and they do not round it.
@@ -75,14 +75,17 @@ The directive levels above do not apply to eval *functions*. The functions have 
 - **Delimited `INDEXED_EXTRACTIONS` overrides apply to `csv`/`tsv`/`psv` only.** Propslab honours these overrides for the delimited formats: `FIELD_DELIMITER`, `FIELD_QUOTE`, `FIELD_NAMES`, `HEADER_FIELD_LINE_NUMBER`, `PREAMBLE_REGEX`, `FIELD_HEADER_REGEX`, the header-side delimiters (`HEADER_FIELD_DELIMITER`/`HEADER_FIELD_QUOTE`) and `MISSING_VALUE_REGEX`. `w3c` keeps its own `#Fields` header mechanism, and the overrides do not change it there.
 
   Propslab also honours `TIMESTAMP_FIELDS` for `json` and `w3c`. Without it, `w3c` reads its timestamp from the `date` and `time` columns, not from any other part of the row. In this context, `KEEP_EMPTY_VALS`/`CLEAN_KEYS` are not implemented. The `CLEAN_KEYS` of transforms.conf itself **is** simulated.
-- **`priority` rules come from the documentation.** `priority` orders stanzas *within* a kind, and it cannot reach across kinds. `source` > `host` > `sourcetype` > `default` is always true, whatever a stanza declares, and `props.conf.spec` says this explicitly. If a stanza declares no `priority`, its default depends on how it matches, not on its kind:
+
+- **`priority` rules come from the documentation.** `priority` orders stanzas _within_ a kind, and it cannot reach across kinds. `source` > `host` > `sourcetype` > `default` is always true, whatever a stanza declares, and `props.conf.spec` says this explicitly. If a stanza declares no `priority`, its default depends on how it matches, not on its kind:
   - 100 when the stanza matches literally (`[my_sourcetype]`, `[source::/var/log/app.log]`)
   - 0 when it matches by pattern (`[source::...app...]`, `[host::web*]`, and a host pattern with any regex syntax other than `.`, such as `[host::web\d+]`).
 
   Thus a pattern stanza needs a `priority` above 100 to beat a literal stanza of the same kind. The tests assert our interpretation of the documentation. On the question across kinds, the documentation contradicts itself one time ([#198](https://github.com/Bimmiest/propslab/issues/198)). `sourcetype` and `rename` are in the same position, but their rules are less ambiguous.
+
 - **`KV_MODE = xml`.** The engine's own XML reader (`src/engine/utils/xmlReader.ts`) reads it, not `DOMParser`, because no Web Worker or Node process has `DOMParser`. The reader is as strict as a parser that conforms to the XML standard, so malformed XML extracts nothing. It does not expand entities that the internal subset of a DOCTYPE declares. The name of an element field is its dotted path from the document root, and this path includes the root (`<event><user>…` gives `event.user`). The Splunk 10.4.0 capture pins this.
 
   No capture pins the names of attributes. An attribute keeps its bare name. The exception is a `Name` attribute: it follows the Windows event-log convention, and it names the field itself.
+
 - **`PAIR_RE` in transform `FORMAT` does not handle escaped quotes in quoted values.** `"([^"]*)"` stops at the first inner `"`, so `field::"say \"hi\""` parses as `field=say \`. The behaviour of real Splunk here is under-documented. Treat it as an edge case.
 
 ## Opt-in
@@ -93,24 +96,26 @@ The directive levels above do not apply to eval *functions*. The functions have 
 
 ## Other
 
-- **Regexes run on PCRE2, bounded by its limits and by worker watchdogs.** Each user pattern runs on PCRE2 compiled to WebAssembly. Thus the preview matches what the PCRE of Splunk matches, not a JavaScript translation of it. Examples are `$` before a final newline, `.` that matches `\r`, possessive quantifiers, recursion and `\K`. Propslab refuses no pattern because it looks prone to catastrophic backtracking.
+- **Regexes run on PCRE2, bounded by its limits, a run budget and worker watchdogs.** Each user pattern runs on PCRE2 compiled to WebAssembly. Thus the preview matches what the PCRE of Splunk matches, not a JavaScript translation of it. Examples are `$` before a final newline, `.` that matches `\r`, possessive quantifiers, recursion and `\K`. Propslab refuses no pattern because it looks prone to catastrophic backtracking.
 
-  `MATCH_LIMIT` and `DEPTH_LIMIT` bound each field-extraction match, as in Splunk. [engine.md](engine.md#the-regex-engine) gives more information. It also tells where PCRE2 differs from PCRE1, the version that gave these limits their names.
+  `MATCH_LIMIT` and `DEPTH_LIMIT` bound each field-extraction match, as in Splunk. [engine.md](engine.md#the-regex-engine) gives more information. It also tells where PCRE2 differs from PCRE1, the version that gave these limits their names. Propslab caps both limits at 10,000,000, the PCRE2 default. Thus `MATCH_LIMIT = 0` does not remove the limit, as it does in Splunk.
 
-  The limits bound each match, not a whole run. Thus the main thread also does not match a user-supplied regex from a directive. These parts run it inside a Web Worker:
+  The limits bound each match, not a whole run. The pipeline stops a run after 4 s, between two matches, and an error names the stage where it stopped. The main thread also does not match a user-supplied regex from a directive. These parts run it inside a Web Worker:
   - the main pipeline (5 s watchdog)
   - the **Regex tab's live tester** and the **Create-EXTRACT dialog's** live capture, which both use the same regex-match worker (2 s watchdog)
   - the **Timestamp tab** (2 s)
   - the `TIME_FORMAT` hover preview of the editor. Its `TIME_PREFIX` match uses the worker of the Timestamp tab, with 1 s for the match itself. If that worker has not loaded the engine yet, the hover waits for it, and does not blame it. When the limit fires, the hover says "preview timed out". The hover has no inline fallback.
 
-  If a regex runs too long, the app stops the Web Worker and starts it again, and the UI does not freeze. The main thread only *compiles* user patterns, to report syntax errors, and a compile cannot backtrack.
+  If a regex runs too long, the app stops the Web Worker and starts it again, and the UI does not freeze. The main thread only _compiles_ user patterns, to report syntax errors, and a compile cannot backtrack.
 
   Stanza patterns are the exception. The Effective config and Timestamp tabs resolve stanzas on the main thread. They match the `[source::…]` and `[host::…]` patterns against the one source and the one host in the metadata panel. Each stanza-pattern match, there and in the pipeline, is held to the default `MATCH_LIMIT` and `DEPTH_LIMIT` of Splunk.
 
   The hover still matches one regex on the main thread: the `TIME_FORMAT` side. The app builds this pattern from strptime specifiers, and the user did not write it. It runs against a maximum of 4 KB of the sample line.
-- **Raw data capped at 1 MB.** The pipeline applies the cap, not the store. The store accepts a larger input in full, and the app sends all of it to the worker. Then the pipeline *truncates* the input at the last complete line. Thus the pipeline drops the partial event at the end, and does not break it incorrectly. A warning says so.
+
+- **Raw data capped at 1 MB.** The pipeline applies the cap, not the store. The store accepts a larger input in full, and the app sends all of it to the worker. Then the pipeline _truncates_ the input at the last complete line. Thus the pipeline drops the partial event at the end, and does not break it incorrectly. A warning says so.
 
   Nothing rejects the input, and the editor still holds all of it. Line breaking also stops at 25,000 events. Without this limit, a `LINE_BREAKER` that breaks on each character makes a million events. A warning gives the line from which the input was dropped.
+
 - **Sourcetype stanzas match by strict equality.** Real Splunk does the same, because sourcetype names are literal, with no wildcards. This note is here so that contributors do not add wildcard support by analogy with `source::` / `host::`.
 - **Monaco find-widget tooltip flicker.** This is an upstream bug in the hover service of Monaco ([microsoft/monaco-editor#5208](https://github.com/microsoft/monaco-editor/issues/5208)). There is no local fix.
 

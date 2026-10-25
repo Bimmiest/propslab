@@ -2,10 +2,11 @@ import { useMemo } from 'react';
 import { useAppStore } from '../../store/useAppStore';
 import { Icon } from '../ui/Icon';
 import { Tooltip } from '../ui/Tooltip';
+import { RUN_BUDGET_MS } from '../../hooks/useProcessingPipeline';
 
 const MAIN_THREAD_HINT =
   'No pipeline worker could be loaded, so the pipeline runs on the main thread. ' +
-  'There is no watchdog here: a runaway regex freezes the tab instead of being stopped. ' +
+  `There is no watchdog here: a runaway regex freezes the tab for about ${RUN_BUDGET_MS / 1000} seconds before the run stops. ` +
   'Reload the page to try the worker again.';
 
 /** Where the pipeline runs and whether it is busy. */

@@ -227,7 +227,8 @@ export const DIRECTIVE_SUPPORT: Record<string, SupportEntry> = {
     note:
       "Applied to EXTRACT (props.conf) and to REPORT/TRANSFORMS REGEX (transforms.conf) as PCRE2's " +
       'match limit; a match that reaches it is no match. Counted as the PCRE2 interpreter counts, ' +
-      "which is close to but not exactly PCRE1's count.",
+      "which is close to but not exactly PCRE1's count. 0, which is no limit in Splunk, and any value above " +
+      "10,000,000 are capped at 10,000,000, PCRE2's default.",
   },
   DEPTH_LIMIT: {
     support: 'simulated',

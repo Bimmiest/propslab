@@ -65,7 +65,7 @@ export function escapeRegex(str: string): string {
 /**
  * MATCH_LIMIT and DEPTH_LIMIT, as PCRE2's match and depth limits. Absent
  * means PCRE2's own defaults, which is what patterns outside field extraction
- * get.
+ * get. A run's total is bounded separately, by {@link withRegexDeadline}.
  */
 export interface RegexLimits {
   matchLimit?: number;
@@ -75,6 +75,12 @@ export interface RegexLimits {
 /** Splunk's defaults for MATCH_LIMIT and DEPTH_LIMIT (props.conf.spec, transforms.conf.spec). */
 export const DEFAULT_MATCH_LIMIT = 100000;
 export const DEFAULT_DEPTH_LIMIT = 1000;
+/**
+ * The most a stanza can raise either limit to, PCRE2's own default. One match
+ * at this limit takes about 0.2 s; "no limit", 0xffffffff steps, about 90 s,
+ * which no run budget can interrupt (#560).
+ */
+export const MAX_REGEX_LIMIT = 10_000_000;
 
 function parseLimit(value: string | undefined, fallback: number): number {
   const text = value?.trim();
@@ -82,8 +88,8 @@ function parseLimit(value: string | undefined, fallback: number): number {
   // i.e. no limit. Negative or non-numeric is unset too, and linted.
   if (!text || !/^\d+$/.test(text)) return fallback;
   const n = Number(text);
-  // 0 is "no limit" in the spec.
-  return n === 0 ? 0xffffffff : n;
+  // 0 is "no limit" in the spec; directiveLint says it is capped.
+  return n === 0 || n > MAX_REGEX_LIMIT ? MAX_REGEX_LIMIT : n;
 }
 
 /**
@@ -96,6 +102,36 @@ export function extractionLimits(matchLimit?: string, depthLimit?: string): Rege
     matchLimit: parseLimit(matchLimit, DEFAULT_MATCH_LIMIT),
     depthLimit: parseLimit(depthLimit, DEFAULT_DEPTH_LIMIT),
   };
+}
+
+/** Thrown by a regex call made after the deadline of {@link withRegexDeadline}. */
+export class RegexDeadlineError extends Error {
+  constructor() {
+    super('the run used its time budget');
+    this.name = 'RegexDeadlineError';
+  }
+}
+
+/** A `Date.now()` time after which every regex call throws; none outside a run. */
+let deadline = Infinity;
+
+/**
+ * Run `fn` with every regex call in it refused, with a {@link RegexDeadlineError},
+ * once `Date.now()` passes `at`. It is checked between matches, so a
+ * match that started in time finishes, within its limits.
+ */
+export function withRegexDeadline<T>(at: number, fn: () => T): T {
+  const outer = deadline;
+  deadline = Math.min(outer, at);
+  try {
+    return fn();
+  } finally {
+    deadline = outer;
+  }
+}
+
+function checkDeadline(): void {
+  if (deadline !== Infinity && Date.now() > deadline) throw new RegexDeadlineError();
 }
 
 // ---------------------------------------------------------------------------
@@ -231,6 +267,7 @@ export class SplunkRegex {
   /** The first match at or after `start`, or null. */
   exec(subject: string, start = 0): RegexMatch | null {
     this.lastError = undefined;
+    checkDeadline();
     try {
       return this.#regex().exec(subject, start);
     } catch (e) {
@@ -251,9 +288,13 @@ export class SplunkRegex {
    */
   matchAll(subject: string, start = 0): RegexMatch[] {
     this.lastError = undefined;
+    checkDeadline();
     const matches: RegexMatch[] = [];
     try {
-      for (const m of this.#regex().matchAll(subject, start)) matches.push(m);
+      for (const m of this.#regex().matchAll(subject, start)) {
+        checkDeadline();
+        matches.push(m);
+      }
     } catch (e) {
       this.#limitHit(e);
     }

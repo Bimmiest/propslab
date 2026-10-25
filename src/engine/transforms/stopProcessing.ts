@@ -6,6 +6,7 @@ import { evalNode } from '../processors/eval/evaluator';
 import { type Node, parseExpression } from '../processors/eval/parser';
 import { atDirective } from '../parser/provenance';
 import { effectiveDirective } from '../utils/directiveValues';
+import { RegexDeadlineError } from '../../utils/splunkRegex';
 
 /**
  * How transforms.conf.spec reads a STOP_PROCESSING_IF result: "numeric 0 and
@@ -78,6 +79,7 @@ export function evaluateStopCondition(
     });
     return { stop: stopConditionHolds(value), expression };
   } catch (err) {
+    if (err instanceof RegexDeadlineError) throw err;
     report(
       'error',
       `STOP_PROCESSING_IF could not be evaluated, so processing continues: ${err instanceof Error ? err.message : String(err)}`,

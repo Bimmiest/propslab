@@ -4,6 +4,7 @@ import { applyTransforms } from './transformsProcessor';
 import { applyKvMode } from './kvMode';
 import { getField } from '../utils/fieldBag';
 import { replayContext, type RunContext } from '../runContext';
+import { RegexDeadlineError } from '../../utils/splunkRegex';
 
 type FieldBag = Record<string, string | string[]>;
 
@@ -98,7 +99,8 @@ function extractFromRaw(
     probed = extractFields(probed, directives, replay);
     probed = applyTransforms(probed, directives, transformsConf, 'search-time', replay);
     probed = applyKvMode(probed, directives, replay);
-  } catch {
+  } catch (err) {
+    if (err instanceof RegexDeadlineError) throw err;
     // A replay that throws yields no attribution for this mutation rather than
     // failing the pipeline — the real pass already surfaced the error.
     return {};
