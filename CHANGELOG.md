@@ -105,6 +105,7 @@ All notable changes to Propslab are documented here, newest first. Entries say w
 
 ### Fixed
 
+- **The "Got it" and "Commands" buttons are named by the text they show** (WCAG 2.5.3, label in name), so a speech user can reach them by saying what is on screen. The command palette button also announces its shortcut through `aria-keyshortcuts`.
 - **`INDEXED_EXTRACTIONS = w3c` takes its timestamp from the `date` and `time` columns when `TIMESTAMP_FIELDS` is unset** ([#444](https://github.com/Bimmiest/propslab/issues/444)), as if `TIMESTAMP_FIELDS = date, time` were set, rather than from wherever the row holds one. A row with neither column gets the time of indexing, whatever `TIME_FORMAT` says.
 - **`[source::]` and `[host::]` patterns are read as Splunk reads them** ([#442](https://github.com/Bimmiest/propslab/issues/442), [#443](https://github.com/Bimmiest/propslab/issues/443)). A source pattern containing `*` or `...` is PCRE with only `...`, `*` and `.` translated, so `(.\d+)?`, `\d`, character classes and lookbehind work; one without a wildcard is compared as written. A host pattern is always PCRE, case-insensitive unless it carries `(?-i)`. Stanzas of one kind and priority are ordered by ASCII name alone, without the literal-character specificity step. The conf lint flags a pattern PCRE rejects.
 - **Eval edge cases match Splunk** ([#446](https://github.com/Bimmiest/propslab/issues/446), [#447](https://github.com/Bimmiest/propslab/issues/447), [#522](https://github.com/Bimmiest/propslab/issues/522)).

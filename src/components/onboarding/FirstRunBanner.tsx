@@ -94,7 +94,7 @@ export function FirstRunBanner() {
         type="button"
         onClick={dismiss}
         className="shrink-0 flex items-center gap-1 px-2.5 py-1 text-xs rounded-md border-none cursor-pointer transition-colors text-[var(--color-text-muted)] hover:bg-[var(--color-bg-tertiary)] hover:text-[var(--color-text-primary)]"
-        aria-label="Dismiss welcome banner"
+        aria-label="Got it: dismiss the welcome banner"
       >
         <Icon name="x" className="w-3.5 h-3.5" />
         <span className="hidden sm:inline">Got it</span>
