@@ -41,3 +41,24 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           SECRETS_READ_TOKEN: ${{ secrets.SECRETS_READ_TOKEN }}
         run: node scripts/check-production-environment.mjs
+
+  # A failed scheduled run opens an issue, or comments on the one already
+  # open (#573): a red scheduled run is a mark nobody is subscribed to. No
+  # checkout, so the token that can write to the tracker never meets the code
+  # the run executed.
+  report:
+    needs: [production]
+    if: failure() && github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - uses: Bimmiest/shared-workflows/.github/actions/open-or-update-issue@9d5ed93ea7b9311ae1b9b460dfa9f9da0a28fffe # v1.1.0
+        with:
+          label: scheduled-environment
+          title: The weekly production environment check failed
+          body: |
+            The weekly check found the `production` environment or main's protection not as docs/deployment.md states. The run log names what is missing.
+
+            Run: {run}

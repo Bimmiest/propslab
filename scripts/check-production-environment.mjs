@@ -128,12 +128,15 @@ async function checkBranchProtection(token) {
       `  ok  main is protected (${via}): pull request required, CI checks required, no force-push, no deletion, no bypass`,
     );
   } else if (result.status === 'skipped') {
-    // The rulesets do not provide everything and the classic rules, which may,
-    // need "Administration: read", which no GITHUB_TOKEN holds. Say so loudly
-    // without failing a check that cannot see the answer.
-    const message = `main branch protection could not be fully verified (${via}); not shown: ${result.missing.join(', ')}. ${result.notes.join('; ')}.`;
-    console.log(`  skipped  ${message}`);
-    console.log(`::warning title=main branch protection unverified::${message}`);
+    // The rulesets do not provide everything, and the classic rules, which
+    // may, need "Administration: read", which no GITHUB_TOKEN holds. A check
+    // that cannot see the answer has verified nothing, so it fails rather
+    // than passing green every week (#573).
+    failures.push(
+      `main branch protection could not be verified (${via}); not shown: ${result.missing.join(', ')}. ` +
+        `${result.notes.join('; ')}. Protect main with a ruleset, which this token can read, ` +
+        'or give the job a token with "Administration: read".',
+    );
   } else {
     failures.push(
       `main branch protection is incomplete (${via}); missing: ${result.missing.join(', ')}. ` +
