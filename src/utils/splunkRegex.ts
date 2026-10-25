@@ -27,6 +27,7 @@ import {
   type Match,
   type ModuleBytes,
 } from 'pcre2-wasm-utf16';
+import { detached } from './redosHeuristic';
 
 export type RegexMatch = Match;
 export type RegexEngineModule = CompiledModule;
@@ -135,7 +136,9 @@ class RegexCache {
       this.#entries.set(key, hit);
       return hit;
     }
-    const regex = new Pcre2Regex(source, flags, limits);
+    // A pattern cut from a conf is a view into the whole conf text, and an entry
+    // kept on it keeps that text alive: one old conf version per entry.
+    const regex = new Pcre2Regex(detached(source), flags, limits);
     this.compiles++;
     if (this.#entries.size >= this.#limit) {
       const oldest = this.#entries.keys().next();
@@ -144,12 +147,20 @@ class RegexCache {
         this.#entries.delete(oldest.value);
       }
     }
-    this.#entries.set(key, regex);
+    this.#entries.set(detached(key), regex);
     return regex;
   }
 }
 
-const cache = new RegexCache(256);
+/**
+ * Patterns each cache holds. A run whose config uses more distinct patterns
+ * than this evicts the next one it needs on every lookup, so every pattern
+ * recompiles for every event (#614); a compiled pattern is a few KB of wasm
+ * memory, so this is set well past any one sourcetype's config.
+ */
+export const REGEX_CACHE_LIMIT = 1024;
+
+const cache = new RegexCache(REGEX_CACHE_LIMIT);
 /**
  * Diagnostic probes (the no-op explainer's truncated patterns) get their own
  * cache: through the shared one, a few hundred of them evicted the patterns the

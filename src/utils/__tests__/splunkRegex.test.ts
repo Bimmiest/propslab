@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   cachedProbeCount,
   cachedRegexCount,
+  regexCompileCount,
+  REGEX_CACHE_LIMIT,
   extractionLimits,
   initRegexEngine,
   initRegexEngineSync,
@@ -273,9 +275,20 @@ describe('MATCH_LIMIT and DEPTH_LIMIT', () => {
 describe('compiled-pattern cache', () => {
   it('stays bounded and recompiles an evicted pattern on its next use', () => {
     const first = new SplunkRegex('first(\\d)');
-    for (let i = 0; i < 400; i++) new SplunkRegex(`evict${i}`);
-    expect(cachedRegexCount()).toBeLessThanOrEqual(256);
+    for (let i = 0; i < REGEX_CACHE_LIMIT + 100; i++) new SplunkRegex(`evict${i}`);
+    expect(cachedRegexCount()).toBeLessThanOrEqual(REGEX_CACHE_LIMIT);
     expect(first.exec('first7')?.[1]).toBe('7');
+  });
+
+  it('compiles each pattern once when a run uses more than 256 of them (#614)', () => {
+    const patterns = Array.from({ length: 300 }, (_, i) => `k${i}=(?<k${i}>\\d+)`);
+    const run = () => {
+      for (let event = 0; event < 20; event++) for (const p of patterns) new SplunkRegex(p).exec(`k${event}=1`);
+    };
+    run();
+    const before = regexCompileCount();
+    run();
+    expect(regexCompileCount() - before).toBe(0);
   });
 
   it('keeps diagnostic probes out of the shared cache (#415)', () => {
