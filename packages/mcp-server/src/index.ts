@@ -48,6 +48,13 @@ async function main(): Promise<void> {
 
   const reexecWanted = !flagsAlreadySet() || heapFlagsSet || !permissionEnabled();
   if (process.env['PROPSLAB_MCP_NO_REEXEC'] === '1') {
+    if (!permissionEnabled()) {
+      // stderr: stdout belongs to the protocol.
+      console.error(
+        'propslab MCP server: PROPSLAB_MCP_NO_REEXEC=1 runs it without the permission model or the ' +
+          'working-directory move, so sandbox workers can read and write files and start processes',
+      );
+    }
     if (heapFlagsSet) {
       // stderr: stdout belongs to the protocol.
       console.error(

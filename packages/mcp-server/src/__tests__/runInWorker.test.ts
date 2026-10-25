@@ -32,6 +32,7 @@ const fixture = (name: string) => fileURLToPath(new URL(`./fixtures/${name}`, im
 const OOM_WORKER = fixture('oomWorker.cjs');
 const SLEEP_WORKER = fixture('sleepWorker.cjs');
 const LOG_WORKER = fixture('logWorker.cjs');
+const ENV_WORKER = fixture('envWorker.cjs');
 const LAUNCHER = fileURLToPath(new URL('../../dist/index.js', import.meta.url));
 // Outside every directory the permission tests allow.
 const PACKAGE_JSON = fileURLToPath(new URL('../../package.json', import.meta.url));
@@ -428,6 +429,19 @@ describe('worker stdout', () => {
   });
 });
 
+describe('the sandbox worker environment (#568)', () => {
+  it('gives a worker none of the server process environment', async () => {
+    process.env['PROPSLAB_TEST_SECRET'] = 'do-not-leak';
+    try {
+      await expect(
+        runInWorker(sleep(0), 10_000, { workerPath: ENV_WORKER, limiter: new Semaphore(1) }),
+      ).resolves.toEqual([]);
+    } finally {
+      delete process.env['PROPSLAB_TEST_SECRET'];
+    }
+  });
+});
+
 describe('heap-size flag stripping', () => {
   it('drops heap-size flags from execArgv in every spelling node accepts', () => {
     expect(
@@ -492,6 +506,19 @@ describe('permission model', () => {
     );
     const denied = { inside: 'ok', outside: 'ERR_ACCESS_DENIED' };
     expect(JSON.parse(out)).toEqual({ main: denied, worker: denied });
+  });
+
+  it('refuses code generation from strings, in the process and its workers (#568)', () => {
+    const fixtures = path.dirname(LOG_WORKER);
+    const run = (flags: string[]) =>
+      JSON.parse(
+        execFileSync(process.execPath, [...flags, path.join(fixtures, 'codegenProbe.cjs')], {
+          encoding: 'utf8',
+          cwd: fixtures,
+        }),
+      ) as Record<'main' | 'worker', string>;
+    expect(run(permissionFlags(fixtures))).toEqual({ main: 'EvalError', worker: 'EvalError' });
+    expect(run([])).toEqual({ main: 'ok', worker: 'ok' });
   });
 
   it('refuses writes, child processes and native addons, in the process and its workers (#490)', () => {

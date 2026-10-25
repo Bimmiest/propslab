@@ -38,6 +38,9 @@ export function permissionFlags(bundleDir: string): string[] {
     // again for every worker it starts, so each tool call would add two lines
     // to the client's server log about a flag chosen on purpose.
     '--disable-warning=SecurityWarning',
+    // Nothing in the server or the engine builds code from a string, so eval
+    // and new Function are refused outright, in the workers too (#568).
+    '--disallow-code-generation-from-strings',
   ];
 }
 

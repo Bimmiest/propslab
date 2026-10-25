@@ -6,6 +6,10 @@ All notable changes to Propslab are documented here, newest first. Entries say w
 
 ## Unreleased
 
+### Changed
+
+- **The MCP server's sandbox workers get no environment, and code generation from strings is refused** ([#568](https://github.com/Bimmiest/propslab/issues/568)). A worker running agent-supplied patterns no longer inherits the API keys an MCP client may start the server with, `eval` and `new Function` throw in the server and its workers, and `PROPSLAB_MCP_NO_REEXEC=1` always warns that it turns the permission model off.
+
 ### Fixed
 
 - **The preview's Fields filter opens promptly on an event with thousands of fields, and the Timestamp tab no longer re-renders on each config keystroke** ([#565](https://github.com/Bimmiest/propslab/issues/565)). The filter rendered a checkbox row for every field; it now renders the rows near the viewport, as the Fields table does.
