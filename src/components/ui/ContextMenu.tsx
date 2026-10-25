@@ -34,7 +34,7 @@ export function ContextMenuContent({ children }: { children: React.ReactNode }) 
   return (
     <RCM.Portal>
       <RCM.Content
-        className="z-50 min-w-[11rem] rounded-md py-1 shadow-lg"
+        className="motion-pop origin-(--radix-context-menu-content-transform-origin) z-50 min-w-[11rem] rounded-md py-1 shadow-lg"
         style={{
           backgroundColor: 'var(--color-bg-elevated)',
           border: '1px solid var(--color-border)',

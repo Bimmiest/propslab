@@ -24,12 +24,16 @@ export interface OverlayProps {
   /** Accessible name for the dialog. */
   label: string;
   children: ReactNode;
-  /** Applied to the content element, which sits above the backdrop. */
+  /**
+   * Applied to the content element, which sits above the backdrop. It places
+   * the content itself (`fixed`, `z-50`): there is no layout wrapper around
+   * it, because Radix gives each child of the portal its own Presence, and a
+   * wrapper with no exit animation unmounts at once and takes the content's
+   * exit animation with it (#696).
+   */
   className?: string;
   /** Inline styles for the content element. */
   style?: React.CSSProperties;
-  /** Classes for the full-screen layer holding the content (layout only). */
-  containerClassName?: string;
   /** Fires on the content element; used for Enter-to-submit in a form dialog. */
   onKeyDown?: (event: React.KeyboardEvent) => void;
   /** `alertdialog` for a confirmation that interrupts the user's flow. */
@@ -49,7 +53,6 @@ export function Overlay({
   children,
   className,
   style,
-  containerClassName = 'fixed inset-0 z-50 flex items-start justify-center pt-[20vh]',
   onKeyDown,
   role,
   description,
@@ -69,29 +72,27 @@ export function Overlay({
         Presence waits out before unmounting.
       */}
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-40" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }} />
-        <div className={containerClassName}>
-          <Dialog.Content
-            className={className}
-            style={style}
-            onKeyDown={onKeyDown}
-            {...(role ? { role } : {})}
-            {...(role === 'alertdialog' ? { onPointerDownOutside: (e: Event) => e.preventDefault() } : {})}
-            // Radix requires either a description or an explicit opt-out.
-            // Without a `description`, opting out is the accurate answer
-            // rather than inventing a sentence for a screen reader to read.
-            {...(description === undefined ? { 'aria-describedby': undefined } : {})}
-          >
-            {/*
-              The accessible name. A bare `aria-label` would name the dialog
-              just as well, but Radix warns for a Content with no Title — and a
-              console error on every overlay is a real cost, not a lint nit.
-            */}
-            <Dialog.Title className="sr-only">{label}</Dialog.Title>
-            {description !== undefined && <Dialog.Description className="sr-only">{description}</Dialog.Description>}
-            {children}
-          </Dialog.Content>
-        </div>
+        <Dialog.Overlay className="motion-fade fixed inset-0 z-40" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }} />
+        <Dialog.Content
+          className={className}
+          style={style}
+          onKeyDown={onKeyDown}
+          {...(role ? { role } : {})}
+          {...(role === 'alertdialog' ? { onPointerDownOutside: (e: Event) => e.preventDefault() } : {})}
+          // Radix requires either a description or an explicit opt-out.
+          // Without a `description`, opting out is the accurate answer
+          // rather than inventing a sentence for a screen reader to read.
+          {...(description === undefined ? { 'aria-describedby': undefined } : {})}
+        >
+          {/*
+            The accessible name. A bare `aria-label` would name the dialog
+            just as well, but Radix warns for a Content with no Title — and a
+            console error on every overlay is a real cost, not a lint nit.
+          */}
+          <Dialog.Title className="sr-only">{label}</Dialog.Title>
+          {description !== undefined && <Dialog.Description className="sr-only">{description}</Dialog.Description>}
+          {children}
+        </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
   );

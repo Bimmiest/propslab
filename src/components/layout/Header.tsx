@@ -51,7 +51,7 @@ function PanelToggle({
         aria-expanded={open}
         className={[
           'flex items-center justify-center w-8 h-8 rounded-md border-none outline-none',
-          'focus-visible:ring-2 transition-colors cursor-pointer',
+          'focus-visible:ring-2 press cursor-pointer',
           open
             ? 'bg-[var(--color-accent)] text-[var(--color-text-on-accent)]'
             : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-tertiary)] hover:text-[var(--color-text-primary)]',
@@ -116,7 +116,7 @@ export function Header() {
               aria-label={`Commands ${modifierName}K`}
               aria-keyshortcuts={isApplePlatform() ? 'Meta+K' : 'Control+K'}
               className="flex items-center gap-1.5 px-2 h-7 rounded-md text-[11px] border border-[var(--color-border-control)] cursor-pointer
-                text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-tertiary)] transition-colors"
+                text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-tertiary)] press"
             >
               <Icon name="search" className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Commands</span>{' '}

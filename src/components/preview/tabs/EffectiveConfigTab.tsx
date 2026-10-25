@@ -74,7 +74,7 @@ function DirectiveRow({ directive }: { directive: EffectiveDirective }) {
       </div>
 
       {expanded && (
-        <ul className="pl-6 pr-3 pb-2 space-y-1">
+        <ul className="motion-reveal pl-6 pr-3 pb-2 space-y-1">
           {directive.overriddenByStanza.map((loser) => (
             <li
               key={`${loser.name}-${loser.directiveLine}-${loser.layer ?? ''}`}

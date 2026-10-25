@@ -124,19 +124,21 @@ export function SettingsPanel() {
   const toggleSettings = useAppStore((s) => s.toggleSettings);
 
   // Escape closes only the topmost overlay, Tab cycles inside this panel, and
-  // sibling content is hidden from assistive tech while it is open.
-
-  if (!settingsOpen) return null;
-
+  // sibling content is hidden from assistive tech while it is open. Rendered
+  // closed rather than not at all, so Presence can play the drawer's exit
+  // (`drawer-slide`, as the pipeline reference does).
   return (
-    <Overlay open={settingsOpen} onClose={toggleSettings} label="Settings" containerClassName="">
-      <aside
-        className="fixed top-0 right-0 z-50 h-full w-80 flex flex-col shadow-xl"
-        style={{
-          backgroundColor: 'var(--color-bg-secondary)',
-          borderLeft: '1px solid var(--color-border)',
-        }}
-      >
+    <Overlay
+      open={settingsOpen}
+      onClose={toggleSettings}
+      label="Settings"
+      className="drawer-slide fixed top-0 right-0 z-50 h-full w-80 flex flex-col shadow-xl"
+      style={{
+        backgroundColor: 'var(--color-bg-secondary)',
+        borderLeft: '1px solid var(--color-border)',
+      }}
+    >
+      <div className="contents">
         {/* Header */}
         <div
           className="flex items-center justify-between px-4 h-12 shrink-0"
@@ -162,7 +164,7 @@ export function SettingsPanel() {
           {/* Pipeline section */}
           <PipelineSection />
         </div>
-      </aside>
+      </div>
     </Overlay>
   );
 }

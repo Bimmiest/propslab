@@ -100,7 +100,7 @@ export function CommandPalette() {
         open
         onClose={close}
         label="Command palette"
-        className="w-full max-w-lg rounded-xl overflow-hidden shadow-2xl"
+        className="motion-pop fixed z-50 left-1/2 -translate-x-1/2 top-[20vh] w-full max-w-lg rounded-xl overflow-hidden shadow-2xl"
         style={{
           backgroundColor: 'var(--color-bg-elevated)',
           border: '1px solid var(--color-border)',

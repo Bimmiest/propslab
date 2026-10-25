@@ -108,13 +108,16 @@ export const PreviewPanel = memo(function PreviewPanel() {
         aria-busy={isProcessing}
       >
         <PipelineInputsProvider>
-          <Suspense fallback={null}>
-            <TabContent tab={activeTab} hasData={!!result && result.events.length > 0} failure={failure} />
-          </Suspense>
+          {/* Keyed so a new tab's content fades in; the tab mounts afresh on a switch anyway. */}
+          <div key={activeTab} className="motion-fade-in h-full">
+            <Suspense fallback={null}>
+              <TabContent tab={activeTab} hasData={!!result && result.events.length > 0} failure={failure} />
+            </Suspense>
+          </div>
         </PipelineInputsProvider>
         {showOverlay && (
           <div
-            className="absolute inset-0 flex items-center justify-center pointer-events-none"
+            className="motion-fade-in absolute inset-0 flex items-center justify-center pointer-events-none"
             style={{ backgroundColor: 'var(--color-bg-primary)', opacity: 0.6 }}
             aria-hidden="true"
           >

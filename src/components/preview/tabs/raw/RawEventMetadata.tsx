@@ -32,7 +32,7 @@ export function MetadataDetails({
 }) {
   return (
     <>
-      <div className="px-3 py-1.5 border-t border-[var(--color-border)] bg-[var(--color-bg-tertiary)]">
+      <div className="motion-reveal px-3 py-1.5 border-t border-[var(--color-border)] bg-[var(--color-bg-tertiary)]">
         <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs font-mono">
           <MetadataField label="index" value={event.metadata.index} original={originalMetadata?.index} />
           <MetadataField label="host" value={event.metadata.host} original={originalMetadata?.host} />

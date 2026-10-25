@@ -32,7 +32,7 @@ export function ClearButton({ onClear, label = 'Clear' }: ClearButtonProps) {
         onClick={handleClick}
         onBlur={() => setConfirming(false)}
         className={[
-          'flex items-center gap-1 px-2 py-1 text-xs rounded transition-colors',
+          'flex items-center gap-1 px-2 py-1 text-xs rounded press',
           confirming
             ? 'bg-[var(--color-error)] text-[var(--color-text-on-error)]'
             : 'bg-[var(--color-bg-tertiary)] text-[var(--color-text-secondary)] hover:bg-[var(--color-error)] hover:text-[var(--color-text-on-error)]',

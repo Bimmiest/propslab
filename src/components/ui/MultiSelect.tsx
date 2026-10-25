@@ -65,7 +65,7 @@ export function MultiSelect({ label, options, selected, onChange, searchable }: 
         // aria-controls are what the disclosure pattern asks for.
         aria-expanded={open}
         aria-controls={open && hasPopup ? popupId : undefined}
-        className="flex items-center gap-1 px-2 py-1 text-xs rounded border cursor-pointer"
+        className="press flex items-center gap-1 px-2 py-1 text-xs rounded border cursor-pointer"
         style={{
           backgroundColor: activeCount > 0 ? 'var(--color-accent)' : 'var(--color-bg-primary)',
           color: activeCount > 0 ? 'var(--color-text-on-accent)' : 'var(--color-text-secondary)',
@@ -81,7 +81,7 @@ export function MultiSelect({ label, options, selected, onChange, searchable }: 
           id={popupId}
           role="group"
           aria-label={`${label} options`}
-          className="absolute top-full left-0 mt-1 z-50 min-w-[180px] max-w-[260px] max-h-[280px] flex flex-col rounded border shadow-lg"
+          className="motion-pop-in origin-top-left absolute top-full left-0 mt-1 z-50 min-w-[180px] max-w-[260px] max-h-[280px] flex flex-col rounded border shadow-lg"
           style={{
             backgroundColor: 'var(--color-bg-secondary)',
             borderColor: 'var(--color-border)',

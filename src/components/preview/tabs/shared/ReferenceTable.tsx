@@ -49,7 +49,7 @@ export function ReferenceTable<R>({
         <span className="text-xs font-medium text-[var(--color-text-muted)]">{title}</span>
       </button>
       {open && (
-        <div id={panelId} className="px-3 pb-2">
+        <div id={panelId} className="motion-reveal px-3 pb-2">
           <div className="relative mb-2">
             <Icon
               name="search"

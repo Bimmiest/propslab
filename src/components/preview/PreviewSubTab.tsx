@@ -170,9 +170,10 @@ export const PreviewSubTab = memo(function PreviewSubTab({ pipelineInputs }: { p
         totalCount={enrichedEvents.length}
       />
 
-      {/* Sub-tab content */}
+      {/* Sub-tab content. Keyed so a new sub-tab fades in, and starts at its top. */}
       <div
-        className="flex-1 min-h-0 overflow-auto"
+        key={subTab}
+        className="motion-fade-in flex-1 min-h-0 overflow-auto"
         role="tabpanel"
         id={tabPanelId(subTabsId, subTab)}
         aria-labelledby={tabId(subTabsId, subTab)}

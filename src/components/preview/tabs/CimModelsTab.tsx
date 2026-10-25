@@ -97,7 +97,7 @@ function CimModelCard({ result }: { result: ReturnType<typeof validateCimComplia
       </button>
 
       {expanded && (
-        <div className="px-3 py-2 border-t border-[var(--color-border)] space-y-2">
+        <div className="motion-reveal px-3 py-2 border-t border-[var(--color-border)] space-y-2">
           {declaresRequired && (
             <FieldGroup title="Required Fields" present={result.requiredPresent} missing={result.requiredMissing} />
           )}

@@ -12,8 +12,16 @@ const APACHE = /Apache Access Log/i;
  * splunk-light/splunk-dark themes, so its violations are ours to fix.
  */
 async function expectNoViolations(page: Page, label: string): Promise<void> {
-  // Let transitions settle so contrast is measured on final colours.
-  await page.evaluate(() => Promise.all(document.getAnimations().map((a) => a.finished.catch(() => {}))));
+  // Let transitions and entrances settle so contrast is measured on final
+  // colours. Not an endless one (the processing pulse), which never finishes.
+  await page.evaluate(() =>
+    Promise.all(
+      document
+        .getAnimations()
+        .filter((a) => a.effect?.getComputedTiming().iterations !== Infinity)
+        .map((a) => a.finished.catch(() => {})),
+    ),
+  );
 
   const results = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'])
