@@ -15,9 +15,6 @@ import { keyCleaner } from './keyCleaning';
 import { normaliseDestKey } from './destKeys';
 import { applyDelimsExtraction } from './delims';
 
-// kvMode applies the same key cleaning, and has always imported it from here.
-export { cleanFieldKey } from './keyCleaning';
-
 export interface TransformResult {
   fields: Record<string, string | string[]>;
   destKey?: string;
@@ -93,12 +90,6 @@ function resolvePriorDestValue(event: SplunkEvent, destKey: string | undefined):
   if (builtIn !== undefined) return builtIn;
   const v = getField(event.fields, destKey);
   return (Array.isArray(v) ? v[0] : v) ?? '';
-}
-
-function addMultiValue(fields: Record<string, string | string[]>, key: string, value: string): void {
-  // hasOwn-guarded + `__proto__`-safe: a named group like `(?<toString>…)` is
-  // stored as a real field rather than reading back the inherited function.
-  addFieldValue(fields, key, value);
 }
 
 /** Resolve the value a transform reads from, honouring SOURCE_KEY (default _raw). */
@@ -292,7 +283,7 @@ function extractFormatPairs(run: MatchedRun, format: string): void {
       // gating both phases on it would make MV_ADD do something where
       // Splunk ignores it entirely.
       if (keepFirstMatchOnly && hasField(result.fields, field)) continue;
-      addMultiValue(result.fields, field, value);
+      addFieldValue(result.fields, field, value);
     }
   }
 }
@@ -324,7 +315,7 @@ function extractNamedGroups(run: MatchedRun): void {
     if (!hasField(result.fields, fieldName)) {
       setField(result.fields, fieldName, value);
     } else if (accumulate) {
-      addMultiValue(result.fields, fieldName, value);
+      addFieldValue(result.fields, fieldName, value);
     }
     // else: search time, field already set and MV_ADD is false — discard the later value.
   };

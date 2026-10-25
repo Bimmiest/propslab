@@ -379,43 +379,6 @@ function classEnd(pattern: string, start: number): number {
   return pattern.length;
 }
 
-/**
- * Value of `key` for a set of already-matched stanzas (highest precedence
- * first).
- *
- * Across stanzas the first match wins; WITHIN a stanza the LAST definition wins,
- * for the same reason `mergeDirectives` does it that way — that is Splunk's rule
- * for a key repeated in a file, and it is also what makes a `local/` layer
- * override the `default/` one it was concatenated after. Taking the first match
- * within the stanza would silently return the lower layer's value.
- */
-export function getDirectiveValue(stanzas: ConfStanza[], key: string): string | undefined {
-  for (const stanza of stanzas) {
-    const value = effectiveDirective(stanza.directives, key)?.value;
-    if (value !== undefined) return value;
-  }
-  return undefined;
-}
-
-/**
- * Every directive of `directiveType` across the matched stanzas, in stanza
- * precedence order. This does NOT resolve overrides — for a layered conf a key
- * redefined in `local/` appears alongside the `default/` definition it beat, and
- * the loser carries `overriddenBy`. Callers that want only the winners should go
- * through `mergeDirectives`.
- */
-export function getDirectivesByType(stanzas: ConfStanza[], directiveType: string): import('../types').ConfDirective[] {
-  const results: import('../types').ConfDirective[] = [];
-  for (const stanza of stanzas) {
-    for (const directive of stanza.directives) {
-      if (directive.directiveType === directiveType) {
-        results.push(directive);
-      }
-    }
-  }
-  return results;
-}
-
 export function mergeDirectives(stanzas: ConfStanza[]): import('../types').ConfDirective[] {
   const seen = new Map<string, import('../types').ConfDirective>();
   // Stanzas arrive in precedence order (highest first), so across stanzas the

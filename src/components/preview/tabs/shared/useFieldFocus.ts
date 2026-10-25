@@ -1,5 +1,4 @@
 import { createContext, useContext, useState, useSyncExternalStore } from 'react';
-export { FIELD_COLORS, fieldColorAt } from './fieldColors';
 
 export function isFieldActive(field: string, activeFields: Set<string> | null): boolean {
   return activeFields === null || activeFields.has(field);

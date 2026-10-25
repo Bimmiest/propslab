@@ -1,3 +1,5 @@
+import { escapeRegex } from './splunkRegex';
+
 // Bound the compiled-pattern cache so it can't grow without limit across a long
 // session over a large sample (each distinct key/value pair compiles 4 regexes).
 // A Map preserves insertion order, so evicting the first key is FIFO.
@@ -8,8 +10,8 @@ function buildContextPatterns(key: string, value: string): RegExp[] {
   const cacheKey = `${key}\x1f${value}`;
   const cached = _patternCache.get(cacheKey);
   if (cached) return cached;
-  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const escapedVal = value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const escapedKey = escapeRegex(key);
+  const escapedVal = escapeRegex(value);
   // The value is wrapped in a capture group and the `d` flag records its start
   // offset, so we highlight the value itself even when the same text also
   // appears in the key (e.g. {"name":"name"}).
@@ -72,7 +74,7 @@ export function findFieldValuePositions(raw: string, field: string, value: strin
   // Require a word boundary around the value so a bare substring match doesn't
   // land inside a larger token — e.g. value "10" must not match the "10" inside
   // "100". Falls back to the first delimiter-bounded occurrence only.
-  const escaped = value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const escaped = escapeRegex(value);
   const bounded = new RegExp(`(?<![\\w.])${escaped}(?![\\w.])`);
   const m = bounded.exec(raw);
   return m ? [m.index] : [];
