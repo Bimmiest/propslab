@@ -126,10 +126,10 @@ export default defineConfig({
       // under node"; main.test.tsx and the worker tests do instantiate them, so
       // they are measured like the rest.
       thresholds: {
-        statements: 92,
-        branches: 86,
-        functions: 91,
-        lines: 94,
+        statements: 94,
+        branches: 87,
+        functions: 92,
+        lines: 95,
         // The engine is held to a much higher bar than the app as a whole. It
         // is where correctness lives — a simulator whose UI is under-tested is
         // annoying, whereas one whose pipeline is under-tested is wrong — and
