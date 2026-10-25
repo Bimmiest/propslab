@@ -77,7 +77,9 @@ function splitAssignment(expr: string): { fieldName: string; evalExpr: string } 
   if (eqIdx <= 0) return null;
   const nameEnd = expr.charAt(eqIdx - 1) === ':' ? eqIdx - 1 : eqIdx;
   const rawName = expr.substring(0, nameEnd).trim();
-  if (rawName === '') return null;
+  // A comparison is not an assignment: `len(_raw)>=5` would otherwise name a
+  // field `len(_raw)>`, and `a!="x"` one called `a!`.
+  if (rawName === '' || /[\s<>!=()"']/.test(rawName)) return null;
   return {
     fieldName: stripLeadingUnderscoreForField(rawName),
     evalExpr: expr.substring(eqIdx + 1).trim(),
@@ -150,7 +152,7 @@ type CompiledAssignment =
   { fieldName: string; tree: Node; error?: undefined } | { fieldName: string; tree?: undefined; error: unknown };
 
 interface CompiledIngestEval {
-  /** How many comma-separated expressions the directive holds, malformed ones included. */
+  /** How many of the directive's assignments parsed, and so run on every event. */
   expressionCount: number;
   assignments: CompiledAssignment[];
 }
@@ -161,14 +163,20 @@ function compileIngestEval(dir: ConfDirective): CompiledIngestEval {
   const assignments: CompiledAssignment[] = [];
   for (const expr of expressions) {
     const assignment = splitAssignment(expr);
-    if (!assignment) continue;
+    if (!assignment) {
+      assignments.push({
+        fieldName: expr,
+        error: new Error('not a <field>=<expression> assignment, so it does nothing'),
+      });
+      continue;
+    }
     try {
       assignments.push({ fieldName: assignment.fieldName, tree: parseExpression(assignment.evalExpr) });
     } catch (error) {
       assignments.push({ fieldName: assignment.fieldName, error });
     }
   }
-  return { expressionCount: expressions.length, assignments };
+  return { expressionCount: assignments.filter((a) => a.tree !== undefined).length, assignments };
 }
 
 /**
