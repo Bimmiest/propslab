@@ -35,8 +35,17 @@ on:
       - 'packages/mcp-server/src/serialize.ts'
       - 'src/hooks/workerLifecycle.ts'
       - 'src/store/**'
+      # Their tests, which a PR can change alone: the run then mutates what
+      # the changed tests import (scripts/mutation-targets.mjs).
+      - 'src/utils/__tests__/**'
+      - 'src/hooks/__tests__/**'
+      - 'packages/mcp-server/src/__tests__/**'
       - 'stryker.config.mjs'
       - 'scripts/check-mutation-canary.mjs'
+      - 'scripts/mutation-targets.mjs'
+      - 'scripts/drop-format-only.mjs'
+      - 'scripts/lib/mutationTargets.mjs'
+      - 'scripts/lib/formatOnly.mjs'
       - 'vitest.config.ts'
       - 'vitest.stryker.config.ts'
       - '.github/workflows/mutation.yml'
@@ -102,33 +111,37 @@ jobs:
       - name: Canary (the test-name shim still filters correctly)
         run: npm run test:mutation:canary
 
-      # The same scope and exclusions as `mutate` in stryker.config.mjs: tests, type-only
-      # modules, worker entry points and data tables are never mutated. Deleted
-      # files have nothing to mutate, so only added and modified ones count.
+      # The scope is stryker.config.mjs's `mutate` list, read by
+      # scripts/mutation-targets.mjs, so it is written in one place (#571).
+      # Deleted files have nothing to mutate, so only added and modified ones
+      # count, and renames are off, so a renamed and edited file counts too.
+      # A changed test file brings the source files it imports: the PR changed
+      # how those are tested, and only the weekly run would notice otherwise.
       - name: Find changed engine files
         id: changed
         if: github.event_name == 'pull_request'
         env:
           BASE_REF: ${{ github.base_ref }}
         run: |
-          # Two pathspecs: git's `**/` needs at least one directory, so
-          # `src/engine/**/*.ts` alone skips src/engine/pipeline.ts and its
-          # neighbours.
-          files=$(git diff --name-only --diff-filter=AM "origin/$BASE_REF...HEAD" -- 'src/engine/*.ts' 'src/engine/**/*.ts' src/utils/strftime.ts src/utils/splunkRegex.ts \
-              packages/mcp-server/src/requestId.ts packages/mcp-server/src/messageLimit.ts packages/mcp-server/src/serialize.ts \
-              src/hooks/workerLifecycle.ts 'src/store/*.ts' \
-            | grep -vE '(/__tests__/|\.test\.ts$|^src/engine/types\.ts$|^src/engine/scaffold/types\.ts$|^src/engine/[^/]*Worker\.ts$|^src/engine/cim/cimModelsData\.ts$|^src/engine/registry/|^src/engine/directiveSupport\.ts$)' \
-            | paste -sd, - || true)
+          targets=$(node scripts/mutation-targets.mjs "origin/$BASE_REF")
+          files=$(sed -n 's/^changed=//p' <<<"$targets")
+          tested=$(sed -n 's/^tested=//p' <<<"$targets")
           # A reformat touches every file and changes nothing a mutant could
           # test, and neither does a comment edit: the files whose change is
           # formatting or comments only are dropped, each named in the summary.
+          # The tested files did not change, so they are not filtered.
           if [ -n "$files" ]; then
             files=$(node scripts/drop-format-only.mjs "origin/$BASE_REF" "$files" 2>> "$GITHUB_STEP_SUMMARY")
+          fi
+          if [ -n "$tested" ]; then
+            echo "Also mutating what the changed tests import: \`$tested\`" >> "$GITHUB_STEP_SUMMARY"
+            files=$(printf '%s,%s' "$files" "$tested" | tr ',' '\n' | grep -v '^$' | paste -sd, -)
           fi
           # A PR that only touches the mutation setup (Stryker or vitest config,
           # this workflow) still proves it works: one small, well-tested file.
           if [ -z "$files" ]; then
-            config=$(git diff --name-only "origin/$BASE_REF...HEAD" -- stryker.config.mjs vitest.config.ts vitest.stryker.config.ts .github/workflows/mutation.yml)
+            config=$(git diff --name-only "origin/$BASE_REF...HEAD" -- stryker.config.mjs vitest.config.ts vitest.stryker.config.ts .github/workflows/mutation.yml \
+              scripts/mutation-targets.mjs scripts/drop-format-only.mjs scripts/lib/mutationTargets.mjs scripts/lib/formatOnly.mjs)
             if [ -n "$config" ]; then
               files=src/engine/utils/fieldRef.ts
               echo "Mutation setup changed; smoke run on \`$files\`." >> "$GITHUB_STEP_SUMMARY"

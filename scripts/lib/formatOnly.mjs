@@ -36,6 +36,9 @@ const STRYKER_DIRECTIVE = /\bStryker\s+(?:disable|restore)\b[^\n]*/gi;
  * TypeScript syntax tree rather than a scan of the text, so a `//` or `/*`
  * inside a string, template or regex literal is never mistaken for a comment.
  *
+ * Stryker directives are the exception: each is a token where it stands, since
+ * it governs the code after it, so moving one is a change to the code (#571).
+ *
  * @param {string} filePath
  * @param {string} text
  * @returns {string[] | null}
@@ -53,6 +56,11 @@ function codeTokens(filePath, text) {
     if (node.kind >= ts.SyntaxKind.FirstJSDocNode && node.kind <= ts.SyntaxKind.LastJSDocNode) return;
     const children = node.getChildren(source);
     if (children.length === 0) {
+      for (const range of ts.getLeadingCommentRanges(text, node.getFullStart()) ?? []) {
+        for (const directive of text.slice(range.pos, range.end).match(STRYKER_DIRECTIVE) ?? []) {
+          tokens.push(`directive ${directive.trim()}`);
+        }
+      }
       if (node.kind !== ts.SyntaxKind.EndOfFileToken) tokens.push(`${String(node.kind)} ${node.getText(source)}`);
       return;
     }
@@ -64,7 +72,8 @@ function codeTokens(filePath, text) {
 
 /**
  * Whether only comments changed, with or without formatting: the code's
- * tokens are the same on both sides, and so are any Stryker directives.
+ * tokens are the same on both sides, Stryker directives and where they stand
+ * included.
  *
  * @param {string} filePath Path used to pick the parser (`.ts`, `.tsx`, `.mjs`, ...).
  * @param {string} before The file's text on the base branch.
@@ -72,8 +81,6 @@ function codeTokens(filePath, text) {
  * @returns {boolean}
  */
 export function isCommentOnly(filePath, before, after) {
-  const directives = (text) => (text.match(STRYKER_DIRECTIVE) ?? []).join('\n');
-  if (directives(before) !== directives(after)) return false;
   const b = codeTokens(filePath, before);
   const a = codeTokens(filePath, after);
   return b !== null && a !== null && a.join('\n') === b.join('\n');
