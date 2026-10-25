@@ -1,7 +1,9 @@
 import type { ConfDirective, SplunkEvent, ValidationDiagnostic } from '../types';
 import type { RunContext } from '../runContext';
 import { transformsMessageKey } from './ingestEval';
-import { evaluateExpression, regexFailureMessage } from '../processors/evalProcessor';
+import { regexFailureMessage } from '../processors/evalProcessor';
+import { evalNode } from '../processors/eval/evaluator';
+import { type Node, parseExpression } from '../processors/eval/parser';
 import { atDirective } from '../parser/provenance';
 import { effectiveDirective } from '../utils/directiveValues';
 
@@ -57,14 +59,23 @@ export function evaluateStopCondition(
     });
   };
 
+  // Parsed once per run, as INGEST_EVAL is: this runs once per event (#561).
+  const parsed = ctx.memo.get<{ tree: Node } | { error: unknown }>('STOP_PROCESSING_IF', dir, () => {
+    try {
+      return { tree: parseExpression(expression) };
+    } catch (error) {
+      return { error };
+    }
+  });
+
   try {
-    const value = evaluateExpression(
-      expression,
+    if ('error' in parsed) throw parsed.error;
+    const value = evalNode(parsed.tree, {
       event,
-      (fn) => report('warning', `${fn}() is not fully simulated — results may differ from real Splunk`),
       now,
-      (fn, pattern) => report('warning', `STOP_PROCESSING_IF: ${regexFailureMessage(fn, pattern)}`),
-    );
+      onStubWarning: (fn) => report('warning', `${fn}() is not fully simulated — results may differ from real Splunk`),
+      onRegexError: (fn, pattern) => report('warning', `STOP_PROCESSING_IF: ${regexFailureMessage(fn, pattern)}`),
+    });
     return { stop: stopConditionHolds(value), expression };
   } catch (err) {
     report(
