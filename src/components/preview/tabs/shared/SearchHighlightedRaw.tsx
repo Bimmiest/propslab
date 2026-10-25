@@ -5,44 +5,47 @@
 // ---------------------------------------------------------------------------
 
 import type React from 'react';
+import { escapeRegex } from '../../../../utils/splunkRegex';
 
 export function SearchHighlightedRaw({ raw, search }: { raw: string; search: string }) {
-  const trimmed = search.trim().toLowerCase();
+  const trimmed = search.trim();
 
   if (!trimmed) return <>{raw}</>;
 
+  // Matched on each line itself, case-insensitively. Offsets found in
+  // `line.toLowerCase()` and cut from `line` drift after a character whose
+  // lower case is a different length, such as `İ` (#624).
+  const pattern = new RegExp(escapeRegex(trimmed), 'giu');
   const lines = raw.split('\n');
 
   return (
     <>
       {lines.map((line, lineIdx) => {
-        const lowerLine = line.toLowerCase();
-        const hasMatch = lowerLine.includes(trimmed);
+        const matches = [...line.matchAll(pattern)];
+        const hasMatch = matches.length > 0;
 
         // Build line content with highlighted matches
         let content: React.ReactNode;
         if (hasMatch) {
           const segments: React.ReactNode[] = [];
           let cursor = 0;
-          let searchIdx = lowerLine.indexOf(trimmed, cursor);
-          while (searchIdx !== -1) {
-            if (searchIdx > cursor) {
-              segments.push(line.substring(cursor, searchIdx));
+          for (const match of matches) {
+            if (match.index > cursor) {
+              segments.push(line.substring(cursor, match.index));
             }
             segments.push(
               <mark
-                key={searchIdx}
+                key={match.index}
                 className="rounded-sm px-0.5"
                 style={{
                   backgroundColor: 'var(--color-accent)',
                   color: 'var(--color-text-on-accent)',
                 }}
               >
-                {line.substring(searchIdx, searchIdx + trimmed.length)}
+                {match[0]}
               </mark>,
             );
-            cursor = searchIdx + trimmed.length;
-            searchIdx = lowerLine.indexOf(trimmed, cursor);
+            cursor = match.index + match[0].length;
           }
           if (cursor < line.length) {
             segments.push(line.substring(cursor));
