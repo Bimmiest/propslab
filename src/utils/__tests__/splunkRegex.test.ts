@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   cachedProbeCount,
   cachedRegexCount,
@@ -15,6 +15,9 @@ import {
   regexError,
   DEFAULT_DEPTH_LIMIT,
   DEFAULT_MATCH_LIMIT,
+  MAX_REGEX_LIMIT,
+  RegexDeadlineError,
+  withRegexDeadline,
 } from '../splunkRegex';
 
 // Patterns run on PCRE2 itself, so these pin PCRE semantics rather than a
@@ -218,10 +221,15 @@ describe('validation', () => {
 describe('MATCH_LIMIT and DEPTH_LIMIT', () => {
   const runaway = `${'a'.repeat(30)}b`;
 
-  it('uses Splunk defaults when unset, and 0 as unlimited', () => {
+  it("uses Splunk defaults when unset, and caps 0 (no limit) and larger values at PCRE2's default (#560)", () => {
     expect(extractionLimits()).toEqual({ matchLimit: DEFAULT_MATCH_LIMIT, depthLimit: DEFAULT_DEPTH_LIMIT });
     expect(extractionLimits('500000', '5000')).toEqual({ matchLimit: 500000, depthLimit: 5000 });
-    expect(extractionLimits('0', '0')).toEqual({ matchLimit: 0xffffffff, depthLimit: 0xffffffff });
+    expect(MAX_REGEX_LIMIT).toBe(10_000_000);
+    expect(extractionLimits('0', '0')).toEqual({ matchLimit: MAX_REGEX_LIMIT, depthLimit: MAX_REGEX_LIMIT });
+    expect(extractionLimits('10000001', '10000000')).toEqual({
+      matchLimit: MAX_REGEX_LIMIT,
+      depthLimit: MAX_REGEX_LIMIT,
+    });
     expect(extractionLimits('-1', 'lots')).toEqual({
       matchLimit: DEFAULT_MATCH_LIMIT,
       depthLimit: DEFAULT_DEPTH_LIMIT,
@@ -315,5 +323,41 @@ describe('a second engine init', () => {
     await initRegexEngine(regexEngineModule());
     expect(cachedRegexCount()).toBe(0);
     expect(held.exec('reinit4')?.[1]).toBe('4');
+  });
+});
+
+describe('withRegexDeadline (#560)', () => {
+  it('refuses every call once the deadline passes, and only inside it', () => {
+    const re = safeRegex('a')!;
+    const past = Date.now() - 1;
+    expect(() => withRegexDeadline(past, () => re.exec('a'))).toThrow(RegexDeadlineError);
+    expect(() => withRegexDeadline(past, () => re.matchAll('aa'))).toThrow(RegexDeadlineError);
+    expect(withRegexDeadline(Date.now() + 60_000, () => re.matchAll('aa'))).toHaveLength(2);
+    expect(re.exec('a')).not.toBeNull();
+  });
+
+  it('keeps the earlier of two nested deadlines, and restores the outer one after', () => {
+    const re = safeRegex('a')!;
+    const past = Date.now() - 1;
+    withRegexDeadline(past, () => {
+      expect(() => withRegexDeadline(Infinity, () => re.exec('a'))).toThrow(RegexDeadlineError);
+      expect(() => re.exec('a')).toThrow(RegexDeadlineError);
+    });
+    withRegexDeadline(Infinity, () => {
+      expect(() => withRegexDeadline(past, () => re.exec('a'))).toThrow(RegexDeadlineError);
+      expect(re.exec('a')).not.toBeNull();
+    });
+  });
+
+  it('stops an iteration between matches', () => {
+    const re = safeRegex('a')!;
+    // In time for the first check and the first match, late for the second.
+    const spy = vi.spyOn(Date, 'now').mockReturnValueOnce(0).mockReturnValueOnce(0).mockReturnValue(100);
+    try {
+      expect(() => withRegexDeadline(50, () => re.matchAll('aaa'))).toThrow(RegexDeadlineError);
+      expect(spy).toHaveBeenCalledTimes(3);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

@@ -8,6 +8,7 @@ All notable changes to Propslab are documented here, newest first. Entries say w
 
 ### Changed
 
+- **A run that takes more than 4 s stops, and an error names the stage where it stopped** ([#560](https://github.com/Bimmiest/propslab/issues/560)). The preview shows the result of the stages before that stage. Before, the watchdog stopped the worker and the preview showed no result. A `MATCH_LIMIT` or `DEPTH_LIMIT` of 0 now means 10,000,000 steps, not "no limit", in the app and in the MCP server.
 - **The MCP server's sandbox workers get no environment, and code generation from strings is refused** ([#568](https://github.com/Bimmiest/propslab/issues/568)). A worker running agent-supplied patterns no longer inherits the API keys an MCP client may start the server with, `eval` and `new Function` throw in the server and its workers, and `PROPSLAB_MCP_NO_REEXEC=1` always warns that it turns the permission model off.
 
 ### Fixed
@@ -175,6 +176,7 @@ All notable changes to Propslab are documented here, newest first. Entries say w
   - index-signature properties are read with brackets.
 
   A Prettier config and `npm run format` / `format:check` are added; the reformat and its CI check follow separately.
+
 - **Test scaffolding** ([#507](https://github.com/Bimmiest/propslab/issues/507), in part): `runCtx` requires the clock, and the remaining hand-written event literals use the shared `makeEvent`.
 - **An MCP timeout no longer re-parses the caller's conf on the server thread** ([#468](https://github.com/Bimmiest/propslab/issues/468)). The simulate worker builds the regex-suspect list before the pipeline runs. The conf parser is now linear on continuation lines (a 2M-character continued value parses in about 150 ms instead of minutes), and so are the editor's diagnostics.
 - **The ReDoS verdict cache no longer keeps each caller's whole conf alive** ([#487](https://github.com/Bimmiest/propslab/issues/487)).
@@ -326,7 +328,7 @@ Entries #341 and #343–#349 are the rest of the fourth review's findings. Engin
     - `like()`, `match()` and `cidrmatch()`.
   - **How NULL is treated.** False in `if()`, `case()` and STOP_PROCESSING_IF, three-valued in NOT/AND/OR/XOR, and an EVAL that yields NULL writes no field.
 - **A `]` straight after `[` or `[^` in a regex is a literal, as in PCRE** ([#341](https://github.com/Bimmiest/propslab/issues/341)), found by the #340 property tests.
-- **XML_IE_* wildcard lists are matched as globs in linear time** ([#344](https://github.com/Bimmiest/propslab/issues/344)) instead of backtracking regexes.
+- _*XML_IE_* wildcard lists are matched as globs in linear time_* ([#344](https://github.com/Bimmiest/propslab/issues/344)) instead of backtracking regexes.
 - **INGEST_EVAL rewrites now show in the trace** ([#346](https://github.com/Bimmiest/propslab/issues/346); [ADR 0010](docs/adr/0010-engine-decisions-are-structured-data-on-the-event.md)).
   - A `_raw=` rewrite records before, after and the fields it destroyed, like `DEST_KEY = _raw`.
   - Metadata assignments show old → new.
@@ -350,6 +352,7 @@ Entries #337–#341 came from a fourth review, which targeted the causes of earl
   - a hover fault, rebuilding the worker on every hover.
 
   Each worker now posts a ready signal, and `createManagedWorker` owns the lifecycle; see the Workers section of [docs/architecture.md](docs/architecture.md).
+
 - **`"x" . .5` parses** ([#340](https://github.com/Bimmiest/propslab/issues/340)).
 
 Entries #326–#335 came from a third review, which also went back over #324's fixes. Engine tests are doc-derived and say so, and the Splunk 10.4.0 fixtures still pass.

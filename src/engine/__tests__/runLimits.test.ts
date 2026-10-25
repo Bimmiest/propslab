@@ -6,7 +6,9 @@
 //   - maxRawChars: input past it is cut back to the last complete line;
 //   - maxEvents: line breaking stops there and says so;
 //   - explanationsPerDirective: missed events a directive's no-match is
-//     analysed for.
+//     analysed for;
+//   - maxRunMs: the stages stop at the stage that spends it (#560), and
+//     MATCH_LIMIT and DEPTH_LIMIT are capped so that one match cannot outlast it.
 //
 // Examples pin the edges; a fast-check property per limit shows the bound
 // holds for arbitrary input. These are the simulator's own budgets, not
@@ -15,12 +17,13 @@
 // The seed comes from FC_SEED when set, and is fixed otherwise.
 // ---------------------------------------------------------------------------
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import fc from 'fast-check';
 import { runPipeline } from '../pipeline';
 import { splitSegments } from '../processors/lineBreaker';
 import { DEFAULT_LIMITS, type RunLimits } from '../runContext';
 import type { EventMetadata, PipelineOptions, ValidationDiagnostic } from '../types';
+import type { RunStage } from '../runStages';
 import { fcSeed } from '../../test/fcSeed';
 
 const META: EventMetadata = { index: 'main', host: 'h', source: '/log', sourcetype: 'st' };
@@ -49,6 +52,109 @@ describe('RunLimits defaults (#479)', () => {
     });
     expect(result.eventCount).toBe(25_000);
     expect(capWarnings(diagnostics)).toHaveLength(1);
+  });
+});
+
+describe('maxRunMs (#560)', () => {
+  const stops = (diags: ValidationDiagnostic[]) => diags.filter((d) => d.message.startsWith('The run stopped'));
+
+  /**
+   * Run with a 1 s budget on a clock that jumps 2 s when `stage` starts, so
+   * the stop is decided by the stage, not by how fast the machine is.
+   */
+  function runOutOfTimeAt(
+    stage: RunStage,
+    raw: string,
+    props: string,
+    transforms = '',
+    options: Partial<PipelineOptions> = {},
+  ) {
+    let clock = 0;
+    const spy = vi.spyOn(Date, 'now').mockImplementation(() => clock);
+    try {
+      return runPipeline(raw, META, props, transforms, {
+        perEventPipeline: false,
+        now: NOW,
+        limits: { maxRunMs: 1_000 },
+        onStage: (s) => {
+          if (s === stage) clock = 2_000;
+        },
+        ...options,
+      });
+    } finally {
+      spy.mockRestore();
+    }
+  }
+
+  it('stops in the stage that spends it, keeps the stages before, and runs none after', () => {
+    const { result, diagnostics } = runOutOfTimeAt(
+      'EXTRACT',
+      'one\ntwo',
+      `${UNMERGED}EXTRACT-word = (?<word>\\w+)\nEVAL-late = "x"\n`,
+    );
+    expect(result.events.map((e) => e._raw)).toEqual(['one', 'two']);
+    expect(result.events.map((e) => e.fields['word'] ?? e.fields['late'])).toEqual([undefined, undefined]);
+    expect(stops(diagnostics)).toHaveLength(1);
+    expect(stops(diagnostics)[0]?.level).toBe('error');
+    expect(stops(diagnostics)[0]?.message).toContain('"EXTRACT"');
+  });
+
+  it('runs no stage once it is spent, and says so once', () => {
+    let clock = 0;
+    const spy = vi.spyOn(Date, 'now').mockImplementation(() => clock++);
+    try {
+      const { result, diagnostics } = run('one\ntwo', UNMERGED, { maxRunMs: 0 });
+      expect(result.eventCount).toBe(0);
+      expect(stops(diagnostics)).toHaveLength(1);
+      expect(stops(diagnostics)[0]?.message).toContain('"LINE_BREAKER"');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  // Each of these stages catches what its expressions throw, and must let the stop through.
+  it.each<[RunStage, string, string]>([
+    ['EVAL', `${UNMERGED}EVAL-b = if(match(_raw, "o"), "y", "n")\n`, ''],
+    ['TRANSFORMS', `${UNMERGED}TRANSFORMS-ie = ie\n`, '[ie]\nINGEST_EVAL = b=if(match(_raw, "o"), "y", "n")\n'],
+    ['TRANSFORMS', `${UNMERGED}RULESET-r = stop\n`, '[stop]\nSTOP_PROCESSING_IF = match(_raw, "o")\n'],
+    ['SEDCMD attribution', `${UNMERGED}SEDCMD-mask = s/one/xxx/\nEXTRACT-word = (?<word>\\w+)\n`, ''],
+  ])("stops at %s, through the stage's own error handling", (stage, props, transforms) => {
+    const { diagnostics } = runOutOfTimeAt(stage, 'one', props, transforms);
+    expect(stops(diagnostics).map((d) => d.message)).toEqual([expect.stringContaining(`"${stage}"`)]);
+    expect(diagnostics.filter((d) => d.level === 'error')).toHaveLength(1);
+  });
+
+  it('says so once in a per-event run, not once per event', () => {
+    const { diagnostics } = runOutOfTimeAt(
+      'search time per event',
+      'one\ntwo\nthree',
+      `${UNMERGED}EXTRACT-word = (?<word>\\w+)\n`,
+      '',
+      { perEventPipeline: true },
+    );
+    expect(stops(diagnostics).map((d) => d.message)).toEqual([expect.stringContaining('"EXTRACT"')]);
+  });
+
+  it('does not bound a run by default', () => {
+    expect(DEFAULT_LIMITS.maxRunMs).toBe(Infinity);
+    const { result, diagnostics } = runOutOfTimeAt('EXTRACT', 'one', `${UNMERGED}EXTRACT-word = (?<word>\\w+)\n`, '', {
+      limits: {},
+    });
+    expect(result.events[0]?.fields['word']).toBe('one');
+    expect(stops(diagnostics)).toEqual([]);
+  });
+
+  it('reports a MATCH_LIMIT or DEPTH_LIMIT above the cap, which no run budget can interrupt', () => {
+    const capNotes = (props: string) =>
+      run('one', props, {}).diagnostics.filter((d) => d.message.includes('The preview stops a match at'));
+    const notes = capNotes(`${UNMERGED}MATCH_LIMIT = 0\nDEPTH_LIMIT = 20000000\n`);
+    expect(notes.map((d) => [d.level, d.directiveKey])).toEqual([
+      ['info', 'MATCH_LIMIT'],
+      ['info', 'DEPTH_LIMIT'],
+    ]);
+    expect(notes[0]?.message).toMatch(/^MATCH_LIMIT = 0 means no limit/);
+    expect(notes[1]?.message).toContain('is above 10,000,000');
+    expect(capNotes(`${UNMERGED}MATCH_LIMIT = 10000000\nDEPTH_LIMIT = 500\n`)).toEqual([]);
   });
 });
 

@@ -35,12 +35,21 @@ export interface RunLimits {
    * directives grows without bound on a large config.
    */
   readonly explanationsPerDirective: number;
+  /**
+   * Milliseconds the stages may run for. Past it, the stage running stops at
+   * its next regex call and the stages after it do not run, with an error
+   * diagnostic. Unbounded by default, so a library run gives the same result
+   * on a slow machine as on a fast one: the browser app sets it below its
+   * worker watchdog, and the MCP server terminates its worker instead (#560).
+   */
+  readonly maxRunMs: number;
 }
 
 export const DEFAULT_LIMITS: RunLimits = Object.freeze({
   maxRawChars: 1_000_000,
   maxEvents: 25_000,
   explanationsPerDirective: 50,
+  maxRunMs: Infinity,
 });
 
 /**
@@ -164,6 +173,8 @@ export interface RunContext {
   readonly captureOffsets: boolean;
   readonly diagnostics: DiagnosticsCollector;
   readonly limits: RunLimits;
+  /** The `Date.now()` time `limits.maxRunMs` runs out at. */
+  readonly deadline: number;
   readonly explanations: ExplanationBudget;
   /** Per-run cache of compiled config; see {@link RunMemo}. */
   readonly memo: RunMemo;
@@ -177,6 +188,8 @@ export interface RunContextInit {
   /** Where diagnostics go; a fresh array when omitted. */
   diagnostics?: ValidationDiagnostic[];
   limits?: Partial<RunLimits>;
+  /** The deadline of the run this one replays; `limits.maxRunMs` from now otherwise. */
+  deadline?: number;
   onStage?: (stage: RunStage, events: number) => void;
 }
 
@@ -187,6 +200,7 @@ export function createRunContext(init: RunContextInit): RunContext {
     captureOffsets: init.captureOffsets ?? true,
     diagnostics: createCollector(init.diagnostics),
     limits,
+    deadline: init.deadline ?? Date.now() + limits.maxRunMs,
     explanations: createBudget(limits.explanationsPerDirective),
     memo: createMemo(),
     ...(init.onStage ? { onStage: init.onStage } : {}),
@@ -207,5 +221,6 @@ export function replayContext(ctx: RunContext): RunContext {
     now: ctx.now,
     captureOffsets: false,
     limits: { ...ctx.limits, explanationsPerDirective: 0 },
+    deadline: ctx.deadline,
   });
 }

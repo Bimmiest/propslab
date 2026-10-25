@@ -6,6 +6,7 @@ import { wrongFileCanonical, WRONG_FILE_MESSAGE } from './directiveRegistry';
 import { lintInertTransformSettings, lintDirectiveValues } from './directiveLint';
 import { effectiveBool, effectiveDirective } from './utils/directiveValues';
 import { stanzaPatternProblem } from './parser/stanzaMatcher';
+import { MAX_REGEX_LIMIT } from '../utils/splunkRegex';
 
 // Config lint: the diagnostics `runPipeline` reports about the conf files
 // themselves, split out of the pipeline so that file reads as the order of
@@ -92,7 +93,10 @@ function lintDirectiveSupport(dir: ConfDirective, file: ConfFile, diagnostics: V
     });
     return;
   }
-  if (entry.support === 'simulated') return;
+  if (entry.support === 'simulated') {
+    lintRegexLimitCap(dir, file, diagnostics);
+    return;
+  }
 
   const tracking = entry.issue ? ` Tracked as #${entry.issue}.` : '';
   diagnostics.push({
@@ -102,6 +106,25 @@ function lintDirectiveSupport(dir: ConfDirective, file: ConfFile, diagnostics: V
     level: entry.support === 'ignored' ? 'warning' : 'info',
     message:
       `${dir.key} is recognised but not simulated — the preview ignores it. ` + `${entry.note ?? ''}${tracking}`.trim(),
+    file,
+    ...atDirective(dir),
+    directiveKey: dir.key,
+  });
+}
+
+/** Say when a MATCH_LIMIT or DEPTH_LIMIT is above the cap that `extractionLimits` puts on it. */
+function lintRegexLimitCap(dir: ConfDirective, file: ConfFile, diagnostics: ValidationDiagnostic[]): void {
+  const value = dir.value.trim();
+  if ((dir.key !== 'MATCH_LIMIT' && dir.key !== 'DEPTH_LIMIT') || !/^\d+$/.test(value)) return;
+  const n = Number(value);
+  if (n !== 0 && n <= MAX_REGEX_LIMIT) return;
+  diagnostics.push({
+    level: 'info',
+    message:
+      `${dir.key} = ${value} ${n === 0 ? 'means no limit' : `is above ${MAX_REGEX_LIMIT.toLocaleString('en-US')}`}. ` +
+      `The preview stops a match at ${MAX_REGEX_LIMIT.toLocaleString('en-US')} steps, the PCRE2 default, because ` +
+      'one match with no limit can run for more than a minute. A pattern that needs more steps matches in Splunk ' +
+      'but not here.',
     file,
     ...atDirective(dir),
     directiveKey: dir.key,

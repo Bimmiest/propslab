@@ -17,6 +17,7 @@ import { explainOutputShape, validateOutputShape } from '../outputSchemas';
 import { MAX_RESPONSE_BYTES } from '../responseBudget';
 import { collectRegexSuspects } from '../suspects';
 import { resultText } from './resultText';
+import { STALLING_RAW, stallingStanza } from './stallingConf';
 
 // Counts the confs parsed on this thread, the server's. The parser itself still
 // runs: collectRegexSuspects below calls it for real. See withParseCount.
@@ -162,19 +163,9 @@ describe('simulate', () => {
   });
 
   it('hard-terminates a catastrophic regex and returns a structured timeout', async () => {
-    // (a|aa)+ backtracks exponentially, and MATCH_LIMIT = 0 / DEPTH_LIMIT = 0
-    // switch off the PCRE limits that would otherwise stop it — so only the
-    // worker watchdog can end this run.
-    const evilProps = [
-      '[evil]',
-      'SHOULD_LINEMERGE = false',
-      'MATCH_LIMIT = 0',
-      'DEPTH_LIMIT = 0',
-      'EXTRACT-boom = ^(?<boom>(a|aa)+)(?=b)$',
-    ].join('\n');
-    const raw = `${'a'.repeat(200)}\n`;
+    // A minute of capped matches on one event: only the worker watchdog ends this run in time.
     const result = await handleSimulate(
-      simulateArgs({ raw, sourcetype: 'evil', props_conf: evilProps, timeout_ms: 1_000 }),
+      simulateArgs({ raw: STALLING_RAW, sourcetype: 'evil', props_conf: stallingStanza(), timeout_ms: 1_000 }),
       WORKER_PATH,
     );
     expect(result.isError).toBe(true);
@@ -629,18 +620,11 @@ describe('response size cap (#414)', () => {
   }, 120_000);
 
   it('timeout: regex_directives is cut, flagged patterns first', async () => {
-    const evil = [
-      '[evil]',
-      'SHOULD_LINEMERGE = false',
-      'MATCH_LIMIT = 0',
-      'DEPTH_LIMIT = 0',
-      'EXTRACT-boom = ^(?<boom>(a+)+)(?=b)$',
-      '[other]',
-    ].join('\n');
+    const evil = `${stallingStanza('(a+)+')}\n[other]`;
     const props = fill((i) => `EXTRACT-${i} = "${'日'.repeat(40)}`, evil);
     const result = await handleSimulate(
       simulateArgs({
-        raw: `${'a'.repeat(200)}\n`,
+        raw: STALLING_RAW,
         sourcetype: 'evil',
         props_conf: props,
         timeout_ms: 1_000,

@@ -10,6 +10,12 @@ import { toViewResult } from '../utils/viewResult';
 const createWorker = () => new Worker(new URL('../engine/pipelineWorker.ts', import.meta.url), { type: 'module' });
 
 const WORKER_TIMEOUT_MS = 5_000;
+/**
+ * The engine's own budget for a run, short of the watchdog: a run that spends
+ * it comes back with what it did and a diagnostic, not a killed worker. It
+ * also bounds a run on the main thread, which has no watchdog (#560).
+ */
+export const RUN_BUDGET_MS = 4_000;
 // How many times a single request may restart the worker after a crash before we
 // give up. A request that itself crashes the worker (e.g. OOM-sized input) would
 // otherwise restart-and-replay forever; cap it so the loop terminates.
@@ -261,9 +267,11 @@ function createPipelineWorker(refs: PipelineRefs, sinks: PipelineSinks): Managed
  * later as an `error` event, and reaches this path through the load-failure
  * cap instead. A request whose worker crashed never does.
  *
- * What is given up is the watchdog: a runaway regex here blocks the tab rather
- * than a worker. That is the cost of producing output at all in an environment
- * that will not run a worker, and the browsers this ships to always can.
+ * What is given up is the watchdog. The run budget still stops a runaway
+ * regex, but only between matches, so the tab freezes for up to the budget and
+ * the last match. That is the cost of producing output at all in an
+ * environment that will not run a worker, and the browsers this ships to
+ * always can.
  *
  * The engine is imported dynamically so the main bundle does not carry a
  * second copy of it for a path the browser normally never takes; the worker
@@ -393,7 +401,7 @@ export function useProcessingPipeline() {
         metadata: inputs.metadata,
         propsConfText: inputs.propsConf,
         transformsConfText: inputs.transformsConf,
-        options: { perEventPipeline: opts.perEventPipeline },
+        options: { perEventPipeline: opts.perEventPipeline, limits: { maxRunMs: RUN_BUDGET_MS } },
         // Each request supersedes the ones before it, so the worker skips any
         // still queued behind a newer one instead of running them all (#562).
         latestOnly: true,

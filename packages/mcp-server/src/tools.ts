@@ -344,7 +344,7 @@ function timeoutAdvice(
     return {
       message:
         `${exceeded} in ${on}. With this little input the likeliest cause is a regex ` +
-        "backtracking heavily, or one whose stanza disables PCRE's limits with MATCH_LIMIT = 0.",
+        'backtracking heavily, more so where its stanza raises MATCH_LIMIT.',
       guidance: `${REPAIR} Do not simply retry with a larger timeout.`,
       listSuspects: true,
     };
