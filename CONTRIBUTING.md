@@ -62,7 +62,7 @@ npm run test:coverage # unit tests: vitest, with the coverage floor enforced
 npm run test:e2e      # e2e: Playwright, against a production build
 ```
 
-The jobs also run three checks from `shared-workflows`: the coverage ratchet (below), the documentation check, and the licences of the production dependencies against `.licence-allowlist.json`. `unit tests` runs the ratchet, and `static checks` runs the other two. The documentation check holds the links, the ADR index and the length of the README ([Documentation](#documentation)). Each is a Node script with no dependencies. To run one locally, clone `shared-workflows` beside this repository and run its script from here:
+The jobs also run three checks from `shared-workflows`: the coverage ratchet (below), the documentation check, and the licences of the production dependencies against `.licence-allowlist.json`. `unit tests` runs the ratchet, and `static checks` runs the other two. The documentation check holds the links, the ADR index and the length of the README ([Documentation](#documentation)). It also warns on each word that ASD-STE100 does not allow, in the files that `ste` names in `.docs-check.json`. Add a file to that list when you rewrite it in STE. Each is a Node script with no dependencies. To run one locally, clone `shared-workflows` beside this repository and run its script from here:
 
 ```bash
 node ../shared-workflows/.github/actions/coverage-ratchet/ratchet.mjs --config vitest.config.ts --slack 3  # after test:coverage
@@ -89,6 +89,10 @@ On the Linux leg it also runs the coverage ratchet against `vitest.config.mts` a
 **`dependency-review`** — on PRs, GitHub's dependency review over the PR's dependency diff, failing on a newly added high-severity advisory. CodeQL is not a workflow here: it runs through GitHub's default code-scanning setup (JavaScript/TypeScript and Actions) and reports as the "Analyze" checks.
 
 **`security / gitleaks`** and **`security / trivy`** — not jobs of `ci.yml` but a workflow of their own, [`security.yml`](.github/workflows/security.yml), calling the reusable one in [`Bimmiest/shared-workflows`](https://github.com/Bimmiest/shared-workflows) pinned by sha: gitleaks over every commit in the history, and Trivy over the tree and both lockfiles at CRITICAL and HIGH with unfixed advisories ignored. It runs on every PR, on pushes to main and weekly, because both checks go red without a push. Locally: `gitleaks detect --source . --log-opts="--all" --redact` and `trivy fs --scanners vuln,misconfig --severity CRITICAL,HIGH --ignore-unfixed .`. A false positive goes in `.gitleaks.toml` or `.trivyignore.yaml` with its reason beside it (both files have no entries yet, and each says what an entry needs and which of its lines are load-bearing); a real key is rotated, never allowlisted.
+
+**`Scorecard`**: [`scorecard.yml`](.github/workflows/scorecard.yml), weekly and on each push to main. It runs the OpenSSF Scorecard workflow of `shared-workflows`. The result goes to the README badge and to code scanning. It reports, and does not fail.
+
+**`Settings`**: [`settings.yml`](.github/workflows/settings.yml), weekly. The `repo-settings-check` action of `shared-workflows` compares the repository settings with the repo-template checklist, and a failure opens an issue. `.repo-settings.json` names the checks that main requires. When the ruleset requires a new check, add its name there too. The action needs `SETTINGS_READ_TOKEN`, a fine-grained token with "Administration: read". [`environment.yml`](.github/workflows/environment.yml) still checks the `production` environment.
 
 A few things worth knowing:
 
@@ -291,6 +295,6 @@ CI checks only the mechanical parts: the links, the ADR index, the root licences
 3. Set the version in `package.json` and `package-lock.json` to `x.y.z` (`npm version x.y.z --no-git-tag-version` does both).
 4. Open a pull request and merge it once CI is green. Merging is what deploys: watch the "Azure Static Web Apps CI/CD" run on `main` until "Verify the deployed headers" passes.
 5. Optionally tag the merge commit, `git tag -s vx.y.z <sha> -m "Release x.y.z"` then `git push origin vx.y.z` (`-s` needs a GPG or SSH signing key; without one use `-a`). The tag is a bookmark for people; no workflow reads it.
-6. The `production` environment and `main`'s protection are verified by `environment.yml`, weekly. It has no per-release trigger; if the release touched repository settings, run it from the Actions tab (`workflow_dispatch`) and expect it to pass.
+6. The `production` environment and `main`'s protection are verified by `environment.yml`, weekly, and the other repository settings by `settings.yml`. Neither has a per-release trigger; if the release touched repository settings, run both from the Actions tab (`workflow_dispatch`) and expect them to pass.
 
 **Note:** `packages/mcp-server` is versioned independently and is not published anywhere (its `package.json` is `private`). Its version, which the server reports in the MCP `initialize` handshake, changes in `packages/mcp-server/package.json` and needs no separate release; if you want a bookmark for it, tag `mcp-server-vx.y.z` the same way.

@@ -48,7 +48,7 @@ jobs:
         # --audit-level=high` plus .audit-exceptions.json: an advisory nothing
         # reachable is exposed to can be listed there with its reason and an
         # expiry, and an expired or unneeded entry fails the step.
-        uses: Bimmiest/shared-workflows/.github/actions/audit-check@9d5ed93ea7b9311ae1b9b460dfa9f9da0a28fffe # v1.1.0
+        uses: Bimmiest/shared-workflows/.github/actions/audit-check@8918b365c38c0dcff8f00597b1d7c194dc238cea # v1.2.0
 
       - name: Report dev-only advisories
         # Reported, never fatal: a CVE in a build tool must not be able to block
@@ -64,7 +64,7 @@ jobs:
         # holds whatever the agent driving it can reach. Its exceptions file is
         # packages/mcp-server/.audit-exceptions.json: one file per lockfile,
         # because an entry the other report does not need would fail here.
-        uses: Bimmiest/shared-workflows/.github/actions/audit-check@9d5ed93ea7b9311ae1b9b460dfa9f9da0a28fffe # v1.1.0
+        uses: Bimmiest/shared-workflows/.github/actions/audit-check@8918b365c38c0dcff8f00597b1d7c194dc238cea # v1.2.0
         with:
           working-directory: packages/mcp-server
 
@@ -82,7 +82,7 @@ jobs:
     permissions:
       issues: write
     steps:
-      - uses: Bimmiest/shared-workflows/.github/actions/open-or-update-issue@9d5ed93ea7b9311ae1b9b460dfa9f9da0a28fffe # v1.1.0
+      - uses: Bimmiest/shared-workflows/.github/actions/open-or-update-issue@8918b365c38c0dcff8f00597b1d7c194dc238cea # v1.2.0
         with:
           label: scheduled-audit
           title: The weekly audit found an advisory

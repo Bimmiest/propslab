@@ -1,0 +1,34 @@
+name: Scorecard
+
+# OpenSSF Scorecard, from shared-workflows. It reads the repository
+# around the workflow files: branch protection, token permissions, pinned
+# dependencies, code review and the other Scorecard checks. It reports and
+# does not fail. The result goes to the README badge and to code scanning.
+#
+# Weekly and on push to main, because the score changes with the settings
+# and with no commit. Scorecard publishes only from a workflow with no
+# top-level `env`, `defaults` or write permission, so this file has none.
+on:
+  push:
+    branches: [main]
+  schedule:
+    # Monday morning UTC, off the hour, as security.yml.
+    - cron: '29 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scorecard:
+    uses: Bimmiest/shared-workflows/.github/workflows/scorecard.yml@8918b365c38c0dcff8f00597b1d7c194dc238cea # v1.2.0
+    with:
+      publish-results: true
+      upload-sarif: true
+    # `id-token: write` signs the published result, and `security-events:
+    # write` uploads the SARIF. Nothing else in the job can write.
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+      security-events: write
