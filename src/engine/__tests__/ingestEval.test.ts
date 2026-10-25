@@ -242,6 +242,25 @@ describe('applyIngestEval — the trace says what was rewritten (#346)', () => {
     expect(step(out).description).toBe('Evaluated 1 ingest-time expression(s)');
   });
 
+  it('writes an indexed field to _meta too, where a later SOURCE_KEY = _meta transform reads it (#558)', () => {
+    const props = '[st]\nSHOULD_LINEMERGE = false\nTRANSFORMS-x = a,b';
+    const transforms =
+      '[a]\nINGEST_EVAL = env="prod"\n\n[b]\nSOURCE_KEY = _meta\nREGEX = env::prod\nDEST_KEY = queue\nFORMAT = nullQueue';
+    const meta: EventMetadata = { index: 'main', host: 'h', source: 's', sourcetype: 'st' };
+    const { result } = runPipeline('hello', meta, props, transforms, { perEventPipeline: false, now: FIXED_NOW });
+    const [e] = result.events;
+    expect(e?.fields['env']).toBe('prod');
+    expect(e?._meta).toEqual({ env: 'prod', _queue: 'nullQueue' });
+  });
+
+  it('removes an indexed field from _meta when it is assigned null (#558)', () => {
+    const input = { ...event('x'), fields: { env: 'prod' }, _meta: { env: 'prod' } };
+    const out = applyIngestEval([input], ingestDir('env=null()'), runCtx(FIXED_NOW))[0]!;
+    expect(out.fields['env']).toBeUndefined();
+    expect(out._meta).toEqual({});
+    expect(input._meta).toEqual({ env: 'prod' });
+  });
+
   it('records nothing for an assignment that leaves the metadata as it was', () => {
     const out = applyIngestEval([event('x')], ingestDir('index="main", host=null(), tag="t"'), runCtx(FIXED_NOW))[0]!;
     expect(step(out).metadataChanges).toBeUndefined();

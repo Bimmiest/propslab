@@ -206,7 +206,9 @@ export function applyIngestEval(
   );
 
   return events.map((event) => {
-    const currentEvent = { ...event, fields: { ...event.fields } };
+    // `_meta` is copied as well: indexed fields are written there too, and the
+    // shallow event copy would otherwise share the input's object.
+    const currentEvent = { ...event, fields: { ...event.fields }, _meta: { ...event._meta } };
 
     for (const assignment of assignments) {
       const { fieldName } = assignment;
@@ -242,10 +244,9 @@ export function applyIngestEval(
           // is Splunk's documented filtering idiom: assigning to `queue` routes
           // the event exactly as `DEST_KEY = queue` does. Writing it as an
           // ordinary field instead previewed dropped events as indexed — the
-          // opposite of what the config does. Copy `_meta` rather than mutating
-          // it: the shallow event copy still shares the input's object.
+          // opposite of what the config does.
           const queue = result === null ? '' : String(Array.isArray(result) ? result[0] : result);
-          currentEvent._meta = { ...currentEvent._meta, _queue: queue };
+          currentEvent._meta._queue = queue;
         } else if (isMetadataKey(fieldName)) {
           // index/host/source/sourcetype are the event's metadata, not indexed
           // fields: assigning one rewrites it exactly as DEST_KEY =
@@ -263,10 +264,14 @@ export function applyIngestEval(
           }
         } else if (result === null) {
           deleteField(currentEvent.fields, fieldName);
-        } else if (Array.isArray(result)) {
-          setField(currentEvent.fields, fieldName, result);
+          deleteField(currentEvent._meta, fieldName);
         } else {
-          setField(currentEvent.fields, fieldName, String(result));
+          // An indexed field, so it lives in `_meta` as WRITE_META's do, where a
+          // later SOURCE_KEY = _meta or `$0` reads it and a DEST_KEY = _meta
+          // replacement can drop it; the event shows it as a field too.
+          const value = Array.isArray(result) ? result : String(result);
+          setField(currentEvent.fields, fieldName, value);
+          setField(currentEvent._meta, fieldName, value);
         }
       } catch (err) {
         diagnostics.report(errorKey(ingestEvalDir, fieldName), {
