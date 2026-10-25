@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
-import { defineConfig } from 'vite';
+import { createHash } from 'node:crypto';
+import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import pkg from './package.json' with { type: 'json' };
@@ -14,8 +15,32 @@ function buildCommit(): string {
   }
 }
 
+/**
+ * Dev server only: put a hash of each inline module script into the meta CSP's
+ * `script-src`. @vitejs/plugin-react injects its Fast Refresh preamble inline,
+ * and the policy allows no inline script. It ran only because the browser
+ * parsed it before the <meta> tag, which a plugin update that moved it would
+ * end (#566). The build has no inline script, and this does not run there.
+ */
+function devInlineScriptHashes(): Plugin {
+  return {
+    name: 'propslab:dev-inline-script-hashes',
+    apply: 'serve',
+    transformIndexHtml: {
+      order: 'post',
+      handler(html) {
+        const hashes = [...html.matchAll(/<script type="module">([\s\S]*?)<\/script>/g)].map(
+          ([, body = '']) => `'sha256-${createHash('sha256').update(body).digest('base64')}'`,
+        );
+        if (hashes.length === 0) return html;
+        return html.replace(/(http-equiv="Content-Security-Policy"[^>]*script-src )/, `$1${hashes.join(' ')} `);
+      },
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), devInlineScriptHashes()],
   // Surfaced in the status bar so a bug report can name the build it came from.
   // Read from package.json rather than duplicated, so `npm version` is the only
   // place a release number is written.
