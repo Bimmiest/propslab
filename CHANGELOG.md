@@ -13,6 +13,7 @@ All notable changes to Propslab are documented here, newest first. Entries say w
 
 ### Fixed
 
+- **A fast Tab no longer leaves a long Fields table or field list** ([#572](https://github.com/Bimmiest/propslab/issues/572)). The list now shows the rows next to the focused row before it scrolls. Before, a second Tab that came before the scroll found no next row, and focus left the list.
 - **The explanation of a regex that does not match reads a POSIX class, a leading `]` and `\k<name>` correctly** ([#561](https://github.com/Bimmiest/propslab/issues/561)). Before, `[[:digit:]]+x` against `123y` said that nothing matched, but `[[:digit:]]+` matches `123`.
 - **The preview's Fields filter opens promptly on an event with thousands of fields, and the Timestamp tab no longer re-renders on each config keystroke** ([#565](https://github.com/Bimmiest/propslab/issues/565)). The filter rendered a checkbox row for every field; it now renders the rows near the viewport, as the Fields table does.
 

@@ -55,6 +55,18 @@ describe('computeWindow', () => {
     expect([...rows].sort((a, b) => a - b)).toEqual(rows);
   });
 
+  it('renders the overscan past a focused row at the edge, before the window has scrolled to it', () => {
+    // Rows 95–119 from the scroll position; Tab focused row 118, and the scroll
+    // it caused has not re-rendered the window yet.
+    const rows = rowIndexes(computeWindow(1000, 2000, 300, 20, 5, 100, 118));
+    expect(rows[0]).toBe(95);
+    expect(rows.at(-1)).toBe(123);
+    expect(rows).toEqual(Array.from({ length: rows.length }, (_, i) => 95 + i));
+    // Away from the window, the focused row brings its neighbours too.
+    const away = rowIndexes(computeWindow(1000, 10_000, 300, 20, 5, 100, 10));
+    expect(away.slice(0, 11)).toEqual(Array.from({ length: 11 }, (_, i) => 5 + i));
+  });
+
   it('ignores a pinned row already in the window, or no longer in the list', () => {
     const plain = computeWindow(1000, 2000, 300, 20, 5, 100, null);
     expect(computeWindow(1000, 2000, 300, 20, 5, 100, 100)).toEqual(plain);

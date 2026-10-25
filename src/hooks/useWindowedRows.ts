@@ -23,9 +23,12 @@ const SCROLL_STEP = 64;
 /**
  * The rows to render for a scroll position, as segments in order.
  *
- * `pinned` is a row kept rendered wherever it is, so the row holding focus
- * is not unmounted (taking focus to <body>) when a wheel scroll moves the
- * window away from it.
+ * `pinned` is the row holding focus. It keeps the overscan around it rendered
+ * wherever it is: the row itself, so a wheel scroll that moves the window
+ * away does not unmount it (taking focus to <body>), and its neighbours, so
+ * Tab has a next row before the scroll that the last Tab caused has
+ * re-rendered the window. Pressed faster than that, Tab used to find the next
+ * row not yet rendered and leave the list.
  */
 export function computeWindow(
   count: number,
@@ -42,30 +45,27 @@ export function computeWindow(
 
   const height = viewport > 0 ? viewport : FALLBACK_VIEWPORT;
   const first = Math.floor(Math.max(0, scrollTop) / rowHeight);
-  const start = Math.max(0, Math.min(count, first) - overscan);
-  const end = Math.min(count, first + Math.ceil(height / rowHeight) + overscan);
+  const ranges: [number, number][] = [
+    [Math.max(0, Math.min(count, first) - overscan), Math.min(count, first + Math.ceil(height / rowHeight) + overscan)],
+  ];
+  if (pinned !== null && pinned >= 0 && pinned < count) {
+    ranges.push([Math.max(0, pinned - overscan), Math.min(count, pinned + overscan + 1)]);
+  }
+  ranges.sort((a, b) => a[0] - b[0]);
 
   const out: WindowSegment[] = [];
   const spacer = (key: string, n: number) => {
     if (n > 0) out.push({ kind: 'spacer', key, height: n * rowHeight });
   };
-  const pin = pinned !== null && pinned >= 0 && pinned < count && (pinned < start || pinned >= end) ? pinned : null;
-
-  if (pin !== null && pin < start) {
-    spacer('before-pinned', pin);
-    out.push({ kind: 'row', index: pin });
-    spacer('before', start - pin - 1);
-  } else {
-    spacer('before', start);
+  let next = 0;
+  for (const [from, to] of ranges) {
+    const start = Math.max(from, next);
+    if (to <= start) continue;
+    spacer(next === 0 ? 'before' : 'between', start - next);
+    out.push(...rows(start, to));
+    next = to;
   }
-  out.push(...rows(start, end));
-  if (pin !== null && pin >= end) {
-    spacer('after', pin - end);
-    out.push({ kind: 'row', index: pin });
-    spacer('after-pinned', count - pin - 1);
-  } else {
-    spacer('after', count - end);
-  }
+  spacer('after', count - next);
   return out;
 }
 
