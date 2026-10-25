@@ -434,3 +434,13 @@ describe('runPipeline — the rename target on the result (#611)', () => {
     expect(result).not.toHaveProperty('renamedSourcetype');
   });
 });
+
+describe('runPipeline — $0 in FORMAT for a metadata DEST_KEY (#620)', () => {
+  const meta: EventMetadata = { index: 'main', host: 'h', source: 's', sourcetype: 'st' };
+
+  it('extends the host, which holds its host:: prefix', () => {
+    const transforms = '[hh]\nREGEX = .\nDEST_KEY = MetaData:Host\nFORMAT = $0.example.com\n';
+    const { result } = runPipeline('x', meta, '[st]\nTRANSFORMS-h = hh\n', transforms, { perEventPipeline: false });
+    expect(result.events[0]?.metadata.host).toBe('h.example.com');
+  });
+});
