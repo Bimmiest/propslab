@@ -47,7 +47,7 @@ export const PIPELINE_STAGES: PipelineStage[] = [
     name: 'Timestamp Extraction',
     phase: 'index-time',
     description:
-      'Locates and parses the event timestamp. TIME_PREFIX anchors the search position; TIME_FORMAT parses the found value using strftime tokens. If no timestamp is found, the event inherits the previous event’s _time; the first event falls back to the time of indexing. Once _time is known, ROUTE_EVENTS_OLDER_THAN sends events older than its age to nullQueue.',
+      'Locates and parses the event timestamp. TIME_PREFIX anchors the search position; TIME_FORMAT parses the found value using strftime tokens. If no timestamp is found, the event inherits the previous event’s _time; the first event falls back to the time of indexing. Once _time is known, including from TIMESTAMP_FIELDS for structured data, ROUTE_EVENTS_OLDER_THAN sends events older than its age to nullQueue.',
     directives: [
       'TIME_PREFIX',
       'TIME_FORMAT',

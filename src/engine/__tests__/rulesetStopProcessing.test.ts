@@ -210,6 +210,18 @@ describe('ROUTE_EVENTS_OLDER_THAN (#275)', () => {
     expect(route).toBeLessThan(trace.indexOf('INGEST_EVAL'));
   });
 
+  it('judges the _time TIMESTAMP_FIELDS gives a structured event (#557)', () => {
+    const csv = 'date,time,msg\n2025-01-01,10:00:00,old row\n';
+    const r = run(
+      csv,
+      '[st]\nINDEXED_EXTRACTIONS = csv\nTIMESTAMP_FIELDS = date,time\nTIME_FORMAT = %Y-%m-%d %H:%M:%S\nTZ = UTC\nROUTE_EVENTS_OLDER_THAN = 7d\n',
+      '',
+    );
+    const [row] = r.result.events;
+    expect(row?._time?.toISOString()).toBe('2025-01-01T10:00:00.000Z');
+    expect(row?._meta._queue).toBe('nullQueue');
+  });
+
   it('honours each unit', () => {
     expect(parseAge('30s')).toBe(30_000);
     expect(parseAge('5m')).toBe(300_000);
