@@ -896,3 +896,34 @@ describe('transforms.conf [default] applies to every transform (#615)', () => {
     expect(keys(`[default]\nCLEAN_KEYS = false\n\n${kv}\nCLEAN_KEYS = true`)).toEqual(['user_name']);
   });
 });
+
+// Doc-derived (transforms.conf.spec, SOURCE_KEY: "If <string> starts with
+// 'field:' or 'fields:' the meaning is changed. Instead of looking up a KEY, it
+// instead looks up an already indexed field … SOURCE_KEY = fields:name1,name2,
+// name3 causes MATCH to be run against a string comprising of all three values,
+// separated by space characters").
+describe('SOURCE_KEY = field:<name> and fields:<a>,<b> (#617)', () => {
+  const meta = { index: 'main', host: 'h', source: 's', sourcetype: 'st' };
+  const run = (raw: string, list: string, transforms: string) =>
+    runPipeline(raw, meta, `[st]\nTRANSFORMS-a = ${list}\nKV_MODE = none`, transforms, { perEventPipeline: false })
+      .result.events[0];
+  const mk = (name: string) => `[mk${name}]\nREGEX = ${name}=(\\S+)\nFORMAT = ${name}::$1\nWRITE_META = true\n\n`;
+
+  it('matches against one indexed field', () => {
+    const e = run(
+      'price=42 x',
+      'mkprice, dollars',
+      `${mk('price')}[dollars]\nSOURCE_KEY = field:price\nREGEX = (\\d)\nFORMAT = first_digit::$1\nWRITE_META = true`,
+    );
+    expect(e?.fields['first_digit']).toBe('4');
+  });
+
+  it('matches against several indexed fields joined by spaces', () => {
+    const e = run(
+      'a=1 b=2 rest',
+      'mka, mkb, both',
+      `${mk('a')}${mk('b')}[both]\nSOURCE_KEY = fields:a,b\nREGEX = ^(\\d) (\\d)$\nFORMAT = pair::$1-$2\nWRITE_META = true`,
+    );
+    expect(e?.fields['pair']).toBe('1-2');
+  });
+});

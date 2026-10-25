@@ -101,7 +101,22 @@ function resolveSourceValue(event: SplunkEvent, sourceKeyDir?: ConfDirective): s
   // pattern this registry documents as its own example.
   const builtin = getSourceKeyValue(event, sourceKey);
   if (builtin !== undefined) return builtin;
-  const v = getField(event.fields, sourceKey);
+  // transforms.conf.spec: `field:<name>` reads an already indexed field, and
+  // `fields:<a>,<b>,<c>` runs against "all three values, separated by space
+  // characters" (#617). A field with no value is left out.
+  const named = /^fields?:(.*)$/s.exec(sourceKey);
+  if (named) {
+    return (named[1] ?? '')
+      .split(',')
+      .map((name) => firstFieldValue(event, name.trim()))
+      .filter((value) => value !== '')
+      .join(' ');
+  }
+  return firstFieldValue(event, sourceKey);
+}
+
+function firstFieldValue(event: SplunkEvent, name: string): string {
+  const v = getField(event.fields, name);
   return (Array.isArray(v) ? v[0] : v) ?? '';
 }
 
