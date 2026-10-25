@@ -9,7 +9,7 @@
 // and is there anything in it the simulator will not honour.
 // ---------------------------------------------------------------------------
 
-import { formatStrftime, strftimeToRegex, parseTimestamp, unsupportedSpecifiers } from '../utils/strftime';
+import { formatStrftime, strftimeToRegex, unsupportedSpecifiers } from '../utils/strftime';
 import { validateRegex } from '../utils/splunkRegex';
 import { escapeMarkdown, inlineCode } from './markdown';
 import { matchTimePrefix, TIME_PREFIX_TIMEOUT_MS } from './timePrefixMatcher';
@@ -18,12 +18,11 @@ import type { CancellationLike, PrefixMatcher } from './timePrefixMatcher';
 /**
  * The most of the sample line the preview will search.
  *
- * TIME_PREFIX itself runs in a terminatable worker, so this cap is not what
- * bounds a runaway pattern. It bounds what is copied to the worker and what
- * the generated TIME_FORMAT regex scans on the main thread. The engine cannot
- * share this bound (it searches the whole event), and a prefix that only
- * matches beyond 4 KB into the first
- * line is not a case this preview needs to get right.
+ * TIME_PREFIX and TIME_FORMAT run in a terminatable worker, so this cap is not
+ * what bounds a runaway pattern. It bounds what is copied to the worker. The
+ * engine cannot share this bound (it searches the whole event), and a prefix
+ * that only matches beyond 4 KB into the first line is not a case this preview
+ * needs to get right.
  */
 export const MAX_PREVIEW_SAMPLE_LENGTH = 4096;
 
@@ -72,52 +71,43 @@ async function attemptSample(
   token: CancellationLike | undefined,
 ): Promise<TimeFormatPreview['sample'] | typeof CANCELLED | typeof OMITTED> {
   const sampleLine = fullSampleLine.slice(0, MAX_PREVIEW_SAMPLE_LENGTH);
-  let searchStart = 0;
   if (timePrefix) {
     // Compiled here by the engine's own PCRE2, so a pattern the engine would
     // refuse is reported with its reason and never sent anywhere. Compiling
-    // does not execute it; the match itself happens only in the worker,
-    // on the same engine, so it previews the way it extracts.
+    // does not execute it.
     const refusal = validateRegex(timePrefix);
     if (refusal !== null) return { status: 'prefix-refused', reason: refusal };
+  }
+  // Generating the format's regex runs nothing either; one that cannot be
+  // generated matches nothing, as in the engine.
+  try {
+    strftimeToRegex(format);
+  } catch {
+    return { status: 'no-match', searchedFrom: 0 };
+  }
 
-    const outcome = await matchPrefix(timePrefix, sampleLine, token);
-    switch (outcome.status) {
-      case 'cancelled':
-        return CANCELLED;
-      case 'unavailable':
-        return OMITTED;
-      case 'timed-out':
-        return { status: 'prefix-timed-out', timeoutMs: TIME_PREFIX_TIMEOUT_MS };
-      case 'error':
-        return { status: 'prefix-error', reason: outcome.message };
-      case 'no-match':
-        return { status: 'no-match', searchedFrom: 0 };
-      case 'matched':
-        searchStart = outcome.end;
-        break;
+  // Both matches happen only in the worker, on the same engine and with the
+  // same anchoring rule, so it previews the way it extracts.
+  const outcome = await matchPrefix(timePrefix || undefined, sampleLine, token, format);
+  switch (outcome.status) {
+    case 'cancelled':
+      return CANCELLED;
+    case 'unavailable':
+      return OMITTED;
+    case 'timed-out':
+      return { status: 'prefix-timed-out', timeoutMs: TIME_PREFIX_TIMEOUT_MS };
+    case 'error':
+      return { status: 'prefix-error', reason: outcome.message };
+    case 'no-match':
+      return { status: 'no-match', searchedFrom: 0 };
+    case 'matched': {
+      const found = outcome.format;
+      if (!found) return { status: 'no-match', searchedFrom: outcome.end };
+      return found.parsedMs === null
+        ? { status: 'unparseable', text: found.text }
+        : { status: 'matched', text: found.text, iso: new Date(found.parsedMs).toISOString() };
     }
   }
-
-  const region = sampleLine.slice(searchStart);
-  let formatRegex: RegExp;
-  try {
-    formatRegex = strftimeToRegex(format);
-  } catch {
-    return { status: 'no-match', searchedFrom: searchStart };
-  }
-
-  // With a prefix the format must sit immediately after it, matching the
-  // engine's anchoring rule.
-  const active = timePrefix ? new RegExp(`^\\s*(?:${formatRegex.source})`, formatRegex.flags) : formatRegex;
-
-  const match = active.exec(region);
-  if (!match) return { status: 'no-match', searchedFrom: searchStart };
-
-  const parsed = parseTimestamp(match[0], format);
-  return parsed
-    ? { status: 'matched', text: match[0], iso: parsed.toISOString() }
-    : { status: 'unparseable', text: match[0] };
 }
 
 /**
@@ -207,11 +197,11 @@ export function renderTimeFormatPreview(preview: TimeFormatPreview): string {
         break;
       case 'prefix-timed-out':
         parts.push(
-          `**Sample:** preview timed out — TIME_PREFIX ran for over ${preview.sample.timeoutMs / 1000} s against the sample line and was stopped.`,
+          `**Sample:** preview timed out — matching TIME_PREFIX and TIME_FORMAT against the sample line ran for over ${preview.sample.timeoutMs / 1000} s and was stopped.`,
         );
         break;
       case 'prefix-error':
-        parts.push(`**Sample:** not tried — TIME_PREFIX failed: ${escapeMarkdown(preview.sample.reason)}`);
+        parts.push(`**Sample:** not tried — matching the sample line failed: ${escapeMarkdown(preview.sample.reason)}`);
         break;
     }
   }

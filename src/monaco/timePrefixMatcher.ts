@@ -41,9 +41,20 @@ export interface CancellationLike {
   onCancellationRequested?: (listener: () => void) => { dispose(): void };
 }
 
+/** Where a TIME_FORMAT matched the sample, and the instant it parsed to. */
+export interface FormatMatch {
+  /** The timestamp text, without the whitespace strptime skips before it. */
+  text: string;
+  /** Epoch ms, or null when the matched text could not be assembled into a date. */
+  parsedMs: number | null;
+}
+
 export type PrefixMatchOutcome =
-  /** The prefix matched; the format is searched from `end`. */
-  | { status: 'matched'; end: number }
+  /**
+   * The prefix matched, or there was none; the format is searched from `end`.
+   * `format` is set when a TIME_FORMAT was sent: where it matched, or null.
+   */
+  | { status: 'matched'; end: number; format?: FormatMatch | null }
   | { status: 'no-match' }
   /** The watchdog fired; the worker was terminated. */
   | { status: 'timed-out' }
@@ -54,7 +65,12 @@ export type PrefixMatchOutcome =
   /** The caller's token was cancelled first. */
   | { status: 'cancelled' };
 
-export type PrefixMatcher = (pattern: string, sample: string, token?: CancellationLike) => Promise<PrefixMatchOutcome>;
+export type PrefixMatcher = (
+  pattern: string | undefined,
+  sample: string,
+  token?: CancellationLike,
+  timeFormat?: string,
+) => Promise<PrefixMatchOutcome>;
 
 interface Pending {
   /** Null once the caller cancelled: the request stays in flight so a hang is still reaped. */
@@ -95,13 +111,25 @@ function replay(
 const managed = createManagedWorker<TimestampMatchRequest, TimestampMatchResponse>({
   create: createWorker,
   timeoutMs: TIME_PREFIX_TIMEOUT_MS,
-  onResponse(response) {
+  onResponse(response, request) {
     if (response.error !== undefined) {
       finish(response.id, { status: 'error', message: response.error });
       return;
     }
-    const prefix = response.probes[0]?.prefix ?? null;
-    finish(response.id, prefix ? { status: 'matched', end: prefix.end } : { status: 'no-match' });
+    const probe = response.probes[0];
+    const prefix = probe?.prefix ?? null;
+    if (request.config.timePrefix !== null && !prefix) {
+      finish(response.id, { status: 'no-match' });
+      return;
+    }
+    const match = probe?.match ?? null;
+    finish(response.id, {
+      status: 'matched',
+      end: prefix?.end ?? 0,
+      ...(request.config.timeFormat !== null
+        ? { format: match && { text: match.matchedText, parsedMs: match.parsedTimeMs } }
+        : {}),
+    });
   },
   onTimeout(request, others, loaded) {
     if (loaded) {
@@ -126,18 +154,26 @@ const managed = createManagedWorker<TimestampMatchRequest, TimestampMatchRespons
 
 /**
  * Where `pattern` (a TIME_PREFIX, PCRE as written) first matches in `sample`,
- * computed in the shared worker under a watchdog. Never runs the pattern on
- * the calling thread.
+ * and, given a `timeFormat`, where that matches after it — computed in the
+ * shared worker under a watchdog, as the engine searches: anchored right after
+ * the prefix, or anywhere in the sample without one. Never runs either on the
+ * calling thread: the format is a regex this app generates, but enough
+ * variable-width specifiers in a row backtrack for minutes (#613).
  */
-export const matchTimePrefix: PrefixMatcher = (pattern, sample, token) => {
+export const matchTimePrefix: PrefixMatcher = (pattern, sample, token, timeFormat) => {
   if (token?.isCancellationRequested) return Promise.resolve({ status: 'cancelled' });
 
   const request: TimestampMatchRequest = {
     id: nextId++,
     raws: [sample],
-    // `timeFormat: null` makes the prober stop after the prefix, which is all
-    // the hover needs from it: the format side is a regex this app generates.
-    config: { timePrefix: pattern, timeFormat: null, maxLookahead: 0, tz: null },
+    // Without a format the prober stops after the prefix. The lookahead is the
+    // whole sample, which the caller has already capped.
+    config: {
+      timePrefix: pattern ?? null,
+      timeFormat: timeFormat ?? null,
+      maxLookahead: timeFormat === undefined ? 0 : sample.length,
+      tz: null,
+    },
   };
   return new Promise<PrefixMatchOutcome>((resolve) => {
     const entry: Pending = { settle: resolve, cancelSub: undefined };
