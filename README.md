@@ -383,7 +383,7 @@ The suite is for the things that vitest cannot reach, because of its structure. 
 
 If you extend the suite, remember this. The app runs the pipeline one time on mount, with an empty raw log. `runPipeline` returns a real result for empty input (`eventCount: 0`). Thus the status bar shows "Worker idle · 0 events" *before* any data loads. Wait for an event count that is not zero, as `loadExample` does. Do not wait for the idle state.
 
-`@playwright/test` is pinned to `~1.63.0`. The pin matches a specific Chromium revision, so that local development is consistent. You can bump it at any time. CI installs the browser that agrees with each version, so the pin has no effect on CI runs.
+`@playwright/test` is pinned to `~1.64.1`. The pin matches a specific Chromium revision, so that local development is consistent. You can bump it at any time. CI installs the browser that agrees with each version, so the pin has no effect on CI runs.
 
 `ci.yml` runs on each PR, on each push to main, weekly and on demand. It has these independent jobs:
 
@@ -569,7 +569,7 @@ The directive levels above do not apply to eval *functions*. The functions have 
 - Tailwind CSS 4 (CSS-first config)
 - Monaco Editor 0.57 (mounted directly by `MonacoEditor.tsx`)
 - Zustand 5
-- react-resizable-panels 4.13
+- react-resizable-panels 4.14
 - `diff` 9
 - `cmdk` (command palette)
 - Radix UI primitives (`react-tooltip`, `react-dialog`, `react-context-menu`)
