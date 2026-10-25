@@ -84,6 +84,52 @@ describe('ErrorBoundary', () => {
   });
 });
 
+describe('ErrorBoundary resetKeys (#563)', () => {
+  /** Throws while `bad`; the fixed input renders. */
+  function Panel({ bad }: { bad: boolean }) {
+    if (bad) throw new Error('kaboom');
+    return <p>fine</p>;
+  }
+
+  it('recovers by itself when a reset key changes after the error', () => {
+    const { rerender } = render(
+      <ErrorBoundary panelName="Output" resetKeys={['run 1']}>
+        <Panel bad />
+      </ErrorBoundary>,
+    );
+    expect(screen.getByRole('alert')).toHaveTextContent('kaboom');
+
+    // The input is fixed and a new result arrives.
+    rerender(
+      <ErrorBoundary panelName="Output" resetKeys={['run 2']}>
+        <Panel bad={false} />
+      </ErrorBoundary>,
+    );
+    expect(screen.getByText('fine')).toBeInTheDocument();
+  });
+
+  it('stays down while the keys are unchanged, and when the new result still throws', () => {
+    const { rerender } = render(
+      <ErrorBoundary panelName="Output" resetKeys={['run 1']}>
+        <Panel bad />
+      </ErrorBoundary>,
+    );
+    rerender(
+      <ErrorBoundary panelName="Output" resetKeys={['run 1']}>
+        <Panel bad={false} />
+      </ErrorBoundary>,
+    );
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+
+    rerender(
+      <ErrorBoundary panelName="Output" resetKeys={['run 2']}>
+        <Panel bad />
+      </ErrorBoundary>,
+    );
+    expect(screen.getByRole('alert')).toHaveTextContent('kaboom');
+  });
+});
+
 describe('RootErrorBoundary', () => {
   it('copies the metadata, props, transforms and raw data to the clipboard (#621)', async () => {
     useAppStore.setState({
