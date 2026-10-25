@@ -1,0 +1,58 @@
+name: Settings
+
+# The repository settings against the checklist in repo-template
+# (docs/starting-from-the-template.md there), from the shared
+# repo-settings-check.
+# A template copies files, not settings, so a setting drifts with no commit,
+# and a check on push does not see the drift. Thus it runs each week.
+#
+# SETTINGS_READ_TOKEN is a fine-grained token with "Administration: read" on
+# this repository. GITHUB_TOKEN cannot read most of these settings. Without
+# the secret the check fails, and the issue below says so.
+# .repo-settings.json names the required checks of main, and each exception
+# with its reason.
+on:
+  schedule:
+    - cron: '23 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  settings:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+
+      - name: The settings match the template
+        uses: Bimmiest/shared-workflows/.github/actions/repo-settings-check@8918b365c38c0dcff8f00597b1d7c194dc238cea # v1.2.0
+        with:
+          token: ${{ secrets.SETTINGS_READ_TOKEN }}
+
+  # A failed scheduled run opens an issue, or comments on the open one: a red
+  # scheduled run is a mark that nobody is subscribed to. No checkout, so the
+  # token that can write issues never meets the code that the run executed.
+  report:
+    needs: [settings]
+    if: failure() && github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - uses: Bimmiest/shared-workflows/.github/actions/open-or-update-issue@8918b365c38c0dcff8f00597b1d7c194dc238cea # v1.2.0
+        with:
+          label: scheduled-settings
+          title: A repository setting differs from the template
+          body: |
+            The weekly settings check found a setting that differs from the repo-template checklist, or a setting that the token cannot read. The run log names each one and what to change.
+
+            Run: {run}

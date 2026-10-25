@@ -1,0 +1,15 @@
+{
+  "$comment": "Read by shared-workflows' repo-settings-check, in settings.yml. requiredChecks are the checks that the ruleset on main must require by name. An exception names a setting and the reason that this repository differs: { \"setting\": \"…\", \"reason\": \"…\" }. An exception for a setting that is correct fails, so the list cannot rot.",
+  "requiredChecks": [
+    "ci",
+    "audit",
+    "mcp-server",
+    "workflow-lint",
+    "pr-hygiene",
+    "security / gitleaks",
+    "security / trivy",
+    "Analyze (actions)",
+    "Analyze (javascript-typescript)"
+  ],
+  "exceptions": []
+}
