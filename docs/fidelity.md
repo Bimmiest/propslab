@@ -88,6 +88,16 @@ The directive levels above do not apply to eval _functions_. The functions have 
 
 - **`PAIR_RE` in transform `FORMAT` does not handle escaped quotes in quoted values.** `"([^"]*)"` stops at the first inner `"`, so `field::"say \"hi\""` parses as `field=say \`. The behaviour of real Splunk here is under-documented. Treat it as an edge case.
 
+## Guesses that no recording confirms
+
+Propslab does these things in a way that no Splunk recording confirms. The note of each directive in the dictionary and the editor hover says the same.
+
+- **`TIME_FORMAT` without `TIME_PREFIX`.** The preview reads the first match of the format anywhere in the `MAX_TIMESTAMP_LOOKAHEAD` window, not only at the start of the event.
+- **Two `EXTRACT`s that give the same field.** The preview keeps the value of the first. It shows the second as a no-op. Splunk can give a multivalue field.
+- **`SEDCMD` before `TRANSFORMS`.** The preview applies `SEDCMD` first. A `TRANSFORMS` that reads the text a `SEDCMD` changes can give a different result in Splunk.
+- **`INGEST_EVAL` with `=` on a field that has a value.** The preview replaces the value, as `:=` does. The spec says that `=` adds the value to a multivalue field.
+- **A bare number in `ROUTE_EVENTS_OLDER_THAN`.** The preview reads it as seconds. The spec does not give the default unit.
+
 ## Opt-in
 
 - **Metadata rewrites with `DEST_KEY = MetaData:*`.** By default, a write to `MetaData:Sourcetype` updates the metadata field of the event. But the search-time processors still use the original stanza match. To change this, enable **"Re-match stanzas after metadata rewrites"** in Settings (gear icon). Then a new `matchStanzas` + `mergeDirectives` pass runs after the index-time transforms, so the search-time directives come from the new sourcetype.

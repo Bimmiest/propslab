@@ -50,7 +50,12 @@ export interface SupportEntry {
 export const DIRECTIVE_SUPPORT: Record<string, SupportEntry> = {
   // ---- Time -------------------------------------------------------------
   TIME_PREFIX: { support: 'simulated' },
-  TIME_FORMAT: { support: 'simulated' },
+  TIME_FORMAT: {
+    support: 'simulated',
+    note:
+      'Without TIME_PREFIX, the preview reads the first match of the format anywhere in the ' +
+      'MAX_TIMESTAMP_LOOKAHEAD window. No recording shows what Splunk does with a timestamp that does not start the event.',
+  },
   MAX_TIMESTAMP_LOOKAHEAD: { support: 'simulated' },
   TZ: { support: 'simulated' },
   DATETIME_CONFIG: {
@@ -104,7 +109,12 @@ export const DIRECTIVE_SUPPORT: Record<string, SupportEntry> = {
   },
 
   // ---- Field extraction -------------------------------------------------
-  EXTRACT: { support: 'simulated' },
+  EXTRACT: {
+    support: 'simulated',
+    note:
+      'When two EXTRACTs give the same field, the preview keeps the value of the first and shows the second as a ' +
+      'no-op. No recording shows what Splunk does here, which can be a multivalue field.',
+  },
   REPORT: { support: 'simulated' },
   TRANSFORMS: { support: 'simulated' },
   INDEXED_EXTRACTIONS: {
@@ -115,7 +125,12 @@ export const DIRECTIVE_SUPPORT: Record<string, SupportEntry> = {
   },
   FIELDALIAS: { support: 'simulated' },
   EVAL: { support: 'simulated' },
-  SEDCMD: { support: 'simulated' },
+  SEDCMD: {
+    support: 'simulated',
+    note:
+      'Applied before the index-time TRANSFORMS. No recording confirms that order, so a TRANSFORMS that reads ' +
+      'text a SEDCMD changes can give a different result in Splunk.',
+  },
   KV_MODE: { support: 'simulated' },
   AUTO_KV_JSON: { support: 'simulated' },
   REGEX: { support: 'simulated' },
@@ -126,7 +141,12 @@ export const DIRECTIVE_SUPPORT: Record<string, SupportEntry> = {
   DEST_KEY: { support: 'simulated' },
   REPEAT_MATCH: { support: 'simulated' },
   WRITE_META: { support: 'simulated' },
-  INGEST_EVAL: { support: 'simulated' },
+  INGEST_EVAL: {
+    support: 'simulated',
+    note:
+      '`=` on a field that already has a value replaces it, as `:=` does. The spec says that `=` adds the ' +
+      'value to a multivalue field there, which the preview does not model.',
+  },
   MV_ADD: { support: 'simulated' },
   CLEAN_KEYS: { support: 'simulated' },
   KEEP_EMPTY_VALS: {
