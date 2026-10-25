@@ -2,7 +2,7 @@
 // The example library (#666): grouped, loads into a clean session at once, and
 // asks before it replaces edits.
 
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { ExamplesMenu } from '../ExamplesMenu';
 import { SAMPLE_CONFIGS } from '../../../engine/sampleData';
@@ -57,6 +57,19 @@ describe('ExamplesMenu', () => {
     fireEvent.click(within(open()).getByRole('button', { name: /Linux SSH Auth/ }));
     fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Load example' }));
     expect(useAppStore.getState().metadata.sourcetype).toBe('linux_secure');
+  });
+
+  it('fits the list in the room between its button and the bottom of the pane that scrolls it (#694)', () => {
+    render(
+      <div data-testid="pane" style={{ overflowY: 'auto' }}>
+        <ExamplesMenu prominent />
+      </div>,
+    );
+    const pane = screen.getByTestId('pane');
+    const trigger = screen.getByRole('button', { name: 'Load an example' });
+    vi.spyOn(pane, 'getBoundingClientRect').mockReturnValue({ bottom: 760 } as DOMRect);
+    vi.spyOn(trigger, 'getBoundingClientRect').mockReturnValue({ bottom: 540 } as DOMRect);
+    expect(open('Load an example').style.maxHeight).toBe('min(70vh, 208px)');
   });
 
   it('closes on Escape and gives focus back to its button', () => {
