@@ -383,3 +383,39 @@ describe('runPipeline — per-event search time keeps an index-time sourcetype (
     expect(extracted(result.events[0])).toEqual({ bar: 'hello' });
   });
 });
+
+describe('runPipeline — a splunkd.log TIME_FORMAT with %l (#578)', () => {
+  // Splunk's default [splunkd] stanza is `TIME_FORMAT = %m-%d-%Y %H:%M:%S.%l %z`,
+  // and its source stanza turns date-based line merging on. %l was read as a
+  // 12-hour clock, so no line had a date, every record merged into one event,
+  // and _time fell back to the run's clock.
+  const raw = Array.from(
+    { length: 60 },
+    (_, i) =>
+      `10-06-2026 15:30:${String(i).padStart(2, '0')}.282 +0000 WARN AdminManager [1045591 TcpChannelThread] - Could not find object id=test`,
+  ).join('\n');
+  const props = String.raw`[splunkd]
+SHOULD_LINEMERGE = 0
+TIME_FORMAT = %m-%d-%Y %H:%M:%S.%l %z
+
+[source::.../splunkd.log(.\d+)?]
+SHOULD_LINEMERGE = 1
+BREAK_ONLY_BEFORE_DATE = 1
+MAX_TIMESTAMP_LOOKAHEAD = 128`;
+  const splunkd: EventMetadata = {
+    index: '_internal',
+    host: 'pve-splunk',
+    source: '/opt/splunk/var/log/splunk/splunkd.log',
+    sourcetype: 'splunkd',
+  };
+
+  it('breaks each record into its own event, timed to the millisecond', () => {
+    const { result } = runPipeline(raw, splunkd, props, '', {
+      perEventPipeline: false,
+      now: Date.parse('2026-10-06T15:40:00Z'),
+    });
+    expect(result.events).toHaveLength(60);
+    expect(result.events[0]?._time?.toISOString()).toBe('2026-10-06T15:30:00.282Z');
+    expect(result.events[59]?._time?.toISOString()).toBe('2026-10-06T15:30:59.282Z');
+  });
+});

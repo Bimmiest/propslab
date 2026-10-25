@@ -58,6 +58,7 @@ What follows, good and bad: what the rule costs, what it rules out, and what to 
 | [0015](0015-mcp-timeouts-start-on-ready-and-report-progress.md) | MCP timeouts start on worker ready, report progress, and never touch caller input on the server thread | `packages/mcp-server/src/runInWorker.ts`, `packages/mcp-server/src/tools.ts` |
 | [0016](0016-recorded-splunk-output-is-not-distributed.md) | Recorded Splunk output, and tests derived from it, are not distributed | `src/engine/__tests__/directiveEvidence.test.ts`, `.gitignore` |
 | [0017](0017-ci-gates-come-from-shared-workflows.md) | CI calls the shared gates from `shared-workflows`, pinned by commit, wherever one is equivalent | `.github/workflows/` |
+| [0018](0018-time-format-reads-l-as-milliseconds.md) | TIME_FORMAT reads `%l` as milliseconds; eval's `strftime()` keeps the 12-hour clock | `src/utils/strftime.ts`, `src/engine/processors/eval/builtins.ts` |
 
 The index has a **Code** column where `repo-template`'s has **Status**: it names the files each decision governs, which is what a reader arrives looking for. Every record's status is on its first lines.
 

@@ -108,6 +108,18 @@ describe('buildTimeFormatPreview', () => {
     });
   });
 
+  it("previews splunkd.log's %l as milliseconds, as the engine reads it (#578)", async () => {
+    const preview = await buildTimeFormatPreview('%m-%d-%Y %H:%M:%S.%l %z', {
+      now: NOW,
+      sampleLine: '10-06-2026 15:30:00.282 +0000 WARN AdminManager - Could not find object',
+    });
+    expect(preview.sample).toEqual({
+      status: 'matched',
+      text: '10-06-2026 15:30:00.282 +0000',
+      iso: '2026-10-06T15:30:00.282Z',
+    });
+  });
+
   it('reports a sample that does not match', async () => {
     const preview = await buildTimeFormatPreview('%Y/%m/%d', {
       now: NOW,
