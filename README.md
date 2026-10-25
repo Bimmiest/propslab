@@ -45,9 +45,9 @@ A test asserts the counts against the table itself, so they cannot become incorr
 
 ## Demo
 
-![Propslab with the Palo Alto Firewall example loaded. The left column holds the raw log, the metadata, props.conf and transforms.conf. The Extractions tab on the right highlights the extracted fields in each event, and lists the 17 fields in a sidebar.](docs/assets/demo.png)
+![Propslab with the Palo Alto Firewall example loaded. The left column holds the raw log, the metadata, props.conf and transforms.conf. The Extractions tab on the right highlights the extracted fields in each event, and lists the 18 fields in a sidebar.](docs/assets/demo.png)
 
-The bundled Palo Alto Firewall example: the Extractions tab highlights each extracted field in `_raw`.
+The bundled Palo Alto Firewall example: the Extractions tab highlights each extracted field in `_raw`. Eight more examples cover other data sources ([user guide](docs/user-guide.md#examples)).
 
 ## Usage
 

@@ -1,13 +1,5 @@
-import {
-  useState,
-  useRef,
-  useEffect,
-  useMemo,
-  useId,
-  type FocusEvent,
-  type KeyboardEvent,
-  type RefObject,
-} from 'react';
+import { useState, useRef, useEffect, useMemo, useId, useCallback, type RefObject } from 'react';
+import { usePopoverDismiss } from '../../hooks/usePopoverDismiss';
 import { useWindowedRows } from '../../hooks/useWindowedRows';
 import { Icon } from './Icon';
 
@@ -27,41 +19,12 @@ export function MultiSelect({ label, options, selected, onChange, searchable }: 
   const searchRef = useRef<HTMLInputElement>(null);
   const popupId = useId();
 
-  const close = () => {
+  const close = useCallback(() => {
     setOpen(false);
     setQuery('');
-  };
-
-  const handleKeyDown = (e: KeyboardEvent) => {
-    if (e.key === 'Escape' && open) {
-      e.stopPropagation();
-      close();
-      triggerRef.current?.focus();
-    }
-  };
-
-  // Tabbing out of an open popup closes it, so it does not cover whatever the
-  // user has moved on to. Only a move to a known
-  // element outside closes it: a null relatedTarget is a click on something
-  // unfocusable inside the popup (its padding, "No matches"), which the
-  // outside-mousedown handler below already covers when it is truly outside.
-  const handleBlur = (e: FocusEvent) => {
-    const next = e.relatedTarget as Node | null;
-    if (open && next && ref.current && !ref.current.contains(next)) close();
-  };
-
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-        setQuery('');
-      }
-    }
-    if (open) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
-    }
-  }, [open]);
+  }, []);
+  // Escape, a Tab that leaves the popup, and a press outside all close it.
+  const dismiss = usePopoverDismiss(ref, triggerRef, open, close);
 
   useEffect(() => {
     if (open && searchable) {
@@ -91,7 +54,7 @@ export function MultiSelect({ label, options, selected, onChange, searchable }: 
   return (
     // The wrapper listens for keys and focus bubbling up from its own controls;
     // it is not itself interactive.
-    <div ref={ref} className="relative" onKeyDown={handleKeyDown} onBlur={handleBlur}>
+    <div ref={ref} className="relative" {...dismiss}>
       <button
         ref={triggerRef}
         type="button"
