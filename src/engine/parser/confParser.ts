@@ -436,7 +436,7 @@ function mergeDuplicateStanzas(stanzas: ConfStanza[]): ConfStanza[] {
   const byKey = new Map<string, ConfStanza>();
   const order: ConfStanza[] = [];
   for (const stanza of stanzas) {
-    const key = `${stanza.type} ${stanza.name}`;
+    const key = `${stanza.type}\u0000${stanza.name}`;
     const existing = byKey.get(key);
     if (!existing) {
       const clone: ConfStanza = {
