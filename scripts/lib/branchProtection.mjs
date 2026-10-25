@@ -17,7 +17,8 @@
 //     GITHUB_TOKEN can hold, so under the workflow token it answers HTTP 403.
 //
 // The requirements: changes arrive through a pull request (no approval count is
-// required: a sole maintainer cannot approve their own PRs), the core CI checks
+// required: a sole maintainer cannot approve their own PRs; see
+// docs/adr/0020-one-maintainer-and-no-required-review.md), the core CI checks
 // are required by name, force-pushes and deletion are blocked, and nobody can
 // bypass the rulesets that say so.
 // ---------------------------------------------------------------------------

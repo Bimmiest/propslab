@@ -60,6 +60,7 @@ What follows, good and bad: what the rule costs, what it rules out, and what to 
 | [0017](0017-ci-gates-come-from-shared-workflows.md)               | CI calls the shared gates from `shared-workflows`, pinned by commit, wherever one is equivalent                      | `.github/workflows/`                                                             |
 | [0018](0018-time-format-reads-l-as-milliseconds.md)               | TIME_FORMAT reads `%l` as milliseconds; eval's `strftime()` keeps the 12-hour clock                                  | `src/utils/strftime.ts`, `src/engine/processors/eval/builtins.ts`                |
 | [0019](0019-a-run-stops-at-its-time-budget.md)                    | A run stops at its time budget, and a match cannot take more than 10,000,000 steps                                   | `src/utils/splunkRegex.ts`, `src/engine/pipeline.ts`, `src/engine/runContext.ts` |
+| [0020](0020-one-maintainer-and-no-required-review.md)             | Propslab has one maintainer, and main requires no approving review                                                   | `scripts/lib/branchProtection.mjs`, `.github/CODEOWNERS`, `SECURITY.md`          |
 
 The index has a **Code** column where `repo-template`'s has **Status**: it names the files each decision governs, which is what a reader arrives looking for. Every record's status is on its first lines.
 
