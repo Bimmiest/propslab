@@ -367,9 +367,13 @@ jobs:
         # sha256sum rather than scripts/check-wasm-checksum.mjs, which ci.yml
         # uses: this workflow runs from main but builds whichever commit it
         # resolved, and a rollback target older than that script would not
-        # have it.
+        # have it. The second check is against the hash this repository
+        # records, which a pin bump changes in the same diff (#567); a commit
+        # older than that file has only the first.
         working-directory: node_modules/pcre2-wasm-utf16
-        run: sha256sum --check --strict pcre2.wasm.sha256
+        run: |
+          sha256sum --check --strict pcre2.wasm.sha256
+          if [ -f ../../pcre2.wasm.sha256 ]; then sha256sum --check --strict ../../pcre2.wasm.sha256; fi
 
       - name: Build
         run: npm run build
