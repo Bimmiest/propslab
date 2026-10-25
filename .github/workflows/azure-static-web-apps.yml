@@ -228,7 +228,11 @@ jobs:
       # built those commits; only the wasm check stopped them, because they
       # predated the package. So the lookup is not taken on trust: the commit
       # it returns must contain the commit whose CI triggered this run and the
-      # commit production is serving now (the newest `production` deployment).
+      # commit production is serving now. That is the commit the newest
+      # successful `production` deployment built, read from the fragment of its
+      # URL (see the deploy job), not the commit GitHub's record names. A
+      # deployment from before the fragment existed names none, and only the
+      # triggering commit is checked then.
       # A newer green commit contains both; a stale answer contains neither.
       # The lookup is retried for about two minutes until it passes, and the
       # job fails, deploying nothing, if it never does. A dispatch with `sha`
@@ -252,7 +256,15 @@ jobs:
             # Commits the answer must contain (see above).
             floor=()
             if [[ $TRIGGER_SHA =~ ^[0-9a-f]{40}$ ]]; then floor+=("$TRIGGER_SHA"); fi
-            live=$(gh api "repos/$GH_REPO/deployments?environment=production&per_page=1" --jq '.[0].sha // ""')
+            live=''
+            while read -r id; do
+              status=$(gh api "repos/$GH_REPO/deployments/$id/statuses?per_page=1" \
+                --jq '.[0] | [.state, (.environment_url // "")] | join(" ")')
+              if [ "${status%% *}" = success ]; then
+                live=${status##*#build=}
+                break
+              fi
+            done < <(gh api "repos/$GH_REPO/deployments?environment=production&per_page=10" --jq '.[].id')
             if [[ $live =~ ^[0-9a-f]{40}$ && $live != "$TRIGGER_SHA" ]]; then floor+=("$live"); fi
             sha=''
             for attempt in 1 2 3 4 5 6 7; do
@@ -480,9 +492,18 @@ jobs:
     # The URL makes the deployment link to the site it deployed, on the
     # repository's Deployments page and sidebar. It is the deploy step's own
     # output, the same address "Verify the deployed headers" checks.
+    #
+    # Its fragment names the commit this run built, which "Resolve commit"
+    # reads back as the commit production serves. GitHub records a deployment
+    # against the run's own `github.sha`, which under workflow_run is main's
+    # head when the run was queued and for a rollback is main's head too, so
+    # the record alone names commits that were never deployed (#574). A
+    # fragment never reaches the site.
     environment:
       name: production
-      url: ${{ steps.builddeploy.outputs.static_web_app_url }}
+      url: >-
+        ${{ steps.builddeploy.outputs.static_web_app_url &&
+        format('{0}#build={1}', steps.builddeploy.outputs.static_web_app_url, needs.build.outputs.sha) || '' }}
     # No `id-token: write`. This deploys with the Static Web App's deployment
     # token, not with a GitHub federated identity — see the Build And Deploy
     # step. Nor anything else: downloading an artifact from the same run uses
