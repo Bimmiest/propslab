@@ -12,6 +12,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, fireEvent, screen } from '@testing-library/react';
 import { Overlay } from '../Overlay';
+import { pressOutside } from '../../../test/pressOutside';
 
 describe('Overlay', () => {
   it('renders its children when open', () => {
@@ -178,10 +179,7 @@ describe('Overlay description and outside clicks (#495)', () => {
         <button>Inside</button>
       </Overlay>,
     );
-    // Radix arms its outside-press listener on the next tick.
-    await new Promise((resolve) => setTimeout(resolve, 10));
-    fireEvent.pointerDown(document.body, { pointerType: 'mouse', button: 0 });
-    fireEvent.click(document.body);
+    await pressOutside();
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
@@ -192,10 +190,8 @@ describe('Overlay description and outside clicks (#495)', () => {
         <button>Inside</button>
       </Overlay>,
     );
-    // Radix arms its outside-press listener on the next tick.
-    await new Promise((resolve) => setTimeout(resolve, 10));
-    fireEvent.pointerDown(document.body, { pointerType: 'mouse', button: 0 });
-    fireEvent.click(document.body);
+    const press = await pressOutside();
+    expect(press.defaultPrevented).toBe(true);
     expect(onClose).not.toHaveBeenCalled();
     fireEvent.keyDown(screen.getByRole('alertdialog'), { key: 'Escape' });
     expect(onClose).toHaveBeenCalledTimes(1);
