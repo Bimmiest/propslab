@@ -1,18 +1,29 @@
-import { createContext, memo, useContext, useId, useMemo, type ReactNode } from 'react';
+import { createContext, memo, Suspense, useContext, useId, useMemo, type ReactNode } from 'react';
 import { useAppStore } from '../../store/useAppStore';
 import { Tabs } from '../ui/Tabs';
 import { tabId, tabPanelId } from '../ui/tabIds';
 import { Icon } from '../ui/Icon';
+import { retryableLazy } from '../ui/retryableLazy';
 import type { OutputTabId } from '../../engine/types';
-import { CimModelsTab } from './tabs/CimModelsTab';
-import { EffectiveConfigTab } from './tabs/EffectiveConfigTab';
-import { FieldsTab } from './tabs/fields';
-import { TransformsTab } from './tabs/TransformsTab';
-import { ArchitecturePanel } from '../architecture/ArchitecturePanel';
 import { useDebounce } from '../../hooks/useDebounce';
 import { EmptyState, FailureState } from './PreviewStates';
 import { PreviewSubTab } from './PreviewSubTab';
 import { usePipelineInputs, type PipelineInputs } from './tabs/shared/usePipelineInputs';
+
+// The output tabs other than Preview, out of the entry chunk (#566): each is
+// mounted only when selected, so the cost is one chunk fetch on first open,
+// and CIM Models brings its data table with it. Retryable, since that fetch
+// can fail in a tab left open across a redeploy; the OutputBoundary around
+// this panel offers the retry.
+const CimModelsTab = retryableLazy(() => import('./tabs/CimModelsTab').then((m) => ({ default: m.CimModelsTab })));
+const EffectiveConfigTab = retryableLazy(() =>
+  import('./tabs/EffectiveConfigTab').then((m) => ({ default: m.EffectiveConfigTab })),
+);
+const FieldsTab = retryableLazy(() => import('./tabs/fields').then((m) => ({ default: m.FieldsTab })));
+const TransformsTab = retryableLazy(() => import('./tabs/TransformsTab').then((m) => ({ default: m.TransformsTab })));
+const ArchitecturePanel = retryableLazy(() =>
+  import('../architecture/ArchitecturePanel').then((m) => ({ default: m.ArchitecturePanel })),
+);
 
 /**
  * How long a run must take before the output is covered with "Processing…".
@@ -97,7 +108,9 @@ export const PreviewPanel = memo(function PreviewPanel() {
         aria-busy={isProcessing}
       >
         <PipelineInputsProvider>
-          <TabContent tab={activeTab} hasData={!!result && result.events.length > 0} failure={failure} />
+          <Suspense fallback={null}>
+            <TabContent tab={activeTab} hasData={!!result && result.events.length > 0} failure={failure} />
+          </Suspense>
         </PipelineInputsProvider>
         {showOverlay && (
           <div
