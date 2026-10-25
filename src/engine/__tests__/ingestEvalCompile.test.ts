@@ -83,7 +83,10 @@ describe('INGEST_EVAL compiles once per run (#486)', () => {
     const transforms = '[ev]\nINGEST_EVAL = n=len(_raw), tag="t"\n';
     for (const perEventPipeline of [false, true]) {
       parses.count = 0;
-      const { result } = runPipeline('one\ntwo\nthree\nfour\nfive', meta, props, transforms, { perEventPipeline });
+      const { result } = runPipeline('one\ntwo\nthree\nfour\nfive', meta, props, transforms, {
+        perEventPipeline,
+        now: FIXED_NOW,
+      });
       expect(result.events.map((e) => e.fields['n'])).toEqual(['3', '3', '5', '4', '4']);
       // Two assignments; the count is not multiplied by the five events.
       expect(parses.count).toBe(2);

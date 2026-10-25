@@ -4,6 +4,7 @@ import { runPipeline } from '../pipeline';
 import type { SplunkEvent } from '../types';
 import type { TransformResult } from '../transforms/regexTransform';
 import { makeEvent } from '../../test/makeEvent';
+import { AT_FIXED_NOW } from './runCtx';
 
 function baseEvent(): SplunkEvent {
   return makeEvent('raw log line', {
@@ -153,7 +154,7 @@ describe('applyDestKey — _meta (SEM-11)', () => {
       '',
     ].join('\n');
     const meta = { index: 'main', host: 'h', source: '/log', sourcetype: 'syslog' };
-    const { result: out } = runPipeline('hello', meta, props, transforms);
+    const { result: out } = runPipeline('hello', meta, props, transforms, AT_FIXED_NOW);
     // Routed to nullQueue by DEST_KEY = queue; a _meta pair cannot undo that.
     expect(out.events.map((e) => e._meta)).toEqual([{ _queue: 'nullQueue', word: 'hello' }]);
   });
@@ -294,6 +295,7 @@ describe('applyDestKey — _time out of the Date range (#417)', () => {
       meta,
       props,
       transforms,
+      AT_FIXED_NOW,
     );
     for (const ev of out.events) expect(ev._time?.toISOString()).toMatch(/^2026-01-02T/);
     const warnings = diagnostics.filter((d) => d.message.includes('out of range'));

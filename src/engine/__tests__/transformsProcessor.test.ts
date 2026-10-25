@@ -515,6 +515,7 @@ describe('#87 — CLONE_SOURCETYPE', () => {
     return runPipeline(raw, metadata, propsConf, transformsConf, {
       perEventPipeline: true,
       captureOffsets: false,
+      now: FIXED_NOW,
     }).result.events;
   }
 
@@ -562,6 +563,7 @@ describe('#87 — CLONE_SOURCETYPE', () => {
       runPipeline('card 1234-5678\n', { ...metadata, sourcetype: 'orig' }, p, t, {
         perEventPipeline: true,
         captureOffsets: false,
+        now: FIXED_NOW,
       });
 
     it("applies the new sourcetype's SEDCMD to the clone and not the original", () => {
@@ -881,7 +883,8 @@ describe('transforms.conf [default] applies to every transform (#615)', () => {
   const kv = '[kv]\nREGEX = (\\S+)=(\\S+)\nFORMAT = $1::$2';
   const keys = (transforms: string) =>
     Object.keys(
-      runPipeline('user-name=bob', meta, props, transforms, { perEventPipeline: false }).result.events[0]?.fields ?? {},
+      runPipeline('user-name=bob', meta, props, transforms, { perEventPipeline: false, now: FIXED_NOW }).result
+        .events[0]?.fields ?? {},
     ).filter((k) => k.startsWith('user'));
 
   it('takes a setting the stanza does not set from [default]', () => {
@@ -905,8 +908,10 @@ describe('transforms.conf [default] applies to every transform (#615)', () => {
 describe('SOURCE_KEY = field:<name> and fields:<a>,<b> (#617)', () => {
   const meta = { index: 'main', host: 'h', source: 's', sourcetype: 'st' };
   const run = (raw: string, list: string, transforms: string) =>
-    runPipeline(raw, meta, `[st]\nTRANSFORMS-a = ${list}\nKV_MODE = none`, transforms, { perEventPipeline: false })
-      .result.events[0];
+    runPipeline(raw, meta, `[st]\nTRANSFORMS-a = ${list}\nKV_MODE = none`, transforms, {
+      perEventPipeline: false,
+      now: FIXED_NOW,
+    }).result.events[0];
   const mk = (name: string) => `[mk${name}]\nREGEX = ${name}=(\\S+)\nFORMAT = ${name}::$1\nWRITE_META = true\n\n`;
 
   it('matches against one indexed field', () => {

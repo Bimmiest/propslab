@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { runPipeline } from '../pipeline';
 import type { EventMetadata, ValidationDiagnostic } from '../types';
+import { AT_FIXED_NOW, FIXED_NOW } from './runCtx';
 
 const META: EventMetadata = { index: 'main', host: '', source: '', sourcetype: 'aws:cloudtrail' };
 const JSON_RAW = '{"eventTime":"2024-01-15T10:00:00Z","action":"login","user":"alice"}';
@@ -11,32 +12,32 @@ const hasDupWarning = (diags: { message: string }[]) =>
 describe('runPipeline — INDEXED_EXTRACTIONS + KV_MODE duplicate-extraction warning', () => {
   it('warns when INDEXED_EXTRACTIONS=json and KV_MODE=json are both set', () => {
     const props = '[aws:cloudtrail]\nINDEXED_EXTRACTIONS = json\nKV_MODE = json';
-    const { diagnostics } = runPipeline(JSON_RAW, META, props, '');
+    const { diagnostics } = runPipeline(JSON_RAW, META, props, '', AT_FIXED_NOW);
     expect(hasDupWarning(diagnostics)).toBe(true);
   });
 
   it('warns when INDEXED_EXTRACTIONS=json and KV_MODE is unset (default auto re-extracts JSON)', () => {
     const props = '[aws:cloudtrail]\nINDEXED_EXTRACTIONS = json';
-    const { diagnostics } = runPipeline(JSON_RAW, META, props, '');
+    const { diagnostics } = runPipeline(JSON_RAW, META, props, '', AT_FIXED_NOW);
     expect(hasDupWarning(diagnostics)).toBe(true);
   });
 
   it('does NOT warn when KV_MODE = none is set alongside INDEXED_EXTRACTIONS=json', () => {
     const props = '[aws:cloudtrail]\nINDEXED_EXTRACTIONS = json\nKV_MODE = none';
-    const { diagnostics } = runPipeline(JSON_RAW, META, props, '');
+    const { diagnostics } = runPipeline(JSON_RAW, META, props, '', AT_FIXED_NOW);
     expect(hasDupWarning(diagnostics)).toBe(false);
   });
 
   it('does NOT warn when AUTO_KV_JSON = false disables the search-time JSON re-extraction', () => {
     const props = '[aws:cloudtrail]\nINDEXED_EXTRACTIONS = json\nAUTO_KV_JSON = false';
-    const { diagnostics } = runPipeline(JSON_RAW, META, props, '');
+    const { diagnostics } = runPipeline(JSON_RAW, META, props, '', AT_FIXED_NOW);
     expect(hasDupWarning(diagnostics)).toBe(false);
   });
 
   it('does NOT warn for delimited INDEXED_EXTRACTIONS (no search-time duplication)', () => {
     const csv = 'ts,action,user\n2024-01-15,login,alice';
     const props = '[csv:st]\nINDEXED_EXTRACTIONS = csv\nKV_MODE = json';
-    const { diagnostics } = runPipeline(csv, { ...META, sourcetype: 'csv:st' }, props, '');
+    const { diagnostics } = runPipeline(csv, { ...META, sourcetype: 'csv:st' }, props, '', AT_FIXED_NOW);
     expect(hasDupWarning(diagnostics)).toBe(false);
   });
 });
@@ -47,13 +48,13 @@ describe('runPipeline — DEST_KEY validation (SEM-11)', () => {
 
   it('warns when DEST_KEY is not a recognised routing key', () => {
     const transforms = '[route]\nREGEX = (.*)\nDEST_KEY = made_up_key\nFORMAT = $1';
-    const { diagnostics } = runPipeline('a log line', PLAIN_META, props, transforms);
+    const { diagnostics } = runPipeline('a log line', PLAIN_META, props, transforms, AT_FIXED_NOW);
     expect(diagnostics.some((d) => d.message.includes('not a recognised Splunk DEST_KEY'))).toBe(true);
   });
 
   it('an unknown DEST_KEY is warned about once, and writes no field (#477)', () => {
     const transforms = '[route]\nREGEX = (.*)\nDEST_KEY = made_up_key\nFORMAT = $1';
-    const { result, diagnostics } = runPipeline('a log line', PLAIN_META, props, transforms);
+    const { result, diagnostics } = runPipeline('a log line', PLAIN_META, props, transforms, AT_FIXED_NOW);
     const about = diagnostics.filter((d) => d.message.includes('made_up_key'));
     expect(about).toHaveLength(1);
     expect(about[0]!.message).toMatch(/no routing effect/);
@@ -63,7 +64,7 @@ describe('runPipeline — DEST_KEY validation (SEM-11)', () => {
 
   it('warns that _TCP_ROUTING is valid but not simulated', () => {
     const transforms = '[route]\nREGEX = (.*)\nDEST_KEY = _TCP_ROUTING\nFORMAT = group1';
-    const { diagnostics } = runPipeline('a log line', PLAIN_META, props, transforms);
+    const { diagnostics } = runPipeline('a log line', PLAIN_META, props, transforms, AT_FIXED_NOW);
     // The conf lint's warning, not the router's note that it left the event alone.
     const about = diagnostics.filter((d) => d.message.startsWith('DEST_KEY = _TCP_ROUTING is'));
     expect(about.map((d) => [d.level, d.file, d.line])).toEqual([['warning', 'transforms.conf', 3]]);
@@ -74,7 +75,7 @@ describe('runPipeline — DEST_KEY validation (SEM-11)', () => {
 
   it('does NOT warn for a documented key like queue', () => {
     const transforms = '[route]\nREGEX = (.*)\nDEST_KEY = queue\nFORMAT = indexQueue';
-    const { diagnostics } = runPipeline('a log line', PLAIN_META, props, transforms);
+    const { diagnostics } = runPipeline('a log line', PLAIN_META, props, transforms, AT_FIXED_NOW);
     expect(diagnostics.some((d) => d.message.includes('DEST_KEY'))).toBe(false);
   });
 });
@@ -83,7 +84,7 @@ describe('runPipeline — transforms references', () => {
   const PLAIN_META: EventMetadata = { index: 'main', host: '', source: '', sourcetype: 'st' };
   const transforms =
     '[default]\nCLEAN_KEYS = true\n\n[route]\nREGEX = (.)\nFORMAT = c::$1\n\n[unused]\nREGEX = (.)\nFORMAT = u::$1\n';
-  const lint = (props: string) => runPipeline('a log line', PLAIN_META, props, transforms).diagnostics;
+  const lint = (props: string) => runPipeline('a log line', PLAIN_META, props, transforms, AT_FIXED_NOW).diagnostics;
 
   it('reports a stanza the list names that transforms.conf lacks, as an error at the directive', () => {
     const missing = lint('[st]\nTRANSFORMS-t = route, nope\n').filter((d) => d.message.includes('not found'));
@@ -114,14 +115,14 @@ describe('runPipeline — DEST_KEY = MetaData:Index FORMAT lint (#281)', () => {
 
   it('accepts the bare index name and routes to it', () => {
     const transforms = '[route]\nREGEX = .\nDEST_KEY = _MetaData:Index\nFORMAT = security';
-    const { result, diagnostics } = runPipeline('a log line', PLAIN_META, props, transforms);
+    const { result, diagnostics } = runPipeline('a log line', PLAIN_META, props, transforms, AT_FIXED_NOW);
     expect(prefixWarning(diagnostics)).toHaveLength(0);
     expect(result.events[0]?.metadata.index).toBe('security');
   });
 
   it('warns that an index:: prefix is kept, naming the index it really routes to', () => {
     const transforms = '[route]\nREGEX = .\nDEST_KEY = _MetaData:Index\nFORMAT = index::security';
-    const { result, diagnostics } = runPipeline('a log line', PLAIN_META, props, transforms);
+    const { result, diagnostics } = runPipeline('a log line', PLAIN_META, props, transforms, AT_FIXED_NOW);
     const warning = prefixWarning(diagnostics);
     expect(warning).toHaveLength(1);
     expect(warning[0]?.message).toContain('"index::security"');
@@ -132,16 +133,28 @@ describe('runPipeline — DEST_KEY = MetaData:Index FORMAT lint (#281)', () => {
   it('lints the effective (last) FORMAT when default/ and local/ both set it', () => {
     const route = (format: string) => `[route]\nREGEX = .\nDEST_KEY = MetaData:Sourcetype\nFORMAT = ${format}`;
     // local fixes what default got wrong: no warning, because runtime uses local's.
-    const fixed = runPipeline('a log line', PLAIN_META, props, [
-      { layer: 'default', text: route('other') },
-      { layer: 'local', text: route('sourcetype::other') },
-    ]);
+    const fixed = runPipeline(
+      'a log line',
+      PLAIN_META,
+      props,
+      [
+        { layer: 'default', text: route('other') },
+        { layer: 'local', text: route('sourcetype::other') },
+      ],
+      AT_FIXED_NOW,
+    );
     expect(prefixWarning(fixed.diagnostics)).toHaveLength(0);
     // And the reverse: local breaks it, so the warning must point at local's line.
-    const broken = runPipeline('a log line', PLAIN_META, props, [
-      { layer: 'default', text: route('sourcetype::other') },
-      { layer: 'local', text: route('other') },
-    ]);
+    const broken = runPipeline(
+      'a log line',
+      PLAIN_META,
+      props,
+      [
+        { layer: 'default', text: route('sourcetype::other') },
+        { layer: 'local', text: route('other') },
+      ],
+      AT_FIXED_NOW,
+    );
     const warning = prefixWarning(broken.diagnostics);
     expect(warning).toHaveLength(1);
     expect(warning[0]?.layer).toBe('local');
@@ -154,14 +167,14 @@ describe('runPipeline — INGEST_EVAL is scoped to referencing stanzas (SEM-2)',
   it('does NOT apply an INGEST_EVAL stanza that no props.conf stanza references', () => {
     const props = '[st]\n'; // no TRANSFORMS reference to the eval stanza
     const transforms = '[addtag]\nINGEST_EVAL = tag="prod"';
-    const { result } = runPipeline('a log line', PLAIN_META, props, transforms);
+    const { result } = runPipeline('a log line', PLAIN_META, props, transforms, AT_FIXED_NOW);
     expect(result.events[0]!.fields['tag']).toBeUndefined();
   });
 
   it('applies an INGEST_EVAL stanza when a TRANSFORMS-<class> references it', () => {
     const props = '[st]\nTRANSFORMS-t = addtag';
     const transforms = '[addtag]\nINGEST_EVAL = tag="prod"';
-    const { result } = runPipeline('a log line', PLAIN_META, props, transforms);
+    const { result } = runPipeline('a log line', PLAIN_META, props, transforms, AT_FIXED_NOW);
     expect(result.events[0]!.fields['tag']).toBe('prod');
   });
 });
@@ -174,7 +187,7 @@ describe('runPipeline — 1 MB input cap aligns to a line boundary (#14)', () =>
   it('does not hand the pipeline a half-formed final event', () => {
     // 10,001 lines = 1,000,100 chars, so the cap lands 100 chars into the last line.
     const raw = LINE.repeat(10_001);
-    const { result, diagnostics } = runPipeline(raw, META, NO_MERGE, '');
+    const { result, diagnostics } = runPipeline(raw, META, NO_MERGE, '', AT_FIXED_NOW);
     expect(diagnostics.some((d) => d.message.includes('truncated'))).toBe(true);
     // Every surviving event is a whole line, not a fragment.
     expect(result.events.every((e) => e._raw === 'x'.repeat(99))).toBe(true);
@@ -182,7 +195,7 @@ describe('runPipeline — 1 MB input cap aligns to a line boundary (#14)', () =>
 
   it('keeps input under the cap intact', () => {
     const raw = LINE.repeat(10);
-    const { result, diagnostics } = runPipeline(raw, META, NO_MERGE, '');
+    const { result, diagnostics } = runPipeline(raw, META, NO_MERGE, '', AT_FIXED_NOW);
     expect(diagnostics.some((d) => d.message.includes('truncated'))).toBe(false);
     expect(result.events).toHaveLength(10);
   });
@@ -199,13 +212,13 @@ describe('runPipeline — per-event mode does not duplicate config diagnostics (
     diags.filter((d) => d.message.includes('EVAL-broken')).length;
 
   it('reports a config-level eval error once in per-event mode', () => {
-    const { result, diagnostics } = runPipeline(RAW, META, PROPS, '', { perEventPipeline: true });
+    const { result, diagnostics } = runPipeline(RAW, META, PROPS, '', { perEventPipeline: true, now: FIXED_NOW });
     expect(result.events.length).toBeGreaterThan(1);
     expect(brokenEvalCount(diagnostics)).toBe(1);
   });
 
   it('matches the batch path, which already reported it once', () => {
-    const { diagnostics } = runPipeline(RAW, META, PROPS, '');
+    const { diagnostics } = runPipeline(RAW, META, PROPS, '', AT_FIXED_NOW);
     expect(brokenEvalCount(diagnostics)).toBe(1);
   });
 });
@@ -215,14 +228,14 @@ describe('runPipeline — search-time REPORT compile failures are reported (#75.
   const TRANSFORMS = '[broken]\nREGEX = (a+\nFORMAT = f::$1';
 
   it('warns when a REPORT stanza regex cannot be compiled', () => {
-    const { diagnostics } = runPipeline('some line', META, PROPS, TRANSFORMS);
+    const { diagnostics } = runPipeline('some line', META, PROPS, TRANSFORMS, AT_FIXED_NOW);
     expect(diagnostics.some((d) => d.message.includes('does not compile'))).toBe(true);
   });
 
   it('warns once, not once per event, in per-event mode', () => {
     const raw = Array.from({ length: 12 }, (_, i) => `line ${i}`).join('\n');
     const props = '[aws:cloudtrail]\nSHOULD_LINEMERGE = false\nREPORT-r = broken';
-    const { diagnostics } = runPipeline(raw, META, props, TRANSFORMS, { perEventPipeline: true });
+    const { diagnostics } = runPipeline(raw, META, props, TRANSFORMS, { perEventPipeline: true, now: FIXED_NOW });
     expect(diagnostics.filter((d) => d.message.includes('does not compile'))).toHaveLength(1);
   });
 });
@@ -239,13 +252,13 @@ describe('runPipeline — an input-time sourcetype assignment is not an index-ti
     diags.some((d) => d.message.includes('rewritten at index-time by a DEST_KEY = MetaData:* transform'));
 
   it('batch mode does not warn about a metadata rewrite', () => {
-    const { result, diagnostics } = runPipeline(raw, meta, props, '', { perEventPipeline: false });
+    const { result, diagnostics } = runPipeline(raw, meta, props, '', { perEventPipeline: false, now: FIXED_NOW });
     expect(rewriteWarning(diagnostics)).toBe(false);
     expect(result.events.map((e) => e.fields['k'])).toEqual(['one', 'two']);
   });
 
   it("per-event mode adds no StanzaRematch step and keeps the assigned sourcetype's search-time config", () => {
-    const { result } = runPipeline(raw, meta, props, '', { perEventPipeline: true });
+    const { result } = runPipeline(raw, meta, props, '', { perEventPipeline: true, now: FIXED_NOW });
     expect(result.processingSteps.some((s) => s.processor === 'StanzaRematch')).toBe(false);
     expect(result.events.map((e) => e.fields['k'])).toEqual(['one', 'two']);
   });
@@ -253,9 +266,9 @@ describe('runPipeline — an input-time sourcetype assignment is not an index-ti
   it('still reports a genuine DEST_KEY = MetaData:Sourcetype rewrite on top of the assignment', () => {
     const rewriting = props + 'TRANSFORMS-st = to_bar\n';
     const transforms = '[to_bar]\nREGEX = two\nDEST_KEY = MetaData:Sourcetype\nFORMAT = sourcetype::bar\n';
-    const batch = runPipeline(raw, meta, rewriting, transforms, { perEventPipeline: false });
+    const batch = runPipeline(raw, meta, rewriting, transforms, { perEventPipeline: false, now: FIXED_NOW });
     expect(rewriteWarning(batch.diagnostics)).toBe(true);
-    const perEvent = runPipeline(raw, meta, rewriting, transforms, { perEventPipeline: true });
+    const perEvent = runPipeline(raw, meta, rewriting, transforms, { perEventPipeline: true, now: FIXED_NOW });
     expect(perEvent.result.events.map((e) => e.processingTrace.some((s) => s.processor === 'StanzaRematch'))).toEqual([
       false,
       true,
@@ -272,19 +285,19 @@ describe('runPipeline — inputMetadata is the metadata the events were broken w
   const props = '[source::/var/log/app.log]\nsourcetype = app\n\n[app]\nSHOULD_LINEMERGE = false\n';
 
   it('reports the assigned sourcetype, matching every unrewritten event', () => {
-    const { result } = runPipeline('a\nb', meta, props, '');
+    const { result } = runPipeline('a\nb', meta, props, '', AT_FIXED_NOW);
     expect(result.inputMetadata).toEqual({ ...meta, sourcetype: 'app' });
     expect(result.events.every((e) => e.metadata.sourcetype === result.inputMetadata.sourcetype)).toBe(true);
   });
 
   it("is the caller's metadata unchanged when nothing is assigned", () => {
-    const { result } = runPipeline('a', { ...meta, source: '/other.log' }, props, '');
+    const { result } = runPipeline('a', { ...meta, source: '/other.log' }, props, '', AT_FIXED_NOW);
     expect(result.inputMetadata).toEqual({ ...meta, source: '/other.log' });
   });
 
   it('still differs from an event a DEST_KEY = MetaData:Sourcetype transform rewrote', () => {
     const transforms = '[to_bar]\nREGEX = b\nDEST_KEY = MetaData:Sourcetype\nFORMAT = sourcetype::bar\n';
-    const { result } = runPipeline('a\nb', meta, props + 'TRANSFORMS-x = to_bar\n', transforms);
+    const { result } = runPipeline('a\nb', meta, props + 'TRANSFORMS-x = to_bar\n', transforms, AT_FIXED_NOW);
     expect(result.events.map((e) => e.metadata.sourcetype === result.inputMetadata.sourcetype)).toEqual([true, false]);
   });
 });
@@ -303,7 +316,10 @@ describe('runPipeline — CLONE_SOURCETYPE copies are not reported as MetaData:*
     diags.filter((d) => d.message.startsWith('CLONE_SOURCETYPE copied events to sourcetype "cloned"'));
 
   it('batch mode warns about the clones once, and not as a DEST_KEY rewrite', () => {
-    const { result, diagnostics } = runPipeline('a\nb', meta, props, transforms, { perEventPipeline: false });
+    const { result, diagnostics } = runPipeline('a\nb', meta, props, transforms, {
+      perEventPipeline: false,
+      now: FIXED_NOW,
+    });
     expect(result.events.map((e) => e.metadata.sourcetype).sort()).toEqual(['cloned', 'cloned', 'st', 'st']);
     expect(rewriteWarning(diagnostics)).toBe(false);
     expect(cloneWarning(diagnostics)).toHaveLength(1);
@@ -312,13 +328,16 @@ describe('runPipeline — CLONE_SOURCETYPE copies are not reported as MetaData:*
   it('batch mode still reports a genuine rewrite alongside clones', () => {
     const rewriting = props + 'TRANSFORMS-r = to_bar\n';
     const both = transforms + '[to_bar]\nREGEX = b\nDEST_KEY = MetaData:Sourcetype\nFORMAT = sourcetype::bar\n';
-    const { diagnostics } = runPipeline('a\nb', meta, rewriting, both, { perEventPipeline: false });
+    const { diagnostics } = runPipeline('a\nb', meta, rewriting, both, { perEventPipeline: false, now: FIXED_NOW });
     expect(rewriteWarning(diagnostics)).toBe(true);
     expect(cloneWarning(diagnostics)).toHaveLength(1);
   });
 
   it('per-event mode re-matches the clones and says they were cloned', () => {
-    const { result, diagnostics } = runPipeline('a', meta, props, transforms, { perEventPipeline: true });
+    const { result, diagnostics } = runPipeline('a', meta, props, transforms, {
+      perEventPipeline: true,
+      now: FIXED_NOW,
+    });
     expect(cloneWarning(diagnostics)).toHaveLength(0);
     const clone = result.events.find((e) => e.clonedFrom !== undefined);
     const step = clone?.processingTrace.find((s) => s.processor === 'StanzaRematch');
@@ -329,7 +348,10 @@ describe('runPipeline — CLONE_SOURCETYPE copies are not reported as MetaData:*
 describe('runPipeline — a conf of hundreds of thousands of parse errors (#517)', () => {
   it('reports them all rather than overflowing the stack', () => {
     // Pushing the parse errors with a spread passed each as an argument.
-    const { diagnostics } = runPipeline('x\n', META, 'x\n'.repeat(300_000), '', { perEventPipeline: false });
+    const { diagnostics } = runPipeline('x\n', META, 'x\n'.repeat(300_000), '', {
+      perEventPipeline: false,
+      now: FIXED_NOW,
+    });
     expect(diagnostics.filter((d) => d.message.startsWith('Malformed line'))).toHaveLength(300_000);
   });
 });
@@ -354,6 +376,7 @@ describe('runPipeline — per-event search time keeps an index-time sourcetype (
     const transforms = '[setst]\nREGEX = .\nDEST_KEY = MetaData:Sourcetype\nFORMAT = sourcetype::other\n';
     const { result } = runPipeline('hello', meta, props('TRANSFORMS-a = setst'), transforms, {
       perEventPipeline: true,
+      now: FIXED_NOW,
     });
     const [event] = result.events;
     expect(event?.metadata.sourcetype).toBe('other');
@@ -366,7 +389,10 @@ describe('runPipeline — per-event search time keeps an index-time sourcetype (
 
   it("gives a CLONE_SOURCETYPE copy its target's search-time config", () => {
     const transforms = '[copy]\nREGEX = .\nCLONE_SOURCETYPE = other\n';
-    const { result } = runPipeline('hello', meta, props('TRANSFORMS-c = copy'), transforms, { perEventPipeline: true });
+    const { result } = runPipeline('hello', meta, props('TRANSFORMS-c = copy'), transforms, {
+      perEventPipeline: true,
+      now: FIXED_NOW,
+    });
     const original = result.events.find((e) => e.clonedFrom === undefined);
     const clone = result.events.find((e) => e.clonedFrom !== undefined);
     expect(original?.metadata.sourcetype).toBe('app');
@@ -378,7 +404,7 @@ describe('runPipeline — per-event search time keeps an index-time sourcetype (
   it("still applies `rename` on the rewritten sourcetype's stanza", () => {
     const transforms = '[setst]\nREGEX = .\nDEST_KEY = MetaData:Sourcetype\nFORMAT = sourcetype::other\n';
     const renaming = props('TRANSFORMS-a = setst').replace('[other]\n', '[other]\nrename = renamed_to\n');
-    const { result } = runPipeline('hello', meta, renaming, transforms, { perEventPipeline: true });
+    const { result } = runPipeline('hello', meta, renaming, transforms, { perEventPipeline: true, now: FIXED_NOW });
     expect(result.events[0]?.metadata.sourcetype).toBe('other');
     expect(extracted(result.events[0])).toEqual({ bar: 'hello' });
   });
@@ -424,13 +450,19 @@ describe('runPipeline — the rename target on the result (#611)', () => {
   const meta: EventMetadata = { index: 'main', host: 'h', source: 's', sourcetype: 'orig' };
 
   it('names the sourcetype search-time settings come from when a matched stanza renames', () => {
-    const { result } = runPipeline('x', meta, '[orig]\nrename = renamed\n', '', { perEventPipeline: false });
+    const { result } = runPipeline('x', meta, '[orig]\nrename = renamed\n', '', {
+      perEventPipeline: false,
+      now: FIXED_NOW,
+    });
     expect(result.renamedSourcetype).toBe('renamed');
     expect(result.inputMetadata.sourcetype).toBe('orig');
   });
 
   it('leaves it out when nothing renames', () => {
-    const { result } = runPipeline('x', meta, '[orig]\nKV_MODE = none\n', '', { perEventPipeline: false });
+    const { result } = runPipeline('x', meta, '[orig]\nKV_MODE = none\n', '', {
+      perEventPipeline: false,
+      now: FIXED_NOW,
+    });
     expect(result).not.toHaveProperty('renamedSourcetype');
   });
 });
@@ -440,7 +472,10 @@ describe('runPipeline — $0 in FORMAT for a metadata DEST_KEY (#620)', () => {
 
   it('extends the host, which holds its host:: prefix', () => {
     const transforms = '[hh]\nREGEX = .\nDEST_KEY = MetaData:Host\nFORMAT = $0.example.com\n';
-    const { result } = runPipeline('x', meta, '[st]\nTRANSFORMS-h = hh\n', transforms, { perEventPipeline: false });
+    const { result } = runPipeline('x', meta, '[st]\nTRANSFORMS-h = hh\n', transforms, {
+      perEventPipeline: false,
+      now: FIXED_NOW,
+    });
     expect(result.events[0]?.metadata.host).toBe('h.example.com');
   });
 });

@@ -11,6 +11,7 @@ import { describe, it, expect } from 'vitest';
 import { runPipeline } from '../pipeline';
 import { regexCompileCount } from '../../utils/splunkRegex';
 import type { EventMetadata, DirectiveNoOp } from '../types';
+import { FIXED_NOW } from './runCtx';
 
 const metadata: EventMetadata = {
   index: 'main',
@@ -23,6 +24,7 @@ function noOpsFor(raw: string, props: string, transforms = ''): DirectiveNoOp[] 
   const result = runPipeline(raw, metadata, props, transforms, {
     perEventPipeline: false,
     captureOffsets: false,
+    now: FIXED_NOW,
   });
   return result.result.events.flatMap((e) => e.noOps ?? []);
 }
@@ -114,6 +116,7 @@ describe('#84 — no-op explanations reach the caller', () => {
     const { result } = runPipeline(RAW, metadata, '[my_app]\nEXTRACT-x = ZZZ(?<a>\\d+)\n', '', {
       perEventPipeline: false,
       captureOffsets: false,
+      now: FIXED_NOW,
     });
     const event = result.events[0]!;
     expect(event.noOps).toHaveLength(1);
@@ -143,7 +146,11 @@ describe('#415 — explaining no-ops stays cheap at volume', () => {
     const props = `[my_app]\nSHOULD_LINEMERGE = false\nLINE_BREAKER = ([\\r\\n]+)\n${extracts}\n`;
 
     const before = regexCompileCount();
-    const { result } = runPipeline(raw, metadata, props, '', { perEventPipeline: false, captureOffsets: false });
+    const { result } = runPipeline(raw, metadata, props, '', {
+      perEventPipeline: false,
+      captureOffsets: false,
+      now: FIXED_NOW,
+    });
     const compiles = regexCompileCount() - before;
 
     expect(result.events).toHaveLength(500);
@@ -165,6 +172,7 @@ describe('#452 — explanations are capped per directive per run', () => {
     const { result } = runPipeline(lines(LIMIT + 10), metadata, props, transforms, {
       perEventPipeline,
       captureOffsets: false,
+      now: FIXED_NOW,
     });
     return result.events.map((e) => e.noOps?.find((n) => n.directive === directive)?.reason.kind);
   }
@@ -197,7 +205,7 @@ describe('#452 — explanations are capped per directive per run', () => {
 
   it('counts each directive apart', () => {
     const props = '[my_app]\nSHOULD_LINEMERGE = false\nEXTRACT-a = user=(?<a>\\w+)@\nEXTRACT-b = user=(?<b>\\w+)#\n';
-    const { result } = runPipeline(lines(LIMIT), metadata, props, '', { perEventPipeline: false });
+    const { result } = runPipeline(lines(LIMIT), metadata, props, '', { perEventPipeline: false, now: FIXED_NOW });
     const kinds = result.events.flatMap((e) => (e.noOps ?? []).map((n) => n.reason.kind));
     expect(kinds).toHaveLength(2 * LIMIT);
     expect(kinds.every((k) => k === 'no-match')).toBe(true);

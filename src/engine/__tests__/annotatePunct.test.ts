@@ -11,6 +11,7 @@ import { describe, it, expect } from 'vitest';
 import { buildPunct } from '../processors/punctAnnotator';
 import { runPipeline } from '../pipeline';
 import type { EventMetadata } from '../types';
+import { AT_FIXED_NOW } from './runCtx';
 
 const METADATA: EventMetadata = {
   index: 'main',
@@ -20,7 +21,7 @@ const METADATA: EventMetadata = {
 };
 
 function run(props: string, input: string) {
-  return runPipeline(input, METADATA, `[st]\n${props}`, '').result.events;
+  return runPipeline(input, METADATA, `[st]\n${props}`, '', AT_FIXED_NOW).result.events;
 }
 
 describe('buildPunct', () => {

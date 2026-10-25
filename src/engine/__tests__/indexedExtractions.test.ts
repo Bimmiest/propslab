@@ -373,7 +373,7 @@ describe('#164 — INDEXED_EXTRACTIONS turns off line merging by default', () =>
       { index: 'main', host: 'h', source: 's', sourcetype: 'st' },
       '[st]\nINDEXED_EXTRACTIONS = JSON\nKV_MODE = none\n',
       '',
-      { perEventPipeline: false, captureOffsets: false },
+      { perEventPipeline: false, captureOffsets: false, now: FIXED_NOW },
     );
     expect(result.events).toHaveLength(2);
     expect(result.events[0]!.fields).toMatchObject({ user: 'alice', status: '200' });
@@ -386,7 +386,7 @@ describe('#164 — INDEXED_EXTRACTIONS turns off line merging by default', () =>
       { index: 'main', host: 'h', source: 's', sourcetype: 'st' },
       '[st]\nINDEXED_EXTRACTIONS = JSON\nSHOULD_LINEMERGE = true\nKV_MODE = none\n',
       '',
-      { perEventPipeline: false, captureOffsets: false },
+      { perEventPipeline: false, captureOffsets: false, now: FIXED_NOW },
     );
     expect(result.events).toHaveLength(1);
   });
@@ -1035,7 +1035,7 @@ describe('applyIndexedExtractions — JSON_TRIM_BRACES_IN_ARRAY_NAMES (#274)', (
       { index: 'main', host: 'h', source: 's', sourcetype: 'st' },
       '[st]\nKV_MODE = json\nJSON_TRIM_BRACES_IN_ARRAY_NAMES = true\n',
       '',
-      { perEventPipeline: false, captureOffsets: false },
+      { perEventPipeline: false, captureOffsets: false, now: FIXED_NOW },
     );
     expect(result.events[0]!.fields['data.mount_point{}']).toEqual(['/', '/home']);
   });
@@ -1049,7 +1049,7 @@ describe('header-side delimited overrides through the pipeline (#272)', () => {
       { index: 'main', host: 'h', source: 's', sourcetype: 'st' },
       `[st]\nINDEXED_EXTRACTIONS = csv\n${body}`,
       '',
-      { perEventPipeline: false, captureOffsets: false },
+      { perEventPipeline: false, captureOffsets: false, now: FIXED_NOW },
     ).result.events.map((e) => e.fields);
 
   it('FIELD_HEADER_REGEX takes the header from the line it matches', () => {

@@ -7,6 +7,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { runPipeline } from '../pipeline';
 import type { EventMetadata } from '../types';
+import { FIXED_NOW } from './runCtx';
 
 // Pass-through, except that a document containing <boom/> throws: stands in
 // for any per-event failure the walkers cannot rule out.
@@ -36,6 +37,7 @@ function run(raw: string, props: string) {
     {
       perEventPipeline: false,
       captureOffsets: false,
+      now: FIXED_NOW,
     },
   );
   return { events: result.events, diagnostics };

@@ -6,6 +6,7 @@
 import { describe, it, expect } from 'vitest';
 import { runPipeline } from '../pipeline';
 import type { EventMetadata } from '../types';
+import { FIXED_NOW } from './runCtx';
 
 const metadata: EventMetadata = { index: 'main', host: 'h', source: 's', sourcetype: 'st' };
 
@@ -13,6 +14,7 @@ function diagnosticsFor(props: string, transforms = '') {
   return runPipeline('2026-01-15T10:00:00Z hello world\n', metadata, `[st]\n${props}`, transforms, {
     perEventPipeline: false,
     captureOffsets: false,
+    now: FIXED_NOW,
   }).diagnostics;
 }
 

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { runPipeline } from '../pipeline';
 import { breakLines } from '../processors/lineBreaker';
 import type { ConfDirective, EventMetadata } from '../types';
-import { runCtx, FIXED_NOW } from './runCtx';
+import { runCtx, FIXED_NOW, AT_FIXED_NOW } from './runCtx';
 
 const META: EventMetadata = { index: 'main', host: '', source: '', sourcetype: 'st' };
 const dir = (key: string, value: string): ConfDirective => ({ key, value, line: 1, directiveType: key });
@@ -17,6 +17,7 @@ describe('lineBreaker — directive keys are case-sensitive (#119)', () => {
       META,
       '[st]\nline_breaker = (X)\nSHOULD_LINEMERGE = false\n',
       '',
+      AT_FIXED_NOW,
     );
 
     expect(diagnostics.some((d) => d.message.includes('"line_breaker" is ignored'))).toBe(true);
@@ -26,7 +27,13 @@ describe('lineBreaker — directive keys are case-sensitive (#119)', () => {
   });
 
   it('honours the correctly-cased LINE_BREAKER', () => {
-    const { result } = runPipeline('aXbXc', META, '[st]\nLINE_BREAKER = (X)\nSHOULD_LINEMERGE = false\n', '');
+    const { result } = runPipeline(
+      'aXbXc',
+      META,
+      '[st]\nLINE_BREAKER = (X)\nSHOULD_LINEMERGE = false\n',
+      '',
+      AT_FIXED_NOW,
+    );
     expect(result.events.map((e) => e._raw)).toEqual(['a', 'b', 'c']);
   });
 

@@ -170,7 +170,10 @@ describe('eval regex arguments that do not compile (#291)', () => {
     const meta = { index: 'main', host: 'h', source: 's', sourcetype: 'st' };
     const props = '[st]\nSHOULD_LINEMERGE = false\nTRANSFORMS-t = rw\n';
     const transforms = '[rw]\nINGEST_EVAL = out=replace(_raw, "(", "x")\n';
-    const { diagnostics } = runPipeline('a\nb\nc\n', meta, props, transforms, { perEventPipeline: false });
+    const { diagnostics } = runPipeline('a\nb\nc\n', meta, props, transforms, {
+      perEventPipeline: false,
+      now: FIXED_NOW,
+    });
     const hits = diagnostics.filter((d) => d.message.includes('replace() pattern'));
     expect(hits).toHaveLength(1);
     expect(hits[0]?.message).toContain('INGEST_EVAL out');

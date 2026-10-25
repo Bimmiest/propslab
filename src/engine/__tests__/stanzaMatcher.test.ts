@@ -3,6 +3,7 @@ import { cachedStanzaPatternCount, matchStanzas, mergeDirectives, stanzaPatternP
 import { parseConf } from '../parser/confParser';
 import { runPipeline } from '../pipeline';
 import type { ConfDirective, ConfStanza, EventMetadata } from '../types';
+import { FIXED_NOW } from './runCtx';
 
 function stanza(type: ConfStanza['type'], name: string): ConfStanza {
   return { name, type, directives: [], lineRange: { start: 1, end: 2 } };
@@ -592,7 +593,11 @@ describe('matchStanzas — a pattern PCRE rejects', () => {
 
   it('is reported by the conf lint, at the stanza, with the regex PCRE was given', () => {
     const props = '[st]\nTRUNCATE = 5\n\n[host::web(01]\nTRUNCATE = 6\n\n[source::/x/*.log]\nTRUNCATE = 7\n';
-    const { diagnostics } = runPipeline('x', META, props, '', { perEventPipeline: false, captureOffsets: false });
+    const { diagnostics } = runPipeline('x', META, props, '', {
+      perEventPipeline: false,
+      captureOffsets: false,
+      now: FIXED_NOW,
+    });
     const reported = diagnostics.filter((d) => d.message.includes('never matches'));
     expect(reported.map((d) => [d.level, d.file, d.line])).toEqual([['warning', 'props.conf', 4]]);
     expect(reported[0]?.message).toMatch(

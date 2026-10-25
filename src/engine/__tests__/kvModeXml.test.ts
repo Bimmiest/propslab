@@ -13,6 +13,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { runPipeline } from '../pipeline';
 import type { EventMetadata } from '../types';
 import { expectLinearWork } from '../../test/scanWork';
+import { FIXED_NOW } from './runCtx';
 
 const metadata: EventMetadata = {
   index: 'main',
@@ -25,6 +26,7 @@ function fieldsOf(raw: string, props = 'SHOULD_LINEMERGE = false\nKV_MODE = xml\
   const { result } = runPipeline(raw, metadata, `[xmltest]\n${props}`, '', {
     perEventPipeline: false,
     captureOffsets: false,
+    now: FIXED_NOW,
   });
   return result.events[0]?.fields ?? {};
 }

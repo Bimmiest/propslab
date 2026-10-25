@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { applyIngestEval, ingestEvalTrees } from '../transforms/ingestEval';
 import { runPipeline } from '../pipeline';
 import type { SplunkEvent, ConfDirective, EventMetadata, ValidationDiagnostic } from '../types';
-import { runCtx, FIXED_NOW } from './runCtx';
+import { runCtx, FIXED_NOW, AT_FIXED_NOW } from './runCtx';
 import { makeEvent } from '../../test/makeEvent';
 
 function event(raw: string): SplunkEvent {
@@ -178,7 +178,7 @@ describe('runPipeline — INGEST_EVAL metadata rewrites re-match stanzas (#327)'
   const transforms = '[to_new]\nINGEST_EVAL = sourcetype="new_st", index="security"\n';
 
   it("per-event mode applies the new sourcetype's search-time config", () => {
-    const { result } = runPipeline('a', meta, props, transforms, { perEventPipeline: true });
+    const { result } = runPipeline('a', meta, props, transforms, { perEventPipeline: true, now: FIXED_NOW });
     const ev = result.events[0]!;
     expect(ev.metadata.sourcetype).toBe('new_st');
     expect(ev.metadata.index).toBe('security');
@@ -187,7 +187,10 @@ describe('runPipeline — INGEST_EVAL metadata rewrites re-match stanzas (#327)'
   });
 
   it('batch mode warns that search-time config still follows the original sourcetype', () => {
-    const { result, diagnostics } = runPipeline('a', meta, props, transforms, { perEventPipeline: false });
+    const { result, diagnostics } = runPipeline('a', meta, props, transforms, {
+      perEventPipeline: false,
+      now: FIXED_NOW,
+    });
     expect(result.events[0]!.metadata.sourcetype).toBe('new_st');
     expect(result.events[0]!.fields['seen']).toBeUndefined();
     expect(diagnostics.some((d) => d.message.includes('sourcetype/host/source rewritten'))).toBe(true);
@@ -298,7 +301,7 @@ describe('INGEST_EVAL _time out of the Date range (#417)', () => {
     'keeps the previous _time for _time=%s, and warns once',
     (expr) => {
       const transforms = `[t]\nINGEST_EVAL = _time=${expr}\n`;
-      const { result, diagnostics } = runPipeline(raw, meta, props, transforms);
+      const { result, diagnostics } = runPipeline(raw, meta, props, transforms, AT_FIXED_NOW);
       expect(result.events).toHaveLength(2);
       for (const ev of result.events) {
         expect(ev._time?.toISOString()).toMatch(/^2026-01-02T/);
@@ -337,7 +340,7 @@ describe('runPipeline — INGEST_EVAL reports each problem once per run (#418)',
   const raw = ['one', 'two', 'three', 'four', 'five'].join('\n');
 
   it.each([false, true])('perEventPipeline=%s: five events, one of each diagnostic', (perEventPipeline) => {
-    const { result, diagnostics } = runPipeline(raw, meta, props, transforms, { perEventPipeline });
+    const { result, diagnostics } = runPipeline(raw, meta, props, transforms, { perEventPipeline, now: FIXED_NOW });
     expect(result.events).toHaveLength(5);
     const count = (pred: (d: ValidationDiagnostic) => boolean) => diagnostics.filter(pred).length;
     expect(count((d) => d.message.startsWith('md5() is not fully simulated'))).toBe(1);
@@ -354,7 +357,10 @@ describe('INGEST_EVAL errors are keyed by where the directive is (#477)', () => 
     const props = '[st]\nSHOULD_LINEMERGE = false\nTRANSFORMS-e = e1, e2\n';
     const transforms = '[e1]\nINGEST_EVAL = x=1+\n[e2]\nINGEST_EVAL = x=nosuchfn(\n';
     for (const perEventPipeline of [false, true]) {
-      const { diagnostics } = runPipeline('one\ntwo\nthree', meta, props, transforms, { perEventPipeline });
+      const { diagnostics } = runPipeline('one\ntwo\nthree', meta, props, transforms, {
+        perEventPipeline,
+        now: FIXED_NOW,
+      });
       const errors = diagnostics.filter((d) => d.level === 'error' && d.message.startsWith('INGEST_EVAL x:'));
       expect(errors).toHaveLength(2);
       expect(new Set(errors.map((d) => d.line)).size).toBe(2);
@@ -386,7 +392,10 @@ describe('runPipeline — CLONE_SOURCETYPE does not repeat INGEST_EVAL problems 
   const transforms = '[copy]\nREGEX = .\nCLONE_SOURCETYPE = cloned\n\n[ev]\nINGEST_EVAL = b=(1==1)\n';
 
   it.each([false, true])('perEventPipeline=%s: three events and three clones, one error', (perEventPipeline) => {
-    const { result, diagnostics } = runPipeline('one\ntwo\nthree', meta, props, transforms, { perEventPipeline });
+    const { result, diagnostics } = runPipeline('one\ntwo\nthree', meta, props, transforms, {
+      perEventPipeline,
+      now: FIXED_NOW,
+    });
     expect(result.events.filter((e) => e.clonedFrom !== undefined)).toHaveLength(3);
     expect(diagnostics.filter((d) => d.message.startsWith('INGEST_EVAL b:'))).toHaveLength(1);
   });
