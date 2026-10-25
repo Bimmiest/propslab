@@ -476,7 +476,13 @@ jobs:
     #
     # With the secret scoped this way, a ref that rewrites this file can still
     # start a run, but not one that can see the token.
-    environment: production
+    #
+    # The URL makes the deployment link to the site it deployed, on the
+    # repository's Deployments page and sidebar. It is the deploy step's own
+    # output, the same address "Verify the deployed headers" checks.
+    environment:
+      name: production
+      url: ${{ steps.builddeploy.outputs.static_web_app_url }}
     # No `id-token: write`. This deploys with the Static Web App's deployment
     # token, not with a GitHub federated identity — see the Build And Deploy
     # step. Nor anything else: downloading an artifact from the same run uses
