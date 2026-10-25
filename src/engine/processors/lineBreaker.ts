@@ -29,6 +29,16 @@ function getDirective(directives: ConfDirective[], key: string): string | undefi
 }
 
 /**
+ * Whether DATETIME_CONFIG stops timestamps being identified: `CURRENT` stamps
+ * each event with the time of indexing and `NONE` turns extraction off, so
+ * neither finds a timestamp in the text.
+ */
+function identifiesNoTimestamps(directives: ConfDirective[]): boolean {
+  const value = effectiveDirective(directives, 'DATETIME_CONFIG')?.value.trim().toUpperCase();
+  return value === 'CURRENT' || value === 'NONE';
+}
+
+/**
  * The test BREAK_ONLY_BEFORE_DATE applies to a line.
  *
  * props.conf.spec: a new event starts "only if it encounters a new line with
@@ -41,6 +51,9 @@ function getDirective(directives: ConfDirective[], key: string): string | undefi
  * TIME_PREFIX that will not compile finds no date, as it finds no `_time`.
  */
 function dateLineTest(directives: ConfDirective[]): (line: string) => boolean {
+  // Under DATETIME_CONFIG = CURRENT or NONE no line has a date, so lines merge
+  // up to MAX_EVENTS (#610).
+  if (identifiesNoTimestamps(directives)) return () => false;
   const finder = createTimestampFinder(readTimestampLocation(directives));
   return (line) => finder.find(line).found;
 }

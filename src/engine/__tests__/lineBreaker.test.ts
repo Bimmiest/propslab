@@ -65,6 +65,39 @@ describe('breakLines — SHOULD_LINEMERGE defaults', () => {
   });
 });
 
+// Doc-derived (props.conf.spec, BREAK_ONLY_BEFORE_DATE: "when using
+// DATETIME_CONFIG = CURRENT or NONE, this setting is not meaningful, as
+// timestamps are not identified"). No line has a date then, so the default
+// line merging joins dated lines into one event (#610).
+describe('#610 — DATETIME_CONFIG = CURRENT or NONE finds no dates to break before', () => {
+  const raw = '2026-01-15T10:00:00Z a\n2026-01-15T10:00:01Z b\n';
+
+  it.each(['CURRENT', 'NONE', 'current', 'CURRENT '])('merges dated lines under DATETIME_CONFIG = "%s"', (value) => {
+    const events = breakLines(raw, [dir('DATETIME_CONFIG', value)], META, runCtx(FIXED_NOW));
+    expect(events.map((e) => e._raw)).toEqual(['2026-01-15T10:00:00Z a\n2026-01-15T10:00:01Z b']);
+  });
+
+  it('still breaks on BREAK_ONLY_BEFORE, which reads no timestamp', () => {
+    const events = breakLines(
+      'EVENT 1\ncont\nEVENT 2\n',
+      [dir('DATETIME_CONFIG', 'CURRENT'), dir('BREAK_ONLY_BEFORE', 'EVENT')],
+      META,
+      runCtx(FIXED_NOW),
+    );
+    expect(events).toHaveLength(2);
+  });
+
+  it('still breaks each line with SHOULD_LINEMERGE = false', () => {
+    const events = breakLines(
+      raw,
+      [dir('DATETIME_CONFIG', 'CURRENT'), dir('SHOULD_LINEMERGE', 'false')],
+      META,
+      runCtx(FIXED_NOW),
+    );
+    expect(events).toHaveLength(2);
+  });
+});
+
 // Doc-derived (props.conf.spec, BREAK_ONLY_BEFORE_DATE: "creates a new event
 // only if it encounters a new line with a date", recognised the way timestamps
 // are — within MAX_TIMESTAMP_LOOKAHEAD).
