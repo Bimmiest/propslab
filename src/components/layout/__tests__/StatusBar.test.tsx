@@ -28,6 +28,12 @@ describe('StatusBar', () => {
     useAppStore.setState(initial, true);
   });
 
+  it('names the build beside the version, for a bug report (#648)', () => {
+    renderStatusBar();
+    const version = screen.getByTitle('Propslab test, build 0000000');
+    expect(version).toHaveTextContent('vtest, build 0000000');
+  });
+
   it('shows "Ready" when no processing has occurred', () => {
     renderStatusBar();
     expect(screen.getByText('Ready')).toBeInTheDocument();
