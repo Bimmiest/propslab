@@ -356,24 +356,26 @@ function translateStanzaPattern(pattern: string): string {
   return out;
 }
 
+/**
+ * Splunk's rule inside one stanza: a repeated key takes its LAST value, the
+ * documented "last definition in the file wins". For a layered conf the layers
+ * were concatenated lowest-precedence-first, so the same rule is what makes
+ * `local/` beat `default/`.
+ */
+export function lastDefinitionPerKey(stanza: ConfStanza): Map<string, import('../types').ConfDirective> {
+  const latest = new Map<string, import('../types').ConfDirective>();
+  for (const directive of stanza.directives) latest.set(directive.key, directive);
+  return latest;
+}
+
 export function mergeDirectives(stanzas: ConfStanza[]): import('../types').ConfDirective[] {
   const seen = new Map<string, import('../types').ConfDirective>();
   // Stanzas arrive in precedence order (highest first), so across stanzas the
-  // first match wins. WITHIN a single stanza, however, a repeated key takes its
-  // LAST value — Splunk's documented "last definition in the file wins" rule.
-  //
-  // For a layered conf the layers were concatenated lowest-precedence-first, so
-  // that same rule is what makes `local/` beat `default/`; the returned directive
-  // carries the `layer` it won from and the `overrides` it beat.
+  // first match wins, and within each the last definition does. The returned
+  // directive carries the `layer` it won from and the `overrides` it beat.
   for (const stanza of stanzas) {
-    const stanzaLatest = new Map<string, import('../types').ConfDirective>();
-    for (const directive of stanza.directives) {
-      stanzaLatest.set(directive.key, directive);
-    }
-    for (const [key, directive] of stanzaLatest) {
-      if (!seen.has(key)) {
-        seen.set(key, directive);
-      }
+    for (const [key, directive] of lastDefinitionPerKey(stanza)) {
+      if (!seen.has(key)) seen.set(key, directive);
     }
   }
   return Array.from(seen.values());

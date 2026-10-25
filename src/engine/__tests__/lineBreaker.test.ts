@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { breakLines } from '../processors/lineBreaker';
+import { breakLines, splitSegments } from '../processors/lineBreaker';
 import { runPipeline } from '../pipeline';
 import type { ConfDirective, EventMetadata, ValidationDiagnostic } from '../types';
 import { runCtx, FIXED_NOW } from './runCtx';
@@ -373,6 +373,10 @@ describe('#472 — a LINE_BREAKER that does not compile', () => {
     expect(lb).toHaveLength(1);
     expect(lb[0]!.message).toContain('no capturing group');
     expect(lb[0]!.message).not.toContain('does not compile');
+  });
+
+  it('is resolved before splitting, which refuses a pattern that does not compile (#561)', () => {
+    expect(() => splitSegments('a\nb', '([\\r\\n]+', [])).toThrow(/needs a pattern that compiles/);
   });
 });
 

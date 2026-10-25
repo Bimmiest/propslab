@@ -23,6 +23,7 @@ import type {
 } from '../types';
 import { getCanonicalDirectiveKey } from '../directiveRegistry';
 import { classifyStanza } from '../stanzaRegistry';
+import { endsWithContinuation } from '../utils/directiveValues';
 
 // ---------------------------------------------------------------------------
 // Regex patterns
@@ -53,16 +54,6 @@ const COMMENT_RE = /^#/;
 
 /** Matches a blank / whitespace-only line. */
 const BLANK_RE = /^\s*$/;
-
-// Splunk uses trailing backslash for line continuation (not leading whitespace).
-// A line continues only when it ends with an ODD number of backslashes — an even
-// count is escaped literal backslashes (e.g. a Windows path "C:\\dir\\"), not a
-// continuation marker.
-function endsWithContinuation(value: string): boolean {
-  let count = 0;
-  for (let i = value.length - 1; i >= 0 && value[i] === '\\'; i--) count++;
-  return count % 2 === 1;
-}
 
 // ---------------------------------------------------------------------------
 // Class-based directive detection

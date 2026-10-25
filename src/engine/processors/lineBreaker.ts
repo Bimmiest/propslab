@@ -221,20 +221,9 @@ export function splitSegments(
   maxSegments = Infinity,
 ): Segment[] {
   const lineBreakerRegex = safeRegex(pattern);
-  if (!lineBreakerRegex) {
-    // Invalid regex — treat entire data as one segment. A user-supplied
-    // LINE_BREAKER that fails to compile silently disables event breaking, so
-    // surface it (the default '([\r\n]+)' always compiles, so this is a real config).
-    if (diagnostics && getDirective(directives, 'LINE_BREAKER') !== undefined) {
-      diagnostics.push({
-        level: 'warning',
-        message: `LINE_BREAKER pattern (${pattern}) does not compile (${validateRegex(pattern) ?? 'invalid regex'}). Event breaking was skipped — the entire input is treated as one event.`,
-        file: 'props.conf',
-        ...atDirective(effectiveDirective(directives, 'LINE_BREAKER')),
-      });
-    }
-    return [{ text: rawData, offset: 0 }];
-  }
+  // breakLines resolves a LINE_BREAKER that does not compile to the default
+  // first, and reports it there; scaffold passes a pattern it built.
+  if (!lineBreakerRegex) throw new Error(`splitSegments needs a pattern that compiles: ${pattern}`);
 
   const segments: Segment[] = [];
   const pushSegment = (start: number, end: number) => {

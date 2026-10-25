@@ -16,7 +16,8 @@
 // and keeps them.
 // ---------------------------------------------------------------------------
 
-import type { ConfDirective, ConfStanza, OverriddenDirective } from '../types';
+import type { ConfStanza, OverriddenDirective } from '../types';
+import { lastDefinitionPerKey } from './stanzaMatcher';
 
 /** A stanza, named the way the user wrote it, with where to find it. */
 export interface StanzaOrigin {
@@ -69,17 +70,6 @@ function originOf(stanza: ConfStanza): StanzaOrigin {
 }
 
 /**
- * Splunk's rule inside one stanza: the last definition of a key wins. Applied
- * per stanza before the cross-stanza contest, so a stanza that defines a key
- * twice competes with the value it would actually use.
- */
-function lastDefinitionPerKey(stanza: ConfStanza): Map<string, ConfDirective> {
-  const latest = new Map<string, ConfDirective>();
-  for (const directive of stanza.directives) latest.set(directive.key, directive);
-  return latest;
-}
-
-/**
  * Resolve the effective configuration for an event.
  *
  * `stanzas` must arrive in precedence order, highest first -- which is what
@@ -97,6 +87,8 @@ export function resolveEffectiveConfig(stanzas: ConfStanza[]): EffectiveDirectiv
   for (const stanza of stanzas) {
     const origin = originOf(stanza);
 
+    // Last definition per key first, so a stanza that defines a key twice
+    // competes with the value it would actually use.
     for (const [key, directive] of lastDefinitionPerKey(stanza)) {
       const existing = winners.get(key);
 
