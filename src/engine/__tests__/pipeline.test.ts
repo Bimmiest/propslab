@@ -419,3 +419,18 @@ MAX_TIMESTAMP_LOOKAHEAD = 128`;
     expect(result.events[59]?._time?.toISOString()).toBe('2026-10-06T15:30:59.282Z');
   });
 });
+
+describe('runPipeline — the rename target on the result (#611)', () => {
+  const meta: EventMetadata = { index: 'main', host: 'h', source: 's', sourcetype: 'orig' };
+
+  it('names the sourcetype search-time settings come from when a matched stanza renames', () => {
+    const { result } = runPipeline('x', meta, '[orig]\nrename = renamed\n', '', { perEventPipeline: false });
+    expect(result.renamedSourcetype).toBe('renamed');
+    expect(result.inputMetadata.sourcetype).toBe('orig');
+  });
+
+  it('leaves it out when nothing renames', () => {
+    const { result } = runPipeline('x', meta, '[orig]\nKV_MODE = none\n', '', { perEventPipeline: false });
+    expect(result).not.toHaveProperty('renamedSourcetype');
+  });
+});

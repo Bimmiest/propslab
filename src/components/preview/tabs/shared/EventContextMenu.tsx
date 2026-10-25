@@ -37,7 +37,7 @@ export function EventContextMenu({
   selectionText?: string;
   selectionStart?: number;
 }) {
-  const { stanza, apply: applyDirective } = useApplyDirective();
+  const { stanza, stanzaFor, apply: applyDirective } = useApplyDirective(event.metadata.sourcetype);
 
   // Capture the native selection when the menu opens — by the time an item's onSelect
   // fires, the menu has taken focus and window.getSelection() is usually empty. A
@@ -101,7 +101,7 @@ export function EventContextMenu({
           raw={event._raw}
           selection={selection}
           selectionStart={effectiveStart}
-          stanza={stanza}
+          stanza={stanzaFor('TIME_PREFIX')}
           onApply={(value) => applyDirective('TIME_PREFIX', value)}
           onClose={() => setTimePrefixOpen(false)}
         />

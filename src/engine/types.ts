@@ -196,6 +196,12 @@ export interface ProcessingResult {
    * unchanged. See docs/adr/0002-input-time-sourcetype-and-rename.md.
    */
   inputMetadata: EventMetadata;
+  /**
+   * The sourcetype whose stanza search-time settings come from, when a matched
+   * stanza's `rename` points away from `inputMetadata.sourcetype`. See
+   * docs/adr/0002-input-time-sourcetype-and-rename.md.
+   */
+  renamedSourcetype?: string;
 }
 
 export type DiagnosticLevel = 'error' | 'warning' | 'info';
