@@ -69,7 +69,7 @@
     "tailwindcss": "^4.2.0",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.71.1",
-    "vite": "^8.3.4",
+    "vite": "^8.3.5",
     "vitest": "^5.0.1"
   },
   "overrides": {
@@ -91,7 +91,7 @@
       "qs": "6.16.0"
     },
     "monaco-editor": {
-      "dompurify": "3.4.16"
+      "dompurify": "3.4.17"
     }
   }
 }
