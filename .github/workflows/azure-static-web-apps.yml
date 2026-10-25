@@ -110,7 +110,7 @@ permissions: {}
 # again. It guarantees nothing for a dispatch made while the variable is
 # unset: the rollback will not stick.
 #
-# Rollback procedure (also in the README and CONTRIBUTING):
+# Rollback procedure (also in docs/deployment.md and CONTRIBUTING):
 #   1. Settings → Secrets and variables → Actions → Variables: set
 #      DEPLOY_PAUSED to `true`.
 #   2. Dispatch this workflow on main with `sha` = the commit to put back.

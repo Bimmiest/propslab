@@ -59,7 +59,7 @@ jobs:
       # a launcher shim for it; the binary arrives through optionalDependencies
       # and the package works without the swap. pcre2-wasm-utf16 is prebuilt
       # and has no install or prepare script.
-      - uses: Bimmiest/shared-workflows/.github/actions/setup-node-project@3e31d07ba1f4472f7526ed8f738318287dd85642 # v1.0.0
+      - uses: Bimmiest/shared-workflows/.github/actions/setup-node-project@9d5ed93ea7b9311ae1b9b460dfa9f9da0a28fffe # v1.1.0
         with:
           # Both lockfiles: this job installs the MCP server's deps too (see
           # the next step), so its lockfile belongs in the cache key.
@@ -131,23 +131,25 @@ jobs:
         # slack rather than the shared default of one, because each floor here
         # is the measured figure minus one point (see vitest.config.ts) and the
         # MCP server's must hold on its Windows and macOS legs too.
-        uses: Bimmiest/shared-workflows/.github/actions/coverage-ratchet@3e31d07ba1f4472f7526ed8f738318287dd85642 # v1.0.0
+        uses: Bimmiest/shared-workflows/.github/actions/coverage-ratchet@9d5ed93ea7b9311ae1b9b460dfa9f9da0a28fffe # v1.1.0
         with:
           slack: '3'
 
-      # Every relative link in every Markdown file resolves, and the ADR index
-      # in docs/adr/README.md agrees with the directory and is in order.
-      # src/__tests__/docs.test.ts checks the README's script list as well;
-      # this covers the files that test does not read.
+      # Every relative link in every Markdown file resolves, the ADR index
+      # in docs/adr/README.md agrees with the directory and is in order, and
+      # the README keeps to readmeMaxLines in .docs-check.json.
+      # src/__tests__/docs.test.ts checks the script list in
+      # docs/development.md as well; this covers the files that test does not
+      # read.
       - name: Documentation links and the ADR index
-        uses: Bimmiest/shared-workflows/.github/actions/docs-check@3e31d07ba1f4472f7526ed8f738318287dd85642 # v1.0.0
+        uses: Bimmiest/shared-workflows/.github/actions/docs-check@9d5ed93ea7b9311ae1b9b460dfa9f9da0a28fffe # v1.1.0
 
       # Every production dependency's licence is on .licence-allowlist.json,
       # read from the lockfile, so it needs no network and sees exactly what
       # `npm ci --omit=dev` installs. The MCP server's lockfile is checked in
       # its own job.
       - name: Production dependency licences
-        uses: Bimmiest/shared-workflows/.github/actions/licence-check@3e31d07ba1f4472f7526ed8f738318287dd85642 # v1.0.0
+        uses: Bimmiest/shared-workflows/.github/actions/licence-check@9d5ed93ea7b9311ae1b9b460dfa9f9da0a28fffe # v1.1.0
 
       # Chromium only — the e2e suite covers browser-level wiring (CSP, worker
       # bundling, Monaco's chunk split), not cross-browser rendering, so the
@@ -156,7 +158,7 @@ jobs:
       # @playwright/test version, so a bump invalidates it on its own, and
       # installs the apt packages either way.
       - name: Playwright browser
-        uses: Bimmiest/shared-workflows/.github/actions/playwright-browser@3e31d07ba1f4472f7526ed8f738318287dd85642 # v1.0.0
+        uses: Bimmiest/shared-workflows/.github/actions/playwright-browser@9d5ed93ea7b9311ae1b9b460dfa9f9da0a28fffe # v1.1.0
 
       - name: End-to-end smoke tests
         id: e2e
@@ -219,7 +221,7 @@ jobs:
       # to that copy. Installing only the package is what proves it.
       # --ignore-scripts for the reason given in the app's job above. The
       # action's steps take their own working directory, not the job's default.
-      - uses: Bimmiest/shared-workflows/.github/actions/setup-node-project@3e31d07ba1f4472f7526ed8f738318287dd85642 # v1.0.0
+      - uses: Bimmiest/shared-workflows/.github/actions/setup-node-project@9d5ed93ea7b9311ae1b9b460dfa9f9da0a28fffe # v1.1.0
         with:
           cache-dependency-path: packages/mcp-server/package-lock.json
           working-directory: packages/mcp-server
@@ -241,7 +243,7 @@ jobs:
         # Linux's: the launcher tests skip elsewhere, so the floors are set for
         # the lowest leg and the others sit further above them.
         if: matrix.os == 'ubuntu-latest'
-        uses: Bimmiest/shared-workflows/.github/actions/coverage-ratchet@3e31d07ba1f4472f7526ed8f738318287dd85642 # v1.0.0
+        uses: Bimmiest/shared-workflows/.github/actions/coverage-ratchet@9d5ed93ea7b9311ae1b9b460dfa9f9da0a28fffe # v1.1.0
         with:
           config: vitest.config.mts
           slack: '3'
@@ -252,7 +254,7 @@ jobs:
         # run on the machine of whoever starts it. Linux only, because the
         # lockfile is the same on every leg.
         if: matrix.os == 'ubuntu-latest'
-        uses: Bimmiest/shared-workflows/.github/actions/licence-check@3e31d07ba1f4472f7526ed8f738318287dd85642 # v1.0.0
+        uses: Bimmiest/shared-workflows/.github/actions/licence-check@9d5ed93ea7b9311ae1b9b460dfa9f9da0a28fffe # v1.1.0
         with:
           working-directory: packages/mcp-server
 
@@ -286,7 +288,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: Bimmiest/shared-workflows/.github/actions/setup-node-project@3e31d07ba1f4472f7526ed8f738318287dd85642 # v1.0.0
+      - uses: Bimmiest/shared-workflows/.github/actions/setup-node-project@9d5ed93ea7b9311ae1b9b460dfa9f9da0a28fffe # v1.1.0
 
       - name: Verify the regex engine's WebAssembly
         run: node scripts/check-wasm-checksum.mjs
@@ -332,7 +334,7 @@ jobs:
         # --audit-level=high` plus .audit-exceptions.json: an advisory nothing
         # reachable is exposed to can be listed there with its reason and an
         # expiry, and an expired or unneeded entry fails the step.
-        uses: Bimmiest/shared-workflows/.github/actions/audit-check@3e31d07ba1f4472f7526ed8f738318287dd85642 # v1.0.0
+        uses: Bimmiest/shared-workflows/.github/actions/audit-check@9d5ed93ea7b9311ae1b9b460dfa9f9da0a28fffe # v1.1.0
 
       - name: Report dev-only advisories
         # Reported, never fatal: a CVE in a build tool must not be able to block
@@ -348,7 +350,7 @@ jobs:
         # holds whatever the agent driving it can reach. Its exceptions file is
         # packages/mcp-server/.audit-exceptions.json: one file per lockfile,
         # because an entry the other report does not need would fail here.
-        uses: Bimmiest/shared-workflows/.github/actions/audit-check@3e31d07ba1f4472f7526ed8f738318287dd85642 # v1.0.0
+        uses: Bimmiest/shared-workflows/.github/actions/audit-check@9d5ed93ea7b9311ae1b9b460dfa9f9da0a28fffe # v1.1.0
         with:
           working-directory: packages/mcp-server
 

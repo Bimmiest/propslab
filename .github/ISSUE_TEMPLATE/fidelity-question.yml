@@ -1,21 +1,21 @@
-name: Fidelity Question
-description: Report a discrepancy between Propslab and Splunk
+name: Fidelity question
+description: The output of Propslab is different from the output of real Splunk
 labels: [question]
 body:
   - type: markdown
     attributes:
       value: |
-        If Propslab's output differs from real Splunk, help us understand it. Provide:
-        - The input line(s) you tested
-        - The `props.conf` and `transforms.conf` stanzas
-        - What Splunk produced
-        - Your Splunk version and build
-        - Confirmation you observed this on a licensed instance you own
+        Use this form when the output of Propslab is different from the output of real Splunk. Give these items:
+        - the input lines that you tested
+        - the `props.conf` and `transforms.conf` stanzas
+        - the output of Splunk
+        - the version and the build of Splunk
+        - a confirmation that you saw this on a licensed instance that you own.
   - type: textarea
     id: input
     attributes:
-      label: Input line(s)
-      description: The raw event or log line(s) you're testing
+      label: Input lines
+      description: The raw events or log lines that you tested.
       placeholder: "Example: 192.168.1.1 - user [01/Jan/2024:12:00:00 +0000]"
     validations:
       required: true
@@ -23,7 +23,7 @@ body:
     id: props
     attributes:
       label: props.conf stanza
-      description: The relevant stanza from props.conf
+      description: The stanza from props.conf that applies to the input.
       placeholder: |
         [sourcetype]
         TRANSFORMS = transform1, transform2
@@ -33,7 +33,7 @@ body:
     id: transforms
     attributes:
       label: transforms.conf stanzas
-      description: Any relevant stanzas from transforms.conf
+      description: The stanzas from transforms.conf that apply to the input.
       placeholder: |
         [transform1]
         REGEX = ...
@@ -44,7 +44,7 @@ body:
     id: splunk-output
     attributes:
       label: What Splunk produced
-      description: The events and fields your Splunk instance generated
+      description: The events and the fields that your Splunk instance made.
       placeholder: "Events and extracted field values..."
     validations:
       required: true
@@ -52,7 +52,7 @@ body:
     id: splunk-version
     attributes:
       label: Splunk version and build
-      description: The exact version and build number (e.g., "10.4.0, build abc123")
+      description: The exact version and build number, for example "10.4.0, build abc123".
       placeholder: "10.4.0, build abc123"
     validations:
       required: true
@@ -60,7 +60,7 @@ body:
     id: licensed
     attributes:
       label: Confirmation
-      description: Confirm you observed this on a licensed Splunk instance you own
+      description: Confirm that you saw this on a licensed Splunk instance that you own.
       options:
         - label: I confirmed this on a Splunk instance licensed to me or my organization
           required: true

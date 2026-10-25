@@ -45,7 +45,7 @@ What layered input adds to the result is provenance that parsing would otherwise
 - every `ConfStanza` carries `layers` (all files defining it, lowest first) with `layer`/`lineRange` naming the highest-precedence one;
 - every diagnostic derived from a directive or stanza carries `layer` alongside `line`, since both files have a line 7.
 
-Passing a plain string produces exactly what it always did, with no provenance fields; passing one layer makes the merge a no-op. Together with stanza precedence (see the README), these are the two halves of what `btool … --debug` prints: which stanza won, and from which file.
+A plain string gives the same result as before, with no provenance fields. One layer makes the merge a no-op. Layered input and stanza precedence ([pipeline.md](pipeline.md#stanza-precedence)) are the two halves of what `btool … --debug` prints: which stanza won, and from which file.
 
 This is within-stanza only — a directive that wins its stanza can still lose to a higher-precedence *stanza*, which `matchStanzas`/`mergeDirectives` resolve separately.
 
