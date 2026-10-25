@@ -20,7 +20,19 @@
 //    and fails in PCRE, so the generator makes none.
 //  - A lookbehind of unbounded length is a JS-only feature.
 //  - `[:` inside a class, which PCRE reads as the start of a POSIX class, is
-//    never generated.
+//    never generated, nor is a class that opens with `[=` or `[.`, which PCRE
+//    reads as POSIX collating syntax when a matching `=]` or `.]` follows.
+//  - A repeated group that can match empty. PCRE ends the loop on an empty
+//    iteration; JS rejects that iteration and backtracks into it, so
+//    `([^a]*?)*` matches "" at the start of "*" in PCRE and "*" in JS (#584).
+//    PCRE's is Splunk's answer. The generator quantifies only groups that
+//    must consume a character.
+//
+// And one fault in the oracle rather than a difference: V8 13.6 (Node 24)
+// drops the `i` of a `(?i:…)` group that opens with `\b` or `\B` when
+// another alternative starts with a non-word character, so
+// `/-|(?i:\Bb)/` misses the "B" in "xB" (#585). The mid-pattern property
+// does not open a flag group with a word boundary.
 //
 // The seed is fixed so a run is reproducible.
 // ---------------------------------------------------------------------------
@@ -164,7 +176,10 @@ const charClass = fc
     const open = `[${negate ? '^' : ''}`;
     const rest = `${items.join('')}${caret ? '^' : ''}]`;
     return { js: `${open}${bracket ? '\\]' : ''}${rest}`, pcre: `${open}${bracket ? ']' : ''}${rest}` };
-  });
+  })
+  // `[=` or `[.` opening a class reads as POSIX collating syntax when a
+  // matching `=]` or `.]` follows (`[==]`), which PCRE refuses outside a class.
+  .filter(({ pcre }) => !/^\[[.=]/.test(pcre));
 
 const quantifier = fc
   .tuple(fc.constantFrom('*', '+', '?', '{2}', '{1,}', '{0,2}', '{1,3}'), fc.boolean())
@@ -177,6 +192,20 @@ const textAtom: fc.Arbitrary<Atom> = fc.oneof(
 
 const anchor: fc.Arbitrary<Atom> = fc.constantFrom('^', '$', '\\b', '\\B').map((s) => ({ t: 'anchor', s }));
 
+/** Whether an atom can match without consuming a character. */
+function canMatchEmpty(a: Atom): boolean {
+  switch (a.t) {
+    case 'text':
+      return false;
+    case 'anchor':
+      return true;
+    case 'quant':
+      return /^(?:\*|\?|\{0,)/.test(a.q) || canMatchEmpty(a.atom);
+    case 'group':
+      return ['la', 'nla', 'lb', 'nlb'].includes(a.kind) || a.body.some((seq) => seq.every(canMatchEmpty));
+  }
+}
+
 const { alt } = fc.letrec<{ alt: Alt; seq: Seq; atom: Atom; group: Atom }>((tie) => ({
   alt: fc.array(tie('seq'), { minLength: 1, maxLength: 3 }),
   seq: fc.array(tie('atom'), { maxLength: 5 }),
@@ -185,11 +214,13 @@ const { alt } = fc.letrec<{ alt: Alt; seq: Seq; atom: Atom; group: Atom }>((tie)
     textAtom,
     anchor,
     tie('group'),
-    // Anchors and lookarounds are not quantifiable in both engines; everything else is.
+    // Anchors and lookarounds are not quantifiable in both engines. A group
+    // that can match empty repeats differently in the two (see the header),
+    // so it stays unquantified.
     fc
       .tuple(fc.oneof(textAtom, tie('group')), quantifier)
       .filter(([a]) => !(a.t === 'group' && ['la', 'nla', 'lb', 'nlb'].includes(a.kind)))
-      .map(([atom, q]): Atom => ({ t: 'quant', atom, q })),
+      .map(([atom, q]): Atom => (canMatchEmpty(atom) ? atom : { t: 'quant', atom, q })),
   ),
   group: fc
     .tuple(fc.constantFrom('cap', 'nc', 'named', 'la', 'nla', 'lb', 'nlb'), tie('alt'))
@@ -327,17 +358,31 @@ describe('PCRE2 agrees with JS on the syntax the two share (#368)', () => {
   });
 
   /**
+   * Whether the zero-width run a sequence opens with holds `\b` or `\B`: the
+   * flag group V8 misreads (see the header).
+   */
+  const opensWithBoundary = (s: Seq) => {
+    for (const a of s) {
+      if (a.t !== 'anchor') return false;
+      if (a.s === '\\b' || a.s === '\\B') return true;
+    }
+    return false;
+  };
+
+  /**
    * `pre(?i)post|rest`, optionally inside a capturing group with text around
    * it: the documented scope of a mid-pattern flag group is the rest of the
    * enclosing group, each later alternative included.
    */
-  const midPattern = fc.record({
-    outer: fc.tuple(seqOnly, seqOnly),
-    inGroup: fc.boolean(),
-    pre: seqOnly,
-    post: seqOnly,
-    rest: fc.option(seqOnly, { nil: undefined }),
-  });
+  const midPattern = fc
+    .record({
+      outer: fc.tuple(seqOnly, seqOnly),
+      inGroup: fc.boolean(),
+      pre: seqOnly,
+      post: seqOnly,
+      rest: fc.option(seqOnly, { nil: undefined }),
+    })
+    .filter(({ post, rest }) => !opensWithBoundary(post) && (rest === undefined || !opensWithBoundary(rest)));
   const seqText = (s: Atom[], flavour: 'js' | 'pcre' = 'js') =>
     s
       .map((a) => (a.t === 'text' ? (flavour === 'pcre' ? (a.pcre ?? a.s) : a.s) : a.t === 'anchor' ? a.s : ''))

@@ -84,6 +84,23 @@ describe('PCRE syntax compiles and means what it means in PCRE', () => {
     expect(/bar$/.test('foo bar\n')).toBe(false);
   });
 
+  it('ends a repeated group on an empty iteration, where a JS regex backtracks into it (#584)', () => {
+    const first = (pattern: string, s: string) => {
+      const m = safeRegex(pattern)!.exec(s);
+      return m && [m.index, m[0]];
+    };
+    expect(first('([^a]*?)*', '*')).toEqual([0, '']);
+    expect(first('(?i)(a*?|)*|', 'a')).toEqual([0, '']);
+    expect(first('([a]*?|)*', 'a')).toEqual([0, '']);
+    expect(/([^a]*?)*/.exec('*')?.[0]).toBe('*');
+  });
+
+  it('keeps a leading (?i) and a \\B across every alternative (#585)', () => {
+    const m = safeRegex('(?i)[a^]|\\Bb')!.exec('aB', 1);
+    expect(m && [m.index, m[0]]).toEqual([1, 'B']);
+    expect(safeRegex('(?i)[a^]|\\Bb')!.exec('-B', 1)).toBeNull();
+  });
+
   it('lets . match \\r under LF newlines, which a JS regex does not', () => {
     expect(matches('^a.b$', 'a\rb')).toBe(true);
     expect(matches('^a.b$', 'a\nb')).toBe(false);
@@ -107,6 +124,11 @@ describe('PCRE syntax compiles and means what it means in PCRE', () => {
     expect(matches('^[[:punct:]]+$', '!/:@[`{~')).toBe(true);
     expect(matches('^[[:^digit:]]$', '5')).toBe(false);
     expect(validateRegex('[[:digt:]]')).toMatch(/unknown POSIX class/);
+    // A whole class spelled as collating syntax is refused; without the
+    // closing `=]` it is an ordinary class.
+    expect(validateRegex('[==]')).not.toBeNull();
+    expect(validateRegex('[.a.]')).not.toBeNull();
+    expect(matches('^[=a]$', '=')).toBe(true);
   });
 
   it('keeps possessive quantifiers and atomic groups from giving anything back', () => {
