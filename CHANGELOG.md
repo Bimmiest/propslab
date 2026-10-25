@@ -9,6 +9,7 @@ All notable changes to Propslab are documented here, newest first. Entries say w
 ### Changed
 
 - **A run that takes more than 4 s stops, and an error names the stage where it stopped** ([#560](https://github.com/Bimmiest/propslab/issues/560)). The preview shows the result of the stages before that stage. Before, the watchdog stopped the worker and the preview showed no result. A `MATCH_LIMIT` or `DEPTH_LIMIT` of 0 now means 10,000,000 steps, not "no limit", in the app and in the MCP server.
+- **The dictionary and the editor hover say where Propslab guesses** ([#561](https://github.com/Bimmiest/propslab/issues/561)). `TIME_FORMAT`, `EXTRACT`, `SEDCMD` and `INGEST_EVAL` show a note for a behaviour that no Splunk recording confirms. [fidelity.md](docs/fidelity.md#guesses-that-no-recording-confirms) lists each guess.
 - **The MCP server's sandbox workers get no environment, and code generation from strings is refused** ([#568](https://github.com/Bimmiest/propslab/issues/568)). A worker running agent-supplied patterns no longer inherits the API keys an MCP client may start the server with, `eval` and `new Function` throw in the server and its workers, and `PROPSLAB_MCP_NO_REEXEC=1` always warns that it turns the permission model off.
 
 ### Fixed
