@@ -124,6 +124,18 @@ describe('EXTRACT — what a match leaves behind', () => {
     ]);
   });
 
+  it('explains a match with no named group as that, not as a pattern that missed (#616)', () => {
+    const e = extractFields([event('user=bob action=login')], [dir('u', 'user=\\w+')], runCtx(FIXED_NOW))[0]!;
+    expect(e.fields).toEqual({});
+    expect(e.noOps?.map((n) => n.reason)).toEqual([{ kind: 'no-named-groups' }]);
+  });
+
+  it('explains a match whose named groups all sat out (#616)', () => {
+    const e = extractFields([event('user=bob')], [dir('u', '(?:(?<a>zzz)|user=\\w+)')], runCtx(FIXED_NOW))[0]!;
+    expect(e.fields).toEqual({});
+    expect(e.noOps?.map((n) => n.reason)).toEqual([{ kind: 'groups-unset', fields: ['a'] }]);
+  });
+
   it('reports only the fields that collided when some were new', () => {
     const e = extractFields(
       [event('a=1 b=2', { a: 'x' })],

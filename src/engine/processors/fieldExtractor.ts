@@ -203,6 +203,8 @@ function storeGroups(
     noteNoOp(state, directive, { kind: 'fields-already-set', fields: alreadySet });
   } else if (emptied.length > 0) {
     noteNoOp(state, directive, { kind: 'values-empty', fields: emptied });
+  } else {
+    noteNoOp(state, directive, { kind: 'groups-unset', fields: Object.keys(groups) });
   }
 }
 
@@ -235,7 +237,11 @@ function runExtraction(
     noteNoOp(state, directive, { kind: 'regex-limit', error: regex.lastError });
     return;
   }
-  if (!m || !m.groups) {
+  if (m && !m.groups) {
+    noteNoOp(state, directive, { kind: 'no-named-groups' });
+    return;
+  }
+  if (!m?.groups) {
     const { pattern } = parseExtractValue(directive.value);
     const explain = options.explanations.take(
       noOpDirectiveKey({ file: 'props.conf', line: directive.line, directive: directive.key }),

@@ -40,6 +40,14 @@ export type NoOpReason =
   /** It matched, but every field it produces was already set by an earlier rule. */
   | { kind: 'fields-already-set'; fields: string[] }
   /**
+   * It matched, but the pattern has no named capture group, so it names no
+   * field: the commonest EXTRACT mistake, which otherwise reads as a pattern
+   * that did not match.
+   */
+  | { kind: 'no-named-groups' }
+  /** It matched, but none of its named groups took part in the match. */
+  | { kind: 'groups-unset'; fields: string[] }
+  /**
    * It matched, but every value it captured was empty once leading and
    * trailing whitespace was trimmed, and an empty value creates no field.
    */
@@ -79,6 +87,10 @@ export function describeNoOp(reason: NoOpReason): string {
         : 'the pattern did not match anywhere in the source';
     case 'fields-already-set':
       return `it matched, but ${reason.fields.join(', ')} ${reason.fields.length === 1 ? 'was' : 'were'} already set by an earlier rule`;
+    case 'no-named-groups':
+      return 'it matched, but the pattern has no named capture group, so it names no field — write (?<field>…)';
+    case 'groups-unset':
+      return `it matched, but ${reason.fields.join(', ')} took no part in the match, so no field was set`;
     case 'values-empty':
       return `it matched, but ${reason.fields.join(', ')} captured only whitespace, and an empty value creates no field`;
     case 'eval-null':
