@@ -41,6 +41,18 @@ describe('longestPartialMatch', () => {
     expect(partial?.end).toBe('[warn] '.length);
   });
 
+  it('reads a POSIX class and a leading ] as PCRE does (#561)', () => {
+    // A scan to the first `]` cut `[[:digit:]]+x` after `[[:digit:]`, which
+    // does not compile, and reported that nothing matched.
+    expect(longestPartialMatch('[[:digit:]]+x', '123y')).toEqual({ end: 3, prefix: '[[:digit:]]+' });
+    expect(longestPartialMatch('[]a]+Z', ']a]b')).toEqual({ end: 3, prefix: '[]a]+' });
+  });
+
+  it('drops a cut that does not compile rather than read it as a miss (#561)', () => {
+    // The scan cuts inside `\k<w>`; those prefixes do not compile.
+    expect(longestPartialMatch(String.raw`(?<w>a)\k<w>Z`, 'aab')).toEqual({ end: 2, prefix: String.raw`(?<w>a)\k<w>` });
+  });
+
   it('returns null when not even the first atom matches', () => {
     // Nothing to report beats reporting offset 0 as though it were a finding.
     expect(longestPartialMatch(String.raw`ZZZ\d+`, 'nothing alike here')).toBeNull();

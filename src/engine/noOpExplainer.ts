@@ -14,6 +14,7 @@
 // ---------------------------------------------------------------------------
 
 import { extractionLimits, safeProbeRegex, safeRegex, validateRegex, type RegexLimits } from '../utils/splunkRegex';
+import { classEnd } from '../utils/regexSyntax';
 
 const PROBE_LIMITS = extractionLimits();
 
@@ -141,11 +142,8 @@ function atomBoundaries(pattern: string): number[] {
     if (c === '\\') {
       i += 2;
     } else if (c === '[') {
-      i++;
-      while (i < pattern.length && pattern[i] !== ']') {
-        i += pattern[i] === '\\' ? 2 : 1;
-      }
-      i++;
+      const end = classEnd(pattern, i);
+      i = end === -1 ? pattern.length : end;
     } else if (c === '(') {
       groupDepth++;
       i++;
@@ -190,6 +188,10 @@ function atomBoundaries(pattern: string): number[] {
  * also matches there, so "this prefix matches" holds up to some cut and not
  * after it. Trying every cut cost one probe per atom per event, which at a few
  * thousand events was most of the run (#415).
+ *
+ * A cut the atom scan got wrong, inside `\k<name>` say, does not compile. It
+ * is dropped from the search: read as a miss, it sent the search below the
+ * cuts that do match (#561).
  */
 export function longestPartialMatch(pattern: string, text: string): { end: number; prefix: string } | null {
   // The last boundary is the whole pattern, which by the time this is called
@@ -198,12 +200,14 @@ export function longestPartialMatch(pattern: string, text: string): { end: numbe
     .slice(0, -1)
     .filter((cut) => cut > 0);
 
-  const probe = (i: number): { end: number; prefix: string; empty: boolean } | null => {
+  const probe = (i: number): { end: number; prefix: string; empty: boolean } | 'invalid' | null => {
     const prefix = pattern.slice(0, cuts[i]);
     // Splunk's extraction limits bound each probe, so explaining a no-op can
     // never cost more than one extraction attempt per prefix. The probes go to
     // a cache of their own so they never evict the patterns the pipeline runs.
-    const match = safeProbeRegex(prefix, PROBE_LIMITS)?.exec(text);
+    const regex = safeProbeRegex(prefix, PROBE_LIMITS);
+    if (!regex) return 'invalid';
+    const match = regex.exec(text);
     return match ? { end: match.index + match[0].length, prefix, empty: match[0] === '' } : null;
   };
 
@@ -214,7 +218,11 @@ export function longestPartialMatch(pattern: string, text: string): { end: numbe
   while (lo <= hi) {
     const mid = Math.floor((lo + hi) / 2);
     const result = probe(mid);
-    if (result) {
+    if (result === 'invalid') {
+      // `best` is below `lo`, so dropping `mid` does not move it.
+      cuts.splice(mid, 1);
+      hi--;
+    } else if (result) {
       best = mid;
       found = result;
       lo = mid + 1;
@@ -227,7 +235,7 @@ export function longestPartialMatch(pattern: string, text: string): { end: numbe
   // prefix may still agree with something.
   for (let i = best; i >= 0; i--) {
     const result = i === best ? found : probe(i);
-    if (result && !result.empty) return { end: result.end, prefix: result.prefix };
+    if (result && result !== 'invalid' && !result.empty) return { end: result.end, prefix: result.prefix };
   }
   return null;
 }
