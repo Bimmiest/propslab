@@ -43,7 +43,7 @@ jobs:
   # exist so that the first false positive lands in a file that already says
   # what an entry needs, and which of its lines are load-bearing.
   security:
-    uses: Bimmiest/shared-workflows/.github/workflows/security.yml@3e31d07ba1f4472f7526ed8f738318287dd85642 # v1.0.0
+    uses: Bimmiest/shared-workflows/.github/workflows/security.yml@9d5ed93ea7b9311ae1b9b460dfa9f9da0a28fffe # v1.1.0
     # `pull-requests: read` because on a pull request gitleaks lists the PR's
     # commits to work out what to scan, and the restricted token 403s without
     # it. Read, not write: the findings are in the job summary, and a job

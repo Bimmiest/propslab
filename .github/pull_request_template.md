@@ -40,7 +40,7 @@ evidence. Paste the interesting lines.
 - [ ] `cd packages/mcp-server && npm run test:coverage`, where the change reaches the engine or the server
 - [ ] `npm run test:mutation -- --mutate <file>` for a changed file that `stryker.config.mjs` mutates (`mutation.yml` runs it on the pull request too)
 - [ ] For a simulated directive: classified in `directiveSupport.ts`, with a "Doc-derived" citation ([CONTRIBUTING](../CONTRIBUTING.md#adding-or-changing-a-simulated-directive))
-- [ ] Documentation this change dates is updated in this change: `CHANGELOG.md` under `Unreleased` for anything a user would notice, the README where a capability changed shape, an ADR and its index row where something was decided, an `Upgrade-Note:` line in the commit where an operator must act
+- [ ] Documentation this change dates is updated in this change: `CHANGELOG.md` under `Unreleased` for anything a user would notice, the README or the file in `docs/` where a capability changed shape, an ADR and its index row where something was decided, an `Upgrade-Note:` line in the commit where an operator must act
 
 ## Not done
 

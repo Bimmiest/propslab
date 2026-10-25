@@ -22,7 +22,7 @@
 //      rather than failed or passed; protection expressed as a ruleset is
 //      always verified.
 //
-// The README states these as facts; this is what keeps them facts.
+// docs/deployment.md states these as facts; this is what keeps them facts.
 //
 // (1) and (3) read with the workflow's GITHUB_TOKEN. (2) lists secret names
 // twice, and a fine-grained token needs a different repository permission for

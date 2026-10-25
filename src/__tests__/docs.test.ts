@@ -26,10 +26,10 @@ const existing = Object.keys(
     { query: '?url' },
   ),
 );
-const readme = markdown['/README.md'] ?? '';
+const development = markdown['/docs/development.md'] ?? '';
 
-function buildBlockScripts(text: string): Set<string> {
-  const start = text.indexOf('## Build');
+function scriptListScripts(text: string): Set<string> {
+  const start = text.indexOf('## Scripts');
   const section = start === -1 ? '' : text.slice(start, text.indexOf('\n## ', start + 1));
   const found = new Set<string>();
   const run = /npm\s+run\s+([a-z0-9:.-]+)/g;
@@ -48,16 +48,16 @@ function exists(path: string): boolean {
 
 describe('Documentation', () => {
   const scripts = Object.keys(pkg.scripts);
-  const documented = buildBlockScripts(readme);
+  const documented = scriptListScripts(development);
 
-  it('every package.json script appears in the README Build block', () => {
+  it('every package.json script appears in the docs/development.md script list', () => {
     const missing = scripts.filter((s) => !documented.has(s));
-    expect(missing, `Scripts missing from README: ${missing.join(', ')}`).toEqual([]);
+    expect(missing, `Scripts missing from docs/development.md: ${missing.join(', ')}`).toEqual([]);
   });
 
-  it('every README Build block script exists in package.json', () => {
+  it('every docs/development.md script list entry exists in package.json', () => {
     const stale = [...documented].filter((s) => !scripts.includes(s));
-    expect(stale, `README lists scripts package.json lacks: ${stale.join(', ')}`).toEqual([]);
+    expect(stale, `docs/development.md lists scripts package.json lacks: ${stale.join(', ')}`).toEqual([]);
   });
 
   for (const [file, text] of Object.entries(markdown)) {

@@ -1,6 +1,82 @@
 # Architecture notes
 
-Contributor-facing internals. The user-facing architecture — pipeline order, stanza precedence, layout — is in the [README](../README.md). The reasoning behind individual engine design choices, and the issues that led to them, is recorded as architecture decision records in [`docs/adr/`](adr/README.md).
+This file describes the internals for contributors: the project structure, the store, the workers, the Monaco bundle, the accessibility patterns and the tech stack. [pipeline.md](pipeline.md) gives the order of the stages and stanza precedence. [user-guide.md](user-guide.md) gives the layout. The architecture decision records in [`docs/adr/`](adr/README.md) give the reasons for the design choices of the engine, and the issues that caused them.
+
+## Project structure
+
+```
+src/
+├── engine/                    # Splunk simulation (pure logic, no React)
+│   ├── types.ts               # SplunkEvent, ProcessingResult, ConfDirective
+│   ├── pipeline.ts            # runPipeline() — sole entry point
+│   ├── pipelineWorker.ts      # Web Worker wrapper
+│   ├── directiveRegistry.ts   # Directive lookup — drives completion,
+│   │                          #   hover, linting AND the dictionary
+│   ├── registry/              # The directive entries, props and transforms
+│   ├── stanzaRegistry.ts      # The four stanza header kinds + precedence
+│   ├── pipelineStages.ts      # The 11 stages, and key → stage lookup
+│   ├── parser/
+│   │   ├── confParser.ts      # INI parser + default/local layer merge → ParsedConf
+│   │   ├── provenance.ts      # Locate a diagnostic at a directive/stanza (+ its layer)
+│   │   └── stanzaMatcher.ts   # Precedence-based stanza matching
+│   ├── processors/            # One file per processing stage
+│   ├── transforms/            # regexTransform, destKeyRouter, ingestEval
+│   ├── cim/                   # cimModels.ts + cimModelsData.ts (CIM 8.5.0)
+│   ├── scaffold/              # Starter props.conf stanza from sample data
+│   └── utils/
+│       ├── epochTime.ts       # _time range guard for INGEST_EVAL / DEST_KEY
+│       └── flattenJson.ts     # With prototype-pollution guard
+│
+├── monaco/                    # Monaco language support
+│   ├── splunkConfCompletion.ts
+│   ├── splunkConfHover.ts
+│   ├── splunkConfFolding.ts
+│   ├── splunkConfDiagnostics.ts
+│   ├── splunkConfCodeActions.ts
+│   ├── timeFormatPreview.ts   # TIME_FORMAT hover preview
+│   ├── timePrefixMatcher.ts   #   and its off-thread TIME_PREFIX match
+│   ├── markdown.ts            # Escape user text in hover Markdown
+│   └── dictionaryCommand.ts   # "Open in dictionary" command id + URI
+│
+├── store/useAppStore.ts       # Zustand store (flat; subscribe per slice)
+├── hooks/                     # useProcessingPipeline, useDebounce, useTheme, usePagination
+├── utils/                     # splunkRegex (the PCRE2 adapter), regexEngineLoader,
+│                              #   strftime, diffEngine, fieldHighlight, countLines
+│
+└── components/
+    ├── layout/                # AppShell, ActivityRail, SimulatorView,
+    │                          #   MobileShell, Header, StatusBar, lazyViews,
+    │                          #   PipelineController (runs the pipeline in a leaf)
+    ├── dictionary/            # DictionaryView + list, detail, badges, entries
+    ├── raw/                   # RawPanel (Monaco plaintext)
+    ├── metadata/              # MetadataPanel
+    ├── editor/                # MonacoEditor, SplunkEditor + props/transforms editors,
+    │                          #   EditorValidationList, editorRegistry
+    ├── preview/
+    │   ├── PreviewPanel.tsx   # Output container
+    │   ├── PreviewFilterBar.tsx
+    │   └── tabs/              # Raw, Timestamp, Highlighted, Diff, Regex,
+    │       └── shared/        #   CimModels, Fields, Transforms, EffectiveConfig
+    ├── settings/              # SettingsPanel (gear in header)
+    ├── onboarding/            # FirstRunBanner
+    ├── help/                  # HelpPanel (pipeline reference slide-out)
+    ├── architecture/          # ArchitecturePanel
+    ├── scaffold/              # ScaffoldModal
+    └── ui/                    # Tabs, Badge, Tooltip, CommandPalette, ErrorBoundary,
+                               #   RootErrorBoundary, retryableLazy, etc.
+
+packages/
+└── mcp-server/                # MCP server over the engine
+    └── src/responseBudget.ts  #   Caps each tool response in bytes on the wire
+
+e2e/                           # Playwright tests (production build, Chromium)
+├── fixtures.ts                # Console/CSP error collection + readiness helpers
+├── smoke.spec.ts
+├── a11y.spec.ts               # axe-core over every main view, both themes
+├── perf.spec.ts               # 20k-event, regex-heavy and 3,000-field budgets
+├── perf-vitals.spec.ts        # LCP, TBT and transferred bytes on first load
+└── perfSummary.ts             # Writes the perf numbers to the job summary
+```
 
 ## State management
 
@@ -50,7 +126,7 @@ The worker also counts the run's fields once (`fieldStats`, `utils/fieldStats.ts
 
 ## Monaco bundling
 
-Monaco's widgets (hover, suggest, code actions, folding, find, multi-cursor) are *contributions*, imported separately from the API surface (`monaco-editor/editor`) in `MonacoEditor.tsx` — one `monaco-editor/features/*/register` module at a time, not all of them, which would also register sticky scroll, rename, code lens and ~40 more contributions the app never enables. `monaco-editor/editor` alone registers providers that nothing ever renders, so dropping a contribution silently removes its feature; the e2e suite exercises each one. `vite.config.ts` groups the slim `esm/vs` tree via `codeSplitting` (Rolldown's replacement for `manualChunks` — it claims modules the graph already reached rather than naming ids to pull in). A bad split type-checks and builds, then fails to mount an editor — which is one of the things the e2e suite exists to catch (see the README's Tests section).
+Monaco's widgets (hover, suggest, code actions, folding, find, multi-cursor) are *contributions*, imported separately from the API surface (`monaco-editor/editor`) in `MonacoEditor.tsx` — one `monaco-editor/features/*/register` module at a time, not all of them, which would also register sticky scroll, rename, code lens and ~40 more contributions the app never enables. `monaco-editor/editor` alone registers providers that nothing ever renders, so dropping a contribution silently removes its feature; the e2e suite exercises each one. `vite.config.ts` groups the slim `esm/vs` tree via `codeSplitting` (Rolldown's replacement for `manualChunks` — it claims modules the graph already reached rather than naming ids to pull in). A bad split passes the type-check and the build, and then the editor does not mount. The e2e suite exists to find this ([testing.md](testing.md#end-to-end-npm-run-teste2e)).
 
 The whole editor loads lazily: `LazyEditors.tsx` is the only thing the shell imports, and it reaches `MonacoEditor`, `SplunkEditor` and `splunkMonacoSetup` through one dynamic import (`editorRuntime.tsx`), so the entry chunk neither contains nor waits for Monaco. Anything that imports monaco at runtime must stay behind that boundary — including `MonacoEnvironment`'s `?worker` import, which the chunk group claims. `scripts/check-bundle-size.mjs` holds each chunk to a gzip budget in CI.
 
@@ -92,3 +168,17 @@ adopting Radix:
 
 Neither shows up in a unit test of an overlay on its own; the e2e suite caught
 both.
+
+## Tech stack
+
+- React 19
+- Vite 8
+- TypeScript 5.9
+- Tailwind CSS 4 (CSS-first config)
+- Monaco Editor 0.57 (mounted directly by `MonacoEditor.tsx`)
+- Zustand 5
+- react-resizable-panels 4.14
+- `diff` 9
+- `cmdk` (command palette)
+- Radix UI primitives (`react-tooltip`, `react-dialog`, `react-context-menu`)
+- PCRE2 10.48 compiled to WebAssembly ([`pcre2-wasm-utf16`](https://github.com/Bimmiest/pcre2-wasm-utf16))

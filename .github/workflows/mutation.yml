@@ -72,7 +72,7 @@ jobs:
       # Node from .nvmrc and `npm ci --ignore-scripts`, as in ci.yml and the
       # deploy build: the same tree is tested everywhere. See ci.yml for why
       # nothing here needs install scripts.
-      - uses: Bimmiest/shared-workflows/.github/actions/setup-node-project@3e31d07ba1f4472f7526ed8f738318287dd85642 # v1.0.0
+      - uses: Bimmiest/shared-workflows/.github/actions/setup-node-project@9d5ed93ea7b9311ae1b9b460dfa9f9da0a28fffe # v1.1.0
         with:
           cache-dependency-path: |
             package-lock.json

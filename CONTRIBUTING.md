@@ -50,7 +50,7 @@ If a tool assigned you a non-conforming branch (an automated `claude/…` name, 
 
 ## The CI checks
 
-[`ci.yml`](.github/workflows/ci.yml) runs five jobs, independently, on every PR, on pushes to main, weekly and on demand (`dependency-review` on PRs only). A PR needs all of them green — and so does the automatic deploy, which runs only after a push to main's CI run passes and then ships the newest commit on main whose whole CI run passed. A manual deploy is not CI-gated: dispatching the deploy workflow on `main` redeploys that same newest green commit, or, with its `sha` input set, rolls back to any commit main has contained, whether or not its CI passed. A rollback only sticks if the repository variable `DEPLOY_PAUSED` is set to `true` *before* you dispatch it — otherwise the next automatic deploy undoes it, or cancels it while it is still queued — and it stays in place until you delete the variable once the fix is on main. The [README](README.md#tests) describes the deploy workflow in full.
+[`ci.yml`](.github/workflows/ci.yml) runs five jobs, independently, on every PR, on pushes to main, weekly and on demand (`dependency-review` on PRs only). A PR needs all of them green — and so does the automatic deploy, which runs only after a push to main's CI run passes and then ships the newest commit on main whose whole CI run passed. A manual deploy is not CI-gated: dispatching the deploy workflow on `main` redeploys that same newest green commit, or, with its `sha` input set, rolls back to any commit main has contained, whether or not its CI passed. A rollback only sticks if the repository variable `DEPLOY_PAUSED` is set to `true` *before* you dispatch it — otherwise the next automatic deploy undoes it, or cancels it while it is still queued — and it stays in place until you delete the variable once the fix is on main. [docs/deployment.md](docs/deployment.md) describes the deploy workflow in full.
 
 **`ci`** — the app, in this order:
 
@@ -62,7 +62,7 @@ npm run test:coverage # vitest, with the coverage floor enforced
 npm run test:e2e      # Playwright, against a production build
 ```
 
-Between the tests and the e2e suite, `ci` also runs three checks from `shared-workflows`: the coverage ratchet (below), documentation links and the ADR index, and production dependency licences against `.licence-allowlist.json`. Each is a Node script with no dependencies. To run one locally, clone `shared-workflows` beside this repository and run its script from here:
+Between the tests and the e2e suite, `ci` also runs three checks from `shared-workflows`. They are the coverage ratchet (below), the documentation check, and the licences of the production dependencies against `.licence-allowlist.json`. The documentation check holds the links, the ADR index and the length of the README ([Documentation](#documentation)). Each is a Node script with no dependencies. To run one locally, clone `shared-workflows` beside this repository and run its script from here:
 
 ```bash
 node ../shared-workflows/.github/actions/coverage-ratchet/ratchet.mjs --config vitest.config.ts --slack 3  # after test:coverage
@@ -233,6 +233,46 @@ header first — the fields must come from the model JSON, not from memory or do
 - Pull requests are squash-merged with the branch's commit messages as the body, so what you write at commit time is what `main` keeps, and an `Upgrade-Note:` in any commit survives the squash. The pull request description is for the reviewer; its template has four sections (What and why, Decisions, Verification, Not done), and a section that does not apply is deleted.
 - Add a `CHANGELOG.md` entry for anything a user would notice. Keep it to one or two sentences stating the user-visible change, with the issue link.
 - **Design rationale and history go in [`docs/adr/`](docs/adr/README.md)**, not in code comments or the changelog. A comment describes what the code does now and any non-obvious constraint; when the reason needs history ("we tried X, #123 showed Y"), write or extend an ADR and point to it from the comment (`See docs/adr/NNNN-….md.`).
+
+## Documentation
+
+**Write all documentation in ASD-STE100 Simplified Technical English** ([repo-template ADR 0002](https://github.com/Bimmiest/repo-template/blob/main/docs/adr/0002-documentation-is-simplified-technical-english-and-a-readme-keeps-to-the-fundamentals.md)). This rule applies to each new or changed text: the README, the files in `docs/`, this file, `SECURITY.md`, ADRs and the CHANGELOG. It does not apply to an accepted ADR, which does not change, or to third-party text such as the Contributor Covenant. Old text changes to STE when somebody next edits it. The main rules:
+
+- One topic in each sentence, and one instruction in each procedure step.
+- A maximum of 20 words in a procedure step, and 25 words in descriptive text. A maximum of six sentences in a paragraph.
+- Use the active voice, and the imperative for an instruction. Put a condition first ("If the test fails, …").
+- Use simple present, past or future tenses. Do not use "-ing" forms, except in technical names.
+- Use "must" for an obligation, "can" for an ability, and "do not" for a prohibition. Do not use "should", "may", "might" or "would".
+- Use the same word for the same thing each time. Do not leave out "the", "a" or "an". Use a maximum of three nouns in a row.
+- Do not use phrasal verbs, contractions, semicolons in prose, or "e.g.", "i.e." and "etc.".
+- Do not change code, commands, file names or product names: they are technical names.
+
+**The README keeps to the fundamentals, in a maximum of 200 lines.** CI's docs check enforces the limit (`readmeMaxLines` in `.docs-check.json`). The README has these sections, in this order:
+
+1. A banner (`docs/assets/banner.svg`), the CI, security and licence badges, the name, and one sentence that says what the product is.
+2. **Highlights:** three to five bullets.
+3. **Overview:** what the product does, how mature it is, and what it is not.
+4. **Demo:** a screenshot or a short GIF, from `docs/assets/`.
+5. **Usage** and **Installation:** one or two commands each.
+6. **Documentation:** a table of the documents, with a row for each file in `docs/`.
+7. **Contributing and feedback**, and **Licence**.
+
+Two facts in the README have a test. `src/engine/__tests__/directiveSupport.test.ts` reads the count for each support level from the table in the Overview. It also reads the count of the attributes that the registry does not know. Keep both in the README.
+
+**Put technical detail in `docs/`.** If a topic needs more than a few lines, add it to the file in `docs/` that has the topic. If no file has the topic, give it a file of its own, and add a row for the file in the Documentation table of the README. Do not use a wiki. A wiki change gets no review and no link check.
+
+**A change updates the documents that it makes wrong, in the same change.** Do not do it later or in a follow-up issue: a document that you update a week later is wrong for a week.
+
+| Document | Update it when |
+|---|---|
+| `CHANGELOG.md`, under `Unreleased` | A user can see the change. Write one or two sentences, with the issue link. |
+| `README.md` | A capability is added or changes shape, or a caveat stops being true |
+| `docs/*.md` | The topic of the file changes |
+| `docs/adr/` | A decision stays true after the pull request: add a new record **and** its row in the index |
+| The commit message | An operator must act: add one `Upgrade-Note:` line |
+| `SECURITY.md` | The attack surface changes: a new input path, or a new place where data is stored or sent |
+
+CI checks only the mechanical parts: the links, the ADR index, the root licences in the README, the length of the README, the counts above, and the script list in `docs/development.md` (`src/__tests__/docs.test.ts`). Whether a paragraph is still true is your decision. Do not write by hand a fact that a tool can give. For example, do not put test counts in the README: `npm test` prints them.
 
 ## Release process
 

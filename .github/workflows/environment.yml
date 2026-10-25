@@ -3,7 +3,7 @@ name: Environment
 # The deploy workflow is only as safe as two settings of the `production`
 # environment that no file in the repository records: its deployments are
 # limited to `main`, and the deployment token is an environment secret rather
-# than a repository one. The README states both; this checks them weekly
+# than a repository one. docs/deployment.md states both; this checks them weekly
 # through the API, so the statement is verified rather than assumed.
 # scripts/check-production-environment.mjs says what each check reads.
 on:

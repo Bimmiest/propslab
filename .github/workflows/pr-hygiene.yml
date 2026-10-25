@@ -42,4 +42,4 @@ jobs:
       # touches `.github/workflows/`. The rules themselves are the action's,
       # pinned by sha; `dependabot[bot]` is exempt by author, and the
       # `no-issue` label exempts a change from the issue rules.
-      - uses: Bimmiest/shared-workflows/.github/actions/pr-hygiene@3e31d07ba1f4472f7526ed8f738318287dd85642 # v1.0.0
+      - uses: Bimmiest/shared-workflows/.github/actions/pr-hygiene@9d5ed93ea7b9311ae1b9b460dfa9f9da0a28fffe # v1.1.0
