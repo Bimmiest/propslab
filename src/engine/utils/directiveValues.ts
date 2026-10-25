@@ -139,7 +139,9 @@ export function regexProblem(pattern: string): string | null {
  * Whether a line's value continues onto the next line: it ends with an ODD
  * number of backslashes, the last being the very last character. An even run is
  * escaped backslashes (a Windows path, say), and a backslash followed by
- * anything, whitespace included, is a literal one. Mirrors confParser's rule.
+ * anything, whitespace included, is a literal one. Splunk continues a value
+ * with a trailing backslash, not with leading whitespace. confParser and the
+ * editor both read continuations through this.
  */
 export function endsWithContinuation(line: string): boolean {
   let count = 0;
