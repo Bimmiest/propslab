@@ -25,6 +25,7 @@ import { evalNode } from '../processors/eval/evaluator';
 import type { EvalValue } from '../processors/eval/values';
 import type { SplunkEvent } from '../types';
 import { fcSeed } from '../../test/fcSeed';
+import { prng } from '../../test/prng';
 import { makeEvent } from '../../test/makeEvent';
 
 fc.configureGlobal({ seed: fcSeed(340), numRuns: 300 });
@@ -72,18 +73,6 @@ function randomCase(word: string, rand: () => number): string {
 /** Canonical rendering: upper-case keywords, single spaces. */
 function canonical(toks: Tok[]): string {
   return toks.map((t) => ('kw' in t ? t.kw.toUpperCase() : t.raw)).join(' ');
-}
-
-/** A small deterministic PRNG (mulberry32), seeded by fast-check. */
-function prng(seed: number): () => number {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
 }
 
 // ── The grammar ─────────────────────────────────────────

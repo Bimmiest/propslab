@@ -43,10 +43,11 @@
 // The seed comes from FC_SEED when set, and is fixed otherwise.
 // ---------------------------------------------------------------------------
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, vi, beforeEach, afterEach } from 'vitest';
 import fc from 'fast-check';
 import { createManagedWorker, MAX_WORKER_LOAD_FAILURES, type ManagedWorker } from '../workerLifecycle';
 import { WORKER_READY } from '../../engine/workerProtocol';
+import { fcSeed } from '../../test/fcSeed';
 
 interface Req {
   id: number;
@@ -56,15 +57,6 @@ interface Res {
 }
 
 const TIMEOUT_MS = 1000;
-const DEFAULT_SEED = 513;
-
-/** The app's tsconfig has no Node types, so `process` is reached through globalThis. */
-const env = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env;
-
-function parseSeed(raw: string | undefined): number {
-  const parsed = raw === undefined || raw === '' ? NaN : Number.parseInt(raw, 10);
-  return Number.isFinite(parsed) ? parsed : DEFAULT_SEED;
-}
 
 function invariant(condition: boolean, message: string): asserts condition {
   if (!condition) throw new Error(`invariant violated: ${message}`);
@@ -587,14 +579,7 @@ describe('workerLifecycle as a state machine (#513)', () => {
         fc.modelRun(() => ({ model: sim, real: undefined }), cmds);
         sim.finish(drain);
       }),
-      { seed: parseSeed(env?.['FC_SEED']), numRuns: 500 },
+      { seed: fcSeed(513), numRuns: 500 },
     );
-  });
-
-  it('takes its seed from FC_SEED, and falls back to a fixed one', () => {
-    expect(parseSeed('1234')).toBe(1234);
-    expect(parseSeed('not a number')).toBe(DEFAULT_SEED);
-    expect(parseSeed('')).toBe(DEFAULT_SEED);
-    expect(parseSeed(undefined)).toBe(DEFAULT_SEED);
   });
 });
