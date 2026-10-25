@@ -57,7 +57,7 @@ afterEach(() => {
 });
 
 describe('PreviewPanel render isolation', () => {
-  it('does not re-render the active tab while the inputs are typed into or a run is in flight', () => {
+  it('does not re-render the active tab while the inputs are typed into or a run is in flight', async () => {
     const result = toViewResult({
       events: [eventWithFields('a=1', { a: '1' })],
       originalRaw: 'a=1',
@@ -67,7 +67,8 @@ describe('PreviewPanel render isolation', () => {
     });
     useAppStore.setState({ activeOutputTab: 'cim', processingResult: result });
     render(<PreviewPanel />);
-    expect(screen.getByText('cim tab')).toBeInTheDocument();
+    // The tab is its own chunk (#566), so it mounts once that has loaded.
+    expect(await screen.findByText('cim tab')).toBeInTheDocument();
     const before = renders.cim;
 
     const { setPropsConf, setTransformsConf, setRawData, setIsProcessing } = useAppStore.getState();

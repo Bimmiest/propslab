@@ -207,11 +207,12 @@ describe('PreviewPanel — Effective config shows the last run in manual-apply m
     );
   });
 
-  it('keeps the run config across edits made while the tab was hidden', () => {
+  it('keeps the run config across edits made while the tab was hidden', async () => {
     render(<PreviewPanel />);
     act(() => useAppStore.getState().setPropsConf('[st]\nTRUNCATE = 123\n'));
     act(() => useAppStore.getState().setActiveOutputTab('effective'));
-    expect(screen.getByText('= 500')).toBeInTheDocument();
+    // The tab is its own chunk (#566), so it mounts once that has loaded.
+    expect(await screen.findByText('= 500')).toBeInTheDocument();
     expect(screen.queryByText('= 123')).not.toBeInTheDocument();
 
     act(() => useAppStore.getState().triggerManualRun());
