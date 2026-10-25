@@ -107,7 +107,7 @@ To make the production build in `dist/`, run `npm run build`. [docs/development.
 
 ## Contributing and feedback
 
-To report a bug or to suggest a change, open an [issue](https://github.com/Bimmiest/propslab/issues/new/choose). If the output is different from what real Splunk does, use the Fidelity Question form. Before you open a pull request, read [CONTRIBUTING.md](CONTRIBUTING.md). It describes these topics:
+To report a bug or to suggest a change, open an [issue](https://github.com/Bimmiest/propslab/issues/new/choose). If the output is different from what real Splunk does, use the Fidelity question form. Before you open a pull request, read [CONTRIBUTING.md](CONTRIBUTING.md). It describes these topics:
 
 - the development environment
 - the CI checks

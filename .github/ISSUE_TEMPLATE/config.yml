@@ -2,4 +2,4 @@ blank_issues_enabled: false
 contact_links:
   - name: Report a vulnerability
     url: https://github.com/Bimmiest/propslab/security/advisories/new
-    about: Please report security vulnerabilities privately through GitHub's security advisory system
+    about: Report a security vulnerability privately, through the security advisories of GitHub, as SECURITY.md says.
