@@ -1,0 +1,22 @@
+{
+  "$comment": "What a production dependency may be licensed under. Read by the shared licence-check action, which checks every package the lockfile installs under `npm ci --omit=dev`. `licences` are SPDX identifiers accepted wherever they appear; an `OR` expression passes when any branch is here, an `AND` only when every part is. `packages` is for the rest: one entry per package, pinned to the versions somebody actually read, with the licence that reading found and why it is acceptable. A bump that moves past a pinned version fails until the new version is read too. packages/mcp-server/.licence-allowlist.json is the same list for that package's own lockfile.",
+  "licences": [
+    "MIT",
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "0BSD",
+    "BlueOak-1.0.0",
+    "Python-2.0",
+    "CC0-1.0",
+    "Unlicense"
+  ],
+  "packages": {
+    "pcre2-wasm-utf16": {
+      "versions": ["0.1.0"],
+      "licence": "MIT AND BSD-3-Clause WITH PCRE2-exception",
+      "reason": "Our own package (Bimmiest/pcre2-wasm-utf16), read 2026-10-25 at the commit package.json pins. The wrapper, bridge and build script are MIT. pcre2.wasm is compiled PCRE2, under BSD-3-Clause with the PCRE2 exception (LICENCE-PCRE2.md in the package). The BSD condition for binary redistribution is to reproduce the copyright notices in the documentation, and NOTICE does that in its PCRE2 section. Named here rather than listed under licences, so that a new dependency under this licence is read too."
+    }
+  }
+}

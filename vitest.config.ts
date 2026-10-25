@@ -90,9 +90,11 @@ export default defineConfig({
       // test:coverage` locally gives the same verdict CI does.
       //
       // Measured, not chosen: each floor is the suite's actual figure minus one
-      // point, rounded down, and scripts/check-coverage-floors.mjs (which CI
-      // runs after this) fails when any floor is more than 3 points under the
-      // actual figure (#506). At 14-24 points of slack coverage could fall by
+      // point, rounded down, and shared-workflows' coverage-ratchet (which CI
+      // runs after this, with `slack: 3`) fails when any floor is more than 3
+      // points under the actual figure (#506, #602). The ratchet prints the
+      // measured figure rounded down as the floor to write; write one point
+      // under it, as the rest here are. At 14-24 points of slack coverage could fall by
       // double digits without a red build, so the ratchet was nominal. Raise a
       // floor in the same change that raises coverage; never lower one to make a
       // branch green. A round target picked in advance just produces tests

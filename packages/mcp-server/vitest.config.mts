@@ -35,8 +35,8 @@ export default defineConfig({
       // Without NODE_OPTIONS, as in CI, they run and the figures are 96.5 / 92.8
       // / 95.1 / 97.0, so the floors sit 1.1-2.5 points under CI's numbers and
       // should hold on the Windows and macOS legs, where the Linux-only launcher
-      // tests skip. scripts/check-coverage-floors.mjs fails CI's Linux leg when a
-      // floor is more than 3 points under (#506). As in the app's config, raise
+      // tests skip. shared-workflows' coverage-ratchet fails CI's Linux leg when
+      // a floor is more than 3 points under (#506, #602). As in the app's config, raise
       // them when tests raise coverage; never lower them to make a branch green.
       thresholds: {
         statements: 94,

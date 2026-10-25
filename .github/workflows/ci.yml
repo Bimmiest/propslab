@@ -42,22 +42,15 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          # Kept in step with .nvmrc and package.json "engines". The pin tracks
-          # Active LTS rather than latest, and the two failure modes it steers
-          # between have both bitten here: CI once built on an end-of-life Node
-          # 20 while .nvmrc pinned a non-LTS 25.x, so neither matched the other
-          # nor what the deploy ran. 22 entered maintenance in October 2025,
-          # which puts the actively supported line at 24 until October 2026.
-          node-version-file: .nvmrc
-          cache: npm
-          # Both lockfiles: this job installs the MCP server's deps too (see
-          # the lint step), so its lockfile belongs in the cache key.
-          cache-dependency-path: |
-            package-lock.json
-            packages/mcp-server/package-lock.json
-
+      # Node from .nvmrc, the npm cache, and `npm ci --ignore-scripts`, from
+      # the shared action (#602). .nvmrc is kept in step with package.json
+      # "engines". The pin tracks Active LTS rather than latest, and the two
+      # failure modes it steers between have both bitten here: CI once built
+      # on an end-of-life Node 20 while .nvmrc pinned a non-LTS 25.x, so
+      # neither matched the other nor what the deploy ran. 22 entered
+      # maintenance in October 2025, which puts the actively supported line at
+      # 24 until October 2026.
+      #
       # --ignore-scripts, as the deploy build installs (azure-static-web-apps.yml):
       # CI must test the tree that ships, not one that also ran install scripts.
       # Nothing here needs them. The only lockfile entries with an install
@@ -66,8 +59,13 @@ jobs:
       # a launcher shim for it; the binary arrives through optionalDependencies
       # and the package works without the swap. pcre2-wasm-utf16 is prebuilt
       # and has no install or prepare script.
-      - name: Install dependencies
-        run: npm ci --ignore-scripts
+      - uses: Bimmiest/shared-workflows/.github/actions/setup-node-project@3e31d07ba1f4472f7526ed8f738318287dd85642 # v1.0.0
+        with:
+          # Both lockfiles: this job installs the MCP server's deps too (see
+          # the next step), so its lockfile belongs in the cache key.
+          cache-dependency-path: |
+            package-lock.json
+            packages/mcp-server/package-lock.json
 
       - name: Install MCP server dependencies
         # Lint below is type-aware over the whole repo (projectService), and
@@ -128,36 +126,37 @@ jobs:
         # vitest enforces actual >= floor; this enforces the other half. A floor
         # more than 3 points under the measured figure is not a ratchet (#506):
         # coverage could fall by that much unnoticed. It reads the config's
-        # thresholds and coverage/coverage-summary.json from the step above.
-        run: node scripts/check-coverage-floors.mjs
+        # thresholds, per-directory ones included, and
+        # coverage/coverage-summary.json from the step above. Three points of
+        # slack rather than the shared default of one, because each floor here
+        # is the measured figure minus one point (see vitest.config.ts) and the
+        # MCP server's must hold on its Windows and macOS legs too.
+        uses: Bimmiest/shared-workflows/.github/actions/coverage-ratchet@3e31d07ba1f4472f7526ed8f738318287dd85642 # v1.0.0
+        with:
+          slack: '3'
+
+      # Every relative link in every Markdown file resolves, and the ADR index
+      # in docs/adr/README.md agrees with the directory and is in order.
+      # src/__tests__/docs.test.ts checks the README's script list as well;
+      # this covers the files that test does not read.
+      - name: Documentation links and the ADR index
+        uses: Bimmiest/shared-workflows/.github/actions/docs-check@3e31d07ba1f4472f7526ed8f738318287dd85642 # v1.0.0
+
+      # Every production dependency's licence is on .licence-allowlist.json,
+      # read from the lockfile, so it needs no network and sees exactly what
+      # `npm ci --omit=dev` installs. The MCP server's lockfile is checked in
+      # its own job.
+      - name: Production dependency licences
+        uses: Bimmiest/shared-workflows/.github/actions/licence-check@3e31d07ba1f4472f7526ed8f738318287dd85642 # v1.0.0
 
       # Chromium only — the e2e suite covers browser-level wiring (CSP, worker
       # bundling, Monaco's chunk split), not cross-browser rendering, so the
-      # other engines would cost minutes to re-assert the same facts.
-      #
-      # The download is ~130MB and `--with-deps` shells out to apt, every run,
-      # for a browser that only changes when @playwright/test does. Keying the
-      # cache on the resolved version means a bump invalidates it on its own;
-      # the apt packages live outside ~/.cache so they are reinstalled either
-      # way.
-      - name: Resolve Playwright version
-        id: playwright
-        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
-
-      - name: Cache Playwright browser
-        id: playwright-cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ steps.playwright.outputs.version }}
-
-      - name: Install Playwright browser
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: npx playwright install --with-deps chromium
-
-      - name: Install Playwright system dependencies
-        if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: npx playwright install-deps chromium
+      # other engines would cost minutes to re-assert the same facts. The
+      # shared action caches the ~130MB download on the resolved
+      # @playwright/test version, so a bump invalidates it on its own, and
+      # installs the apt packages either way.
+      - name: Playwright browser
+        uses: Bimmiest/shared-workflows/.github/actions/playwright-browser@3e31d07ba1f4472f7526ed8f738318287dd85642 # v1.0.0
 
       - name: End-to-end smoke tests
         id: e2e
@@ -215,18 +214,15 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-          cache-dependency-path: packages/mcp-server/package-lock.json
-
       # No root install: the package declares the engine's one dependency,
       # pcre2-wasm-utf16, itself, and its build resolves the engine's import
       # to that copy. Installing only the package is what proves it.
-      # --ignore-scripts for the reason given in the app's job above.
-      - name: Install dependencies
-        run: npm ci --ignore-scripts
+      # --ignore-scripts for the reason given in the app's job above. The
+      # action's steps take their own working directory, not the job's default.
+      - uses: Bimmiest/shared-workflows/.github/actions/setup-node-project@3e31d07ba1f4472f7526ed8f738318287dd85642 # v1.0.0
+        with:
+          cache-dependency-path: packages/mcp-server/package-lock.json
+          working-directory: packages/mcp-server
 
       - name: Verify the regex engine's WebAssembly
         # The package's build checks it too (build:regex-engine, which the
@@ -245,7 +241,20 @@ jobs:
         # Linux's: the launcher tests skip elsewhere, so the floors are set for
         # the lowest leg and the others sit further above them.
         if: matrix.os == 'ubuntu-latest'
-        run: node ../../scripts/check-coverage-floors.mjs vitest.config.mts
+        uses: Bimmiest/shared-workflows/.github/actions/coverage-ratchet@3e31d07ba1f4472f7526ed8f738318287dd85642 # v1.0.0
+        with:
+          config: vitest.config.mts
+          slack: '3'
+          working-directory: packages/mcp-server
+
+      - name: Production dependency licences
+        # The server's own lockfile and allowlist: these are the packages that
+        # run on the machine of whoever starts it. Linux only, because the
+        # lockfile is the same on every leg.
+        if: matrix.os == 'ubuntu-latest'
+        uses: Bimmiest/shared-workflows/.github/actions/licence-check@3e31d07ba1f4472f7526ed8f738318287dd85642 # v1.0.0
+        with:
+          working-directory: packages/mcp-server
 
   # The default run is deterministic on purpose: one timezone, one locale, a
   # fixed order, and property-test seeds that FC_SEED can pin. That is what
@@ -277,14 +286,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-          cache-dependency-path: package-lock.json
-
-      - name: Install dependencies
-        run: npm ci --ignore-scripts
+      - uses: Bimmiest/shared-workflows/.github/actions/setup-node-project@3e31d07ba1f4472f7526ed8f738318287dd85642 # v1.0.0
 
       - name: Verify the regex engine's WebAssembly
         run: node scripts/check-wasm-checksum.mjs
@@ -325,8 +327,12 @@ jobs:
           # package-lock.json, so installing would only buy a slower job.
 
       - name: Audit production dependencies
-        # Production deps are what ship to the browser, so they gate the build.
-        run: npm audit --omit=dev --audit-level=high
+        # Production deps are what ship to the browser, so they gate the build,
+        # at `high`. The shared action is `npm audit --omit=dev
+        # --audit-level=high` plus .audit-exceptions.json: an advisory nothing
+        # reachable is exposed to can be listed there with its reason and an
+        # expiry, and an expired or unneeded entry fails the step.
+        uses: Bimmiest/shared-workflows/.github/actions/audit-check@3e31d07ba1f4472f7526ed8f738318287dd85642 # v1.0.0
 
       - name: Report dev-only advisories
         # Reported, never fatal: a CVE in a build tool must not be able to block
@@ -339,9 +345,12 @@ jobs:
       - name: Audit the MCP server's production dependencies
         # Same gate as the app's, for the same reason: these are what run on the
         # machine of whoever starts the server, and the process they run in
-        # holds whatever the agent driving it can reach.
-        working-directory: packages/mcp-server
-        run: npm audit --omit=dev --audit-level=high
+        # holds whatever the agent driving it can reach. Its exceptions file is
+        # packages/mcp-server/.audit-exceptions.json: one file per lockfile,
+        # because an entry the other report does not need would fail here.
+        uses: Bimmiest/shared-workflows/.github/actions/audit-check@3e31d07ba1f4472f7526ed8f738318287dd85642 # v1.0.0
+        with:
+          working-directory: packages/mcp-server
 
       - name: Report the MCP server's dev-only advisories
         working-directory: packages/mcp-server
@@ -352,6 +361,12 @@ jobs:
   # inputs, shellcheck findings in `run:` blocks); zizmor catches what GitHub
   # happily runs (template injection, persisted credentials, unpinned or
   # impostor action refs). zizmor also reads dependabot.yml.
+  #
+  # A local job, not shared-workflows' workflow-lint.yml (which runs the same
+  # two steps at the same versions), because of the check's name: main's
+  # ruleset and scripts/lib/branchProtection.mjs require `workflow-lint`, and a
+  # reusable workflow reports as `workflow-lint / workflow-lint` (#602).
+  # Moving to it means changing both in the same step.
   workflow-lint:
     runs-on: ubuntu-latest
     timeout-minutes: 10

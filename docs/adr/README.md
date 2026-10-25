@@ -10,7 +10,9 @@ An ADR records one design decision: the problem, the choice made, and what it co
 
 - Files are named `NNNN-kebab-case-title.md` and numbered in the order they are written, from `0001`. A number is never reused.
 - An ADR is not rewritten when a decision changes. Write a new one, set the old one's status to `Superseded by NNNN`, and link the two.
+- A choice not yet made stays an issue, labelled `decision`, until it is: an ADR records a decision, an issue tracks the absence of one.
 - Keep an ADR short and factual. Link the issues and PRs the decision came from, and name the files it governs.
+- Every record has a row in the index below, in ascending order. CI's documentation check (shared-workflows' docs-check) holds the index to the directory, and a number with no file is explained under [Numbers with no record](#numbers-with-no-record).
 
 ## Template
 
@@ -18,6 +20,8 @@ An ADR records one design decision: the problem, the choice made, and what it co
 # NNNN. Title in sentence case
 
 - **Status:** Proposed | Accepted | Superseded by [NNNN](NNNN-title.md)
+- **Date:** YYYY-MM-DD
+- **Issue:** #n
 - **Code:** `src/…`
 
 ## Context
@@ -53,3 +57,10 @@ What follows, good and bad: what the rule costs, what it rules out, and what to 
 | [0014](0014-pipeline-worker-failure-policy.md) | A crashed input never runs inline, and the retry budget spans requests | `src/hooks/useProcessingPipeline.ts` |
 | [0015](0015-mcp-timeouts-start-on-ready-and-report-progress.md) | MCP timeouts start on worker ready, report progress, and never touch caller input on the server thread | `packages/mcp-server/src/runInWorker.ts`, `packages/mcp-server/src/tools.ts` |
 | [0016](0016-recorded-splunk-output-is-not-distributed.md) | Recorded Splunk output, and tests derived from it, are not distributed | `src/engine/__tests__/directiveEvidence.test.ts`, `.gitignore` |
+| [0017](0017-ci-gates-come-from-shared-workflows.md) | CI calls the shared gates from `shared-workflows`, pinned by commit, wherever one is equivalent | `.github/workflows/` |
+
+The index has a **Code** column where `repo-template`'s has **Status**: it names the files each decision governs, which is what a reader arrives looking for. Every record's status is on its first lines.
+
+## Numbers with no record
+
+None. When a number is skipped or a record is withdrawn, add a bullet here: `- **N**: why there is no file.`

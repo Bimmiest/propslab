@@ -1,0 +1,45 @@
+name: PR hygiene
+
+# CONTRIBUTING's branch and issue rules, enforced rather than asked for (#602).
+# Before this check, 46 of the 50 most recent pull requests not opened by
+# Dependabot broke at least one of them, most from automated `claude/…`
+# branches. A warning would have joined the prose.
+#
+# `edited` because fixing the description is how most failures get fixed, and
+# `labeled`/`unlabeled` because `no-issue` changes the verdict; without them a
+# corrected pull request would stay red until its next push.
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened, labeled, unlabeled]
+
+# Editing a description three times in a minute is three runs; only the last
+# one's verdict matters.
+concurrency:
+  group: pr-hygiene-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+# Read-only: the check reads the event payload and writes nothing back. Its
+# verdict is the job's status; nothing here comments or labels.
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  pr-hygiene:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # No checkout: the action reads the pull request from the event, not
+      # from the tree, and a job with no checkout has nothing a branch could
+      # have put there. Which is also why the Node version is written here
+      # rather than read from .nvmrc; keep the two on the same major.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      # The pull request runs its own copy of this file, so a change to the
+      # pin or the inputs below is what review looks at on a pull request that
+      # touches `.github/workflows/`. The rules themselves are the action's,
+      # pinned by sha; `dependabot[bot]` is exempt by author, and the
+      # `no-issue` label exempts a change from the issue rules.
+      - uses: Bimmiest/shared-workflows/.github/actions/pr-hygiene@3e31d07ba1f4472f7526ed8f738318287dd85642 # v1.0.0

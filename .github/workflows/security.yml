@@ -38,9 +38,10 @@ jobs:
   # finding's confidence. Trivy scans both lockfiles and the tree at CRITICAL
   # and HIGH with unfixed advisories ignored, the same bar as `audit`'s
   # production gate. Both were dry-run against all 288 commits and both
-  # lockfiles before this file was added: no findings, so there is no
-  # `.gitleaks.toml` or `.trivyignore.yaml` yet. The first false positive gets
-  # one, with its reason beside it, as repo-template's show.
+  # lockfiles before this file was added, with no findings. `.gitleaks.toml`
+  # and `.trivyignore.yaml` are the template's, with no entries (#602): they
+  # exist so that the first false positive lands in a file that already says
+  # what an entry needs, and which of its lines are load-bearing.
   security:
     uses: Bimmiest/shared-workflows/.github/workflows/security.yml@3e31d07ba1f4472f7526ed8f738318287dd85642 # v1.0.0
     # `pull-requests: read` because on a pull request gitleaks lists the PR's

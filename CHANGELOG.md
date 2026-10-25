@@ -8,6 +8,7 @@ All notable changes to Propslab are documented here, newest first. Entries say w
 
 ### Added
 
+- **CI runs the shared gates from [`Bimmiest/shared-workflows`](https://github.com/Bimmiest/shared-workflows)** ([#602](https://github.com/Bimmiest/propslab/issues/602), [ADR 0017](docs/adr/0017-ci-gates-come-from-shared-workflows.md)). The coverage ratchet, the advisory audit and the install steps are the shared ones now, and CI also checks production dependency licences and every documentation link; a new `pr-hygiene` check holds pull requests to the `<type>/<short-description>-<issue-number>` branch name and an issue link.
 - **CI scans the history for secrets and the tree for vulnerabilities** ([#549](https://github.com/Bimmiest/propslab/issues/549)). A separate `Security` workflow runs gitleaks over every commit and Trivy over both lockfiles, from the shared [`Bimmiest/shared-workflows`](https://github.com/Bimmiest/shared-workflows) repository, on every PR, on pushes to main and weekly.
 - **An entry-graph gate and an initial-load budget** ([#467](https://github.com/Bimmiest/propslab/issues/467)). `check-entry-graph.mjs` fails the build if the startup path reaches the Monaco chunk; `check-bundle-size.mjs` budgets the modulepreload set and the codicon font.
 - **Governance files** ([#520](https://github.com/Bimmiest/propslab/issues/520)): CODEOWNERS, issue forms (bug, fidelity question, enhancement), a PR template, a code of conduct, and a release process in CONTRIBUTING; the environment check now asserts `main`'s branch protection.

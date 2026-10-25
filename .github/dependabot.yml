@@ -91,6 +91,14 @@ updates:
       # Monaco ships, not the newest. Move it in the same change that moves
       # monaco-editor, to the version that release pins.
       - dependency-name: "marked"
+      # A tilde pin that Dependabot would propose past anyway (#222 proposed
+      # 5.9 to 7.0, and was closed). TypeScript does not follow semver, and
+      # typescript-eslint declares the range it supports; a major it has not
+      # accepted cannot install, let alone pass. TypeScript moves when
+      # typescript-eslint does, the two bumped together by hand. From
+      # repo-template (#602).
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
 
   # `directory` is not recursive, so the entry above never sees
   # packages/mcp-server's lockfile. That was harmless while nothing audited that
@@ -130,12 +138,18 @@ updates:
       # nothing the root says reaches here.
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
+      # As the root entry (#236 was the same 7.0 proposal here). The package
+      # pins the root's `~5.9.3`, and both move together.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
 
   # Actions are pinned to commit SHAs, which is what stops a mutable tag
   # from moving an unreviewed change into a job holding the deploy credentials.
   # A SHA cannot move on its own, so without something raising the pin forward
   # it rots into a permanently stale action; these updates are that something.
-  # Dependabot rewrites the SHA and the trailing `# vN` comment together.
+  # Dependabot rewrites the SHA and the trailing `# vN` comment together. The
+  # Bimmiest/shared-workflows pins are bumped here too, from that repository's
+  # tags, and every one of them moves in the same pull request.
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
