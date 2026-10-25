@@ -68,7 +68,7 @@ export function RegexTab(props: RegexTabProps) {
           onChange={(e) => setPattern(e.target.value)}
           aria-invalid={validationError ? true : undefined}
           aria-describedby={validationError ? errorId : undefined}
-          className="w-full px-2 py-1.5 text-xs font-mono rounded border border-[var(--color-border)] bg-[var(--color-bg-primary)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent)]"
+          className="w-full px-2 py-1.5 text-xs font-mono rounded border border-[var(--color-border-control)] bg-[var(--color-bg-primary)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent)]"
           spellCheck={false}
         />
         {validationError && (

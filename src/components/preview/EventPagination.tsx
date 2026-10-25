@@ -50,7 +50,7 @@ export function EventPagination({
             style={{
               backgroundColor: 'var(--color-bg-tertiary)',
               color: 'var(--color-text-primary)',
-              border: '1px solid var(--color-border)',
+              border: '1px solid var(--color-border-control)',
             }}
           >
             {PAGE_SIZE_OPTIONS.map((size) => (

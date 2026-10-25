@@ -69,7 +69,7 @@ export function MetadataPanel() {
                   onChange={(e) => setMetadataField(key, e.target.value)}
                   placeholder={key === 'index' ? 'main' : key}
                   spellCheck={false}
-                  className="flex-1 min-w-0 px-2 py-1 text-xs font-mono rounded-md outline-none bg-[var(--color-bg-elevated)] text-[var(--color-text-primary)] border border-[var(--color-border)] focus:border-[var(--color-accent)] transition-colors"
+                  className="flex-1 min-w-0 px-2 py-1 text-xs font-mono rounded-md outline-none bg-[var(--color-bg-elevated)] text-[var(--color-text-primary)] border border-[var(--color-border-control)] focus:border-[var(--color-accent)] transition-colors"
                 />
               </div>
             );

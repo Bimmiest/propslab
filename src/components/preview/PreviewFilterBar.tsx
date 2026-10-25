@@ -46,7 +46,7 @@ export function PreviewFilterBar({
           placeholder="Search events…"
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
-          className="w-full pl-7 pr-2 py-1 text-xs rounded border border-[var(--color-border)] bg-[var(--color-bg-primary)] text-[var(--color-text-primary)] outline-none focus:border-[var(--color-accent)]"
+          className="w-full pl-7 pr-2 py-1 text-xs rounded border border-[var(--color-border-control)] bg-[var(--color-bg-primary)] text-[var(--color-text-primary)] outline-none focus:border-[var(--color-accent)]"
         />
       </div>
       <MultiSelect label="Fields" options={allFields} selected={selectedFields} onChange={onFieldsChange} searchable />

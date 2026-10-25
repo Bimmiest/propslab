@@ -67,7 +67,7 @@ export function DictionaryFilterBar({
     >
       <div
         className="flex items-center gap-2 px-2 rounded-md border focus-within:ring-2 focus-within:ring-[var(--color-accent)]"
-        style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-bg-primary)' }}
+        style={{ borderColor: 'var(--color-border-control)', backgroundColor: 'var(--color-bg-primary)' }}
       >
         <Icon name="search" className="w-3.5 h-3.5 shrink-0 text-[var(--color-text-muted)]" />
         <input
@@ -154,7 +154,8 @@ function DictionaryOption({
       onClick={() => onSelect(entry.id)}
       className={[
         'flex items-center gap-1.5 px-3 py-1.5 cursor-pointer transition-colors',
-        isSelected ? 'bg-[var(--color-accent)]/15' : 'hover:bg-[var(--color-bg-tertiary)]',
+        // /10: the chips inside keep 4.5:1 over it (#688); the inset bar marks it too.
+        isSelected ? 'bg-[var(--color-accent)]/10' : 'hover:bg-[var(--color-bg-tertiary)]',
       ].join(' ')}
       style={isSelected ? { boxShadow: 'inset 2px 0 0 var(--color-accent)' } : undefined}
     >

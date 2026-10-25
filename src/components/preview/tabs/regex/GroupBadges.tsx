@@ -41,7 +41,10 @@ export function GroupLegend({
         <span className="flex items-center gap-1.5">
           <span
             className="w-3 h-2 rounded-sm"
-            style={{ backgroundColor: '#22c55e40', borderBottom: '2px solid #22c55e' }}
+            style={{
+              backgroundColor: tint('var(--color-success)', 25),
+              borderBottom: '2px solid var(--color-success)',
+            }}
           />
           <span className="text-[var(--color-text-muted)]">Full match</span>
         </span>

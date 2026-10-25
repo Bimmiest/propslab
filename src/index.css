@@ -3,65 +3,77 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
+  /* "Charcoal and sand" (#222831 #393e46 #948979 #dfd0b8, colorhunt.co, #688).
+     The two themes swap its roles: here the surfaces are near-white and the
+     text is charcoal; in .dark the surfaces are charcoal and the text is sand.
+     The accent is the palette's bronze in both, dark here and gold in .dark.
+     Every text token is at least 4.5:1 on every surface;
+     src/__tests__/themeContrast.test.ts holds them. */
+
   /* Canvas (main app background) */
-  --color-bg-primary: #fafafa;
+  --color-bg-primary: #f7f6f3;
   /* Pane chrome (panel headers, sidebar, tab bars) */
-  --color-bg-secondary: #f4f4f5;
+  --color-bg-secondary: #eae8e2;
   /* Elevated surfaces (cards, inputs, editors, dropdowns) */
   --color-bg-elevated: #ffffff;
-  /* Kept for compatibility with any tertiary uses */
-  --color-bg-tertiary: #e4e4e7;
+  /* Hover and pressed fills */
+  --color-bg-tertiary: #e0ddd5;
 
-  --color-text-primary: #27272a;       /* zinc-800 — softer than near-black */
-  --color-text-secondary: #52525b;     /* zinc-600 */
-  --color-text-muted: #63636b;         /* ≥4.5:1 on every light surface, incl. #e4e4e7 */
+  --color-text-primary: #222831;       /* the palette's charcoal: ≥7:1 on every surface */
+  --color-text-secondary: #393e46;     /* the palette's second charcoal */
+  --color-text-muted: #595b5f;         /* ≥4.5:1 on every surface, incl. the hover fill */
 
-  --color-border: #e4e4e7;             /* zinc-200 */
-  --color-border-subtle: rgba(228,228,231,0.5);  /* for internal dividers */
-  --color-border-hover: #a1a1aa;       /* zinc-400 */
+  --color-border: #cbc7bd;             /* dividers between panes: decorative */
+  --color-border-subtle: rgba(203,199,189,0.5);  /* internal dividers */
+  --color-border-hover: #9a958a;
+  /* The edge of a control (an input, a dropdown): ≥3:1 on every surface, the
+     non-text contrast WCAG 1.4.11 asks of a component's boundary (#564). */
+  --color-border-control: #7c7970;
 
-  /* Indigo accent, -700: ≥4.5:1 as text on every surface and its own /10 tint */
-  --color-accent: #4338ca;
-  --color-accent-hover: #3730a3;
+  /* Dark bronze: ≥4.5:1 as text on every surface and on its own /10 tint */
+  --color-accent: #6e4e14;
+  --color-accent-hover: #5c410f;
   --color-text-on-accent: #ffffff;
   --color-text-on-error: #ffffff;
 
-  /* Status colours double as text on their own /10 tint, which the -500s
-     failed at 2–3.8:1; the -800s clear 4.5:1 on every surface. */
+  /* Status colours double as text on their own /10 tint: ≥4.5:1 there too. */
   --color-error: #991b1b;
-  --color-warning: #92400e;
+  --color-warning: #9a3412;
   --color-success: #166534;
-  --color-info: #4338ca;
+  --color-info: #6e4e14;
 }
 
 .dark {
-  /* Canvas */
-  --color-bg-primary: #18181b;         /* zinc-900 */
-  /* Pane chrome */
-  --color-bg-secondary: #27272a;       /* zinc-800 */
+  /* Canvas: the palette's charcoal, darkened */
+  --color-bg-primary: #16191e;
+  /* Pane chrome: the palette's charcoal */
+  --color-bg-secondary: #222831;
   /* Elevated surfaces */
-  --color-bg-elevated: #303036;        /* between zinc-800 and zinc-700 */
-  --color-bg-tertiary: #3f3f46;        /* zinc-700 */
+  --color-bg-elevated: #2e343e;
+  /* Hover and pressed fills: the palette's second charcoal */
+  --color-bg-tertiary: #393e46;
 
-  --color-text-primary: #f4f4f5;       /* zinc-100 */
-  --color-text-secondary: #c4c4cc;     /* ≥6:1 on every dark surface */
-  --color-text-muted: #acacb4;         /* ≥4.5:1 on every dark surface, incl. #3f3f46 */
+  --color-text-primary: #f3ede3;       /* the sand, lightened: ≥7:1 on every surface */
+  --color-text-secondary: #dfd0b8;     /* the palette's sand */
+  --color-text-muted: #bab2a6;         /* ≥4.5:1 on every surface, incl. the hover fill */
 
-  --color-border: #3f3f46;             /* zinc-700 */
-  --color-border-subtle: rgba(63,63,70,0.5);
-  --color-border-hover: #52525b;       /* zinc-600 */
+  --color-border: #454b55;             /* dividers between panes */
+  --color-border-subtle: rgba(69,75,85,0.5);
+  --color-border-hover: #6b7079;
+  --color-border-control: #8d9097;     /* ≥3:1 on every surface (#564) */
 
-  /* Light enough to read as text on #3f3f46 and on its own /10 tint, which
-     makes it too light for white text: text on an accent fill is dark here. */
-  --color-accent: #b4befe;
-  --color-accent-hover: #a5b4fc;
-  --color-text-on-accent: #18181b;
-  --color-text-on-error: #18181b;
+  /* Gold, from the palette's bronze: ≥4.5:1 as text on every surface and on
+     its own /10 tint, which makes it too light for white text: text on an
+     accent fill is dark here. */
+  --color-accent: #e2c08d;
+  --color-accent-hover: #ecd2ab;
+  --color-text-on-accent: #16191e;
+  --color-text-on-error: #16191e;
 
   --color-error: #fca5a5;
-  --color-warning: #fbbf24;
-  --color-success: #4ade80;
-  --color-info: #b4befe;
+  --color-warning: #fdba74;
+  --color-success: #86efac;
+  --color-info: #e2c08d;
 }
 
 html, body, #root {

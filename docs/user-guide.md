@@ -138,7 +138,7 @@ The editor has a custom language, `splunk-conf`:
 - Hover tooltips in rich Markdown: description, default, example, category, phase, value type and valid values.
 - Folding for stanzas and for consecutive comments.
 - Lint markers through `setModelMarkers`: unknown directives, invalid regex, type mismatches, duplicate stanzas, a stanza header without its `]`, and best-practice warnings.
-- Light and dark themes (`splunk-light`, `splunk-dark`) that follow the zinc and indigo palette of the app.
+- Light and dark themes (`splunk-light`, `splunk-dark`) that use the same charcoal, sand and gold colours as the app.
 
 `directiveRegistry.ts` drives all three features. When you add a `DirectiveInfo` entry, autocomplete, hover and lint use it automatically, and so does the dictionary. [architecture.md](architecture.md#monaco-bundling) describes how Monaco is bundled:
 

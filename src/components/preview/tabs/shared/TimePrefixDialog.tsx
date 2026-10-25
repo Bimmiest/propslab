@@ -77,7 +77,7 @@ export function TimePrefixDialog({
           onChange={(e) => setValue(e.target.value)}
           spellCheck={false}
           placeholder="e.g. \["
-          className="mt-1 w-full px-2.5 py-1.5 rounded-md text-sm font-mono outline-none bg-[var(--color-bg-secondary)] text-[var(--color-text-primary)] border border-[var(--color-border)] focus:border-[var(--color-accent)]"
+          className="mt-1 w-full px-2.5 py-1.5 rounded-md text-sm font-mono outline-none bg-[var(--color-bg-secondary)] text-[var(--color-text-primary)] border border-[var(--color-border-control)] focus:border-[var(--color-accent)]"
         />
       </div>
 

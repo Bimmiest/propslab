@@ -1,8 +1,10 @@
 // One palette per theme, in the same hue order so a field keeps its hue across a
 // toggle. The colours are drawn as TEXT, on the pane surfaces and on their own
-// ~20% tint, so no single set can serve both: the light set is Tailwind's
-// -700/-800 shades and the dark set its -300s, each ≥4.5:1 in every such
-// pairing. Callers tint them with tint() (utils/tint.ts).
+// tint (up to 13%), so no single set can serve both: the light set is
+// Tailwind's -700/-800 shades and the dark set its -300s, four of them
+// lightened a step for the dark surfaces (#688), each ≥4.5:1 in every such
+// pairing; src/__tests__/themeContrast.test.ts holds it. Callers tint them
+// with tint() (utils/tint.ts).
 //
 // Typed as non-empty so `fieldColorAt` has an element it can always fall back
 // on. Every consumer cycles through this palette by index, and a palette with no
@@ -23,16 +25,16 @@ export const FIELD_COLORS = {
     '#3f6212',
   ],
   dark: [
-    '#93c5fd',
-    '#fca5a5',
+    '#9ecbfd',
+    '#fcb2b2',
     '#86efac',
     '#fcd34d',
-    '#c4b5fd',
+    '#cabcfd',
     '#f9a8d4',
     '#67e8f9',
     '#fdba74',
     '#5eead4',
-    '#b4befe',
+    '#bcc4fe',
     '#d8b4fe',
     '#bef264',
   ],

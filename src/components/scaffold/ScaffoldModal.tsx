@@ -11,6 +11,7 @@ import { escapeRegex } from '../../utils/splunkRegex';
 import { Icon } from '../ui/Icon';
 import { DiffLines } from '../ui/DiffLines';
 import { Badge } from '../ui/Badge';
+import { tint } from '../../utils/tint';
 
 const CONFIDENCE_VARIANT: Record<Confidence, 'success' | 'warning' | 'info'> = {
   high: 'success',
@@ -186,7 +187,7 @@ function ExistingStanzaWarning({ stanzaName }: { stanzaName: string }) {
   return (
     <div
       className="flex items-start gap-2 px-3 py-2 rounded-md text-xs"
-      style={{ backgroundColor: 'rgba(245, 158, 11, 0.12)', color: 'var(--color-warning)' }}
+      style={{ backgroundColor: tint('var(--color-warning)', 12), color: 'var(--color-warning)' }}
     >
       <Icon name="warning" className="w-4 h-4 shrink-0 mt-0.5" />
       <span>
@@ -227,7 +228,7 @@ function StanzaNameField({
         className="mt-1 w-full px-2.5 py-1.5 rounded-md text-sm font-mono outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
         style={{
           backgroundColor: 'var(--color-bg-secondary)',
-          border: '1px solid var(--color-border)',
+          border: '1px solid var(--color-border-control)',
           color: 'var(--color-text-primary)',
         }}
       />
