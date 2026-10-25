@@ -23,9 +23,11 @@ export interface FieldFocusStore {
   setHoveredField: (field: string | null) => void;
   togglePin: (field: string) => void;
   /**
-   * Unpin every field not in `fields`. A pin on a field the latest run no
-   * longer extracts has no sidebar entry to unpin it from, and would leave
-   * the tab filtering to "0/N events" with nothing to show.
+   * Unpin every field not in `fields`, and forget a hover on one. A pin on a
+   * field the latest run no longer extracts has no sidebar entry to unpin it
+   * from, and would leave the tab filtering to "0/N events" with nothing to
+   * show. A hovered field's span unmounts without a `mouseleave`, so its hover
+   * would dim every event until another value was hovered (#623).
    */
   retainPins: (fields: ReadonlySet<string>) => void;
 }
@@ -62,8 +64,10 @@ export function createFieldFocusStore(): FieldFocusStore {
     },
     retainPins: (fields) => {
       const kept = [...pinned].filter((f) => fields.has(f));
-      if (kept.length === pinned.size) return;
-      pinned = new Set(kept);
+      const staleHover = hovered !== null && !fields.has(hovered);
+      if (kept.length === pinned.size && !staleHover) return;
+      if (kept.length !== pinned.size) pinned = new Set(kept);
+      if (staleHover) hovered = null;
       update();
     },
   };
