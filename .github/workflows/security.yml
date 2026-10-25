@@ -52,3 +52,22 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+
+  # A failed scheduled run opens an issue, or comments on the open one
+  # (#573). See environment.yml's `report` job.
+  report:
+    needs: [security]
+    if: failure() && github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - uses: Bimmiest/shared-workflows/.github/actions/open-or-update-issue@9d5ed93ea7b9311ae1b9b460dfa9f9da0a28fffe # v1.1.0
+        with:
+          label: scheduled-security
+          title: The weekly security scan failed
+          body: |
+            gitleaks found a secret in the history, or Trivy found a critical or high vulnerability in the tree or a lockfile. Rotate a real secret; list a false positive in `.gitleaks.toml` or `.trivyignore.yaml` with its reason.
+
+            Run: {run}

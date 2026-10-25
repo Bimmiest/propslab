@@ -44,7 +44,11 @@ A dispatch from any other branch or tag fails. These checks are in the workflow 
 3. Under the deployment branches and tags of the environment, choose "Selected branches and tags".
 4. Allow `main` only, and add no tag patterns.
 
-Until the admin completes these steps, any workflow on any branch can read the token. The weekly [`environment.yml`](../.github/workflows/environment.yml) workflow checks both settings through the API. It fails when one of them is not in place. Its secret check needs a `SECRETS_READ_TOKEN` repository secret. This is a fine-grained token for this repository, with the Environments and Secrets permissions both set to read-only. The token lists the names of the secrets, and never their values.
+Until the admin completes these steps, any workflow on any branch can read the token. The weekly [`environment.yml`](../.github/workflows/environment.yml) workflow checks both settings through the API. It fails when one of them is not in place. It also checks the protection of `main`, and it fails when it cannot read the protection, because then it verified nothing. Its secret check needs a `SECRETS_READ_TOKEN` repository secret. This is a fine-grained token for this repository, with the Environments and Secrets permissions both set to read-only. The token lists the names of the secrets, and never their values.
+
+## Scheduled runs
+
+`ci.yml`, `audit.yml`, `security.yml`, `mutation.yml` and `environment.yml` also run on a schedule, to find problems that occur without a push. If a scheduled run fails, its `report` job opens an issue with a `scheduled-*` label. If an issue with that label is open, the job adds a comment to it. Close the issue when the fix is on main.
 
 ## Rollback
 

@@ -125,7 +125,8 @@ const NONE = {
  *   `ok`: every requirement is met by rulesets, classic protection or the two together.
  *   `incomplete`: something is missing and nothing prevented reading the sources.
  *   `skipped`: something is missing, but the classic protection could not be read
- *   (HTTP 403), so it may be what provides it. A warning, not a verdict.
+ *   (HTTP 403), so it may be what provides it. check-production-environment.mjs
+ *   fails on it: nothing was verified (#573).
  *   Any other API failure is rethrown for the caller to report.
  */
 export async function evaluateMainProtection({ getRules, getClassic, getRuleset }) {

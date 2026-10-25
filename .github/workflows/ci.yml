@@ -425,3 +425,22 @@ jobs:
         with:
           # The same bar as the audit job's production gate.
           fail-on-severity: high
+
+  # A failed scheduled run opens an issue, or comments on the open one
+  # (#573). See environment.yml's `report` job.
+  report:
+    needs: [ci, randomised]
+    if: failure() && github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - uses: Bimmiest/shared-workflows/.github/actions/open-or-update-issue@9d5ed93ea7b9311ae1b9b460dfa9f9da0a28fffe # v1.1.0
+        with:
+          label: scheduled-ci
+          title: The weekly CI run failed
+          body: |
+            Nothing was pushed, so the cause is the runner image, a dependency, or the randomised job's timezone, locale, order or seed. The randomised job prints the command that replays it.
+
+            Run: {run}

@@ -71,3 +71,22 @@ jobs:
       - name: Report the MCP server's dev-only advisories
         working-directory: packages/mcp-server
         run: npm audit --audit-level=high || true
+
+  # A failed scheduled run opens an issue, or comments on the open one
+  # (#573). See environment.yml's `report` job.
+  report:
+    needs: [audit]
+    if: failure() && github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - uses: Bimmiest/shared-workflows/.github/actions/open-or-update-issue@9d5ed93ea7b9311ae1b9b460dfa9f9da0a28fffe # v1.1.0
+        with:
+          label: scheduled-audit
+          title: The weekly audit found an advisory
+          body: |
+            A high or critical advisory now affects a production dependency of the app or the MCP server. Update the dependency, or list the advisory in that lockfile's `.audit-exceptions.json` with the reason and an expiry.
+
+            Run: {run}
