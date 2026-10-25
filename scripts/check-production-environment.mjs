@@ -24,11 +24,12 @@
 //
 // The README states these as facts; this is what keeps them facts.
 //
-// (1) and (3) read with the workflow's GITHUB_TOKEN. (2) lists secret names,
-// which needs a token with the "Secrets" repository permission (read), and no
-// GITHUB_TOKEN can be granted that; it comes from SECRETS_READ_TOKEN. Listing
-// returns names only, never values. Without that token (2) fails rather than
-// passing unverified.
+// (1) and (3) read with the workflow's GITHUB_TOKEN. (2) lists secret names
+// twice, and a fine-grained token needs a different repository permission for
+// each list: "Environments" (read) for the environment's secrets and "Secrets"
+// (read) for the repository's. No GITHUB_TOKEN can be granted either; they come
+// from SECRETS_READ_TOKEN. Listing returns names only, never values. Without
+// that token (2) fails rather than passing unverified.
 // ---------------------------------------------------------------------------
 
 import { ApiError, evaluateMainProtection } from './lib/branchProtection.mjs';
@@ -75,13 +76,28 @@ async function checkSecretScope(token) {
   if (!token) {
     failures.push(
       `SECRETS_READ_TOKEN is not set, so where ${SECRET} is stored could not be checked. ` +
-        'Add a fine-grained token for this repository with the "Secrets" permission (read-only) as that repository secret.',
+        'Add a fine-grained token for this repository with the "Environments" and "Secrets" permissions (both read-only) as that repository secret.',
     );
     return;
   }
   const names = (body) => body.secrets.map((secret) => secret.name);
-  const inEnvironment = names(await get(`/environments/${ENVIRONMENT}/secrets?per_page=100`, token));
-  const inRepository = names(await get('/actions/secrets?per_page=100', token));
+  // A 403 here is almost always a token without the permission that endpoint
+  // needs, so name it rather than print the bare status.
+  const list = async (path, permission) => {
+    try {
+      return names(await get(path, token));
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 403) {
+        throw new Error(
+          `${error.message}: SECRETS_READ_TOKEN needs the "${permission}" repository permission (read-only)`,
+          { cause: error },
+        );
+      }
+      throw error;
+    }
+  };
+  const inEnvironment = await list(`/environments/${ENVIRONMENT}/secrets?per_page=100`, 'Environments');
+  const inRepository = await list('/actions/secrets?per_page=100', 'Secrets');
   if (!inEnvironment.includes(SECRET)) failures.push(`${SECRET} is not a secret of the ${ENVIRONMENT} environment.`);
   if (inRepository.includes(SECRET)) {
     failures.push(`${SECRET} is also a repository secret, readable by any workflow on any branch; delete that copy.`);
