@@ -343,7 +343,9 @@ function spawnAndWait<T>(
   // `stdout: true` because by default a worker's console.log lands on the
   // server's stdout, which is the JSON-RPC channel: one stray line corrupts
   // the stream. `end: false` so the worker exiting does not end stderr.
-  const worker = new Worker(resolvedPath, { workerData, resourceLimits, stdout: true });
+  // `env: {}`: MCP clients often start servers with API keys in the
+  // environment, and a worker running agent-supplied patterns needs none of it.
+  const worker = new Worker(resolvedPath, { workerData, resourceLimits, stdout: true, env: {} });
   worker.stdout.pipe(process.stderr, { end: false });
   const exited = new Promise<void>((resolve) => worker.once('exit', () => resolve()));
 
