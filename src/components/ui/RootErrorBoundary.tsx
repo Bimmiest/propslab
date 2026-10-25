@@ -5,8 +5,25 @@ import { copyToClipboard } from '../../utils/clipboard';
 
 /** Everything the user typed, in one paste-able block. Nothing else holds it: inputs are not persisted. */
 function configSnapshot(): string {
-  const { rawData, propsConf, transformsConf } = useAppStore.getState();
-  return ['# props.conf', propsConf, '', '# transforms.conf', transformsConf, '', '# Raw data', rawData].join('\n');
+  const { metadata, rawData, propsConf, transformsConf } = useAppStore.getState();
+  // The metadata decides which stanzas match, so the confs alone do not restore the run.
+  const { index, host, source, sourcetype } = metadata;
+  return [
+    '# Metadata',
+    `index = ${index}`,
+    `host = ${host}`,
+    `source = ${source}`,
+    `sourcetype = ${sourcetype}`,
+    '',
+    '# props.conf',
+    propsConf,
+    '',
+    '# transforms.conf',
+    transformsConf,
+    '',
+    '# Raw data',
+    rawData,
+  ].join('\n');
 }
 
 function RootFallback({ error }: { error: Error }) {
