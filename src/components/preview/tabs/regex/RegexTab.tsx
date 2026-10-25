@@ -10,6 +10,7 @@ import { RegexResults } from './RegexResults';
 
 export function RegexTab(props: RegexTabProps) {
   const patternId = useId();
+  const errorId = useId();
   // In the store, so they survive the tab unmounting on a sub-tab switch.
   const pattern = useAppStore((s) => s.regexPattern);
   const setPattern = useAppStore((s) => s.setRegexPattern);
@@ -49,12 +50,15 @@ export function RegexTab(props: RegexTabProps) {
           </label>
           {/* Only settled counts: while matching is pending, "0/N" would
               describe a pattern that has not been tried yet. */}
-          {pattern && !validationError && status === 'ok' && matchStats.total > 0 && (
-            <span className="text-[10px] text-[var(--color-text-muted)] ml-auto">
-              {matchStats.matched}/{matchStats.total} events matched
-              {refreshing && !countExact && ' · updating…'}
-            </span>
-          )}
+          {/* Always mounted, so a screen reader announces the count as it changes. */}
+          <span role="status" className="text-[10px] text-[var(--color-text-muted)] ml-auto">
+            {pattern && !validationError && status === 'ok' && matchStats.total > 0 && (
+              <>
+                {matchStats.matched}/{matchStats.total} events matched
+                {refreshing && !countExact && ' · updating…'}
+              </>
+            )}
+          </span>
         </div>
         <input
           id={patternId}
@@ -62,10 +66,16 @@ export function RegexTab(props: RegexTabProps) {
           placeholder="(?P<field_name>\d+\.\d+\.\d+\.\d+)..."
           value={pattern}
           onChange={(e) => setPattern(e.target.value)}
+          aria-invalid={validationError ? true : undefined}
+          aria-describedby={validationError ? errorId : undefined}
           className="w-full px-2 py-1.5 text-xs font-mono rounded border border-[var(--color-border)] bg-[var(--color-bg-primary)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent)]"
           spellCheck={false}
         />
-        {validationError && <div className="mt-1 text-[10px] text-[var(--color-error)]">{validationError}</div>}
+        {validationError && (
+          <div id={errorId} role="alert" className="mt-1 text-[10px] text-[var(--color-error)]">
+            {validationError}
+          </div>
+        )}
       </div>
 
       {/* Named capture groups */}

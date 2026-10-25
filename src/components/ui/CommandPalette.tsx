@@ -155,7 +155,10 @@ export function CommandPalette() {
 
 function PaletteInput() {
   return (
-    <div className="flex items-center gap-2 px-3 border-b" style={{ borderColor: 'var(--color-border)' }}>
+    <div
+      className="flex items-center gap-2 px-3 border-b focus-within:ring-2 focus-within:ring-inset focus-within:ring-[var(--color-accent)]"
+      style={{ borderColor: 'var(--color-border)' }}
+    >
       <Icon name="search" className="w-4 h-4 shrink-0 text-[var(--color-text-muted)]" />
       <Command.Input
         placeholder="Type a command…"
