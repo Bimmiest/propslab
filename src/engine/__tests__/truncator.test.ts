@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { truncateEvents } from '../processors/truncator';
 import { breakLines } from '../processors/lineBreaker';
-import type { SplunkEvent, ConfDirective, ValidationDiagnostic } from '../types';
+import { runPipeline } from '../pipeline';
+import type { SplunkEvent, ConfDirective } from '../types';
 import { runCtx, FIXED_NOW } from './runCtx';
 import { makeEvent } from '../../test/makeEvent';
 
@@ -31,11 +32,9 @@ describe('truncateEvents', () => {
   });
 
   // A non-numeric TRUNCATE must not slice every event to '' via NaN.
-  it('ignores a non-numeric TRUNCATE instead of blanking every event', () => {
-    const diags: ValidationDiagnostic[] = [];
-    const e = truncateEvents([event('keep me intact')], truncateDir('abc'), runCtx(FIXED_NOW, diags))[0]!;
+  it('reads a non-numeric TRUNCATE as the default instead of blanking every event', () => {
+    const e = truncateEvents([event('keep me intact')], truncateDir('abc'), runCtx(FIXED_NOW))[0]!;
     expect(e._raw).toBe('keep me intact');
-    expect(diags.some((d) => d.message.includes('not a valid byte count'))).toBe(true);
   });
 
   // TRUNCATE is a per-line cap, not a per-(merged-)event cap.
@@ -80,14 +79,35 @@ describe('truncateEvents', () => {
     expect(byDefault.processingTrace.at(-1)!.truncation).toEqual({ lines: 1, limitBytes: 10_000, isDefault: true });
   });
 
-  // parseInt is too lenient — these forms must be rejected, not silently
-  // truncating with a wrong length (1e3→1) or disabling truncation (0x10→0).
-  it.each(['0x10', '1e3', '100abc', '1.5', '-5'])('ignores a malformed TRUNCATE value %s', (bad) => {
-    const diags: ValidationDiagnostic[] = [];
-    const long = 'x'.repeat(50);
-    const e = truncateEvents([event(long)], truncateDir(bad), runCtx(FIXED_NOW, diags))[0]!;
-    expect(e._raw).toBe(long); // unchanged
-    expect(diags.some((d) => d.message.includes('not a valid byte count'))).toBe(true);
+  // parseInt is too lenient. These forms must not truncate with a wrong length
+  // (1e3 read as 1) or disable truncation (0x10 read as 0), and an empty or
+  // negative value resets TRUNCATE in Splunk: each caps at the 10,000-byte
+  // default (#559).
+  it.each(['0x10', '1e3', '100abc', '1.5', '-5', '', '   '])('caps at the default for TRUNCATE = "%s"', (bad) => {
+    const e = truncateEvents([event('x'.repeat(20_021))], truncateDir(bad), runCtx(FIXED_NOW))[0]!;
+    expect(e._raw).toHaveLength(10_000);
+    expect(e.fields['meta']).toBe('truncated');
+    expect(e.processingTrace.at(-1)!.truncation).toEqual({ lines: 1, limitBytes: 10_000, isDefault: true });
+  });
+});
+
+describe('#559 — a malformed TRUNCATE in a run', () => {
+  const META = { index: 'main', host: 'h', source: 's', sourcetype: 'st' };
+
+  it('caps at the default and is reported once, by the linter', () => {
+    const run = (value: string) =>
+      runPipeline('x'.repeat(20_021), META, `[st]\nTRUNCATE = ${value}`, '', {
+        perEventPipeline: false,
+        now: FIXED_NOW,
+      });
+    for (const value of ['', 'abc', '-5']) {
+      const { result, diagnostics } = run(value);
+      expect(result.events[0]?._raw, value).toHaveLength(10_000);
+      expect(
+        diagnostics.filter((d) => d.directiveKey === 'TRUNCATE' || d.message.includes('TRUNCATE')),
+        value,
+      ).toHaveLength(value === '' ? 0 : 1);
+    }
   });
 });
 

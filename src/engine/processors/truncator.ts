@@ -1,5 +1,4 @@
 import type { SplunkEvent, ConfDirective } from '../types';
-import { atDirective } from '../parser/provenance';
 import { segmentLengthsOf } from './lineBreaker';
 import { effectiveDirective } from '../utils/directiveValues';
 import type { RunContext } from '../runContext';
@@ -77,28 +76,17 @@ function splitIntoSegments(event: SplunkEvent): string[] {
   return raw.split('\n');
 }
 
-export function truncateEvents(events: SplunkEvent[], directives: ConfDirective[], ctx: RunContext): SplunkEvent[] {
-  const { diagnostics } = ctx;
+/** Takes the run context like every stage, though it reads nothing from it: the linter reports a bad value. */
+export function truncateEvents(events: SplunkEvent[], directives: ConfDirective[], _ctx: RunContext): SplunkEvent[] {
   const truncateDir = effectiveDirective(directives, 'TRUNCATE');
-  const isDefault = !truncateDir;
-  const rawValue = truncateDir?.value.trim() ?? '';
-  const maxBytes = truncateDir ? parseInt(rawValue, 10) : 10000;
-
   // TRUNCATE must be a clean non-negative integer (byte count). parseInt is far
-  // too lenient — "0x10"→0 (silently disables truncation), "1e3"→1 (truncates
-  // every event to ~1 byte), "100abc"→100 (no warning) — so validate the exact
-  // form and ignore anything else, as real Splunk does, rather than silently
-  // truncating with a wrong length or blanking the whole preview.
-  if (truncateDir && !/^\d+$/.test(rawValue)) {
-    diagnostics.push({
-      level: 'warning',
-      message: `TRUNCATE = "${rawValue}" is not a valid byte count and was ignored. TRUNCATE expects a non-negative integer (default 10000; 0 disables truncation).`,
-      file: 'props.conf',
-      ...atDirective(truncateDir),
-      directiveKey: truncateDir.key,
-    });
-    return events;
-  }
+  // too lenient ("0x10" reads as 0, "1e3" as 1, "100abc" as 100), so anything
+  // else takes the default, as an empty assignment and a negative do in Splunk.
+  // The directive linter reports a malformed value; this only decides the cap.
+  const rawValue = truncateDir?.value.trim() ?? '';
+  const valid = /^\d+$/.test(rawValue);
+  const isDefault = !valid;
+  const maxBytes = valid ? parseInt(rawValue, 10) : 10000;
 
   if (maxBytes <= 0) return events;
 

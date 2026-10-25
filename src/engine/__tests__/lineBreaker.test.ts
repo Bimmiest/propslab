@@ -297,6 +297,21 @@ describe('#172 — a LINE_BREAKER with no capture group', () => {
   });
 });
 
+describe('#559 — an empty LINE_BREAKER resets to the default', () => {
+  // An empty assignment resets a setting to its default (directiveValues.ts).
+  it.each(['', '   '])('breaks on newlines with no warning for LINE_BREAKER = "%s"', (value) => {
+    const diags: ValidationDiagnostic[] = [];
+    const events = breakLines(
+      'a\nb\n',
+      [dir('SHOULD_LINEMERGE', 'false'), dir('LINE_BREAKER', value)],
+      META,
+      runCtx(FIXED_NOW, diags),
+    );
+    expect(events.map((e) => e._raw)).toEqual(['a', 'b']);
+    expect(diags.filter((d) => d.directiveKey === 'LINE_BREAKER')).toEqual([]);
+  });
+});
+
 describe('#472 — a LINE_BREAKER that does not compile', () => {
   // Doc-derived: props.conf.spec says LINE_BREAKER is a regular expression, and
   // a regular expression that is not valid PCRE cannot name a break. The
