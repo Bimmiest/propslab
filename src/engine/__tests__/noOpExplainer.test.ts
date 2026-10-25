@@ -130,6 +130,8 @@ describe('describeNoOp', () => {
   it('agrees in number when several fields were already set', () => {
     expect(describeNoOp({ kind: 'fields-already-set', fields: ['a', 'b'] })).toContain('were already set');
     expect(describeNoOp({ kind: 'fields-already-set', fields: ['a'] })).toContain('was already set');
+    expect(describeNoOp({ kind: 'no-named-groups' })).toContain('has no named capture group');
+    expect(describeNoOp({ kind: 'groups-unset', fields: ['a', 'b'] })).toContain('a, b took no part in the match');
   });
 
   it('says plainly when an event was past the explanation limit', () => {

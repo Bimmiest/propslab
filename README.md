@@ -234,6 +234,7 @@ The strftime completions show the same rendered time. Thus you can choose betwee
 - Its `SOURCE_KEY` was empty.
 - The pattern did not match. The row gives the character where the match stopped.
 - The fields that it makes were already set.
+- The pattern matched, but it has no named capture group, or none of its named groups took part in the match.
 - An `EVAL` expression evaluated to null.
 
 The list covers `EXTRACT`, `TRANSFORMS`/`REPORT`, `SEDCMD`, `FIELDALIAS` and `EVAL`. When you click the line reference, the editor moves to that line.
