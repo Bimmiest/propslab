@@ -20,9 +20,27 @@ interface TimestampTabProps {
   inputs?: Pick<PipelineInputs, 'propsConf' | 'metadata'>;
 }
 
-export function TimestampTab({ items, currentPage, eventsPerPage, inputs }: TimestampTabProps) {
-  const ownInputs = usePipelineInputs();
-  const { propsConf, metadata } = inputs ?? ownInputs;
+/**
+ * The tab, reading the inputs it is given. Without them it subscribes to the
+ * store's own, which re-renders it on every config keystroke and again after
+ * the debounce: PreviewPanel passes them precisely so that it does not (#565).
+ */
+export function TimestampTab(props: TimestampTabProps) {
+  return props.inputs ? <TimestampView {...props} inputs={props.inputs} /> : <TimestampWithOwnInputs {...props} />;
+}
+
+function TimestampWithOwnInputs(props: TimestampTabProps) {
+  const inputs = usePipelineInputs();
+  return <TimestampView {...props} inputs={inputs} />;
+}
+
+function TimestampView({
+  items,
+  currentPage,
+  eventsPerPage,
+  inputs,
+}: TimestampTabProps & { inputs: NonNullable<TimestampTabProps['inputs']> }) {
+  const { propsConf, metadata } = inputs;
 
   const config = useMemo(() => parseTimeConfig(propsConf, metadata), [propsConf, metadata]);
 

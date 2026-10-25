@@ -6,6 +6,10 @@ All notable changes to Propslab are documented here, newest first. Entries say w
 
 ## Unreleased
 
+### Fixed
+
+- **The preview's Fields filter opens promptly on an event with thousands of fields, and the Timestamp tab no longer re-renders on each config keystroke** ([#565](https://github.com/Bimmiest/propslab/issues/565)). The filter rendered a checkbox row for every field; it now renders the rows near the viewport, as the Fields table does.
+
 ## 1.3.0 — 2026-10-25
 
 ### Added

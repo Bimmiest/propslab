@@ -8,6 +8,7 @@ import {
   type KeyboardEvent,
   type RefObject,
 } from 'react';
+import { useWindowedRows } from '../../hooks/useWindowedRows';
 import { Icon } from './Icon';
 
 interface MultiSelectProps {
@@ -124,9 +125,7 @@ export function MultiSelect({ label, options, selected, onChange, searchable }: 
           }}
         >
           {showSearch && <OptionFilter label={label} query={query} setQuery={setQuery} searchRef={searchRef} />}
-          <div className="overflow-auto flex-1">
-            <OptionList options={filteredOptions} selected={selected} toggle={toggle} />
-          </div>
+          <OptionList options={filteredOptions} selected={selected} toggle={toggle} />
           {activeCount > 0 && <ClearAllButton onClear={() => onChange(new Set())} triggerRef={triggerRef} />}
         </div>
       )}
@@ -157,6 +156,12 @@ function ClearAllButton({
   );
 }
 
+/**
+ * The options, rendered only near the viewport once there are many: a wide
+ * JSON event flattens to thousands of fields, and the Fields filter mounted a
+ * checkbox row for each on open and re-rendered them all per keystroke in its
+ * filter box (#565), as the Fields table did before #454.
+ */
 function OptionList({
   options,
   selected,
@@ -166,24 +171,51 @@ function OptionList({
   selected: ReadonlySet<string>;
   toggle: (value: string) => void;
 }) {
-  if (options.length === 0) {
-    return <div className="px-3 py-2 text-xs text-[var(--color-text-muted)]">No matches</div>;
-  }
-  return options.map((opt) => (
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const { segments, onFocus } = useWindowedRows(scrollRef, options.length, { estimate: 28 });
+  return (
+    <div ref={scrollRef} className="overflow-auto flex-1" onFocus={onFocus}>
+      {options.length === 0 ? (
+        <div className="px-3 py-2 text-xs text-[var(--color-text-muted)]">No matches</div>
+      ) : (
+        segments.map((seg) => {
+          if (seg.kind === 'spacer') return <div key={seg.key} aria-hidden="true" style={{ height: seg.height }} />;
+          const opt = options[seg.index];
+          if (opt === undefined) return null;
+          return <OptionRow key={opt} opt={opt} index={seg.index} checked={selected.has(opt)} toggle={toggle} />;
+        })
+      )}
+    </div>
+  );
+}
+
+function OptionRow({
+  opt,
+  index,
+  checked,
+  toggle,
+}: {
+  opt: string;
+  index: number;
+  checked: boolean;
+  toggle: (value: string) => void;
+}) {
+  return (
     <label
-      key={opt}
+      data-window-row
+      data-window-index={index}
       className="flex items-center gap-2 px-2.5 py-1.5 text-xs cursor-pointer hover:bg-[var(--color-bg-tertiary)]"
       style={{ color: 'var(--color-text-primary)' }}
     >
       <input
         type="checkbox"
-        checked={selected.has(opt)}
+        checked={checked}
         onChange={() => toggle(opt)}
         className="rounded accent-[var(--color-accent)]"
       />
       <span className="truncate">{opt}</span>
     </label>
-  ));
+  );
 }
 
 function OptionFilter({
