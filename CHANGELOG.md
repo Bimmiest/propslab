@@ -6,6 +6,8 @@ All notable changes to Propslab are documented here, newest first. Entries say w
 
 ## Unreleased
 
+## 1.3.0 — 2026-10-25
+
 ### Added
 
 - **The status bar names the build** ([#648](https://github.com/Bimmiest/propslab/issues/648)). Hovering the version shows the commit the app was built from, for example `Propslab 1.3.0, build 9f9744f`, and the bug form asks for it, so a report can be tied to a deploy rather than to a version every deploy since the last release shares.
