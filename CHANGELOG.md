@@ -121,6 +121,7 @@ All notable changes to Propslab are documented here, newest first. Entries say w
   - `like()` and `LIKE` match across newlines.
   - Operands are typed as Splunk types them: a field is compared as a number against a number and as text against a string, and two numeric fields compare as numbers. `+` follows the same rule, and a non-numeric string beside a number is NULL.
   - Ordering operators on a multivalue are NULL, and `!=` stays the complement of `==`.
+- **`INGEST_EVAL` writes its indexed fields to `_meta`** ([#558](https://github.com/Bimmiest/propslab/issues/558)), as `WRITE_META` does, so a later transform with `SOURCE_KEY = _meta` or `$0` sees them and a `DEST_KEY = _meta` replacement can drop them. A null assignment removes the field from `_meta` too.
 - **Structured data** ([#444](https://github.com/Bimmiest/propslab/issues/444), [#449](https://github.com/Bimmiest/propslab/issues/449)).
   - `TIMESTAMP_FIELDS` applies to `json` and `w3c`. A value that does not parse takes the previous event's time rather than a timestamp found elsewhere in the row.
   - `HEADER_FIELD_LINE_NUMBER` counts raw lines, including blank and preamble lines.
