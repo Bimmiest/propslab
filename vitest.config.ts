@@ -154,7 +154,7 @@ export default defineConfig({
         },
         'src/utils/**': {
           statements: 93,
-          branches: 87,
+          branches: 89,
           functions: 99,
           lines: 96,
         },
