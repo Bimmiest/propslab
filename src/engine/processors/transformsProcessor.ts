@@ -343,6 +343,24 @@ function runRegexStanza(
   else if (result.noOp) noteNoOp(run, state, site, result.noOp);
 }
 
+/**
+ * The transforms.conf stanzas by name, each with the `[default]` stanza's
+ * directives (and any written above the first header) in front of its own.
+ * Every .conf file applies its `[default]` settings to all its stanzas, and a
+ * stanza's own setting wins, which putting them first gives under the readers'
+ * last-definition rule (#615). Without a default stanza the stanzas are
+ * returned as parsed. Built once per run: the regex cache is keyed by stanza.
+ */
+function stanzasWithDefaults(conf: ParsedConf): Map<string, TransformStanza> {
+  const defaults = conf.stanzas.find((s) => s.type === 'default')?.directives ?? [];
+  return new Map(
+    conf.stanzas.map((s) => [
+      s.name,
+      defaults.length > 0 && s.type !== 'default' ? { ...s, directives: [...defaults, ...s.directives] } : s,
+    ]),
+  );
+}
+
 /** Run one TRANSFORMS-/RULESET-/REPORT- list against the event. */
 function runTransformList(run: TransformsRun, state: EventState, dir: ConfDirective): void {
   // Value can be comma-separated list of transform stanza names
@@ -385,7 +403,7 @@ export function applyTransforms(
     phase,
     ctx,
     diagnostics: ctx.diagnostics,
-    stanzaMap: new Map(transformsConf.stanzas.map((s) => [s.name, s])),
+    stanzaMap: ctx.memo.get('transforms stanzas', transformsConf, () => stanzasWithDefaults(transformsConf)),
   };
 
   return events.flatMap((event) => {
