@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useCallback, useRef } from 'react';
+import { useRovingTabs } from '../../hooks/useRovingTabs';
 import { tabId, tabPanelId } from './tabIds';
 
 interface TabItem {
@@ -33,43 +33,21 @@ export function Tabs({
   size = 'md',
   variant = 'underline',
 }: TabsProps) {
-  const tablistRef = useRef<HTMLDivElement>(null);
-
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      const currentIndex = tabs.findIndex((t) => t.id === activeTab);
-      let nextIndex = -1;
-
-      if (e.key === 'ArrowRight') {
-        nextIndex = (currentIndex + 1) % tabs.length;
-      } else if (e.key === 'ArrowLeft') {
-        nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
-      } else if (e.key === 'Home') {
-        nextIndex = 0;
-      } else if (e.key === 'End') {
-        nextIndex = tabs.length - 1;
-      }
-
-      const nextTab = tabs[nextIndex];
-      if (nextIndex >= 0 && nextTab) {
-        e.preventDefault();
-        onTabChange(nextTab.id);
-        const buttons = tablistRef.current?.querySelectorAll<HTMLButtonElement>('[role="tab"]');
-        buttons?.[nextIndex]?.focus();
-      }
-    },
-    [tabs, activeTab, onTabChange],
+  const { ref, onKeyDown } = useRovingTabs(
+    tabs.map((t) => t.id),
+    activeTab,
+    onTabChange,
   );
 
   return (
     <div
-      ref={tablistRef}
+      ref={ref}
       role="tablist"
       aria-label={ariaLabel}
       className={
         variant === 'secondary' ? 'flex gap-0.5 p-1 overflow-x-auto min-w-0' : 'flex gap-1 overflow-x-auto min-w-0'
       }
-      onKeyDown={handleKeyDown}
+      onKeyDown={onKeyDown}
     >
       {tabs.map((tab) => {
         const isActive = tab.id === activeTab;

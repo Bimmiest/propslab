@@ -1,5 +1,5 @@
-import { useRef, type KeyboardEvent } from 'react';
 import { useAppStore } from '../../store/useAppStore';
+import { useRovingTabs } from '../../hooks/useRovingTabs';
 import type { ActiveView } from '../../store/useAppStore';
 import { Icon } from '../ui/Icon';
 import type { IconName } from '../ui/Icon';
@@ -15,6 +15,7 @@ const ITEMS: RailItem[] = [
   { id: 'simulator', label: 'Simulator', icon: 'sliders' },
   { id: 'dictionary', label: 'Dictionary', icon: 'book' },
 ];
+const ITEM_IDS = ITEMS.map((i) => i.id);
 
 /**
  * Icon-only vertical switcher for the top-level workspace views.
@@ -31,36 +32,19 @@ const ITEMS: RailItem[] = [
 export function ActivityRail({ dictionaryMounted = false }: { dictionaryMounted?: boolean }) {
   const activeView = useAppStore((s) => s.activeView);
   const setActiveView = useAppStore((s) => s.setActiveView);
-  const railRef = useRef<HTMLDivElement>(null);
-
-  // Roving tabindex, matching MobileShell and the shared Tabs component: only
-  // the active item sits in the tab order, and arrows move between items. The
-  // rail is vertical, so Up/Down drive it — Left/Right are also accepted
-  // because the pattern is muscle-memory from the horizontal tab strips.
-  const handleKeyDown = (e: KeyboardEvent) => {
-    const current = ITEMS.findIndex((i) => i.id === activeView);
-    let next = -1;
-    if (e.key === 'ArrowDown' || e.key === 'ArrowRight') next = (current + 1) % ITEMS.length;
-    else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') next = (current - 1 + ITEMS.length) % ITEMS.length;
-    else if (e.key === 'Home') next = 0;
-    else if (e.key === 'End') next = ITEMS.length - 1;
-    if (next < 0) return;
-    e.preventDefault();
-    const target = ITEMS[next];
-    if (!target) return;
-    setActiveView(target.id);
-    railRef.current?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus();
-  };
+  // Roving tabindex, matching MobileShell and the shared Tabs component. The
+  // rail is vertical, so Up/Down drive it.
+  const { ref, onKeyDown } = useRovingTabs(ITEM_IDS, activeView, setActiveView, 'vertical');
 
   return (
     // Wrapped in a <nav> so the rail sits inside a landmark (axe `region`).
     <nav aria-label="Views" className="shrink-0 flex">
       <div
-        ref={railRef}
+        ref={ref}
         role="tablist"
         aria-label="Workspace views"
         aria-orientation="vertical"
-        onKeyDown={handleKeyDown}
+        onKeyDown={onKeyDown}
         className="shrink-0 w-12 flex flex-col items-center gap-1 py-2"
         style={{
           backgroundColor: 'var(--color-bg-secondary)',

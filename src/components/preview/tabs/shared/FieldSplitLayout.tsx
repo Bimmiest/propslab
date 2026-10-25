@@ -1,6 +1,8 @@
 import { useState, type ReactNode } from 'react';
-import { Panel, Group, Separator } from 'react-resizable-panels';
+import { Panel, Group } from 'react-resizable-panels';
 import type { Layout } from 'react-resizable-panels';
+import { ResizeHandle } from '../../../ui/ResizeHandle';
+import { safeStorage } from '../../../../utils/safeStorage';
 
 const eventsId = (storageKey: string) => `${storageKey}-events`;
 const sidebarId = (storageKey: string) => `${storageKey}-sidebar`;
@@ -31,14 +33,13 @@ function isLayout(value: unknown, storageKey: string): value is Layout {
 }
 
 function getSavedLayout(storageKey: string): Layout | undefined {
+  const saved = safeStorage.get(storageKey);
+  if (!saved) return undefined;
   try {
-    const saved = localStorage.getItem(storageKey);
-    if (saved) {
-      const parsed: unknown = JSON.parse(saved);
-      if (isLayout(parsed, storageKey)) return parsed;
-    }
+    const parsed: unknown = JSON.parse(saved);
+    if (isLayout(parsed, storageKey)) return parsed;
   } catch {
-    /* ignore */
+    /* not JSON */
   }
   return undefined;
 }
@@ -68,11 +69,7 @@ export function FieldSplitLayout({ storageKey, collapsed, sidebar, children }: F
     // With the sidebar hidden the group holds the events pane alone: not a split to keep.
     if (!isLayout(next, storageKey)) return;
     setLayout(next);
-    try {
-      localStorage.setItem(storageKey, JSON.stringify(next));
-    } catch {
-      /* ignore */
-    }
+    safeStorage.set(storageKey, JSON.stringify(next));
   };
 
   // One tree whether or not the sidebar shows: the events pane stays the
@@ -91,11 +88,7 @@ export function FieldSplitLayout({ storageKey, collapsed, sidebar, children }: F
           {children}
         </div>
       </Panel>
-      {!collapsed && (
-        <Separator className="w-1.5 cursor-col-resize bg-[var(--color-border)] hover:bg-[var(--color-accent)] transition-colors group relative flex items-center justify-center">
-          <div className="w-0.5 h-8 rounded-full bg-[var(--color-text-muted)] group-hover:bg-white transition-colors" />
-        </Separator>
-      )}
+      {!collapsed && <ResizeHandle direction="horizontal" />}
       {!collapsed && (
         <Panel defaultSize="15" minSize="10" id={sidebarId(storageKey)}>
           {sidebar}

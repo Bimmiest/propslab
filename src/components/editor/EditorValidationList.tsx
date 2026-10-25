@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useAppStore } from '../../store/useAppStore';
 import type { ValidationDiagnostic, DiagnosticTarget } from '../../engine/types';
 import { Icon } from '../ui/Icon';
+import { countByLevel } from '../../utils/diagnosticCounts';
 import { revealInEditor } from './revealInEditor';
 
 interface EditorValidationListProps {
@@ -14,9 +15,7 @@ export function EditorValidationList({ file }: EditorValidationListProps) {
 
   const filtered = useMemo(() => diagnostics.filter((d) => d.file === file), [diagnostics, file]);
 
-  const errorCount = filtered.filter((d) => d.level === 'error').length;
-  const warningCount = filtered.filter((d) => d.level === 'warning').length;
-  const infoCount = filtered.filter((d) => d.level === 'info').length;
+  const { error: errorCount, warning: warningCount, info: infoCount } = countByLevel(filtered);
 
   if (filtered.length === 0) {
     return (

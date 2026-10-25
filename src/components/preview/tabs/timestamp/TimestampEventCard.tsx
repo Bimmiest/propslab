@@ -1,6 +1,7 @@
 import type { TimeConfig, TimestampProbe } from '../../../../engine/timestampMatch';
 import type { TimeSource } from '../../../../engine/types';
 import { tint } from '../../../../utils/tint';
+import { EventCardHeader, EventNumber } from '../shared/EventCardHeader';
 import { FALLBACK_LABEL, FORMAT_COLOR, LOOKAHEAD_COLOR, PREFIX_COLOR } from './data';
 import { overlaySegments, type OverlaySegment } from './timestampLogic';
 
@@ -30,9 +31,8 @@ export function TimestampEventCard({
 
   return (
     <div className="border border-[var(--color-border)] rounded bg-[var(--color-bg-secondary)]">
-      <div className="flex items-center justify-between px-3 py-1.5 border-b border-[var(--color-border)] bg-[var(--color-bg-tertiary)]">
-        <span className="text-xs font-medium text-[var(--color-text-muted)]">
-          Event #{globalIdx}
+      <EventCardHeader split>
+        <EventNumber globalIdx={globalIdx}>
           {rewritten && (
             <span
               className="ml-2 font-normal italic"
@@ -41,7 +41,7 @@ export function TimestampEventCard({
               as read before _raw was rewritten
             </span>
           )}
-        </span>
+        </EventNumber>
         <div className="flex items-center gap-2">
           {pending ? (
             <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-bg-secondary)] text-[var(--color-text-muted)] font-medium">
@@ -73,7 +73,7 @@ export function TimestampEventCard({
             </span>
           )}
         </div>
-      </div>
+      </EventCardHeader>
       <pre className="p-3 text-xs font-mono whitespace-pre-wrap break-all">
         <TimestampOverlay raw={raw} probe={probe} config={config} />
       </pre>

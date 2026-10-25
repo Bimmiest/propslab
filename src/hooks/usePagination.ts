@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import { useAppStore } from '../store/useAppStore';
+import { pageStart } from '../utils/pagination';
 
 export function usePagination<T>(items: T[]) {
   const currentPage = useAppStore((s) => s.currentPage);
@@ -18,7 +19,7 @@ export function usePagination<T>(items: T[]) {
   }, [currentPage, totalPages, setCurrentPage]);
 
   const paginatedItems = useMemo(() => {
-    const start = (safePage - 1) * eventsPerPage;
+    const start = pageStart(safePage, eventsPerPage);
     return items.slice(start, start + eventsPerPage);
   }, [items, safePage, eventsPerPage]);
 

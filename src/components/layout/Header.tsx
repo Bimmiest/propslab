@@ -5,6 +5,7 @@ import { ProgressBar } from '../ui/ProgressBar';
 import { Icon, type IconName } from '../ui/Icon';
 import { ClearButton } from '../editor/ClearButton';
 import { Tooltip } from '../ui/Tooltip';
+import { countByLevel } from '../../utils/diagnosticCounts';
 
 /** Detect whether the platform is Apple (Mac, iOS, iPad, etc.). */
 function isApplePlatform(): boolean {
@@ -81,8 +82,7 @@ export function Header() {
   // re-renders on every keystroke even though hasAnyContent never changes.
   const hasAnyContent = useAppStore((s) => Boolean(s.rawData || s.propsConf || s.transformsConf));
 
-  const errorCount = useMemo(() => diagnostics.filter((d) => d.level === 'error').length, [diagnostics]);
-  const warningCount = useMemo(() => diagnostics.filter((d) => d.level === 'warning').length, [diagnostics]);
+  const { error: errorCount, warning: warningCount } = useMemo(() => countByLevel(diagnostics), [diagnostics]);
 
   const modifierName = getModifierName();
 

@@ -10,7 +10,7 @@ import { FirstRunBanner } from '../onboarding/FirstRunBanner';
 import { DictionaryView, ScaffoldModal } from './lazyViews';
 import { PipelineController } from './PipelineController';
 import { useAppStore } from '../../store/useAppStore';
-import { useMediaQuery } from '../../hooks/useMediaQuery';
+import { MOBILE_QUERY, useMediaQuery } from '../../hooks/useMediaQuery';
 import { CommandPalette } from '../ui/CommandPalette';
 import { MobileShell } from './MobileShell';
 
@@ -18,7 +18,7 @@ export function AppShell() {
   const scaffoldOpen = useAppStore((s) => s.scaffoldOpen);
   const toggleScaffold = useAppStore((s) => s.toggleScaffold);
   const activeView = useAppStore((s) => s.activeView);
-  const isMobile = useMediaQuery('(max-width: 767px)');
+  const isMobile = useMediaQuery(MOBILE_QUERY);
 
   // The dictionary is inert reference material, so don't pay for it until the
   // user asks. Once mounted it stays mounted, for the same reason the simulator
