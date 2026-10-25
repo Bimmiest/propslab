@@ -127,6 +127,7 @@ All notable changes to Propslab are documented here, newest first. Entries say w
   - `MISSING_VALUE_REGEX` matches whole values.
   - A quoted value containing a line break stays in one row, and a quote opens a value only at the start of a field.
   - `FIELD_NAMES` names columns by position, and a value past the last name is named `EXTRA_FIELD_<column>`.
+- **"Add to props.conf", "Create EXTRACT" and "Set as TIME_PREFIX" write into the stanza the event uses** ([#611](https://github.com/Bimmiest/propslab/issues/611)). When a `[source::]` or `[host::]` stanza assigned the sourcetype at input, they wrote into the stanza of the sourcetype typed in the Metadata panel, which never matched. A search-time directive on a stanza with `rename` now goes to the rename target.
 - **`FIELDALIAS … AS` removes the target when the source has no value** ([#445](https://github.com/Bimmiest/propslab/issues/445)). `ASNEW` keeps it.
 - **A JSON number keeps the text the event wrote** ([#448](https://github.com/Bimmiest/propslab/issues/448)): `10.50`, `1e3` and integers past 2^53 are no longer rounded through a double.
 - **`KEEP_EMPTY_VALS` is honoured by a REGEX-based `REPORT`** ([#450](https://github.com/Bimmiest/propslab/issues/450)), and an empty capture is dropped by default. A DELIMS-based `REPORT` drops empty values whatever it says.

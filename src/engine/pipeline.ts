@@ -124,6 +124,8 @@ interface PipelineRun {
   directives: ConfDirective[];
   /** Search-time directives: `directives`, unless `rename` points elsewhere. */
   searchTimeDirectives: ConfDirective[];
+  /** Where `rename` points, when a matched stanza has one. */
+  renamedSourcetype: string | undefined;
   /** The metadata the events were broken with: the caller's, after any input-time assignment. */
   effectiveMetadata: EventMetadata;
   ctx: RunContext;
@@ -140,7 +142,7 @@ function resolveDirectives(
   propsConf: ParsedConf,
   metadata: EventMetadata,
   diagnostics: ValidationDiagnostic[],
-): Pick<PipelineRun, 'directives' | 'searchTimeDirectives' | 'effectiveMetadata'> {
+): Pick<PipelineRun, 'directives' | 'searchTimeDirectives' | 'renamedSourcetype' | 'effectiveMetadata'> {
   const resolved = resolveStanzasForEvent(propsConf.stanzas, metadata);
   const matchedStanzas = resolved.stanzas;
   const effectiveMetadata = resolved.metadata;
@@ -161,7 +163,9 @@ function resolveDirectives(
   // sourcetype, and search-time config comes from the target stanza alone.
   // See docs/adr/0002-input-time-sourcetype-and-rename.md.
   const renamedSourcetype = getRenamedSourcetype(matchedStanzas);
-  if (!renamedSourcetype) return { directives, searchTimeDirectives: directives, effectiveMetadata };
+  if (!renamedSourcetype) {
+    return { directives, searchTimeDirectives: directives, renamedSourcetype: undefined, effectiveMetadata };
+  }
 
   const searchTimeStanzas = matchStanzas(propsConf.stanzas, { ...effectiveMetadata, sourcetype: renamedSourcetype });
   diagnostics.push({
@@ -174,7 +178,7 @@ function resolveDirectives(
     file: 'props.conf',
     directiveKey: 'rename',
   });
-  return { directives, searchTimeDirectives: mergeDirectives(searchTimeStanzas), effectiveMetadata };
+  return { directives, searchTimeDirectives: mergeDirectives(searchTimeStanzas), renamedSourcetype, effectiveMetadata };
 }
 
 /**
@@ -511,6 +515,7 @@ export function runPipeline(
       // input-time `sourcetype =` assignment, so the UI does not badge every
       // event of an assigned sourcetype as "Metadata Modified".
       inputMetadata: run.effectiveMetadata,
+      ...(run.renamedSourcetype !== undefined ? { renamedSourcetype: run.renamedSourcetype } : {}),
     },
     diagnostics,
   };

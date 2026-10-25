@@ -179,6 +179,7 @@ export function toViewResult(result: ProcessingResult): ViewResult {
     originalRaw: result.originalRaw,
     eventCount: result.eventCount,
     inputMetadata: result.inputMetadata,
+    ...(result.renamedSourcetype !== undefined ? { renamedSourcetype: result.renamedSourcetype } : {}),
     events,
     stepSummaries: summarizeSteps(result.events),
     fieldStats: computeFieldStats(result.events),
