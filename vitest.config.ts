@@ -9,13 +9,29 @@ import react from '@vitejs/plugin-react';
 // runPipeline. This file is evaluated once, in the main process, and workers
 // inherit the environment, so every file of one invocation shares one
 // directory and two invocations never share one. The directory goes when the
-// main process does, whichever projects that run reached: a run of a single
-// test file writes into it too, and has no project to clean up after it.
-const evidenceDir = join(tmpdir(), `propslab-directive-evidence-${String(process.pid)}-${String(Date.now())}`);
-process.env['PROPSLAB_EVIDENCE_DIR'] = evidenceDir;
-process.once('exit', () => {
-  rmSync(evidenceDir, { recursive: true, force: true });
-});
+// main process does.
+//
+// Only a full run records: `vitest run` with no file filter, project, shard,
+// name pattern or changed-files selection. A partial run cannot judge the
+// evidence, so it records nothing and directiveEvidence.test.ts skips rather
+// than failing on what it did not see (#569). CI always records, so a command
+// line misread here cannot switch the gate off there.
+const cliArgs = process.argv.slice(2);
+const runAt = cliArgs.findIndex((arg) => arg === 'run' || arg === '--run');
+const fullRun =
+  runAt !== -1 &&
+  cliArgs
+    .slice(runAt + 1)
+    .every(
+      (arg) => arg.startsWith('-') && !/^(?:-t|--(?:project|shard|testNamePattern|changed|related|dir))\b/.test(arg),
+    );
+if (fullRun || process.env['CI']) {
+  const evidenceDir = join(tmpdir(), `propslab-directive-evidence-${String(process.pid)}-${String(Date.now())}`);
+  process.env['PROPSLAB_EVIDENCE_DIR'] = evidenceDir;
+  process.once('exit', () => {
+    rmSync(evidenceDir, { recursive: true, force: true });
+  });
+}
 
 const UNIT_TESTS = ['src/**/*.test.{ts,tsx}'];
 const EVIDENCE_TEST = 'src/engine/__tests__/directiveEvidence.test.ts';
