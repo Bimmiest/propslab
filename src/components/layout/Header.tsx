@@ -103,14 +103,21 @@ export function Header() {
         </div>
         <div className="flex items-center gap-2">
           <Tooltip content={`Command palette (${modifierName}+K)`} side="bottom">
+            {/* The name is the visible text, "Commands" and the shortcut (WCAG
+                2.5.3, label in name), so a speech user who says what they see
+                reaches it. It stays an aria-label because both spans are hidden
+                on narrow screens, where the icon alone is shown. The space
+                before the <kbd> keeps the two words apart for tools that read
+                the text; the flex layout ignores it. */}
             <button
               onClick={toggleCommandPalette}
-              aria-label="Open command palette"
+              aria-label={`Commands ${modifierName}K`}
+              aria-keyshortcuts={isApplePlatform() ? 'Meta+K' : 'Control+K'}
               className="flex items-center gap-1.5 px-2 h-7 rounded-md text-[11px] border border-[var(--color-border)] cursor-pointer
                 text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-tertiary)] transition-colors"
             >
               <Icon name="search" className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Commands</span>
+              <span className="hidden sm:inline">Commands</span>{' '}
               <kbd className="ml-1 px-1 rounded text-[10px] font-mono bg-[var(--color-bg-tertiary)] hidden sm:inline">
                 {modifierName}K
               </kbd>

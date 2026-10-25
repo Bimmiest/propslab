@@ -19,7 +19,7 @@ describe('FirstRunBanner', () => {
         </main>
       </>,
     );
-    const dismiss = screen.getByRole('button', { name: 'Dismiss welcome banner' });
+    const dismiss = screen.getByRole('button', { name: 'Got it: dismiss the welcome banner' });
     dismiss.focus();
     fireEvent.click(dismiss);
 
@@ -29,7 +29,7 @@ describe('FirstRunBanner', () => {
 
   it('remembers the dismissal', () => {
     const { unmount } = render(<FirstRunBanner />);
-    fireEvent.click(screen.getByRole('button', { name: 'Dismiss welcome banner' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Got it: dismiss the welcome banner' }));
     unmount();
     render(<FirstRunBanner />);
     expect(screen.queryByRole('region', { name: 'Getting started' })).not.toBeInTheDocument();
