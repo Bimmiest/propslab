@@ -131,25 +131,71 @@ body {
   animation: indeterminate 1.4s ease-in-out infinite;
 }
 
-/* Slide-out drawer (pipeline reference). Keyframes on Radix's data-state, not
-   a transition: Presence keeps a closing dialog mounted only while an exit
-   animation runs. */
-@keyframes drawer-in {
-  from { transform: translateX(100%); }
-  to   { transform: translateX(0); }
+/* Motion (#696): one set of durations and easings for every animation in the
+   app. An entrance decelerates and an exit accelerates and is shorter, so a
+   closing overlay gets out of the way. Theme-independent, so not in .dark. */
+:root {
+  --motion-fast: 120ms;  /* press feedback, exits */
+  --motion-base: 180ms;  /* popups, tooltips, tab content, disclosures */
+  --motion-slow: 240ms;  /* dialogs, drawers, backdrops */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
 }
-@keyframes drawer-out {
-  from { transform: translateX(0); }
-  to   { transform: translateX(100%); }
+
+/* `from`-only keyframes end at the element's own style, whatever it is. */
+@keyframes fade-in { from { opacity: 0; } }
+@keyframes fade-out { to { opacity: 0; } }
+@keyframes pop-in { from { opacity: 0; transform: translateY(4px) scale(0.98); } }
+@keyframes pop-out { to { opacity: 0; transform: scale(0.98); } }
+@keyframes reveal { from { opacity: 0; transform: translateY(-4px); } }
+@keyframes slide-in { from { opacity: 0; transform: translate(var(--slide-x, 0), var(--slide-y, 0)); } }
+@keyframes drawer-in { from { transform: translateX(100%); } }
+@keyframes drawer-out { to { transform: translateX(100%); } }
+
+/* Overlays animate on Radix's data-state with keyframes, not transitions:
+   Presence keeps a closing overlay mounted only while an exit animation runs,
+   and a transition would be cut off by the unmount. */
+.motion-fade[data-state='open']    { animation: fade-in var(--motion-slow) var(--ease-out); }
+.motion-fade[data-state='closed']  { animation: fade-out var(--motion-fast) var(--ease-in); }
+.motion-pop[data-state='open']     { animation: pop-in var(--motion-slow) var(--ease-out); }
+.motion-pop[data-state='closed']   { animation: pop-out var(--motion-fast) var(--ease-in); }
+.drawer-slide[data-state='open']   { animation: drawer-in var(--motion-slow) var(--ease-out); }
+.drawer-slide[data-state='closed'] { animation: drawer-out var(--motion-base) var(--ease-in); }
+
+/* A tooltip comes in from the side it opens on (Radix sets data-side). Its
+   open states are delayed-open and instant-open. */
+.motion-tooltip[data-state$='open']  { animation: slide-in var(--motion-base) var(--ease-out); }
+.motion-tooltip[data-state='closed'] { animation: fade-out var(--motion-fast) var(--ease-in); }
+.motion-tooltip[data-side='top']    { --slide-y: 4px; }
+.motion-tooltip[data-side='bottom'] { --slide-y: -4px; }
+.motion-tooltip[data-side='left']   { --slide-x: 4px; }
+.motion-tooltip[data-side='right']  { --slide-x: -4px; }
+
+/* Entrances only, for what React mounts and unmounts itself (no data-state):
+   a popup, the content of a tab, the body of a disclosure. Tab content fades
+   without a transform, which would make it the containing block of anything
+   fixed inside it. */
+.motion-pop-in  { animation: pop-in var(--motion-base) var(--ease-out); }
+.motion-fade-in { animation: fade-in var(--motion-base) var(--ease-out); }
+.motion-reveal  { animation: reveal var(--motion-base) var(--ease-out); }
+/* A native <details> opens the same way as the app's own disclosures. */
+details[open] > :not(summary) { animation: reveal var(--motion-base) var(--ease-out); }
+
+/* Press feedback for a button: it gives a little under the pointer. `scale`,
+   not `transform`, so it composes with a translate or rotate utility. Brings
+   the colour transitions with it, so it replaces `transition-colors`. */
+@utility press {
+  transition-property: color, background-color, border-color, opacity, scale;
+  transition-duration: var(--motion-fast);
+  transition-timing-function: var(--ease-out);
+  &:active:not(:disabled) { scale: 0.97; }
 }
-.drawer-slide[data-state='open']   { animation: drawer-in 250ms ease-in-out; }
-.drawer-slide[data-state='closed'] { animation: drawer-out 250ms ease-in-out; }
 
 /* Reduced motion, for everything: transitions and animations collapse to an
    instant change rather than being removed, so anything waiting on an
    `animationend`/`transitionend` (Radix Presence) still finishes. The drawer
-   drops its animation outright, and the indeterminate bar, whose keyframes
-   end off-screen, becomes a still segment. */
+   drops its animation outright, the indeterminate bar, whose keyframes end
+   off-screen, becomes a still segment, and a pressed button does not shrink. */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
@@ -159,6 +205,7 @@ body {
   }
   .drawer-slide[data-state] { animation: none; }
   .progress-indeterminate { animation: none; }
+  .press:active:not(:disabled) { scale: none; }
 }
 
 /* Resizable panel handle styles */

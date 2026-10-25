@@ -33,7 +33,6 @@ export function HelpPanel() {
       open={helpOpen}
       onClose={toggleHelp}
       label="Pipeline reference"
-      containerClassName=""
       className="drawer-slide fixed top-0 right-0 bottom-0 z-50 flex flex-col w-[420px] max-w-full shadow-2xl"
       style={{
         backgroundColor: 'var(--color-bg-primary)',
@@ -203,7 +202,7 @@ function StageCard({
       </button>
 
       {isExpanded && (
-        <div className="px-3 pb-3 pt-1 border-t" style={{ borderColor: 'var(--color-border-subtle)' }}>
+        <div className="motion-reveal px-3 pb-3 pt-1 border-t" style={{ borderColor: 'var(--color-border-subtle)' }}>
           <p className="text-xs text-[var(--color-text-secondary)] leading-relaxed mb-3">{stage.description}</p>
           <div className="flex flex-wrap gap-1.5">
             {stage.directives.map((d) => (

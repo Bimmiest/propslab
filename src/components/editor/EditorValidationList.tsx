@@ -52,7 +52,7 @@ export function EditorValidationList({ file }: EditorValidationListProps) {
         />
       </button>
       {expanded && (
-        <div className="max-h-32 overflow-auto divide-y divide-[var(--color-border)]">
+        <div className="motion-reveal max-h-32 overflow-auto divide-y divide-[var(--color-border)]">
           {filtered.map((diag, idx) => (
             <DiagnosticRow
               key={idx}

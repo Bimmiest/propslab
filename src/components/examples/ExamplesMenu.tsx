@@ -89,8 +89,8 @@ export function ExamplesMenu({ prominent = false }: { prominent?: boolean }) {
         aria-controls={open ? popupId : undefined}
         className={
           prominent
-            ? 'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] bg-[var(--color-accent)] text-[var(--color-text-on-accent)] hover:opacity-90 transition-opacity'
-            : 'flex items-center gap-1.5 px-2 h-7 rounded-md text-[11px] border border-[var(--color-border-control)] cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-tertiary)] transition-colors'
+            ? 'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] bg-[var(--color-accent)] text-[var(--color-text-on-accent)] hover:opacity-90 press'
+            : 'flex items-center gap-1.5 px-2 h-7 rounded-md text-[11px] border border-[var(--color-border-control)] cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-tertiary)] press'
         }
         // Only the header's label hides on narrow screens; the name stays.
         aria-label={prominent ? undefined : 'Examples'}
@@ -105,8 +105,8 @@ export function ExamplesMenu({ prominent = false }: { prominent?: boolean }) {
           role="group"
           aria-label="Examples"
           className={[
-            'absolute top-full mt-1 z-50 w-[22rem] max-w-[calc(100vw-2rem)] max-h-[70vh] overflow-y-auto py-1 rounded-lg border shadow-lg text-left',
-            prominent ? 'left-1/2 -translate-x-1/2' : 'right-0',
+            'motion-pop-in absolute top-full mt-1 z-50 w-[22rem] max-w-[calc(100vw-2rem)] max-h-[70vh] overflow-y-auto py-1 rounded-lg border shadow-lg text-left',
+            prominent ? 'left-1/2 -translate-x-1/2 origin-top' : 'right-0 origin-top-right',
           ].join(' ')}
           style={{
             backgroundColor: 'var(--color-bg-elevated)',

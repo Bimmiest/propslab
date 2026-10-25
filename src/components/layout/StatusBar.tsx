@@ -23,7 +23,12 @@ function WorkerState() {
       : result
         ? 'var(--color-success)'
         : 'var(--color-text-muted)';
-  const dot = <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ backgroundColor: color }} />;
+  const dot = (
+    <span
+      className={`inline-block w-1.5 h-1.5 rounded-full ${isProcessing ? 'animate-pulse' : ''}`}
+      style={{ backgroundColor: color }}
+    />
+  );
 
   // After a worker load failure the pipeline runs inline (#403): say so
   // rather than "Worker idle", in words and to a screen reader.

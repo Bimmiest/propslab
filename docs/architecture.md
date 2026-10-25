@@ -149,25 +149,36 @@ The whole editor loads lazily: `LazyEditors.tsx` is the only thing the shell imp
 ### Overlays
 
 Every overlay — command palette, settings, scaffold modal, pipeline reference,
-directive dialogs — goes through `components/ui/Overlay.tsx`, which wraps
-`@radix-ui/react-dialog`. That supplies the Escape layer stack (only the topmost
-overlay closes), the focus trap, background inertness, scroll lock, and focus
-return to the trigger.
+metadata, directive and confirm dialogs — goes through `components/ui/Overlay.tsx`,
+which wraps `@radix-ui/react-dialog`. That supplies the Escape layer stack (only
+the topmost overlay closes), the focus trap, background inertness, scroll lock,
+and focus return to the trigger.
 
-Two props exist for one consumer each, and both encode a bug found while
-adopting Radix:
+An overlay is never force-mounted: closed content left in the tree keeps a Radix
+DismissableLayer alive, and its capture-phase Escape handler then swallows Escape
+for the whole app. One that should animate out is rendered closed
+(`open={false}`) rather than not at all, and Radix's Presence keeps it mounted
+while its exit animation runs. Presence watches each direct child of the portal
+separately, so the content element places itself (`fixed`, `z-50`) with no layout
+wrapper around it: a wrapper with no animation of its own unmounts at once and
+cuts the content's exit short (#696).
 
-- **`forceMount`** keeps a sliding panel mounted while closed. A closed
-  force-mounted overlay is marked `inert` and `aria-hidden` by `Overlay` itself
-  — otherwise it remains a `dialog` in the accessibility tree with focusable
-  buttons parked off-screen, and role-based queries find it instead of whatever
-  is actually open.
-- **Modality is scoped to `open`** (`modal={open}`). Left permanently modal, a
-  force-mounted overlay keeps the *rest of the app* `aria-hidden` while it sits
-  closed, which makes every element in the app unreachable to assistive tech.
+## Motion
 
-Neither shows up in a unit test of an overlay on its own; the e2e suite caught
-both.
+`index.css` holds the motion tokens (`--motion-fast`, `--motion-base`,
+`--motion-slow`, `--ease-out`, `--ease-in`) and the classes built on them. Use
+these rather than a component's own `duration-*` or keyframes:
+
+- `motion-fade`, `motion-pop`, `drawer-slide` and `motion-tooltip` enter and exit
+  on Radix's `data-state`: a backdrop, a dialog or menu, a side drawer, a tooltip.
+- `motion-pop-in`, `motion-fade-in` and `motion-reveal` are entrances only, for
+  what React mounts itself: a popup, a tab's content, a disclosure's body. An
+  open native `<details>` reveals the same way.
+- `press` gives a button press feedback. It carries the colour transitions, so it
+  replaces `transition-colors`.
+
+Under `prefers-reduced-motion` every animation and transition is instant, and
+`press` does not scale.
 
 ## Tech stack
 

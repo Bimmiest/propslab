@@ -65,7 +65,7 @@ export function EventPagination({
           <button
             onClick={() => onPageChange(currentPage - 1)}
             disabled={currentPage <= 1}
-            className="px-2 py-1 rounded cursor-pointer border-none outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-40 bg-[var(--color-bg-tertiary)] text-[var(--color-text-secondary)] hover:enabled:bg-[var(--color-border)]"
+            className="px-2 py-1 rounded cursor-pointer border-none outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-40 bg-[var(--color-bg-tertiary)] text-[var(--color-text-secondary)] hover:enabled:bg-[var(--color-border)] press"
             aria-label="Previous page"
           >
             <Icon name="chevron-left" size={14} className="" />
@@ -78,7 +78,7 @@ export function EventPagination({
           <button
             onClick={() => onPageChange(currentPage + 1)}
             disabled={currentPage >= totalPages}
-            className="px-2 py-1 rounded cursor-pointer border-none outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-40 bg-[var(--color-bg-tertiary)] text-[var(--color-text-secondary)] hover:enabled:bg-[var(--color-border)]"
+            className="px-2 py-1 rounded cursor-pointer border-none outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-40 bg-[var(--color-bg-tertiary)] text-[var(--color-text-secondary)] hover:enabled:bg-[var(--color-border)] press"
             aria-label="Next page"
           >
             <Icon name="chevron-right" size={14} className="" />

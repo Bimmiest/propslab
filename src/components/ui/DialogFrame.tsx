@@ -13,17 +13,15 @@ import { Overlay } from './Overlay';
 
 const PANEL_STYLE = { backgroundColor: 'var(--color-bg-elevated)', border: '1px solid var(--color-border)' };
 
+// Centred with left-1/2 and a translate (the `translate` property, which the
+// motion-pop keyframes' `transform` composes with), 1rem clear of each edge.
+const PLACEMENT = 'fixed z-50 left-1/2 -translate-x-1/2 w-[calc(100%-2rem)]';
+
 const SIZES = {
   /** A short form or a question. */
-  md: {
-    container: 'fixed inset-0 z-50 flex items-start justify-center pt-[20vh] px-4',
-    panel: 'w-full max-w-md rounded-xl overflow-hidden shadow-2xl',
-  },
+  md: `motion-pop ${PLACEMENT} top-[20vh] max-w-md rounded-xl overflow-hidden shadow-2xl`,
   /** A body that scrolls between a fixed header and footer. */
-  lg: {
-    container: 'fixed inset-0 z-50 flex items-start justify-center pt-[10vh] px-4',
-    panel: 'w-full max-w-3xl max-h-[80vh] flex flex-col rounded-xl overflow-hidden shadow-2xl',
-  },
+  lg: `motion-pop ${PLACEMENT} top-[10vh] max-w-3xl max-h-[80vh] flex flex-col rounded-xl overflow-hidden shadow-2xl`,
 } as const;
 
 export interface DialogFrameProps {
@@ -52,7 +50,6 @@ export function DialogFrame({
   footer,
   children,
 }: DialogFrameProps) {
-  const { container, panel } = SIZES[size];
   return (
     <Overlay
       open={open}
@@ -61,8 +58,7 @@ export function DialogFrame({
       role={role}
       description={description}
       onKeyDown={onKeyDown}
-      containerClassName={container}
-      className={panel}
+      className={SIZES[size]}
       style={PANEL_STYLE}
     >
       {/* `contents`, so a flex-column panel lays out the three parts itself. */}
@@ -123,7 +119,7 @@ export function DialogFooter({ children }: { children: ReactNode }) {
   );
 }
 
-const BUTTON_BASE = 'px-3 py-1.5 text-sm rounded-md cursor-pointer border-none';
+const BUTTON_BASE = 'press px-3 py-1.5 text-sm rounded-md cursor-pointer border-none';
 
 const BUTTON_VARIANTS = {
   cancel: {
