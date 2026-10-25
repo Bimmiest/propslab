@@ -102,14 +102,13 @@ export default defineConfig({
       // written to move a number.
       //
       // Nothing is excluded to flatter these numbers. The files only the
-      // Playwright suite exercises (App.tsx, SplunkEditor.tsx,
-      // PropsConfEditor.tsx, TransformsConfEditor.tsx, editorRuntime.tsx,
-      // SimulatorView.tsx, ScaffoldModal.tsx and the `index.ts` barrels) are
-      // deliberately still counted, at or near 0%: that is the honest figure
-      // for "covered by vitest", and it is why `src/components/**` sits well
-      // below `src/engine/**`. main.tsx and src/engine/*Worker.ts were once
-      // excluded as "cannot be instantiated under node"; main.test.tsx and the
-      // worker tests do instantiate them, so they are measured like the rest.
+      // Playwright suite exercises (App.tsx, editorRuntime.tsx and the
+      // `index.ts` barrels) are deliberately still counted, at 0%: that is the
+      // honest figure for "covered by vitest", and it is why
+      // `src/components/**` sits below `src/engine/**`. main.tsx and
+      // src/engine/*Worker.ts were once excluded as "cannot be instantiated
+      // under node"; main.test.tsx and the worker tests do instantiate them, so
+      // they are measured like the rest.
       thresholds: {
         statements: 92,
         branches: 86,
@@ -129,10 +128,10 @@ export default defineConfig({
           lines: 97,
         },
         'src/components/**': {
-          statements: 86,
-          branches: 77,
-          functions: 83,
-          lines: 88,
+          statements: 88,
+          branches: 79,
+          functions: 86,
+          lines: 90,
         },
         'src/hooks/**': {
           statements: 92,

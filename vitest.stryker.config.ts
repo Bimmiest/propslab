@@ -1,4 +1,4 @@
-import { defineConfig, type Plugin } from 'vitest/config';
+import { configDefaults, defineConfig, type Plugin } from 'vitest/config';
 import base from './vitest.config';
 
 // The vitest config Stryker runs (`npm run test:mutation`, stryker.config.mjs).
@@ -77,7 +77,7 @@ export default defineConfig({
       'src/store/__tests__/*.test.ts',
     ],
     exclude: [
-      ...(base.test?.exclude ?? []),
+      ...configDefaults.exclude,
       'src/engine/__tests__/workerReady.test.ts',
       // Every worker entry's own test, by name, so the next one is excluded too.
       'src/engine/__tests__/*Worker.test.ts',

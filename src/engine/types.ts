@@ -21,14 +21,6 @@ export type TimeSource =
   | 'datetime-config-current'
   | 'datetime-config-none';
 
-/** `_time` sources that were not read out of the event's own text. */
-export const FALLBACK_TIME_SOURCES: readonly TimeSource[] = [
-  'previous-event',
-  'current-time',
-  'datetime-config-current',
-  'datetime-config-none',
-];
-
 export interface ProcessingStep {
   processor: string;
   phase: 'index-time' | 'search-time';
