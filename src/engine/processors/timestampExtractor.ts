@@ -457,7 +457,10 @@ class TimestampBatch {
       }
       return carried && { parsed: carried, how: 'date carried from the previous timestamp' };
     }
-    const offsetMs = (parsed.offsetMinutes ?? 0) * 60_000;
+    // `parsed` was read on a placeholder date, so a named zone's offset there is
+    // January's. Re-read it on the clock's own date for the offset in force now.
+    const atNow = reparse({ year: now.getUTCFullYear(), month: now.getUTCMonth(), day: now.getUTCDate() });
+    const offsetMs = ((atNow ?? parsed).offsetMinutes ?? 0) * 60_000;
     const today = new Date(now.getTime() + offsetMs);
     const candidate = (back: number): CalendarDate => {
       const d = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - back));

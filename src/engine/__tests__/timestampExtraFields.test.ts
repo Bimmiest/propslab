@@ -251,6 +251,19 @@ describe('DETERMINE_TIMESTAMP_DATE_WITH_SYSTEM_TIME (#273)', () => {
     expect(e?.fields['date_mday']).toBe('3');
   });
 
+  it('reads "today" in a named zone\'s offset on the clock\'s date, summer time included (#556)', () => {
+    // 04:30 UTC on 15 July is 00:30 EDT, so the stamp is today's, the 15th. Read
+    // at January's offset (EST, -05:00) the clock said 23:30 on the 14th.
+    const [e] = run(
+      ['00:20:00 login'],
+      [TIME_ONLY, dir('TZ', 'America/New_York'), dir('DETERMINE_TIMESTAMP_DATE_WITH_SYSTEM_TIME', 'true')],
+      new Date('2026-07-15T04:30:00Z'),
+    );
+    expect(e?._time?.toISOString()).toBe('2026-07-15T04:20:00.000Z');
+    const [f] = run(['00:10:00 x'], [TIME_ONLY, dir('TZ', 'Australia/Sydney')], new Date('2026-01-15T13:30:00Z'));
+    expect(f?._time?.toISOString()).toBe('2026-01-15T13:10:00.000Z');
+  });
+
   it('says in the trace where the date came from', () => {
     const [, , third] = run(RAWS, [TIME_ONLY]);
     const step = third?.processingTrace.find((s) => s.processor === 'timestampExtractor');
