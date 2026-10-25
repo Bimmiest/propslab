@@ -421,7 +421,7 @@ const TIME_BUILTINS: Record<string, Builtin> = {
     // renders a confident, wrong timestamp for a field that isn't there.
     const epoch = numArg(args[0]);
     if (epoch === null) return null;
-    return formatStrftime(new Date(epoch * 1000), toStr(args[1]));
+    return formatStrftime(new Date(epoch * 1000), toStr(args[1]), 'eval');
   },
   strptime: stub('strptime', (args) => strArg(args[0])),
   relative_time: stub('relative_time', (args) => toNum(args[0])),

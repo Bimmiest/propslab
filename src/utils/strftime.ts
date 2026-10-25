@@ -82,6 +82,11 @@ interface DirectiveMeta {
    * See docs/adr/0003-one-strftime-directive-table.md.
    */
   format: (date: Date) => string;
+  /**
+   * How eval's `strftime()` renders the directive, where that differs from what
+   * TIME_FORMAT reads. See docs/adr/0018-time-format-reads-l-as-milliseconds.md.
+   */
+  evalFormat?: (date: Date) => string;
 }
 
 const pad = (n: number, w = 2) => String(n).padStart(w, '0');
@@ -150,9 +155,17 @@ function buildDirectiveMap(): Record<string, DirectiveMeta> {
     // Additional specifiers
     '%f': { regex: '(\\d{1,6})', capture: 'microsecondsFull', format: fraction(6) },
     '%j': { regex: '(\\d{3})', capture: 'dayOfYear', format: (d) => pad(dayOfYear(d), 3) },
-    // Space-padded 24h and 12h, sharing %H's and %I's captures.
+    // Space-padded 24h, sharing %H's capture.
     '%k': { regex: '(\\s?\\d{1,2})', capture: 'hour24', format: (d) => spacePad(d.getHours()) },
-    '%l': { regex: '(\\s?\\d{1,2})', capture: 'hour12', format: (d) => spacePad(hour12(d)) },
+    // TIME_FORMAT reads %l as milliseconds: Splunk's own [splunkd] stanza is
+    // `%m-%d-%Y %H:%M:%S.%l %z`. eval's strftime() keeps C's space-padded
+    // 12-hour clock. See docs/adr/0018-time-format-reads-l-as-milliseconds.md.
+    '%l': {
+      regex: '(\\d{3})',
+      capture: 'milliseconds',
+      format: fraction(3),
+      evalFormat: (d) => spacePad(hour12(d)),
+    },
     // %% and the composites %T and %F are handled before the table is consulted.
   };
 }
@@ -952,9 +965,11 @@ function assembleTimestamp(
  * Format a Date with a Splunk strftime string. Uses the browser's local timezone
  * (a documented browser-tool divergence — real Splunk uses the configured/indexer
  * TZ). Renders every specifier the parser reads, from the same table; anything
- * else is left as literal text, which unsupportedSpecifiers flags.
+ * else is left as literal text, which unsupportedSpecifiers flags. `dialect`
+ * says whose reading a directive takes where TIME_FORMAT and eval's
+ * `strftime()` differ (`%l`).
  */
-export function formatStrftime(date: Date, format: string): string {
+export function formatStrftime(date: Date, format: string, dialect: 'TIME_FORMAT' | 'eval' = 'TIME_FORMAT'): string {
   // An epoch outside the Date range yields an Invalid Date, whose accessors all
   // return NaN — %F would render "NaN-NaN-NaN", and the %b/%B/%a/%A name lookups
   // would index their table with NaN. Reject it deliberately, so the error names
@@ -971,7 +986,8 @@ export function formatStrftime(date: Date, format: string): string {
     if (expanded[i] === '%') {
       const directive = directiveAt(expanded, i);
       if (directive) {
-        out += directive.meta.format(date);
+        const render = (dialect === 'eval' ? directive.meta.evalFormat : undefined) ?? directive.meta.format;
+        out += render(date);
         i += directive.spec.length;
         continue;
       }

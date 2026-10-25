@@ -1,6 +1,6 @@
 # 0003. Parsing, formatting and linting of strftime formats read one directive table
 
-- **Status:** Accepted
+- **Status:** Accepted, refined by [0018](0018-time-format-reads-l-as-milliseconds.md)
 - **Code:** `buildDirectiveMap`, `directiveAt`, `formatStrftime`, `supportedSpecifiers` and `formatSpecifiers` in `src/utils/strftime.ts`
 
 ## Context

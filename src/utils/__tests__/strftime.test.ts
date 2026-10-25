@@ -67,6 +67,20 @@ describe('#69.1 — Splunk enhanced-strptime specifiers', () => {
   });
 });
 
+describe('%l in a TIME_FORMAT (#578)', () => {
+  // Splunk's default props.conf times its own splunkd.log with
+  // `TIME_FORMAT = %m-%d-%Y %H:%M:%S.%l %z`, and the Troubleshoot HTTP Event
+  // Collector page gives the same format for its metrics events: three digits
+  // of milliseconds, not the C library's space-padded 12-hour clock.
+  it('reads %l as three digits of milliseconds', () => {
+    expect(iso('10-06-2026 15:30:00.282 +0000', '%m-%d-%Y %H:%M:%S.%l %z')).toBe('2026-10-06T15:30:00.282Z');
+  });
+
+  it('does not read a one- or two-digit hour as %l', () => {
+    expect(parseTimestamp('10-06-2026 15:30:00. 7 +0000', '%m-%d-%Y %H:%M:%S.%l %z')).toBeNull();
+  });
+});
+
 describe('#69.2 — %s must not discard captured subseconds', () => {
   it('folds %3N milliseconds into an epoch-seconds timestamp', () => {
     expect(parseTimestamp('1712345678123', '%s%3N')?.getTime()).toBe(1712345678123);
@@ -377,9 +391,14 @@ describe('formatStrftime — every parsed specifier renders (#429)', () => {
     expect(formatStrftime(at, '%Q %3Q %6Q %9Q %f')).toBe('042 042 042000 042000000 042000');
   });
 
-  it('space-pads %k and %l', () => {
-    expect(formatStrftime(at, '[%k] [%l]')).toBe('[ 7] [ 7]');
-    expect(formatStrftime(new Date(2024, 6, 1, 19), '[%k] [%l]')).toBe('[19] [ 7]');
+  it('space-pads %k, and %l in eval', () => {
+    expect(formatStrftime(at, '[%k] [%l]', 'eval')).toBe('[ 7] [ 7]');
+    expect(formatStrftime(new Date(2024, 6, 1, 19), '[%k] [%l]', 'eval')).toBe('[19] [ 7]');
+  });
+
+  it('renders %l as milliseconds in a TIME_FORMAT, which is how TIME_FORMAT reads it (#578)', () => {
+    expect(formatStrftime(at, '%H:%M:%S.%l')).toBe('07:05:09.042');
+    expect(formatStrftime(at, '%%l %l', 'eval')).toBe('%l  7');
   });
 
   it('renders %:z and %::z as %z with colons', () => {
@@ -417,7 +436,6 @@ describe('formatStrftime then parseTimestamp agree for every specifier (#429)', 
     `%Y %B %d ${T}`,
     `%a %A %F ${T}`,
     '%Y-%m-%d %I:%M:%S %p %z',
-    '%Y-%m-%d %l:%M:%S %p %z',
     '%Y-%m-%d %k:%M:%S %z',
     '%F %T %Z',
     '%F %T %:z',
@@ -425,7 +443,7 @@ describe('formatStrftime then parseTimestamp agree for every specifier (#429)', 
     '%s',
     '%s.%3N',
     '100%% %F %T %z',
-    ...['%1N', '%2N', '%3N', '%4N', '%5N', '%6N', '%7N', '%8N', '%9N', '%N', '%Q', '%3Q', '%6Q', '%9Q', '%f'].map(
+    ...['%1N', '%2N', '%3N', '%4N', '%5N', '%6N', '%7N', '%8N', '%9N', '%N', '%Q', '%3Q', '%6Q', '%9Q', '%f', '%l'].map(
       (s) => `%F %T.${s} %z`,
     ),
   ];
@@ -446,7 +464,7 @@ describe('formatStrftime then parseTimestamp agree for every specifier (#429)', 
       fc.property(instant, fc.constantFrom(...cases), (ms, format) => {
         const text = formatStrftime(new Date(ms), format);
         const width = /%(\d)N/.exec(format)?.[1];
-        const precision = width ? 10 ** Math.max(0, 3 - Number(width)) : /%\d?[NQf]/.test(format) ? 1 : 1000;
+        const precision = width ? 10 ** Math.max(0, 3 - Number(width)) : /%\d?[NQf]|%l/.test(format) ? 1 : 1000;
         expect(parseTimestamp(text, format)?.getTime(), `${format} → ${text}`).toBe(
           Math.floor(ms / precision) * precision,
         );
