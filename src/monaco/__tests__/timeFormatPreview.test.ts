@@ -22,14 +22,25 @@ import { probeTimestamps } from '../../engine/timestampMatch';
 import { unsupportedSpecifiers } from '../../utils/strftime';
 
 /**
- * Stands in for the worker by running what the worker runs — the
- * Timestamp prober with no TIME_FORMAT — so these tests still pin the preview
- * to the engine's reading of TIME_PREFIX. The worker plumbing itself is
- * covered in timePrefixMatcher.test.ts.
+ * Stands in for the worker by running what the worker runs — the Timestamp
+ * prober, over the whole sample — so these tests still pin the preview to the
+ * engine's reading of TIME_PREFIX and TIME_FORMAT. The worker plumbing itself
+ * is covered in timePrefixMatcher.test.ts.
  */
-const proberInline: PrefixMatcher = (pattern, sample) => {
-  const [probe] = probeTimestamps([sample], { timePrefix: pattern, timeFormat: null, maxLookahead: 0, tz: null });
-  return Promise.resolve(probe?.prefix ? { status: 'matched', end: probe.prefix.end } : { status: 'no-match' });
+const proberInline: PrefixMatcher = (pattern, sample, _token, timeFormat) => {
+  const [probe] = probeTimestamps([sample], {
+    timePrefix: pattern ?? null,
+    timeFormat: timeFormat ?? null,
+    maxLookahead: timeFormat === undefined ? 0 : sample.length,
+    tz: null,
+  });
+  if (pattern !== undefined && !probe?.prefix) return Promise.resolve({ status: 'no-match' });
+  const match = probe?.match ?? null;
+  return Promise.resolve({
+    status: 'matched',
+    end: probe?.prefix?.end ?? 0,
+    ...(timeFormat !== undefined ? { format: match && { text: match.matchedText, parsedMs: match.parsedTimeMs } } : {}),
+  });
 };
 
 async function buildTimeFormatPreview(

@@ -91,11 +91,11 @@ function cancellable() {
 const CONF = '[my:st]\nTIME_PREFIX = ts=\nTIME_FORMAT = %Y-%m-%d';
 const SAMPLE = 'id=5 ts=2024-01-15 rest';
 
-/** Hover the TIME_FORMAT value in CONF. */
-function hover(token: CancellationToken = cancellable().token) {
+/** Hover the TIME_FORMAT value in CONF, or in `conf` at `lineNumber`. */
+function hover(token: CancellationToken = cancellable().token, conf = CONF, lineNumber = 3) {
   const result = createHoverProvider('props.conf').provideHover(
-    fakeModel(CONF),
-    { lineNumber: 3, column: 16 } as Position,
+    fakeModel(conf),
+    { lineNumber, column: 16 } as Position,
     token,
     undefined,
   );
@@ -121,11 +121,15 @@ describe('TIME_FORMAT hover — TIME_PREFIX in a worker (#334)', () => {
     useAppStore.getState().setRawData('');
   });
 
-  it('asks the worker for the prefix alone, and renders what the main-thread preview did', async () => {
+  it('asks the worker for the prefix and the format together, and renders what the main-thread preview did', async () => {
     const pending = hover();
     await flush();
     expect(worker().posted).toHaveLength(1);
-    expect(worker().posted[0]!.config).toMatchObject({ timePrefix: 'ts=', timeFormat: null });
+    expect(worker().posted[0]!.config).toMatchObject({
+      timePrefix: 'ts=',
+      timeFormat: '%Y-%m-%d',
+      maxLookahead: SAMPLE.length,
+    });
     expect(worker().posted[0]!.raws).toEqual([SAMPLE]);
     worker().answer();
 
@@ -133,6 +137,19 @@ describe('TIME_FORMAT hover — TIME_PREFIX in a worker (#334)', () => {
     const markdown = text(await pending);
     expect(markdown).toContain('**Sample:** matched `2024-01-15` → `2024-01-15T00:00:00.000Z`');
     expect(markdown).toMatch(/^\*\*Now:\*\* `\d{4}-\d{2}-\d{2}`\n\n\*\*Sample:\*\*/);
+  });
+
+  it('matches a TIME_FORMAT with no TIME_PREFIX in the worker too, never on this thread (#613)', async () => {
+    // Twenty-two `%d`s backtrack for seconds against a line of digits: the
+    // hover must wait on the worker for it, not run it here.
+    const format = `${'%d'.repeat(22)}Z`;
+    const pending = hover(cancellable().token, `[my:st]\nTIME_FORMAT = ${format}`, 2);
+    await flush();
+    expect(worker().posted).toHaveLength(1);
+    expect(worker().posted[0]!.config).toMatchObject({ timePrefix: null, timeFormat: format });
+
+    worker().answer({ ...worker().posted[0]!, config: { ...worker().posted[0]!.config, timeFormat: '%Y-%m-%d' } });
+    expect(text(await pending)).toContain('**Sample:** matched `2024-01-15`');
   });
 
   it('keeps one worker alive across hovers', async () => {
@@ -361,7 +378,7 @@ describe('TIME_FORMAT preview — no main-thread TIME_PREFIX execution (#334)', 
       return exec.call(this, s, start);
     });
 
-    const seen: string[] = [];
+    const seen: (string | undefined)[] = [];
     const matcher: PrefixMatcher = (pattern) => {
       seen.push(pattern);
       return Promise.resolve({ status: 'timed-out' });
