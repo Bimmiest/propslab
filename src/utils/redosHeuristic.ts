@@ -22,6 +22,8 @@
  * It does NOT catch alternation-overlap forms such as `(a|aa)+`, so an empty
  * verdict proves nothing.
  */
+import { classEnd } from './regexSyntax';
+
 const REDOS_NESTED_GROUP = /\((?:[^()\\]|\\.)*[*+][^()]*\)(?:[*+]|\{\d+,?\d*\})/;
 // The atom must start on an even run of backslashes: in `\d+d+` the second `d`
 // is a literal, not a repeat of `\d`, while in `\\d+d+` both are literals.
@@ -64,17 +66,8 @@ const PROBE_CHARS: string[] = (() => {
 
 /** Index of the `]` closing the character class that starts at `start`, or -1. */
 function findClassEnd(source: string, start: number): number {
-  let i = start + 1;
-  if (source[i] === '^') i++;
-  if (source[i] === ']') i++; // a leading `]` is a literal in PCRE
-  for (; i < source.length; i++) {
-    if (source[i] === '\\') {
-      i++;
-      continue;
-    }
-    if (source[i] === ']') return i;
-  }
-  return -1;
+  const end = classEnd(source, start);
+  return end === -1 ? -1 : end - 1;
 }
 
 /** Index of the `)` closing the group that starts at `start`, or -1. */
