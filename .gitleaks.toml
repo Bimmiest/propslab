@@ -1,0 +1,34 @@
+# gitleaks configuration, read by the shared Security workflow's gitleaks job.
+#
+# This file exists only to carry allowlist entries. It adds no rules and
+# removes none: `useDefault = true` loads gitleaks' own rule set first and this
+# file layers on top of it. **That line is load-bearing.** Without it a config
+# file REPLACES the default rules rather than extending them, and the scan goes
+# green by looking for nothing.
+#
+# **The singular `[allowlist]` is also load-bearing, and it is the harder
+# trap.** gitleaks also accepts a plural `[[allowlists]]`, which the version
+# gitleaks-action v3.0.0 installs (8.24.3) parses without complaint and then
+# ignores. The plural form reads as a working allowlist and suppresses nothing
+# (propslab-ent #1404).
+#
+# Check a change to this file against the version CI installs, not the newest
+# release, and falsify it: remove an entry and confirm its own findings come
+# back.
+#
+#     gitleaks detect --source . --log-opts="--all" --redact
+#
+# A path is allowlisted only when the value is provably not a credential: a
+# fixture shaped like a key on purpose, a documentation example. A real key is
+# rotated, never allowlisted.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Fixtures whose contents are shaped like secrets on purpose"
+paths = [
+  # One regex per line, each under a comment saying what the file is and why
+  # its contents cannot be a credential. For example:
+  #   '''src/redaction/__tests__/redaction\.test\.ts''',
+]

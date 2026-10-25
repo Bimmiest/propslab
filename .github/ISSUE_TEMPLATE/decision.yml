@@ -1,0 +1,27 @@
+name: Decision
+description: An open question to settle before code is written; the ADR records the answer
+labels: [decision]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        An ADR records a decision; an issue tracks the absence of one. This stays open while the question is, and closes when `docs/adr/` has the record.
+  - type: textarea
+    id: question
+    attributes:
+      label: The question
+      description: What has to be chosen, in one sentence.
+    validations:
+      required: true
+  - type: textarea
+    id: options
+    attributes:
+      label: The options and what each costs
+      description: An option that only lists benefits is not yet an option.
+    validations:
+      required: true
+  - type: textarea
+    id: constraints
+    attributes:
+      label: Constraints
+      description: What rules an option out, and what is blocked until this is settled.

@@ -1,0 +1,24 @@
+# Findings this repository has answered somewhere other than where Trivy looks.
+# None, and it should stay that way: an ignore file is a place to write down a
+# decision, not a place to put findings nobody wants to read.
+#
+# Named by the shared Security workflow's `trivyignores` input rather than
+# found there, because the YAML form of this file is still experimental in
+# Trivy and is not picked up automatically the way a plain `.trivyignore` is.
+# It is the form worth having: it can scope an entry to a path and carry the
+# reasoning and an expiry beside it.
+#
+# When adding a misconfiguration entry, name both spellings: Trivy carries a
+# check as an `ID` (`DS-0002`, what the scan prints) and an `AVDID`
+# (`AVD-DS-0002`, what its documentation writes), and matches an entry against
+# whichever the report was built with. Naming one and not the other is an
+# ignore file that silently stops applying on a version bump.
+#
+#   misconfigurations:
+#     - id: DS-0002
+#       paths: [Dockerfile]
+#       statement: The entrypoint drops to `node` before anything runs (#n).
+#       expired_at: 2027-01-01
+
+vulnerabilities: []
+misconfigurations: []

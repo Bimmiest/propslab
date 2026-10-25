@@ -1,0 +1,4 @@
+{
+  "$comment": "Advisories in production dependencies that are accepted rather than fixed. Read by the shared audit-check action, which runs `npm audit --json --omit=dev` and fails on a high or critical advisory not listed here. Each entry: `id` (the GHSA the report links), `package` (the name the advisory is against), `reason` (why nothing reachable is exposed, or what the fix is waiting on) and `expires` (YYYY-MM-DD, the last day it holds). An expired entry fails the step whether or not the advisory is still reported, so an acceptance is re-argued rather than inherited; so does an entry no advisory needs any more. Below `high` nothing is gated and nothing needs listing here.",
+  "exceptions": []
+}

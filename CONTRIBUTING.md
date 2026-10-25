@@ -2,9 +2,11 @@
 
 Thanks for looking at this. Most of what follows is already enforced by CI — it is written down here so you do not have to reverse-engineer it from `.github/workflows/ci.yml`.
 
+The conventions follow [`repo-template`](https://github.com/Bimmiest/repo-template), and most of the checks come from [`shared-workflows`](https://github.com/Bimmiest/shared-workflows), pinned by commit ([ADR 0017](docs/adr/0017-ci-gates-come-from-shared-workflows.md)). A change to a shared check is made there and reaches this repository as a pin bump.
+
 ## Getting set up
 
-Node is pinned in [`.nvmrc`](.nvmrc), matched by `engines` in `package.json`, and used by CI. Use that version; a different major will produce failures that have nothing to do with your change.
+Node is pinned in [`.nvmrc`](.nvmrc), matched by `engines` in `package.json`, and used by CI. Use that version; a different major will produce failures that have nothing to do with your change. `.npmrc` sets `engine-strict=true` (and so does `packages/mcp-server/.npmrc`), so npm refuses to install on a Node older than `engines` instead of failing later.
 
 ```bash
 nvm use            # or: fnm use
@@ -15,7 +17,36 @@ npm run dev        # http://localhost:5173
 
 The `npm ci --prefix packages/mcp-server` is not optional if you intend to lint. `npm run lint` is type-aware over the whole repository, including `packages/mcp-server`, and that package resolves `@modelcontextprotocol/sdk` and `zod` from its own `node_modules`. Without them those types don't resolve and every use reports as an unsafe `any` — a wall of errors that have nothing to do with your change.
 
-`.claude/` and `CLAUDE.md` are git-ignored (see `.gitignore`) and can be used freely by contributors for local project configuration.
+`.claude/` and `CLAUDE.md` are git-ignored (see `.gitignore`) and can be used freely by contributors for local project configuration. This is a deliberate difference from `repo-template`, which commits its `CLAUDE.md`.
+
+## Issues first
+
+Open an issue for anything larger than a typo, before writing the code. The issue is where the *why* gets argued while changing it is still cheap; filing one afterwards to record what you already built is the inversion the rule exists to prevent. A closed issue is not a substitute: if the work is new, the issue is new. A discrepancy with real Splunk is a fidelity question, which has its own issue form.
+
+An open question that has to be settled before code is written is an issue labelled `decision`. The answer becomes an ADR ([`docs/adr/`](docs/adr/README.md)).
+
+## Branches
+
+Trunk-based: `main` is the only long-lived branch, and every change reaches it through a pull request.
+
+```
+<type>/<short-description>-<issue-number>
+```
+
+| Type | For |
+|---|---|
+| `feature/` | New capability |
+| `fix/` | A defect in something that already shipped |
+| `refactor/` | Behaviour unchanged, shape improved |
+| `docs/` | Documentation, ADRs, this file |
+| `ci/` | Workflows, checks, build tooling |
+| `chore/` | Dependencies, config, housekeeping |
+
+The description is lower-case kebab: letters, digits and hyphens, so no dots (`fix/dompurify-3-4-17-123`, not `fix/dompurify-3.4.17`). The issue number comes last, and the description must link the same issue (`Closes #123`). Omit the number only when there is genuinely no issue, and label the pull request `no-issue`. The [`pr-hygiene`](.github/workflows/pr-hygiene.yml) check enforces the pattern, the number and the link in the description; Dependabot's pull requests are exempt. It re-runs when the description or the labels change, so most failures are fixed with an edit rather than a push.
+
+**One branch per coherent piece of work.** A feature, a fix, a decision. Work that is mutually dependent belongs together; work that is merely adjacent does not.
+
+If a tool assigned you a non-conforming branch (an automated `claude/…` name, say), rename it and reopen the pull request from the renamed branch, and say so in the description. GitHub cannot change a pull request's head branch.
 
 ## The CI checks
 
@@ -31,6 +62,14 @@ npm run test:coverage # vitest, with the coverage floor enforced
 npm run test:e2e      # Playwright, against a production build
 ```
 
+Between the tests and the e2e suite, `ci` also runs three checks from `shared-workflows`: the coverage ratchet (below), documentation links and the ADR index, and production dependency licences against `.licence-allowlist.json`. Each is a Node script with no dependencies. To run one locally, clone `shared-workflows` beside this repository and run its script from here:
+
+```bash
+node ../shared-workflows/.github/actions/coverage-ratchet/ratchet.mjs --config vitest.config.ts --slack 3  # after test:coverage
+node ../shared-workflows/.github/actions/docs-check/docs-check.mjs
+node ../shared-workflows/.github/actions/licence-check/licence-check.mjs
+```
+
 **`mcp-server`** — the MCP server package, which has its own lockfile and toolchain:
 
 ```bash
@@ -39,13 +78,17 @@ npm ci
 npm run test:coverage # typecheck + esbuild bundle first, then vitest with the package's coverage floor
 ```
 
-**`audit`** — `npm audit` over both lockfiles, the app's and `packages/mcp-server`'s. A high-severity advisory in a production dependency fails it; dev-only advisories are reported but never fatal. It installs nothing, so there is nothing to run locally beyond `npm audit --omit=dev --audit-level=high` in each directory.
+On the Linux leg it also runs the coverage ratchet against `vitest.config.mts` and the licence check against the package's own lockfile and `packages/mcp-server/.licence-allowlist.json`.
 
-**`workflow-lint`** — [actionlint](https://github.com/rhysd/actionlint) and [zizmor](https://docs.zizmor.sh/) over `.github/`. Locally: `go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 && actionlint`, and `uvx zizmor==1.30.1 .` (or `pipx run`). A zizmor finding that is deliberate gets an inline `# zizmor: ignore[<audit>]` with the reason beside it, as the deploy workflow's `workflow_run` trigger has.
+**`audit`** — shared-workflows' audit-check over both lockfiles, the app's and `packages/mcp-server`'s: `npm audit --omit=dev`, failing on a high or critical advisory. An advisory that nothing reachable is exposed to can be listed in that lockfile's `.audit-exceptions.json`, with the reason and an expiry; an expired entry, or one the report no longer needs, fails the job. Dev-only advisories are reported but never fatal. It installs nothing, so locally run `node ../shared-workflows/.github/actions/audit-check/audit-check.mjs` in each directory (or `npm audit --omit=dev --audit-level=high`, which is the same gate without the exceptions).
+
+**`workflow-lint`** — [actionlint](https://github.com/rhysd/actionlint) and [zizmor](https://docs.zizmor.sh/) over `.github/`. Locally: `go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 && actionlint`, and `uvx zizmor==1.30.1 .` (or `pipx run`). A zizmor finding that is deliberate gets an inline `# zizmor: ignore[<audit>]` with the reason beside it, as the deploy workflow's `workflow_run` trigger has. It is a job of `ci.yml` rather than a call to shared-workflows' `workflow-lint.yml`, which runs the same two tools at the same versions, because the required check is named `workflow-lint` and a reusable workflow's check is named `workflow-lint / workflow-lint`.
+
+**`pr-hygiene`** — a workflow of its own, [`pr-hygiene.yml`](.github/workflows/pr-hygiene.yml), on pull requests only: the branch and issue rules in [Branches](#branches).
 
 **`dependency-review`** — on PRs, GitHub's dependency review over the PR's dependency diff, failing on a newly added high-severity advisory. CodeQL is not a workflow here: it runs through GitHub's default code-scanning setup (JavaScript/TypeScript and Actions) and reports as the "Analyze" checks.
 
-**`security / gitleaks`** and **`security / trivy`** — not jobs of `ci.yml` but a workflow of their own, [`security.yml`](.github/workflows/security.yml), calling the reusable one in [`Bimmiest/shared-workflows`](https://github.com/Bimmiest/shared-workflows) pinned by sha: gitleaks over every commit in the history, and Trivy over the tree and both lockfiles at CRITICAL and HIGH with unfixed advisories ignored. It runs on every PR, on pushes to main and weekly, because both checks go red without a push. Locally: `gitleaks detect --source . --log-opts="--all" --redact` and `trivy fs --scanners vuln,misconfig --severity CRITICAL,HIGH --ignore-unfixed .`. A false positive goes in `.gitleaks.toml` or `.trivyignore.yaml` with its reason beside it (neither file exists yet, because neither scan has found anything); a real key is rotated, never allowlisted.
+**`security / gitleaks`** and **`security / trivy`** — not jobs of `ci.yml` but a workflow of their own, [`security.yml`](.github/workflows/security.yml), calling the reusable one in [`Bimmiest/shared-workflows`](https://github.com/Bimmiest/shared-workflows) pinned by sha: gitleaks over every commit in the history, and Trivy over the tree and both lockfiles at CRITICAL and HIGH with unfixed advisories ignored. It runs on every PR, on pushes to main and weekly, because both checks go red without a push. Locally: `gitleaks detect --source . --log-opts="--all" --redact` and `trivy fs --scanners vuln,misconfig --severity CRITICAL,HIGH --ignore-unfixed .`. A false positive goes in `.gitleaks.toml` or `.trivyignore.yaml` with its reason beside it (both files have no entries yet, and each says what an entry needs and which of its lines are load-bearing); a real key is rotated, never allowlisted.
 
 A few things worth knowing:
 
@@ -58,7 +101,7 @@ A few things worth knowing:
 - **`noPropertyAccessFromIndexSignature` is on**, with `noImplicitOverride`: a property that comes from an index signature (`process.env`, `dataset`, a `Record<string, T>`) is read as `x['name']`, so it cannot be mistaken for a declared one. `exactOptionalPropertyTypes` is off on purpose; `tsconfig.app.json` says why.
 - **`npm run build` is the type-check.** There is no separate `tsc --noEmit` step, so a type error surfaces as a build failure.
 - **The e2e suite runs against `dist/`, not the dev server.** A change that works under `vite dev` and not in a production build will pass locally and fail in CI. On a clean checkout the first run needs the browser: `npx playwright install chromium`.
-- **Coverage is a floor, and a ratchet.** The thresholds live in `vitest.config.ts` (and `packages/mcp-server/vitest.config.mts`) so a local run gives the same verdict CI does. The engine is held to a higher bar than the app as a whole, because a simulator whose UI is under-tested is annoying while one whose pipeline is under-tested is wrong; `src/components`, `hooks`, `monaco`, `store` and `utils` each have a floor too, so the engine's number cannot hide a fall elsewhere. Each floor is the measured figure minus one point, and `node scripts/check-coverage-floors.mjs` (run by CI after the tests) fails when one is more than 3 points under. So a change that raises coverage also raises the floor, in the same commit; do not lower one to make a branch green. Nothing is excluded to flatter the numbers: files only the Playwright suite exercises stay counted at or near 0%.
+- **Coverage is a floor, and a ratchet.** The thresholds live in `vitest.config.ts` (and `packages/mcp-server/vitest.config.mts`) so a local run gives the same verdict CI does. The engine is held to a higher bar than the app as a whole, because a simulator whose UI is under-tested is annoying while one whose pipeline is under-tested is wrong; `src/components`, `hooks`, `monaco`, `store` and `utils` each have a floor too, so the engine's number cannot hide a fall elsewhere. Each floor is the measured figure minus one point, and shared-workflows' coverage-ratchet (run by CI after the tests, with `slack: 3`) fails when one is more than 3 points under. It prints the measured figure rounded down as the floor to write; write one point under that, which keeps the MCP server's floors clear of its Windows and macOS legs. So a change that raises coverage also raises the floor, in the same commit; do not lower one to make a branch green. Nothing is excluded to flatter the numbers: files only the Playwright suite exercises stay counted at or near 0%.
 
 - **Test scaffolding is shared.** `src/test/makeEvent.ts` builds a `SplunkEvent` (`makeEvent(raw, { fields })`), `src/test/fakeModel.ts` a Monaco text model, and `src/test/fcSeed.ts` every fast-check seed: a property test passes `fcSeed(<its default>)` and never a bare number, so `FC_SEED` can re-seed it. The weekly `randomised` job in `ci.yml` draws a fresh `FC_SEED`, shuffles the order, and runs under another timezone and locale; it prints the seed and the command that replays the run. A new test file uses these rather than defining its own event literal or model stand-in.
 - **A test does not time itself.** No `performance.now()`, `Date.now()` or `toBeLessThan(<ms>)` in a unit test: a stopwatch assertion fails on a loaded runner and passes on a fast one. Pick the bound that is about the claim instead. For a linear-time claim, count the work: `expectLinearWork` in `src/test/scanWork.ts` runs a function at size *n* and *2n* and fails when the length its slices, joins and searches touch more than triples (linear doubles, quadratic quadruples), and a spy on the built-in the fix removed (`indexOf` in `wildcardMatch.test.ts`, `RegExp.prototype.test` in `redosHeuristic.test.ts`) counts calls. Where the cost hides inside one regex call and nothing can be counted, size the input so the quadratic version cannot finish inside the test's own timeout. For "answers promptly" or "frees the slot" in the MCP server, make the alternative outlast the test's timeout (a worker that sleeps 60 s in a 20 s test) or assert the order events happened in. Check that a new bound bites by reintroducing the bug once. The Playwright timing budgets live in their own non-retried `perf` project.
@@ -103,6 +146,8 @@ The module lives in its own repository, [`Bimmiest/pcre2-wasm-utf16`](https://gi
 ### Supply-chain checks
 
 `supply-chain.yml` watches what Dependabot cannot. It runs `npm run check:overrides` (the `overrides` below against what the lockfile resolves) on pull requests that touch `package.json`, the lockfile or `.nvmrc`, and monthly. Monthly it also compares `.nvmrc` with the newest release on its Node line (`scripts/check-node-patch.mjs`) and fails when it is behind; on a pull request that check only annotates. The deploy attests the `dist/` it uploads, in a job with the signing permissions and nothing else, and refuses to upload anything the attestation does not cover; the comments in `azure-static-web-apps.yml` say what that proves and what it does not. To check a deployed bundle later, `gh attestation verify` the `dist.sha256` manifest from that run's `dist-attestation` artifact (kept a day) with `--signer-workflow`.
+
+Every production dependency's licence is on `.licence-allowlist.json` (`packages/mcp-server/.licence-allowlist.json` for the server's lockfile), or the package is named there with the version somebody read and why it is acceptable; `pcre2-wasm-utf16` is, because the PCRE2 licence's attribution condition is met by `NOTICE`. A bump past a named version fails until the new version is read too.
 
 ### The Radix overrides
 
@@ -181,8 +226,11 @@ header first — the fields must come from the model JSON, not from memory or do
 
 ## Commits and PRs
 
-- Explain **why** in the commit body, not just what.
+- Explain **why** in the commit body, not just what, including what the choice cost.
 - Reference issues with a closing keyword **per issue** — `Closes #1, #2` only closes #1.
+- When an operator must *act* on a change (a manual step, a repository setting or variable, a default that changes what a deployment does), add a line on its own anywhere in the message: `Upgrade-Note: <what to do, in one sentence>`. The bar is action, not interest.
+- A commit that only reformats goes in `.git-blame-ignore-revs`, one hash per line, under a comment naming it.
+- Pull requests are squash-merged with the branch's commit messages as the body, so what you write at commit time is what `main` keeps, and an `Upgrade-Note:` in any commit survives the squash. The pull request description is for the reviewer; its template has four sections (What and why, Decisions, Verification, Not done), and a section that does not apply is deleted.
 - Add a `CHANGELOG.md` entry for anything a user would notice. Keep it to one or two sentences stating the user-visible change, with the issue link.
 - **Design rationale and history go in [`docs/adr/`](docs/adr/README.md)**, not in code comments or the changelog. A comment describes what the code does now and any non-obvious constraint; when the reason needs history ("we tried X, #123 showed Y"), write or extend an ADR and point to it from the comment (`See docs/adr/NNNN-….md.`).
 

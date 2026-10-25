@@ -68,6 +68,9 @@ jobs:
 
       - name: .nvmrc is the newest patch of its Node line
         # Annotate on a pull request; fail on the schedule and a manual run.
+        # shared-workflows' node-patch-check runs the same logic. It replaces
+        # this script once the script's unit test, which lives under src/, can
+        # be deleted in the same change (#602).
         env:
           WARN_ONLY: ${{ github.event_name == 'pull_request' && '--warn-only' || '' }}
         run: |

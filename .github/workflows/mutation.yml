@@ -69,18 +69,14 @@ jobs:
           # nothing talks to the remote afterwards, so the token is not kept.
           persist-credentials: false
 
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      # Node from .nvmrc and `npm ci --ignore-scripts`, as in ci.yml and the
+      # deploy build: the same tree is tested everywhere. See ci.yml for why
+      # nothing here needs install scripts.
+      - uses: Bimmiest/shared-workflows/.github/actions/setup-node-project@3e31d07ba1f4472f7526ed8f738318287dd85642 # v1.0.0
         with:
-          node-version-file: .nvmrc
-          cache: npm
           cache-dependency-path: |
             package-lock.json
             packages/mcp-server/package-lock.json
-
-      # --ignore-scripts, as in ci.yml and the deploy build: the same tree is
-      # tested everywhere. See ci.yml for why nothing here needs install scripts.
-      - name: Install dependencies
-        run: npm ci --ignore-scripts
 
       # The run includes the MCP server's tests for the modules it mutates
       # there, and Stryker's first pass runs every included test: they import
