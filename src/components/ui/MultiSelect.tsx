@@ -69,7 +69,7 @@ export function MultiSelect({ label, options, selected, onChange, searchable }: 
         style={{
           backgroundColor: activeCount > 0 ? 'var(--color-accent)' : 'var(--color-bg-primary)',
           color: activeCount > 0 ? 'var(--color-text-on-accent)' : 'var(--color-text-secondary)',
-          borderColor: activeCount > 0 ? 'var(--color-accent)' : 'var(--color-border)',
+          borderColor: activeCount > 0 ? 'var(--color-accent)' : 'var(--color-border-control)',
         }}
       >
         <span>{label}</span>
@@ -206,7 +206,7 @@ function OptionFilter({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Filter…"
-          className="w-full pl-6 pr-2 py-0.5 text-xs rounded bg-[var(--color-bg-primary)] border border-[var(--color-border)] text-[var(--color-text-primary)] outline-none focus:border-[var(--color-accent)]"
+          className="w-full pl-6 pr-2 py-0.5 text-xs rounded bg-[var(--color-bg-primary)] border border-[var(--color-border-control)] text-[var(--color-text-primary)] outline-none focus:border-[var(--color-accent)]"
         />
       </div>
     </div>

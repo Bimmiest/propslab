@@ -150,7 +150,11 @@ function RegexEventCard({
   );
 }
 
-const MATCH_TEXT_STYLE = { backgroundColor: '#22c55e20', borderBottom: '2px solid #22c55e' };
+// The success token, so a match reads as one in either theme (#688).
+const MATCH_TEXT_STYLE = {
+  backgroundColor: tint('var(--color-success)', 13),
+  borderBottom: '2px solid var(--color-success)',
+};
 
 function SegmentSpan({ segment }: { segment: HighlightSegment }) {
   switch (segment.kind) {
@@ -178,7 +182,10 @@ function SegmentSpan({ segment }: { segment: HighlightSegment }) {
       );
     case 'whole':
       return (
-        <span style={{ backgroundColor: '#22c55e35', borderBottom: '2px solid #22c55e' }} className="rounded-sm px-0.5">
+        <span
+          style={{ backgroundColor: tint('var(--color-success)', 20), borderBottom: '2px solid var(--color-success)' }}
+          className="rounded-sm px-0.5"
+        >
           {segment.text}
         </span>
       );

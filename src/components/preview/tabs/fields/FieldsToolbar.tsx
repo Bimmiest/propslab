@@ -31,7 +31,7 @@ export function FieldsToolbar({
           placeholder="Search fields..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full pl-7 pr-2 py-1.5 text-xs rounded border border-[var(--color-border)] bg-[var(--color-bg-elevated)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent)] transition-colors"
+          className="w-full pl-7 pr-2 py-1.5 text-xs rounded border border-[var(--color-border-control)] bg-[var(--color-bg-elevated)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent)] transition-colors"
         />
       </div>
       <span className="text-xs text-[var(--color-text-muted)]">{fieldCount} fields</span>

@@ -49,7 +49,7 @@ export function FieldSidebar({ fieldCount, activeFields, onCollapse, renderItems
             placeholder="Filter fields..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-6 pr-2 py-1 text-xs rounded border border-[var(--color-border)] bg-[var(--color-bg-primary)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent)]"
+            className="w-full pl-6 pr-2 py-1 text-xs rounded border border-[var(--color-border-control)] bg-[var(--color-bg-primary)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent)]"
           />
         </div>
         <div className="flex items-center justify-between">

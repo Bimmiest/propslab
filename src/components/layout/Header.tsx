@@ -115,7 +115,7 @@ export function Header() {
               onClick={toggleCommandPalette}
               aria-label={`Commands ${modifierName}K`}
               aria-keyshortcuts={isApplePlatform() ? 'Meta+K' : 'Control+K'}
-              className="flex items-center gap-1.5 px-2 h-7 rounded-md text-[11px] border border-[var(--color-border)] cursor-pointer
+              className="flex items-center gap-1.5 px-2 h-7 rounded-md text-[11px] border border-[var(--color-border-control)] cursor-pointer
                 text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-tertiary)] transition-colors"
             >
               <Icon name="search" className="w-3.5 h-3.5" />

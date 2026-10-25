@@ -9,8 +9,9 @@ const TONE_COLORS: Record<Tone, string> = {
   // pipeline reference drawer already uses for the two phases.
   index: 'var(--color-warning)',
   search: 'var(--color-accent)',
-  // Secondary, not muted: muted has no margin left for the tint beneath it.
-  neutral: 'var(--color-text-secondary)',
+  // Primary: on a selected row's accent fill, under its own tint, secondary
+  // text had no margin left (#688).
+  neutral: 'var(--color-text-primary)',
   danger: 'var(--color-error)',
 };
 

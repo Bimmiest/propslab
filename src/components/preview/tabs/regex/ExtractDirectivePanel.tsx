@@ -62,7 +62,7 @@ export function ExtractDirectivePanel({
           onChange={(e) => setClassName(e.target.value.replace(/\s/g, '_'))}
           aria-invalid={classError !== null}
           aria-describedby={classError ? classErrorId : undefined}
-          className="px-1.5 py-0.5 text-xs font-mono rounded border border-[var(--color-border)] bg-[var(--color-bg-primary)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent)] w-32"
+          className="px-1.5 py-0.5 text-xs font-mono rounded border border-[var(--color-border-control)] bg-[var(--color-bg-primary)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent)] w-32"
           placeholder="classname"
         />
       </div>

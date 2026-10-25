@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 240" role="img" aria-label="Propslab: a browser simulator of the Splunk props.conf and transforms.conf pipeline">
-  <rect width="1200" height="240" rx="16" fill="#1f2328"/>
-  <rect x="48" y="96" width="12" height="48" rx="3" fill="#4493f8"/>
-  <text x="84" y="138" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="56" font-weight="600" fill="#f0f6fc">Propslab</text>
-  <text x="86" y="182" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="24" fill="#9198a1">A browser simulator of the Splunk props.conf and transforms.conf pipeline</text>
+  <rect width="1200" height="240" rx="16" fill="#222831"/>
+  <rect x="48" y="96" width="12" height="48" rx="3" fill="#e2c08d"/>
+  <text x="84" y="138" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="56" font-weight="600" fill="#f3ede3">Propslab</text>
+  <text x="86" y="182" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="24" fill="#dfd0b8">A browser simulator of the Splunk props.conf and transforms.conf pipeline</text>
 </svg>

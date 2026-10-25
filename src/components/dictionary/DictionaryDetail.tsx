@@ -136,8 +136,8 @@ function Callout({
       className="flex items-start gap-2 rounded-md px-3 py-2.5 text-[12px] leading-relaxed max-w-prose"
       style={{
         color,
-        backgroundColor: tone === 'danger' ? 'rgba(239, 68, 68, 0.10)' : 'var(--color-bg-secondary)',
-        border: `1px solid ${tone === 'danger' ? 'rgba(239, 68, 68, 0.25)' : 'var(--color-border-subtle)'}`,
+        backgroundColor: tone === 'danger' ? tint('var(--color-error)', 10) : 'var(--color-bg-secondary)',
+        border: `1px solid ${tone === 'danger' ? tint('var(--color-error)', 25) : 'var(--color-border-subtle)'}`,
       }}
     >
       <Icon name={icon} className="w-3.5 h-3.5 shrink-0 mt-0.5" />

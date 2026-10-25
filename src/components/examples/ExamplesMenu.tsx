@@ -62,7 +62,7 @@ export function ExamplesMenu({ prominent = false }: { prominent?: boolean }) {
         className={
           prominent
             ? 'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] bg-[var(--color-accent)] text-[var(--color-text-on-accent)] hover:opacity-90 transition-opacity'
-            : 'flex items-center gap-1.5 px-2 h-7 rounded-md text-[11px] border border-[var(--color-border)] cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-tertiary)] transition-colors'
+            : 'flex items-center gap-1.5 px-2 h-7 rounded-md text-[11px] border border-[var(--color-border-control)] cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-tertiary)] transition-colors'
         }
         // Only the header's label hides on narrow screens; the name stays.
         aria-label={prominent ? undefined : 'Examples'}

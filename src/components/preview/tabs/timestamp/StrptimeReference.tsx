@@ -1,6 +1,7 @@
 import { ReferenceTable } from '../shared/ReferenceTable';
 import { STRPTIME_REFERENCE, type StrptimeCategory, type StrptimeDirective } from './data';
 import { isSimulated } from './timestampLogic';
+import { tint } from '../../../../utils/tint';
 
 const STRPTIME_COLUMNS = [
   { label: 'Directive', className: 'pb-1 pr-3 font-medium w-16' },
@@ -50,16 +51,14 @@ function StrptimeCategoryRows({
           <tr
             key={d.directive}
             className="hover:bg-[var(--color-bg-tertiary)] transition-colors"
-            style={isActive ? { backgroundColor: 'var(--color-accent-muted, rgba(59,130,246,0.1))' } : undefined}
+            style={isActive ? { backgroundColor: tint('var(--color-accent)', 10) } : undefined}
           >
             <td className="py-0.5 pr-3">
               <code
                 className="font-mono px-1 py-0.5 rounded text-[11px]"
                 style={{
                   color: isActive ? 'var(--color-success)' : 'var(--color-text-primary)',
-                  backgroundColor: isActive
-                    ? 'var(--color-success-bg, rgba(34,197,94,0.15))'
-                    : 'var(--color-bg-tertiary)',
+                  backgroundColor: isActive ? tint('var(--color-success)', 15) : 'var(--color-bg-tertiary)',
                 }}
               >
                 {d.directive}
