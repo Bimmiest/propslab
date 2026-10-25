@@ -7,7 +7,7 @@ import { run } from '../../scripts/drop-format-only.mjs';
 const source = 'export const x = 1;\n';
 const texts: Record<string, { before: string | null; after: string }> = {
   'src/new.ts': { before: null, after: source },
-  'src/reformatted.ts': { before: 'export const x=1\n', after: source },
+  'src/reformatted.ts': { before: 'export const   x =\n  1;\n', after: source },
   'src/commented.ts': { before: `// old\n${source}`, after: `// new\n${source}` },
   'src/changed.ts': { before: source, after: 'export const x = 2;\n' },
 };
@@ -54,17 +54,17 @@ describe('drop-format-only', () => {
     expect(await runWith(['origin/main', 'src/changed.ts'])).toMatchObject({ out: ['src/changed.ts'], err: [] });
   });
 
-  it('drops a reformatted file and names it as formatting-only, even though its comments did not change either', async () => {
+  it('drops a reformatted file', async () => {
     expect(await runWith(['origin/main', 'src/reformatted.ts'])).toMatchObject({
       out: [''],
-      err: ['Formatting-only change, not mutated: `src/reformatted.ts`'],
+      err: ['Formatting or comment change only, not mutated: `src/reformatted.ts`'],
     });
   });
 
-  it('drops a file whose comments alone changed and names it as comment-only', async () => {
+  it('drops a file whose comments alone changed', async () => {
     expect(await runWith(['origin/main', 'src/commented.ts'])).toMatchObject({
       out: [''],
-      err: ['Comment-only change, not mutated: `src/commented.ts`'],
+      err: ['Formatting or comment change only, not mutated: `src/commented.ts`'],
     });
   });
 
@@ -76,8 +76,8 @@ describe('drop-format-only', () => {
     expect(code).toBe(0);
     expect(out).toEqual(['src/changed.ts,src/new.ts']);
     expect(err).toEqual([
-      'Formatting-only change, not mutated: `src/reformatted.ts`',
-      'Comment-only change, not mutated: `src/commented.ts`',
+      'Formatting or comment change only, not mutated: `src/reformatted.ts`',
+      'Formatting or comment change only, not mutated: `src/commented.ts`',
     ]);
   });
 });
