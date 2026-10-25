@@ -1,5 +1,8 @@
 import { useCallback, useSyncExternalStore } from 'react';
 
+/** Narrower than Tailwind's `md` breakpoint: the phone layout, one panel at a time. */
+export const MOBILE_QUERY = '(max-width: 767px)';
+
 /**
  * Subscribe to a CSS media query and re-render when its match state changes.
  * Returns false during server-side rendering (no `window`).

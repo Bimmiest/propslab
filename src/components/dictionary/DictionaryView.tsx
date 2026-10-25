@@ -1,8 +1,9 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Panel, Group, Separator } from 'react-resizable-panels';
+import { Panel, Group } from 'react-resizable-panels';
 import { useAppStore } from '../../store/useAppStore';
-import { useMediaQuery } from '../../hooks/useMediaQuery';
+import { MOBILE_QUERY, useMediaQuery } from '../../hooks/useMediaQuery';
 import { Icon } from '../ui/Icon';
+import { ResizeHandle } from '../ui/ResizeHandle';
 import { DictionaryFilterBar, DictionaryList } from './DictionaryList';
 import { DictionaryDetail } from './DictionaryDetail';
 import { buildEntries, filterEntries, findEntry, DEFAULT_FILTERS, type DictionaryFilters } from './entries';
@@ -68,7 +69,7 @@ function usePhoneDrill(isMobile: boolean, selectedEntryId: string | null, storeS
  */
 export function DictionaryView() {
   const selectedId = useAppStore((s) => s.dictionarySelection);
-  const isMobile = useMediaQuery('(max-width: 767px)');
+  const isMobile = useMediaQuery(MOBILE_QUERY);
 
   const [filters, setFilters] = useState<DictionaryFilters>(DEFAULT_FILTERS);
 
@@ -155,12 +156,7 @@ export function DictionaryView() {
       <Panel defaultSize="26" minSize={168} maxSize="45" id="dictionary-list">
         {list}
       </Panel>
-      <Separator
-        className="group relative flex items-center justify-center w-1.5 cursor-col-resize
-          bg-[var(--color-border)] hover:bg-[var(--color-accent)] transition-colors"
-      >
-        <div className="w-0.5 h-8 rounded-full bg-[var(--color-text-muted)] group-hover:bg-white transition-colors" />
-      </Separator>
+      <ResizeHandle direction="horizontal" />
       <Panel defaultSize="74" minSize="30" id="dictionary-detail">
         {detail}
       </Panel>

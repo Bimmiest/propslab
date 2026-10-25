@@ -1,6 +1,7 @@
 import { create, type StoreApi } from 'zustand';
 import type { EventMetadata, OutputTabId, PreviewSubTabId, ValidationDiagnostic } from '../engine/types';
 import type { ViewResult } from '../utils/viewResult';
+import { safeStorage } from '../utils/safeStorage';
 
 /** Top-level workspace the activity rail switches between. */
 export type ActiveView = 'simulator' | 'dictionary';
@@ -174,11 +175,7 @@ const SETTINGS_KEY = 'propslab:settings';
  * argument and this comment can go.
  */
 function readPreference(key: string, legacyKey: string): string | null {
-  try {
-    return localStorage.getItem(key) ?? localStorage.getItem(legacyKey);
-  } catch {
-    return null;
-  }
+  return safeStorage.get(key) ?? safeStorage.get(legacyKey);
 }
 
 /** Restore the persisted theme, defaulting to dark when unset or unreadable. */
@@ -254,11 +251,7 @@ function settingsState(set: StoreApi<AppState>['setState']): SettingsState {
         const perEventPipeline = !state.settings.perEventPipeline;
         const manualApply = perEventPipeline ? true : state.settings.manualApply;
         const next = { ...state.settings, perEventPipeline, manualApply };
-        try {
-          localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
-        } catch {
-          /* ignore */
-        }
+        safeStorage.set(SETTINGS_KEY, JSON.stringify(next));
         return { settings: next };
       }),
     toggleManualApply: () =>
@@ -271,11 +264,7 @@ function settingsState(set: StoreApi<AppState>['setState']): SettingsState {
         // disagreed until then.
         if (state.settings.perEventPipeline && state.settings.manualApply) return {};
         const next = { ...state.settings, manualApply: !state.settings.manualApply };
-        try {
-          localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
-        } catch {
-          /* ignore */
-        }
+        safeStorage.set(SETTINGS_KEY, JSON.stringify(next));
         return { settings: next };
       }),
   };
@@ -328,11 +317,7 @@ export const useAppStore = create<AppState>((set) => ({
   toggleTheme: () =>
     set((state) => {
       const theme = state.theme === 'light' ? 'dark' : 'light';
-      try {
-        localStorage.setItem(THEME_KEY, theme);
-      } catch {
-        /* ignore */
-      }
+      safeStorage.set(THEME_KEY, theme);
       return { theme };
     }),
 

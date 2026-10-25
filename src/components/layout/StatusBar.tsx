@@ -3,6 +3,7 @@ import { useAppStore } from '../../store/useAppStore';
 import { Icon } from '../ui/Icon';
 import { Tooltip } from '../ui/Tooltip';
 import { RUN_BUDGET_MS } from '../../hooks/useProcessingPipeline';
+import { countByLevel } from '../../utils/diagnosticCounts';
 
 const MAIN_THREAD_HINT =
   'No pipeline worker could be loaded, so the pipeline runs on the main thread. ' +
@@ -114,8 +115,7 @@ function ResultSummary() {
   // mounted, and a walk of every event's fields here ran after every run.
   const fieldCount = result?.fieldStats.names.length ?? 0;
 
-  const errorCount = useMemo(() => diagnostics.filter((d) => d.level === 'error').length, [diagnostics]);
-  const warningCount = useMemo(() => diagnostics.filter((d) => d.level === 'warning').length, [diagnostics]);
+  const { error: errorCount, warning: warningCount } = useMemo(() => countByLevel(diagnostics), [diagnostics]);
 
   return (
     <div className="flex items-center gap-3">
