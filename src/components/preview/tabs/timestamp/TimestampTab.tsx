@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useTimestampMatch } from '../../../../hooks/useTimestampMatch';
 import { usePipelineInputs, type PipelineInputs } from '../shared/usePipelineInputs';
 import type { EnrichedEvent } from '../../enrichEvents';
+import { pageStart } from '../../../../utils/pagination';
 import { extractDirectives, parseTimeConfig, resolvedTimeSource, timestampTextOf } from './timestampLogic';
 import { ConfigSummary, TimestampLegend } from './ConfigSummary';
 import { StrptimeReference } from './StrptimeReference';
@@ -92,7 +93,7 @@ function TimestampView({
           </div>
         ) : (
           items.map((item, idx) => {
-            const globalIdx = (currentPage - 1) * eventsPerPage + idx + 1;
+            const globalIdx = pageStart(currentPage, eventsPerPage) + idx + 1;
             return (
               <TimestampEventCard
                 key={idx}

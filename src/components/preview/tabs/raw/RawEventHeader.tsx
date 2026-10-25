@@ -5,6 +5,7 @@
 // ---------------------------------------------------------------------------
 
 import type { ViewEvent } from '../../../../utils/viewResult';
+import { EventCardHeader, EventNumber } from '../shared/EventCardHeader';
 
 export function ExpandLabel({ expanded }: { expanded: boolean }) {
   return expanded ? (
@@ -41,9 +42,9 @@ export function EventRowHeader({
   const truncation = event.processingTrace.find((t) => t.truncation)?.truncation;
 
   return (
-    <div className="flex items-center justify-between px-3 py-1.5 border-b border-[var(--color-border)] bg-[var(--color-bg-tertiary)]">
+    <EventCardHeader split>
       <div className="flex items-center gap-3">
-        <span className="text-xs font-medium text-[var(--color-text-muted)]">Event #{globalIdx}</span>
+        <EventNumber globalIdx={globalIdx} />
         {event._time && (
           <span className="text-xs text-[var(--color-accent)] font-mono">{event._time.toISOString()}</span>
         )}
@@ -92,6 +93,6 @@ export function EventRowHeader({
           </span>
         ) : null}
       </div>
-    </div>
+    </EventCardHeader>
   );
 }

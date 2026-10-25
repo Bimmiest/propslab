@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRegexMatch } from '../../../../hooks/useRegexMatch';
 import type { RegexMatchInfo } from '../../../../engine/regexMatch';
 import type { EnrichedEvent } from '../../enrichEvents';
+import { pageStart } from '../../../../utils/pagination';
 import { NO_RESULTS, alignResults, countMatched } from './regexLogic';
 
 export interface RegexTabProps {
@@ -70,7 +71,7 @@ export function useRegexResults(
   const aligned = useMemo(() => alignResults(settled, rawInputs), [settled, rawInputs]);
 
   // The rendered page starts at this offset into `rawInputs`.
-  const pageOffset = (currentPage - 1) * eventsPerPage;
+  const pageOffset = pageStart(currentPage, eventsPerPage);
   const pageEntries = useMemo<PageEntry[]>(() => {
     if (!pattern || validationError || !settled) return [];
     return items.map((item, i) => ({

@@ -2,6 +2,7 @@ import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useAppStore } from '../../../store/useAppStore';
 import type { EnrichedEvent } from '../enrichEvents';
 import type { EventMetadata } from '../../../engine/types';
+import { pageStart } from '../../../utils/pagination';
 import { EventContextMenu } from './shared/EventContextMenu';
 import { SelectableRaw, type RawSelection } from './shared/SelectableRaw';
 import { SearchHighlightedRaw } from './shared/SearchHighlightedRaw';
@@ -47,7 +48,7 @@ export function RawTab({ items, currentPage, eventsPerPage, search }: RawTabProp
   return (
     <div className="p-3 space-y-2">
       {items.map((item, idx) => {
-        const globalIdx = (currentPage - 1) * eventsPerPage + idx + 1;
+        const globalIdx = pageStart(currentPage, eventsPerPage) + idx + 1;
         return (
           <EventRow
             // Keyed by event, not its slot on the page (see rowKeys).

@@ -5,6 +5,7 @@
 // ---------------------------------------------------------------------------
 
 import { getField, hasField } from '../../../../engine/utils/fieldBag';
+import { pageStart } from '../../../../utils/pagination';
 import type { EnrichedEvent } from '../../enrichEvents';
 import type { FieldNode } from '../shared/fieldTreeUtils';
 import type { FieldCategories, FieldFilter } from './fieldColoring';
@@ -35,7 +36,7 @@ export function selectRows(
   pinnedFields: Set<string>,
 ): EventRow[] {
   if (pinnedFields.size === 0) {
-    const offset = (currentPage - 1) * eventsPerPage;
+    const offset = pageStart(currentPage, eventsPerPage);
     return items.map((item, i) => ({ item, globalIdx: offset + i + 1 }));
   }
   const out: EventRow[] = [];
