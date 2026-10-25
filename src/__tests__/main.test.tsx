@@ -8,11 +8,13 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 // was first evaluated (see 'installs the Trusted Types policy before App').
 const seen = vi.hoisted(() => ({ policiesWhenAppLoaded: undefined as string[] | undefined }));
 
-vi.mock('../App.tsx', () => {
+const mockApp = vi.hoisted(() => () => {
   const factory = (globalThis as { trustedTypes?: { createPolicy: { mock: { calls: string[][] } } } }).trustedTypes;
   seen.policiesWhenAppLoaded = factory?.createPolicy.mock.calls.map(([name]) => String(name));
   return { default: () => null };
 });
+
+vi.mock('../App.tsx', mockApp);
 
 vi.mock('../utils/regexEngineLoader', () => ({
   // Never settles: the assertion is about what happens before the await.
@@ -23,6 +25,11 @@ describe('main.tsx', () => {
   beforeEach(() => {
     seen.policiesWhenAppLoaded = undefined;
     vi.resetModules();
+    // resetModules clears the module cache but not the mock registry, so
+    // without this the factory above runs only for the first test that
+    // imports main, and a shuffled order leaves the policy test reading
+    // nothing (#587).
+    vi.doMock('../App.tsx', mockApp);
     document.documentElement.className = '';
     document.body.innerHTML = '<div id="root"></div>';
   });

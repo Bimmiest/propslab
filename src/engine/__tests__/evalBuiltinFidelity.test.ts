@@ -414,8 +414,11 @@ nulls(
   ['strftime("", "%Y")', 'strftime("😀", "%Y")', 'strftime(sqrt(-1), "%Y")'],
   `${TIME} > strftime(X,Y): a value that is not a time is NULL`,
 );
-row('strftime', 'strftime(0, "%Y")', '1970', `${TIME} > strftime(X,Y): %Y is the year`);
-row('strftime', 'strftime(0, "😀%Y")', '😀1970', `${TIME} > strftime(X,Y): other text is literal`);
+// strftime formats in the machine's local zone, as the user's zone stands in
+// for Splunk's per-user setting (#407). Epoch 0 is 1969 west of UTC, so these
+// rows use noon UTC on 2024-07-01, which is 2024 in every zone (#586).
+row('strftime', 'strftime(1719835200, "%Y")', '2024', `${TIME} > strftime(X,Y): %Y is the year`);
+row('strftime', 'strftime(1719835200, "😀%Y")', '😀2024', `${TIME} > strftime(X,Y): other text is literal`);
 row('strftime', 'strftime(0, "")', '', `${TIME} > strftime(X,Y): an empty format is empty`);
 todo('strftime', 'strftime(0, missing)', 'the docs do not say what a NULL format gives');
 todo('strftime', 'strftime(mv, "%Y")', MV_UNDOCUMENTED, MV_AB);
