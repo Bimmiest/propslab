@@ -21,6 +21,19 @@ export type TimeSource =
   | 'datetime-config-current'
   | 'datetime-config-none';
 
+/**
+ * `_time` sources that were not read out of the event's own text. Nothing in
+ * this app reads it; propslab-sb and propslab-ent do, through the vendored
+ * engine. #570 deleted it as dead and broke both, so a search for readers
+ * must include them.
+ */
+export const FALLBACK_TIME_SOURCES: readonly TimeSource[] = [
+  'previous-event',
+  'current-time',
+  'datetime-config-current',
+  'datetime-config-none',
+];
+
 export interface ProcessingStep {
   processor: string;
   phase: 'index-time' | 'search-time';
