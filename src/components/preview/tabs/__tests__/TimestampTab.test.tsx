@@ -4,6 +4,7 @@
 // reference disclosure has to announce its state.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
+import { Profiler } from 'react';
 import { TimestampTab } from '../timestamp';
 import { useAppStore } from '../../../../store/useAppStore';
 import type { EnrichedEvent } from '../../enrichEvents';
@@ -121,5 +122,23 @@ describe('TimestampTab', () => {
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
     fireEvent.click(toggle);
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  });
+});
+
+describe('TimestampTab inputs (#565)', () => {
+  it('does not re-render on a config keystroke when it is given the run inputs', () => {
+    let renders = 0;
+    const inputs = {
+      propsConf: '[st]\nTIME_FORMAT = %Y-%m-%d',
+      metadata: { index: 'main', host: 'h', source: 's', sourcetype: 'st' },
+    };
+    render(
+      <Profiler id="ts" onRender={() => renders++}>
+        <TimestampTab items={items} currentPage={1} eventsPerPage={10} inputs={inputs} />
+      </Profiler>,
+    );
+    const before = renders;
+    act(() => useAppStore.getState().setPropsConf('[st]\nTIME_FORMAT = %d/%m/%Y'));
+    expect(renders).toBe(before);
   });
 });
