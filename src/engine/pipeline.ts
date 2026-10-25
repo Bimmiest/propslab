@@ -215,11 +215,6 @@ function runIndexTime(rawData: string, run: PipelineRun): SplunkEvent[] {
     'batch',
   );
 
-  // Stage 3, continued: ROUTE_EVENTS_OLDER_THAN — the spec runs the age test "after
-  // timestamp extraction", so it reads the extracted _time, before any
-  // index-time transform can rewrite it.
-  events = safeProcessor('ROUTE_EVENTS_OLDER_THAN', events, (batch, c) => routeEventsByAge(batch, directives, c), ctx);
-
   // Stage 4: Indexed extractions. Batch-shaped: CSV's header row names the
   // fields of every row after it. The XML modes catch per event themselves.
   // It reads the input too, for the line break inside a quoted CSV value that
@@ -232,6 +227,12 @@ function runIndexTime(rawData: string, run: PipelineRun): SplunkEvent[] {
     'props.conf',
     'batch',
   );
+
+  // Stage 3, continued: ROUTE_EVENTS_OLDER_THAN — the spec runs the age test "after
+  // timestamp extraction", and for structured data TIMESTAMP_FIELDS, read by the
+  // indexed extractions, is that extraction (#557). So it reads the _time the
+  // event ends up with, before any index-time transform can rewrite it.
+  events = safeProcessor('ROUTE_EVENTS_OLDER_THAN', events, (batch, c) => routeEventsByAge(batch, directives, c), ctx);
 
   // Stage 5: SEDCMD
   events = safeProcessor('SEDCMD', events, (batch, c) => applySedCommands(batch, directives, c), ctx);

@@ -25,9 +25,10 @@ export function parseAge(value: string): number | null {
  * ROUTE_EVENTS_OLDER_THAN: route events whose extracted timestamp is
  * older than the given age to nullQueue.
  *
- * Runs straight after timestamp extraction, which is where the spec places it,
- * so it tests the `_time` that extraction produced — not one a later
- * INGEST_EVAL or DEST_KEY = _time rewrites. "Older" is measured from `now`, the
+ * Runs after timestamp extraction, which is where the spec places it: after
+ * the indexed extractions too, since for structured data TIMESTAMP_FIELDS is
+ * that extraction (#557). So it tests the `_time` the event ends up with — not
+ * one a later INGEST_EVAL or DEST_KEY = _time rewrites. "Older" is measured from `now`, the
  * run's single injected clock, so a test or a replay gets the same answer every
  * time.
  *
