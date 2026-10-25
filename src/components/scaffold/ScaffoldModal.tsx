@@ -28,8 +28,9 @@ export function ScaffoldModal() {
 
   const noData = rawData.trim().length === 0;
 
-  // Computed once per mount — the overlay blocks input editing while open, so the
-  // sample is a point-in-time snapshot. (Mounted only while open; see AppShell.)
+  // Recomputed when the sample or the metadata changes. The overlay blocks input
+  // editing while open, so in practice that is once per opening. (Mounted only
+  // while open; see AppShell.)
   const result = useMemo(() => scaffoldConfig(rawData, metadata), [rawData, metadata]);
 
   const [selected, setSelected] = useState<Record<string, boolean>>(() => {
