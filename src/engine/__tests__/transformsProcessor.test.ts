@@ -870,3 +870,29 @@ describe('#451 — DEST_KEY = _meta replaces what came before it', () => {
     expect(kept.fields['punct']).toBe(punct);
   });
 });
+
+// Doc-derived (transforms.conf.spec, GLOBAL SETTINGS: "Use the [default] stanza
+// to define any global settings … If an attribute is defined at both the global
+// level and in a specific stanza, the value in the specific stanza takes
+// precedence"). Settings written above the first stanza header are global too.
+describe('transforms.conf [default] applies to every transform (#615)', () => {
+  const meta = { index: 'main', host: 'h', source: 's', sourcetype: 'st' };
+  const props = '[st]\nREPORT-a = kv\nKV_MODE = none';
+  const kv = '[kv]\nREGEX = (\\S+)=(\\S+)\nFORMAT = $1::$2';
+  const keys = (transforms: string) =>
+    Object.keys(
+      runPipeline('user-name=bob', meta, props, transforms, { perEventPipeline: false }).result.events[0]?.fields ?? {},
+    ).filter((k) => k.startsWith('user'));
+
+  it('takes a setting the stanza does not set from [default]', () => {
+    expect(keys(`[default]\nCLEAN_KEYS = false\n\n${kv}`)).toEqual(['user-name']);
+  });
+
+  it('takes a setting written above the first stanza as global', () => {
+    expect(keys(`CLEAN_KEYS = false\n\n${kv}`)).toEqual(['user-name']);
+  });
+
+  it("lets the stanza's own setting win", () => {
+    expect(keys(`[default]\nCLEAN_KEYS = false\n\n${kv}\nCLEAN_KEYS = true`)).toEqual(['user_name']);
+  });
+});
