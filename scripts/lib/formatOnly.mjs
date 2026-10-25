@@ -2,27 +2,15 @@
 // formatting or comments and nothing else. Such a change cannot alter what the
 // code does, so it gives mutation testing nothing new to test. Text that does
 // not parse is never skippable.
+//
+// One test covers both, because the code tokens leave out layout as well as
+// comments. A Prettier comparison used to sit beside it, but CI holds every
+// file to Prettier, so both sides were already its output and it could only
+// say "yes" for text that had not changed (#571). The cost: a Prettier upgrade
+// that adds a token, a semicolon or a parenthesis, makes the files it touches
+// count as changed, and they are mutated once.
 
-import prettier from 'prettier';
 import ts from 'typescript';
-
-/**
- * Whether only formatting changed: Prettier, with the file's own config,
- * prints the old and the new text identically.
- *
- * @param {string} filePath Path used to pick the parser and resolve the config.
- * @param {string} before The file's text on the base branch.
- * @param {string} after The file's text now.
- * @returns {Promise<boolean>}
- */
-export async function isFormattingOnly(filePath, before, after) {
-  const options = { ...(await prettier.resolveConfig(filePath)), filepath: filePath };
-  try {
-    return (await prettier.format(before, options)) === (await prettier.format(after, options));
-  } catch {
-    return false;
-  }
-}
 
 /**
  * Comments that change which mutants Stryker generates. A change to one of

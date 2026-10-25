@@ -1,32 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { isCommentOnly, isFormattingOnly } from '../../scripts/lib/formatOnly.mjs';
+import { isCommentOnly } from '../../scripts/lib/formatOnly.mjs';
 
-// mutation.yml skips a file whose change these call formatting or comments
+// mutation.yml skips a file whose change this calls formatting or comments
 // only, so a false "yes" would let a real change through unmutated.
-describe('isFormattingOnly', () => {
-  const file = 'src/engine/example.ts';
-
-  it('is true when only layout changed', async () => {
-    const before = 'export function f(a:number,b:number){return a+b}\n';
-    const after = 'export function f(a: number, b: number) {\n  return a + b;\n}\n';
-    expect(await isFormattingOnly(file, before, after)).toBe(true);
-  });
-
-  it('is false when behaviour changed, however small', async () => {
-    const before = 'export const f = (a: number) => a + 1;\n';
-    expect(await isFormattingOnly(file, before, 'export const f = (a: number) => a - 1;\n')).toBe(false);
-    expect(await isFormattingOnly(file, before, "export const f = (a: number) => a + '1';\n")).toBe(false);
-  });
-
-  it('is false when a comment changed', async () => {
-    expect(await isFormattingOnly(file, '// a\nexport const x = 1;\n', '// b\nexport const x = 1;\n')).toBe(false);
-  });
-
-  it('is false for text that does not parse', async () => {
-    expect(await isFormattingOnly(file, 'export const x = 1;\n', 'export const x = ;\n')).toBe(false);
-  });
-});
-
 describe('isCommentOnly', () => {
   const file = 'src/engine/example.ts';
   const code = 'export function f(a: number): number {\n  return a + 1;\n}\n';
@@ -35,6 +11,15 @@ describe('isCommentOnly', () => {
     expect(isCommentOnly(file, `// old\n${code}`, `// new, and longer\n${code}`)).toBe(true);
     expect(isCommentOnly(file, `/** Adds one. */\n${code}`, `/**\n * Adds one to a.\n */\n${code}`)).toBe(true);
     expect(isCommentOnly(file, code, code.replace('return', '/* inline */ return'))).toBe(true);
+  });
+
+  it('is true when only layout changed, and false when a reformat adds a token (#571)', () => {
+    const before = 'export function f(a: number, b: number) { return a + b; }\n';
+    const after = 'export function f(a: number, b: number) {\n  return a + b;\n}\n';
+    expect(isCommentOnly(file, before, after)).toBe(true);
+    // Prettier adds the semicolon here. Both sides of a PR are Prettier's
+    // output already, so this arises only when a Prettier upgrade changes it.
+    expect(isCommentOnly(file, 'export const x = 1\n', 'export const x = 1;\n')).toBe(false);
   });
 
   it('is true when comments and layout both changed', () => {

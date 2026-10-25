@@ -12,7 +12,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { isCommentOnly, isFormattingOnly } from './lib/formatOnly.mjs';
+import { isCommentOnly } from './lib/formatOnly.mjs';
 
 /**
  * The command, given its arguments and what it reads and writes through: `show`
@@ -32,10 +32,8 @@ export async function run([baseRef, list = ''], { show, read, out, err }) {
       continue;
     }
     const after = read(file);
-    if (await isFormattingOnly(file, before, after)) {
-      err(`Formatting-only change, not mutated: \`${file}\``);
-    } else if (isCommentOnly(file, before, after)) {
-      err(`Comment-only change, not mutated: \`${file}\``);
+    if (isCommentOnly(file, before, after)) {
+      err(`Formatting or comment change only, not mutated: \`${file}\``);
     } else {
       kept.push(file);
     }
