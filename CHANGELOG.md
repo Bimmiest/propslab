@@ -53,6 +53,7 @@ All notable changes to Propslab are documented here, newest first. Entries say w
 
 ### Changed
 
+- **The `dompurify` override is lifted to 3.4.17, past GHSA-cg2g-xh64-v4q7 and GHSA-mrv2-3pqr-j5jr (Monaco ships its own inlined copy, which no reachable path can exploit; CONTRIBUTING says why); `vite` to 8.3.5, `zod` to 4.6.7 and `undici` past their advisories; and the MCP server's `body-parser`, `hono`, `fast-uri` and `ip-address` likewise.** `npm audit` reports zero vulnerabilities in both lockfiles again.
 - **`dompurify` is lifted to 3.4.16, past GHSA-p98j-92pf-mc4p.** `monaco-editor` 0.57 pins 3.4.15 exactly, so the fix is an override scoped to it; `npm audit` reports zero vulnerabilities again.
 - **The MCP server's `@modelcontextprotocol/sdk` is lifted to 1.32.1 and its `proxy-addr` to 2.0.8**, past GHSA-6qxp-vccf-f47h and GHSA-jqcg-44mw-7w3h, and `source-map-js` to 1.2.2 in both lockfiles, past GHSA-68fv-2mgg-jv7q; `npm audit` reports zero vulnerabilities in both again.
 - **Recorded Splunk output is no longer distributed** ([ADR 0016](docs/adr/0016-recorded-splunk-output-is-not-distributed.md)). The fidelity fixtures, their replay suite and the unit tests built on observed output are removed from the source tree and its releases. Engine behaviour is unchanged. `docDerivedDirectives.test.ts` adds pipeline-level tests, written from the spec, for the directives that relied on a fixture.
