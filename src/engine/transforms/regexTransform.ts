@@ -8,7 +8,7 @@ import { extractionLimits, safeRegex, validateRegex, type RegexMatch, type Splun
 import { explainNoMatch, type NoOpReason } from '../noOpExplainer';
 import { getField, hasField, setField, addFieldValue } from '../utils/fieldBag';
 import { stripLeadingUnderscoreForField } from '../utils/internalFields';
-import { getSourceKeyValue, serialiseMeta } from '../utils/metadataFields';
+import { getSourceKeyValue } from '../utils/metadataFields';
 import { effectiveDirective, effectiveValue, parseSplunkBool } from '../utils/directiveValues';
 import { expandFormat, parseFormatPairs } from './format';
 import { keyCleaner } from './keyCleaning';
@@ -81,25 +81,16 @@ function getCompiledRegex(transformStanza: ConfStanza, pattern: string): SplunkR
 /**
  * Resolve the current contents of DEST_KEY (used for `$0` in FORMAT). Returns
  * `undefined` when there is no DEST_KEY, so `$0` falls back to the whole match.
+ *
+ * transforms.conf.spec: "$0 represents the DEST_KEY value before Splunk
+ * software performs the REGEX". A built-in key reads as `SOURCE_KEY` reads it,
+ * prefix included (`host::web01`, `indexQueue`), so the two cannot disagree
+ * about what a key holds (#620); any other key is a field.
  */
 function resolvePriorDestValue(event: SplunkEvent, destKey: string | undefined): string | undefined {
   if (!destKey) return undefined;
-  if (destKey === '_raw') return event._raw;
-  switch (normaliseDestKey(destKey)) {
-    case '_meta':
-      // transforms.conf.spec: "$0 represents the DEST_KEY value before Splunk
-      // software performs the REGEX (in other words, _meta)" — the indexed
-      // fields written so far, in the `key::value` form `_meta` holds them.
-      return serialiseMeta(event._meta);
-    case 'MetaData:Host':
-      return event.metadata.host;
-    case 'MetaData:Index':
-      return event.metadata.index;
-    case 'MetaData:Source':
-      return event.metadata.source;
-    case 'MetaData:Sourcetype':
-      return event.metadata.sourcetype;
-  }
+  const builtIn = getSourceKeyValue(event, destKey);
+  if (builtIn !== undefined) return builtIn;
   const v = getField(event.fields, destKey);
   return (Array.isArray(v) ? v[0] : v) ?? '';
 }

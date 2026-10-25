@@ -119,12 +119,16 @@ describe('DEFAULT_VALUE', () => {
 });
 
 describe('$0 — the DEST_KEY value before the REGEX ran', () => {
+  // A metadata key holds its `host::`-style prefix, as SOURCE_KEY reads it and
+  // as FORMAT must write it. #620 corrected these from the bare value, which
+  // made `FORMAT = $0.example.com` write a host with no prefix, so no change.
   it.each([
-    ['MetaData:Host', 'h'],
+    ['MetaData:Host', 'host::h'],
     ['MetaData:Index', 'main'],
-    ['MetaData:Source', 's'],
-    ['MetaData:Sourcetype', 'st'],
+    ['MetaData:Source', 'source::s'],
+    ['MetaData:Sourcetype', 'sourcetype::st'],
     ['_MetaData:Index', 'main'],
+    ['queue', 'indexQueue'],
   ])('reads the current %s', (destKey, prior) => {
     const r = applyRegexTransform(event('v=1'), stanza({ REGEX: 'v=(\\d)', FORMAT: '$0-$1', DEST_KEY: destKey }));
     expect(r.destValue).toBe(`${prior}-1`);

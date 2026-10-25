@@ -15,12 +15,11 @@ import type { ConfStanza } from '../types';
 import { makeEvent } from '../../test/makeEvent';
 
 const KEYS = [
-  { key: 'Host', prior: 'h', read: 'host::h', write: 'host::new', field: 'host', written: 'new' },
-  { key: 'Index', prior: 'main', read: 'main', write: 'other', field: 'index', written: 'other' },
-  { key: 'Source', prior: 's', read: 'source::s', write: 'source::/new', field: 'source', written: '/new' },
+  { key: 'Host', read: 'host::h', write: 'host::new', field: 'host', written: 'new' },
+  { key: 'Index', read: 'main', write: 'other', field: 'index', written: 'other' },
+  { key: 'Source', read: 'source::s', write: 'source::/new', field: 'source', written: '/new' },
   {
     key: 'Sourcetype',
-    prior: 'st',
     read: 'sourcetype::st',
     write: 'sourcetype::newst',
     field: 'sourcetype',
@@ -53,19 +52,20 @@ describe('normaliseDestKey', () => {
 });
 
 describe('the _MetaData: alias reads the same as MetaData: at every site', () => {
-  describe.each(KEYS)('$key', ({ key, prior, read, write, field, written }) => {
+  describe.each(KEYS)('$key', ({ key, read, write, field, written }) => {
     it('SOURCE_KEY reads the slot', () => {
       const ev = makeEvent('x');
       expect(getSourceKeyValue(ev, `_MetaData:${key}`)).toBe(read);
       expect(getSourceKeyValue(ev, `MetaData:${key}`)).toBe(read);
     });
 
+    // `$0` reads the slot as SOURCE_KEY does, prefix included (#620).
     it('$0 in FORMAT is the slot before the REGEX ran', () => {
       const r = applyRegexTransform(
         makeEvent('v=1'),
         stanza({ REGEX: 'v=(\\d)', FORMAT: '$0|$1', DEST_KEY: `_MetaData:${key}` }),
       );
-      expect(r.destValue).toBe(`${prior}|1`);
+      expect(r.destValue).toBe(`${read}|1`);
     });
 
     it('a single-valued slot takes the first match only, even under REPEAT_MATCH', () => {
