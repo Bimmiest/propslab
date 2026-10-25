@@ -100,6 +100,10 @@ const hour12 = (date: Date) => (date.getHours() % 12 === 0 ? 12 : date.getHours(
 const fraction = (width: number) => (date: Date) => pad(date.getMilliseconds(), 3).padEnd(width, '0').slice(0, width);
 
 function buildDirectiveMap(): Record<string, DirectiveMeta> {
+  // Stryker disable all: this runs once, when the module loads, so a mutant in
+  // the table never takes effect in the run that judges it and survives
+  // unkilled (#641). The round-trip property in strftime.test.ts renders and
+  // parses every entry.
   return {
     '%Y': { regex: '(\\d{4})', capture: 'year4', format: (d) => String(d.getFullYear()) },
     '%y': { regex: '(\\d{2})', capture: 'year2', format: (d) => pad(d.getFullYear() % 100) },
@@ -169,6 +173,7 @@ function buildDirectiveMap(): Record<string, DirectiveMeta> {
     // %% and the composites %T and %F are handled before the table is consulted.
   };
 }
+// Stryker restore all
 
 const DIRECTIVE_MAP = buildDirectiveMap();
 
