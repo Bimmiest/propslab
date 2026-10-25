@@ -25,6 +25,8 @@ The Azure SWA deploy (`azure-static-web-apps.yml`) only builds and deploys. It h
 
 The workflow then deploys the **newest commit on main with a green push CI**. This is not always the commit that started it, because the CI runs for two quick pushes can complete in either order. The workflow builds that commit with the `.nvmrc` Node and `npm ci --ignore-scripts`. Then it uploads `dist/`, and skips the app build.
 
+The list of CI runs can lag, so the workflow checks the commit that it finds. The commit must contain the commit that started the run and the commit that production serves. The deploy job writes the commit that it built into the URL of the deployment, as the fragment `#build=<sha>`. The next run reads the commit that production serves from there. The deployment record of GitHub names the commit of the run, which is not always the commit that the run built ([#574](https://github.com/Bimmiest/propslab/issues/574)).
+
 Build and deploy are separate jobs:
 
 - `build` resolves and checks the commit, installs and builds it, and uploads `dist/` as an artifact. This job never sees the deployment token.
