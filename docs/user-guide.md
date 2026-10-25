@@ -13,7 +13,7 @@ The layout has four parts:
 
 The rail selects one of two top-level views:
 
-- **Simulator**: two panels, with the inputs on the left and the output on the right. The left column holds Raw log → Metadata → props.conf → transforms.conf, in a group that you can resize. A collapsed editor becomes a bar of fixed height at the bottom, so that the resize handle can use its space.
+- **Simulator**: two panels, with the inputs on the left and the output on the right. The left column holds Raw log → props.conf → transforms.conf, in a group that you can resize. The **Metadata** button in the Raw log header opens a dialog for the index, the host, the source and the sourcetype. The button shows the sourcetype. A collapsed editor becomes a bar of fixed height at the bottom, so that the resize handle can use its space.
 - **Dictionary**: a reference that you can browse, for each directive and each stanza kind ([Dictionary](#dictionary)).
 
 The two views stay mounted. The app shows one of them with `hidden`, and does not render them conditionally. Thus, when you go to the dictionary and back, Monaco keeps its undo history, cursor and folding state. The output filters also stay as they were. An `ErrorBoundary` wraps each major panel.

@@ -55,7 +55,7 @@ The bundled Palo Alto Firewall example: the Extractions tab highlights each extr
 Open [propslab.vero-labs.net](https://propslab.vero-labs.net), or run the app locally ([Installation](#installation)). Then:
 
 1. Click an example, or paste a raw log into the Raw log panel.
-2. Set the metadata: the index, the host, the source and the sourcetype.
+2. Set the metadata: click **Metadata** in the Raw log header, and enter the index, the host, the source and the sourcetype.
 3. Write your stanzas in the `props.conf` and `transforms.conf` editors.
 4. Read the result in the Output panel. By default, each change runs the pipeline again.
 

@@ -1,7 +1,7 @@
 import { useMemo, useEffect, useRef } from 'react';
 import type { editor } from 'monaco-editor';
 import { useAppStore } from '../../store/useAppStore';
-import { MetadataPanel } from '../metadata/MetadataPanel';
+import { MetadataButton } from '../metadata/MetadataButton';
 import { Icon } from '../ui/Icon';
 import { ClearButton } from '../editor/ClearButton';
 import { MonacoEditor } from '../editor/LazyEditors';
@@ -74,15 +74,18 @@ export function RawPanel() {
         <span className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">
           Raw Log
         </span>
-        <button
-          onClick={toggleScaffold}
-          disabled={!hasText}
-          title="Scaffold a starter props.conf from this sample"
-          className="ml-auto flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium cursor-pointer border-none text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-tertiary)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          <Icon name="sparkles" className="w-3.5 h-3.5 text-[var(--color-accent)]" />
-          Scaffold
-        </button>
+        <div className="ml-auto flex items-center gap-1 min-w-0">
+          <MetadataButton />
+          <button
+            onClick={toggleScaffold}
+            disabled={!hasText}
+            title="Scaffold a starter props.conf from this sample"
+            className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium cursor-pointer border-none text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-tertiary)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <Icon name="sparkles" className="w-3.5 h-3.5 text-[var(--color-accent)]" />
+            Scaffold
+          </button>
+        </div>
       </div>
 
       <div className="relative flex-1 min-h-0">
@@ -119,10 +122,6 @@ export function RawPanel() {
 
       <div className="flex-shrink-0">
         <EditorValidationList file="raw" />
-      </div>
-
-      <div className="flex-shrink-0 border-t border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
-        <MetadataPanel />
       </div>
     </div>
   );
