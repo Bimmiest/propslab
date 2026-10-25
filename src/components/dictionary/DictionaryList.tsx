@@ -66,7 +66,7 @@ export function DictionaryFilterBar({
       style={{ borderColor: 'var(--color-border-subtle)' }}
     >
       <div
-        className="flex items-center gap-2 px-2 rounded-md border"
+        className="flex items-center gap-2 px-2 rounded-md border focus-within:ring-2 focus-within:ring-[var(--color-accent)]"
         style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-bg-primary)' }}
       >
         <Icon name="search" className="w-3.5 h-3.5 shrink-0 text-[var(--color-text-muted)]" />

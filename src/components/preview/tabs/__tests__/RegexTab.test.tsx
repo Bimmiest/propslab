@@ -77,6 +77,27 @@ describe('RegexTab', () => {
 
     expect(screen.getByText(/Fix the regex error above/i)).toBeInTheDocument();
   });
+
+  it('marks the pattern invalid and announces why (#564)', () => {
+    render(<RegexTab items={items} allEvents={items} currentPage={1} eventsPerPage={10} />);
+    const input = screen.getByRole('textbox', { name: 'Regex Pattern' });
+    expect(input).not.toHaveAttribute('aria-invalid');
+    fireEvent.change(input, { target: { value: '[unterminated' } });
+
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    const alert = screen.getByRole('alert');
+    expect(input).toHaveAccessibleDescription(alert.textContent);
+  });
+
+  it('announces the match count in a live region that is there before it changes (#564)', async () => {
+    render(<RegexTab items={items} allEvents={items} currentPage={1} eventsPerPage={10} />);
+    expect(screen.getByRole('status')).toHaveTextContent('');
+    fireEvent.change(screen.getByRole('textbox', { name: 'Regex Pattern' }), {
+      target: { value: '\\d+\\.\\d+\\.\\d+\\.\\d+' },
+    });
+    await screen.findAllByText(/Event #/);
+    expect(screen.getByRole('status')).toHaveTextContent('2/3 events matched');
+  });
 });
 
 const initialState = useAppStore.getState();

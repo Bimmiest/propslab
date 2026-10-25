@@ -223,7 +223,7 @@ function StanzaNameField({
         onChange={(e) => setSourcetype(e.target.value)}
         spellCheck={false}
         placeholder="my:sourcetype"
-        className="mt-1 w-full px-2.5 py-1.5 rounded-md text-sm font-mono outline-none focus:border-[var(--color-border-hover)]"
+        className="mt-1 w-full px-2.5 py-1.5 rounded-md text-sm font-mono outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
         style={{
           backgroundColor: 'var(--color-bg-secondary)',
           border: '1px solid var(--color-border)',
