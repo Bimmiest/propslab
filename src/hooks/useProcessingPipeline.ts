@@ -130,11 +130,12 @@ function finishInline(p: WorkerPolicy, request: PipelineWorkerRequest): void {
   p.runInline(request);
 }
 
-function onResponse(p: WorkerPolicy, { id, result, error }: PipelineWorkerResponse): void {
+function onResponse(p: WorkerPolicy, { id, result, error, runMs }: PipelineWorkerResponse): void {
   if (id !== p.requestIdRef.current) return;
   p.setIsProcessing(false);
   useAppStore.getState().setPipelineOnMainThread(false);
-  p.setLastProcessingMs(performance.now() - p.requestStartRef.current);
+  // The worker's own figure leaves out the wait behind earlier requests.
+  p.setLastProcessingMs(runMs ?? performance.now() - p.requestStartRef.current);
   // This request completed cleanly — it is not poison, so clear the retry
   // budget.
   p.retryCountRef.current = 0;
@@ -393,6 +394,9 @@ export function useProcessingPipeline() {
         propsConfText: inputs.propsConf,
         transformsConfText: inputs.transformsConf,
         options: { perEventPipeline: opts.perEventPipeline },
+        // Each request supersedes the ones before it, so the worker skips any
+        // still queued behind a newer one instead of running them all (#562).
+        latestOnly: true,
       };
 
       // Answers to earlier requests are stale now. The worker is still running

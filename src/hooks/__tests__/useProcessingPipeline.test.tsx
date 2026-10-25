@@ -244,6 +244,23 @@ describe('useProcessingPipeline', () => {
     expect(FakeWorker.instances[0]!.posted).toHaveLength(1);
   });
 
+  it("marks each request latest-only, and reports the worker's own run time (#562)", async () => {
+    vi.stubGlobal('Worker', FakeWorker);
+    renderHook(() => useProcessingPipeline());
+    act(() => useAppStore.getState().loadInputs(SAMPLE_CONFIGS[0]!));
+    await waitFor(() => expect(latest().posted).toHaveLength(1));
+    const { id, latestOnly } = latest().posted[0]!;
+    expect(latestOnly).toBe(true);
+
+    act(() => {
+      latest().ready();
+      latest().onmessage?.({
+        data: { id, result: { result: { events: [] }, diagnostics: [] }, runMs: 42 },
+      } as unknown as MessageEvent);
+    });
+    expect(useAppStore.getState().lastProcessingMs).toBe(42);
+  });
+
   describe('Ctrl/Cmd+Enter (#492)', () => {
     const press = (init: KeyboardEventInit) => {
       const e = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true, ...init });
