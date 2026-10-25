@@ -52,6 +52,17 @@ Until the admin completes these steps, any workflow on any branch can read the t
 
 `ci.yml`, `audit.yml`, `security.yml`, `mutation.yml` and `environment.yml` also run on a schedule, to find problems that occur without a push. If a scheduled run fails, its `report` job opens an issue with a `scheduled-*` label. If an issue with that label is open, the job adds a comment to it. Close the issue when the fix is on main.
 
+## Credentials
+
+The maintainer holds both credentials that the workflows use. Propslab has one maintainer, so this section is the hand-off ([#576](https://github.com/Bimmiest/propslab/issues/576)).
+
+| Secret | Where it is stored | What it does | How to rotate it |
+|---|---|---|---|
+| `AZURE_STATIC_WEB_APPS_API_TOKEN` | The secrets of the `production` environment | The deploy job uploads the site with it. It gives access to this Static Web App only. | In the Azure portal, open the Static Web App, select **Manage deployment token**, and reset it. Then put the new token in the environment secret. |
+| `SECRETS_READ_TOKEN` | The repository secrets | The weekly environment check lists the secret names with it. It is a fine-grained token for this repository, with Environments and Secrets set to read-only. | Make a new token with the same permissions, put it in the repository secret, and delete the old token. |
+
+A fine-grained token has an expiry date. When `SECRETS_READ_TOKEN` expires, the weekly environment check fails. Then rotate it. Reset the deployment token if it is possible that somebody else knows it.
+
 ## Rollback
 
 A rollback stays in place only while the automatic path is paused. If the automatic path is not paused, two things can occur:

@@ -4,7 +4,16 @@
 
 Report privately through GitHub's [private vulnerability reporting](https://github.com/Bimmiest/propslab/security/advisories/new) — the **Security** tab, then **Report a vulnerability**. Please do not open a public issue for a security problem.
 
-Expect an acknowledgement within a week. If a report is valid, the fix and the advisory go out together.
+If you cannot use private reporting, open an issue that asks for a private contact. Do not put details of the problem in the issue.
+
+The timeline:
+
+1. The maintainer acknowledges a report within 7 days.
+2. If the report is valid, the maintainer releases a fix within 90 days of the report.
+3. The advisory is published with the fix.
+4. If a fix needs more than 90 days, the maintainer tells you why and agrees a new date with you.
+
+Propslab has one maintainer, so no second person reviews a security fix before it merges.
 
 ## What this application is
 
@@ -35,3 +44,5 @@ The repository also contains [`packages/mcp-server`](packages/mcp-server/README.
 ## Supported versions
 
 The deployed application is built from `main`, and fixes land there. There is no support branch for older releases.
+
+The MCP server is not published to a package registry. Run it from the current `main`. Only `main` gets security fixes, and a fix does not go to an older checkout.
