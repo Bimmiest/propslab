@@ -118,7 +118,7 @@ Propslab does these things in a way that no Splunk recording confirms. The note 
 
   If a regex runs too long, the app stops the Web Worker and starts it again, and the UI does not freeze. The main thread only _compiles_ user patterns, to report syntax errors, and a compile cannot backtrack.
 
-  Stanza patterns are the exception. The Effective config and Timestamp tabs resolve stanzas on the main thread. They match the `[source::…]` and `[host::…]` patterns against the one source and the one host in the metadata panel. Each stanza-pattern match, there and in the pipeline, is held to the default `MATCH_LIMIT` and `DEPTH_LIMIT` of Splunk.
+  Stanza patterns are the exception. The Effective config and Timestamp tabs resolve stanzas on the main thread. They match the `[source::…]` and `[host::…]` patterns against the one source and the one host in the Metadata dialog. Each stanza-pattern match, there and in the pipeline, is held to the default `MATCH_LIMIT` and `DEPTH_LIMIT` of Splunk.
 
   The hover still matches one regex on the main thread: the `TIME_FORMAT` side. The app builds this pattern from strptime specifiers, and the user did not write it. It runs against a maximum of 4 KB of the sample line.
 
