@@ -12,6 +12,7 @@ All notable changes to Propslab are documented here, newest first. Entries say w
 
 ### Changed
 
+- **The borders of text boxes and dropdowns are lighter** ([#695](https://github.com/Bimmiest/propslab/issues/695)). They have a contrast of just over 3:1, which WCAG 1.4.11 asks for, and no more. The change is large in the dark theme (from 3.9–5.5:1) and small in the light theme (from 3.6–4.4:1).
 - **The metadata fields are in a dialog** ([#693](https://github.com/Bimmiest/propslab/issues/693)). The **Metadata** button in the Raw Log header opens it, and shows the sourcetype. Before, the fields were below the raw log editor and used its height: at a window height of 800 px, the editor showed no lines.
 - **A pull request that changes the app or the MCP server must add a CHANGELOG entry** ([#577](https://github.com/Bimmiest/propslab/issues/577)). The `pr-hygiene` check fails without one. The `no-changelog` label exempts a change that no user can see.
 - **A new colour palette for the light and dark themes** ([#688](https://github.com/Bimmiest/propslab/issues/688)). The two themes use the same four colours from Color Hunt: two charcoals, bronze and sand. The dark theme has charcoal surfaces, sand text and a gold accent. The light theme has near-white surfaces, charcoal text and a dark bronze accent. The editor follows the theme. All text has a contrast of 4.5:1 or more, and the borders of text boxes and dropdowns have 3:1 or more. Before, the borders of inputs had less than 3:1 ([#564](https://github.com/Bimmiest/propslab/issues/564)).

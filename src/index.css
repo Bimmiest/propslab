@@ -26,9 +26,10 @@
   --color-border: #cbc7bd;             /* dividers between panes: decorative */
   --color-border-subtle: rgba(203,199,189,0.5);  /* internal dividers */
   --color-border-hover: #9a958a;
-  /* The edge of a control (an input, a dropdown): ≥3:1 on every surface, the
-     non-text contrast WCAG 1.4.11 asks of a component's boundary (#564). */
-  --color-border-control: #7c7970;
+  /* The edge of a control (an input, a dropdown): just over 3:1 on the
+     surfaces a control sits on, the non-text contrast WCAG 1.4.11 asks of a
+     component's boundary (#564), and no darker, so controls stay quiet (#695). */
+  --color-border-control: #88847b;
 
   /* Dark bronze: ≥4.5:1 as text on every surface and on its own /10 tint */
   --color-accent: #6e4e14;
@@ -60,7 +61,7 @@
   --color-border: #454b55;             /* dividers between panes */
   --color-border-subtle: rgba(69,75,85,0.5);
   --color-border-hover: #6b7079;
-  --color-border-control: #8d9097;     /* ≥3:1 on every surface (#564) */
+  --color-border-control: #7a7d84;     /* just over 3:1 on a control's surfaces (#564, #695) */
 
   /* Gold, from the palette's bronze: ≥4.5:1 as text on every surface and on
      its own /10 tint, which makes it too light for white text: text on an

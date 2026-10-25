@@ -99,12 +99,24 @@ describe.each([
     ).toEqual([]);
   });
 
-  it("gives a control's border and the focus ring 3:1 on every surface", () => {
-    const pairs = SURFACES.flatMap((s) => [
-      [`border-control on ${s}`, get('border-control'), get(s), 3] as [string, string, string, number],
-      [`accent (focus ring) on ${s}`, get('accent'), get(s), 3] as [string, string, string, number],
-    ]);
+  it('gives the focus ring 3:1 on every surface', () => {
+    const pairs = SURFACES.map(
+      (s) => [`accent (focus ring) on ${s}`, get('accent'), get(s), 3] as [string, string, string, number],
+    );
     expect(failures(pairs)).toEqual([]);
+  });
+
+  // Not on bg-tertiary: that is a hover or pressed fill, never the surface
+  // around a control. A control filled with it (the page box) has the fill
+  // inside its border, and the border's contrast is with what is outside.
+  it("gives a control's border 3:1 on the surfaces a control sits on, and not much more (#695)", () => {
+    const surfaces = ['bg-primary', 'bg-secondary', 'bg-elevated'];
+    const pairs = surfaces.map(
+      (s) => [`border-control on ${s}`, get('border-control'), get(s), 3] as [string, string, string, number],
+    );
+    expect(failures(pairs)).toEqual([]);
+    // The weakest pair sets how dark the border is: keep it near the floor.
+    expect(Math.min(...surfaces.map((s) => ratio(get('border-control'), get(s))))).toBeLessThan(3.3);
   });
   it('gives every field-highlight colour 4.5:1 on the panes and on its own tint', () => {
     const pairs = FIELD_COLORS[theme].flatMap((c) =>
