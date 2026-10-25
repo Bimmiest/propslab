@@ -41,6 +41,19 @@ describe('strftime — baseline directives (regression)', () => {
     expect(parseTimestamp('2024-01-32 10:00:00', '%Y-%m-%d %H:%M:%S')).toBeNull();
   });
 
+  it('carries a leap second into the next day rather than back to the start of its own (#619)', () => {
+    expect(iso('2016-12-31 23:59:60', '%Y-%m-%d %H:%M:%S', 'UTC')).toBe('2017-01-01T00:00:00.000Z');
+    expect(iso('2026-06-30 23:59:60', '%Y-%m-%d %H:%M:%S', 'UTC')).toBe('2026-07-01T00:00:00.000Z');
+  });
+
+  it('rejects a %j day the year does not have instead of clamping it (#619)', () => {
+    for (const doy of ['000', '366', '999']) {
+      expect(parseTimestamp(`2026 ${doy} 10:00:00`, '%Y %j %H:%M:%S', 'UTC'), doy).toBeNull();
+    }
+    expect(iso('2024 366 10:00:00', '%Y %j %H:%M:%S', 'UTC')).toBe('2024-12-31T10:00:00.000Z');
+    expect(iso('2026 365 10:00:00', '%Y %j %H:%M:%S', 'UTC')).toBe('2026-12-31T10:00:00.000Z');
+  });
+
   it('expands the %T and %F composites', () => {
     expect(iso('2024-01-15 10:00:00', '%F %T')).toBe('2024-01-15T10:00:00.000Z');
   });

@@ -434,12 +434,14 @@ function buildIanaFormatter(tz: string): Intl.DateTimeFormat | null {
 
 /**
  * `Date.UTC`, without its mapping of years 0-99 onto 1900-1999: `%Y` reading
- * `0050` means the year 50.
+ * `0050` means the year 50. The time of day is added after the date is set,
+ * because setting the date writes the day back over a rollover: `23:59:60`
+ * on 31 December would otherwise land at the start of that day (#619).
  */
 function utcMs(year: number, month: number, day: number, hour: number, minute: number, second: number, ms = 0): number {
-  const d = new Date(Date.UTC(2000, month, day, hour, minute, second, ms));
+  const d = new Date(Date.UTC(2000, month, day));
   d.setUTCFullYear(year, month, day);
-  return d.getTime();
+  return d.getTime() + ((hour * 60 + minute) * 60 + second) * 1000 + ms;
 }
 
 /**
@@ -792,11 +794,11 @@ function resolveMonthDay(
   year: number,
   supplied: CalendarDate | undefined,
 ): { month: number; day: number } {
-  // %j: day-of-year (001-366) — convert to month+day when no month/day present
+  // %j: day-of-year (001-366) — convert to month+day when no month/day present.
+  // A day the year does not have lands on day 0 or month 12, which
+  // componentsInRange rejects, as it rejects any other out-of-range field.
   if (bag.dayOfYear && !bag.day && !bag.month) {
-    const maxDoy = isLeap(year) ? 366 : 365;
-    const doy = Math.max(1, Math.min(parseInt(bag.dayOfYear, 10), maxDoy));
-    let rem = doy;
+    let rem = parseInt(bag.dayOfYear, 10);
     let m = 0;
     for (const monthLength of monthLengths(year)) {
       if (rem <= monthLength) break;
