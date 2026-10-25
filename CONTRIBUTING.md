@@ -50,19 +50,19 @@ If a tool assigned you a non-conforming branch (an automated `claude/…` name, 
 
 ## The CI checks
 
-[`ci.yml`](.github/workflows/ci.yml) runs five jobs, independently, on every PR, on pushes to main, weekly and on demand (`dependency-review` on PRs only). A PR needs all of them green — and so does the automatic deploy, which runs only after a push to main's CI run passes and then ships the newest commit on main whose whole CI run passed. A manual deploy is not CI-gated: dispatching the deploy workflow on `main` redeploys that same newest green commit, or, with its `sha` input set, rolls back to any commit main has contained, whether or not its CI passed. A rollback only sticks if the repository variable `DEPLOY_PAUSED` is set to `true` *before* you dispatch it — otherwise the next automatic deploy undoes it, or cancels it while it is still queued — and it stays in place until you delete the variable once the fix is on main. [docs/deployment.md](docs/deployment.md) describes the deploy workflow in full.
+[`ci.yml`](.github/workflows/ci.yml) runs its jobs side by side on every PR, on pushes to main, weekly and on demand (`dependency-review` on PRs only). The job `ci` passes only when every other job of `ci.yml` passed, and `main` requires it, so a PR cannot merge while one of them fails. The automatic deploy runs only after a push to main's CI run passes, and then ships the newest commit on main whose whole CI run passed. Thus it gates on the same jobs. The `audit` job is in [`audit.yml`](.github/workflows/audit.yml): `main` requires it, but the deploy does not wait for it, so a new advisory stops merges and not deploys. A manual deploy is not CI-gated: dispatching the deploy workflow on `main` redeploys that same newest green commit, or, with its `sha` input set, rolls back to any commit main has contained, whether or not its CI passed. A rollback only sticks if the repository variable `DEPLOY_PAUSED` is set to `true` *before* you dispatch it — otherwise the next automatic deploy undoes it, or cancels it while it is still queued — and it stays in place until you delete the variable once the fix is on main. [docs/deployment.md](docs/deployment.md) describes the deploy workflow in full.
 
-**`ci`** — the app, in this order:
+**`static checks`**, **`unit tests`** and **`e2e`** — the app, in three jobs:
 
 ```bash
-npm run lint          # ESLint, including type-aware rules (needs the MCP server's deps, above)
-npm run format:check  # Prettier over the TypeScript and JavaScript sources; `npm run format` fixes what it reports
-npm run build         # tsc -b && vite build — this is the type-check
-npm run test:coverage # vitest, with the coverage floor enforced
-npm run test:e2e      # Playwright, against a production build
+npm run lint          # static checks: ESLint, including type-aware rules (needs the MCP server's deps, above)
+npm run format:check  # static checks: Prettier over the TypeScript and JavaScript sources; `npm run format` fixes what it reports
+npm run build         # static checks: tsc -b && vite build — this is the type-check
+npm run test:coverage # unit tests: vitest, with the coverage floor enforced
+npm run test:e2e      # e2e: Playwright, against a production build
 ```
 
-Between the tests and the e2e suite, `ci` also runs three checks from `shared-workflows`. They are the coverage ratchet (below), the documentation check, and the licences of the production dependencies against `.licence-allowlist.json`. The documentation check holds the links, the ADR index and the length of the README ([Documentation](#documentation)). Each is a Node script with no dependencies. To run one locally, clone `shared-workflows` beside this repository and run its script from here:
+The jobs also run three checks from `shared-workflows`: the coverage ratchet (below), the documentation check, and the licences of the production dependencies against `.licence-allowlist.json`. `unit tests` runs the ratchet, and `static checks` runs the other two. The documentation check holds the links, the ADR index and the length of the README ([Documentation](#documentation)). Each is a Node script with no dependencies. To run one locally, clone `shared-workflows` beside this repository and run its script from here:
 
 ```bash
 node ../shared-workflows/.github/actions/coverage-ratchet/ratchet.mjs --config vitest.config.ts --slack 3  # after test:coverage

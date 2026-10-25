@@ -3,16 +3,6 @@ import { defineConfig, devices } from '@playwright/test';
 const PORT = 4173;
 const BASE_URL = `http://127.0.0.1:${PORT}`;
 
-/**
- * Opt-out of the webServer's rebuild, for callers that just built.
- *
- * The rebuild is the right default (see the `command` note below) and stays on
- * unless something explicitly claims otherwise — an absent flag must never mean
- * "probably fine". CI sets this on the e2e step alone, immediately after its own
- * build step, which is the only place the claim is checked.
- */
-const SKIP_BUILD = process.env['E2E_SKIP_BUILD'] === '1';
-
 /** The specs that assert timing budgets; they run in their own project. */
 const PERF_SPECS = /perf(-[\w-]+)?\.spec\.ts$/;
 
@@ -39,8 +29,8 @@ const PERF_SPECS = /perf(-[\w-]+)?\.spec\.ts$/;
  *
  * The server command BUILDS before serving on purpose. Serving a stale `dist/`
  * produces confident, wrong results — a tightened CSP that is not in the
- * artifact reads as a passing test. `E2E_SKIP_BUILD=1` suppresses it for the
- * one caller that can prove the artifact is current; see `SKIP_BUILD` below.
+ * artifact reads as a passing test. CI's e2e job has no build of its own, so
+ * it relies on this one (#573).
  */
 export default defineConfig({
   testDir: './e2e',
@@ -86,7 +76,7 @@ export default defineConfig({
     // first — so the server comes up on IPv6 only and `BASE_URL`'s 127.0.0.1 is
     // never reachable. The symptom is a webServer timeout with a completely
     // healthy build in the log directly above it.
-    command: `${SKIP_BUILD ? '' : 'npm run build && '}npm run preview -- --port ${PORT} --strictPort --host 127.0.0.1`,
+    command: `npm run build && npm run preview -- --port ${PORT} --strictPort --host 127.0.0.1`,
     url: BASE_URL,
     // Reusing a stale dist/ produces confident, wrong results; always rebuild to ensure freshness.
     reuseExistingServer: false,

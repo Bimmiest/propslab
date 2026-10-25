@@ -1,0 +1,73 @@
+name: Audit
+
+# `npm audit` over both lockfiles. A workflow of its own, not a job of ci.yml,
+# because the deploy waits for CI's whole run to pass: as a CI job, a new
+# advisory against a dependency nobody had touched blocked every deploy,
+# however unrelated (#573). It still gates merges, as the required check
+# `audit`. It was split out of the app's job before that, for the same kind
+# of reason: sequentially, a new advisory turned the whole run red after five
+# minutes of tests and hid their verdict, and the two questions are
+# unrelated. A fresh advisory is reported in seconds this way.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  # Advisories appear against dependencies nobody has touched, so it also
+  # runs weekly: with only push and pull_request it would run when someone
+  # happened to commit.
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: audit-${{ github.event_name == 'push' && github.sha || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          # No `cache: npm` and no `npm ci`: npm audit resolves the tree from
+          # package-lock.json, so installing would only buy a slower job.
+
+      - name: Audit production dependencies
+        # Production deps are what ship to the browser, so they gate merges,
+        # at `high`. The shared action is `npm audit --omit=dev
+        # --audit-level=high` plus .audit-exceptions.json: an advisory nothing
+        # reachable is exposed to can be listed there with its reason and an
+        # expiry, and an expired or unneeded entry fails the step.
+        uses: Bimmiest/shared-workflows/.github/actions/audit-check@9d5ed93ea7b9311ae1b9b460dfa9f9da0a28fffe # v1.1.0
+
+      - name: Report dev-only advisories
+        # Reported, never fatal: a CVE in a build tool must not be able to block
+        # a fix for something users are actually hitting.
+        run: npm audit --audit-level=high || true
+
+      # `npm audit` resolves exactly one lockfile — the one for the tree it is
+      # pointed at — so the two steps above say nothing whatsoever about
+      # packages/mcp-server, which carries its own; these steps audit that one.
+      - name: Audit the MCP server's production dependencies
+        # Same gate as the app's, for the same reason: these are what run on the
+        # machine of whoever starts the server, and the process they run in
+        # holds whatever the agent driving it can reach. Its exceptions file is
+        # packages/mcp-server/.audit-exceptions.json: one file per lockfile,
+        # because an entry the other report does not need would fail here.
+        uses: Bimmiest/shared-workflows/.github/actions/audit-check@9d5ed93ea7b9311ae1b9b460dfa9f9da0a28fffe # v1.1.0
+        with:
+          working-directory: packages/mcp-server
+
+      - name: Report the MCP server's dev-only advisories
+        working-directory: packages/mcp-server
+        run: npm audit --audit-level=high || true

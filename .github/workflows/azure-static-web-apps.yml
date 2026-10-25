@@ -140,8 +140,11 @@ jobs:
   # and `deploy` only downloads the built `dist/` and hands it to the Azure
   # action. It never checks out the repository at all.
   build:
-    # `conclusion` is the whole run's verdict, so every CI job — app, MCP
-    # server, audit and workflow lint — has to be green. `event` is the event
+    # `conclusion` is the whole run's verdict, so every CI job — the app's
+    # static checks, unit and e2e tests, the MCP server on each platform and
+    # workflow lint — has to be green: the same jobs the required `ci` check
+    # holds a PR to. The audit is a workflow of its own and gates merges only,
+    # so a new advisory does not block a deploy (#573). `event` is the event
     # CI itself ran on; only a push to main is a candidate for production. DEPLOY_PAUSED
     # stops the automatic path only — a dispatch is how you roll back while
     # paused (see the concurrency note). It is read again here, not just

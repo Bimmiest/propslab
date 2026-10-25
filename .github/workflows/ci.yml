@@ -5,12 +5,10 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
-  # The audit job gates on advisories, and advisories appear against
-  # dependencies nobody has touched. With only push/pull_request triggers it
-  # runs when someone happens to commit, so a critical advisory can sit
-  # unreported for as long as main is quiet. The weekly run is also the only
-  # thing that re-exercises the suite against a current runner image, which is
-  # where toolchain drift shows up first.
+  # The weekly run is the only thing that re-exercises the suite against a
+  # current runner image, which is where toolchain drift shows up first, and
+  # it is when the randomised job runs. audit.yml runs weekly for its own
+  # reason.
   schedule:
     - cron: '0 6 * * 1'
   workflow_dispatch:
@@ -24,17 +22,32 @@ permissions:
 # Three pushes to a PR currently grade the same final commit three times, and
 # only the last verdict is ever read. Superseded runs are cancelled — except on
 # main, where each push is a distinct commit whose status stands on its own
-# (and whose green run is what the deploy is judged against).
+# (and whose green run is what the deploy is judged against). A push gets a
+# group of its own commit: a group holds one running and one pending run, and
+# a newer pending run cancels the older one even without cancel-in-progress,
+# so with one group for main a commit pushed between two others lost its CI
+# verdict (#573).
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.event_name == 'push' && github.sha || github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
-  ci:
+  # The app's checks, in three jobs that run side by side, and `ci`, which
+  # passes only when every job of this workflow did (#573). They were one
+  # serial job: a format error and a test failure took two pushes to find,
+  # and a slow runner could reach its timeout. `ci` keeps the name the ruleset
+  # on main and scripts/lib/branchProtection.mjs require, so a PR cannot
+  # merge with any job here red, including the MCP server's Windows and macOS
+  # legs, and the deploy, which waits for this whole run to pass, gates on the
+  # same jobs. The audit is a workflow of its own (audit.yml), so a new
+  # advisory does not hold up a deploy.
+  #
+  # The webServer has its own 180s timeout, but nothing bounds a wedged
+  # browser or a hung install; without a job timeout the ceiling is six hours.
+  static:
+    name: static checks
     runs-on: ubuntu-latest
-    # The webServer has its own 180s timeout, but nothing bounds a wedged
-    # browser or a hung install; without this the ceiling is six hours.
-    timeout-minutes: 20
+    timeout-minutes: 15
     steps:
       # Nothing in these jobs talks to the remote after checkout, and they
       # run dependency code that has no business finding a token in .git/config.
@@ -116,6 +129,45 @@ jobs:
         # load while each chunk stayed inside its budget).
         run: node scripts/check-entry-graph.mjs
 
+      # Every relative link in every Markdown file resolves, the ADR index
+      # in docs/adr/README.md agrees with the directory and is in order, and
+      # the README keeps to readmeMaxLines in .docs-check.json.
+      # src/__tests__/docs.test.ts checks the script list in
+      # docs/development.md as well; this covers the files that test does not
+      # read.
+      - name: Documentation links and the ADR index
+        uses: Bimmiest/shared-workflows/.github/actions/docs-check@9d5ed93ea7b9311ae1b9b460dfa9f9da0a28fffe # v1.1.0
+
+      # Every production dependency's licence is on .licence-allowlist.json,
+      # read from the lockfile, so it needs no network and sees exactly what
+      # `npm ci --omit=dev` installs. The MCP server's lockfile is checked in
+      # its own job.
+      - name: Production dependency licences
+        uses: Bimmiest/shared-workflows/.github/actions/licence-check@9d5ed93ea7b9311ae1b9b460dfa9f9da0a28fffe # v1.1.0
+
+  unit:
+    name: unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - uses: Bimmiest/shared-workflows/.github/actions/setup-node-project@9d5ed93ea7b9311ae1b9b460dfa9f9da0a28fffe # v1.1.0
+        with:
+          cache-dependency-path: |
+            package-lock.json
+            packages/mcp-server/package-lock.json
+
+      - name: Install MCP server dependencies
+        # The ESLint tests lint files under packages/mcp-server with the
+        # type-aware config; see the static job.
+        run: npm ci --ignore-scripts --prefix packages/mcp-server
+
+      - name: Verify the regex engine's WebAssembly
+        run: node scripts/check-wasm-checksum.mjs
+
       - name: Test
         # --coverage rather than a bare `vitest run`: the thresholds live in
         # vitest.config.ts, so this is the same verdict `npm run test:coverage`
@@ -135,21 +187,18 @@ jobs:
         with:
           slack: '3'
 
-      # Every relative link in every Markdown file resolves, the ADR index
-      # in docs/adr/README.md agrees with the directory and is in order, and
-      # the README keeps to readmeMaxLines in .docs-check.json.
-      # src/__tests__/docs.test.ts checks the script list in
-      # docs/development.md as well; this covers the files that test does not
-      # read.
-      - name: Documentation links and the ADR index
-        uses: Bimmiest/shared-workflows/.github/actions/docs-check@9d5ed93ea7b9311ae1b9b460dfa9f9da0a28fffe # v1.1.0
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
-      # Every production dependency's licence is on .licence-allowlist.json,
-      # read from the lockfile, so it needs no network and sees exactly what
-      # `npm ci --omit=dev` installs. The MCP server's lockfile is checked in
-      # its own job.
-      - name: Production dependency licences
-        uses: Bimmiest/shared-workflows/.github/actions/licence-check@9d5ed93ea7b9311ae1b9b460dfa9f9da0a28fffe # v1.1.0
+      - uses: Bimmiest/shared-workflows/.github/actions/setup-node-project@9d5ed93ea7b9311ae1b9b460dfa9f9da0a28fffe # v1.1.0
+
+      - name: Verify the regex engine's WebAssembly
+        run: node scripts/check-wasm-checksum.mjs
 
       # Chromium only — the e2e suite covers browser-level wiring (CSP, worker
       # bundling, Monaco's chunk split), not cross-browser rendering, so the
@@ -166,26 +215,38 @@ jobs:
         # reach: the Content-Security-Policy, the pipeline Web Worker
         # round-trip, and that Monaco actually mounts.
         #
-        # E2E_SKIP_BUILD suppresses the rebuild the Playwright webServer does by
-        # default. That rebuild exists so a stale dist/ can never be what gets
-        # tested, which is the right default — but here the Build step above ran
-        # against this same commit minutes ago, so it would rebuild identical
-        # output. Setting the flag is the caller asserting the artifact is
-        # fresh; anywhere that assertion does not hold, leave it unset.
-        env:
-          E2E_SKIP_BUILD: '1'
+        # The Playwright webServer builds first, so the suite tests this
+        # commit's dist/ and never a stale one. This job has no Build step of
+        # its own to skip that for.
         run: npm run test:e2e
 
       - name: Upload Playwright report
         # Scoped to the e2e step rather than the job. A bare `failure()` also
-        # fires when lint failed, where no report was ever written — that upload
-        # finds nothing, warns, and leaves a misleading empty artifact link.
+        # fires when an earlier step failed, where no report was ever written —
+        # that upload finds nothing, warns, and leaves a misleading empty
+        # artifact link.
         if: ${{ failure() && steps.e2e.outcome == 'failure' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: playwright-report
           path: playwright-report/
           retention-days: 7
+
+  # The required check. Skipped counts as passed for dependency-review alone,
+  # which runs on pull requests only; any other job that did not succeed fails
+  # this one.
+  ci:
+    needs: [static, unit, e2e, mcp-server, workflow-lint, dependency-review]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Every job passed
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          echo "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          echo "$NEEDS" | jq -e 'to_entries | all(.value.result == "success" or (.key == "dependency-review" and .value.result == "skipped"))' > /dev/null
 
   # The MCP server is a separate package with its own lockfile and toolchain
   # (esbuild, no browser), so it gets its own job rather than riding the app's:
@@ -309,55 +370,6 @@ jobs:
           echo "Seed: $seed. Replay: FC_SEED=$seed TZ=$TZ LANG=$LANG npx vitest run --sequence.shuffle --sequence.seed=$seed" | tee -a "$GITHUB_STEP_SUMMARY"
           FC_SEED="$seed" npx vitest run --sequence.shuffle --sequence.seed="$seed"
 
-  # Split out of the main job on purpose. Sequentially, a new advisory turned
-  # the whole run red after five minutes of tests, and the tests' own verdict
-  # was lost behind it — the two ask unrelated questions and should be able to
-  # fail independently. It also means a fresh advisory is reported in seconds
-  # rather than behind the e2e suite.
-  audit:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version-file: .nvmrc
-          # No `cache: npm` and no `npm ci`: npm audit resolves the tree from
-          # package-lock.json, so installing would only buy a slower job.
-
-      - name: Audit production dependencies
-        # Production deps are what ship to the browser, so they gate the build,
-        # at `high`. The shared action is `npm audit --omit=dev
-        # --audit-level=high` plus .audit-exceptions.json: an advisory nothing
-        # reachable is exposed to can be listed there with its reason and an
-        # expiry, and an expired or unneeded entry fails the step.
-        uses: Bimmiest/shared-workflows/.github/actions/audit-check@9d5ed93ea7b9311ae1b9b460dfa9f9da0a28fffe # v1.1.0
-
-      - name: Report dev-only advisories
-        # Reported, never fatal: a CVE in a build tool must not be able to block
-        # a fix for something users are actually hitting.
-        run: npm audit --audit-level=high || true
-
-      # `npm audit` resolves exactly one lockfile — the one for the tree it is
-      # pointed at — so the two steps above say nothing whatsoever about
-      # packages/mcp-server, which carries its own; these steps audit that one.
-      - name: Audit the MCP server's production dependencies
-        # Same gate as the app's, for the same reason: these are what run on the
-        # machine of whoever starts the server, and the process they run in
-        # holds whatever the agent driving it can reach. Its exceptions file is
-        # packages/mcp-server/.audit-exceptions.json: one file per lockfile,
-        # because an entry the other report does not need would fail here.
-        uses: Bimmiest/shared-workflows/.github/actions/audit-check@9d5ed93ea7b9311ae1b9b460dfa9f9da0a28fffe # v1.1.0
-        with:
-          working-directory: packages/mcp-server
-
-      - name: Report the MCP server's dev-only advisories
-        working-directory: packages/mcp-server
-        run: npm audit --audit-level=high || true
-
   # The workflows are code too, and the deploy one holds a token. actionlint
   # catches what GitHub would only reject at run time (bad expressions, unknown
   # inputs, shellcheck findings in `run:` blocks); zizmor catches what GitHub
@@ -393,8 +405,8 @@ jobs:
         uses: zizmorcore/zizmor-action@85b2b9fb8e3325e7a23d7d0a9d7ba5ae0f999e3e # v0.7.1
         with:
           # An exact version, which the action maps to an image digest. `latest`
-          # would let a new zizmor audit fail an unrelated PR, the trap the
-          # audit job's comment describes. Raise it when the action's pin moves.
+          # would let a new zizmor audit fail an unrelated PR, the trap that
+          # audit.yml's header describes. Raise it when the action's pin moves.
           version: 1.30.1
           # Findings as PR annotations and a failed step, not a SARIF upload:
           # that needs `security-events: write`, and nothing else here does.
