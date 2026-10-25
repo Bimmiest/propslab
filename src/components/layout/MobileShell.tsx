@@ -1,4 +1,3 @@
-import { useRef, type KeyboardEvent } from 'react';
 import { RawPanel } from '../raw/RawPanel';
 import { PropsConfEditor } from '../editor/PropsConfEditor';
 import { TransformsConfEditor } from '../editor/TransformsConfEditor';
@@ -8,6 +7,7 @@ import { ErrorBoundary } from '../ui/ErrorBoundary';
 import { Icon } from '../ui/Icon';
 import type { IconName } from '../ui/Icon';
 import { useAppStore, type MobileView as SimulatorMobileView } from '../../store/useAppStore';
+import { useRovingTabs } from '../../hooks/useRovingTabs';
 
 type MobileView = SimulatorMobileView | 'dictionary';
 
@@ -18,6 +18,7 @@ const VIEWS: { id: MobileView; label: string; icon: IconName }[] = [
   { id: 'output', label: 'Output', icon: 'eye' },
   { id: 'dictionary', label: 'Docs', icon: 'book' },
 ];
+const VIEW_IDS = VIEWS.map((v) => v.id);
 
 /**
  * Single-panel-at-a-time layout for narrow viewports. The desktop resizable
@@ -33,7 +34,6 @@ export function MobileShell() {
   const setActiveView = useAppStore((s) => s.setActiveView);
   const simulatorView = useAppStore((s) => s.mobileView);
   const setSimulatorView = useAppStore((s) => s.setMobileView);
-  const tablistRef = useRef<HTMLDivElement>(null);
 
   // The dictionary tab is backed by the shared `activeView` so that deep links
   // (openDictionaryAt, from the editor hover or the command palette) land here
@@ -50,30 +50,16 @@ export function MobileShell() {
     setSimulatorView(next);
   };
 
-  // Roving-tabindex keyboard navigation, matching the shared Tabs component:
-  // only the active tab is in the tab order; arrows/Home/End move between tabs.
-  const handleKeyDown = (e: KeyboardEvent) => {
-    const current = VIEWS.findIndex((v) => v.id === view);
-    let next = -1;
-    if (e.key === 'ArrowRight') next = (current + 1) % VIEWS.length;
-    else if (e.key === 'ArrowLeft') next = (current - 1 + VIEWS.length) % VIEWS.length;
-    else if (e.key === 'Home') next = 0;
-    else if (e.key === 'End') next = VIEWS.length - 1;
-    if (next < 0) return;
-    e.preventDefault();
-    const target = VIEWS[next];
-    if (!target) return;
-    setView(target.id);
-    tablistRef.current?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus();
-  };
+  // Roving-tabindex keyboard navigation, matching the shared Tabs component.
+  const { ref, onKeyDown } = useRovingTabs(VIEW_IDS, view, setView);
 
   return (
     <div className="h-full flex flex-col">
       <div
-        ref={tablistRef}
+        ref={ref}
         role="tablist"
         aria-label="Workspace panels"
-        onKeyDown={handleKeyDown}
+        onKeyDown={onKeyDown}
         className="shrink-0 flex items-stretch border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)] overflow-x-auto"
       >
         {VIEWS.map((v) => {

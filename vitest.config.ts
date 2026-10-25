@@ -150,8 +150,8 @@ export default defineConfig({
           lines: 90,
         },
         'src/hooks/**': {
-          statements: 92,
-          branches: 82,
+          statements: 94,
+          branches: 84,
           functions: 95,
           lines: 96,
         },
