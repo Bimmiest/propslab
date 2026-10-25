@@ -40,7 +40,7 @@ A new worker entry must serve through `serveWithRegexEngine`, which posts `WORKE
 The Regex and Timestamp tabs match a changing pattern or config against the same events many times. Two rules keep that cheap (#496):
 
 - **Inputs travel once.** `useWorkerRequest`'s `sendAhead` posts the events in an inputs message (`WorkerInputsMessage`) when they change, and each request names them by `inputsId` instead of carrying them; at 20k events that was about 10 MB cloned per keystroke. The lifecycle's `setInputs` re-sends the current inputs first to every replacement worker, so a request replayed after a crash or a timeout finds them there.
-- **Superseded requests are skipped.** A request marked `latestOnly` waits one task in the worker (`createRequestQueue`), and is answered `skipped` without running when a newer `latestOnly` request has arrived behind it. With a slow pattern, the answer the user waits for no longer queues behind every pattern typed past. The TIME_FORMAT hover's requests are not `latestOnly`: several hovers can each be waited on.
+- **Superseded requests are skipped.** A request marked `latestOnly` waits one task in the worker (`createRequestQueue`), and is answered `skipped` without running when a newer `latestOnly` request has arrived behind it. With a slow pattern, the answer the user waits for no longer queues behind every pattern typed past. The pipeline worker's requests are `latestOnly` too, so an edit made during a slow run is answered after one more run, not after every request typed past it ([#562](https://github.com/Bimmiest/propslab/issues/562)). The TIME_FORMAT hover's requests are not `latestOnly`: several hovers can each be waited on.
 
 ### What the pipeline worker sends back
 

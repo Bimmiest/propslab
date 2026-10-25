@@ -7,16 +7,22 @@
  *
  * Message protocol:
  *   in  → PipelineWorkerRequest
- *   out → WORKER_READY once, when the worker has loaded its regex engine; then PipelineWorkerResponse
+ *   out → WORKER_READY once, when the worker has loaded its regex engine; then a
+ *         PipelineWorkerResponse, or a WorkerSkippedResponse, per request
  */
 
 import { runPipeline } from './pipeline';
 import type { ConfInput, EventMetadata, PipelineOptions, ValidationDiagnostic } from './types';
 import { serveWithRegexEngine } from '../utils/regexEngineLoader';
 import { toViewResult, type ViewResult } from '../utils/viewResult';
+import {
+  createRequestQueue,
+  type QueuedRequest,
+  type WorkerInputsMessage,
+  type WorkerSkippedResponse,
+} from './workerProtocol';
 
-export interface PipelineWorkerRequest {
-  id: number;
+export interface PipelineWorkerRequest extends QueuedRequest {
   rawData: string;
   metadata: EventMetadata;
   /**
@@ -41,26 +47,47 @@ export interface PipelineWorkerResponse {
    * runPipeline, which the message alone rarely locates.
    */
   stack?: string;
+  /**
+   * How long the run took in the worker, in ms, from when it started rather
+   * than when it was posted: a request can wait behind another, and the
+   * status bar reports the run.
+   */
+  runMs?: number;
 }
+
+// A request the page marks `latestOnly` is skipped when a newer one is already
+// queued behind it, as the live testers' are: an edit made while a slow run is
+// in progress supersedes every request typed past, and only the newest runs.
+const serve = createRequestQueue<undefined, PipelineWorkerRequest>({
+  run: (request) => {
+    const { id, rawData, metadata, propsConfText, transformsConfText, options } = request;
+    const started = Date.now();
+    try {
+      const output = runPipeline(rawData, metadata, propsConfText, transformsConfText, options);
+      const response: PipelineWorkerResponse = {
+        id,
+        result: { result: toViewResult(output.result), diagnostics: output.diagnostics },
+        runMs: Date.now() - started,
+      };
+      self.postMessage(response);
+    } catch (err) {
+      const response: PipelineWorkerResponse = {
+        id,
+        result: null,
+        error: err instanceof Error ? err.message : String(err),
+        ...(err instanceof Error && err.stack !== undefined ? { stack: err.stack } : {}),
+      };
+      self.postMessage(response);
+    }
+  },
+  skip: ({ id }) => self.postMessage({ id, skipped: true } satisfies WorkerSkippedResponse),
+  defer: (drain) => setTimeout(drain),
+  rethrow: (err) =>
+    setTimeout(() => {
+      throw err;
+    }),
+});
 
 // Loads the regex engine from its fixed asset URL, then signals ready and
 // serves requests in order; see serveWithRegexEngine.
-serveWithRegexEngine<PipelineWorkerRequest>(self, (request) => {
-  const { id, rawData, metadata, propsConfText, transformsConfText, options } = request;
-  try {
-    const output = runPipeline(rawData, metadata, propsConfText, transformsConfText, options);
-    const response: PipelineWorkerResponse = {
-      id,
-      result: { result: toViewResult(output.result), diagnostics: output.diagnostics },
-    };
-    self.postMessage(response);
-  } catch (err) {
-    const response: PipelineWorkerResponse = {
-      id,
-      result: null,
-      error: err instanceof Error ? err.message : String(err),
-      ...(err instanceof Error && err.stack !== undefined ? { stack: err.stack } : {}),
-    };
-    self.postMessage(response);
-  }
-});
+serveWithRegexEngine<PipelineWorkerRequest | WorkerInputsMessage<undefined>>(self, serve);
