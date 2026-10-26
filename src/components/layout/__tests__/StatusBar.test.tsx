@@ -91,9 +91,22 @@ describe('StatusBar', () => {
     useAppStore.setState({ processingResult: result, validationDiagnostics: [] });
     renderStatusBar();
     expect(screen.getByText('2 events')).toBeInTheDocument();
-    // distinct fields across events: a, b, c = 3
-    expect(screen.getByText('3 fields')).toBeInTheDocument();
+    // a, b and c, and the four default fields from the events' metadata (#741)
+    expect(screen.getByText('7 fields')).toBeInTheDocument();
     expect(screen.getByText('✓ Valid')).toBeInTheDocument();
+  });
+
+  it('counts a default field once when an event also extracts it (#741)', () => {
+    const result = toViewResult({
+      events: [eventWithFields({ host: 'from_raw' })],
+      originalRaw: '',
+      eventCount: 1,
+      processingSteps: [],
+      inputMetadata: { index: 'main', host: '', source: '', sourcetype: '' },
+    });
+    useAppStore.setState({ processingResult: result, validationDiagnostics: [] });
+    renderStatusBar();
+    expect(screen.getByText('4 fields')).toBeInTheDocument();
   });
 
   it('shows error / warning counts when diagnostics are present', () => {

@@ -120,7 +120,9 @@ function ResultSummary() {
 
   // Counted once per run, with the result (`fieldStats`): this bar is always
   // mounted, and a walk of every event's fields here ran after every run.
-  const fieldCount = result?.fieldStats.names.length ?? 0;
+  const stats = result?.fieldStats;
+  // The default fields count as Splunk counts them, once even when also extracted.
+  const fieldCount = stats ? stats.names.length + stats.metadataNames.filter((n) => !stats.counts.has(n)).length : 0;
 
   const { error: errorCount, warning: warningCount } = useMemo(() => countByLevel(diagnostics), [diagnostics]);
 

@@ -66,7 +66,7 @@ The examples are dated October 2026. Until 2032 they are inside the default `MAX
 
 **Field highlights.** A highlight uses the authoritative byte offsets that the extraction recorded, when they exist. These offsets exist for positional EXTRACT captures against `_raw`. For EVAL-computed, aliased, JSON-flattened and KV-mode fields, the highlight uses a context-aware match instead: `"key":"value"`, `key="value"`, `key: value` or `key=value`. A value of one character gets a highlight only when the context-aware match succeeds. Without this rule, a plain substring search for `"0"` highlights the whole event.
 
-**Fields tab.** This tab lists each extracted field, with its phase (index-time or search-time) and the processors that made it. The filter pill is `All / Index-time / Search-time`.
+**Fields tab.** This tab lists each extracted field, with its phase (index-time or search-time) and the processors that made it. It also lists the default fields `host`, `source`, `sourcetype` and `index` that have a value in the metadata, with the label **default**. These come from the metadata of each event after the pipeline. An extracted field with the same name replaces the metadata value in that event. The filter pill is `All / Index-time / Search-time`.
 
 **TIME_FORMAT preview.** When you hover over a `TIME_FORMAT` value, the editor does three things:
 

@@ -10,7 +10,8 @@ import { computeFieldStats, fieldCollator, isJsonContainer } from '../fieldStats
 import { toViewResult } from '../viewResult';
 import { makeEvent } from '../../test/makeEvent';
 
-const withFields = (fields: Record<string, string | string[]>) => ({ fields });
+const NO_METADATA = { index: '', host: '', source: '', sourcetype: '' };
+const withFields = (fields: Record<string, string | string[]>, metadata = NO_METADATA) => ({ fields, metadata });
 
 describe('computeFieldStats', () => {
   it('lists every field once, in first-seen order, with how many events have it', () => {
@@ -45,6 +46,15 @@ describe('computeFieldStats', () => {
     expect(stats.names).toEqual(['constructor', '__proto__']);
   });
 
+  it("lists the default fields that some event's metadata gives a value, apart from the extracted names (#741)", () => {
+    const stats = computeFieldStats([
+      withFields({ host: 'extracted' }, { index: 'main', host: '', source: '', sourcetype: '' }),
+      withFields({}, { index: '', host: '', source: '', sourcetype: 'st' }),
+    ]);
+    expect(stats.metadataNames).toEqual(['sourcetype', 'index']);
+    expect(stats.names).toEqual(['host']);
+  });
+
   it('is carried on the view result, over the whole run', () => {
     const view = toViewResult({
       events: [makeEvent('a=1', { fields: { a: '1' } }), makeEvent('b={}', { fields: { b: '{}' } })],
@@ -61,6 +71,7 @@ describe('computeFieldStats', () => {
         ['b', 1],
       ]),
       containers: ['b'],
+      metadataNames: ['host', 'source', 'sourcetype', 'index'],
     });
     // It crosses the worker boundary by structured clone.
     expect(structuredClone(view.fieldStats)).toEqual(view.fieldStats);

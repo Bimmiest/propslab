@@ -7,7 +7,7 @@ import {
   ContextMenuLabel,
 } from '../../../ui/ContextMenu';
 import { Icon } from '../../../ui/Icon';
-import type { FieldRow } from './fieldRows';
+import { METADATA_SOURCE, type FieldRow } from './fieldRows';
 
 export function FieldTableRow({
   field,
@@ -53,6 +53,14 @@ export function FieldTableRow({
                 controls={controls}
                 onToggle={onToggle}
               />
+              {field.sources.has(METADATA_SOURCE) && (
+                <span
+                  className="inline-block flex-shrink-0 px-1.5 py-0.5 rounded text-xs font-medium font-sans bg-[var(--color-bg-tertiary)] text-[var(--color-text-secondary)]"
+                  title="A default field: its value is the event's metadata, which every event has."
+                >
+                  default
+                </span>
+              )}
               {field.maskedBy.size > 0 && (
                 <span
                   className="inline-block flex-shrink-0 px-1.5 py-0.5 rounded text-xs font-medium font-sans bg-[var(--color-warning)]/10 text-[var(--color-warning)]"

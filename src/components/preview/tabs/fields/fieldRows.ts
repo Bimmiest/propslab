@@ -2,6 +2,10 @@ import type { TraceStep, ViewEvent } from '../../../../utils/viewResult';
 import { fieldCollator, type FieldStats } from '../../../../utils/fieldStats';
 import type { WindowSegment } from '../../../../hooks/useWindowedRows';
 import type { PhaseFilter, SortDir, SortKey } from './data';
+import { METADATA_FIELD_NAMES } from '../../../../engine/utils/metadataFields';
+
+/** The source a default field (host, source, sourcetype, index) is credited to. */
+export const METADATA_SOURCE = 'metadata';
 
 /** One field, summarised across every event that has it. */
 export interface AggregatedField {
@@ -116,6 +120,22 @@ export function aggregateFields(
       }
     }
     outstanding.set(trace, left);
+  }
+
+  // The default fields, from each event's metadata, as Splunk lists them. An
+  // extracted field of the same name wins, as it does in getMetadataField. A
+  // pass of its own, after the extracted fields, so the rows keep one order
+  // whether or not `stats` supplied them.
+  for (const event of events) {
+    for (const name of METADATA_FIELD_NAMES) {
+      const value = event.metadata[name];
+      if (!value || Object.hasOwn(event.fields, name)) continue;
+      const entry = entryFor(name);
+      entry.count++;
+      entry.values.add(value);
+      entry.sources.add(METADATA_SOURCE);
+      entry.phases.add('index-time');
+    }
   }
 
   // Attach alias names to their source fields and remove alias entries as standalone rows

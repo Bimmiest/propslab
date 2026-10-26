@@ -7,8 +7,14 @@ import type { SplunkEvent, ProcessingStep } from '../../../../engine/types';
 import { toViewResult } from '../../../../utils/viewResult';
 import { makeEvent } from '../../../../test/makeEvent';
 
+// No metadata values, so the tables below hold only the extracted fields;
+// the default fields have tests of their own.
 function eventWithTrace(fields: Record<string, string>, traces: ProcessingStep[]): SplunkEvent {
-  return makeEvent('', { fields, processingTrace: traces });
+  return makeEvent('', {
+    fields,
+    processingTrace: traces,
+    metadata: { index: '', host: '', source: '', sourcetype: '' },
+  });
 }
 
 // An event with fields from both index-time and search-time phases.
@@ -59,6 +65,29 @@ describe('FieldsTab', () => {
     expect(within(container).getByText('ext_field')).toBeInTheDocument();
     expect(within(container).getByText('evaled')).toBeInTheDocument();
     expect(within(container).getByText('2 fields')).toBeInTheDocument();
+  });
+
+  it('lists the metadata as default fields, index-time, and an extracted field of the same name wins (#741)', () => {
+    const events = [
+      makeEvent('', {
+        fields: { ext_field: 'b' },
+        metadata: { index: 'main', host: 'web01', source: '', sourcetype: 'st' },
+      }),
+      makeEvent('', {
+        fields: { host: 'from_raw' },
+        metadata: { index: 'main', host: 'web02', source: '', sourcetype: 'st' },
+      }),
+    ];
+    useAppStore.setState({ processingResult: toViewResult({ ...raw, events, eventCount: 2 }) });
+    const { container } = render(<FieldsTab />);
+    fireEvent.click(within(container).getByRole('button', { name: 'Index-time' }));
+    // host, sourcetype and index; source is empty, so it has no row.
+    expect(within(container).getByText('3 fields')).toBeInTheDocument();
+    expect(within(container).queryByText('source')).not.toBeInTheDocument();
+    const host = within(container).getByText('host').closest('tr')!;
+    expect(host).toHaveTextContent('default');
+    expect(host).toHaveTextContent('2/2');
+    expect(host).toHaveTextContent('from_raw, web01');
   });
 
   it('filters by name when searching', () => {

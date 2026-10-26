@@ -149,7 +149,7 @@ export default defineConfig({
           statements: 90,
           branches: 79,
           functions: 86,
-          lines: 90,
+          lines: 93,
         },
         // Lower since #566 moved workerLifecycle.ts, a well-covered module, to
         // src/workers; the hooks themselves are covered as before.
