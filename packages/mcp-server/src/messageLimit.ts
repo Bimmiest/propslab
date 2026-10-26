@@ -93,13 +93,15 @@ function lastBytes(bufs: Buffer[], n: number): Buffer {
  * again each time, which is quadratic.
  */
 export function holdPiece(pending: Buffer[], piece: Buffer): void {
-  pending.push(piece);
-  for (;;) {
-    const last = pending[pending.length - 1];
-    const before = pending[pending.length - 2];
-    if (!last || !before || before.length > last.length) return;
-    pending.splice(pending.length - 2, 2, Buffer.concat([before, last]));
+  // Pop, then push: each pass shrinks `pending`, so no edit to this loop can
+  // make it grow without bound. A splice that removed and re-inserted could,
+  // and a mutant of its index filled the mutation runner's memory (#571).
+  let merged = piece;
+  for (let top = pending.at(-1); top !== undefined && top.length <= merged.length; top = pending.at(-1)) {
+    pending.pop();
+    merged = Buffer.concat([top, merged]);
   }
+  pending.push(merged);
 }
 
 export class MessageSizeLimiter extends Transform {
