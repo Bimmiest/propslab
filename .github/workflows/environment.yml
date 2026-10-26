@@ -40,6 +40,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           SECRETS_READ_TOKEN: ${{ secrets.SECRETS_READ_TOKEN }}
+          # The ruleset's bypass list and the classic protection need
+          # "Administration: read" (#720); settings.yml's token has it.
+          SETTINGS_READ_TOKEN: ${{ secrets.SETTINGS_READ_TOKEN }}
         run: node scripts/check-production-environment.mjs
 
   # A failed scheduled run opens an issue, or comments on the one already

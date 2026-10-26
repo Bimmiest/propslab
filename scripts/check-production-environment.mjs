@@ -24,7 +24,11 @@
 //
 // docs/deployment.md states these as facts; this is what keeps them facts.
 //
-// (1) and (3) read with the workflow's GITHUB_TOKEN. (2) lists secret names
+// (1) reads with the workflow's GITHUB_TOKEN. (3) reads with SETTINGS_READ_TOKEN,
+// the fine-grained token with "Administration: read" that settings.yml uses,
+// because GITHUB_TOKEN sees neither a ruleset's bypass list nor the classic
+// protection, so (3) could only ever be "skipped", which fails (#720). Without
+// that secret (3) falls back to GITHUB_TOKEN. (2) lists secret names
 // twice, and a fine-grained token needs a different repository permission for
 // each list: "Environments" (read) for the environment's secrets and "Secrets"
 // (read) for the repository's. No GITHUB_TOKEN can be granted either; they come
@@ -148,7 +152,7 @@ async function checkBranchProtection(token) {
 for (const [name, check] of [
   ['branch rule', () => checkBranchRule(process.env.GITHUB_TOKEN)],
   ['secret scope', () => checkSecretScope(process.env.SECRETS_READ_TOKEN)],
-  ['branch protection', () => checkBranchProtection(process.env.GITHUB_TOKEN)],
+  ['branch protection', () => checkBranchProtection(process.env.SETTINGS_READ_TOKEN || process.env.GITHUB_TOKEN)],
 ]) {
   try {
     await check();

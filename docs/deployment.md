@@ -46,7 +46,7 @@ A dispatch from any other branch or tag fails. These checks are in the workflow 
 3. Under the deployment branches and tags of the environment, choose "Selected branches and tags".
 4. Allow `main` only, and add no tag patterns.
 
-Until the admin completes these steps, any workflow on any branch can read the token. The weekly [`environment.yml`](../.github/workflows/environment.yml) workflow checks both settings through the API. It fails when one of them is not in place. It also checks the protection of `main`, and it fails when it cannot read the protection, because then it verified nothing. Its secret check needs a `SECRETS_READ_TOKEN` repository secret. This is a fine-grained token for this repository, with the Environments and Secrets permissions both set to read-only. The token lists the names of the secrets, and never their values.
+Until the admin completes these steps, any workflow on any branch can read the token. The weekly [`environment.yml`](../.github/workflows/environment.yml) workflow checks both settings through the API. It fails when one of them is not in place. It also checks the protection of `main`, and it fails when it cannot read the protection, because then it verified nothing. To read the protection, it uses the `SETTINGS_READ_TOKEN` repository secret, which the weekly settings check also uses. Its secret check needs a `SECRETS_READ_TOKEN` repository secret. This is a fine-grained token for this repository, with the Environments and Secrets permissions both set to read-only. The token lists the names of the secrets, and never their values.
 
 ## Scheduled runs
 
@@ -54,11 +54,12 @@ Until the admin completes these steps, any workflow on any branch can read the t
 
 ## Credentials
 
-The maintainer holds both credentials that the workflows use. Propslab has one maintainer, so this section is the hand-off ([#576](https://github.com/Bimmiest/propslab/issues/576)).
+The maintainer holds the credentials that the workflows use. Propslab has one maintainer, so this section is the hand-off ([#576](https://github.com/Bimmiest/propslab/issues/576)).
 
 | Secret | Where it is stored | What it does | How to rotate it |
 |---|---|---|---|
 | `AZURE_STATIC_WEB_APPS_API_TOKEN` | The secrets of the `production` environment | The deploy job uploads the site with it. It gives access to this Static Web App only. | In the Azure portal, open the Static Web App, select **Manage deployment token**, and reset it. Then put the new token in the environment secret. |
+| `SETTINGS_READ_TOKEN` | The repository secrets | The weekly settings check and the weekly environment check read the repository settings and the protection of `main` with it. It is a fine-grained token for this repository, with Administration set to read-only. | Make a new token with the same permission, put it in the repository secret, and delete the old token. |
 | `SECRETS_READ_TOKEN` | The repository secrets | The weekly environment check lists the secret names with it. It is a fine-grained token for this repository, with Environments and Secrets set to read-only. | Make a new token with the same permissions, put it in the repository secret, and delete the old token. |
 
 A fine-grained token has an expiry date. When `SECRETS_READ_TOKEN` expires, the weekly environment check fails. Then rotate it. Reset the deployment token if it is possible that somebody else knows it.
