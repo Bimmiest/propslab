@@ -12,6 +12,7 @@ import { atDirective } from '../parser/provenance';
 import { effectiveDirective, parseSplunkBool } from '../utils/directiveValues';
 import { createTimestampFinder, readTimestampLocation } from './timestampRecognizer';
 import type { RunContext, DiagnosticSink } from '../runContext';
+import { truncateLimit, truncateLine } from './truncateLine';
 
 const XML_EXTRACTIONS = new Set(['xml', 'xmlkv', 'xmlkv-winevt']);
 
@@ -394,14 +395,14 @@ interface MergeState {
  * can stand against it: positive rules are weighed in precedence order, then
  * the vetoes are applied.
  */
-function breakReason(seg: Segment, segLines: number, rules: MergeRules, state: MergeState): BreakReason | null {
+function breakReason(text: string, segLines: number, rules: MergeRules, state: MergeState): BreakReason | null {
   const overCap = state.currentLineCount + segLines > rules.maxLines;
   let reason: BreakReason | null = null;
   if (state.forceBreakNext) reason = 'must-break-after';
   else if (!rules.canMerge) reason = 'no-merge-rule';
   else if (overCap) reason = 'max-events';
-  else if (rules.breakOnlyBefore !== null && rules.breakOnlyBefore.test(seg.text)) reason = 'break-only-before';
-  else if (rules.breakOnlyBeforeDate && rules.lineStartsWithDate(seg.text)) reason = 'date';
+  else if (rules.breakOnlyBefore !== null && rules.breakOnlyBefore.test(text)) reason = 'break-only-before';
+  else if (rules.breakOnlyBeforeDate && rules.lineStartsWithDate(text)) reason = 'date';
 
   // MUST_NOT_BREAK_AFTER suppression: every rule-driven break is
   // suppressed until MUST_BREAK_AFTER matches, the stateful span the spec
@@ -433,23 +434,33 @@ function startEvent(seg: Segment): MergedSegment {
   return { text: seg.text, offset: seg.offset, end: seg.offset + seg.text.length, lines: [seg.text.length] };
 }
 
-/** Apply SHOULD_LINEMERGE's rules, joining continuation segments with `\n`. */
+/**
+ * Apply SHOULD_LINEMERGE's rules, joining continuation segments with `\n`.
+ *
+ * The rules see each segment as TRUNCATE leaves it (`seen`): a merge rule that
+ * matches only past the cut does not fire. This follows a capture on Splunk
+ * 10.4.0 (ADR 0021). The events keep the full text here; the truncator cuts
+ * their segments next.
+ */
 function mergeSegments(
   first: Segment,
   rest: Segment[],
   rules: MergeRules,
+  seen: (text: string) => string,
 ): { merged: MergedSegment[]; maxEventsTriggered: boolean } {
   const merged = [startEvent(first)];
   let maxEventsTriggered = false;
+  const firstSeen = seen(first.text);
   const state: MergeState = {
-    currentLineCount: countLines(first.text),
-    forceBreakNext: rules.mustBreakAfter !== null && rules.mustBreakAfter.test(first.text),
-    suppressBreaks: rules.mustNotBreakAfter !== null && rules.mustNotBreakAfter.test(first.text),
+    currentLineCount: countLines(firstSeen),
+    forceBreakNext: rules.mustBreakAfter !== null && rules.mustBreakAfter.test(firstSeen),
+    suppressBreaks: rules.mustNotBreakAfter !== null && rules.mustNotBreakAfter.test(firstSeen),
   };
 
   for (const seg of rest) {
-    const segLines = countLines(seg.text);
-    const reason = breakReason(seg, segLines, rules, state);
+    const text = seen(seg.text);
+    const segLines = countLines(text);
+    const reason = breakReason(text, segLines, rules, state);
     state.forceBreakNext = false;
     if (reason === 'max-events') maxEventsTriggered = true;
 
@@ -465,7 +476,7 @@ function mergeSegments(
       }
       state.currentLineCount += segLines;
     }
-    advanceBreakState(seg.text, rules, state);
+    advanceBreakState(text, rules, state);
   }
   return { merged, maxEventsTriggered };
 }
@@ -573,8 +584,10 @@ export function breakLines(
     return [];
   }
 
+  const { maxBytes } = truncateLimit(directives);
+  const seen = (text: string) => (maxBytes > 0 ? truncateLine(text, maxBytes).text : text);
   const { merged, maxEventsTriggered } = shouldLineMerge
-    ? mergeSegments(firstSegment, restSegments, readMergeRules(directives, diagnostics))
+    ? mergeSegments(firstSegment, restSegments, readMergeRules(directives, diagnostics), seen)
     : { merged: segments.map(startEvent), maxEventsTriggered: false };
 
   const newlines = buildNewlineIndex(rawData);
