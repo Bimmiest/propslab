@@ -28,13 +28,21 @@ import { pathToFileURL } from 'node:url';
 
 const INDEX_URL = 'https://nodejs.org/dist/index.json';
 
-/** "v24.18.1" or "24.18.1" -> [24, 18, 1]; null when it is not a plain x.y.z. */
+/**
+ * "v24.18.1" or "24.18.1" -> [24, 18, 1]; null when it is not a plain x.y.z.
+ * @param {string} text
+ * @returns {[number, number, number] | null}
+ */
 export function parseVersion(text) {
   const match = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(text.trim());
   return match ? [Number(match[1]), Number(match[2]), Number(match[3])] : null;
 }
 
-/** Negative, zero or positive, as Array.prototype.sort wants. */
+/**
+ * Negative, zero or positive, as Array.prototype.sort wants.
+ * @param {[number, number, number]} a
+ * @param {[number, number, number]} b
+ */
 export function compareVersions(a, b) {
   return a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
 }
@@ -43,8 +51,12 @@ export function compareVersions(a, b) {
  * The newest release on `major`'s line in nodejs.org's index.json, or null.
  * Entries that are not a plain x.y.z (there are none today) are ignored, and
  * the index is not assumed to be sorted.
+ * @param {unknown[]} index
+ * @param {number} major
+ * @returns {[number, number, number] | null}
  */
 export function latestOfMajor(index, major) {
+  /** @type {[number, number, number] | null} */
   let latest = null;
   for (const entry of index) {
     const version = typeof entry?.version === 'string' ? parseVersion(entry.version) : null;

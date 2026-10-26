@@ -1,21 +1,11 @@
 import { describe, it, expect } from 'vitest';
+import { compareVersions, latestOfMajor, parseVersion } from '../../scripts/check-node-patch.mjs';
 
 /**
  * The comparison behind the scheduled Node-patch reminder (#518). The fetch and
  * the exit code are the script's own and need the network; the part that can be
  * wrong is reading versions and choosing the newest one on a line.
  */
-
-type Version = [number, number, number];
-interface Script {
-  parseVersion: (text: string) => Version | null;
-  compareVersions: (a: Version, b: Version) => number;
-  latestOfMajor: (index: unknown[], major: number) => Version | null;
-}
-
-// Through import.meta.glob: the app's tsconfig has no Node types (see docs.test.ts).
-const scripts = import.meta.glob<Script>('/scripts/check-node-patch.mjs', { eager: true });
-const { parseVersion, compareVersions, latestOfMajor } = scripts['/scripts/check-node-patch.mjs']!;
 
 describe('parseVersion', () => {
   it('reads .nvmrc and index.json spellings', () => {
