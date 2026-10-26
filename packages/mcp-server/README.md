@@ -177,14 +177,13 @@ reviewed. `docs/engine.md`'s closing section is the spec this implements:
   legitimate inputs can still need more than the default, which is why a
   timeout over many events does not blame a regex.
   **The limit covers the V8 heap only.** PCRE2's WebAssembly memory is
-  outside it: each worker's instance may grow its linear memory up to the
-  1 GiB maximum the module is built with (`--max-memory` in
-  pcre2-wasm-utf16's `build/build.sh`), so four workers could in principle
-  hold 4 GiB of it beside their heaps. The module caps one match's
-  backtracking memory at 64 MiB, which keeps real runs far below that, but
-  the same memory holds every compiled pattern and the subject too, and
-  nothing here bounds their total; a smaller `--max-memory` in that build
-  would be the place to (#490).
+  outside it, so each worker sets a second limit: its PCRE2 instance can
+  grow its memory to 256 MiB and no more. Four workers then hold a maximum
+  of 1 GiB of it beside their heaps. This memory holds the compiled
+  patterns, the subject and the match data. A match that needs more stops
+  as a limit hit, with a warning that says "no more memory", and the run
+  continues (#568). The module also caps the backtracking memory of one
+  match at 64 MiB.
   Process-wide V8 heap flags override worker limits, so the launcher strips
   `--max-old-space-size` (and its `-percentage` form) / `--max-semi-space-size` / `--max-heap-size` from
   its own arguments and from `NODE_OPTIONS` before re-exec'ing, and says so

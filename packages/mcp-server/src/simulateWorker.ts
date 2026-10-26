@@ -174,8 +174,8 @@ const port = parentPort;
 if (port) {
   let response: WorkerResponse;
   try {
-    const { regexEngine, progress, ...request } = workerData as WorkerData;
-    initRegexEngineSync(regexEngine);
+    const { regexEngine, regexMemoryBytes, progress, ...request } = workerData as WorkerData;
+    initRegexEngineSync(regexEngine, { maxMemoryBytes: regexMemoryBytes });
     // Start-up is over: the modules are loaded and the regex engine is
     // instantiated. The server starts the run's budget on this message.
     const ready: ReadyMessage = { kind: 'ready' };

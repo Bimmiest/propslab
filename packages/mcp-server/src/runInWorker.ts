@@ -168,6 +168,15 @@ export const DEFAULT_RESOURCE_LIMITS: Readonly<ResourceLimits> = Object.freeze({
 });
 
 /**
+ * The most memory a worker's regex engine may use: PCRE2's wasm memory, which
+ * the V8 limits above do not cover (#568). It holds the compiled patterns, the
+ * subject and the match state, and the engine caches 256 patterns; at 256 MiB,
+ * four workers hold at most 1 GiB of it. A match that needs more stops as a
+ * limit hit, as a match-step limit does.
+ */
+export const DEFAULT_REGEX_MEMORY_BYTES = 256 * 1024 * 1024;
+
+/**
  * A counting semaphore: at most `max` holders, the rest wait FIFO. FIFO
  * matters — a stack would let a steady stream of new calls starve the first
  * one queued. At most `maxQueued` may wait; beyond that `acquire` rejects
@@ -281,6 +290,8 @@ export interface RunInWorkerOptions {
   workerPath?: string;
   /** Overrides `DEFAULT_RESOURCE_LIMITS` (tests use a tiny heap to force OOM). */
   resourceLimits?: ResourceLimits;
+  /** Overrides `DEFAULT_REGEX_MEMORY_BYTES` (tests use a small one). */
+  regexMemoryBytes?: number;
   /** Overrides the process-wide concurrency cap (tests use their own). */
   limiter?: Semaphore;
   /** Overrides `DEFAULT_STARTUP_LIMIT_MS` (tests use a short one). */
@@ -339,7 +350,12 @@ function spawnAndWait<T>(
   // Compiled (once per process) before the worker exists and before its
   // budget starts, so no request pays for it.
   const progress = createProgressBuffer();
-  const workerData: WorkerData = { ...request, regexEngine: regexEngineModule(), progress };
+  const workerData: WorkerData = {
+    ...request,
+    regexEngine: regexEngineModule(),
+    regexMemoryBytes: options.regexMemoryBytes ?? DEFAULT_REGEX_MEMORY_BYTES,
+    progress,
+  };
   // `stdout: true` because by default a worker's console.log lands on the
   // server's stdout, which is the JSON-RPC channel: one stray line corrupts
   // the stream. `end: false` so the worker exiting does not end stderr.
