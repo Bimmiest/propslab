@@ -66,8 +66,13 @@ function ScaffoldBody() {
 
   const chosen: ScaffoldSuggestion[] = result.suggestions.filter((s) => selected[s.key]);
   const mergedProps = chosen.length > 0 ? appendStanza(propsConf, renderStanza(stanzaName, chosen)) : propsConf;
-  const diff = computeDiff(propsConf, mergedProps);
-  const stanzaExists = new RegExp(`^[ \\t]*\\[${escapeRegex(stanzaName)}\\][ \\t]*$`, 'm').test(propsConf);
+  // propsConf is fixed while the dialog is open, so these rerun only when the
+  // stanza they describe changes, not on every render (#565).
+  const diff = useMemo(() => computeDiff(propsConf, mergedProps), [propsConf, mergedProps]);
+  const stanzaExists = useMemo(
+    () => new RegExp(`^[ \\t]*\\[${escapeRegex(stanzaName)}\\][ \\t]*$`, 'm').test(propsConf),
+    [propsConf, stanzaName],
+  );
 
   // A name that cannot be written as a header must block Apply, not silently
   // produce a malformed props.conf (`foo]bar` → `[foo]bar]`).

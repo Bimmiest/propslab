@@ -56,7 +56,23 @@ function offsetFromPoint(container: HTMLElement, x: number, y: number): number |
     }
   }
   if (!node || !container.contains(node)) return null;
-  return charOffset(container, node, off);
+  // Inside a segment's text, the segment's own start gives the offset without
+  // measuring all the text before it, which a long event made slow per mousemove.
+  const span = node.nodeType === Node.TEXT_NODE ? node.parentElement : null;
+  const start = span?.parentElement === container ? span.dataset['start'] : undefined;
+  return start !== undefined ? Number(start) + off : charOffset(container, node, off);
+}
+
+/** Index of the first segment that ends after `offset`. Segments are in text order and cover it. */
+function firstEndingAfter(segments: RawSegment[], offset: number): number {
+  let lo = 0;
+  let hi = segments.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if ((segments[mid]?.end ?? Infinity) > offset) hi = mid;
+    else lo = mid + 1;
+  }
+  return lo;
 }
 
 /** The selection covering every token that [lo, hi) touches, or null if it touches none. */
@@ -64,8 +80,10 @@ function snapToTokens(segments: RawSegment[], lo: number, hi: number): RawSelect
   let start = lo;
   let end = hi;
   let touched = false;
-  for (const s of segments) {
-    if (s.selectable && s.start < hi && s.end > lo) {
+  for (let i = firstEndingAfter(segments, lo); i < segments.length; i++) {
+    const s = segments[i];
+    if (!s || s.start >= hi) break;
+    if (s.selectable) {
       start = Math.min(start, s.start);
       end = Math.max(end, s.end);
       touched = true;
@@ -141,7 +159,10 @@ function useTokenDrag(
       const hi = Math.max(anchor, cur);
       if (hi > lo) {
         moved = true;
-        latest.current.onChange(snapToTokens(latest.current.segments, lo, hi));
+        const next = snapToTokens(latest.current.segments, lo, hi);
+        const prev = latest.current.selection;
+        // Most moves stay inside a token: an unchanged selection re-rendered every segment.
+        if (next?.start !== prev?.start || next?.end !== prev?.end) latest.current.onChange(next);
       }
     };
     const up = (ev: MouseEvent) => {
@@ -277,7 +298,7 @@ function RawSegments({ segments, selection }: { segments: RawSegment[]; selectio
         const selected = selection != null && seg.start >= selection.start && seg.end <= selection.end;
         if (!seg.selectable) {
           return (
-            <span key={seg.start} style={selected ? SELECTED_STYLE : undefined}>
+            <span key={seg.start} data-start={seg.start} style={selected ? SELECTED_STYLE : undefined}>
               {seg.text}
             </span>
           );
@@ -285,6 +306,7 @@ function RawSegments({ segments, selection }: { segments: RawSegment[]; selectio
         return (
           <span
             key={seg.start}
+            data-start={seg.start}
             className={`cursor-pointer rounded-sm ${selected ? '' : 'hover:bg-[var(--color-bg-tertiary)]'}`}
             style={selected ? SELECTED_STYLE : undefined}
           >
