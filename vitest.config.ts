@@ -148,7 +148,7 @@ export default defineConfig({
         'src/components/**': {
           statements: 90,
           branches: 81,
-          functions: 86,
+          functions: 89,
           lines: 93,
         },
         // Lower since #566 moved workerLifecycle.ts, a well-covered module, to

@@ -5,6 +5,17 @@ import { Icon } from '../../ui/Icon';
 import { Tooltip } from '../../ui/Tooltip';
 import { tint } from '../../../utils/tint';
 import type { StepSummary } from '../../../utils/viewResult';
+import { copyQuietly } from '../../../utils/clipboard';
+import { revealInEditor } from '../../editor/revealInEditor';
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuLabel,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from '../../ui/ContextMenu';
+import { currentStepDirectiveLine, stepDictionaryKey, stepTransformsLine } from './shared/fieldDirective';
 
 /** Per-event detail rows rendered at first, and added per "show more". */
 const DETAIL_PAGE_SIZE = 100;
@@ -87,64 +98,110 @@ function StepSection({ title, steps, phaseColor }: { title: string; steps: StepS
       </h2>
       <div className="space-y-1">
         {steps.map((step, idx) => (
-          <div
-            key={idx}
-            className="flex items-start gap-3 px-3 py-2.5 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-bg-elevated)] hover:border-[var(--color-border)] transition-colors"
-          >
-            <div
-              className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
-              style={{ backgroundColor: tint(phaseColor, 13), color: phaseColor }}
-            >
-              {idx + 1}
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-mono font-semibold text-[var(--color-text-primary)]">
-                  {step.processor}
-                </span>
-                <span className="text-xs text-[var(--color-text-muted)]">
-                  ({step.eventsAffected}/{step.totalEvents} events)
-                </span>
-              </div>
-              <div className="text-xs text-[var(--color-text-secondary)] mt-0.5">{step.summaryText}</div>
-              {step.descriptions.length > 1 && <PerEventDetail descriptions={step.descriptions} />}
-              {(step.fieldsAdded.length > 0 || step.fieldsModified.length > 0 || step.fieldsRemoved.length > 0) && (
-                <div className="flex flex-wrap gap-1 mt-1">
-                  {step.fieldsAdded.map((f) => (
-                    <span
-                      key={`+${f}`}
-                      className="px-1.5 py-0.5 text-xs rounded bg-[var(--color-success)]/10 text-[var(--color-success)]"
-                    >
-                      +{f}
+          <ContextMenu key={idx}>
+            <ContextMenuTrigger>
+              <div
+                // Focusable, so Shift+F10 or the Menu key opens the step's menu (#760).
+                tabIndex={0}
+                role="group"
+                aria-label={`Step ${idx + 1}: ${step.processor}`}
+                className="flex items-start gap-3 px-3 py-2.5 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-bg-elevated)] hover:border-[var(--color-border)] transition-colors"
+              >
+                <div
+                  className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
+                  style={{ backgroundColor: tint(phaseColor, 13), color: phaseColor }}
+                >
+                  {idx + 1}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-mono font-semibold text-[var(--color-text-primary)]">
+                      {step.processor}
                     </span>
-                  ))}
-                  {/* A masked field still extracts — it just carries a destroyed
+                    <span className="text-xs text-[var(--color-text-muted)]">
+                      ({step.eventsAffected}/{step.totalEvents} events)
+                    </span>
+                  </div>
+                  <div className="text-xs text-[var(--color-text-secondary)] mt-0.5">{step.summaryText}</div>
+                  {step.descriptions.length > 1 && <PerEventDetail descriptions={step.descriptions} />}
+                  {(step.fieldsAdded.length > 0 || step.fieldsModified.length > 0 || step.fieldsRemoved.length > 0) && (
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {step.fieldsAdded.map((f) => (
+                        <span
+                          key={`+${f}`}
+                          className="px-1.5 py-0.5 text-xs rounded bg-[var(--color-success)]/10 text-[var(--color-success)]"
+                        >
+                          +{f}
+                        </span>
+                      ))}
+                      {/* A masked field still extracts — it just carries a destroyed
                       value. Flagging it separately stops "looks empty" from being
                       read as "never extracted", which invites the wrong fix. */}
-                  {step.fieldsModified.map((f) => (
-                    <Tooltip
-                      key={`~${f}`}
-                      content={`This step rewrote _raw and changed the value of "${f}". The extraction still works — the value it finds is no longer the original.`}
-                    >
-                      <span className="px-1.5 py-0.5 text-xs rounded bg-[var(--color-warning)]/10 text-[var(--color-warning)] cursor-default">
-                        ~{f}
-                      </span>
-                    </Tooltip>
-                  ))}
-                  {step.fieldsRemoved.map((f) => (
-                    <Tooltip key={`-${f}`} content={removedFieldHint(step.processor, f)}>
-                      <span className="px-1.5 py-0.5 text-xs rounded bg-[var(--color-error)]/10 text-[var(--color-error)] cursor-default">
-                        −{f}
-                      </span>
-                    </Tooltip>
-                  ))}
+                      {step.fieldsModified.map((f) => (
+                        <Tooltip
+                          key={`~${f}`}
+                          content={`This step rewrote _raw and changed the value of "${f}". The extraction still works — the value it finds is no longer the original.`}
+                        >
+                          <span className="px-1.5 py-0.5 text-xs rounded bg-[var(--color-warning)]/10 text-[var(--color-warning)] cursor-default">
+                            ~{f}
+                          </span>
+                        </Tooltip>
+                      ))}
+                      {step.fieldsRemoved.map((f) => (
+                        <Tooltip key={`-${f}`} content={removedFieldHint(step.processor, f)}>
+                          <span className="px-1.5 py-0.5 text-xs rounded bg-[var(--color-error)]/10 text-[var(--color-error)] cursor-default">
+                            −{f}
+                          </span>
+                        </Tooltip>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          </div>
+              </div>
+            </ContextMenuTrigger>
+            <ContextMenuContent>
+              <StepMenuItems step={step} />
+            </ContextMenuContent>
+          </ContextMenu>
         ))}
       </div>
     </div>
+  );
+}
+
+/** A step's menu (#760). Rendered only while open, so the lookups read the editors as they are now. */
+function StepMenuItems({ step }: { step: StepSummary }) {
+  const openDictionaryAt = useAppStore((s) => s.openDictionaryAt);
+  const propsLine = currentStepDirectiveLine(step.processor);
+  const isTransform = step.processor.includes(':');
+  const transformsLine = isTransform ? stepTransformsLine(step.processor, useAppStore.getState().transformsConf) : null;
+  const dictionaryKey = stepDictionaryKey(step.processor);
+  const description = [`${step.processor}: ${step.summaryText}`, ...step.descriptions.slice(1)].join('\n');
+  return (
+    <>
+      <ContextMenuLabel>{step.processor}</ContextMenuLabel>
+      <ContextMenuItem
+        disabled={propsLine === null}
+        onSelect={() => propsLine !== null && revealInEditor('props.conf', propsLine)}
+      >
+        Jump to config
+      </ContextMenuItem>
+      {isTransform && (
+        <ContextMenuItem
+          disabled={transformsLine === null}
+          onSelect={() => transformsLine !== null && revealInEditor('transforms.conf', transformsLine)}
+        >
+          Jump to [{step.processor.split(':')[1]}] in transforms.conf
+        </ContextMenuItem>
+      )}
+      {dictionaryKey && (
+        <ContextMenuItem onSelect={() => openDictionaryAt(dictionaryKey)}>
+          Look up {dictionaryKey} in the Dictionary
+        </ContextMenuItem>
+      )}
+      <ContextMenuSeparator />
+      <ContextMenuItem onSelect={() => copyQuietly(description)}>Copy the step's description</ContextMenuItem>
+    </>
   );
 }
 
