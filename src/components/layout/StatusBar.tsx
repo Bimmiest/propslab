@@ -4,6 +4,7 @@ import { Icon } from '../ui/Icon';
 import { Tooltip } from '../ui/Tooltip';
 import { RUN_BUDGET_MS } from '../../hooks/useProcessingPipeline';
 import { countByLevel } from '../../utils/diagnosticCounts';
+import { BUILD_LABEL, SHORT_COMMIT } from '../about/buildInfo';
 
 const MAIN_THREAD_HINT =
   'No pipeline worker could be loaded, so the pipeline runs on the main thread. ' +
@@ -115,6 +116,7 @@ function PipelineStatus() {
 function ResultSummary() {
   const result = useAppStore((s) => s.processingResult);
   const diagnostics = useAppStore((s) => s.validationDiagnostics);
+  const toggleAbout = useAppStore((s) => s.toggleAbout);
 
   // Counted once per run, with the result (`fieldStats`): this bar is always
   // mounted, and a walk of every event's fields here ran after every run.
@@ -149,10 +151,16 @@ function ResultSummary() {
       )}
       {/* Last, and muted: a bug report needs to be able to name the build it
           came from, but the version is not something a user is looking for. */}
-      <span style={{ color: 'var(--color-text-muted)' }} title={`Propslab ${__APP_VERSION__}, build ${__APP_COMMIT__}`}>
+      <button
+        type="button"
+        onClick={toggleAbout}
+        aria-haspopup="dialog"
+        title={BUILD_LABEL}
+        className="bg-transparent border-none p-0 cursor-pointer text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:underline"
+      >
         v{__APP_VERSION__}
-        <span className="sr-only">, build {__APP_COMMIT__}</span>
-      </span>
+        <span className="sr-only">, build {SHORT_COMMIT}</span>
+      </button>
     </div>
   );
 }

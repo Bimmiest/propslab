@@ -61,6 +61,7 @@ describe('defaults', () => {
       manualRunTick: 0,
       settingsOpen: false,
       scaffoldOpen: false,
+      aboutOpen: false,
     });
     expect(s.loadedInputs).toEqual(EMPTY_INPUTS);
     expect(EMPTY_INPUTS).toEqual({
@@ -159,13 +160,14 @@ describe('setters', () => {
 
 describe('toggles', () => {
   const toggles: [
-    action: 'toggleHelp' | 'toggleCommandPalette' | 'toggleSettings' | 'toggleScaffold',
+    action: 'toggleHelp' | 'toggleCommandPalette' | 'toggleSettings' | 'toggleScaffold' | 'toggleAbout',
     field: string,
   ][] = [
     ['toggleHelp', 'helpOpen'],
     ['toggleCommandPalette', 'commandPaletteOpen'],
     ['toggleSettings', 'settingsOpen'],
     ['toggleScaffold', 'scaffoldOpen'],
+    ['toggleAbout', 'aboutOpen'],
   ];
 
   it.each(toggles)('%s flips %s and flips it back', (action, field) => {

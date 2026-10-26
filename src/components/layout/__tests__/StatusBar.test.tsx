@@ -34,6 +34,12 @@ describe('StatusBar', () => {
     expect(version).toHaveTextContent('vtest, build 0000000');
   });
 
+  it('opens the About dialog from the version (#739)', () => {
+    renderStatusBar();
+    fireEvent.click(screen.getByRole('button', { name: 'vtest, build 0000000' }));
+    expect(useAppStore.getState().aboutOpen).toBe(true);
+  });
+
   it('shows "Ready" when no processing has occurred', () => {
     renderStatusBar();
     expect(screen.getByText('Ready')).toBeInTheDocument();

@@ -6,10 +6,10 @@ import tailwindcss from '@tailwindcss/vite';
 import pkg from './package.json' with { type: 'json' };
 import swa from './public/staticwebapp.config.json' with { type: 'json' };
 
-/** The short hash of the commit being built, or `unknown` outside a git checkout. */
-function buildCommit(): string {
+/** The output of a git command about the commit being built, or `unknown` outside a git checkout. */
+function gitOutput(args: string[]): string {
   try {
-    return execFileSync('git', ['rev-parse', '--short', 'HEAD'], { encoding: 'utf8' }).trim();
+    return execFileSync('git', args, { encoding: 'utf8' }).trim();
   } catch {
     return 'unknown';
   }
@@ -47,8 +47,11 @@ export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
     // The version alone names a release, and every deploy between two releases
-    // shares it; the commit names the build (#648).
-    __APP_COMMIT__: JSON.stringify(buildCommit()),
+    // shares it; the commit names the build (#648). The commit's date, not the
+    // build's, so that two builds of one commit stay byte-identical (#739).
+    __APP_COMMIT__: JSON.stringify(gitOutput(['rev-parse', 'HEAD'])),
+    __APP_COMMIT_DATE__: JSON.stringify(gitOutput(['log', '-1', '--format=%cI', 'HEAD'])),
+    __APP_REPOSITORY__: JSON.stringify(pkg.repository.url.replace(/^git\+/, '').replace(/\.git$/, '')),
   },
   // Serve the deployed headers from `vite preview` too, so the e2e suite runs
   // the workers under the same CSP they get in production (a worker ignores the

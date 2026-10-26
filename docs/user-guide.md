@@ -29,7 +29,8 @@ Below 768px, the labelled tab strip of `MobileShell` replaces the rail. The rail
 - the event count
 - the count of distinct fields
 - the error and warning counts
-- a "Per-event pipeline" chip, when that setting is on.
+- a "Per-event pipeline" chip, when that setting is on
+- the version. Select it to open the About dialog. The dialog shows the build and the date of its commit, and has links to the source code, the changelog and the issue tracker. Use its **Copy** button to put the version and the build in a bug report.
 
 
 ## Examples
