@@ -9,6 +9,27 @@ import { countByLevel } from '../../utils/diagnosticCounts';
 import { ExamplesMenu } from '../examples/ExamplesMenu';
 import { getModifierName, isApplePlatform } from '../../utils/platform';
 
+/**
+ * The Propslab mark (#743): public/favicon.svg's tile and paths, in the
+ * --color-brand-* tokens, which give the sand (inverse) tile in the dark theme.
+ * Decorative: the h1 beside it names the app.
+ */
+function BrandMark() {
+  return (
+    <svg viewBox="0 0 32 32" className="w-6 h-6 shrink-0" aria-hidden="true">
+      <rect width="32" height="32" rx="7" fill="var(--color-brand-tile)" />
+      <path
+        d="M8.5 6.5H5.5v19h3M23.5 6.5h3v19h-3M10 11.5h4M16.5 11.5h5.5M10 16h5.5M18 16h4M10 20.5h3M15.5 20.5h6.5"
+        fill="none"
+        stroke="var(--color-brand-mark)"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 /** A header button that opens a side panel, highlighted while the panel is open. */
 function PanelToggle({
   tooltip,
@@ -77,7 +98,7 @@ export function Header() {
     >
       <div className="flex items-center justify-between px-4 h-12">
         <div className="flex items-center gap-2">
-          <Icon name="sliders" className="w-5 h-5 shrink-0 text-[var(--color-accent)]" />
+          <BrandMark />
           <h1 className="text-sm font-bold tracking-wide" style={{ color: 'var(--color-text-primary)' }}>
             Propslab
           </h1>
