@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { overrideMismatches, radixDependencies, radixPackages } from '../../scripts/lib/radixOverrides.mjs';
+import {
+  obsoleteScopedOverrides,
+  overrideMismatches,
+  radixDependencies,
+  radixPackages,
+} from '../../scripts/lib/radixOverrides.mjs';
 
 // The comparison behind scripts/check-radix-overrides.mjs: an override that
 // pins a @radix-ui package to a version its dependents do not ask for. Reading
@@ -121,5 +126,43 @@ describe('overrideMismatches — overrides only other Radix packages ask for (#6
         dependentPackage: '@radix-ui/react-dismissable-layer',
       },
     ]);
+  });
+});
+
+describe('obsoleteScopedOverrides (#575)', () => {
+  const overrides = { '@radix-ui/react-portal': '1.1.0', 'monaco-editor': { dompurify: '^3.4.17' } };
+
+  it('keeps an override while the parent pins something older', () => {
+    const pinned = { 'node_modules/monaco-editor': { dependencies: { dompurify: '3.4.15' } } };
+    expect(obsoleteScopedOverrides(overrides, pinned)).toEqual([]);
+  });
+
+  it('names an override once the parent asks for the fixed version or later', () => {
+    const obsolete = [{ parent: 'monaco-editor', package: 'dompurify', override: '^3.4.17' }];
+    for (const asked of ['3.4.17', '^3.4.20', '3.5.0'])
+      expect(
+        obsoleteScopedOverrides(overrides, { 'node_modules/monaco-editor': { dependencies: { dompurify: asked } } }),
+      ).toEqual(obsolete);
+  });
+
+  it('names an override whose parent is gone or no longer depends on the package', () => {
+    const obsolete = [{ parent: 'monaco-editor', package: 'dompurify', override: '^3.4.17' }];
+    expect(obsoleteScopedOverrides(overrides, {})).toEqual(obsolete);
+    expect(obsoleteScopedOverrides(overrides, { 'node_modules/monaco-editor': { dependencies: {} } })).toEqual(
+      obsolete,
+    );
+  });
+
+  it('keeps an override while any copy of the parent, nested ones included, still pins something older', () => {
+    const twoCopies = {
+      'node_modules/monaco-editor': { dependencies: { dompurify: '3.5.0' } },
+      'node_modules/x/node_modules/monaco-editor': { dependencies: { dompurify: '3.4.15' } },
+    };
+    expect(obsoleteScopedOverrides(overrides, twoCopies)).toEqual([]);
+  });
+
+  it('keeps an override it cannot read a version from', () => {
+    const unreadable = { 'node_modules/monaco-editor': { dependencies: { dompurify: '*' } } };
+    expect(obsoleteScopedOverrides(overrides, unreadable)).toEqual([]);
   });
 });

@@ -1,6 +1,7 @@
-// The comparison behind scripts/check-radix-overrides.mjs, apart from reading
+// The comparisons behind scripts/check-radix-overrides.mjs, apart from reading
 // package.json and the lockfile: which @radix-ui packages the checked packages
-// depend on, and where an override pins one to a version they do not ask for.
+// depend on, where an override pins one to a version they do not ask for, and
+// which scoped overrides (the non-Radix ones) their parent no longer needs.
 
 /**
  * Every @radix-ui package installed at the top of node_modules: the packages
@@ -59,4 +60,47 @@ export function overrideMismatches(overrides, lockPackages, checkPackages = radi
     }
   }
   return issues;
+}
+
+/**
+ * Each scoped override (`"parent": { "dep": "^x.y.z" }`) that its parent no
+ * longer needs: no copy of the parent in the lockfile still asks for a `dep`
+ * older than `x.y.z`. These overrides lift a dependency that the parent pins
+ * past an advisory (CONTRIBUTING, "The Radix overrides"). One left behind after
+ * the parent caught up would hold the dependency back without a reason.
+ * A version that cannot be read (`*`, a git URL) counts as still needing it.
+ * @param {Record<string, string | Record<string, string>>} overrides package.json's `overrides`
+ * @param {Record<string, { dependencies?: Record<string, string> }>} lockPackages
+ * @returns {{ parent: string, package: string, override: string }[]}
+ */
+export function obsoleteScopedOverrides(overrides, lockPackages) {
+  const issues = [];
+  for (const [parent, scoped] of Object.entries(overrides)) {
+    if (typeof scoped !== 'object') continue;
+    const copies = Object.entries(lockPackages)
+      .filter(([key]) => key === `node_modules/${parent}` || key.endsWith(`/node_modules/${parent}`))
+      .map(([, entry]) => entry);
+    for (const [pkg, override] of Object.entries(scoped)) {
+      const wanted = lowestVersion(override);
+      const needed = copies.some((copy) => {
+        const asked = copy.dependencies?.[pkg];
+        if (asked === undefined) return false;
+        const floor = lowestVersion(asked);
+        return !floor || !wanted || compareVersions(floor, wanted) < 0;
+      });
+      if (!needed) issues.push({ parent, package: pkg, override });
+    }
+  }
+  return issues;
+}
+
+/** @param {string} spec @returns {number[] | null} the first x.y.z in a version or range */
+function lowestVersion(spec) {
+  const match = /(\d+)\.(\d+)\.(\d+)/.exec(spec);
+  return match ? match.slice(1).map(Number) : null;
+}
+
+/** @param {number[]} a @param {number[]} b */
+function compareVersions(a, b) {
+  return a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
 }
