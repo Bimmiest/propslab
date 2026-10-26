@@ -9,6 +9,9 @@ export type ActiveView = 'simulator' | 'dictionary';
 /** The simulator panels the mobile layout switches between. */
 export type MobileView = 'raw' | 'props' | 'transforms' | 'output';
 
+/** The FIELDALIAS dialog's fixed half: the source field, or the alias (#761). */
+export type FieldAliasRequest = { source: string } | { alias: string };
+
 /** The four inputs an example, or "Clear all", replaces together. */
 export interface SessionInputs {
   rawData: string;
@@ -166,9 +169,12 @@ interface AppState {
   aboutOpen: boolean;
   toggleAbout: () => void;
 
-  /** The field the "Create FIELDALIAS" dialog is open for, from a field's context menu. */
-  fieldAliasFor: string | null;
-  setFieldAliasFor: (field: string | null) => void;
+  /**
+   * What the "Create FIELDALIAS" dialog is open for: a field to give an alias
+   * (a field's menu), or an alias to find a source for (a missing CIM field).
+   */
+  fieldAlias: FieldAliasRequest | null;
+  setFieldAlias: (request: FieldAliasRequest | null) => void;
 }
 
 const THEME_KEY = 'propslab:theme';
@@ -382,8 +388,8 @@ export const useAppStore = create<AppState>((set) => ({
   aboutOpen: false,
   toggleAbout: () => set((state) => ({ aboutOpen: !state.aboutOpen })),
 
-  fieldAliasFor: null,
-  setFieldAliasFor: (field) => set({ fieldAliasFor: field }),
+  fieldAlias: null,
+  setFieldAlias: (request) => set({ fieldAlias: request }),
 }));
 
 // What is persisted is written here, once, whatever set it: the updaters stay

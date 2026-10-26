@@ -62,7 +62,7 @@ describe('defaults', () => {
       settingsOpen: false,
       scaffoldOpen: false,
       aboutOpen: false,
-      fieldAliasFor: null,
+      fieldAlias: null,
     });
     expect(s.loadedInputs).toEqual(EMPTY_INPUTS);
     expect(EMPTY_INPUTS).toEqual({

@@ -25,7 +25,7 @@ export function DiffLines({ diff }: { diff: ReturnType<typeof computeDiff> }) {
     const kind: DiffKind = segment.added ? 'added' : segment.removed ? 'removed' : 'ctx';
     const lines = segment.value.replace(/\n$/, '').split('\n');
     return lines.map((line, li) => (
-      <div key={`${si}-${li}`} className={`flex${ROW_BG[kind]}`}>
+      <div key={`${si}-${li}`} className={`flex${ROW_BG[kind]}`} data-diff-line={line}>
         <span className={`flex-shrink-0 w-6 text-center ${SIGN_COLOR[kind]} select-none`}>{SIGN[kind]}</span>
         <pre className={`flex-1 px-2 py-0.5 whitespace-pre-wrap break-all ${TEXT_COLOR[kind]}`}>{line}</pre>
       </div>

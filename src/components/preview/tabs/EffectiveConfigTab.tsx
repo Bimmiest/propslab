@@ -14,6 +14,15 @@ import { parseConf } from '../../../engine/parser/confParser';
 import { resolveStanzasForEvent } from '../../../engine/parser/stanzaMatcher';
 import { resolveEffectiveConfig, type EffectiveDirective } from '../../../engine/parser/effectiveConfig';
 import { revealInEditor } from '../../editor/revealInEditor';
+import { getDirectiveInfo } from '../../../engine/directiveRegistry';
+import { copyQuietly } from '../../../utils/clipboard';
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuLabel,
+  ContextMenuTrigger,
+} from '../../ui/ContextMenu';
 import { Icon } from '../../ui/Icon';
 import type { PipelineInputs } from './shared/usePipelineInputs';
 
@@ -34,7 +43,42 @@ function StanzaBadge({ type }: { type: EffectiveDirective['stanza']['type'] }) {
   );
 }
 
+/** A directive row's menu (#761); Shift+F10 on its [stanza]:line link opens it too. */
+function DirectiveMenuItems({ directive }: { directive: EffectiveDirective }) {
+  const openDictionaryAt = useAppStore((s) => s.openDictionaryAt);
+  const dictionaryKey = getDirectiveInfo(directive.key, 'props.conf')?.key;
+  return (
+    <>
+      <ContextMenuLabel>{directive.key}</ContextMenuLabel>
+      <ContextMenuItem onSelect={() => jumpTo(directive.line)}>Jump to config</ContextMenuItem>
+      <ContextMenuItem onSelect={() => copyQuietly(`${directive.key} = ${directive.value}`)}>
+        Copy {directive.key} = …
+      </ContextMenuItem>
+      {dictionaryKey && (
+        <ContextMenuItem onSelect={() => openDictionaryAt(dictionaryKey)}>
+          Look up {dictionaryKey} in the Dictionary
+        </ContextMenuItem>
+      )}
+    </>
+  );
+}
+
 function DirectiveRow({ directive }: { directive: EffectiveDirective }) {
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger>
+        <div>
+          <DirectiveRowBody directive={directive} />
+        </div>
+      </ContextMenuTrigger>
+      <ContextMenuContent>
+        <DirectiveMenuItems directive={directive} />
+      </ContextMenuContent>
+    </ContextMenu>
+  );
+}
+
+function DirectiveRowBody({ directive }: { directive: EffectiveDirective }) {
   const [expanded, setExpanded] = useState(false);
   const contested = directive.overriddenByStanza.length > 0;
 
