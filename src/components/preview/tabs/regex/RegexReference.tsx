@@ -46,10 +46,7 @@ function RegexCategoryRows({
   return (
     <>
       <tr>
-        <td
-          colSpan={3}
-          className="pt-2 pb-0.5 text-[10px] font-medium text-[var(--color-accent)] uppercase tracking-wider"
-        >
+        <td colSpan={3} className="pt-2 pb-0.5 text-xs font-medium text-[var(--color-accent)] uppercase tracking-wider">
           {category.name}
           <span className="ml-1.5 font-normal normal-case tracking-normal text-[var(--color-text-muted)]">
             (click to {isReplace ? 'use' : 'append'})
@@ -100,7 +97,7 @@ function RegexReferenceRow({
           }}
           aria-label={isReplace ? `Use pattern ${d.pattern}` : `Append ${d.pattern}`}
           aria-describedby={descriptionId}
-          className="font-mono px-1 py-0.5 rounded text-[11px] text-left bg-[var(--color-bg-tertiary)] text-[var(--color-text-primary)] border-none cursor-pointer"
+          className="font-mono px-1 py-0.5 rounded text-xs text-left bg-[var(--color-bg-tertiary)] text-[var(--color-text-primary)] border-none cursor-pointer"
         >
           {d.pattern}
         </button>
@@ -108,7 +105,7 @@ function RegexReferenceRow({
       <td id={descriptionId} className="py-0.5 pr-3 text-[var(--color-text-secondary)]">
         {d.description}
       </td>
-      <td className="py-0.5 text-[var(--color-text-muted)] font-mono text-[11px]">{d.example}</td>
+      <td className="py-0.5 text-[var(--color-text-muted)] font-mono text-xs">{d.example}</td>
     </tr>
   );
 }

@@ -17,7 +17,7 @@ function Segmented<T extends string>({
 }) {
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">{label}</span>
+      <span className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">{label}</span>
       <div
         role="group"
         aria-label={label}
@@ -33,7 +33,7 @@ function Segmented<T extends string>({
               aria-pressed={isActive}
               onClick={() => onChange(option.value)}
               className={[
-                'flex-1 min-w-0 truncate px-2 py-1 text-[11px] font-medium cursor-pointer border-none',
+                'flex-1 min-w-0 truncate px-2 py-1 text-xs font-medium cursor-pointer border-none',
                 'outline-none focus-visible:ring-2 transition-colors',
                 isActive
                   ? 'bg-[var(--color-accent)] text-[var(--color-text-on-accent)]'
@@ -103,7 +103,7 @@ export function DictionaryFilterBar({
         ]}
       />
 
-      <label className="flex items-center gap-2 text-[11px] cursor-pointer text-[var(--color-text-secondary)]">
+      <label className="flex items-center gap-2 text-xs cursor-pointer text-[var(--color-text-secondary)]">
         <input
           type="checkbox"
           checked={filters.hideDeprecated}
@@ -113,7 +113,7 @@ export function DictionaryFilterBar({
         Hide deprecated
       </label>
 
-      <p className="text-[10px] text-[var(--color-text-muted)]" role="status" aria-live="polite">
+      <p className="text-xs text-[var(--color-text-muted)]" role="status" aria-live="polite">
         {resultCount === totalCount ? `${totalCount} entries` : `${resultCount} of ${totalCount} entries`}
       </p>
     </div>
@@ -160,7 +160,7 @@ function DictionaryOption({
       style={isSelected ? { boxShadow: 'inset 2px 0 0 var(--color-accent)' } : undefined}
     >
       <span
-        className="flex-1 min-w-0 truncate text-[11px] font-mono"
+        className="flex-1 min-w-0 truncate text-xs font-mono"
         style={{
           color: isSelected ? 'var(--color-accent)' : 'var(--color-text-primary)',
         }}
@@ -254,7 +254,7 @@ export function DictionaryList({
       {groups.map(({ group, entries: items }) => (
         <div key={group} role="group" aria-label={group}>
           <p
-            className="sticky top-0 z-10 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)]"
+            className="sticky top-0 z-10 px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)]"
             style={{ backgroundColor: 'var(--color-bg-secondary)' }}
           >
             {group}

@@ -28,7 +28,7 @@ const STANZA_TYPE_LABEL: Record<EffectiveDirective['stanza']['type'], string> = 
 
 function StanzaBadge({ type }: { type: EffectiveDirective['stanza']['type'] }) {
   return (
-    <span className="text-[10px] uppercase tracking-wide px-1 py-0.5 rounded bg-[var(--color-bg-tertiary)] text-[var(--color-text-muted)]">
+    <span className="text-xs uppercase tracking-wide px-1 py-0.5 rounded bg-[var(--color-bg-tertiary)] text-[var(--color-text-muted)]">
       {STANZA_TYPE_LABEL[type]}
     </span>
   );

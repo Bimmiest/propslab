@@ -194,7 +194,7 @@ function FieldTreeRow({
       </span>
 
       {hasChildren && (
-        <span className="text-[9px] text-[var(--color-text-muted)] flex-shrink-0">({node.children.length})</span>
+        <span className="text-xs text-[var(--color-text-muted)] flex-shrink-0">({node.children.length})</span>
       )}
       {pinned && (
         <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 ml-auto" style={{ backgroundColor: node.color }} />

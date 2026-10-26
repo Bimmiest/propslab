@@ -31,7 +31,7 @@ export function Chip({
   const color = TONE_COLORS[tone];
   return (
     <span
-      className={`inline-flex shrink-0 items-center rounded px-1.5 py-0.5 text-[10px] font-medium leading-tight whitespace-nowrap ${mono ? 'font-mono' : ''}`}
+      className={`inline-flex shrink-0 items-center rounded px-1.5 py-0.5 text-xs font-medium leading-tight whitespace-nowrap ${mono ? 'font-mono' : ''}`}
       // tint(), not a concatenated `${color}20` alpha suffix: these tones are
       // `var(--color-…)` references, and appending hex digits to a var() call
       // produces a declaration the browser drops — which is why these pills

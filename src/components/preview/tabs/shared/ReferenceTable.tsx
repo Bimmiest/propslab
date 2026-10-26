@@ -68,7 +68,7 @@ export function ReferenceTable<R>({
           <div className="max-h-56 overflow-auto">
             <table className="w-full text-xs">
               <thead>
-                <tr className="text-left text-[10px] text-[var(--color-text-muted)] uppercase tracking-wider">
+                <tr className="text-left text-xs text-[var(--color-text-muted)] uppercase tracking-wider">
                   {columns.map((c) => (
                     <th key={c.label} className={c.className}>
                       {c.label}

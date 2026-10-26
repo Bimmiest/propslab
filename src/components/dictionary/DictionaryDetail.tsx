@@ -20,9 +20,7 @@ function Page({ children }: { children: React.ReactNode }) {
 }
 
 function Eyebrow({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--color-text-muted)]">{children}</p>
-  );
+  return <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--color-text-muted)]">{children}</p>;
 }
 
 /**
@@ -79,7 +77,7 @@ function Card({
         className="flex items-center justify-between gap-2 px-3 h-8 border-b"
         style={{ borderColor: 'var(--color-border-subtle)', backgroundColor: 'var(--color-bg-secondary)' }}
       >
-        <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--color-text-muted)]">
+        <span className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--color-text-muted)]">
           {label}
         </span>
         {action}
@@ -100,7 +98,7 @@ function CodeCard({ label, code }: { label: string; code: string }) {
 }
 
 function Mono({ children }: { children: React.ReactNode }) {
-  return <span className="font-mono text-[11px] break-words">{children}</span>;
+  return <span className="font-mono text-xs break-words">{children}</span>;
 }
 
 /** Label/value rows inside an aside card. Ruled rather than boxed, to stay quiet. */
@@ -113,7 +111,7 @@ function SpecRows({ rows }: { rows: { label: string; value: React.ReactNode }[] 
           className="flex items-baseline justify-between gap-3 py-1.5"
           style={i > 0 ? { borderTop: '1px solid var(--color-border-subtle)' } : undefined}
         >
-          <dt className="shrink-0 text-[11px] text-[var(--color-text-muted)]">{row.label}</dt>
+          <dt className="shrink-0 text-xs text-[var(--color-text-muted)]">{row.label}</dt>
           <dd className="min-w-0 text-right text-[var(--color-text-primary)]">{row.value}</dd>
         </div>
       ))}
@@ -188,7 +186,7 @@ export function DictionaryDetail({ entry }: { entry: DictionaryEntry }) {
                   { label: 'Default', value: <Mono>{info.defaultValue || '(none)'}</Mono> },
                   { label: 'Type', value: <Mono>{info.valueType}</Mono> },
                   { label: 'File', value: <Mono>{info.appliesTo}</Mono> },
-                  { label: 'Category', value: <span className="text-[11px]">{info.category}</span> },
+                  { label: 'Category', value: <span className="text-xs">{info.category}</span> },
                 ]}
               />
             </Card>
@@ -234,7 +232,7 @@ function StageLinks({
               outline-none focus-visible:ring-2"
           >
             <span
-              className="shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold"
+              className="shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold"
               style={{
                 backgroundColor: tint(
                   stage.phase === 'index-time' ? 'var(--color-warning)' : 'var(--color-accent)',
@@ -247,7 +245,7 @@ function StageLinks({
             </span>
             <span className="flex-1 min-w-0 flex flex-col">
               <span className="text-[12px] font-medium text-[var(--color-text-primary)] truncate">{stage.name}</span>
-              <span className="text-[10px] text-[var(--color-text-muted)]">{PHASE_LABELS[stage.phase]}</span>
+              <span className="text-xs text-[var(--color-text-muted)]">{PHASE_LABELS[stage.phase]}</span>
             </span>
             <Icon
               name="arrow-right"

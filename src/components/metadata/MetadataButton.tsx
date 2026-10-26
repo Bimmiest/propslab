@@ -44,7 +44,7 @@ export function MetadataButton() {
         type="button"
         onClick={() => setOpen(true)}
         title="Index, host, source and sourcetype of the events"
-        className="flex items-center gap-1 min-w-0 px-2 py-0.5 rounded text-[11px] font-medium cursor-pointer border-none text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-tertiary)] press"
+        className="flex items-center gap-1 min-w-0 px-2 py-0.5 rounded text-xs font-medium cursor-pointer border-none text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-tertiary)] press"
       >
         <Icon name="tag" className="w-3.5 h-3.5 shrink-0 text-[var(--color-accent)]" />
         Metadata

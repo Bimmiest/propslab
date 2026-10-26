@@ -64,12 +64,12 @@ export function HighlightedFilterBar({
         </div>
 
         {pinned && (
-          <span className="text-[10px] text-[var(--color-text-muted)] flex items-center gap-1.5">
+          <span className="text-xs text-[var(--color-text-muted)] flex items-center gap-1.5">
             {pinned.matching}/{pinned.total} events match {pinned.count} pinned field{pinned.count > 1 ? 's' : ''}
             <button
               type="button"
               onClick={pinned.clear}
-              className="text-[10px] text-[var(--color-accent)] hover:underline bg-transparent border-none p-0 cursor-pointer"
+              className="text-xs text-[var(--color-accent)] hover:underline bg-transparent border-none p-0 cursor-pointer"
             >
               Clear
             </button>

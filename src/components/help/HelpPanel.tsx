@@ -124,7 +124,7 @@ function StageGroup({
 }) {
   return (
     <div>
-      <p className="text-[11px] font-semibold uppercase tracking-wider mb-2" style={{ color: phaseColor }}>
+      <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: phaseColor }}>
         {title}
       </p>
       <div className="space-y-1.5">
@@ -179,7 +179,7 @@ function StageCard({
       >
         {/* Step badge */}
         <div
-          className="shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold"
+          className="shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
           style={{ backgroundColor: tint(phaseColor, 13), color: phaseColor }}
         >
           {stage.step}
@@ -188,7 +188,7 @@ function StageCard({
         <div className="flex-1 min-w-0">
           <span className="text-xs font-semibold text-[var(--color-text-primary)]">{stage.name}</span>
           <span
-            className="ml-2 text-[10px] px-1.5 py-0.5 rounded font-medium"
+            className="ml-2 text-xs px-1.5 py-0.5 rounded font-medium"
             style={{ backgroundColor: tint(phaseColor, 8), color: phaseColor }}
           >
             {PHASE_LABELS[stage.phase]}
@@ -211,7 +211,7 @@ function StageCard({
                 type="button"
                 onClick={() => onOpenDirective(d)}
                 title={`Open ${d} in the dictionary`}
-                className="px-2 py-0.5 text-[11px] font-mono rounded-md font-medium cursor-pointer
+                className="px-2 py-0.5 text-xs font-mono rounded-md font-medium cursor-pointer
                   outline-none focus-visible:ring-2 transition-colors hover:bg-[var(--color-bg-tertiary)]"
                 style={{
                   backgroundColor: 'var(--color-bg-secondary)',

@@ -160,7 +160,7 @@ function PerEventDetail({ descriptions }: { descriptions: string[] }) {
 
   return (
     <details className="mt-1" onToggle={(e) => setOpen(e.currentTarget.open)}>
-      <summary className="text-[10px] text-[var(--color-text-muted)] cursor-pointer hover:text-[var(--color-text-secondary)] transition-colors select-none">
+      <summary className="text-xs text-[var(--color-text-muted)] cursor-pointer hover:text-[var(--color-text-secondary)] transition-colors select-none">
         Per-event detail ({descriptions.length})
       </summary>
       {open && (
@@ -169,7 +169,7 @@ function PerEventDetail({ descriptions }: { descriptions: string[] }) {
             {descriptions.slice(0, shown).map((d, i) => (
               <li
                 key={i}
-                className="text-[11px] text-[var(--color-text-muted)] pl-2 border-l border-[var(--color-border-subtle)]"
+                className="text-xs text-[var(--color-text-muted)] pl-2 border-l border-[var(--color-border-subtle)]"
               >
                 {d}
               </li>
@@ -179,7 +179,7 @@ function PerEventDetail({ descriptions }: { descriptions: string[] }) {
             <button
               type="button"
               onClick={() => setShown((n) => n + DETAIL_PAGE_SIZE)}
-              className="mt-1 text-[10px] text-[var(--color-accent)] hover:underline cursor-pointer border-none bg-transparent p-0"
+              className="mt-1 text-xs text-[var(--color-accent)] hover:underline cursor-pointer border-none bg-transparent p-0"
             >
               Show {Math.min(remaining, DETAIL_PAGE_SIZE)} more ({remaining} not shown)
             </button>

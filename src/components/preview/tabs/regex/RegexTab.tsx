@@ -51,7 +51,7 @@ export function RegexTab(props: RegexTabProps) {
           {/* Only settled counts: while matching is pending, "0/N" would
               describe a pattern that has not been tried yet. */}
           {/* Always mounted, so a screen reader announces the count as it changes. */}
-          <span role="status" className="text-[10px] text-[var(--color-text-muted)] ml-auto">
+          <span role="status" className="text-xs text-[var(--color-text-muted)] ml-auto">
             {pattern && !validationError && status === 'ok' && matchStats.total > 0 && (
               <>
                 {matchStats.matched}/{matchStats.total} events matched
@@ -72,7 +72,7 @@ export function RegexTab(props: RegexTabProps) {
           spellCheck={false}
         />
         {validationError && (
-          <div id={errorId} role="alert" className="mt-1 text-[10px] text-[var(--color-error)]">
+          <div id={errorId} role="alert" className="mt-1 text-xs text-[var(--color-error)]">
             {validationError}
           </div>
         )}

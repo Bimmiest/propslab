@@ -77,7 +77,7 @@ export function MobileShell() {
               onClick={() => setView(v.id)}
               className={[
                 'flex-1 min-w-0 flex flex-col items-center justify-center gap-0.5 px-2 py-1.5',
-                'text-[11px] font-medium cursor-pointer border-b-2 -mb-px outline-none focus-visible:ring-2 transition-colors',
+                'text-xs font-medium cursor-pointer border-b-2 -mb-px outline-none focus-visible:ring-2 transition-colors',
                 isActive
                   ? 'text-[var(--color-accent)] border-b-[var(--color-accent)]'
                   : 'text-[var(--color-text-muted)] border-b-transparent hover:text-[var(--color-text-secondary)]',
