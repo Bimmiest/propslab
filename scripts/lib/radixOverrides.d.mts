@@ -9,3 +9,7 @@ export function overrideMismatches(
   lockPackages: LockPackages,
   checkPackages?: string[],
 ): { package: string; override: string; dependency: string; dependentPackage: string }[];
+export function obsoleteScopedOverrides(
+  overrides: Record<string, string | Record<string, string>>,
+  lockPackages: LockPackages,
+): { parent: string; package: string; override: string }[];

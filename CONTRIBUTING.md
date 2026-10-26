@@ -163,6 +163,8 @@ Two overrides are not Radix. One is `typed-rest-client` → `qs`. `@stryker-muta
 
 Nor is `monaco-editor` → `dompurify`. `monaco-editor` 0.57 declares `dompurify` 3.4.15 exactly, and that version carries GHSA-p98j-92pf-mc4p, GHSA-cg2g-xh64-v4q7 and GHSA-mrv2-3pqr-j5jr. The override lifts the declared package to 3.4.17, the first release past all three, and because the declaration is an exact pin Dependabot cannot do that on its own. **The override does not change what ships.** Monaco does not import the `dompurify` package: it inlines its own copy (`esm/vs/base/browser/dompurify/dompurify.js`, version 3.4.15). The override only takes the advisory off the `npm audit` and Trivy reports. What makes the inlined copy safe here is that no hover sets `supportHtml`, so Monaco drops raw HTML before the sanitiser sees it, and every one of these advisories needs markup to exploit. The only trusted hover (`splunkConfHover.ts`) enables one command and escapes the document text it quotes. Keep it that way: if a provider starts to set `supportHtml`, or builds trusted Markdown from document text, these advisories become reachable. Drop the override once a `monaco-editor` release inlines a fixed `dompurify`.
 
+Both non-Radix overrides are caret ranges (`^6.16.0`, `^3.4.17`), so the next fix within the major reaches the lockfile through `npm update` or a Dependabot lockfile update. An exact pin would leave a later advisory red on every pull request until someone edits `package.json`. `npm run check:overrides` fails once no copy of the parent asks for an older version than the override. That is when to drop it.
+
 ## Adding or changing a simulated directive
 
 This is the part with rules of its own, because the project's whole claim is that its output matches Splunk.
