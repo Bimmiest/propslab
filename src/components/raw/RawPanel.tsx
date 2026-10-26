@@ -1,4 +1,4 @@
-import { useMemo, useEffect, useRef } from 'react';
+import { useMemo, useEffect, useRef, useState } from 'react';
 import type { editor } from 'monaco-editor';
 import { useAppStore } from '../../store/useAppStore';
 import { MetadataButton } from '../metadata/MetadataButton';
@@ -7,6 +7,7 @@ import { ClearButton } from '../editor/ClearButton';
 import { MonacoEditor } from '../editor/LazyEditors';
 import { registerEditor, unregisterEditor } from '../editor/editorRegistry';
 import { EditorValidationList } from '../editor/EditorValidationList';
+import { CursorPosition } from '../editor/CursorPosition';
 import { countLines } from '../../utils/countLines';
 
 // Module-level so the identity is stable: MonacoEditor treats a new `options`
@@ -53,8 +54,11 @@ export function RawPanel() {
   // Register the raw-log editor so data-quality diagnostics (e.g. malformed JSON)
   // can focus and reveal the offending input line, the same way conf editors do.
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
+  // State as well as the ref: the footer re-renders with the instance.
+  const [editorInstance, setEditorInstance] = useState<editor.IStandaloneCodeEditor | null>(null);
   const handleMount = (instance: editor.IStandaloneCodeEditor) => {
     editorRef.current = instance;
+    setEditorInstance(instance);
     registerEditor('raw', instance);
   };
   useEffect(() => {
@@ -117,7 +121,10 @@ export function RawPanel() {
           {lineCount > 0 ? `${lineCount} line${lineCount !== 1 ? 's' : ''} · ` : ''}
           {rawData.length.toLocaleString()} chars
         </span>
-        {rawData && <ClearButton onClear={() => setRawData('')} label="Clear" />}
+        <div className="flex items-center gap-3 min-w-0">
+          <CursorPosition editor={editorInstance} withBytes />
+          {rawData && <ClearButton onClear={() => setRawData('')} label="Clear" />}
+        </div>
       </div>
 
       <div className="flex-shrink-0">

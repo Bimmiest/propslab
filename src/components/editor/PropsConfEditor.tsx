@@ -1,9 +1,11 @@
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
+import type { editor } from 'monaco-editor';
 import { useAppStore } from '../../store/useAppStore';
 import { SplunkEditor } from './LazyEditors';
 import { CopyButton } from './CopyButton';
 import { ClearButton } from './ClearButton';
 import { EditorValidationList } from './EditorValidationList';
+import { CursorPosition } from './CursorPosition';
 import { Icon } from '../ui/Icon';
 
 export function PropsConfEditor() {
@@ -11,6 +13,7 @@ export function PropsConfEditor() {
   const setPropsConf = useAppStore((s) => s.setPropsConf);
   const collapsed = useAppStore((s) => !!s.collapsedPanels['props.conf']);
   const toggleCollapse = useAppStore((s) => s.togglePanelCollapse);
+  const [editorInstance, setEditorInstance] = useState<editor.IStandaloneCodeEditor | null>(null);
 
   const getText = useCallback(() => propsConf, [propsConf]);
 
@@ -53,7 +56,15 @@ export function PropsConfEditor() {
         </div>
       </div>
       <div className="flex-1 min-h-0">
-        <SplunkEditor value={propsConf} onChange={setPropsConf} fileType="props.conf" />
+        <SplunkEditor
+          value={propsConf}
+          onChange={setPropsConf}
+          fileType="props.conf"
+          onEditorReady={setEditorInstance}
+        />
+      </div>
+      <div className="flex items-center justify-end px-3 py-1 text-xs shrink-0 bg-[var(--color-bg-secondary)] border-t border-[var(--color-border)]">
+        <CursorPosition editor={editorInstance} />
       </div>
       <EditorValidationList file="props.conf" />
     </div>
