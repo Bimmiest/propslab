@@ -2,7 +2,7 @@
 // A run that failed outright has to say that it failed, and why, rather than
 // show the first-run "No data yet" invitation.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent, act, within } from '@testing-library/react';
 import { PreviewPanel } from '../PreviewPanel';
 import { useAppStore, selectSessionDirty } from '../../../store/useAppStore';
 import { SAMPLE_CONFIGS } from '../../../engine/sampleData';
@@ -11,6 +11,18 @@ import { toViewResult, type ViewResult } from '../../../utils/viewResult';
 import { makeEvent } from '../../../test/makeEvent';
 
 const initial = useAppStore.getState();
+
+/** The states a preview filter offers, or none when the filter is not shown (#752). */
+function filterStates(label: 'Status' | 'Changes'): string[] {
+  const trigger = screen.queryByRole('button', { name: new RegExp(`^${label}`) });
+  if (!trigger) return [];
+  fireEvent.click(trigger);
+  const states = within(screen.getByRole('group', { name: `${label} options` }))
+    .getAllByRole('checkbox')
+    .map((box) => box.closest('label')?.textContent ?? '');
+  fireEvent.click(trigger);
+  return states;
+}
 
 describe('PreviewPanel', () => {
   beforeEach(() => {
@@ -106,12 +118,6 @@ describe('PreviewPanel — metadata changes are relative to the run (#316)', () 
     });
   }
 
-  function metadataModifiedCount(): string | null {
-    fireEvent.click(screen.getByRole('button', { name: /Changes/ }));
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Metadata Modified' }));
-    return screen.getByText(/^\d+ \/ \d+$/).textContent;
-  }
-
   beforeEach(() => {
     useAppStore.setState({ ...initial, activeOutputTab: 'preview' }, true);
   });
@@ -124,13 +130,13 @@ describe('PreviewPanel — metadata changes are relative to the run (#316)', () 
     act(() => {
       useAppStore.getState().setMetadataField('host', 'web02');
     });
-    expect(metadataModifiedCount()).toBe('0 / 1');
+    expect(filterStates('Changes')).toEqual([]);
   });
 
   it('still flags an event whose metadata the run rewrote', () => {
     useAppStore.setState({ metadata: runMeta, processingResult: resultWith('rewritten') });
     render(<PreviewPanel />);
-    expect(metadataModifiedCount()).toBe('1 / 1');
+    expect(filterStates('Changes')).toEqual(['Metadata Modified']);
   });
 });
 
@@ -247,12 +253,6 @@ describe('PreviewPanel — the change check is linear in whitespace (#427)', () 
     });
   }
 
-  function unmodifiedCount(): string | null {
-    fireEvent.click(screen.getByRole('button', { name: /Changes/ }));
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Unmodified' }));
-    return screen.getByText(/^\d+ \/ \d+$/).textContent;
-  }
-
   beforeEach(() => {
     useAppStore.setState({ ...initial, activeOutputTab: 'preview' }, true);
   });
@@ -260,7 +260,8 @@ describe('PreviewPanel — the change check is linear in whitespace (#427)', () 
   it('ignores CRLF and trailing whitespace when deciding an event changed', () => {
     useAppStore.setState({ processingResult: resultOf('GET /a 200 \t', 'GET /a 200\r') });
     render(<PreviewPanel />);
-    expect(unmodifiedCount()).toBe('1 / 1');
+    // No Changes filter: the run changed no event.
+    expect(filterStates('Changes')).toEqual([]);
   });
 
   it('checks an event with a long inner run of whitespace in linear time', () => {
@@ -272,7 +273,77 @@ describe('PreviewPanel — the change check is linear in whitespace (#427)', () 
     const raw = `a${' '.repeat(400_000)}b`;
     useAppStore.setState({ processingResult: resultOf(raw, raw) });
     render(<PreviewPanel />);
-    expect(unmodifiedCount()).toBe('1 / 1');
+    // No Changes filter: the run changed no event.
+    expect(filterStates('Changes')).toEqual([]);
+  });
+});
+
+describe('PreviewPanel — Status and Changes offer only what the run has (#752)', () => {
+  const kept = (raw: string) => makeEvent(raw);
+  const dropped = (raw: string) => makeEvent(raw, { _meta: { _queue: 'nullQueue' } });
+  function run(...events: ReturnType<typeof makeEvent>[]): ViewResult {
+    return toViewResult({
+      // One line each, so no event reads as a changed copy of another line.
+      events: events.map((e, i) => ({ ...e, lineNumbers: { start: i + 1, end: i + 1 } })),
+      originalRaw: events.map((e) => e._raw).join('\n'),
+      eventCount: events.length,
+      processingSteps: [],
+      inputMetadata: events[0]!.metadata,
+    });
+  }
+
+  beforeEach(() => {
+    useAppStore.setState({ ...initial, activeOutputTab: 'preview' }, true);
+  });
+
+  it('shows neither filter when the run dropped and changed nothing', () => {
+    useAppStore.setState({ processingResult: run(kept('a'), kept('b')) });
+    render(<PreviewPanel />);
+    expect(filterStates('Status')).toEqual([]);
+    expect(filterStates('Changes')).toEqual([]);
+  });
+
+  it('offers Status when an event was dropped, with only the states present', () => {
+    useAppStore.setState({ processingResult: run(kept('a'), dropped('b')) });
+    render(<PreviewPanel />);
+    expect(filterStates('Status')).toEqual(['Accepted', 'Dropped']);
+
+    act(() => useAppStore.setState({ processingResult: run(dropped('a'), dropped('b')) }));
+    expect(filterStates('Status')).toEqual(['Dropped']);
+  });
+
+  it('offers Changes when an event changed, and filters by the state chosen', () => {
+    useAppStore.setState({
+      processingResult: toViewResult({
+        events: [makeEvent('a'), makeEvent('B', { lineNumbers: { start: 2, end: 2 } })],
+        originalRaw: 'a\nb',
+        eventCount: 2,
+        processingSteps: [],
+        inputMetadata: makeEvent().metadata,
+      }),
+    });
+    render(<PreviewPanel />);
+    expect(filterStates('Changes')).toEqual(['Raw Modified', 'Unmodified']);
+
+    fireEvent.click(screen.getByRole('button', { name: /^Changes/ }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Raw Modified' }));
+    expect(screen.getByText('1 / 2')).toBeInTheDocument();
+  });
+
+  it('clears a selected state that a later run no longer has', () => {
+    useAppStore.setState({ processingResult: run(kept('a'), dropped('b')) });
+    render(<PreviewPanel />);
+    fireEvent.click(screen.getByRole('button', { name: /^Status/ }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Dropped' }));
+    expect(screen.getByText('1 / 2')).toBeInTheDocument();
+
+    act(() => useAppStore.setState({ processingResult: run(kept('a'), kept('b')) }));
+    expect(screen.queryByText(/^\d+ \/ \d+$/)).not.toBeInTheDocument();
+    expect(useAppStore.getState().previewFilters.status.size).toBe(0);
+
+    // Nor does it come back with the state.
+    act(() => useAppStore.setState({ processingResult: run(kept('a'), dropped('b')) }));
+    expect(screen.queryByText(/^\d+ \/ \d+$/)).not.toBeInTheDocument();
   });
 });
 
