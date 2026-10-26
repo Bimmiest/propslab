@@ -147,7 +147,7 @@ The editor has a custom language, `splunk-conf`:
 - Folding for stanzas and for consecutive comments.
 - Lint markers through `setModelMarkers`: unknown directives, invalid regex, type mismatches, duplicate stanzas, a stanza header without its `]`, and best-practice warnings.
 - Light and dark themes (`splunk-light`, `splunk-dark`) that use the same charcoal, sand and gold colours as the app.
-- A context menu. Right-click in an editor, or press `Shift+F10` or the Menu key. The menu has Cut, Copy, Paste, Select all, Find and the command palette, with their shortcuts. In props.conf and transforms.conf, it also opens the directive on the cursor line in the dictionary. In the raw log, it opens the Scaffold. A right-click outside the selection moves the cursor to the pointer first.
+- A context menu. Right-click in an editor, or press `Shift+F10` or the Menu key. The menu has Cut, Copy, Paste, Select all, Find and the command palette, with their shortcuts. In props.conf and transforms.conf, it also opens the directive on the cursor line in the dictionary, comments the lines in or out (also `Ctrl/Cmd+/`), and sends a regex value to the Regex tab. In props.conf, it opens the Effective config tab when the stanza at the cursor matches the metadata. In the raw log, it opens the Scaffold. A right-click outside the selection moves the cursor to the pointer first.
 
 `directiveRegistry.ts` drives all three features. When you add a `DirectiveInfo` entry, autocomplete, hover and lint use it automatically, and so does the dictionary. [architecture.md](architecture.md#monaco-bundling) describes how Monaco is bundled:
 

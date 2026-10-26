@@ -188,6 +188,15 @@ test.describe('editor context menu (#745)', () => {
     await expect(page.getByRole('tabpanel', { name: 'Dictionary' })).toBeVisible();
   });
 
+  test('Ctrl+/ comments out the line in props.conf, as the menu does (#762)', async ({ page }) => {
+    await openApp(page);
+    await loadExample(page, APACHE);
+    const line = page.locator('.monaco-editor').nth(1).locator('.view-line').nth(1);
+    await line.click();
+    await page.keyboard.press('ControlOrMeta+/');
+    await expect(line).toHaveText(/^#\sTIME_PREFIX/);
+  });
+
   test('Shift+F10 opens the menu from the keyboard, and Find opens the find widget', async ({ page, browserName }) => {
     // See 'a raw-event selection can be made and acted on from the keyboard'.
     test.skip(browserName === 'firefox', "Playwright's Firefox fires no contextmenu event from the keyboard");

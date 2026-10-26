@@ -11,6 +11,10 @@ import type { PointerEvent, ReactNode } from 'react';
 import type { editor } from 'monaco-editor';
 import { useAppStore } from '../../store/useAppStore';
 import { getDirectiveInfo } from '../../engine/directiveRegistry';
+import { parseConf } from '../../engine/parser/confParser';
+import { resolveStanzasForEvent } from '../../engine/parser/stanzaMatcher';
+import { parseExtractValue } from '../../engine/processors/fieldExtractor';
+import { toggleComment } from './toggleComment';
 import { copyQuietly, copyToClipboard } from '../../utils/clipboard';
 import { getModifierName } from '../../utils/platform';
 import { openCommandPalette, openScaffold } from '../ui/appActions';
@@ -62,6 +66,58 @@ function directiveOnLine(line: string, file: 'props.conf' | 'transforms.conf'): 
   return getDirectiveInfo(line.slice(0, eq).trim(), file)?.key;
 }
 
+/** The regex a directive line holds, for the Regex tab, with an EXTRACT's class name. */
+function regexOnLine(
+  line: string,
+  file: 'props.conf' | 'transforms.conf',
+): { pattern: string; className?: string } | undefined {
+  const eq = line.indexOf('=');
+  if (eq <= 0 || /^\s*[#[]/.test(line)) return undefined;
+  const key = line.slice(0, eq).trim();
+  if (getDirectiveInfo(key, file)?.valueType !== 'regex') return undefined;
+  const value = line.slice(eq + 1);
+  const extract = /^EXTRACT-(.+)$/i.exec(key);
+  // EXTRACT's value may end in `in <field>`, which is not part of the regex.
+  const pattern = extract ? parseExtractValue(value).pattern : value.trim();
+  return pattern ? { pattern, ...(extract?.[1] ? { className: extract[1] } : {}) } : undefined;
+}
+
+/** The name of the stanza that holds `lineNumber`: the nearest `[header]` above it, or undefined. */
+function stanzaAt(model: editor.ITextModel, lineNumber: number): string | undefined {
+  for (let n = lineNumber; n >= 1; n--) {
+    const header = /^\s*\[(.+)\]\s*$/.exec(model.getLineContent(n));
+    if (header) return header[1];
+  }
+  return undefined;
+}
+
+function testInRegexTab({ pattern, className }: { pattern: string; className?: string }): void {
+  const s = useAppStore.getState();
+  s.setRegexPattern(pattern);
+  if (className) s.setRegexClassName(className);
+  s.setActiveView('simulator');
+  s.setActiveOutputTab('preview');
+  s.setPreviewSubTab('regex');
+  s.setMobileView('output');
+}
+
+function showInEffectiveConfig(): void {
+  const s = useAppStore.getState();
+  s.setActiveView('simulator');
+  s.setActiveOutputTab('effective');
+  s.setMobileView('output');
+}
+
+/**
+ * Whether `stanza` is one the Effective config tab shows: a stanza that applies
+ * to the metadata, as the tab resolves it. Parsed when the menu opens.
+ */
+function appliesToMetadata(stanza: string): boolean {
+  const { propsConf, metadata } = useAppStore.getState();
+  const { stanzas } = parseConf(propsConf, 'props.conf');
+  return resolveStanzasForEvent(stanzas, metadata).stanzas.some((s) => s.name === stanza);
+}
+
 /** Rendered only while the menu is open, so it reads the editor as it is now. */
 function EditorMenuItems({ editor: ed, file }: { editor: editor.IStandaloneCodeEditor; file: EditorFile }) {
   const openDictionaryAt = useAppStore((s) => s.openDictionaryAt);
@@ -70,8 +126,10 @@ function EditorMenuItems({ editor: ed, file }: { editor: editor.IStandaloneCodeE
   const selection = ed.getSelection();
   const selected = model && selection && !selection.isEmpty() ? model.getValueInRange(selection) : '';
   const position = ed.getPosition();
-  const directive =
-    file !== 'raw' && model && position ? directiveOnLine(model.getLineContent(position.lineNumber), file) : undefined;
+  const conf = file !== 'raw' && model && position ? { file, line: model.getLineContent(position.lineNumber) } : null;
+  const directive = conf ? directiveOnLine(conf.line, conf.file) : undefined;
+  const regex = conf ? regexOnLine(conf.line, conf.file) : undefined;
+  const stanza = file === 'props.conf' && model && position ? stanzaAt(model, position.lineNumber) : undefined;
   // Absent outside a secure context, whatever the DOM types say.
   const canPaste = (navigator as { clipboard?: Clipboard }).clipboard !== undefined;
 
@@ -135,6 +193,28 @@ function EditorMenuItems({ editor: ed, file }: { editor: editor.IStandaloneCodeE
           Look up {directive} in the Dictionary
         </ContextMenuItem>
       )}
+      {file !== 'raw' && (
+        <ContextMenuItem
+          shortcut={`${mod}+/`}
+          onSelect={() => {
+            toggleComment(ed);
+            ed.focus();
+          }}
+        >
+          Toggle line comment
+        </ContextMenuItem>
+      )}
+      {regex && (
+        <ContextMenuItem onSelect={() => testInRegexTab(regex)}>Test the regex in the Regex tab</ContextMenuItem>
+      )}
+      {stanza !== undefined &&
+        (appliesToMetadata(stanza) ? (
+          <ContextMenuItem onSelect={showInEffectiveConfig}>Show [{stanza}] in Effective config</ContextMenuItem>
+        ) : (
+          <ContextMenuItem disabled onSelect={() => {}}>
+            [{stanza}] does not match the metadata
+          </ContextMenuItem>
+        ))}
       {file === 'raw' && (
         <ContextMenuItem onSelect={openScaffold}>Scaffold props.conf from this sample</ContextMenuItem>
       )}
