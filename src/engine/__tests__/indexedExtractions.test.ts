@@ -1041,6 +1041,10 @@ describe('applyIndexedExtractions — JSON_TRIM_BRACES_IN_ARRAY_NAMES (#274)', (
   });
 });
 
+// Doc-derived (props.conf.spec 10.4.3): FIELD_HEADER_REGEX,
+// HEADER_FIELD_DELIMITER, HEADER_FIELD_QUOTE,
+// HEADER_FIELD_ACCEPTABLE_SPECIAL_CHARACTERS and MISSING_VALUE_REGEX, as the
+// section above reads them, set from a props.conf stanza.
 describe('header-side delimited overrides through the pipeline (#272)', () => {
   /** A csv stanza with `body` appended; every event's fields, header line consumed. */
   const fieldsOf = (raw: string, body: string) =>

@@ -151,6 +151,26 @@ describe('TRUNCATE through the pipeline', () => {
 
 const time = (events: SplunkEvent[]) => events[0]?._time?.toISOString();
 
+// Doc-derived (props.conf.spec, TIME_FORMAT): a strptime() format string that
+// extracts the date, here with the 12-hour clock and its AM/PM marker.
+describe('TIME_FORMAT through the pipeline', () => {
+  it('reads the time with the format it is given', () => {
+    const body = `${ONE_PER_LINE}TIME_FORMAT = %d/%m/%Y %I:%M:%S %p\n`;
+    expect(time(run('15/01/2026 01:30:00 PM ready', body))).toBe('2026-01-15T13:30:00.000Z');
+  });
+});
+
+// Doc-derived (props.conf.spec, TIME_PREFIX): a regex; the timestamp is looked
+// for only in the text that follows the end of its first match, so a date
+// before it is not the one taken.
+describe('TIME_PREFIX through the pipeline', () => {
+  it('reads the timestamp after the prefix, not the first date in the event', () => {
+    const raw = 'created 2026-01-14 09:00:00 seen at=2026-01-15 10:00:00';
+    const body = `${ONE_PER_LINE}TIME_PREFIX = at=\nTIME_FORMAT = %Y-%m-%d %H:%M:%S\n`;
+    expect(time(run(raw, body))).toBe('2026-01-15T10:00:00.000Z');
+  });
+});
+
 // Doc-derived (props.conf.spec, MAX_TIMESTAMP_LOOKAHEAD): how many characters
 // into the event (from the TIME_PREFIX match, when there is one) to look for a
 // timestamp.
