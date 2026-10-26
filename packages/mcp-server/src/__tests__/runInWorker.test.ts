@@ -450,6 +450,7 @@ describe('heap-size flag stripping', () => {
         '--max_semi_space_size',
         '64',
         '--max-heap-size=100',
+        '--max-old-space-size-percentage=50',
         '--enable-source-maps',
       ]),
     ).toEqual(['--enable-source-maps']);
@@ -474,6 +475,7 @@ describe('heap-size flag stripping', () => {
       '"--max-old-space-size" 8192',
       '--enable-source-maps "--max-heap-size=1"',
       '--max_semi_space_size=64',
+      '--max-old-space-size-percentage=75',
     ]) {
       expect(stripHeapSizeFlagsFromNodeOptions(options), options).not.toMatch(/max.old.space|max.heap|semi.space/);
     }
@@ -600,8 +602,13 @@ describe('permission model', () => {
 });
 
 // The launcher re-execs node, so a client holds the pid of a shim, not of the
-// server. pgrep finds the server behind it; Linux-only, which is what CI runs.
-describe.skipIf(process.platform !== 'linux')('launcher', () => {
+// server, which names its pid when it starts listening. Tests that read /proc
+// run on Linux; those that rely on POSIX signals skip Windows, where killing
+// a process is TerminateProcess and no handler runs. The rest run everywhere
+// CI does (#568).
+const onLinux = process.platform === 'linux';
+const onWindows = process.platform === 'win32';
+describe('launcher', () => {
   const startLauncher = (extraEnv: Record<string, string> = {}, nodeArgs: string[] = []) =>
     new Promise<{ launcher: ReturnType<typeof spawn>; serverPid: number }>((resolve, reject) => {
       const env = { ...process.env, ...extraEnv };
@@ -613,14 +620,8 @@ describe.skipIf(process.platform !== 'linux')('launcher', () => {
       let stderr = '';
       launcher.stderr.on('data', (chunk: Buffer) => {
         stderr += chunk.toString();
-        if (stderr.includes('listening on stdio')) {
-          const serverPid = Number(
-            execFileSync('pgrep', ['-P', String(launcher.pid)])
-              .toString()
-              .trim(),
-          );
-          resolve({ launcher, serverPid });
-        }
+        const listening = /listening on stdio \(pid (\d+)\)/.exec(stderr);
+        if (listening) resolve({ launcher, serverPid: Number(listening[1]) });
       });
       launcher.once('exit', () => reject(new Error(`launcher exited early: ${stderr}`)));
     });
@@ -639,25 +640,33 @@ describe.skipIf(process.platform !== 'linux')('launcher', () => {
     }
   };
 
-  it('forwards SIGTERM to the server rather than orphaning it', async () => {
-    const { launcher, serverPid } = await startLauncher();
-    const exited = exitOf(launcher);
-    try {
-      launcher.kill('SIGTERM');
-      expect(await exited).toEqual({ code: null, signal: 'SIGTERM' });
-      expect(isAlive(serverPid)).toBe(false);
-    } finally {
-      if (isAlive(serverPid)) process.kill(serverPid, 'SIGKILL');
-    }
-  }, 20_000);
+  it.skipIf(onWindows)(
+    'forwards SIGTERM to the server rather than orphaning it',
+    async () => {
+      const { launcher, serverPid } = await startLauncher();
+      const exited = exitOf(launcher);
+      try {
+        launcher.kill('SIGTERM');
+        expect(await exited).toEqual({ code: null, signal: 'SIGTERM' });
+        expect(isAlive(serverPid)).toBe(false);
+      } finally {
+        if (isAlive(serverPid)) process.kill(serverPid, 'SIGKILL');
+      }
+    },
+    20_000,
+  );
 
-  it('dies by the same signal the server did', async () => {
-    const { launcher, serverPid } = await startLauncher();
-    const exited = exitOf(launcher);
-    // Before, a signalled child was reported as a plain exit code 1.
-    process.kill(serverPid, 'SIGTERM');
-    expect(await exited).toEqual({ code: null, signal: 'SIGTERM' });
-  }, 20_000);
+  it.skipIf(onWindows)(
+    'dies by the same signal the server did',
+    async () => {
+      const { launcher, serverPid } = await startLauncher();
+      const exited = exitOf(launcher);
+      // Before, a signalled child was reported as a plain exit code 1.
+      process.kill(serverPid, 'SIGTERM');
+      expect(await exited).toEqual({ code: null, signal: 'SIGTERM' });
+    },
+    20_000,
+  );
 
   it("passes the server's exit code through", async () => {
     const { launcher } = await startLauncher();
@@ -667,71 +676,136 @@ describe.skipIf(process.platform !== 'linux')('launcher', () => {
     expect(await exited).toEqual({ code: 0, signal: null });
   }, 20_000);
 
-  it('starts the server without heap-size flags that would lift the sandbox limit', async () => {
-    const { launcher, serverPid } = await startLauncher({
-      NODE_OPTIONS: '--max-old-space-size=8192',
+  it('the server exits when the launcher is killed outright (#568)', async () => {
+    // The server's stdin comes from a process that outlives the launcher, as
+    // a client's does. A pipe from this test would not: node closes a child's
+    // stdin when it exits, and the server would exit on that EOF instead.
+    const feeder = spawn(process.execPath, ['-e', 'setInterval(() => {}, 60_000)'], {
+      stdio: ['ignore', 'pipe', 'ignore'],
     });
+    const env = { ...process.env };
+    delete env['PROPSLAB_MCP_NO_REEXEC'];
+    const launcher = spawn(process.execPath, [LAUNCHER], { stdio: [feeder.stdout, 'pipe', 'pipe'], env });
+    let stderr = '';
+    launcher.stderr.on('data', (chunk: Buffer) => (stderr += chunk.toString()));
+    let serverPid = 0;
     try {
-      const environ = readFileSync(`/proc/${serverPid}/environ`, 'utf8').split('\0');
-      const nodeOptions = environ.find((e) => e.startsWith('NODE_OPTIONS='));
-      expect(nodeOptions ?? '').not.toMatch(/max-old-space-size/);
+      await vi.waitFor(
+        () => {
+          serverPid = Number(/listening on stdio \(pid (\d+)\)/.exec(stderr)?.[1] ?? 0);
+          expect(serverPid).toBeGreaterThan(0);
+        },
+        { timeout: 15_000 },
+      );
+      // SIGKILL runs no handler, so nothing is forwarded: what a client on
+      // Windows does to the launcher with any signal.
+      const exited = exitOf(launcher);
+      launcher.kill('SIGKILL');
+      await exited;
+      await vi.waitFor(() => expect(isAlive(serverPid)).toBe(false), { timeout: 10_000 });
     } finally {
-      launcher.kill('SIGTERM');
-      await exitOf(launcher);
+      if (serverPid && isAlive(serverPid)) process.kill(serverPid, 'SIGKILL');
+      feeder.kill('SIGKILL');
     }
-  }, 20_000);
+  }, 30_000);
 
-  it('strips a quoted heap-size flag, which node reads as the flag (#490)', async () => {
-    const { launcher, serverPid } = await startLauncher({
-      NODE_OPTIONS: '"--max-old-space-size=8192"',
-    });
-    try {
-      const environ = readFileSync(`/proc/${serverPid}/environ`, 'utf8').split('\0');
-      const nodeOptions = environ.find((e) => e.startsWith('NODE_OPTIONS='));
-      expect(nodeOptions ?? '').not.toMatch(/max-old-space-size/);
-    } finally {
-      launcher.kill('SIGTERM');
-      await exitOf(launcher);
-    }
-  }, 20_000);
+  it.runIf(onLinux)(
+    "gives the server none of the client's environment beyond what node reads (#568)",
+    async () => {
+      const { launcher, serverPid } = await startLauncher({ PROPSLAB_TEST_SECRET: 'do-not-leak' });
+      try {
+        const environ = readFileSync(`/proc/${serverPid}/environ`, 'utf8').split('\0');
+        expect(environ.some((e) => e.startsWith('PROPSLAB_TEST_SECRET='))).toBe(false);
+        expect(environ.some((e) => e.startsWith('PATH='))).toBe(true);
+      } finally {
+        launcher.kill('SIGTERM');
+        await exitOf(launcher);
+      }
+    },
+    20_000,
+  );
 
-  it('strips heap-size flags even when the regex flags are already on the command line', async () => {
-    // Before, the launcher skipped its re-exec whenever the regex flags were
-    // present, so the heap flags stayed in effect.
-    const { launcher, serverPid } = await startLauncher({ NODE_OPTIONS: '--max-old-space-size=8192' }, [
-      REGEXP_FALLBACK_FLAGS[0],
-      '--max-semi-space-size=64',
-    ]);
-    try {
-      const environ = readFileSync(`/proc/${serverPid}/environ`, 'utf8').split('\0');
-      const nodeOptions = environ.find((e) => e.startsWith('NODE_OPTIONS='));
-      expect(nodeOptions ?? '').not.toMatch(/max-old-space-size/);
-      const cmdline = readFileSync(`/proc/${serverPid}/cmdline`, 'utf8').split('\0');
-      expect(cmdline).not.toContain('--max-semi-space-size=64');
-      // Not passed twice.
-      expect(cmdline.filter((a) => a === REGEXP_FALLBACK_FLAGS[0])).toHaveLength(1);
-    } finally {
-      launcher.kill('SIGTERM');
-      await exitOf(launcher);
-    }
-  }, 20_000);
+  it.runIf(onLinux)(
+    'starts the server without heap-size flags that would lift the sandbox limit',
+    async () => {
+      const { launcher, serverPid } = await startLauncher({
+        NODE_OPTIONS: '--max-old-space-size=8192',
+      });
+      try {
+        const environ = readFileSync(`/proc/${serverPid}/environ`, 'utf8').split('\0');
+        const nodeOptions = environ.find((e) => e.startsWith('NODE_OPTIONS='));
+        expect(nodeOptions ?? '').not.toMatch(/max-old-space-size/);
+      } finally {
+        launcher.kill('SIGTERM');
+        await exitOf(launcher);
+      }
+    },
+    20_000,
+  );
 
-  it('starts the server under the permission model, reading only its bundle', async () => {
-    const { launcher, serverPid } = await startLauncher();
-    try {
-      const cmdline = readFileSync(`/proc/${serverPid}/cmdline`, 'utf8').split('\0');
-      expect(cmdline).toEqual(expect.arrayContaining(permissionFlags(path.dirname(LAUNCHER))));
-      expect(cmdline.filter((a) => a.startsWith('--allow-'))).toEqual([
-        '--allow-worker',
-        `--allow-fs-read=${path.dirname(LAUNCHER)}`,
+  it.runIf(onLinux)(
+    'strips a quoted heap-size flag, which node reads as the flag (#490)',
+    async () => {
+      const { launcher, serverPid } = await startLauncher({
+        NODE_OPTIONS: '"--max-old-space-size=8192"',
+      });
+      try {
+        const environ = readFileSync(`/proc/${serverPid}/environ`, 'utf8').split('\0');
+        const nodeOptions = environ.find((e) => e.startsWith('NODE_OPTIONS='));
+        expect(nodeOptions ?? '').not.toMatch(/max-old-space-size/);
+      } finally {
+        launcher.kill('SIGTERM');
+        await exitOf(launcher);
+      }
+    },
+    20_000,
+  );
+
+  it.runIf(onLinux)(
+    'strips heap-size flags even when the regex flags are already on the command line',
+    async () => {
+      // Before, the launcher skipped its re-exec whenever the regex flags were
+      // present, so the heap flags stayed in effect.
+      const { launcher, serverPid } = await startLauncher({ NODE_OPTIONS: '--max-old-space-size=8192' }, [
+        REGEXP_FALLBACK_FLAGS[0],
+        '--max-semi-space-size=64',
       ]);
-      // Workers can read below the cwd whatever the flags say (see index.ts).
-      expect(readlinkSync(`/proc/${serverPid}/cwd`)).toBe(path.dirname(LAUNCHER));
-    } finally {
-      launcher.kill('SIGTERM');
-      await exitOf(launcher);
-    }
-  }, 20_000);
+      try {
+        const environ = readFileSync(`/proc/${serverPid}/environ`, 'utf8').split('\0');
+        const nodeOptions = environ.find((e) => e.startsWith('NODE_OPTIONS='));
+        expect(nodeOptions ?? '').not.toMatch(/max-old-space-size/);
+        const cmdline = readFileSync(`/proc/${serverPid}/cmdline`, 'utf8').split('\0');
+        expect(cmdline).not.toContain('--max-semi-space-size=64');
+        // Not passed twice.
+        expect(cmdline.filter((a) => a === REGEXP_FALLBACK_FLAGS[0])).toHaveLength(1);
+      } finally {
+        launcher.kill('SIGTERM');
+        await exitOf(launcher);
+      }
+    },
+    20_000,
+  );
+
+  it.runIf(onLinux)(
+    'starts the server under the permission model, reading only its bundle',
+    async () => {
+      const { launcher, serverPid } = await startLauncher();
+      try {
+        const cmdline = readFileSync(`/proc/${serverPid}/cmdline`, 'utf8').split('\0');
+        expect(cmdline).toEqual(expect.arrayContaining(permissionFlags(path.dirname(LAUNCHER))));
+        expect(cmdline.filter((a) => a.startsWith('--allow-'))).toEqual([
+          '--allow-worker',
+          `--allow-fs-read=${path.dirname(LAUNCHER)}`,
+        ]);
+        // Workers can read below the cwd whatever the flags say (see index.ts).
+        expect(readlinkSync(`/proc/${serverPid}/cwd`)).toBe(path.dirname(LAUNCHER));
+      } finally {
+        launcher.kill('SIGTERM');
+        await exitOf(launcher);
+      }
+    },
+    20_000,
+  );
 
   it('answers a simulate call under the permission model', async () => {
     const { launcher } = await startLauncher();
@@ -801,7 +875,7 @@ describe.skipIf(process.platform !== 'linux')('launcher', () => {
     try {
       expect(stderr).toMatch(/started under --permission with --allow-fs-read=\*; those grants apply/);
       // It left the caller's working directory for the bundle's all the same.
-      expect(readlinkSync(`/proc/${server.pid}/cwd`)).toBe(path.dirname(LAUNCHER));
+      if (onLinux) expect(readlinkSync(`/proc/${server.pid}/cwd`)).toBe(path.dirname(LAUNCHER));
     } finally {
       server.stdin.end();
       await exited;
