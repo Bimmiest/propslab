@@ -16,7 +16,7 @@ const mockApp = vi.hoisted(() => () => {
 
 vi.mock('../App.tsx', mockApp);
 
-vi.mock('../utils/regexEngineLoader', () => ({
+vi.mock('../workers/regexEngineLoader', () => ({
   // Never settles: the assertion is about what happens before the await.
   loadRegexEngine: () => new Promise(() => {}),
 }));

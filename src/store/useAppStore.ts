@@ -250,9 +250,7 @@ function settingsState(set: StoreApi<AppState>['setState']): SettingsState {
       set((state) => {
         const perEventPipeline = !state.settings.perEventPipeline;
         const manualApply = perEventPipeline ? true : state.settings.manualApply;
-        const next = { ...state.settings, perEventPipeline, manualApply };
-        safeStorage.set(SETTINGS_KEY, JSON.stringify(next));
-        return { settings: next };
+        return { settings: { ...state.settings, perEventPipeline, manualApply } };
       }),
     toggleManualApply: () =>
       set((state) => {
@@ -263,16 +261,16 @@ function settingsState(set: StoreApi<AppState>['setState']): SettingsState {
         // silently "correct" on the next reload, so live and persisted state
         // disagreed until then.
         if (state.settings.perEventPipeline && state.settings.manualApply) return {};
-        const next = { ...state.settings, manualApply: !state.settings.manualApply };
-        safeStorage.set(SETTINGS_KEY, JSON.stringify(next));
-        return { settings: next };
+        return { settings: { ...state.settings, manualApply: !state.settings.manualApply } };
       }),
   };
 }
 
 export const useAppStore = create<AppState>((set) => ({
   rawData: '',
-  setRawData: (data) => set({ rawData: data, currentPage: 1 }),
+  // Keeps the page, so typing on page 3 stays there; usePagination clamps a
+  // page that the new run no longer has (#566).
+  setRawData: (data) => set({ rawData: data }),
 
   isProcessing: false,
   setIsProcessing: (v) => set({ isProcessing: v }),
@@ -314,12 +312,7 @@ export const useAppStore = create<AppState>((set) => ({
   setValidationDiagnostics: (diags) => set({ validationDiagnostics: diags }),
 
   theme: loadTheme(),
-  toggleTheme: () =>
-    set((state) => {
-      const theme = state.theme === 'light' ? 'dark' : 'light';
-      safeStorage.set(THEME_KEY, theme);
-      return { theme };
-    }),
+  toggleTheme: () => set((state) => ({ theme: state.theme === 'light' ? 'dark' : 'light' })),
 
   activeOutputTab: 'preview',
   setActiveOutputTab: (tab) => set({ activeOutputTab: tab }),
@@ -379,6 +372,13 @@ export const useAppStore = create<AppState>((set) => ({
   scaffoldOpen: false,
   toggleScaffold: () => set((state) => ({ scaffoldOpen: !state.scaffoldOpen })),
 }));
+
+// What is persisted is written here, once, whatever set it: the updaters stay
+// free of side effects (#566).
+useAppStore.subscribe((state, prev) => {
+  if (state.settings !== prev.settings) safeStorage.set(SETTINGS_KEY, JSON.stringify(state.settings));
+  if (state.theme !== prev.theme) safeStorage.set(THEME_KEY, state.theme);
+});
 
 /**
  * Whether the session holds work that replacing the inputs would lose: an

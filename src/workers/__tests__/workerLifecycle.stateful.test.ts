@@ -46,7 +46,7 @@
 import { describe, it, vi, beforeEach, afterEach } from 'vitest';
 import fc from 'fast-check';
 import { createManagedWorker, MAX_WORKER_LOAD_FAILURES, type ManagedWorker } from '../workerLifecycle';
-import { WORKER_READY } from '../../engine/workerProtocol';
+import { WORKER_READY } from '../workerProtocol';
 import { fcSeed } from '../../test/fcSeed';
 
 interface Req {

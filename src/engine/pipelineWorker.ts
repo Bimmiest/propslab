@@ -13,14 +13,14 @@
 
 import { runPipeline } from './pipeline';
 import type { ConfInput, EventMetadata, PipelineOptions, ValidationDiagnostic } from './types';
-import { serveWithRegexEngine } from '../utils/regexEngineLoader';
+import { serveWithRegexEngine } from '../workers/regexEngineLoader';
 import { toViewResult, type ViewResult } from '../utils/viewResult';
 import {
   createRequestQueue,
   type QueuedRequest,
   type WorkerInputsMessage,
   type WorkerSkippedResponse,
-} from './workerProtocol';
+} from '../workers/workerProtocol';
 
 export interface PipelineWorkerRequest extends QueuedRequest {
   rawData: string;

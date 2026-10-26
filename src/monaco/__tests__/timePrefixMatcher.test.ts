@@ -16,7 +16,7 @@ import type { TimestampMatchRequest, TimestampMatchResponse } from '../../engine
 import { probeTimestamps } from '../../engine/timestampMatch';
 import { SplunkRegex } from '../../utils/splunkRegex';
 import { useAppStore } from '../../store/useAppStore';
-import { LOAD_WAIT_FACTOR } from '../../hooks/workerLifecycle';
+import { LOAD_WAIT_FACTOR } from '../../workers/workerLifecycle';
 import { createHoverProvider } from '../splunkConfHover';
 import { buildTimeFormatPreview, renderTimeFormatPreview } from '../timeFormatPreview';
 import {

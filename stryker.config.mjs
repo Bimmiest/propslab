@@ -31,7 +31,9 @@ export default {
     // Monaco's model, so a mutant there is killed or spared by how faithful the
     // fake is, and the run's cost is the jsdom start of a dozen test files per
     // mutant. See CONTRIBUTING.md.
-    'src/hooks/workerLifecycle.ts',
+    'src/workers/workerLifecycle.ts',
+    // Was under src/engine until #566 moved the worker plumbing to src/workers.
+    'src/workers/workerProtocol.ts',
     'src/store/**/*.ts',
     '!src/store/**/__tests__/**',
     '!src/engine/**/__tests__/**',

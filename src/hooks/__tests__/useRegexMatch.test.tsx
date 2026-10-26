@@ -16,7 +16,7 @@ import { useRegexMatch, type RegexMatchState } from '../useRegexMatch';
 import { matchInputs } from '../../engine/regexMatch';
 import type { RegexMatchRequest, RegexMatchResponse } from '../../engine/regexMatchWorker';
 import { lastRequest, requestsIn } from '../../test/workerInputs';
-import { isWorkerInputsMessage } from '../../engine/workerProtocol';
+import { isWorkerInputsMessage } from '../../workers/workerProtocol';
 
 class FakeWorker {
   static instances: FakeWorker[] = [];

@@ -191,7 +191,7 @@ describe('the regex worker entry serves inputs sent ahead and skips superseded p
     vi.stubGlobal('self', fakeSelf);
     stubWasmFetch();
     vi.resetModules();
-    await import('../regexMatchWorker');
+    await import('../../engine/regexMatchWorker');
     const send = (data: unknown) => fakeSelf.onmessage!({ data } as MessageEvent);
 
     send(inputs(1, ['a1', 'b']));

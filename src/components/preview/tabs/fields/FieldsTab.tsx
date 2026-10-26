@@ -3,7 +3,7 @@ import { useAppStore } from '../../../../store/useAppStore';
 import { buildParentIndex, isFieldVisible } from '../shared/fieldCollapse';
 import { COLUMNS, type PhaseFilter, type SortDir, type SortKey } from './data';
 import { aggregateFields, buildAliasMap, buildFieldRows, buildRowIds, countChildren } from './fieldRows';
-import { useCollapsedParents } from './useCollapsedParents';
+import { useGroupCollapse } from '../shared/useGroupCollapse';
 import { FieldsToolbar } from './FieldsToolbar';
 import { FieldsTable } from './FieldsTable';
 import { ResizableHeader } from './ResizableHeader';
@@ -49,9 +49,9 @@ export function FieldsTab() {
     [aggregatedFields, search, sortKey, sortDir, phaseFilter],
   );
 
-  // Auto-collapse all parents on initial load
+  // Every parent starts collapsed, including one that appears after an edit.
   const allParentNames = useMemo(() => fieldSummary.filter((f) => f.isParent).map((f) => f.name), [fieldSummary]);
-  const { effectiveCollapsed, setCollapsedParents, toggleCollapse } = useCollapsedParents(allParentNames);
+  const { collapsed, toggleGroup, setAllCollapsed } = useGroupCollapse(allParentNames);
 
   // Name → parent, so the ancestor walk below is O(depth) instead of scanning
   // the whole field list at every step.
@@ -65,11 +65,11 @@ export function FieldsTab() {
   const rowIdPrefix = useId();
   const { rowIds, childRowIds } = useMemo(() => buildRowIds(fieldSummary, rowIdPrefix), [fieldSummary, rowIdPrefix]);
 
-  const allCollapsed = allParentNames.every((p) => effectiveCollapsed.has(p));
+  const allCollapsed = allParentNames.every((p) => collapsed.has(p));
 
   const visibleRows = useMemo(
-    () => fieldSummary.filter((field) => isFieldVisible(field, effectiveCollapsed, parentIndex)),
-    [fieldSummary, effectiveCollapsed, parentIndex],
+    () => fieldSummary.filter((field) => isFieldVisible(field, collapsed, parentIndex)),
+    [fieldSummary, collapsed, parentIndex],
   );
 
   return (
@@ -84,7 +84,7 @@ export function FieldsTab() {
           allParentNames.length > 0
             ? {
                 allCollapsed,
-                onToggle: () => setCollapsedParents(allCollapsed ? new Set() : new Set(allParentNames)),
+                onToggle: () => setAllCollapsed(!allCollapsed),
               }
             : null
         }
@@ -94,10 +94,10 @@ export function FieldsTab() {
         rowIds={rowIds}
         childRowIds={childRowIds}
         childCounts={childCounts}
-        collapsedParents={effectiveCollapsed}
+        collapsedParents={collapsed}
         eventCount={events.length}
         columnWidths={columnWidths}
-        onToggle={toggleCollapse}
+        onToggle={toggleGroup}
         header={
           <tr
             aria-rowindex={1}

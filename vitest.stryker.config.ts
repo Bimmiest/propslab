@@ -73,7 +73,8 @@ export default defineConfig({
       // The worker lifecycle and the store (#508), the two non-engine modules
       // whose logic the app's correctness leans on. Both are plain modules; the
       // store's test opts into jsdom itself, once, for a file.
-      'src/hooks/__tests__/workerLifecycle*.test.ts',
+      'src/workers/__tests__/workerLifecycle*.test.ts',
+      'src/workers/__tests__/workerRequestQueue.test.ts',
       'src/store/__tests__/*.test.ts',
     ],
     exclude: [

@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import type { RegexMatchInfo } from '../../../../engine/regexMatch';
 import { tint } from '../../../../utils/tint';
+import { EventCardHeader, EventNumber } from '../shared/EventCardHeader';
 import { highlightSegments, type HighlightSegment } from './regexLogic';
 import type { PageEntry } from './useRegexResults';
 
@@ -99,8 +100,8 @@ function RegexEventCard({
 
   return (
     <div className="border border-[var(--color-border)] rounded bg-[var(--color-bg-secondary)]">
-      <div className="flex items-center justify-between px-3 py-1.5 border-b border-[var(--color-border)] bg-[var(--color-bg-tertiary)]">
-        <span className="text-xs font-medium text-[var(--color-text-muted)]">Event #{globalIdx}</span>
+      <EventCardHeader split>
+        <EventNumber globalIdx={globalIdx} />
         <div className="flex items-center gap-2">
           {hasPattern && matchInfo && (
             <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-success)]/10 text-[var(--color-success)] font-medium">
@@ -115,7 +116,7 @@ function RegexEventCard({
             </span>
           )}
         </div>
-      </div>
+      </EventCardHeader>
 
       <pre className="p-3 text-xs font-mono whitespace-pre-wrap break-all">
         <RegexHighlightedRaw raw={raw} matchInfo={matchInfo} groupColorMap={groupColorMap} />

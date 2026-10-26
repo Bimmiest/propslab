@@ -22,7 +22,7 @@
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { useProcessingPipeline } from '../useProcessingPipeline';
-import { LOAD_WAIT_FACTOR, type ManagedWorkerConfig } from '../workerLifecycle';
+import { LOAD_WAIT_FACTOR, type ManagedWorkerConfig } from '../../workers/workerLifecycle';
 import { useAppStore } from '../../store/useAppStore';
 import type { PipelineWorkerRequest } from '../../engine/pipelineWorker';
 import { SAMPLE_CONFIGS } from '../../engine/sampleData';
@@ -32,8 +32,8 @@ import { SAMPLE_CONFIGS } from '../../engine/sampleData';
 const lifecycle = vi.hoisted(() => ({
   configs: [] as ManagedWorkerConfig<PipelineWorkerRequest, { id: number }>[],
 }));
-vi.mock('../workerLifecycle', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../workerLifecycle')>();
+vi.mock('../../workers/workerLifecycle', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../workers/workerLifecycle')>();
   return {
     ...actual,
     createManagedWorker: (config: ManagedWorkerConfig<PipelineWorkerRequest, { id: number }>) => {

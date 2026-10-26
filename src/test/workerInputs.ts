@@ -7,7 +7,7 @@
 // matches against.
 // ---------------------------------------------------------------------------
 
-import { isWorkerInputsMessage, type QueuedRequest } from '../engine/workerProtocol';
+import { isWorkerInputsMessage, type QueuedRequest } from '../workers/workerProtocol';
 
 /** The requests among `posted`, without the inputs messages. */
 export function requestsIn<TReq extends QueuedRequest>(posted: readonly unknown[]): TReq[] {

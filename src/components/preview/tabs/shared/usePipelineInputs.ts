@@ -8,7 +8,7 @@
 import { useMemo, useState } from 'react';
 import { useAppStore } from '../../../../store/useAppStore';
 import { useDebounce } from '../../../../hooks/useDebounce';
-import { PIPELINE_DEBOUNCE_MS } from '../../../../hooks/workerLifecycle';
+import { PIPELINE_DEBOUNCE_MS } from '../../../../workers/workerLifecycle';
 import type { EventMetadata } from '../../../../engine/types';
 
 export interface PipelineInputs {

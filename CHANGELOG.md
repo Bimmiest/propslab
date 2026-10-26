@@ -25,6 +25,7 @@ All notable changes to Propslab are documented here, newest first. Entries say w
 
 ### Fixed
 
+- **Editing the raw log keeps the page of events you are on** ([#566](https://github.com/Bimmiest/propslab/issues/566)). Before, each keystroke went back to page 1. If the new run has fewer pages, the last page shows.
 - **Show full event appears when a narrower pane makes an event overflow** ([#565](https://github.com/Bimmiest/propslab/issues/565)). The Raw tab measures each event again when the splitter moves. Before, it measured only when the text, the search or the toggle changed, so the button could be missing for an event that was cut off. Selecting tokens by dragging across a long event is also faster.
 - **A tab that was open during a deploy can open the Dictionary** ([#706](https://github.com/Bimmiest/propslab/issues/706)). Before, the Dictionary, the Scaffold dialog and the output tabs other than Preview showed `error loading dynamically imported module`, and **Try Again** showed the same error. Now the page reloads to get the new version. It keeps the raw data, the configuration and the view that you opened.
 - **The list of examples fits in the window and scrolls** ([#694](https://github.com/Bimmiest/propslab/issues/694)). Before, the list from **Load an example** went below the bottom of the output pane, and you could not see the last examples.
