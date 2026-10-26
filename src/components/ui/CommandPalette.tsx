@@ -8,6 +8,7 @@ import type { OutputTabId } from '../../engine/types';
 import { Icon } from './Icon';
 import { Overlay } from './Overlay';
 import { useReplaceInputs } from './useReplaceInputs';
+import { openAbout, openHelp, openScaffold } from './appActions';
 
 // Static registry, so the lookup list is built once rather than per keystroke.
 // Deduplicated because a few keys (MATCH_LIMIT, DEPTH_LIMIT) are registered once
@@ -215,20 +216,6 @@ function LookupCommands({ run }: { run: RunCommand }) {
 
 function ActionCommands({ run, replaceInputs }: { run: RunCommand; replaceInputs: ReplaceInputs }) {
   const toggleTheme = useAppStore((s) => s.toggleTheme);
-  const toggleHelp = useAppStore((s) => s.toggleHelp);
-  const toggleScaffold = useAppStore((s) => s.toggleScaffold);
-  const toggleAbout = useAppStore((s) => s.toggleAbout);
-  // "Open", not "toggle": the panel may already be open behind the palette, and
-  // choosing the command must not close it.
-  const openHelp = () => {
-    if (!useAppStore.getState().helpOpen) toggleHelp();
-  };
-  const openScaffold = () => {
-    if (!useAppStore.getState().scaffoldOpen) toggleScaffold();
-  };
-  const openAbout = () => {
-    if (!useAppStore.getState().aboutOpen) toggleAbout();
-  };
   return (
     <CommandGroup heading="Actions">
       <CommandItem

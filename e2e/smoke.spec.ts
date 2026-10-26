@@ -172,6 +172,29 @@ test.describe('raw-log editor', () => {
   });
 });
 
+test.describe('editor context menu (#745)', () => {
+  test('a right-click on a directive looks it up in the dictionary', async ({ page }) => {
+    await openApp(page);
+    await loadExample(page, APACHE);
+    // Line 2 is TIME_PREFIX; the right-click puts the cursor on it.
+    await page.locator('.monaco-editor').nth(1).locator('.view-line').nth(1).click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Look up TIME_PREFIX in the Dictionary' }).click();
+    await expect(page.getByRole('tabpanel', { name: 'Dictionary' })).toBeVisible();
+  });
+
+  test('Shift+F10 opens the menu from the keyboard, and Find opens the find widget', async ({ page, browserName }) => {
+    // See 'a raw-event selection can be made and acted on from the keyboard'.
+    test.skip(browserName === 'firefox', "Playwright's Firefox fires no contextmenu event from the keyboard");
+    await openApp(page);
+    await loadExample(page, APACHE);
+    const props = page.locator('.monaco-editor').nth(1);
+    await props.click();
+    await page.keyboard.press('Shift+F10');
+    await page.getByRole('menuitem', { name: 'Find' }).click();
+    await expect(props.locator('.find-widget')).toBeVisible();
+  });
+});
+
 test.describe('monaco contributions', () => {
   const typeIntoProps = async (page: Page, text: string) => {
     await openApp(page);
