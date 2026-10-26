@@ -19,6 +19,7 @@ const clipboard = vi.hoisted(() => ({
 vi.mock('../../../utils/clipboard', () => clipboard);
 
 const { EditorContextMenu } = await import('../EditorContextMenu');
+const { toggleComment } = await import('../toggleComment');
 
 const initial = useAppStore.getState();
 beforeEach(() => {
@@ -181,6 +182,90 @@ describe('EditorContextMenu', () => {
     expect(within(again.menu).queryByRole('menuitem', { name: /Scaffold/ })).not.toBeInTheDocument();
     fireEvent.click(item(again.menu, 'Command palette'));
     expect(useAppStore.getState().commandPaletteOpen).toBe(true);
+    again.ed.dispose();
+  });
+});
+
+describe('toggleComment (#762)', () => {
+  const editorAt = (value: string, selection: monaco.Selection) => {
+    const ed = monaco.editor.create(document.createElement('div'), { value, language: 'plaintext' });
+    ed.setSelection(selection);
+    return ed;
+  };
+
+  it('comments out the selected lines, leaves blank ones, and uncomments them again as one undo step each', () => {
+    const ed = editorAt('[web]\nKV_MODE = none\n\nTRUNCATE = 0', new monaco.Selection(2, 1, 4, 3));
+    toggleComment(ed);
+    expect(ed.getValue()).toBe('[web]\n# KV_MODE = none\n\n# TRUNCATE = 0');
+    toggleComment(ed);
+    expect(ed.getValue()).toBe('[web]\nKV_MODE = none\n\nTRUNCATE = 0');
+    ed.trigger('test', 'undo', null);
+    expect(ed.getValue()).toBe('[web]\n# KV_MODE = none\n\n# TRUNCATE = 0');
+    ed.dispose();
+  });
+
+  it('comments out a mixed selection, and leaves out a line the selection only reaches the start of', () => {
+    const ed = editorAt('# a = 1\nb = 2\nc = 3', new monaco.Selection(1, 1, 3, 1));
+    toggleComment(ed);
+    expect(ed.getValue()).toBe('# # a = 1\n# b = 2\nc = 3');
+    ed.dispose();
+  });
+
+  it('takes off a # with no space after it, keeping the indent', () => {
+    const ed = editorAt('  #KV_MODE = none', new monaco.Selection(1, 3, 1, 3));
+    toggleComment(ed);
+    expect(ed.getValue()).toBe('  KV_MODE = none');
+    ed.dispose();
+  });
+});
+
+describe('EditorContextMenu — actions for the line under the cursor (#762)', () => {
+  it('toggles the comment from the menu, in a conf file only', () => {
+    const { ed, menu } = openMenu('[web]\nKV_MODE = none', 'props.conf', new monaco.Selection(2, 1, 2, 1));
+    fireEvent.click(item(menu, 'Toggle line comment'));
+    expect(ed.getValue()).toBe('[web]\n# KV_MODE = none');
+    ed.dispose();
+    cleanup();
+    const raw = openMenu('KV_MODE = none', 'raw');
+    expect(within(raw.menu).queryByRole('menuitem', { name: /Toggle line comment/ })).not.toBeInTheDocument();
+    raw.ed.dispose();
+  });
+
+  it("sends the regex of the line to the Regex tab, without an EXTRACT's `in <field>`", () => {
+    const { ed, menu } = openMenu(
+      '[web]\nEXTRACT-user = user=(?<user>\\w+) in _raw',
+      'props.conf',
+      new monaco.Selection(2, 1, 2, 1),
+    );
+    fireEvent.click(item(menu, 'Test the regex in the Regex tab'));
+    expect(useAppStore.getState()).toMatchObject({
+      regexPattern: 'user=(?<user>\\w+)',
+      regexClassName: 'user',
+      activeView: 'simulator',
+      activeOutputTab: 'preview',
+      previewSubTab: 'regex',
+    });
+    ed.dispose();
+  });
+
+  it('offers no regex test on a directive whose value is not a regex', () => {
+    const { ed, menu } = openMenu('[web]\nKV_MODE = none', 'props.conf', new monaco.Selection(2, 1, 2, 1));
+    expect(within(menu).queryByRole('menuitem', { name: /Test the regex/ })).not.toBeInTheDocument();
+    ed.dispose();
+  });
+
+  it('shows the stanza in Effective config when it matches the metadata, and says why not when it does not', () => {
+    useAppStore.getState().setPropsConf('[web]\nKV_MODE = none\n');
+    useAppStore.getState().setMetadataField('sourcetype', 'web');
+    const { ed, menu } = openMenu('[web]\nKV_MODE = none', 'props.conf', new monaco.Selection(2, 1, 2, 1));
+    fireEvent.click(item(menu, 'Show [web] in Effective config'));
+    expect(useAppStore.getState().activeOutputTab).toBe('effective');
+    ed.dispose();
+    cleanup();
+
+    useAppStore.getState().setMetadataField('sourcetype', 'other');
+    const again = openMenu('[web]\nKV_MODE = none', 'props.conf', new monaco.Selection(2, 1, 2, 1));
+    expect(item(again.menu, '[web] does not match the metadata')).toHaveAttribute('aria-disabled', 'true');
     again.ed.dispose();
   });
 });

@@ -7,6 +7,7 @@ import { registerEditor, unregisterEditor } from './editorRegistry';
 import { computeDiagnostics } from '../../monaco/splunkConfDiagnostics';
 import { toMarkerData } from '../../monaco/markerData';
 import { ensureSplunkMonaco, PROPS_LANGUAGE_ID, TRANSFORMS_LANGUAGE_ID } from './splunkMonacoSetup';
+import { TOGGLE_COMMENT_ACTION, toggleComment } from './toggleComment';
 
 interface SplunkEditorProps {
   value: string;
@@ -80,6 +81,13 @@ export function SplunkEditor({ value, onChange, fileType = 'props.conf', languag
 
   const handleMount = (editorInstance: editor.IStandaloneCodeEditor) => {
     editorRef.current = editorInstance;
+    // Ctrl+/ as in other editors; the context menu runs the same function (#762).
+    editorInstance.addAction({
+      id: TOGGLE_COMMENT_ACTION,
+      label: 'Toggle line comment',
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.Slash],
+      run: toggleComment,
+    });
     registerEditor(fileType, editorInstance);
     onEditorReady?.(editorInstance);
   };
