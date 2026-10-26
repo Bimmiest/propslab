@@ -138,7 +138,7 @@ function PaletteInput() {
         autoFocus
       />
       <kbd
-        className="px-1.5 py-0.5 text-[10px] rounded font-mono"
+        className="px-1.5 py-0.5 text-xs rounded font-mono"
         style={{
           backgroundColor: 'var(--color-bg-tertiary)',
           color: 'var(--color-text-muted)',
@@ -248,7 +248,7 @@ function CommandGroup({ heading, children }: { heading: string; children: React.
   return (
     <Command.Group
       heading={heading}
-      className="[&>[cmdk-group-heading]]:px-3 [&>[cmdk-group-heading]]:py-1.5 [&>[cmdk-group-heading]]:text-[10px] [&>[cmdk-group-heading]]:font-semibold [&>[cmdk-group-heading]]:uppercase [&>[cmdk-group-heading]]:tracking-wider"
+      className="[&>[cmdk-group-heading]]:px-3 [&>[cmdk-group-heading]]:py-1.5 [&>[cmdk-group-heading]]:text-xs [&>[cmdk-group-heading]]:font-semibold [&>[cmdk-group-heading]]:uppercase [&>[cmdk-group-heading]]:tracking-wider"
       style={{ '--heading-color': 'var(--color-text-muted)' } as React.CSSProperties}
     >
       {children}
@@ -282,7 +282,7 @@ function CommandItem({
       />
       <span className="flex-1">{label}</span>
       {hint && (
-        <span className="text-[11px] truncate max-w-[180px] text-[var(--color-text-muted)] group-aria-selected:text-[var(--color-text-on-accent)]">
+        <span className="text-xs truncate max-w-[180px] text-[var(--color-text-muted)] group-aria-selected:text-[var(--color-text-on-accent)]">
           {hint}
         </span>
       )}

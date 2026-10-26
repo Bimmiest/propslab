@@ -142,7 +142,7 @@ function EventRow({
             type="button"
             onClick={() => setExpanded((v) => !v)}
             aria-expanded={expanded}
-            className="w-full flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-medium border-t border-[var(--color-border)] hover:bg-[var(--color-bg-tertiary)] transition-colors"
+            className="w-full flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium border-t border-[var(--color-border)] hover:bg-[var(--color-bg-tertiary)] transition-colors"
             style={{ color: 'var(--color-accent)' }}
           >
             <ExpandLabel expanded={expanded} />

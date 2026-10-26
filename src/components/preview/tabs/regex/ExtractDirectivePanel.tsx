@@ -67,7 +67,7 @@ export function ExtractDirectivePanel({
         />
       </div>
       {classError && (
-        <div id={classErrorId} className="mb-1 text-[10px] text-[var(--color-error)]">
+        <div id={classErrorId} className="mb-1 text-xs text-[var(--color-error)]">
           {classError}
         </div>
       )}
@@ -95,7 +95,7 @@ export function ExtractDirectivePanel({
       {matchBlock && (
         <p
           id={matchBlockId}
-          className={`mt-1 text-[10px] ${block.isError ? 'text-[var(--color-error)]' : 'text-[var(--color-text-muted)]'}`}
+          className={`mt-1 text-xs ${block.isError ? 'text-[var(--color-error)]' : 'text-[var(--color-text-muted)]'}`}
         >
           {matchBlock}
         </p>
@@ -107,7 +107,7 @@ export function ExtractDirectivePanel({
         the fact.
       */}
       {isPlaceholderStanza && (
-        <p className="mt-1 text-[10px] text-[var(--color-text-muted)]">
+        <p className="mt-1 text-xs text-[var(--color-text-muted)]">
           This event has no sourcetype. Adding writes <code>[{stanza}]</code> and sets the event&apos;s sourcetype to
           match, so the stanza applies.
         </p>

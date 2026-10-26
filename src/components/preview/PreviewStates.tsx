@@ -50,7 +50,7 @@ export function EmptyState() {
 
       <div className="flex flex-col items-center gap-2">
         <ExamplesMenu prominent />
-        <p className="text-[11px] text-[var(--color-text-muted)]">
+        <p className="text-xs text-[var(--color-text-muted)]">
           {SAMPLE_CONFIGS.length} examples, from web logs to Windows XML. The Examples button in the header opens the
           same list.
         </p>

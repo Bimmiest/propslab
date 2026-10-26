@@ -55,7 +55,7 @@ export function FieldTableRow({
               />
               {field.maskedBy.size > 0 && (
                 <span
-                  className="inline-block flex-shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium font-sans bg-[var(--color-warning)]/10 text-[var(--color-warning)]"
+                  className="inline-block flex-shrink-0 px-1.5 py-0.5 rounded text-xs font-medium font-sans bg-[var(--color-warning)]/10 text-[var(--color-warning)]"
                   title={`Value rewritten at index time by ${Array.from(field.maskedBy).join(', ')}. The extraction works — the value it finds is not the original.`}
                 >
                   masked
@@ -119,7 +119,7 @@ function PhaseChips({ phases, sources }: Pick<FieldRow, 'phases' | 'sources'>) {
       {Array.from(phases).map((phase) => (
         <span
           key={phase}
-          className="inline-block px-1.5 py-0.5 rounded text-[10px] font-medium"
+          className="inline-block px-1.5 py-0.5 rounded text-xs font-medium"
           style={
             phase === 'index-time'
               ? { backgroundColor: 'var(--color-accent)', color: 'var(--color-text-on-accent)' }
@@ -201,13 +201,13 @@ function FieldNameCell({
         {name}
         {isParent && (
           <span
-            className="text-[9px] px-1 py-px rounded"
+            className="text-xs px-1 py-px rounded"
             style={{ backgroundColor: 'var(--color-accent)', color: 'var(--color-text-on-accent)' }}
           >
             JSON
           </span>
         )}
-        {isParent && collapsed && <span className="text-[9px] text-[var(--color-text-muted)]">({childCount})</span>}
+        {isParent && collapsed && <span className="text-xs text-[var(--color-text-muted)]">({childCount})</span>}
       </span>
     );
   }
@@ -228,13 +228,13 @@ function FieldNameCell({
       <span title={name}>.{leafName}</span>
       {isParent && (
         <span
-          className="text-[9px] px-1 py-px rounded ml-1"
+          className="text-xs px-1 py-px rounded ml-1"
           style={{ backgroundColor: 'var(--color-accent)', color: 'var(--color-text-on-accent)' }}
         >
           JSON
         </span>
       )}
-      {isParent && collapsed && <span className="text-[9px] text-[var(--color-text-muted)] ml-1">({childCount})</span>}
+      {isParent && collapsed && <span className="text-xs text-[var(--color-text-muted)] ml-1">({childCount})</span>}
     </span>
   );
 }

@@ -44,7 +44,7 @@ export function FieldsToolbar({
             // styling alone does not.
             aria-pressed={phaseFilter === f}
             className={[
-              'px-1.5 py-0.5 text-[10px] rounded transition-colors cursor-pointer border-none',
+              'px-1.5 py-0.5 text-xs rounded transition-colors cursor-pointer border-none',
               phaseFilter === f
                 ? 'bg-[var(--color-bg-elevated)] text-[var(--color-text-primary)] font-medium shadow-sm'
                 : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)] bg-transparent',

@@ -125,7 +125,7 @@ function RegexEventCard({
         <div className="px-3 pb-2 border-t border-[var(--color-border)]">
           <table className="w-full text-xs mt-1.5">
             <thead>
-              <tr className="text-left text-[10px] text-[var(--color-text-muted)] uppercase tracking-wider">
+              <tr className="text-left text-xs text-[var(--color-text-muted)] uppercase tracking-wider">
                 <th className="pb-1 pr-3 font-medium">Field</th>
                 <th className="pb-1 font-medium">Value</th>
               </tr>

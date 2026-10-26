@@ -163,7 +163,7 @@ function CalcFieldChip({
           <span style={{ color }} className="font-medium">
             {cf.name}
           </span>
-          <span className="text-[10px] uppercase tracking-wider text-[var(--color-text-muted)]">expr</span>
+          <span className="text-xs uppercase tracking-wider text-[var(--color-text-muted)]">expr</span>
           <code
             className="text-[var(--color-text-secondary)] bg-[var(--color-bg-tertiary)] px-1.5 py-0.5 rounded"
             style={{ outline: pinned ? `2px solid ${color}` : 'none', outlineOffset: '1px' }}

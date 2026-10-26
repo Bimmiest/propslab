@@ -78,7 +78,7 @@ function PipelineStatus() {
         >
           <button
             onClick={toggleSettings}
-            className="flex items-center gap-1 px-1.5 h-4 rounded text-[10px] font-medium border border-[var(--color-accent)] text-[var(--color-accent)] hover:bg-[var(--color-accent)] hover:text-[var(--color-text-on-accent)] transition-colors cursor-pointer bg-transparent"
+            className="flex items-center gap-1 px-1.5 h-4 rounded text-xs font-medium border border-[var(--color-accent)] text-[var(--color-accent)] hover:bg-[var(--color-accent)] hover:text-[var(--color-text-on-accent)] transition-colors cursor-pointer bg-transparent"
           >
             Per-event pipeline
           </button>
@@ -93,7 +93,7 @@ function PipelineStatus() {
               disabled={isProcessing}
               aria-label="Run pipeline"
               className={[
-                'flex items-center gap-1 px-2 h-5 rounded text-[10px] font-medium border transition-colors cursor-pointer',
+                'flex items-center gap-1 px-2 h-5 rounded text-xs font-medium border transition-colors cursor-pointer',
                 isProcessing
                   ? 'opacity-40 cursor-not-allowed border-[var(--color-border)] text-[var(--color-text-muted)]'
                   : pipelineDirty
@@ -162,7 +162,7 @@ export function StatusBar() {
     // A <footer>, so the bar is a contentinfo landmark rather than stray
     // content outside every landmark (axe `region`).
     <footer
-      className="flex items-center justify-between px-4 h-6 shrink-0 text-[11px] select-none"
+      className="flex items-center justify-between px-4 h-6 shrink-0 text-xs select-none"
       style={{
         backgroundColor: 'var(--color-bg-secondary)',
         borderTop: '1px solid var(--color-border)',

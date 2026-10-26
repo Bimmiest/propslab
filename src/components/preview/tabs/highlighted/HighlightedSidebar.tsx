@@ -41,7 +41,7 @@ export function HighlightedSidebar({
       renderControls={() =>
         allGroupNames.length > 0 ? (
           <button
-            className="text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-accent)] transition-colors cursor-pointer bg-transparent border-none p-0"
+            className="text-xs text-[var(--color-text-muted)] hover:text-[var(--color-accent)] transition-colors cursor-pointer bg-transparent border-none p-0"
             onClick={() => setAllCollapsed(!allCollapsed)}
           >
             {allCollapsed ? 'Expand all' : 'Collapse all'}

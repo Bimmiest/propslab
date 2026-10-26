@@ -73,7 +73,7 @@ export function MultiSelect({ label, options, selected, onChange, searchable }: 
         }}
       >
         <span>{label}</span>
-        {activeCount > 0 && <span className="bg-white/25 rounded-full px-1 text-[10px] leading-4">{activeCount}</span>}
+        {activeCount > 0 && <span className="bg-white/25 rounded-full px-1 text-xs leading-4">{activeCount}</span>}
         <Icon name="chevron-down" className="w-3 h-3" />
       </button>
       {open && hasPopup && (

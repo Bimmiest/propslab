@@ -74,7 +74,7 @@ function PipelineSection() {
         </div>
         <p className="text-xs leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>
           Simulates{' '}
-          <code className="font-mono text-[11px] px-1 rounded" style={{ backgroundColor: 'var(--color-bg-tertiary)' }}>
+          <code className="font-mono text-xs px-1 rounded" style={{ backgroundColor: 'var(--color-bg-tertiary)' }}>
             DEST_KEY = MetaData:*
           </code>{' '}
           correctly. After any index-time transform rewrites the sourcetype, host, or source, stanzas are re-matched and

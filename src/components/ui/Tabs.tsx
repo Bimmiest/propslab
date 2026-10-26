@@ -81,7 +81,7 @@ export function Tabs({
             <span>{tab.label}</span>
             {tab.badge !== undefined && tab.badge !== 0 && (
               <span
-                className="ml-1 text-[10px] font-semibold rounded-full px-1.5 py-0 leading-4"
+                className="ml-1 text-xs font-semibold rounded-full px-1.5 py-0 leading-4"
                 style={{
                   backgroundColor:
                     tab.badgeVariant === 'error'

@@ -76,7 +76,7 @@ export function ContextMenuSeparator() {
 export function ContextMenuLabel({ children }: { children: React.ReactNode }) {
   return (
     <RCM.Label
-      className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider"
+      className="px-3 py-1 text-xs font-semibold uppercase tracking-wider"
       style={{ color: 'var(--color-text-muted)' }}
     >
       {children}

@@ -40,7 +40,7 @@ function StrptimeCategoryRows({
       <tr>
         <td
           colSpan={3}
-          className="pt-2 pb-0.5 text-[10px] font-medium text-[var(--color-accent)] uppercase tracking-wider"
+          className="pt-2 pb-0.5 text-xs font-medium text-[var(--color-accent)] uppercase tracking-wider"
         >
           {category.name}
         </td>
@@ -55,7 +55,7 @@ function StrptimeCategoryRows({
           >
             <td className="py-0.5 pr-3">
               <code
-                className="font-mono px-1 py-0.5 rounded text-[11px]"
+                className="font-mono px-1 py-0.5 rounded text-xs"
                 style={{
                   color: isActive ? 'var(--color-success)' : 'var(--color-text-primary)',
                   backgroundColor: isActive ? tint('var(--color-success)', 15) : 'var(--color-bg-tertiary)',
@@ -69,14 +69,14 @@ function StrptimeCategoryRows({
               {/* Text, not colour alone: Splunk reads these, the preview does not. */}
               {!isSimulated(d.directive) && (
                 <span
-                  className="ml-1.5 px-1 rounded text-[10px] font-medium bg-[var(--color-warning)]/10 text-[var(--color-warning)]"
+                  className="ml-1.5 px-1 rounded text-xs font-medium bg-[var(--color-warning)]/10 text-[var(--color-warning)]"
                   title={`${d.directive} is not simulated: the preview treats it as literal text, though a real indexer parses it.`}
                 >
                   not simulated
                 </span>
               )}
             </td>
-            <td className="py-0.5 text-[var(--color-text-muted)] font-mono text-[11px]">{d.example}</td>
+            <td className="py-0.5 text-[var(--color-text-muted)] font-mono text-xs">{d.example}</td>
           </tr>
         );
       })}
