@@ -48,6 +48,7 @@ describe('TimePrefixDialog — only a settled result for this pattern enables Se
     const onApply = vi.fn();
     render(
       <TimePrefixDialog
+        open
         raw="[2024-01-01 10:00:00] GET /"
         selection="2024-01-01 10:00:00"
         selectionStart={1}

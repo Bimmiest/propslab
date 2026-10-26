@@ -156,9 +156,12 @@ and focus return to the trigger.
 
 An overlay is never force-mounted: closed content left in the tree keeps a Radix
 DismissableLayer alive, and its capture-phase Escape handler then swallows Escape
-for the whole app. One that should animate out is rendered closed
-(`open={false}`) rather than not at all, and Radix's Presence keeps it mounted
-while its exit animation runs. Presence watches each direct child of the portal
+for the whole app. Each one is rendered closed (`open={false}`) rather than not
+at all, and Radix's Presence keeps it mounted while its exit animation runs. State
+that belongs to one opening (a form's fields, Scaffold's suggestions) lives in a
+component inside the content, which Presence mounts afresh on each opening and
+unmounts after the exit, so a closed dialog holds nothing and computes nothing
+(#702). Presence watches each direct child of the portal
 separately, so the content element places itself (`fixed`, `z-50`) with no layout
 wrapper around it: a wrapper with no animation of its own unmounts at once and
 cuts the content's exit short (#696).

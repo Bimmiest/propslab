@@ -86,26 +86,24 @@ export function EventContextMenu({
           )}
         </ContextMenuContent>
       </ContextMenu>
-      {extractOpen && (
-        <ExtractNameDialog
-          raw={event._raw}
-          selection={selection}
-          selectionStart={effectiveStart}
-          stanza={stanza}
-          onApply={(key, value) => applyDirective(key, value)}
-          onClose={() => setExtractOpen(false)}
-        />
-      )}
-      {timePrefixOpen && (
-        <TimePrefixDialog
-          raw={event._raw}
-          selection={selection}
-          selectionStart={effectiveStart}
-          stanza={stanzaFor('TIME_PREFIX')}
-          onApply={(value) => applyDirective('TIME_PREFIX', value)}
-          onClose={() => setTimePrefixOpen(false)}
-        />
-      )}
+      <ExtractNameDialog
+        open={extractOpen}
+        raw={event._raw}
+        selection={selection}
+        selectionStart={effectiveStart}
+        stanza={stanza}
+        onApply={(key, value) => applyDirective(key, value)}
+        onClose={() => setExtractOpen(false)}
+      />
+      <TimePrefixDialog
+        open={timePrefixOpen}
+        raw={event._raw}
+        selection={selection}
+        selectionStart={effectiveStart}
+        stanza={stanzaFor('TIME_PREFIX')}
+        onApply={(value) => applyDirective('TIME_PREFIX', value)}
+        onClose={() => setTimePrefixOpen(false)}
+      />
     </>
   );
 }

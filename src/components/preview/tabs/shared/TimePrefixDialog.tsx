@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { timePrefixFromSelection } from '../../../../engine/scaffold/fromSelection';
-import { DirectiveDialog } from './DirectiveDialog';
+import { DirectiveDialog, DirectiveForm } from './DirectiveDialog';
 import { useLiveCapture, isSettledCapture, type Capture } from './useLiveCapture';
 
 /**
@@ -9,21 +9,25 @@ import { useLiveCapture, isSettledCapture, type Capture } from './useLiveCapture
  * selected timestamp when one can be derived, and always shows the preceding text so
  * the user can craft/adjust the prefix even when auto-derivation finds no boundary.
  */
-export function TimePrefixDialog({
-  raw,
-  selection,
-  selectionStart,
-  stanza,
-  onApply,
-  onClose,
-}: {
+export function TimePrefixDialog({ open, ...props }: { open: boolean } & TimePrefixProps) {
+  return (
+    <DirectiveDialog open={open} title="Set TIME_PREFIX from selection" onClose={props.onClose}>
+      <TimePrefixForm {...props} />
+    </DirectiveDialog>
+  );
+}
+
+interface TimePrefixProps {
   raw: string;
   selection: string;
   selectionStart?: number;
   stanza: string;
   onApply: (value: string) => void;
   onClose: () => void;
-}) {
+}
+
+/** The dialog's state lives here, inside the content, so each opening starts fresh. */
+function TimePrefixForm({ raw, selection, selectionStart, stanza, onApply, onClose }: TimePrefixProps) {
   // Best-effort default from the shared, tested helper (may be null at the start of
   // the event or when no stable boundary precedes the selection).
   const [value, setValue] = useState(() => timePrefixFromSelection(raw, selection, selectionStart) ?? '');
@@ -49,8 +53,7 @@ export function TimePrefixDialog({
   const valid = isSettledCapture(capture);
 
   return (
-    <DirectiveDialog
-      title="Set TIME_PREFIX from selection"
+    <DirectiveForm
       applyLabel="Set TIME_PREFIX"
       applyDisabled={!valid}
       onApply={() => {
@@ -110,7 +113,7 @@ export function TimePrefixDialog({
           {trimmed ? `TIME_PREFIX = ${trimmed}` : 'Enter the text that precedes the timestamp…'}
         </pre>
       </div>
-    </DirectiveDialog>
+    </DirectiveForm>
   );
 }
 

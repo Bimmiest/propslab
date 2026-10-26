@@ -91,13 +91,12 @@ export function CommandPalette() {
     [close, replace],
   );
 
-  if (!open) return confirm || null;
-
+  // Rendered closed rather than not at all, so it can animate out (#702).
   return (
     <>
       {confirm}
       <Overlay
-        open
+        open={open}
         onClose={close}
         label="Command palette"
         className="motion-pop fixed z-50 left-1/2 -translate-x-1/2 top-[20vh] w-full max-w-lg rounded-xl overflow-hidden shadow-2xl"

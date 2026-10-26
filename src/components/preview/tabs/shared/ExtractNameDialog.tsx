@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import { buildExtractFromSelection, toCaptureGroupName } from '../../../../engine/scaffold/fromSelection';
-import { DirectiveDialog } from './DirectiveDialog';
+import { DirectiveDialog, DirectiveForm } from './DirectiveDialog';
 import { useLiveCapture, isSettledCapture, type Capture } from './useLiveCapture';
 
 /**
@@ -10,21 +10,25 @@ import { useLiveCapture, isSettledCapture, type Capture } from './useLiveCapture
  * in the regex-match worker, behind its watchdog, so you can see exactly what it
  * grabs before applying; Add stays disabled until that capture has settled.
  */
-export function ExtractNameDialog({
-  raw,
-  selection,
-  selectionStart,
-  stanza,
-  onApply,
-  onClose,
-}: {
+export function ExtractNameDialog({ open, ...props }: { open: boolean } & ExtractNameProps) {
+  return (
+    <DirectiveDialog open={open} title="Create EXTRACT from selection" onClose={props.onClose}>
+      <ExtractNameForm {...props} />
+    </DirectiveDialog>
+  );
+}
+
+interface ExtractNameProps {
   raw: string;
   selection: string;
   selectionStart?: number;
   stanza: string;
   onApply: (key: string, value: string) => void;
   onClose: () => void;
-}) {
+}
+
+/** The dialog's state lives here, inside the content, so each opening starts fresh. */
+function ExtractNameForm({ raw, selection, selectionStart, stanza, onApply, onClose }: ExtractNameProps) {
   const [name, setName] = useState('new_field');
   const [pattern, setPattern] = useState(
     () => buildExtractFromSelection(raw, selection, 'new_field', selectionStart)?.value ?? '',
@@ -67,8 +71,7 @@ export function ExtractNameDialog({
   const valid = isSettledCapture(capture);
 
   return (
-    <DirectiveDialog
-      title="Create EXTRACT from selection"
+    <DirectiveForm
       applyLabel="Add EXTRACT"
       applyDisabled={!valid}
       onApply={() => {
@@ -105,7 +108,7 @@ export function ExtractNameDialog({
       <CapturePreview capture={capture} />
 
       <AddedLine stanza={stanza} line={trimmed ? `EXTRACT-${cleanName} = ${trimmed}` : 'Enter a regex…'} />
-    </DirectiveDialog>
+    </DirectiveForm>
   );
 }
 

@@ -19,19 +19,37 @@ const CONFIDENCE_VARIANT: Record<Confidence, 'success' | 'warning' | 'info'> = {
   low: 'info',
 };
 
-export function ScaffoldModal() {
+/**
+ * Rendered closed rather than not at all, so it can animate out (#702). The
+ * work is all in ScaffoldBody, inside the content, which Radix mounts only
+ * while the dialog is open or closing: a closed Scaffold computes nothing.
+ */
+export function ScaffoldModal({ open }: { open: boolean }) {
   const toggleScaffold = useAppStore((s) => s.toggleScaffold);
-  const rawData = useAppStore((s) => s.rawData);
-  const metadata = useAppStore((s) => s.metadata);
-  const propsConf = useAppStore((s) => s.propsConf);
+  return (
+    <DialogFrame
+      open={open}
+      onClose={toggleScaffold}
+      label="Scaffold configuration"
+      size="lg"
+      header={<ScaffoldHeader onClose={toggleScaffold} />}
+      footer={null}
+    >
+      <ScaffoldBody />
+    </DialogFrame>
+  );
+}
+
+function ScaffoldBody() {
+  const toggleScaffold = useAppStore((s) => s.toggleScaffold);
   const setPropsConf = useAppStore((s) => s.setPropsConf);
   const setMetadataField = useAppStore((s) => s.setMetadataField);
+  // The inputs as they were at opening. The overlay blocks editing while it is
+  // open, so this is what a live read would give, except while it closes after
+  // Append: then a live read would redraw it against the stanza it just wrote.
+  const [{ rawData, metadata, propsConf }] = useState(() => useAppStore.getState());
 
   const noData = rawData.trim().length === 0;
-
-  // Recomputed when the sample or the metadata changes. The overlay blocks input
-  // editing while open, so in practice that is once per opening. (Mounted only
-  // while open; see AppShell.)
   const result = useMemo(() => scaffoldConfig(rawData, metadata), [rawData, metadata]);
 
   const [selected, setSelected] = useState<Record<string, boolean>>(() => {
@@ -65,22 +83,7 @@ export function ScaffoldModal() {
   };
 
   return (
-    <DialogFrame
-      onClose={toggleScaffold}
-      label="Scaffold configuration"
-      size="lg"
-      header={<ScaffoldHeader onClose={toggleScaffold} />}
-      footer={
-        <DialogFooter>
-          <DialogButton variant="cancel" onClick={toggleScaffold}>
-            Cancel
-          </DialogButton>
-          <DialogButton variant="accent" onClick={apply} disabled={!canApply}>
-            Append to props.conf
-          </DialogButton>
-        </DialogFooter>
-      }
-    >
+    <>
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {noData ? (
           <EmptyState text="Paste raw log data first, then reopen Scaffold." />
@@ -114,7 +117,15 @@ export function ScaffoldModal() {
           </>
         )}
       </div>
-    </DialogFrame>
+      <DialogFooter>
+        <DialogButton variant="cancel" onClick={toggleScaffold}>
+          Cancel
+        </DialogButton>
+        <DialogButton variant="accent" onClick={apply} disabled={!canApply}>
+          Append to props.conf
+        </DialogButton>
+      </DialogFooter>
+    </>
   );
 }
 

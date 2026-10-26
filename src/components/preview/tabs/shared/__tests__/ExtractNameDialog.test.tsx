@@ -11,6 +11,7 @@ function setup(pattern?: string) {
   const onClose = vi.fn();
   render(
     <ExtractNameDialog
+      open
       raw="status=200 user=alice"
       selection={pattern ? '' : 'alice'}
       stanza="my:sourcetype"
