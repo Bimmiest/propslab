@@ -189,7 +189,10 @@ jobs:
 
   e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # 25, not 15: on 2026-10-26 the browser's system packages took 12 minutes
+    # to install from apt, twice, and the suite was cancelled mid-run. With
+    # Firefox installed too (#572) there are two such installs.
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
