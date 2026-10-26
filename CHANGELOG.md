@@ -33,6 +33,7 @@ All notable changes to Propslab are documented here, newest first. Entries say w
 
 ### Fixed
 
+- **The Preview filters tick an option on the first click** ([#751](https://github.com/Bimmiest/propslab/issues/751)). Before, a click on an option in the Fields, Status or Changes filter closed the list, and the option stayed clear.
 - **TRUNCATE cuts each line before the line-merging rules read it, and index-time transforms keep trailing whitespace** ([#561](https://github.com/Bimmiest/propslab/issues/561)). A `MUST_BREAK_AFTER` or `BREAK_ONLY_BEFORE` match that lies past the `TRUNCATE` limit no longer starts or ends an event. In an index-time transform, a `REGEX` or `FORMAT` that ends in a space keeps the space, so `REGEX = ^ERROR ` no longer matches `ERRORS`; search-time `REPORT-` transforms still drop it. Both now match Splunk 10.4.0 ([ADR 0021](docs/adr/0021-transform-whitespace-and-truncate-order-follow-recorded-splunk.md)).
 - **Editing the raw log keeps the page of events you are on** ([#566](https://github.com/Bimmiest/propslab/issues/566)). Before, each keystroke went back to page 1. If the new run has fewer pages, the last page shows.
 - **Show full event appears when a narrower pane makes an event overflow** ([#565](https://github.com/Bimmiest/propslab/issues/565)). The Raw tab measures each event again when the splitter moves. Before, it measured only when the text, the search or the toggle changed, so the button could be missing for an event that was cut off. Selecting tokens by dragging across a long event is also faster.
