@@ -30,6 +30,7 @@ npm run test:e2e:ui  # …in Playwright's interactive runner
 npm run test:mutation # Stryker mutation testing
 npm run test:mutation:canary # 40-second check that Stryker still kills mutants (the vitest shim)
 npm run check:overrides # Verify the @radix-ui overrides match what the Radix packages pin, and that each scoped override is still needed
+npm run screenshot:readme # Build, then take the README screenshot (docs/assets/demo.png) again with the same setup
 ```
 
 [testing.md](testing.md) describes the two test suites.
