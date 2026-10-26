@@ -109,7 +109,12 @@ function EventRow({
     if (expanded) return;
     const el = preRef.current;
     if (!el) return;
-    setOverflows(el.scrollHeight > el.clientHeight + 1);
+    const measure = () => setOverflows(el.scrollHeight > el.clientHeight + 1);
+    measure();
+    // The text wraps, so moving the splitter changes whether it overflows (#565).
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+    observer?.observe(el);
+    return () => observer?.disconnect();
   }, [event._raw, search, expanded]);
 
   return (

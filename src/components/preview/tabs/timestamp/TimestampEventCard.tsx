@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import type { TimeConfig, TimestampProbe } from '../../../../engine/timestampMatch';
 import type { TimeSource } from '../../../../engine/types';
 import { tint } from '../../../../utils/tint';
@@ -5,7 +6,8 @@ import { EventCardHeader, EventNumber } from '../shared/EventCardHeader';
 import { FALLBACK_LABEL, FORMAT_COLOR, LOOKAHEAD_COLOR, PREFIX_COLOR } from './data';
 import { overlaySegments, type OverlaySegment } from './timestampLogic';
 
-export function TimestampEventCard({
+// Memoised: the tab re-renders with its parent, and a page holds up to 50 cards (#565).
+export const TimestampEventCard = memo(function TimestampEventCard({
   raw,
   rewritten,
   globalIdx,
@@ -79,7 +81,7 @@ export function TimestampEventCard({
       </pre>
     </div>
   );
-}
+});
 
 function OverlaySpan({ segment: { kind, text, title } }: { segment: OverlaySegment }) {
   switch (kind) {

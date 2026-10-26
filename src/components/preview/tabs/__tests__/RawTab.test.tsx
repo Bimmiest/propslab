@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { act, render, screen, fireEvent } from '@testing-library/react';
 import { useAppStore } from '../../../../store/useAppStore';
 import { RawTab } from '../RawTab';
 import type { EnrichedEvent } from '../../enrichEvents';
@@ -91,6 +91,23 @@ describe('RawTab — toggles announce their state (#335)', () => {
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
     fireEvent.click(toggle);
     expect(screen.getByRole('button', { name: /Show less/ })).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('measures again when the event body is resized, as moving the splitter does (#565)', () => {
+    let resized: (() => void) | undefined;
+    vi.spyOn(globalThis, 'ResizeObserver').mockImplementation(function (callback: ResizeObserverCallback) {
+      resized = () => callback([], {} as ResizeObserver);
+      return { observe() {}, unobserve() {}, disconnect() {} };
+    });
+    let height = 0;
+    Object.defineProperty(HTMLElement.prototype, 'scrollHeight', { configurable: true, get: () => height });
+    render(<RawTab items={pageOne} currentPage={1} eventsPerPage={1} search="" />);
+    expect(screen.queryByRole('button', { name: /Show full event/ })).toBeNull();
+
+    // A narrower pane wraps the text onto more lines.
+    height = 1000;
+    act(() => resized?.());
+    expect(screen.getByRole('button', { name: /Show full event/ })).toBeInTheDocument();
   });
 });
 

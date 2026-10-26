@@ -83,6 +83,27 @@ describe('SelectableRaw', () => {
     expect(selected()).toBe(RAW);
   });
 
+  it('selects every token a drag crosses, and reports a move only when the selection changes (#565)', () => {
+    const onChange = vi.fn();
+    render(<Harness onChange={onChange} />);
+    stubCaretAt(1);
+    fireEvent.mouseDown(screen.getByRole('textbox'), { button: 0 });
+    stubCaretAt(12);
+    fireEvent.mouseMove(window);
+    expect(selected()).toBe('user=alice ip');
+
+    // Still inside `ip`: the same tokens, so nothing to report.
+    stubCaretAt(13);
+    fireEvent.mouseMove(window);
+    expect(onChange).toHaveBeenCalledTimes(1);
+
+    stubCaretAt(20);
+    fireEvent.mouseMove(window);
+    fireEvent.mouseUp(window);
+    expect(selected()).toBe(RAW);
+    expect(onChange).toHaveBeenCalledTimes(2);
+  });
+
   it('detaches its window listeners when unmounted mid-drag', () => {
     const onChange = vi.fn();
     const removed = vi.spyOn(window, 'removeEventListener');
