@@ -1,15 +1,8 @@
 import { useMemo } from 'react';
 import { findFieldValuePositions } from '../../../../utils/fieldHighlight';
 import { useFieldFocusState } from './useFieldFocus';
-import { copyQuietly } from '../../../../utils/clipboard';
-import {
-  ContextMenu,
-  ContextMenuTrigger,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuLabel,
-} from '../../../ui/ContextMenu';
+import { ContextMenu, ContextMenuTrigger, ContextMenuContent } from '../../../ui/ContextMenu';
+import { FieldMenuItems } from './FieldMenuItems';
 import { tint } from '../../../../utils/tint';
 import { atomicSegments, type Highlight } from './atomicSegments';
 
@@ -124,12 +117,7 @@ function HighlightedSpan({
         </span>
       </ContextMenuTrigger>
       <ContextMenuContent>
-        <ContextMenuLabel>{hl.field}</ContextMenuLabel>
-        <ContextMenuItem onSelect={() => copyQuietly(valueStr)}>Copy value</ContextMenuItem>
-        <ContextMenuItem onSelect={() => copyQuietly(hl.field)}>Copy field name</ContextMenuItem>
-        <ContextMenuItem onSelect={() => copyQuietly(`${hl.field}=${valueStr}`)}>Copy field=value</ContextMenuItem>
-        <ContextMenuSeparator />
-        <ContextMenuItem onSelect={() => onFieldClick(hl.field)}>Pin / unpin field</ContextMenuItem>
+        <FieldMenuItems field={hl.field} value={valueStr} onTogglePin={onFieldClick} />
       </ContextMenuContent>
     </ContextMenu>
   );

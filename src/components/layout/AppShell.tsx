@@ -14,6 +14,7 @@ import { MOBILE_QUERY, useMediaQuery } from '../../hooks/useMediaQuery';
 import { CommandPalette } from '../ui/CommandPalette';
 import { MobileShell } from './MobileShell';
 import { AboutDialog } from '../about/AboutDialog';
+import { FieldAliasDialog } from '../preview/tabs/shared/FieldAliasDialog';
 
 export function AppShell() {
   const scaffoldOpen = useAppStore((s) => s.scaffoldOpen);
@@ -57,6 +58,9 @@ export function AppShell() {
       </ErrorBoundary>
       <ErrorBoundary panelName="About" variant="inline">
         <AboutDialog />
+      </ErrorBoundary>
+      <ErrorBoundary panelName="Create FIELDALIAS" variant="inline">
+        <FieldAliasDialog />
       </ErrorBoundary>
       {scaffoldMounted && (
         <ErrorBoundary

@@ -1,5 +1,6 @@
 import { useMemo, useRef, type ReactNode } from 'react';
 import { useWindowedRows } from '../../../../hooks/useWindowedRows';
+import { useRovingRows } from '../../../../hooks/useRovingRows';
 import { COLUMNS } from './data';
 import { controlledRowIds, renderedRowIds, type FieldRow } from './fieldRows';
 import { FieldTableRow } from './FieldTableRow';
@@ -35,6 +36,14 @@ export function FieldsTable({
   // A toggle names only the child rows that exist: with the table windowed,
   // most of them may not be rendered.
   const rendered = useMemo(() => renderedRowIds(segments, rows, rowIds), [segments, rows, rowIds]);
+  // One Tab stop for the rows, which can then open their menu from the keyboard (#745).
+  const names = useMemo(() => rows.map((row) => row.name), [rows]);
+  const {
+    containerRef,
+    tabStopIndex,
+    onFocus: onRowFocus,
+    onKeyDown,
+  } = useRovingRows<HTMLTableSectionElement>(names, segments, scrollRef);
 
   return (
     <div ref={scrollRef} className="flex-1 overflow-auto" onFocus={onFocus}>
@@ -46,7 +55,7 @@ export function FieldsTable({
         aria-rowcount={rows.length + 1}
       >
         <thead className="sticky top-0 z-10 bg-[var(--color-bg-secondary)]">{header}</thead>
-        <tbody>
+        <tbody ref={containerRef} onFocus={onRowFocus} onKeyDown={onKeyDown}>
           {segments.map((seg) => {
             if (seg.kind === 'spacer') {
               return (
@@ -64,6 +73,7 @@ export function FieldsTable({
                 field={field}
                 rowId={rowIds.get(field.name)}
                 rowIndex={seg.index}
+                tabStop={seg.index === tabStopIndex}
                 eventCount={eventCount}
                 columnWidths={columnWidths}
                 collapsed={collapsed}

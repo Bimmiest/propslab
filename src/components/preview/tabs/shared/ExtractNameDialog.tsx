@@ -154,7 +154,7 @@ function NameField({
 }
 
 /** The line the dialog will add, under the stanza it adds it to. */
-function AddedLine({ stanza, line }: { stanza: string; line: string }) {
+export function AddedLine({ stanza, line }: { stanza: string; line: string }) {
   return (
     <div>
       <div
