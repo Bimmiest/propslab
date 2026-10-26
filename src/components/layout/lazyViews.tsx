@@ -2,7 +2,7 @@ import { Suspense } from 'react';
 import { retryableLazy } from '../ui/retryableLazy';
 
 // Views nobody sees at startup, split out of the entry chunk. Each is
-// already mounted on demand, so the only cost is one chunk fetch on first open.
+// mounted on first use, so the only cost is one chunk fetch on first open.
 // Retryable, since that fetch can fail in a tab left open across a redeploy.
 const Dictionary = retryableLazy(() =>
   import('../dictionary/DictionaryView').then((m) => ({ default: m.DictionaryView })),
@@ -17,10 +17,10 @@ export function DictionaryView() {
   );
 }
 
-export function ScaffoldModal() {
+export function ScaffoldModal({ open }: { open: boolean }) {
   return (
     <Suspense fallback={null}>
-      <Scaffold />
+      <Scaffold open={open} />
     </Suspense>
   );
 }

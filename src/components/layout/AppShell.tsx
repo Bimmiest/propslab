@@ -30,6 +30,10 @@ export function AppShell() {
   // extra render happens before the browser sees anything.
   const [dictionaryMounted, setDictionaryMounted] = useState(false);
   if (activeView === 'dictionary' && !dictionaryMounted) setDictionaryMounted(true);
+  // Scaffold the same way: its chunk loads on first open, and from then on it
+  // stays rendered, closed between uses, so it can animate out (#702).
+  const [scaffoldMounted, setScaffoldMounted] = useState(false);
+  if (scaffoldOpen && !scaffoldMounted) setScaffoldMounted(true);
 
   return (
     <div className="h-full flex flex-col">
@@ -50,9 +54,17 @@ export function AppShell() {
       <ErrorBoundary panelName="Command palette" variant="inline">
         <CommandPalette />
       </ErrorBoundary>
-      {scaffoldOpen && (
-        <ErrorBoundary panelName="Scaffold" variant="inline" onDismiss={toggleScaffold}>
-          <ScaffoldModal />
+      {scaffoldMounted && (
+        <ErrorBoundary
+          panelName="Scaffold"
+          variant="inline"
+          onDismiss={() => {
+            if (useAppStore.getState().scaffoldOpen) toggleScaffold();
+            // Unmounted, so a chunk that failed is fetched again on the next open, not while closed.
+            setScaffoldMounted(false);
+          }}
+        >
+          <ScaffoldModal open={scaffoldOpen} />
         </ErrorBoundary>
       )}
       <div className="flex-1 min-h-0 flex">

@@ -3,18 +3,45 @@ import { DialogButton, DialogFooter, DialogFrame, DialogHeader } from '../../../
 
 /**
  * Shared shell for the "scaffold from selection" dialogs (Create EXTRACT,
- * Set TIME_PREFIX): `DialogFrame` with Esc, Enter-to-apply and an Apply
- * button. The caller supplies the body (inputs + preview) and the apply logic.
+ * Set TIME_PREFIX): `DialogFrame` with Esc and a title. Rendered closed rather
+ * than not at all, so it can animate out (#702); the caller's form goes inside,
+ * where Radix mounts it afresh on each opening and keeps it through the exit.
  */
 export function DirectiveDialog({
+  open,
   title,
+  onClose,
+  children,
+}: {
+  open: boolean;
+  title: string;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <DialogFrame
+      open={open}
+      onClose={onClose}
+      label={title}
+      header={<DialogHeader icon="sparkles" iconClassName="text-[var(--color-accent)]" title={title} />}
+      footer={null}
+    >
+      {children}
+    </DialogFrame>
+  );
+}
+
+/**
+ * A directive dialog's body and its Cancel/Apply footer, with Enter-to-apply.
+ * The caller supplies the inputs and preview, and the apply logic.
+ */
+export function DirectiveForm({
   applyLabel,
   applyDisabled,
   onApply,
   onClose,
   children,
 }: {
-  title: string;
   applyLabel: string;
   applyDisabled: boolean;
   onApply: () => void;
@@ -37,23 +64,18 @@ export function DirectiveDialog({
   };
 
   return (
-    <DialogFrame
-      onClose={onClose}
-      label={title}
-      onKeyDown={onKeyDown}
-      header={<DialogHeader icon="sparkles" iconClassName="text-[var(--color-accent)]" title={title} />}
-      footer={
-        <DialogFooter>
-          <DialogButton variant="cancel" onClick={onClose}>
-            Cancel
-          </DialogButton>
-          <DialogButton variant="accent" onClick={onApply} disabled={applyDisabled}>
-            {applyLabel}
-          </DialogButton>
-        </DialogFooter>
-      }
-    >
+    // `contents`, so the panel's flex column lays out the body and the footer
+    // itself; keys from the inputs still bubble here.
+    <div className="contents" onKeyDown={onKeyDown}>
       <div className="p-4 space-y-3">{children}</div>
-    </DialogFrame>
+      <DialogFooter>
+        <DialogButton variant="cancel" onClick={onClose}>
+          Cancel
+        </DialogButton>
+        <DialogButton variant="accent" onClick={onApply} disabled={applyDisabled}>
+          {applyLabel}
+        </DialogButton>
+      </DialogFooter>
+    </div>
   );
 }

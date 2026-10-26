@@ -14,7 +14,7 @@ const SYSLOG = [
 
 function renderOpen(rawData: string) {
   useAppStore.setState({ rawData, scaffoldOpen: true });
-  return render(<ScaffoldModal />);
+  return render(<ScaffoldModal open />);
 }
 
 const append = () => screen.getByRole('button', { name: 'Append to props.conf' });
@@ -65,5 +65,18 @@ describe('ScaffoldModal', () => {
     expect(propsConf).toMatch(/^\[existing\]\nKV_MODE = none\n\n\[syslog:test\]\nMAX_TIMESTAMP_LOOKAHEAD = \d+\n$/);
     expect(metadata.sourcetype).toBe('syslog:test');
     expect(scaffoldOpen).toBe(false);
+  });
+
+  it('renders nothing while closed, and starts afresh on each opening (#702)', () => {
+    useAppStore.setState({ rawData: SYSLOG });
+    const { rerender } = render(<ScaffoldModal open={false} />);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+    rerender(<ScaffoldModal open />);
+    fireEvent.click(suggestion('TIME_FORMAT'));
+    expect(suggestion('TIME_FORMAT')).not.toBeChecked();
+    rerender(<ScaffoldModal open={false} />);
+    rerender(<ScaffoldModal open />);
+    expect(suggestion('TIME_FORMAT')).toBeChecked();
   });
 });
