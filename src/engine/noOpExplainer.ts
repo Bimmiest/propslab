@@ -95,7 +95,7 @@ export function describeNoOp(reason: NoOpReason): string {
     case 'values-empty':
       return `it matched, but ${reason.fields.join(', ')} captured only whitespace, and an empty value creates no field`;
     case 'eval-null':
-      return `\`${reason.expression}\` evaluated to null, so no field was written — usually a field referenced in it is absent`;
+      return `\`${reason.expression}\` evaluated to null, so no field was written`;
     case 'not-explained':
       return 'Not analysed: explanation limit reached for this directive';
   }

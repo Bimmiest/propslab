@@ -31,9 +31,9 @@ export interface GroupedNoOp {
 }
 
 export function groupNoOps(events: readonly Pick<SplunkEvent, 'noOps'>[]): GroupedNoOp[] {
-  const groups = new Map<string, GroupedNoOp & { seen: Map<string, number> }>();
+  const groups = new Map<string, GroupedNoOp & { seen: Map<string, number>; lastEvent: number }>();
 
-  for (const event of events) {
+  for (const [index, event] of events.entries()) {
     for (const noOp of event.noOps ?? []) {
       const key = noOpDirectiveKey(noOp);
       let group = groups.get(key);
@@ -47,10 +47,16 @@ export function groupNoOps(events: readonly Pick<SplunkEvent, 'noOps'>[]): Group
           notExplained: 0,
           eventsAffected: 0,
           seen: new Map<string, number>(),
+          lastEvent: -1,
         };
         groups.set(key, group);
       }
-      group.eventsAffected++;
+      // Events, not records: the count is shown as "of N events", and the
+      // list warns only when it reaches N.
+      if (group.lastEvent !== index) {
+        group.eventsAffected++;
+        group.lastEvent = index;
+      }
       if (noOp.reason.kind === 'not-explained') {
         group.notExplained++;
         continue;
@@ -60,7 +66,7 @@ export function groupNoOps(events: readonly Pick<SplunkEvent, 'noOps'>[]): Group
     }
   }
 
-  return [...groups.values()].map(({ seen, ...group }) => ({
+  return [...groups.values()].map(({ seen, lastEvent: _lastEvent, ...group }) => ({
     ...group,
     reasons: [...seen.entries()].map(([text, events]) => ({ text, events })).sort((a, b) => b.events - a.events),
   }));

@@ -48,6 +48,11 @@ describe('groupNoOps', () => {
     expect(groupNoOps([event([noMatch, sameLine])])).toHaveLength(2);
   });
 
+  it('counts an event once when a directive records two no-ops on it', () => {
+    const groups = groupNoOps([event([noMatch, notExplained]), event([])]);
+    expect(groups[0]?.eventsAffected).toBe(1);
+  });
+
   it('returns nothing for events with no no-ops', () => {
     expect(groupNoOps([event([])])).toEqual([]);
   });
@@ -77,7 +82,33 @@ describe('DirectiveNoOpList', () => {
 
   it('says how many events it had no effect on', () => {
     const { container } = render(<DirectiveNoOpList events={[event([noMatch]), event([noMatch]), event([])]} />);
+    fireEvent.click(within(container).getByRole('button', { name: /Fired on some events/ }));
     expect(container.textContent).toContain('no effect on 2 of 3 events');
+  });
+
+  // In a sourcetype with several log structures, most directives are written
+  // for one structure and miss the others; only one that fired nowhere is a
+  // warning (#772).
+  it('warns only about a directive that had no effect on any event', () => {
+    const { container } = render(<DirectiveNoOpList events={[event([noMatch, missingStanza]), event([noMatch])]} />);
+    expect(container.textContent).toContain('Did not fire (1)');
+    expect(container.textContent).toContain('EXTRACT-user');
+    expect(container.textContent).toContain('Fired on some events (1)');
+    expect(container.textContent).not.toContain('maskit');
+  });
+
+  it('keeps a directive that fired on some events collapsed, with its reasons behind Why', () => {
+    const { container } = render(<DirectiveNoOpList events={[event([noMatch]), event([])]} />);
+    expect(container.textContent).not.toContain('Did not fire');
+    const heading = within(container).getByRole('button', { name: 'Fired on some events (1)' });
+    expect(heading).toHaveAttribute('aria-expanded', 'false');
+    expect(container.textContent).not.toContain('EXTRACT-user');
+
+    fireEvent.click(heading);
+    expect(container.textContent).toContain('EXTRACT-user');
+    expect(container.textContent).not.toContain('stopped agreeing');
+    fireEvent.click(within(container).getByRole('button', { name: 'Why' }));
+    expect(container.textContent).toContain('stopped agreeing at character 10');
   });
 
   it('offers a jump to the line it is written on', () => {

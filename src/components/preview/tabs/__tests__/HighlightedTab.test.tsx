@@ -44,6 +44,26 @@ describe('HighlightedTab', () => {
     useAppStore.setState(initial, true);
   });
 
+  it('counts directives that did not fire over every page, not this page only (#772)', () => {
+    const missed = makeEvent('page one', {
+      noOps: [
+        {
+          directive: 'EXTRACT-action',
+          file: 'props.conf',
+          line: 2,
+          phase: 'search-time',
+          reason: { kind: 'no-match' },
+        },
+      ],
+    });
+    const page1 = [toItem(missed)];
+    render(
+      <HighlightedTab items={page1} allEvents={[...page1, toItem(eventWithBoth)]} currentPage={1} eventsPerPage={1} />,
+    );
+    expect(screen.queryByText(/Did not fire/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Fired on some events (1)' })).toBeInTheDocument();
+  });
+
   it('renders an event card per item by default', () => {
     render(<HighlightedTab items={items} allEvents={items} currentPage={1} eventsPerPage={10} />);
     expect(screen.getAllByText(/Event #/)).toHaveLength(3);
