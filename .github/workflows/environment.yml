@@ -54,7 +54,7 @@ jobs:
     permissions:
       issues: write
     steps:
-      - uses: Bimmiest/shared-workflows/.github/actions/open-or-update-issue@db6586f85d7ffaade83ee996799ebf8f3fe43aae # v1.3.0
+      - uses: Bimmiest/shared-workflows/.github/actions/open-or-update-issue@5f68ca4788224cfb9fd210be687f9c00f7284b4a # v1.3.1
         with:
           label: scheduled-environment
           title: The weekly production environment check failed
