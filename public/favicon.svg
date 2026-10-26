@@ -1,7 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <!-- The header's sliders mark, in the dark theme's accent on the palette's charcoal (#688): a tile reads on light and dark tab strips alike. -->
-  <rect width="32" height="32" rx="7" fill="#222831"/>
-  <g transform="translate(4 4)" fill="none" stroke="#e2c08d" stroke-width="2.25" stroke-linecap="round">
-    <path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/>
-  </g>
+  <!-- The Propslab mark (#743): a config stanza, key = value lines in [ ] brackets. The charcoal tile in a light browser and the sand tile in a dark one, so it stands out on either tab strip. The colours live in the stylesheet: an inline style would override the media query. -->
+  <style>svg { color: #e2c08d } .tile { fill: #222831 } @media (prefers-color-scheme: dark) { svg { color: #222831 } .tile { fill: #e2c08d } }</style>
+  <rect class="tile" width="32" height="32" rx="7"/>
+  <path d="M8.5 6.5H5.5v19h3M23.5 6.5h3v19h-3M10 11.5h4M16.5 11.5h5.5M10 16h5.5M18 16h4M10 20.5h3M15.5 20.5h6.5" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

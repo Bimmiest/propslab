@@ -35,6 +35,11 @@
   --color-accent: #6e4e14;
   --color-accent-hover: #5c410f;
   --color-text-on-accent: #ffffff;
+
+  /* The logo's tile and mark (#743): the charcoal tile here, the sand
+     (inverse) tile in .dark, as the favicon does with the browser's theme. */
+  --color-brand-tile: #222831;
+  --color-brand-mark: #e2c08d;
   --color-text-on-error: #ffffff;
 
   /* Status colours double as text on their own /10 tint: ≥4.5:1 there too. */
@@ -69,6 +74,9 @@
   --color-accent: #e2c08d;
   --color-accent-hover: #ecd2ab;
   --color-text-on-accent: #16191e;
+
+  --color-brand-tile: #e2c08d;
+  --color-brand-mark: #222831;
   --color-text-on-error: #16191e;
 
   --color-error: #fca5a5;
