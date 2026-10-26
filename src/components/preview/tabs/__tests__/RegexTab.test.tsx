@@ -3,6 +3,7 @@ import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { render, screen, fireEvent, within, act, waitFor } from '@testing-library/react';
 import { useAppStore } from '../../../../store/useAppStore';
 import { RegexTab } from '../regex';
+import { FLASH_MS } from '../regex/useRegexResults';
 import type { EnrichedEvent } from '../../enrichEvents';
 import { makeEvent } from '../../../../test/makeEvent';
 import { matchInputs } from '../../../../engine/regexMatch';
@@ -270,12 +271,12 @@ describe('RegexTab — timers (#322)', () => {
       value: { writeText: () => Promise.resolve() },
     });
     useAppStore.setState({ metadata: { index: 'main', host: 'h', source: 's', sourcetype: 'my_app' } });
-    // The labels' 1.5 s timers, told apart from the debounce and React's own.
+    // The labels' timers, told apart from the debounce and React's own by their delay.
     const labelTimers: unknown[] = [];
     const realSetTimeout = globalThis.setTimeout;
     vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: () => void, ms?: number) => {
       const id = realSetTimeout(fn, ms);
-      if (ms === 1500) labelTimers.push(id);
+      if (ms === FLASH_MS) labelTimers.push(id);
       return id;
     }) as typeof setTimeout);
     const clearSpy = vi.spyOn(globalThis, 'clearTimeout');

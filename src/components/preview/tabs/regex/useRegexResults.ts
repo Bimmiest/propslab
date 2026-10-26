@@ -93,8 +93,11 @@ export function useRegexResults(
   return { match, requestedPattern, rawInputs, status, refreshing, pageEntries, countExact, matchStats };
 }
 
+/** How long a confirmation label ("Copied!", "Added!") stays up. */
+export const FLASH_MS = 1500;
+
 /**
- * A confirmation flag that resets itself 1.5 s after it is raised. The reset
+ * A confirmation flag that resets itself FLASH_MS after it is raised. The reset
  * runs from an effect rather than a bare setTimeout in the click handler, so
  * the timer is cleared if the tab unmounts first (a sub-tab switch within
  * 1.5 s of a click).
@@ -103,7 +106,7 @@ export function useFlashFlag(): [boolean, () => void] {
   const [flag, setFlag] = useState(false);
   useEffect(() => {
     if (!flag) return;
-    const t = setTimeout(() => setFlag(false), 1500);
+    const t = setTimeout(() => setFlag(false), FLASH_MS);
     return () => clearTimeout(t);
   }, [flag]);
   return [flag, () => setFlag(true)];

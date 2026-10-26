@@ -32,7 +32,7 @@ import { runCtx } from './runCtx';
 import { fcSeed } from '../../test/fcSeed';
 import { makeEvent } from '../../test/makeEvent';
 
-fc.configureGlobal({ seed: fcSeed(371), numRuns: 200 });
+fc.configureGlobal({ seed: fcSeed(5721), numRuns: 200 });
 
 const MIN = 60_000;
 const HOUR = 60 * MIN;
