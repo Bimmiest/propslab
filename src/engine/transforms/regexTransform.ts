@@ -58,6 +58,17 @@ const SINGLE_VALUE_DEST_KEYS = new Set([
  * The stanza's REGEX, compiled under the stanza's own MATCH_LIMIT and
  * DEPTH_LIMIT (Splunk's defaults when unset).
  */
+/**
+ * A REGEX or FORMAT value as Splunk reads it: an index-time transform keeps
+ * trailing whitespace, a search-time one drops it. This follows a capture on
+ * Splunk 10.4.0, not the spec, which is silent (ADR 0021). The parser keeps
+ * trailing whitespace, as a conf file does. Leading whitespace was not
+ * captured and is dropped in both phases, as before.
+ */
+function asRead(value: string, phase: Phase): string {
+  return phase === 'index-time' ? value.trimStart() : value.trim();
+}
+
 function getCompiledRegex(transformStanza: ConfStanza, pattern: string): SplunkRegex | null {
   let byPattern = regexCache.get(transformStanza);
   if (!byPattern) {
@@ -379,8 +390,9 @@ function extractNamedGroups(run: MatchedRun): void {
  */
 function resolveFormat(transformStanza: ConfStanza, run: MatchedRun): string | undefined {
   const hasNamedGroups = run.firstMatch.groups !== undefined;
+  const written = run.settings.formatDir?.value;
   return (
-    run.settings.formatDir?.value.trim() ??
+    (written === undefined ? undefined : asRead(written, run.phase)) ??
     (run.phase === 'index-time' && !hasNamedGroups && run.firstMatch.length > 1
       ? `${transformStanza.name}::$1`
       : undefined)
@@ -415,7 +427,7 @@ export function applyRegexTransform(
   if (!regexDir) return { fields: {}, matched: false };
 
   const sourceValue = applyLookahead(resolveSourceValue(event, sourceKeyDir), transformStanza, phase);
-  const pattern = regexDir.value.trim();
+  const pattern = asRead(regexDir.value, phase);
   const compiled = getCompiledRegex(transformStanza, pattern);
   if (!compiled) {
     // The transform silently does nothing, so let the caller surface a diagnostic.

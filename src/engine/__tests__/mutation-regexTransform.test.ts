@@ -61,7 +61,7 @@ describe('LOOKAHEAD', () => {
 describe('why a transform did nothing', () => {
   it('reports a REGEX that will not compile, and tells the caller which', () => {
     const onInvalid = vi.fn();
-    const r = applyRegexTransform(event('a'), stanza({ REGEX: '  (unclosed  ' }), onInvalid);
+    const r = applyRegexTransform(event('a'), stanza({ REGEX: '  (unclosed' }), onInvalid);
     expect(onInvalid).toHaveBeenCalledWith('(unclosed');
     expect(r.matched).toBe(false);
     expect(r.noOp?.kind).toBe('regex-invalid');
@@ -175,11 +175,8 @@ describe('DEST_KEY', () => {
     expect(r.destValue).toBe('d::1');
   });
 
-  it('trims DEST_KEY and FORMAT', () => {
-    const r = applyRegexTransform(
-      event('v=1'),
-      stanza({ REGEX: 'v=(\\d)', FORMAT: '  x::$1  ', DEST_KEY: '  _meta  ' }),
-    );
+  it('trims DEST_KEY, and the leading whitespace of FORMAT', () => {
+    const r = applyRegexTransform(event('v=1'), stanza({ REGEX: 'v=(\\d)', FORMAT: '  x::$1', DEST_KEY: '  _meta  ' }));
     expect(r).toMatchObject({ destKey: '_meta', destValue: 'x::1' });
   });
 
