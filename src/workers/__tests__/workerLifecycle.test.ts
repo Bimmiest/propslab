@@ -16,7 +16,7 @@ import {
   MAX_WORKER_LOAD_FAILURES,
   type ManagedWorkerConfig,
 } from '../workerLifecycle';
-import { WORKER_READY, isWorkerReadyMessage } from '../../engine/workerProtocol';
+import { WORKER_READY, isWorkerReadyMessage } from '../workerProtocol';
 
 interface Req {
   id: number;

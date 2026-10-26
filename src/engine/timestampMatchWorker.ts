@@ -13,13 +13,13 @@
 
 import { probeTimestamps } from './timestampMatch';
 import type { TimeConfig, TimestampProbe } from './timestampMatch';
-import { serveWithRegexEngine } from '../utils/regexEngineLoader';
+import { serveWithRegexEngine } from '../workers/regexEngineLoader';
 import {
   createRequestQueue,
   type QueuedRequest,
   type WorkerInputsMessage,
   type WorkerSkippedResponse,
-} from './workerProtocol';
+} from '../workers/workerProtocol';
 
 export interface TimestampMatchRequest extends QueuedRequest {
   /**

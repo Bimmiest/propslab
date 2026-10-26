@@ -8,7 +8,7 @@
  * outside any component and uses the same lifecycle as the hooks.
  */
 
-import { isWorkerReadyMessage } from '../engine/workerProtocol';
+import { isWorkerReadyMessage } from './workerProtocol';
 
 /** How long input must be still before the pipeline re-runs in auto mode. */
 export const PIPELINE_DEBOUNCE_MS = 300;
@@ -35,7 +35,7 @@ export const LOAD_WAIT_FACTOR = 6;
 // is the caller's policy, and it arrives here as callbacks; the lifecycle only
 // says what happened.
 //
-// Classification is by the worker's ready signal (`engine/workerProtocol.ts`),
+// Classification is by the worker's ready signal (`workerProtocol.ts`),
 // never by whether it had been given work: the first request is posted in the
 // same commit the worker is built, before its script has even run, so a
 // module that throws at top level must not be charged to that request.

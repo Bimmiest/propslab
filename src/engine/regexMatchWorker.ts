@@ -13,13 +13,13 @@
 
 import { matchInputs } from './regexMatch';
 import type { RegexMatchInfo } from './regexMatch';
-import { serveWithRegexEngine } from '../utils/regexEngineLoader';
+import { serveWithRegexEngine } from '../workers/regexEngineLoader';
 import {
   createRequestQueue,
   type QueuedRequest,
   type WorkerInputsMessage,
   type WorkerSkippedResponse,
-} from './workerProtocol';
+} from '../workers/workerProtocol';
 
 export interface RegexMatchRequest extends QueuedRequest {
   pattern: string;

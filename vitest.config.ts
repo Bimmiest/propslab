@@ -149,11 +149,13 @@ export default defineConfig({
           functions: 86,
           lines: 90,
         },
+        // Lower since #566 moved workerLifecycle.ts, a well-covered module, to
+        // src/workers; the hooks themselves are covered as before.
         'src/hooks/**': {
-          statements: 94,
-          branches: 84,
+          statements: 93,
+          branches: 81,
           functions: 95,
-          lines: 96,
+          lines: 95,
         },
         'src/monaco/**': {
           statements: 91,
@@ -168,10 +170,16 @@ export default defineConfig({
           lines: 99,
         },
         'src/utils/**': {
-          statements: 93,
+          statements: 95,
           branches: 89,
           functions: 99,
           lines: 96,
+        },
+        'src/workers/**': {
+          statements: 95,
+          branches: 91,
+          functions: 99,
+          lines: 95,
         },
       },
     },

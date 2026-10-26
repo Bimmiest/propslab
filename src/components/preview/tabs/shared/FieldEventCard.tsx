@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import type { ViewEvent } from '../../../../utils/viewResult';
 import { HighlightedRaw } from './HighlightedRaw';
 import { EventContextMenu } from './EventContextMenu';
+import { EventCardHeader, EventNumber } from './EventCardHeader';
 
 interface FieldEventCardProps {
   event: ViewEvent;
@@ -37,10 +38,10 @@ export function FieldEventCard({
   return (
     <EventContextMenu event={event}>
       <div className="border border-[var(--color-border)] rounded bg-[var(--color-bg-secondary)]">
-        <div className="flex items-center gap-2 px-3 py-1.5 border-b border-[var(--color-border)] bg-[var(--color-bg-tertiary)]">
-          <span className="text-xs font-medium text-[var(--color-text-muted)]">Event #{globalIdx}</span>
+        <EventCardHeader>
+          <EventNumber globalIdx={globalIdx} />
           {badges}
-        </div>
+        </EventCardHeader>
         <pre className="p-3 text-xs font-mono whitespace-pre-wrap break-all">
           <HighlightedRaw
             raw={event._raw}

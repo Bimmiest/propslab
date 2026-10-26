@@ -112,11 +112,10 @@ describe('setters', () => {
     expect(state().processingResult).toBeNull();
   });
 
-  it('setRawData and setEventsPerPage go back to page one', () => {
+  it('setRawData keeps the page, and setEventsPerPage goes back to page one (#566)', () => {
     state().setCurrentPage(5);
     state().setRawData('x');
-    expect(state()).toMatchObject({ rawData: 'x', currentPage: 1 });
-    state().setCurrentPage(5);
+    expect(state()).toMatchObject({ rawData: 'x', currentPage: 5 });
     state().setEventsPerPage(50);
     expect(state()).toMatchObject({ eventsPerPage: 50, currentPage: 1 });
   });

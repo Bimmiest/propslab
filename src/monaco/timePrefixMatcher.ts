@@ -25,7 +25,7 @@
 // makes the preview omit its sample line (#403, #420).
 // ---------------------------------------------------------------------------
 
-import { createManagedWorker } from '../hooks/workerLifecycle';
+import { createManagedWorker } from '../workers/workerLifecycle';
 import type { TimestampMatchRequest, TimestampMatchResponse } from '../engine/timestampMatchWorker';
 
 /**

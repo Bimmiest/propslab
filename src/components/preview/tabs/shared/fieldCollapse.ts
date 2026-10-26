@@ -38,24 +38,3 @@ export function isFieldVisible(
   }
   return true;
 }
-
-/**
- * Fold newly-appeared parents into the collapsed set.
- *
- * "Collapse all on load" has to hold for a parent that appears LATER — after
- * a props.conf edit changes which fields extract — too, so this reconciles on
- * the parent set rather than initialising once: new parents start collapsed,
- * and the ones the user has already seen keep whatever they chose.
- */
-export function reconcileCollapsed(
-  allParentNames: readonly string[],
-  seenParents: ReadonlySet<string>,
-  collapsed: ReadonlySet<string>,
-): { collapsed: Set<string>; seen: Set<string> } | null {
-  const fresh = allParentNames.filter((name) => !seenParents.has(name));
-  if (fresh.length === 0) return null;
-  return {
-    collapsed: new Set([...collapsed, ...fresh]),
-    seen: new Set([...seenParents, ...allParentNames]),
-  };
-}

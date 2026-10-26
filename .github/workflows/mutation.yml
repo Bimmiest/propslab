@@ -33,12 +33,14 @@ on:
       - 'packages/mcp-server/src/requestId.ts'
       - 'packages/mcp-server/src/messageLimit.ts'
       - 'packages/mcp-server/src/serialize.ts'
-      - 'src/hooks/workerLifecycle.ts'
+      - 'src/workers/workerLifecycle.ts'
+      - 'src/workers/workerProtocol.ts'
       - 'src/store/**'
       # Their tests, which a PR can change alone: the run then mutates what
       # the changed tests import (scripts/mutation-targets.mjs).
       - 'src/utils/__tests__/**'
       - 'src/hooks/__tests__/**'
+      - 'src/workers/__tests__/**'
       - 'packages/mcp-server/src/__tests__/**'
       - 'stryker.config.mjs'
       - 'scripts/check-mutation-canary.mjs'

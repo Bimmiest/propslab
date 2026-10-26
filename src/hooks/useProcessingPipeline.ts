@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useMemo, type RefObject } from 'react';
 import { useAppStore } from '../store/useAppStore';
 import { useDebounce } from './useDebounce';
-import { PIPELINE_DEBOUNCE_MS, createManagedWorker, type ManagedWorker } from './workerLifecycle';
+import { PIPELINE_DEBOUNCE_MS, createManagedWorker, type ManagedWorker } from '../workers/workerLifecycle';
 import type { PipelineWorkerRequest, PipelineWorkerResponse } from '../engine/pipelineWorker';
 import type { EventMetadata } from '../engine/types';
 import { toViewResult } from '../utils/viewResult';

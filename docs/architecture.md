@@ -40,8 +40,9 @@ src/
 │
 ├── store/useAppStore.ts       # Zustand store (flat; subscribe per slice)
 ├── hooks/                     # useProcessingPipeline, useDebounce, useTheme, usePagination
-├── utils/                     # splunkRegex (the PCRE2 adapter), regexEngineLoader,
-│                              #   strftime, diffEngine, fieldHighlight, countLines
+├── workers/                   # No React: workerLifecycle, workerProtocol, regexEngineLoader
+├── utils/                     # splunkRegex (the PCRE2 adapter), strftime, diffEngine,
+│                              #   fieldHighlight, countLines
 │
 └── components/
     ├── layout/                # AppShell, ActivityRail, SimulatorView,
@@ -97,11 +98,11 @@ Monaco editor instances live in a module-level `Map` in `editorRegistry.ts`, not
 
 ## Workers
 
-Three workers run user regexes off the main thread: the pipeline (`pipelineWorker.ts`), the Regex tab and Create EXTRACT dialog (`regexMatchWorker.ts`), and the Timestamp tab and TIME_FORMAT hover (`timestampMatchWorker.ts`). All three share one lifecycle, `createManagedWorker` in `src/hooks/workerLifecycle.ts`. It has no React import, so the hover can use it outside a component. Each caller passes in only its fallback policy, as callbacks.
+Three workers run user regexes off the main thread: the pipeline (`pipelineWorker.ts`), the Regex tab and Create EXTRACT dialog (`regexMatchWorker.ts`), and the Timestamp tab and TIME_FORMAT hover (`timestampMatchWorker.ts`). All three share one lifecycle, `createManagedWorker` in `src/workers/workerLifecycle.ts`. It has no React import, so the hover can use it outside a component. Each caller passes in only its fallback policy, as callbacks.
 
 The lifecycle rules:
 
-- **Regex engine first, then ready.** Each worker entry runs through `serveWithRegexEngine` (`utils/regexEngineLoader.ts`): it loads the PCRE2 WebAssembly module itself, from the one same-origin asset URL fixed at build time, and only then posts `WORKER_READY` (`engine/workerProtocol.ts`). Requests that arrive while it loads wait, in order. The engine is never taken from a message, so no message can choose the code a worker compiles; loading costs a few milliseconds, and the page loads its own copy for the editor before the first render.
+- **Regex engine first, then ready.** Each worker entry runs through `serveWithRegexEngine` (`workers/regexEngineLoader.ts`): it loads the PCRE2 WebAssembly module itself, from the one same-origin asset URL fixed at build time, and only then posts `WORKER_READY` (`workers/workerProtocol.ts`). Requests that arrive while it loads wait, in order. The engine is never taken from a message, so no message can choose the code a worker compiles; loading costs a few milliseconds, and the page loads its own copy for the editor before the first render.
 - **Ready signal.** An error before `WORKER_READY` is a *load failure*: the chunk didn't fetch, CSP blocked it, the module threw at top level, or the engine would not instantiate. An error after it is a *crash*.
 - **Load failures are capped.** After `MAX_WORKER_LOAD_FAILURES`, no new worker is built. The pipeline and the matchers then run on the calling thread. The hover has no fallback and drops its sample line.
 - **Crashes are never retried inline.** A request whose worker crashed never runs on the main thread (#326).

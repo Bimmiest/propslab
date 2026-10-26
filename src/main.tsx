@@ -6,7 +6,7 @@ import { createRoot } from 'react-dom/client';
 import * as RadixTooltip from '@radix-ui/react-tooltip';
 import './index.css';
 import App from './App.tsx';
-import { loadRegexEngine } from './utils/regexEngineLoader';
+import { loadRegexEngine } from './workers/regexEngineLoader';
 import { applyTheme } from './hooks/useTheme';
 import { useAppStore } from './store/useAppStore';
 import { installStaleChunkReload, restoreStaleChunkReload } from './staleChunkReload';

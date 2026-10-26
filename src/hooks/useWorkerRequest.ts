@@ -15,8 +15,8 @@
 // ---------------------------------------------------------------------------
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { createManagedWorker } from './workerLifecycle';
-import { isWorkerSkippedResponse, type WorkerInputsMessage } from '../engine/workerProtocol';
+import { createManagedWorker } from '../workers/workerLifecycle';
+import { isWorkerSkippedResponse, type WorkerInputsMessage } from '../workers/workerProtocol';
 
 /** What is posted: the request, or what `sendAhead` leaves of it, with the id this hook assigns. */
 type Posted = object & { id: number };

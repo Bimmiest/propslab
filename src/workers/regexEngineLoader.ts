@@ -11,8 +11,8 @@
  */
 
 import wasmUrl from 'pcre2-wasm-utf16/pcre2.wasm?url';
-import { initRegexEngine } from './splunkRegex';
-import { WORKER_READY } from '../engine/workerProtocol';
+import { initRegexEngine } from '../utils/splunkRegex';
+import { WORKER_READY } from './workerProtocol';
 
 let loading: Promise<void> | null = null;
 
