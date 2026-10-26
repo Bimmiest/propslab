@@ -14,9 +14,9 @@
   ],
   "packages": {
     "pcre2-wasm-utf16": {
-      "versions": ["0.1.0"],
+      "versions": ["0.2.0"],
       "licence": "MIT AND BSD-3-Clause WITH PCRE2-exception",
-      "reason": "Our own package (Bimmiest/pcre2-wasm-utf16), read 2026-10-25 at the commit package.json pins. The wrapper, bridge and build script are MIT. pcre2.wasm is compiled PCRE2, under BSD-3-Clause with the PCRE2 exception (LICENCE-PCRE2.md in the package). The BSD condition for binary redistribution is to reproduce the copyright notices in the documentation, and NOTICE does that in its PCRE2 section. Named here rather than listed under licences, so that a new dependency under this licence is read too."
+      "reason": "Our own package (Bimmiest/pcre2-wasm-utf16), read 2026-10-25 at the commit package.json pins, and again for 0.2.0 on 2026-10-26: its licence files are unchanged. The wrapper, bridge and build script are MIT. pcre2.wasm is compiled PCRE2, under BSD-3-Clause with the PCRE2 exception (LICENCE-PCRE2.md in the package). The BSD condition for binary redistribution is to reproduce the copyright notices in the documentation, and NOTICE does that in its PCRE2 section. Named here rather than listed under licences, so that a new dependency under this licence is read too."
     }
   }
 }

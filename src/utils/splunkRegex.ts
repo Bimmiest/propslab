@@ -24,6 +24,7 @@ import {
   RegexMatchError,
   RegexSyntaxError,
   type CompiledModule,
+  type InitOptions,
   type Match,
   type ModuleBytes,
 } from 'pcre2-wasm-utf16';
@@ -36,18 +37,21 @@ export type RegexEngineModule = CompiledModule;
  * Instantiate the regex engine from its module (compiled or bytes). Calling it
  * again replaces the instance, and with it every compiled pattern: the cache is
  * emptied so nothing compiled against the old memory is run against the new.
+ * `options.maxMemoryBytes` caps the instance's memory; a match that needs more
+ * stops as a limit hit (`lastError`), as a match-step limit does.
  */
 export async function initRegexEngine(
   source: CompiledModule | ModuleBytes | PromiseLike<CompiledModule | ModuleBytes>,
+  options?: InitOptions,
 ): Promise<void> {
-  await init(source);
+  await init(source, options);
   cache.clear();
   probeCache.clear();
 }
 
 /** {@link initRegexEngine}, synchronously: for workers and Node. */
-export function initRegexEngineSync(source: CompiledModule | ModuleBytes): void {
-  initSync(source);
+export function initRegexEngineSync(source: CompiledModule | ModuleBytes, options?: InitOptions): void {
+  initSync(source, options);
   cache.clear();
   probeCache.clear();
 }

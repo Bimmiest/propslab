@@ -44,11 +44,12 @@ export type WorkerRequest = SimulateRequest | ValidateRequest | ExplainRequest;
 
 /**
  * What a sandbox worker is started with: its request, the regex engine the
- * server compiled once (see regexEngine.ts), and the shared word it reports
- * its progress in (progress.ts).
+ * server compiled once (see regexEngine.ts) and the most memory its instance
+ * may use, and the shared word it reports its progress in (progress.ts).
  */
 export type WorkerData = WorkerRequest & {
   regexEngine: RegexEngineModule;
+  regexMemoryBytes: number;
   progress: SharedArrayBuffer;
 };
 

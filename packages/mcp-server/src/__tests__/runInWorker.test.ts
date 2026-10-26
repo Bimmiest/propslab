@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   DEFAULT_MAX_CONCURRENT_WORKERS,
   DEFAULT_MAX_QUEUED_CALLS,
+  DEFAULT_REGEX_MEMORY_BYTES,
   runInWorker,
   Semaphore,
   WorkerBusyError,
@@ -426,6 +427,39 @@ describe('worker stdout', () => {
       stdout.mockRestore();
       stderr.mockRestore();
     }
+  });
+});
+
+describe("the worker's regex memory (#568)", () => {
+  const SIMULATE_WORKER = fileURLToPath(new URL('../../dist/simulateWorker.js', import.meta.url));
+  // A 600,000-character event: its UTF-16 copy alone is more than a 2 MiB cap leaves.
+  const request = {
+    op: 'simulate',
+    raw: `x=${'a'.repeat(600_000)}\n`,
+    metadata: { index: 'main', host: 'h', source: 's', sourcetype: 'st' },
+    propsConf: '[st]\nSHOULD_LINEMERGE = false\nTRUNCATE = 0\n',
+    transformsConf: '',
+    perEventPipeline: false,
+    captureOffsets: false,
+    maxEvents: 1,
+    includeSnapshots: false,
+  } as const;
+  const memoryStops = async (regexMemoryBytes?: number) => {
+    const out = await runInWorker<{ diagnostics: { message: string }[] }>(request, 20_000, {
+      workerPath: SIMULATE_WORKER,
+      limiter: new Semaphore(1),
+      regexMemoryBytes,
+    });
+    return out.diagnostics.filter((d) => /no more memory/.test(d.message));
+  };
+
+  it('stops a match that needs more than the cap as a limit hit, with a warning, and the run completes', async () => {
+    expect(await memoryStops(2 * 1024 * 1024)).not.toEqual([]);
+  });
+
+  it('has room for the same event under the default cap', async () => {
+    expect(DEFAULT_REGEX_MEMORY_BYTES).toBe(256 * 1024 * 1024);
+    expect(await memoryStops()).toEqual([]);
   });
 });
 
