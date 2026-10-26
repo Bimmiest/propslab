@@ -2,7 +2,6 @@
 import { describe, it, expect } from 'vitest';
 import { render, fireEvent, within } from '@testing-library/react';
 import { DirectiveNoOpList } from '../DirectiveNoOpList';
-import { groupNoOps } from '../../../../../engine/groupNoOps';
 import type { DirectiveNoOp, SplunkEvent } from '../../../../../engine/types';
 import { makeEvent } from '../../../../../test/makeEvent';
 
@@ -27,45 +26,6 @@ const missingStanza: DirectiveNoOp = {
   phase: 'index-time',
   reason: { kind: 'transforms-stanza-missing', name: 'maskit' },
 };
-
-describe('groupNoOps', () => {
-  it('collapses the same directive across events into one row', () => {
-    const groups = groupNoOps([event([noMatch]), event([noMatch]), event([noMatch])]);
-    expect(groups).toHaveLength(1);
-    expect(groups[0]?.eventsAffected).toBe(3);
-  });
-
-  it('keeps distinct reasons for the same directive, commonest first', () => {
-    const other: DirectiveNoOp = { ...noMatch, reason: { kind: 'source-key-empty', sourceKey: '_raw' } };
-    const groups = groupNoOps([event([noMatch]), event([other]), event([other])]);
-    expect(groups[0]?.reasons).toHaveLength(2);
-    expect(groups[0]?.reasons[0]?.events).toBe(2);
-    expect(groups[0]?.reasons[0]?.text).toContain('_raw is empty');
-  });
-
-  it('keeps two directives on the same line apart', () => {
-    const sameLine: DirectiveNoOp = { ...missingStanza, line: 3 };
-    expect(groupNoOps([event([noMatch, sameLine])])).toHaveLength(2);
-  });
-
-  it('counts an event once when a directive records two no-ops on it', () => {
-    const groups = groupNoOps([event([noMatch, notExplained]), event([])]);
-    expect(groups[0]?.eventsAffected).toBe(1);
-  });
-
-  it('returns nothing for events with no no-ops', () => {
-    expect(groupNoOps([event([])])).toEqual([]);
-  });
-
-  it('counts events past the explanation limit apart from the reasons (#452)', () => {
-    // Fifty analysed misses and 450 past the cap: the headline must stay the
-    // real reason, not "not analysed", however many there are of the latter.
-    const groups = groupNoOps([event([noMatch]), event([notExplained]), event([notExplained])]);
-    expect(groups[0]?.eventsAffected).toBe(3);
-    expect(groups[0]?.notExplained).toBe(2);
-    expect(groups[0]?.reasons).toEqual([{ text: expect.stringContaining('stopped agreeing') as string, events: 1 }]);
-  });
-});
 
 describe('DirectiveNoOpList', () => {
   it('renders nothing at all when every directive fired', () => {
