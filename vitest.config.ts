@@ -144,7 +144,7 @@ export default defineConfig({
           lines: 97,
         },
         'src/components/**': {
-          statements: 88,
+          statements: 90,
           branches: 79,
           functions: 86,
           lines: 90,
