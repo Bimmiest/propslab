@@ -170,6 +170,12 @@ test.describe('raw-log editor', () => {
     await page.keyboard.type('x=1 '.repeat(80));
     await expect(raw.locator('.wwi').first()).toBeAttached();
   });
+
+  test('names the format of the sample beside the line count (#742)', async ({ page }) => {
+    await openApp(page);
+    await loadExample(page, APACHE);
+    await expect(page.getByText('Format: Access log')).toBeVisible();
+  });
 });
 
 test.describe('monaco contributions', () => {

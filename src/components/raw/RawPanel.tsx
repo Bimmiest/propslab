@@ -9,6 +9,7 @@ import { registerEditor, unregisterEditor } from '../editor/editorRegistry';
 import { EditorValidationList } from '../editor/EditorValidationList';
 import { CursorPosition } from '../editor/CursorPosition';
 import { countLines } from '../../utils/countLines';
+import { detectLogFormat } from '../../engine/scaffold/analyzers/logFormat';
 
 // Module-level so the identity is stable: MonacoEditor treats a new `options`
 // object as a change and re-runs updateOptions.
@@ -68,6 +69,7 @@ export function RawPanel() {
   }, []);
 
   const lineCount = useMemo(() => countLines(rawData), [rawData]);
+  const format = useMemo(() => detectLogFormat(rawData), [rawData]);
   // A test, not trim(), which copies the whole buffer to answer a yes/no.
   const hasText = /\S/.test(rawData);
 
@@ -117,9 +119,20 @@ export function RawPanel() {
       </div>
 
       <div className="flex items-center justify-between px-3 py-1 text-xs shrink-0 bg-[var(--color-bg-secondary)] border-t border-[var(--color-border)]">
-        <span className="text-[var(--color-text-muted)]">
-          {lineCount > 0 ? `${lineCount} line${lineCount !== 1 ? 's' : ''} · ` : ''}
-          {rawData.length.toLocaleString()} chars
+        <span className="flex items-center gap-2 min-w-0 text-[var(--color-text-muted)]">
+          {format && (
+            <span
+              title={format.evidence}
+              className="shrink-0 px-1.5 rounded font-medium bg-[var(--color-bg-tertiary)] text-[var(--color-text-secondary)]"
+            >
+              <span className="sr-only">Format: </span>
+              {format.name}
+            </span>
+          )}
+          <span className="truncate">
+            {lineCount > 0 ? `${lineCount} line${lineCount !== 1 ? 's' : ''} · ` : ''}
+            {rawData.length.toLocaleString()} chars
+          </span>
         </span>
         <div className="flex items-center gap-3 min-w-0">
           <CursorPosition editor={editorInstance} withBytes />
