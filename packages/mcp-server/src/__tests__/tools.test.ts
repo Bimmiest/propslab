@@ -11,7 +11,7 @@ import {
   validateInputShape,
   workerFailure,
 } from '../tools';
-import { WorkerStartTimeoutError, WorkerTimeoutError } from '../runInWorker';
+import { WorkerBusyError, WorkerOutOfMemoryError, WorkerStartTimeoutError, WorkerTimeoutError } from '../runInWorker';
 import type { RunProgress } from '../progress';
 import { explainOutputShape, validateOutputShape } from '../outputSchemas';
 import { MAX_RESPONSE_BYTES } from '../responseBudget';
@@ -323,6 +323,25 @@ describe('explain_precedence', () => {
     expect(effective['TIME_FORMAT']).toBe('%Y-%m-%d');
     expect(effective['CHARSET']).toBe('UTF-8');
   });
+
+  it('resolves nothing for transforms.conf, whose stanzas no event matches', async () => {
+    const out = payload(
+      await handleExplainPrecedence(
+        {
+          file: 'transforms.conf',
+          conf: '[t]\nREGEX = x\n',
+          sourcetype: 'access_log',
+          index: 'main',
+          host: 'localhost',
+          source: '/var/log/x',
+          timeout_ms: 10_000,
+        },
+        WORKER_PATH,
+      ),
+    );
+    expect(out.stanzas.map((s: { name: string }) => s.name)).toEqual(['t']);
+    expect(out).not.toHaveProperty('resolution');
+  });
 });
 
 describe('lookup_directive', () => {
@@ -345,12 +364,27 @@ describe('lookup_directive', () => {
     expect(result.isError).toBe(true);
     const out = payload(result);
     expect(out.suggestions).toContainEqual({ file: 'props.conf', canonical: 'KV_MODE' });
+    expect(out.note).toMatch(/case-sensitive; a mis-cased name is silently ignored and the default applies/);
+  });
+
+  it('says so when no key matches, even case-insensitively', () => {
+    const result = handleLookupDirective({ key: 'NOT_A_DIRECTIVE' });
+    expect(result.isError).toBe(true);
+    expect(payload(result)).toEqual({
+      error: 'unknown_directive',
+      key: 'NOT_A_DIRECTIVE',
+      note: 'No registry entry matches this key, exactly or case-insensitively.',
+    });
   });
 
   it('lists directives per file when no key is given', () => {
     const out = payload(handleLookupDirective({ file: 'transforms.conf' }));
     expect(out['transforms.conf'].some((d: { key: string }) => d.key === 'REGEX')).toBe(true);
     expect(out).not.toHaveProperty('props.conf');
+  });
+
+  it('lists both files when neither key nor file is given', () => {
+    expect(Object.keys(payload(handleLookupDirective({})))).toEqual(['props.conf', 'transforms.conf']);
   });
 });
 
@@ -377,6 +411,10 @@ describe('conf size bound', () => {
       expect(out.error).toBe('input_too_large');
       expect(out.conf_chars).toBe(2 * half.length);
       expect(out.max_conf_chars).toBe(MAX_TOTAL_CONF_CHARS);
+      expect(out.message).toMatch(
+        new RegExp(`totals ${2 * half.length} characters .*limit is ${MAX_TOTAL_CONF_CHARS}\\.`),
+      );
+      expect(out.guidance).toMatch(/only the stanzas that matter .*the transforms they reference/);
     }
   });
 
@@ -400,6 +438,7 @@ describe('conf size bound', () => {
     const explain = z.object(explainInputShape);
     expect(explain.safeParse({ conf: layers(3, 700_000) }).success).toBe(false);
     expect(explain.safeParse({ conf: layers(2, 700_000) }).success).toBe(true);
+    expect(explain.safeParse({ conf: layers(2, MAX_TOTAL_CONF_CHARS / 2) }).success).toBe(true);
     // The combined sum is a cross-field rule the shape cannot express; the
     // handler owns it (above). Each field alone still passes the schema.
     const big = layers(2, 600_000);
@@ -549,9 +588,90 @@ describe('timeout budget and advice (#488)', () => {
   });
 
   it('reports a worker that never started as its own error, not a timeout of the input', () => {
-    const out = advise(new WorkerStartTimeoutError(10_000), { op: 'validate' });
+    const result = workerFailure(new WorkerStartTimeoutError(10_000), { op: 'validate' });
+    expect(result.isError).toBe(true);
+    const out = payload(result);
     expect(out).toMatchObject({ error: 'start_timeout', limit_ms: 10_000 });
+    expect(out.message).toMatch(/did not start within 10000ms, so the input was never run\. .*likely overloaded/);
     expect(out.guidance).toMatch(/Nothing is wrong with the input/);
+  });
+
+  it('says how far the run got, and lists the regexes only where one may be the cause', () => {
+    const simulate = { op: 'simulate', rawChars: 50 } as const;
+    const exceeded = 'The run exceeded its 5000ms wall-clock budget and was hard-terminated';
+
+    const parsing = workerFailure(timeout({ phase: 'parsing' }), simulate);
+    expect(parsing.isError).toBe(true);
+    const parsed = payload(parsing);
+    expect(parsed.message.startsWith(exceeded)).toBe(true);
+    expect(parsed.guidance).toMatch(/its size, not a pattern: send only the stanzas that matter/);
+    expect(parsed).not.toHaveProperty('regex_directives');
+
+    const finishing = advise(timeout({ phase: 'finishing' }), simulate);
+    expect(finishing.message).toMatch(/after the run itself had finished, while shaping the response/);
+    expect(finishing).not.toHaveProperty('regex_directives');
+
+    // Validate and explain run no directive's regex, whatever stage they report.
+    const validate = advise(timeout({ phase: 'running' }), { op: 'validate' });
+    expect(validate.message).toMatch(/while linting the conf and compiling its regexes\./);
+    expect(validate.guidance).toMatch(/only the stanzas that matter/);
+    expect(advise(timeout({ phase: 'running' }), { op: 'explain' }).message).toMatch(
+      /while matching stanzas to the event\./,
+    );
+    const staged = advise(timeout({ phase: 'running', stage: 'EXTRACT', events: 1 }), { op: 'validate' });
+    expect(staged.message).toMatch(/no pattern is backtracking/);
+
+    // Stalled: the suspects, and no truncation note when all of them fit.
+    const stalled = advise(timeout({ phase: 'running', stage: 'EXTRACT', events: 1 }), simulate);
+    expect(stalled.message).toMatch(/EXTRACT on a single event\. .*backtracking heavily/);
+    expect(stalled.regex_directives).toEqual([]);
+    expect(stalled).not.toHaveProperty('regex_directive_count');
+
+    // Over many events either cause is possible, so the suspects come too.
+    expect(advise(timeout({ phase: 'running', stage: 'EVAL', events: 5_000 }), simulate).regex_directives).toEqual([]);
+  });
+
+  it('blames LINE_BREAKER only below 50 sample characters per budget millisecond', () => {
+    const at = (rawChars: number) =>
+      advise(timeout({ phase: 'running', stage: 'LINE_BREAKER', events: 0 }), { op: 'simulate', rawChars });
+    expect(at(249_999).message).toMatch(/likeliest cause/);
+    const volume = at(250_000);
+    expect(volume.message).toMatch(/in breaking a 250000-character sample into events\. .*simply large/);
+  });
+
+  it('offers no larger budget once the run had the largest', () => {
+    expect(advise(timeout({ phase: 'finishing' }, 30_000), { op: 'validate' }).guidance).toBe('Send less conf text.');
+  });
+
+  it('says an out-of-memory run was too big, not that a regex failed', () => {
+    const err = new WorkerOutOfMemoryError({ maxOldGenerationSizeMb: 256 });
+    const out = advise(err, { op: 'simulate', rawChars: 50 });
+    expect(out).toMatchObject({ error: 'out_of_memory', heap_limit_mb: 256 });
+    expect(out.message).toMatch(/exceeded the sandbox's 256MB heap limit and was terminated\. The server itself/);
+    expect(out.guidance).toMatch(/fewer layers, or a LINE_BREAKER that splits .*event\. The limit is fixed; retrying/);
+    expect(out).not.toHaveProperty('regex_directives');
+  });
+
+  it('tells a busy caller to wait, not to change its input', () => {
+    const out = advise(new WorkerBusyError(4, 16), { op: 'validate' });
+    expect(out).toMatchObject({ error: 'busy', max_concurrent: 4, max_queued: 16 });
+    expect(out.guidance).toMatch(/Nothing is wrong with the input\. Wait .* retry; issue fewer calls at once\./);
+  });
+
+  it('keeps an engine failure on stderr and tells the caller only that it happened', () => {
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const err = new Error("Cannot find module '/srv/secret/dist/simulateWorker.js'");
+      const result = workerFailure(err, { op: 'validate' });
+      expect(errorLog).toHaveBeenCalledWith('propslab MCP server: engine failure:', err);
+      expect(resultText(result)).not.toMatch(/secret/);
+      const out = payload(result);
+      expect(out.error).toBe('engine_failure');
+      expect(out.message).toMatch(/without producing a result\. The details are in the server's log\./);
+      expect(out.guidance).toMatch(/not a problem the conf can fix\. Please report it/);
+    } finally {
+      errorLog.mockRestore();
+    }
   });
 });
 

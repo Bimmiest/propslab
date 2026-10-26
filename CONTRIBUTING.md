@@ -130,7 +130,7 @@ The code tells the reader what it does. A comment tells the reader what the code
 
 ## Mutation testing
 
-Coverage says a line ran; it does not say a test would notice the line being wrong. [Stryker](https://stryker-mutator.io/) answers that by making small edits to `src/engine/**`, the two utils it runs on (`strftime.ts`, `splunkRegex.ts`), and four modules of the MCP server (`requestId.ts`, `messageLimit.ts`, `serialize.ts`, `responseBudget.ts`), the worker lifecycle and its message protocol (`src/workers/workerLifecycle.ts`, `src/workers/workerProtocol.ts`) and the store (`src/store`) — flipping a `<`, emptying a string, deleting a call — and rerunning the tests that reach each one. A mutant no test fails on has *survived*, and marks behaviour nothing asserts.
+Coverage says a line ran; it does not say a test would notice the line being wrong. [Stryker](https://stryker-mutator.io/) answers that by making small edits to `src/engine/**`, the two utils it runs on (`strftime.ts`, `splunkRegex.ts`), and five modules of the MCP server (`requestId.ts`, `messageLimit.ts`, `serialize.ts`, `responseBudget.ts`, `tools.ts`), the worker lifecycle and its message protocol (`src/workers/workerLifecycle.ts`, `src/workers/workerProtocol.ts`) and the store (`src/store`) — flipping a `<`, emptying a string, deleting a call — and rerunning the tests that reach each one. A mutant no test fails on has *survived*, and marks behaviour nothing asserts.
 
 ```bash
 npm run test:mutation                  # full run; about 2½ hours on 4 cores (12,713 mutants in October 2026)

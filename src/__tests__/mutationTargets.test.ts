@@ -20,7 +20,7 @@ describe('selectMutated', () => {
           'src/engine/directiveSupport.ts',
           'src/engine/__tests__/lineBreaker.test.ts',
           'src/utils/regexSyntax.ts',
-          'packages/mcp-server/src/tools.ts',
+          'packages/mcp-server/src/runInWorker.ts',
           'docs/engine.md',
         ],
         globs,
