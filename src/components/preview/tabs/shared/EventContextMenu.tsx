@@ -5,6 +5,9 @@ import { copyQuietly } from '../../../../utils/clipboard';
 import { useApplyDirective } from './useApplyDirective';
 import { ExtractNameDialog } from './ExtractNameDialog';
 import { TimePrefixDialog } from './TimePrefixDialog';
+import { matchedStanzas } from './fieldDirective';
+import { useAppStore } from '../../../../store/useAppStore';
+import { revealInEditor } from '../../../editor/revealInEditor';
 import {
   ContextMenu,
   ContextMenuTrigger,
@@ -16,6 +19,32 @@ import {
 
 function currentSelection(): string {
   return (typeof window !== 'undefined' ? (window.getSelection()?.toString() ?? '') : '').trim();
+}
+
+/** The metadata as Splunk writes it in a search: `index=… host=… source=… sourcetype=…`. */
+function metadataLine(m: ViewEvent['metadata']): string {
+  return `index=${m.index} host=${m.host} source=${m.source} sourcetype=${m.sourcetype}`;
+}
+
+/**
+ * "Jump to [stanza]" for each stanza that applies to the event, in precedence
+ * order (#759). Rendered only while the menu is open, so it parses the
+ * editor's props.conf as it is now, whose lines the jump lands on.
+ */
+function StanzaItems({ event }: { event: ViewEvent }) {
+  const stanzas = matchedStanzas(useAppStore.getState().propsConf, event.metadata);
+  if (stanzas.length === 0) {
+    return (
+      <ContextMenuItem disabled onSelect={() => {}}>
+        No stanza in props.conf matches this event
+      </ContextMenuItem>
+    );
+  }
+  return stanzas.map(({ name, line }) => (
+    <ContextMenuItem key={`${name}:${line}`} onSelect={() => revealInEditor('props.conf', line)}>
+      Jump to [{name}]
+    </ContextMenuItem>
+  ));
 }
 
 /**
@@ -75,6 +104,9 @@ export function EventContextMenu({
               Copy fields as JSON
             </ContextMenuItem>
           )}
+          <ContextMenuItem onSelect={() => copyQuietly(metadataLine(event.metadata))}>Copy metadata</ContextMenuItem>
+          <ContextMenuSeparator />
+          <StanzaItems event={event} />
           {selection.length > 0 && (
             <>
               <ContextMenuItem onSelect={() => copyQuietly(selection)}>Copy selection</ContextMenuItem>

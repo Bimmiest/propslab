@@ -12,6 +12,16 @@ import type { EventMetadata } from '../../../../engine/types';
 import type { ViewEvent } from '../../../../utils/viewResult';
 import { useAppStore } from '../../../../store/useAppStore';
 
+/**
+ * The stanzas of `propsConf` that apply to an event with `metadata`, in
+ * precedence order, with the line of each header: an event menu's "Jump to
+ * [stanza]" (#759).
+ */
+export function matchedStanzas(propsConf: string, metadata: EventMetadata): { name: string; line: number }[] {
+  const { stanzas } = parseConf(propsConf, 'props.conf');
+  return resolveStanzasForEvent(stanzas, metadata).stanzas.map((s) => ({ name: s.name, line: s.lineRange.start }));
+}
+
 /** The processors of the steps that added `field`, read from the first event that has it. */
 export function processorsOf(field: string, events: readonly ViewEvent[]): string[] {
   const event = events.find((e) => Object.hasOwn(e.fields, field));
