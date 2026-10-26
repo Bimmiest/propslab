@@ -217,6 +217,7 @@ function ActionCommands({ run, replaceInputs }: { run: RunCommand; replaceInputs
   const toggleTheme = useAppStore((s) => s.toggleTheme);
   const toggleHelp = useAppStore((s) => s.toggleHelp);
   const toggleScaffold = useAppStore((s) => s.toggleScaffold);
+  const toggleAbout = useAppStore((s) => s.toggleAbout);
   // "Open", not "toggle": the panel may already be open behind the palette, and
   // choosing the command must not close it.
   const openHelp = () => {
@@ -224,6 +225,9 @@ function ActionCommands({ run, replaceInputs }: { run: RunCommand; replaceInputs
   };
   const openScaffold = () => {
     if (!useAppStore.getState().scaffoldOpen) toggleScaffold();
+  };
+  const openAbout = () => {
+    if (!useAppStore.getState().aboutOpen) toggleAbout();
   };
   return (
     <CommandGroup heading="Actions">
@@ -235,6 +239,12 @@ function ActionCommands({ run, replaceInputs }: { run: RunCommand; replaceInputs
       />
       <CommandItem label="Toggle theme" icon="sun" onSelect={() => run(toggleTheme)} />
       <CommandItem label="Open pipeline reference" icon="info" onSelect={() => run(openHelp)} />
+      <CommandItem
+        label="About Propslab"
+        hint="Version, build and links"
+        icon="info-circle"
+        onSelect={() => run(openAbout)}
+      />
       <CommandItem
         label="Clear all editors"
         icon="x"

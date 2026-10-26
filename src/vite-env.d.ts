@@ -10,5 +10,9 @@
  * the suite.
  */
 declare const __APP_VERSION__: string;
-/** The short hash of the commit the bundle was built from (`unknown` outside a git checkout). */
+/** The full hash of the commit the bundle was built from (`unknown` outside a git checkout). */
 declare const __APP_COMMIT__: string;
+/** That commit's committer date, ISO 8601 (`unknown` outside a git checkout). */
+declare const __APP_COMMIT_DATE__: string;
+/** The repository's web address, from `repository.url` in `package.json`. */
+declare const __APP_REPOSITORY__: string;

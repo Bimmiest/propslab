@@ -138,6 +138,16 @@ describe('CommandPalette — Ctrl+K and panel commands (#495)', () => {
     expect(useAppStore.getState().helpOpen).toBe(true);
   });
 
+  it('"About Propslab" opens the About dialog, and leaves it open if it already was', () => {
+    openPalette();
+    choose('About Propslab');
+    expect(useAppStore.getState().aboutOpen).toBe(true);
+
+    act(() => useAppStore.getState().toggleCommandPalette());
+    choose('About Propslab');
+    expect(useAppStore.getState().aboutOpen).toBe(true);
+  });
+
   it('the scaffold command opens the modal, and leaves it open if it already was', () => {
     openPalette();
     choose('Scaffold config from sample data');

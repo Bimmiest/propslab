@@ -162,6 +162,9 @@ interface AppState {
 
   scaffoldOpen: boolean;
   toggleScaffold: () => void;
+
+  aboutOpen: boolean;
+  toggleAbout: () => void;
 }
 
 const THEME_KEY = 'propslab:theme';
@@ -371,6 +374,9 @@ export const useAppStore = create<AppState>((set) => ({
 
   scaffoldOpen: false,
   toggleScaffold: () => set((state) => ({ scaffoldOpen: !state.scaffoldOpen })),
+
+  aboutOpen: false,
+  toggleAbout: () => set((state) => ({ aboutOpen: !state.aboutOpen })),
 }));
 
 // What is persisted is written here, once, whatever set it: the updaters stay

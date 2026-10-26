@@ -135,6 +135,13 @@ for (const theme of ['dark', 'light'] as const) {
       await expectNoViolations(page, 'scaffold dialog');
     });
 
+    test('about dialog', async ({ page }) => {
+      await openApp(page);
+      await page.getByRole('contentinfo').getByRole('button', { name: /^v/ }).click();
+      await expect(page.getByRole('dialog', { name: 'About Propslab' })).toBeVisible();
+      await expectNoViolations(page, 'about dialog');
+    });
+
     test('event context menu', async ({ page }) => {
       await openApp(page);
       await loadExample(page, APACHE);

@@ -8,6 +8,7 @@ All notable changes to Propslab are documented here, newest first. Entries say w
 
 ### Added
 
+- **An About dialog** ([#739](https://github.com/Bimmiest/propslab/issues/739)). Select the version in the status bar, or choose **About Propslab** in the command palette. The dialog shows the version, the full commit with a link to it on GitHub, and the date of that commit. It has a button that copies the version and the build for a bug report, and links to the source code, the changelog, the issue tracker, the security policy and the licence.
 - **Seven more examples, one for each part of the pipeline** ([#666](https://github.com/Bimmiest/propslab/issues/666)). Linux SSH auth, Windows Security XML, AWS CloudTrail JSON, Cisco ASA, a multi-line Java log, a CSV file with no header row, and FortiGate traffic. An **Examples** button in the header opens them all, grouped by data source, at any time; the empty output has the same button. The user guide lists what each one shows.
 
 ### Changed
