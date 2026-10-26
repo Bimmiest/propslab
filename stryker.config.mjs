@@ -57,8 +57,10 @@ export default {
   // it and Stryker has to rerun the whole suite for each. There are ~900 of
   // them and they cost more than every other mutant combined, which would put a
   // full run past three hours. They are reported as Ignored, not counted either
-  // way; `MUTATION_STATIC=1 npm run test:mutation` runs them when you are
-  // changing one of those constants; mutation.yml also runs them monthly (#508).
+  // way; `MUTATION_STATIC=1 npm run test:mutation -- --mutate <file>` runs them
+  // when you are changing one of those constants. CI does not: a whole-engine run
+  // with them needs 6 to 12 hours on four cores, past GitHub's 6-hour job limit,
+  // so the monthly run that was to report them never finished (#571).
   //
   // An environment variable, because Stryker's `--ignoreStatic` flag can only
   // switch the option on: `--ignoreStatic false` reads `false` as the path of a
@@ -79,9 +81,5 @@ export default {
   // passes but is flagged in the report. It sat at `break`, so the band was empty
   // and the first sign of a slide was a red build (#508). Now a few points
   // above, so a run drifting toward the floor is visible before it fails.
-  //
-  // MUTATION_REPORT_ONLY is set by the monthly static-mutant run in
-  // mutation.yml, which prints its score without gating on a floor measured for
-  // a different population of mutants. Nothing else sets it.
-  thresholds: { high: 85, low: 82, break: process.env.MUTATION_REPORT_ONLY === '1' ? null : 78 },
+  thresholds: { high: 85, low: 82, break: 78 },
 };
