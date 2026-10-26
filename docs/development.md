@@ -17,6 +17,7 @@ npm install
 npm ci --prefix packages/mcp-server  # lint is type-aware over the MCP server too
 npm run dev          # Dev server on http://localhost:5173
 npm run build        # tsc -b && vite build → dist/
+npm run typecheck    # tsc -b alone: every tsconfig project, no bundle
 npm run preview      # Serve production build
 npm run lint         # ESLint
 npm run format       # Prettier: rewrite the TypeScript and JavaScript sources

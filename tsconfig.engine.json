@@ -7,32 +7,13 @@
   // is what catches it. It deliberately overlaps the app project rather than
   // carving src/engine out of it: the app imports the engine, so it would
   // type-check those files anyway.
+  "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.engine.tsbuildinfo",
     "target": "ES2022",
     "lib": ["ES2022"],
-    "module": "ESNext",
     // No ambient packages either: @types/node would admit Buffer and process.
-    "types": [],
-    "skipLibCheck": true,
-
-    /* Bundler mode */
-    "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true,
-    "verbatimModuleSyntax": true,
-    "moduleDetection": "force",
-    "noEmit": true,
-
-    /* Linting */
-    "strict": true,
-    "noImplicitOverride": true,
-    "noPropertyAccessFromIndexSignature": true,
-    "noUncheckedIndexedAccess": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "erasableSyntaxOnly": true,
-    "noFallthroughCasesInSwitch": true,
-    "noUncheckedSideEffectImports": true
+    "types": []
   },
   "include": ["src/engine"],
   // Tests use vitest and Vite globals and run under Node, not in a worker.

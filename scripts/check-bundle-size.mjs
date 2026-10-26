@@ -33,20 +33,21 @@ import { budgetRows, initialLoadFiles, staleBudgets } from './lib/bundleBudget.m
 /**
  * Budgets in kB (1000 bytes, as Vite reports) of gzip output, keyed by
  * `<chunk name>.<ext>`. Sizes measured by this script at level-6 gzip, which
- * reads ~1% under Vite's own figures.
+ * reads ~1% under Vite's own figures. The figures in the comments were all
+ * measured on 2026-10-26 (#575); the script prints the current ones.
  */
 const BUDGETS_KB = {
-  // 853.8 kB; 903 kB while MonacoEditor.tsx imported all of editor.all.
+  // 853.0 kB; 903 kB while MonacoEditor.tsx imported all of editor.all.
   'monaco-editor.js': 880,
   'monaco-editor.css': 26, // 23.2 (monaco-editor 0.57's stylesheet is larger than 0.55's 18.8)
-  // 143.2 kB; 160 kB before the editors, dictionary and scaffold split out.
+  // 135.3 kB; 160 kB before the editors, dictionary and scaffold split out.
   'index.js': 165,
-  'index.css': 9.5, // 8.4
+  'index.css': 9.5, // 8.5
   'react-vendor.js': 77, // 67.5
-  'pipeline.js': 33, // 29.5
-  'editorRuntime.js': 11, // 9.7
+  'pipeline.js': 33, // 32.7
+  'editorRuntime.js': 11, // 10.6
   // Workers: off the startup path, but each is a whole download of its own.
-  // 70.0 kB; 62.9 kB before the fidelity answers (#442–#451, #522) added the
+  // 71.4 kB; 62.9 kB before the fidelity answers (#442–#451, #522) added the
   // stanza-pattern tokenizer, eval operand typing and the CSV row rejoining.
   'pipelineWorker.js': 77,
   'editor.worker.js': 97, // 92.8
@@ -60,8 +61,9 @@ const BUDGETS_KB = {
 const DEFAULT_KB = 25;
 
 // What a first visit downloads before main.tsx runs: the sum of the gzip sizes
-// of everything dist/index.html references. 231.4 kB when set (entry 148.5,
-// react-vendor 67.5, directiveValues 6.5, index.css 8.5, runtime 0.4).
+// of everything dist/index.html references. 235.3 kB in 11 files: the entry
+// 135.3, react-vendor 67.5, two `dist` chunks 17.7, index.css 8.5, splunkRegex
+// 3.1, and five chunks under 2 kB.
 const INITIAL_LOAD_BUDGET_KB = 260;
 
 const dir = join(process.argv[2] ?? 'dist', 'assets');
