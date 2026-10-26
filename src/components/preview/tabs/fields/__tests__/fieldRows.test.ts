@@ -11,6 +11,7 @@ import {
   immediateParent,
   nestFields,
   renderedRowIds,
+  METADATA_SOURCE,
   type AggregatedField,
 } from '../fieldRows';
 import type { ProcessingStep, SplunkEvent } from '../../../../../engine/types';
@@ -76,6 +77,58 @@ describe('aggregateFields', () => {
     expect(buildAliasMap(events)).toEqual(new Map([['al', 'a']]));
     expect(byName.get('a')!.aliases).toEqual(['al']);
     expect(byName.has('al')).toBe(false);
+  });
+});
+
+describe('aggregateFields — default fields (#741)', () => {
+  const meta = (host: string, sourcetype = 'st') => ({ index: 'main', host, source: '', sourcetype });
+  const events = [
+    makeEvent('', { metadata: meta('web01') }),
+    makeEvent('', { fields: { host: 'from_raw' }, metadata: meta('web02') }),
+    makeEvent('', {
+      metadata: meta('web01'),
+      processingTrace: [
+        {
+          processor: 'FIELDALIAS-dvc',
+          phase: 'search-time',
+          description: '',
+          fieldsAdded: ['dvc'],
+          fieldAliases: [{ source: 'host', target: 'dvc' }],
+        },
+      ],
+      fields: { dvc: 'web01' },
+    }),
+  ];
+  const byName = new Map(aggregateFields(events, buildAliasMap(events)).map((f) => [f.name, f]));
+
+  it('gives each metadata value a row, credited to the metadata at index time', () => {
+    expect(byName.get('sourcetype')).toMatchObject({
+      count: 3,
+      values: new Set(['st']),
+      sources: new Set([METADATA_SOURCE]),
+      phases: new Set(['index-time']),
+    });
+    expect(byName.get('index')?.count).toBe(3);
+  });
+
+  it('gives an empty metadata value no row', () => {
+    expect(byName.has('source')).toBe(false);
+  });
+
+  it('lets an extracted field of the same name win in its event', () => {
+    expect(byName.get('host')).toMatchObject({ count: 3, values: new Set(['from_raw', 'web01']) });
+  });
+
+  it('folds an alias of a default field into its row, rather than dropping it', () => {
+    expect(byName.get('host')?.aliases).toEqual(['dvc']);
+    expect(byName.has('dvc')).toBe(false);
+  });
+
+  it("gives the same rows with the run's statistics as without", () => {
+    const view = toViewResult({ events, originalRaw: '', eventCount: 3, processingSteps: [], inputMetadata: meta('') });
+    const rows = (stats?: typeof view.fieldStats) =>
+      aggregateFields(view.events, buildAliasMap(view.events), stats).map((f) => [f.name, f.count, [...f.values]]);
+    expect(rows(view.fieldStats)).toEqual(rows());
   });
 });
 

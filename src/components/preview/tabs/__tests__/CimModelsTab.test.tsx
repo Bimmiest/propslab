@@ -5,6 +5,7 @@ import { CimModelsTab } from '../CimModelsTab';
 import { useAppStore } from '../../../../store/useAppStore';
 import type { ViewResult } from '../../../../utils/viewResult';
 import { computeFieldStats } from '../../../../utils/fieldStats';
+import { makeEvent } from '../../../../test/makeEvent';
 
 const initial = useAppStore.getState();
 
@@ -30,7 +31,7 @@ describe('CimModelsTab "Show matching only" (#495)', () => {
       processingResult: {
         events: [{ fields: { src: '10.0.0.1', dest: '10.0.0.2' } }],
         eventCount: 1,
-        fieldStats: computeFieldStats([{ fields: { src: '10.0.0.1', dest: '10.0.0.2' } }]),
+        fieldStats: computeFieldStats([makeEvent('', { fields: { src: '10.0.0.1', dest: '10.0.0.2' } })]),
       } as unknown as ViewResult,
     });
   });

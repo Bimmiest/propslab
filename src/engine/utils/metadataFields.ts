@@ -21,7 +21,7 @@ import { normaliseDestKey } from '../transforms/destKeys';
  */
 
 /** The default fields Splunk materialises from event metadata at search time. */
-const METADATA_FIELD_NAMES = ['host', 'source', 'sourcetype', 'index'] as const;
+export const METADATA_FIELD_NAMES = ['host', 'source', 'sourcetype', 'index'] as const;
 
 type MetadataFieldName = (typeof METADATA_FIELD_NAMES)[number];
 
