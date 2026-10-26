@@ -142,6 +142,16 @@ for (const theme of ['dark', 'light'] as const) {
       await expectNoViolations(page, 'about dialog');
     });
 
+    test('FIELDALIAS dialog', async ({ page }) => {
+      await openApp(page);
+      await loadExample(page, APACHE);
+      await page.getByRole('tab', { name: /^Fields$/ }).click();
+      await page.locator('tbody tr[data-field-row="clientip"]').click({ button: 'right' });
+      await page.getByRole('menuitem', { name: 'Create FIELDALIAS…' }).click();
+      await expect(page.getByRole('dialog', { name: 'Create FIELDALIAS' })).toBeVisible();
+      await expectNoViolations(page, 'FIELDALIAS dialog');
+    });
+
     test('event context menu', async ({ page }) => {
       await openApp(page);
       await loadExample(page, APACHE);

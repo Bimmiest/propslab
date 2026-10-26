@@ -68,6 +68,13 @@ The examples are dated October 2026. Until 2032 they are inside the default `MAX
 
 **Fields tab.** This tab lists each extracted field, with its phase (index-time or search-time) and the processors that made it. It also lists the default fields `host`, `source`, `sourcetype` and `index` that have a value in the metadata, with the label **default**. These come from the metadata of each event after the pipeline. An extracted field with the same name replaces the metadata value in that event. The filter pill is `All / Index-time / Search-time`.
 
+**Field menu.** Right-click a field in the Fields tab, in the Extractions sidebar or in the event text to open its menu. From the keyboard, move to a row with the arrow keys and press `Shift+F10` or the Menu key. The menu is the same in each place. It has these items:
+
+- copy the field name, the value or the sample values
+- pin the field, in the Extractions view
+- **Create FIELDALIAS…**, which adds `FIELDALIAS-<alias> = <field> AS <alias>` to the stanza of the sourcetype
+- **Jump to config**, which moves the props.conf cursor to the directive that made the field. This item is not available when no line in props.conf made the field, for example a default field or `KV_MODE = auto`.
+
 **TIME_FORMAT preview.** When you hover over a `TIME_FORMAT` value, the editor does three things:
 
 - It renders the current time with that pattern.

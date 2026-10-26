@@ -1,11 +1,5 @@
-import { copyQuietly } from '../../../../utils/clipboard';
-import {
-  ContextMenu,
-  ContextMenuTrigger,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuLabel,
-} from '../../../ui/ContextMenu';
+import { ContextMenu, ContextMenuTrigger, ContextMenuContent } from '../../../ui/ContextMenu';
+import { FieldMenuItems } from '../shared/FieldMenuItems';
 import { Icon } from '../../../ui/Icon';
 import { METADATA_SOURCE, type FieldRow } from './fieldRows';
 
@@ -13,6 +7,7 @@ export function FieldTableRow({
   field,
   rowId,
   rowIndex,
+  tabStop,
   eventCount,
   columnWidths,
   collapsed,
@@ -24,6 +19,8 @@ export function FieldTableRow({
   rowId: string | undefined;
   /** Position among the visible rows; aria-rowindex counts the header as 1. */
   rowIndex: number;
+  /** Whether this row is the table's one Tab stop (`useRovingRows`). */
+  tabStop: boolean;
   eventCount: number;
   columnWidths: Record<string, number>;
   collapsed: boolean;
@@ -39,6 +36,8 @@ export function FieldTableRow({
           aria-rowindex={rowIndex + 2}
           data-window-row=""
           data-window-index={rowIndex}
+          data-field-row={field.name}
+          tabIndex={tabStop ? 0 : -1}
           className="border-b border-[var(--color-border-subtle)] hover:bg-[var(--color-bg-secondary)] transition-colors"
         >
           <td className="py-1.5 px-3 font-mono font-medium" style={{ width: columnWidths['name'] }}>
@@ -92,11 +91,7 @@ export function FieldTableRow({
         </tr>
       </ContextMenuTrigger>
       <ContextMenuContent>
-        <ContextMenuLabel>{field.name}</ContextMenuLabel>
-        <ContextMenuItem onSelect={() => copyQuietly(field.name)}>Copy field name</ContextMenuItem>
-        <ContextMenuItem onSelect={() => copyQuietly(Array.from(field.values).join(', '))}>
-          Copy sample values
-        </ContextMenuItem>
+        <FieldMenuItems field={field.name} values={field.values} sources={field.sources} />
       </ContextMenuContent>
     </ContextMenu>
   );

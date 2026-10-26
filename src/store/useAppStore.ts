@@ -165,6 +165,10 @@ interface AppState {
 
   aboutOpen: boolean;
   toggleAbout: () => void;
+
+  /** The field the "Create FIELDALIAS" dialog is open for, from a field's context menu. */
+  fieldAliasFor: string | null;
+  setFieldAliasFor: (field: string | null) => void;
 }
 
 const THEME_KEY = 'propslab:theme';
@@ -377,6 +381,9 @@ export const useAppStore = create<AppState>((set) => ({
 
   aboutOpen: false,
   toggleAbout: () => set((state) => ({ aboutOpen: !state.aboutOpen })),
+
+  fieldAliasFor: null,
+  setFieldAliasFor: (field) => set({ fieldAliasFor: field }),
 }));
 
 // What is persisted is written here, once, whatever set it: the updaters stay

@@ -345,6 +345,24 @@ test.describe('engine output reaches the tabs', () => {
     expect(await page.locator('tbody tr').count()).toBeGreaterThan(0);
   });
 
+  test('a Fields row opens its menu from the keyboard, and Jump to config reaches the directive (#745)', async ({
+    page,
+    browserName,
+  }) => {
+    // See 'a raw-event selection can be made and acted on from the keyboard'.
+    test.skip(browserName === 'firefox', "Playwright's Firefox fires no contextmenu event from the keyboard");
+    await openApp(page);
+    await loadExample(page, APACHE);
+    await page.getByRole('tab', { name: /^Fields$/ }).click();
+    // EVAL-action is line 15 of the example's props.conf.
+    await page.locator('tbody tr[data-field-row="action"]').focus();
+    await page.keyboard.press('Shift+F10');
+    const menu = page.getByRole('menu');
+    await expect(menu.getByRole('menuitem', { name: 'Create FIELDALIAS…' })).toBeVisible();
+    await menu.getByRole('menuitem', { name: 'Jump to config' }).click();
+    await expect(page.getByText('Ln 15, Col 1', { exact: true })).toBeVisible();
+  });
+
   test('Pipeline lists the processors that ran', async ({ page }) => {
     await openApp(page);
     await loadExample(page, APACHE);

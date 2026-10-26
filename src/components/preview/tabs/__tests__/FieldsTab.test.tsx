@@ -90,6 +90,18 @@ describe('FieldsTab', () => {
     expect(host).toHaveTextContent('from_raw, web01');
   });
 
+  it('makes the rows one Tab stop that the arrow keys move, so a row can open its menu from the keyboard (#745)', () => {
+    const { container } = render(<FieldsTab />);
+    const rows = () => [...container.querySelectorAll<HTMLElement>('tbody tr[data-field-row]')];
+    expect(rows().map((r) => r.tabIndex)).toEqual([0, -1, -1]);
+    rows()[0]!.focus();
+    fireEvent.keyDown(rows()[0]!, { key: 'ArrowDown' });
+    expect(document.activeElement).toBe(rows()[1]);
+    expect(rows().map((r) => r.tabIndex)).toEqual([-1, 0, -1]);
+    fireEvent.contextMenu(rows()[1]!);
+    expect(within(document.body).getByRole('menuitem', { name: 'Create FIELDALIAS…' })).toBeInTheDocument();
+  });
+
   it('filters by name when searching', () => {
     const { container } = render(<FieldsTab />);
     const search = within(container).getByPlaceholderText('Search fields...');
