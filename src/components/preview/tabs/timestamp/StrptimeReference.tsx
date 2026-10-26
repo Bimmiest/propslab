@@ -38,10 +38,7 @@ function StrptimeCategoryRows({
   return (
     <>
       <tr>
-        <td
-          colSpan={3}
-          className="pt-2 pb-0.5 text-xs font-medium text-[var(--color-accent)] uppercase tracking-wider"
-        >
+        <td colSpan={3} className="pt-2 pb-0.5 text-xs font-medium text-[var(--color-accent)] uppercase tracking-wider">
           {category.name}
         </td>
       </tr>

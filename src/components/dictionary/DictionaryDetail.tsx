@@ -20,9 +20,7 @@ function Page({ children }: { children: React.ReactNode }) {
 }
 
 function Eyebrow({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--color-text-muted)]">{children}</p>
-  );
+  return <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--color-text-muted)]">{children}</p>;
 }
 
 /**

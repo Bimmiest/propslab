@@ -46,10 +46,7 @@ function RegexCategoryRows({
   return (
     <>
       <tr>
-        <td
-          colSpan={3}
-          className="pt-2 pb-0.5 text-xs font-medium text-[var(--color-accent)] uppercase tracking-wider"
-        >
+        <td colSpan={3} className="pt-2 pb-0.5 text-xs font-medium text-[var(--color-accent)] uppercase tracking-wider">
           {category.name}
           <span className="ml-1.5 font-normal normal-case tracking-normal text-[var(--color-text-muted)]">
             (click to {isReplace ? 'use' : 'append'})
