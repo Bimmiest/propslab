@@ -71,6 +71,22 @@ describe('MultiSelect', () => {
     expect(screen.getByRole('group')).toBeInTheDocument();
   });
 
+  it('stays open when a press inside it moves focus to a focusable ancestor (#751)', () => {
+    const onChange = vi.fn();
+    render(
+      <main tabIndex={-1}>
+        <MultiSelect label="Changes" options={['Unmodified']} selected={new Set()} onChange={onChange} />
+      </main>,
+    );
+    const trigger = screen.getByRole('button', { name: /Changes/ });
+    fireEvent.click(trigger);
+    fireEvent.blur(trigger, { relatedTarget: screen.getByRole('main') });
+    expect(screen.getByRole('group', { name: 'Changes options' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Unmodified' }));
+    expect(onChange).toHaveBeenCalledWith(new Set(['Unmodified']));
+  });
+
   it('keeps focus on the trigger after Clear all removes itself', () => {
     const { trigger, onChange } = setup(new Set(['Dropped']));
     fireEvent.click(trigger);

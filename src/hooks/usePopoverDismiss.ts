@@ -29,13 +29,14 @@ export function usePopoverDismiss(
         triggerRef.current?.focus();
       }
     },
-    // Only a move to a known element outside closes it: a null relatedTarget
-    // is a click on something unfocusable inside the popup (its padding),
-    // which the outside-mousedown handler already covers when it is truly
-    // outside.
+    // Only a move to a known element outside closes it. A press on something
+    // unfocusable inside the popup (its padding, an option's label text) moves
+    // focus to the nearest focusable ancestor: none (a null relatedTarget), or
+    // an ancestor such as the skip link's <main tabIndex={-1}> (#751). The
+    // outside-mousedown handler already covers a press that is truly outside.
     onBlur: (e) => {
       const next = e.relatedTarget as Node | null;
-      if (open && next && ref.current && !ref.current.contains(next)) close();
+      if (open && next && ref.current && !ref.current.contains(next) && !next.contains(ref.current)) close();
     },
   };
 }
