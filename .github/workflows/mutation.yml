@@ -54,11 +54,14 @@ jobs:
     # limit was set. By 2026-10-19 it was 12,713 mutants and had reached 82%
     # at the 120-minute limit (two weekly runs cancelled), so the weekly limit
     # went to 180. On 2026-10-25 a run was at 96% when 180 cancelled it, and
-    # no full run had finished since 2026-10-05 (#571), so it is 240. A PR run mutates a handful
-    # of files; if one outgrows 30 minutes, the PR is changing more of the
-    # engine at once than this check was sized for. The static-mutant run is
-    # past three hours (stryker.config.mjs says why).
-    timeout-minutes: ${{ github.event_name == 'pull_request' && 30 || (github.event.schedule == '0 9 1 * *' || inputs.static) && 330 || 240 }}
+    # no full run had finished since 2026-10-05 (#571), so it is 240.
+    #
+    # A PR run mutates the files it changes, and the sources its changed tests
+    # import. A test-only change to a property suite brings the parser it
+    # imports: #723 had 3,494 mutants and was two-thirds through at 28 minutes,
+    # so a PR gets 50. The static-mutant run is past three hours
+    # (stryker.config.mjs says why).
+    timeout-minutes: ${{ github.event_name == 'pull_request' && 50 || (github.event.schedule == '0 9 1 * *' || inputs.static) && 330 || 240 }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
