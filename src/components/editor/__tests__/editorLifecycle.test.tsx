@@ -31,6 +31,9 @@ function disposeEverything() {
   cleanup();
   for (const model of monaco.editor.getModels()) model.dispose();
   resetModelRegistry();
+  // The theme is global too. Left on splunk-light, the next MonacoEditor's
+  // switch to 'vs' repaints its overview ruler, a canvas jsdom cannot draw (#710).
+  monaco.editor.setTheme('vs');
 }
 
 beforeEach(() => {
