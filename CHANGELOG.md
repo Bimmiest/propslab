@@ -15,6 +15,7 @@ All notable changes to Propslab are documented here, newest first. Entries say w
 
 ### Changed
 
+- **The Preview's Status and Changes filters show only when they can separate the events** ([#752](https://github.com/Bimmiest/propslab/issues/752)). Status shows when the run dropped an event, and Changes shows when the run changed the `_raw` or the metadata of an event. Each lists only the states that the events have. Before, both showed on every run, and most of their choices selected all of the events or none.
 - **The event context menu leaves the rest of the page readable** ([#572](https://github.com/Bimmiest/propslab/issues/572)). While it was open, it hid everything else from screen readers, including controls that could still take focus. Escape and a click outside still close it.
 - **The tab icon is the sliders mark from the header, in the new palette** ([#733](https://github.com/Bimmiest/propslab/issues/733)). It was a gear in the old indigo.
 - **The MCP server caps the PCRE2 memory of each worker at 256 MiB** ([#568](https://github.com/Bimmiest/propslab/issues/568)). Before, each worker could grow it to 1 GiB, outside the heap limit. A match that needs more stops with a "no more memory" warning, and the run continues. The app and the MCP server use [pcre2-wasm-utf16 0.2.0](https://github.com/Bimmiest/pcre2-wasm-utf16/releases/tag/v0.2.0), which takes the cap at start-up.

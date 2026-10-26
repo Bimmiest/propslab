@@ -6,7 +6,7 @@
 
 import { memo, useEffect, useId, useMemo } from 'react';
 import type { ReactNode } from 'react';
-import { useAppStore } from '../../store/useAppStore';
+import { useAppStore, type PreviewFilters } from '../../store/useAppStore';
 import { Tabs } from '../ui/Tabs';
 import { tabId, tabPanelId } from '../ui/tabIds';
 import type { PreviewSubTabId } from '../../engine/types';
@@ -22,7 +22,7 @@ import { useDebounce } from '../../hooks/useDebounce';
 import type { PipelineInputs } from './tabs/shared/usePipelineInputs';
 import { enrichEvents, type EnrichedEvent } from './enrichEvents';
 import type { FieldStats } from '../../utils/fieldStats';
-import { anyFilter, matchesFilters, pruneSelection } from './previewFilters';
+import { anyFilter, filterOptions, matchesFilters, pruneSelection } from './previewFilters';
 
 /** How long the preview search waits for typing to pause before filtering. */
 const SEARCH_DEBOUNCE_MS = 200;
@@ -77,6 +77,39 @@ function subTabContent(subTab: PreviewSubTabId, d: SubTabData): ReactNode {
   }
 }
 
+/**
+ * The selections that still apply to this run. A field that a later run no
+ * longer extracts, a Status or Changes state that it no longer has, or a whole
+ * filter that is not shown (#752) has no checkbox to untick, yet would keep
+ * filtering (to "0 / N" if it was the only one). So it is dropped from the
+ * selection: filtered by the pruned set at once, and the store corrected after
+ * the commit, without moving the page.
+ */
+function useLiveSelections(
+  filters: PreviewFilters,
+  allFields: string[],
+  options: { status: string[]; changeState: string[] },
+  setFilters: (patch: Partial<PreviewFilters>, keepPage?: boolean) => void,
+): Pick<PreviewFilters, 'fields' | 'status' | 'changeState'> {
+  const { fields, status, changeState } = filters;
+  const live = useMemo(
+    () => ({
+      fields: pruneSelection(fields, allFields),
+      status: pruneSelection(status, options.status),
+      changeState: pruneSelection(changeState, options.changeState),
+    }),
+    [fields, status, changeState, allFields, options],
+  );
+  useEffect(() => {
+    const patch: Partial<PreviewFilters> = {};
+    if (live.fields !== fields) patch.fields = live.fields;
+    if (live.status !== status) patch.status = live.status;
+    if (live.changeState !== changeState) patch.changeState = live.changeState;
+    if (Object.keys(patch).length > 0) setFilters(patch, true);
+  }, [live, fields, status, changeState, setFilters]);
+  return live;
+}
+
 export const PreviewSubTab = memo(function PreviewSubTab({ pipelineInputs }: { pipelineInputs: PreviewInputs }) {
   const result = useAppStore((s) => s.processingResult);
   const events = useMemo(() => result?.events ?? [], [result]);
@@ -89,7 +122,7 @@ export const PreviewSubTab = memo(function PreviewSubTab({ pipelineInputs }: { p
   const setSubTab = useAppStore((s) => s.setPreviewSubTab);
   const filters = useAppStore((s) => s.previewFilters);
   const setFilters = useAppStore((s) => s.setPreviewFilters);
-  const { search, fields: selectedFields, status: selectedStatus, changeState: selectedChangeState } = filters;
+  const { search } = filters;
   const subTabsId = useId();
   // The input stays bound to `search`, so typing is immediate; everything the
   // filter drives reads this settled copy, so a keystroke does not rebuild
@@ -112,27 +145,21 @@ export const PreviewSubTab = memo(function PreviewSubTab({ pipelineInputs }: { p
   const fieldStats = result?.fieldStats;
   const allFields = useMemo(() => [...(fieldStats?.names ?? [])].sort(), [fieldStats]);
 
-  // A field a later run no longer extracts has no checkbox to untick, yet
-  // would keep filtering (to "0 / N" if it was the only one), so it is dropped
-  // from the selection: filtered by the pruned set at once, and the store
-  // corrected after the commit, without moving the page.
-  const liveSelectedFields = useMemo(() => pruneSelection(selectedFields, allFields), [selectedFields, allFields]);
-  useEffect(() => {
-    if (liveSelectedFields !== selectedFields) setFilters({ fields: liveSelectedFields }, true);
-  }, [liveSelectedFields, selectedFields, setFilters]);
+  const options = useMemo(() => filterOptions(enrichedEvents), [enrichedEvents]);
+  const live = useLiveSelections(filters, allFields, options, setFilters);
 
   // With no filter set, the very same array: the tabs below read that as
   // "every event" and use the run's precomputed statistics.
   const filteredEvents = useMemo(() => {
     const filters = {
       search: debouncedSearch.toLowerCase(),
-      selectedFields: liveSelectedFields,
-      selectedStatus,
-      selectedChangeState,
+      selectedFields: live.fields,
+      selectedStatus: live.status,
+      selectedChangeState: live.changeState,
     };
     if (!anyFilter(filters)) return enrichedEvents;
     return enrichedEvents.filter((item) => matchesFilters(item, filters));
-  }, [enrichedEvents, debouncedSearch, liveSelectedFields, selectedStatus, selectedChangeState]);
+  }, [enrichedEvents, debouncedSearch, live.fields, live.status, live.changeState]);
 
   const { paginatedItems, currentPage, totalPages, eventsPerPage, totalItems, setCurrentPage, setEventsPerPage } =
     usePagination(filteredEvents);
@@ -160,11 +187,13 @@ export const PreviewSubTab = memo(function PreviewSubTab({ pipelineInputs }: { p
         search={search}
         onSearchChange={(v) => setFilters({ search: v })}
         allFields={allFields}
-        selectedFields={liveSelectedFields}
+        selectedFields={live.fields}
         onFieldsChange={(f) => setFilters({ fields: f })}
-        selectedStatus={selectedStatus}
+        statusOptions={options.status}
+        selectedStatus={live.status}
         onStatusChange={(s) => setFilters({ status: s })}
-        selectedChangeState={selectedChangeState}
+        changeStateOptions={options.changeState}
+        selectedChangeState={live.changeState}
         onChangeStateChange={(m) => setFilters({ changeState: m })}
         filteredCount={filteredEvents.length}
         totalCount={enrichedEvents.length}

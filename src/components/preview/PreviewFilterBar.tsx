@@ -7,16 +7,15 @@ interface PreviewFilterBarProps {
   allFields: string[];
   selectedFields: ReadonlySet<string>;
   onFieldsChange: (fields: Set<string>) => void;
+  statusOptions: string[];
   selectedStatus: ReadonlySet<string>;
   onStatusChange: (status: Set<string>) => void;
+  changeStateOptions: string[];
   selectedChangeState: ReadonlySet<string>;
   onChangeStateChange: (mod: Set<string>) => void;
   filteredCount: number;
   totalCount: number;
 }
-
-const STATUS_OPTIONS = ['Accepted', 'Dropped'];
-const CHANGE_STATE_OPTIONS = ['Raw Modified', 'Metadata Modified', 'Unmodified'];
 
 export function PreviewFilterBar({
   search,
@@ -24,8 +23,10 @@ export function PreviewFilterBar({
   allFields,
   selectedFields,
   onFieldsChange,
+  statusOptions,
   selectedStatus,
   onStatusChange,
+  changeStateOptions,
   selectedChangeState,
   onChangeStateChange,
   filteredCount,
@@ -50,13 +51,17 @@ export function PreviewFilterBar({
         />
       </div>
       <MultiSelect label="Fields" options={allFields} selected={selectedFields} onChange={onFieldsChange} searchable />
-      <MultiSelect label="Status" options={STATUS_OPTIONS} selected={selectedStatus} onChange={onStatusChange} />
-      <MultiSelect
-        label="Changes"
-        options={CHANGE_STATE_OPTIONS}
-        selected={selectedChangeState}
-        onChange={onChangeStateChange}
-      />
+      {statusOptions.length > 0 && (
+        <MultiSelect label="Status" options={statusOptions} selected={selectedStatus} onChange={onStatusChange} />
+      )}
+      {changeStateOptions.length > 0 && (
+        <MultiSelect
+          label="Changes"
+          options={changeStateOptions}
+          selected={selectedChangeState}
+          onChange={onChangeStateChange}
+        />
+      )}
       {hasFilters && (
         <span className="text-xs whitespace-nowrap ml-auto tabular-nums" style={{ color: 'var(--color-accent)' }}>
           {filteredCount} / {totalCount}

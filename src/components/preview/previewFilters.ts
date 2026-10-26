@@ -12,6 +12,39 @@ export interface ActiveFilters {
   selectedChangeState: ReadonlySet<string>;
 }
 
+/**
+ * The Status and Changes states that the run's events have, in display order
+ * (#752). Status is offered only when an event was dropped, and Changes only
+ * when an event's _raw or metadata changed: otherwise each would only select
+ * every event or none.
+ */
+export function filterOptions(events: readonly EnrichedEvent[]): { status: string[]; changeState: string[] } {
+  let accepted = false;
+  let dropped = false;
+  let raw = false;
+  let meta = false;
+  let unmodified = false;
+  for (const e of events) {
+    if (e.isDropped) dropped = true;
+    else accepted = true;
+    if (e.hasChanges) raw = true;
+    if (e.hasMetadataChanges) meta = true;
+    if (!e.hasChanges && !e.hasMetadataChanges) unmodified = true;
+  }
+  const status: string[] = [];
+  if (dropped) {
+    if (accepted) status.push('Accepted');
+    status.push('Dropped');
+  }
+  const changeState: string[] = [];
+  if (raw || meta) {
+    if (raw) changeState.push('Raw Modified');
+    if (meta) changeState.push('Metadata Modified');
+    if (unmodified) changeState.push('Unmodified');
+  }
+  return { status, changeState };
+}
+
 /** `selected` without the entries `options` lacks; the same set when none are missing. */
 export function pruneSelection(selected: ReadonlySet<string>, options: string[]): ReadonlySet<string> {
   if (selected.size === 0) return selected;
