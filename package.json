@@ -27,7 +27,8 @@
     "test:e2e:ui": "playwright test --ui",
     "test:mutation": "stryker run",
     "test:mutation:canary": "stryker run --mutate src/engine/utils/wildcardMatch.ts --reporters json && node scripts/check-mutation-canary.mjs",
-    "check:overrides": "node scripts/check-radix-overrides.mjs"
+    "check:overrides": "node scripts/check-radix-overrides.mjs",
+    "screenshot:readme": "npm run build && node scripts/take-readme-screenshot.mjs"
   },
   "dependencies": {
     "@radix-ui/react-context-menu": "^2.4.1",
