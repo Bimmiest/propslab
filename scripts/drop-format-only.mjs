@@ -18,6 +18,9 @@ import { isCommentOnly } from './lib/formatOnly.mjs';
  * The command, given its arguments and what it reads and writes through: `show`
  * is a file's text at the base ref (null when it is not there), `read` its text
  * now, `out` and `err` stdout and stderr. Returns the exit code.
+ * @param {string[]} args the base ref, then the changed files joined by commas
+ * @param {{ show: (baseRef: string, file: string) => string | null, read: (file: string) => string, out: (line: string) => void, err: (line: string) => void }} io
+ * @returns {Promise<number>}
  */
 export async function run([baseRef, list = ''], { show, read, out, err }) {
   if (!baseRef) {

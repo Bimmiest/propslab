@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Reminds us to move .nvmrc to the newest patch of its Node line (#518).
 //
-// .nvmrc is an exact version (24.18.1) on purpose: CI, the deploy build and
+// .nvmrc is an exact version on purpose: CI, the deploy build and
 // local development all run the toolchain that was tested. The cost is that
 // Dependabot has nothing to propose — it does not read .nvmrc — so a Node
 // security release is picked up when someone happens to remember. This asks
