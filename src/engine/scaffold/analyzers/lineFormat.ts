@@ -61,6 +61,11 @@ export function detectLineFormat(rawData: string, lines: string[]): ScaffoldSugg
     return multiLineJsonSuggestions(several);
   }
 
+  // CEF and LEEF, before the delimiter check: their headers are pipe-separated,
+  // and as PSV the first data line would become the header row (#758).
+  const header = headerFormatSuggestions(nonBlank);
+  if (header) return header;
+
   // Delimited (CSV / TSV / PSV).
   const delim = detectDelimiter(nonBlank);
   if (delim) {
@@ -97,6 +102,67 @@ export function detectLineFormat(rawData: string, lines: string[]): ScaffoldSugg
   }
 
   return [];
+}
+
+/** A CEF header, at the start of the line or behind a syslog header. */
+export const CEF_HEADER = /(?:^|\s)CEF:\d+\|/;
+/** A LEEF 1.0 or 2.0 header, likewise. */
+export const LEEF_HEADER = /(?:^|\s)LEEF:[12]\.0\|/;
+
+/** The fixed header fields of each format, in order, after the version. */
+const HEADER_FIELDS = {
+  CEF: [
+    'cef_device_vendor',
+    'cef_device_product',
+    'cef_device_version',
+    'cef_signature_id',
+    'cef_name',
+    'cef_severity',
+  ],
+  LEEF: ['leef_vendor', 'leef_product', 'leef_product_version', 'leef_event_id'],
+};
+
+/** One header field: a backslash escapes the next character, as CEF writes a `|` in a field as `\|`. */
+const HEADER_FIELD = '(?:\\\\.|[^\\\\|])*';
+
+/**
+ * One event per line, and an EXTRACT for the fixed header fields. KV_MODE =
+ * auto, the default, reads the extension's pairs that follow a space, but not
+ * the first, which follows the header's last `|`: a key starts only after a
+ * space, `,`, `;` or `:` (kvMode.ts). Reading every pair needs a REPORT in
+ * transforms.conf, which the Scaffold does not write.
+ */
+function headerFormatSuggestions(nonBlank: string[]): ScaffoldSuggestion[] | null {
+  const share = (header: RegExp) => nonBlank.filter((l) => header.test(l)).length;
+  const cef = share(CEF_HEADER);
+  const leef = share(LEEF_HEADER);
+  const [format, count] = cef >= leef ? (['CEF', cef] as const) : (['LEEF', leef] as const);
+  if (count / nonBlank.length < 0.8) return null;
+  const prefix = format.toLowerCase();
+  const fields = HEADER_FIELDS[format].map((name) => `\\|(?<${name}>${HEADER_FIELD})`).join('');
+  return [
+    {
+      key: 'LINE_BREAKER',
+      value: '([\\r\\n]+)',
+      confidence: 'high',
+      evidence: `${format} writes one event per line`,
+      enabledByDefault: true,
+    },
+    {
+      key: 'SHOULD_LINEMERGE',
+      value: 'false',
+      confidence: 'high',
+      evidence: `${format} events are a single line each; do not merge`,
+      enabledByDefault: true,
+    },
+    {
+      key: `EXTRACT-${prefix}_header`,
+      value: `${format}:(?<${prefix}_version>[\\d.]+)${fields}\\|`,
+      confidence: 'medium',
+      evidence: `${count}/${nonBlank.length} lines carry a ${format} header: extract its fields. KV_MODE = auto, the default, reads the extension's pairs after the first`,
+      enabledByDefault: true,
+    },
+  ];
 }
 
 /** KV_MODE = xml, and a LINE_BREAKER when the documents in the sample can be told apart. */

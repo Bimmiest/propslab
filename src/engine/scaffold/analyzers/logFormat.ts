@@ -1,4 +1,4 @@
-import { detectLineFormat } from './lineFormat';
+import { CEF_HEADER, LEEF_HEADER, detectLineFormat } from './lineFormat';
 
 /**
  * The format of a raw sample, named for the chip in the Raw Log footer (#742).
@@ -25,8 +25,8 @@ const MIN_SHARE = 0.8;
 
 const LINE_FORMATS: { name: string; test: (line: string) => boolean; what: string }[] = [
   // Before syslog: CEF and LEEF usually arrive behind a syslog header.
-  { name: 'CEF', test: (l) => /(?:^|\s)CEF:\d+\|/.test(l), what: 'a CEF header' },
-  { name: 'LEEF', test: (l) => /(?:^|\s)LEEF:[12]\.0\|/.test(l), what: 'a LEEF header' },
+  { name: 'CEF', test: (l) => CEF_HEADER.test(l), what: 'a CEF header' },
+  { name: 'LEEF', test: (l) => LEEF_HEADER.test(l), what: 'a LEEF header' },
   {
     name: 'Syslog (RFC 5424)',
     test: (l) => /^<\d{1,3}>\d{1,2} \S+ \S+ \S+ \S+ \S+ /.test(l),
