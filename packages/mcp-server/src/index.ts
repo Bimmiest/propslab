@@ -27,11 +27,14 @@
  *
  * Because the client holds the pid of this shim rather than of the server,
  * the shim forwards termination signals to the child and exits the way the
- * child did.
+ * child did. A shim terminated without a signal (TerminateProcess on Windows,
+ * SIGKILL anywhere) forwards nothing, so the server also exits when the shim
+ * is gone. The server gets only the environment node needs (launcherEnv.ts).
  */
 import { spawn } from 'node:child_process';
 import os from 'node:os';
 import { stripHeapSizeFlags, stripHeapSizeFlagsFromNodeOptions } from './heapFlags';
+import { exitWhenParentGone, launcherEnv, SHIM_PID_VAR } from './launcherEnv';
 import { adoptPresetPermission, canSpawn, permissionEnabled, permissionFlags } from './permissionFlags';
 import { flagsAlreadySet, REGEXP_FALLBACK_FLAGS } from './v8Flags';
 
@@ -89,7 +92,7 @@ async function main(): Promise<void> {
       // whatever --allow-fs-read says (measured on Node 22 and 24; the main
       // thread is not affected). A client that starts the server from `/` or
       // a home directory would otherwise hand the sandbox all of it.
-      { stdio: 'inherit', env, cwd: __dirname },
+      { stdio: 'inherit', env: launcherEnv(env, process.pid), cwd: __dirname },
     );
     // This process is only a shim: whatever the MCP client does to it has to
     // reach the real server, and whatever the server does has to come back.
@@ -135,6 +138,10 @@ async function main(): Promise<void> {
   if (permissionEnabled()) {
     for (const warning of adoptPresetPermission(__dirname)) console.error(warning);
   }
+
+  // Started by the launcher above: exit if it disappears without a signal.
+  const shimPid = Number(process.env[SHIM_PID_VAR]);
+  if (shimPid > 0) exitWhenParentGone(shimPid);
 
   const { start } = await import('./server');
   await start();

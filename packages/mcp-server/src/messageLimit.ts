@@ -83,6 +83,25 @@ function lastBytes(bufs: Buffer[], n: number): Buffer {
  * with no `\n` when input ends is discarded — the SDK would never parse it
  * either.
  */
+/**
+ * Adds `piece` to the part-line held so far, merging the newest buffer into
+ * the one before it while that one is no larger, as a binary counter carries.
+ * A client that sends a line a byte at a time left one Buffer view per byte,
+ * millions for one 8 MiB line (#568). Now the held sizes strictly decrease,
+ * so a byte-at-a-time line holds about log2(n) buffers and copies each byte
+ * as many times; merging everything every 64 pieces would copy the line
+ * again each time, which is quadratic.
+ */
+export function holdPiece(pending: Buffer[], piece: Buffer): void {
+  pending.push(piece);
+  for (;;) {
+    const last = pending[pending.length - 1];
+    const before = pending[pending.length - 2];
+    if (!last || !before || before.length > last.length) return;
+    pending.splice(pending.length - 2, 2, Buffer.concat([before, last]));
+  }
+}
+
 export class MessageSizeLimiter extends Transform {
   /** The current line so far, while it is within the limit. */
   private pending: Buffer[] = [];
@@ -115,7 +134,7 @@ export class MessageSizeLimiter extends Transform {
           this.pendingBytes = 0;
           this.discarding = true;
         } else if (newline === -1) {
-          this.pending.push(chunk.subarray(start));
+          holdPiece(this.pending, chunk.subarray(start));
           this.pendingBytes += end - start;
         } else {
           // One push per complete line, so the SDK's read buffer never holds

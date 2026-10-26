@@ -12,7 +12,8 @@
  */
 
 // `--flag=N` and `--flag N`, `-` or `_` separated: the forms node accepts.
-const HEAP_SIZE_FLAG = /^--max[-_](?:old[-_]space|semi[-_]space|heap)[-_]size(?:=|$)/;
+// `--max-old-space-size-percentage` (Node 24) sizes the same heap (#568).
+const HEAP_SIZE_FLAG = /^--max[-_](?:old[-_]space|semi[-_]space|heap)[-_]size(?:[-_]percentage)?(?:=|$)/;
 
 /** `process.execArgv` minus any heap-size flag (and a separate numeric value). */
 export function stripHeapSizeFlags(execArgv: readonly string[]): string[] {

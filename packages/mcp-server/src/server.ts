@@ -59,5 +59,5 @@ export async function start(): Promise<void> {
   // Bounds each message before the SDK buffers and parses it.
   await server.connect(createStdioTransport());
   // stdout belongs to the protocol; anything human-facing goes to stderr.
-  console.error('propslab MCP server listening on stdio');
+  console.error(`propslab MCP server listening on stdio (pid ${process.pid})`);
 }

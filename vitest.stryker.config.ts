@@ -57,6 +57,11 @@ export default defineConfig({
   test: {
     ...base.test,
     projects: undefined,
+    // Instrumented code is slower. Once responseBudget.ts was mutated (#571),
+    // the dry run's serializeSimulation test, which calls it in its loops,
+    // passed 20 s and every full run stopped before mutating anything (#728).
+    // Each mutant still gets Stryker's own timeout, from the dry run's times.
+    testTimeout: 120_000,
     setupFiles: (base.test?.setupFiles as string[] | undefined)?.filter((f) => !f.includes('recordDirectiveEvidence')),
     // The engine's tests, those of the two utils the engine runs on, those of
     // the MCP server modules in stryker.config.mjs's `mutate`, and those of the
@@ -70,6 +75,7 @@ export default defineConfig({
       'packages/mcp-server/src/__tests__/requestId.test.ts',
       'packages/mcp-server/src/__tests__/messageLimit.test.ts',
       'packages/mcp-server/src/__tests__/serialize.test.ts',
+      'packages/mcp-server/src/__tests__/responseBudget.test.ts',
       // The worker lifecycle and the store (#508), the two non-engine modules
       // whose logic the app's correctness leans on. Both are plain modules; the
       // store's test opts into jsdom itself, once, for a file.
