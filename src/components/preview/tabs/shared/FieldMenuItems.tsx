@@ -31,7 +31,7 @@ export function FieldMenuItems({
   pinned?: boolean;
   onTogglePin?: (field: string) => void;
 }) {
-  const setFieldAliasFor = useAppStore((s) => s.setFieldAliasFor);
+  const setFieldAlias = useAppStore((s) => s.setFieldAlias);
   const line = currentFieldDirectiveLine(field, sources);
 
   return (
@@ -55,7 +55,7 @@ export function FieldMenuItems({
         </ContextMenuItem>
       )}
       <ContextMenuSeparator />
-      <ContextMenuItem onSelect={() => setFieldAliasFor(field)}>Create FIELDALIAS…</ContextMenuItem>
+      <ContextMenuItem onSelect={() => setFieldAlias({ source: field })}>Create FIELDALIAS…</ContextMenuItem>
       <ContextMenuItem disabled={line === null} onSelect={() => line !== null && revealInEditor('props.conf', line)}>
         Jump to config
       </ContextMenuItem>

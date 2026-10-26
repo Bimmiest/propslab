@@ -79,7 +79,7 @@ describe('FieldMenuItems', () => {
     const input = within(dialog).getByRole('textbox');
     fireEvent.change(input, { target: { value: 'user' } });
     expect(add).toBeDisabled();
-    expect(within(dialog).getByText(/other than the field/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/need different names/)).toBeInTheDocument();
 
     fireEvent.change(input, { target: { value: 'src user' } });
     expect(add).toBeDisabled();
@@ -88,6 +88,6 @@ describe('FieldMenuItems', () => {
     expect(within(dialog).getByText('FIELDALIAS-username = user AS username')).toBeInTheDocument();
     fireEvent.click(add);
     expect(useAppStore.getState().propsConf).toContain('FIELDALIAS-username = user AS username');
-    expect(useAppStore.getState().fieldAliasFor).toBeNull();
+    expect(useAppStore.getState().fieldAlias).toBeNull();
   });
 });

@@ -3,6 +3,14 @@ import { useAppStore } from '../../../store/useAppStore';
 import { validateCimCompliance } from '../../../engine/cim/cimModels';
 import { ProgressBar } from '../../ui/ProgressBar';
 import { Icon } from '../../ui/Icon';
+import { copyQuietly } from '../../../utils/clipboard';
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuLabel,
+  ContextMenuTrigger,
+} from '../../ui/ContextMenu';
 
 export function CimModelsTab() {
   const result = useAppStore((s) => s.processingResult);
@@ -129,17 +137,38 @@ function FieldGroup({ title, present, missing }: { title: string; present: strin
           </span>
         ))}
         {missing.map((f) => (
-          <span
-            key={f}
-            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-[var(--color-error)]/10 text-[var(--color-error)]"
-          >
-            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-            {f}
-          </span>
+          <ContextMenu key={f}>
+            <ContextMenuTrigger>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-[var(--color-error)]/10 text-[var(--color-error)]">
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                {f}
+              </span>
+            </ContextMenuTrigger>
+            <ContextMenuContent>
+              <MissingFieldMenuItems field={f} missing={missing} />
+            </ContextMenuContent>
+          </ContextMenu>
         ))}
       </div>
     </div>
+  );
+}
+
+/**
+ * A missing field's menu (#761): an alias is the usual way a CIM field is
+ * made, from a field the events already have, so the alias is fixed and the
+ * dialog asks only for the source.
+ */
+function MissingFieldMenuItems({ field, missing }: { field: string; missing: string[] }) {
+  const setFieldAlias = useAppStore((s) => s.setFieldAlias);
+  return (
+    <>
+      <ContextMenuLabel>{field}</ContextMenuLabel>
+      <ContextMenuItem onSelect={() => setFieldAlias({ alias: field })}>Create FIELDALIAS…</ContextMenuItem>
+      <ContextMenuItem onSelect={() => copyQuietly(field)}>Copy field name</ContextMenuItem>
+      <ContextMenuItem onSelect={() => copyQuietly(missing.join(', '))}>Copy the missing fields</ContextMenuItem>
+    </>
   );
 }
