@@ -76,6 +76,11 @@ export default defineConfig({
       'packages/mcp-server/src/__tests__/messageLimit.test.ts',
       'packages/mcp-server/src/__tests__/serialize.test.ts',
       'packages/mcp-server/src/__tests__/responseBudget.test.ts',
+      // What tools.ts's handlers are tested by.
+      'packages/mcp-server/src/__tests__/tools.test.ts',
+      'packages/mcp-server/src/__tests__/toolsProperties.test.ts',
+      'packages/mcp-server/src/__tests__/adversarial.test.ts',
+      'packages/mcp-server/src/__tests__/runInWorker.test.ts',
       // The worker lifecycle and the store (#508), the two non-engine modules
       // whose logic the app's correctness leans on. Both are plain modules; the
       // store's test opts into jsdom itself, once, for a file.

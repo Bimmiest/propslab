@@ -24,9 +24,11 @@ export default {
     'packages/mcp-server/src/requestId.ts',
     'packages/mcp-server/src/messageLimit.ts',
     'packages/mcp-server/src/serialize.ts',
-    // The response budget (#571): measured at 78.7% on its own tests. tools.ts
-    // is not here yet: 72.8% with runInWorker's tests, under the floor.
+    // The response budget and the tool handlers (#571). tools.ts runs the engine
+    // in a worker, which loads the built bundle, so what is mutated here is the
+    // handlers' own logic: limits, error advice and the lookup tool.
     'packages/mcp-server/src/responseBudget.ts',
+    'packages/mcp-server/src/tools.ts',
     // The worker lifecycle (post, ready, watchdog, crash) and the app store
     // (#508): state machines with real logic, and tests that ran in the app's
     // suite but were never asked whether they would notice a wrong edit.
