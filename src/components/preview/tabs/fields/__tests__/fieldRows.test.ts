@@ -111,6 +111,11 @@ describe('aggregateFields — default fields (#741)', () => {
     expect(byName.get('index')?.count).toBe(3);
   });
 
+  it('lists the sourcetype an event is searched as after a rename (#757)', () => {
+    const renamed = [makeEvent('', { metadata: meta('web01', 'orig'), renamedSourcetype: 'new' })];
+    expect(aggregateFields(renamed, new Map()).find((f) => f.name === 'sourcetype')?.values).toEqual(new Set(['new']));
+  });
+
   it('gives an empty metadata value no row', () => {
     expect(byName.has('source')).toBe(false);
   });

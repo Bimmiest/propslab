@@ -33,8 +33,17 @@ function isMetadataFieldName(name: string): name is MetadataFieldName {
  * The value of a metadata-backed default field, or undefined when `name` is not
  * one. Callers consult their own `event.fields` first, so an explicitly
  * extracted field of the same name still wins.
+ *
+ * After a `rename`, `sourcetype` is the new name and `_sourcetype` the one the
+ * event is indexed under: props.conf.spec has a search find renamed events by
+ * the new name, and the original through `_sourcetype` (#757).
  */
-export function getMetadataField(event: SplunkEvent, name: string): string | undefined {
+export function getMetadataField(
+  event: Pick<SplunkEvent, 'metadata' | 'renamedSourcetype'>,
+  name: string,
+): string | undefined {
+  if (name === 'sourcetype') return event.renamedSourcetype ?? event.metadata.sourcetype;
+  if (name === '_sourcetype') return event.metadata.sourcetype;
   return isMetadataFieldName(name) ? event.metadata[name] : undefined;
 }
 
