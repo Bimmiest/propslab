@@ -1,7 +1,9 @@
 import { useEffect } from 'react';
 import { useAppStore, selectSessionDirty } from '../store/useAppStore';
+import { reloadingWithInputs } from '../staleChunkReload';
 
 function warn(e: BeforeUnloadEvent) {
+  if (reloadingWithInputs()) return;
   // preventDefault is what current browsers honour; returnValue is for the
   // ones that still ask for it. Either way the browser shows its own generic
   // prompt, and nothing of the session is written anywhere (#453).

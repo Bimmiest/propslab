@@ -1,9 +1,12 @@
 // @vitest-environment jsdom
 // The leave-page prompt is armed only while the session holds edits (#453).
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useUnloadWarning } from '../useUnloadWarning';
 import { useAppStore } from '../../store/useAppStore';
+
+const reloading = vi.hoisted(() => ({ withInputs: false }));
+vi.mock('../../staleChunkReload', () => ({ reloadingWithInputs: () => reloading.withInputs }));
 
 const initial = useAppStore.getState();
 
@@ -14,7 +17,10 @@ function fireBeforeUnload() {
 }
 
 describe('useUnloadWarning', () => {
-  beforeEach(() => useAppStore.setState(initial, true));
+  beforeEach(() => {
+    useAppStore.setState(initial, true);
+    reloading.withInputs = false;
+  });
   afterEach(() => useAppStore.setState(initial, true));
 
   it('does not prompt over an untouched session', () => {
@@ -43,6 +49,13 @@ describe('useUnloadWarning', () => {
         metadata: s.metadata,
       });
     });
+    expect(fireBeforeUnload().defaultPrevented).toBe(false);
+  });
+
+  it('does not prompt over a reload that keeps the inputs (#706)', () => {
+    renderHook(() => useUnloadWarning());
+    act(() => useAppStore.getState().setRawData('some log line'));
+    reloading.withInputs = true;
     expect(fireBeforeUnload().defaultPrevented).toBe(false);
   });
 

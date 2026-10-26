@@ -13,8 +13,8 @@ import { usePipelineInputs, type PipelineInputs } from './tabs/shared/usePipelin
 // The output tabs other than Preview, out of the entry chunk (#566): each is
 // mounted only when selected, so the cost is one chunk fetch on first open,
 // and CIM Models brings its data table with it. Retryable, since that fetch
-// can fail in a tab left open across a redeploy; the OutputBoundary around
-// this panel offers the retry.
+// can fail on a flaky network; the OutputBoundary around this panel offers the
+// retry. A tab left open across a redeploy reloads instead (staleChunkReload.ts).
 const CimModelsTab = retryableLazy(() => import('./tabs/CimModelsTab').then((m) => ({ default: m.CimModelsTab })));
 const EffectiveConfigTab = retryableLazy(() =>
   import('./tabs/EffectiveConfigTab').then((m) => ({ default: m.EffectiveConfigTab })),
