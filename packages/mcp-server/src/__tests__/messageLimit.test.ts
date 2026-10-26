@@ -6,7 +6,13 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { McpError } from '@modelcontextprotocol/sdk/types.js';
 import type { JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js';
-import { createStdioTransport, MAX_MESSAGE_BYTES, MessageSizeLimiter, oversizeMessageError } from '../messageLimit';
+import {
+  createStdioTransport,
+  holdPiece,
+  MAX_MESSAGE_BYTES,
+  MessageSizeLimiter,
+  oversizeMessageError,
+} from '../messageLimit';
 import { ID_SCAN_BYTES } from '../requestId';
 
 /**
@@ -32,6 +38,25 @@ async function limit(maxBytes: number, chunks: (string | Buffer)[]) {
   await done;
   return { passed: out.map((b) => b.toString('utf8')), oversize: oversize.length, ids };
 }
+
+describe('holdPiece (#568)', () => {
+  it('holds a line sent a byte at a time in a handful of buffers, in order', () => {
+    const pending: Buffer[] = [];
+    const text = 'x'.repeat(100_000) + 'end';
+    for (const ch of text) holdPiece(pending, Buffer.from(ch));
+    expect(pending.length).toBeLessThanOrEqual(Math.ceil(Math.log2(text.length)) + 1);
+    expect(Buffer.concat(pending).toString()).toBe(text);
+  });
+
+  it('keeps a large piece as it is and merges the small ones after it', () => {
+    const big = Buffer.alloc(1000, 'a');
+    const pending = [big];
+    holdPiece(pending, Buffer.from('b'));
+    holdPiece(pending, Buffer.from('c'));
+    expect(pending[0]).toBe(big);
+    expect(pending.map((b) => b.toString().slice(-2))).toEqual(['aa', 'bc']);
+  });
+});
 
 describe('MessageSizeLimiter', () => {
   it('passes lines within the limit through unchanged, one line per chunk', async () => {

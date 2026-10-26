@@ -117,6 +117,21 @@ reviewed. `docs/engine.md`'s closing section is the spec this implements:
   launcher adds none: it still moves to `dist/`, and names on stderr every
   `--allow-…` grant beyond its own, so a broader one does not apply
   silently. Without `--allow-child-process` it cannot re-exec, and says so.
+  **On Node 24 the permission model does not cover the network.** Nothing
+  in the server or the engine opens a connection, but nothing stops one
+  either. Node 26 adds `--allow-net`; the launcher grants none, so under
+  Node 26 or later the server and its workers cannot reach the network.
+- **The server gets only the environment node reads**: `PATH`,
+  `NODE_OPTIONS`, `SystemRoot`, `windir`, `TEMP`, `TMP`, `TMPDIR`, `TZ`,
+  `LANG` and `LC_*`. MCP clients often start servers with API keys in the
+  environment; the server reads none of them, and each sandbox worker gets
+  an empty environment. `PROPSLAB_MCP_NO_REEXEC=1` keeps the full
+  environment, as it keeps everything else the re-exec would change.
+- **The server exits when the launcher is gone.** The launcher forwards
+  SIGTERM, SIGINT and SIGHUP, but a client on Windows stops it with
+  TerminateProcess, and SIGKILL anywhere runs no handler, so nothing is
+  forwarded. The server checks its launcher once a second and exits when it
+  is gone, rather than keep the client's stdio.
 - **A timeout comes back structured**: the budget, how far the run got
   (`progress`: `parsing`, `running` with the pipeline stage and the events
   it was given, or `finishing`), and advice that follows from that (#488).
@@ -171,7 +186,7 @@ reviewed. `docs/engine.md`'s closing section is the spec this implements:
   nothing here bounds their total; a smaller `--max-memory` in that build
   would be the place to (#490).
   Process-wide V8 heap flags override worker limits, so the launcher strips
-  `--max-old-space-size` / `--max-semi-space-size` / `--max-heap-size` from
+  `--max-old-space-size` (and its `-percentage` form) / `--max-semi-space-size` / `--max-heap-size` from
   its own arguments and from `NODE_OPTIONS` before re-exec'ing, and says so
   on stderr. `NODE_OPTIONS` is split the way node splits it, so a quoted
   `"--max-old-space-size=8192"`, which node reads as the flag, is found too
