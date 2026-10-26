@@ -6,6 +6,7 @@ import vitest from '@vitest/eslint-plugin';
 import importX from 'eslint-plugin-import-x';
 import tseslint from 'typescript-eslint';
 import { defineConfig, globalIgnores } from 'eslint/config';
+import comments from './scripts/eslint-comments.mjs';
 
 // Flat config merges `globals` across matching blocks rather than replacing
 // them, so a later `globals: globals.node` would leave every browser global
@@ -203,6 +204,14 @@ export default defineConfig([
         { groups: ['builtin', 'external', ['parent', 'sibling', 'index']], 'newlines-between': 'ignore' },
       ],
     },
+  },
+  {
+    // The comment rules in CONTRIBUTING ("Code comments") that a tool can
+    // check: a TODO names its issue, and code is not kept in a comment. From
+    // repo-template, as in propslab-sb and propslab-ent (#731).
+    files: ['**/*.{ts,tsx,js,mjs}'],
+    plugins: { comments },
+    rules: { 'comments/todo-has-issue': 'error', 'comments/no-commented-out-code': 'error' },
   },
   {
     // Size and branching limits for hand-written code, so a function stays a
