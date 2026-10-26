@@ -8,6 +8,7 @@ import { MonacoEditor } from '../editor/LazyEditors';
 import { registerEditor, unregisterEditor } from '../editor/editorRegistry';
 import { EditorValidationList } from '../editor/EditorValidationList';
 import { CursorPosition } from '../editor/CursorPosition';
+import { EditorContextMenu } from '../editor/EditorContextMenu';
 import { countLines } from '../../utils/countLines';
 import { detectLogFormat } from '../../engine/scaffold/analyzers/logFormat';
 
@@ -95,15 +96,17 @@ export function RawPanel() {
       </div>
 
       <div className="relative flex-1 min-h-0">
-        <MonacoEditor
-          language="plaintext"
-          value={rawData}
-          onChange={setRawData}
-          onMount={handleMount}
-          theme={theme === 'dark' ? 'splunk-dark' : 'splunk-light'}
-          options={EDITOR_OPTIONS}
-          modelKey="raw"
-        />
+        <EditorContextMenu editor={editorInstance} file="raw">
+          <MonacoEditor
+            language="plaintext"
+            value={rawData}
+            onChange={setRawData}
+            onMount={handleMount}
+            theme={theme === 'dark' ? 'splunk-dark' : 'splunk-light'}
+            options={EDITOR_OPTIONS}
+            modelKey="raw"
+          />
+        </EditorContextMenu>
         {!rawData && (
           <div
             className="absolute inset-0 flex flex-col items-center justify-center gap-3 pointer-events-none select-none"

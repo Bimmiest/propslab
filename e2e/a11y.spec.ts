@@ -160,6 +160,14 @@ for (const theme of ['dark', 'light'] as const) {
       await expectNoViolations(page, 'event context menu', POPUP_RULES_OFF);
     });
 
+    test('editor context menu', async ({ page }) => {
+      await openApp(page);
+      await loadExample(page, APACHE);
+      await page.locator('.monaco-editor').nth(1).click({ button: 'right' });
+      await expect(page.getByRole('menu')).toBeVisible();
+      await expectNoViolations(page, 'editor context menu', POPUP_RULES_OFF);
+    });
+
     test('tooltip', async ({ page }) => {
       await openApp(page);
       await page.getByRole('tab', { name: 'Dictionary' }).hover();

@@ -6,6 +6,7 @@ import { CopyButton } from './CopyButton';
 import { ClearButton } from './ClearButton';
 import { EditorValidationList } from './EditorValidationList';
 import { CursorPosition } from './CursorPosition';
+import { EditorContextMenu } from './EditorContextMenu';
 import { Icon } from '../ui/Icon';
 
 export function PropsConfEditor() {
@@ -56,12 +57,14 @@ export function PropsConfEditor() {
         </div>
       </div>
       <div className="flex-1 min-h-0">
-        <SplunkEditor
-          value={propsConf}
-          onChange={setPropsConf}
-          fileType="props.conf"
-          onEditorReady={setEditorInstance}
-        />
+        <EditorContextMenu editor={editorInstance} file="props.conf">
+          <SplunkEditor
+            value={propsConf}
+            onChange={setPropsConf}
+            fileType="props.conf"
+            onEditorReady={setEditorInstance}
+          />
+        </EditorContextMenu>
       </div>
       <div className="flex items-center justify-end px-3 py-1 text-xs shrink-0 bg-[var(--color-bg-secondary)] border-t border-[var(--color-border)]">
         <CursorPosition editor={editorInstance} />

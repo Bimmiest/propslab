@@ -30,8 +30,21 @@ export function ContextMenu(props: React.ComponentProps<typeof RCM.Root>) {
   return <RCM.Root modal={false} {...props} />;
 }
 
-export function ContextMenuTrigger({ children, asChild = true }: { children: React.ReactNode; asChild?: boolean }) {
-  return <RCM.Trigger asChild={asChild}>{children}</RCM.Trigger>;
+export function ContextMenuTrigger({
+  children,
+  asChild = true,
+  disabled,
+}: {
+  children: React.ReactNode;
+  asChild?: boolean;
+  /** Leaves the browser's own menu in place, for a target that is not ready. */
+  disabled?: boolean;
+}) {
+  return (
+    <RCM.Trigger asChild={asChild} disabled={disabled}>
+      {children}
+    </RCM.Trigger>
+  );
 }
 
 export function ContextMenuContent({ children }: { children: React.ReactNode }) {
@@ -55,20 +68,31 @@ export function ContextMenuItem({
   children,
   onSelect,
   disabled,
+  shortcut,
 }: {
   children: React.ReactNode;
   onSelect: () => void;
   disabled?: boolean;
+  /** The key that does the same outside the menu, shown at the right. Not part of the item's name. */
+  shortcut?: string;
 }) {
   return (
     <RCM.Item
       disabled={disabled}
       onSelect={onSelect}
-      className="flex items-center gap-2 mx-1 px-2 py-1.5 rounded text-xs cursor-pointer outline-none select-none
+      className="group flex items-center gap-2 mx-1 px-2 py-1.5 rounded text-xs cursor-pointer outline-none select-none
         text-[var(--color-text-primary)] data-[highlighted]:bg-[var(--color-accent)] data-[highlighted]:text-[var(--color-text-on-accent)]
         data-[disabled]:opacity-40 data-[disabled]:cursor-not-allowed"
     >
       {children}
+      {shortcut && (
+        <kbd
+          aria-hidden="true"
+          className="ml-auto pl-6 font-sans text-[var(--color-text-muted)] group-data-[highlighted]:text-[var(--color-text-on-accent)]"
+        >
+          {shortcut}
+        </kbd>
+      )}
     </RCM.Item>
   );
 }
