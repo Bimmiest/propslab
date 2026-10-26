@@ -36,6 +36,9 @@ A manual `workflow_dispatch` on `main` is the path for a redeploy and for a roll
 
 - If the `sha` input is empty, the dispatch redeploys the newest green commit on main.
 - If `sha` has a value, the dispatch deploys that commit. It refuses a commit that is not an ancestor of `main`. Thus it can restore only a commit that was merged before.
+- If `run_id` has a value, the dispatch deploys the bundle that an earlier run of the deploy workflow deployed. It does not build again. A run keeps its bundle and its attestation for 30 days. The run must be a successful run of the deploy workflow on `main`, and the deploy job verifies its attestation as it verifies a new one. Use `sha` or `run_id`, not both.
+
+A rebuild of an old commit can be different from the bundle that was live. The dependency `pcre2-wasm-utf16` comes from git, with no integrity hash in the lockfile, and the tools change. Thus `run_id` is the better rollback while the bundle is kept.
 
 ## The production environment
 
@@ -51,6 +54,8 @@ Until the admin completes these steps, any workflow on any branch can read the t
 ## Scheduled runs
 
 `ci.yml`, `audit.yml`, `security.yml`, `mutation.yml` and `environment.yml` also run on a schedule, to find problems that occur without a push. If a scheduled run fails, its `report` job opens an issue with a `scheduled-*` label. If an issue with that label is open, the job adds a comment to it. Close the issue when the fix is on main.
+
+If an automatic deploy fails, the `report` job of the deploy workflow opens an issue with the label `deploy-failed`, or adds a comment to the open issue. If the header check failed, the site serves the new bundle. The issue tells you how to restore the previous bundle.
 
 ## Credentials
 
@@ -75,7 +80,7 @@ The repository variable `DEPLOY_PAUSED` is the switch. While it is `true`, autom
 To do a rollback:
 
 1. Under Settings → Secrets and variables → Actions → Variables, set `DEPLOY_PAUSED` to `true`.
-2. Dispatch the deploy workflow on `main`, with `sha` set to the commit that you want to restore.
+2. Dispatch the deploy workflow on `main`. Set `run_id` to the last good run of the deploy workflow. If that run is older than 30 days, set `sha` to the commit that you want to restore.
 3. Wait until the fix is merged and the push CI on main is green.
 4. Delete `DEPLOY_PAUSED`, or set it to a value other than `true`.
 5. To start automatic deploys again, dispatch with `sha` empty, or wait for the next push.

@@ -38,6 +38,8 @@ on:
   # copy of this file has no ancestor check, dispatch on it, and reach the
   # token. So the ref a dispatch runs from is always main — whose copy of this
   # file is the reviewed one — and the target commit is data, validated by that copy.
+  # `run_id` instead of `sha` deploys the bundle an earlier run deployed,
+  # without a rebuild (see the input).
   # The environment admitting `main` and nothing else is what makes that
   # binding; the ref check in the build job only makes the failure readable.
   workflow_dispatch:
@@ -46,6 +48,19 @@ on:
         description: >-
           Commit to deploy (rollback). Must be on main. Leave empty for the
           newest commit on main whose push CI passed.
+        required: false
+        default: ''
+        type: string
+      # Rollback without a rebuild (#574). A rebuild of an old commit can
+      # differ from what was live: the git dependency pcre2-wasm-utf16 has no
+      # integrity hash in the lockfile, and the toolchain moves. The bundle a
+      # run deployed is kept 30 days with its attestation, and this deploys it
+      # again, verified the same way as a new one.
+      run_id:
+        description: >-
+          Rollback without a rebuild: the id of an earlier run of this
+          workflow, on main, whose bundle to deploy again (kept 30 days).
+          Leave empty to build. Not together with sha.
         required: false
         default: ''
         type: string
@@ -202,6 +217,66 @@ jobs:
           # origin/main is present without a second, credentialed fetch.
           fetch-depth: 0
 
+      # A rollback to a kept bundle: the run must be one of this workflow's,
+      # from main, and it must have succeeded, which means it deployed. Its
+      # bundle and attestation are taken as they are; the deploy job verifies
+      # the attestation as it does a new one, so a bundle this workflow did not
+      # sign on main is refused there. The commit comes from the file the
+      # Attest job writes beside the manifest. Runs from before #574 have none,
+      # and their bundles are gone after a day anyway.
+      - name: Use a kept bundle
+        if: inputs.run_id != ''
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_ID: ${{ inputs.run_id }}
+          INPUT_SHA: ${{ inputs.sha }}
+        run: |
+          if [ -n "$INPUT_SHA" ]; then
+            echo "::error::Set 'sha' or 'run_id', not both."
+            exit 1
+          fi
+          if [[ ! $RUN_ID =~ ^[0-9]{1,20}$ ]]; then
+            echo "::error::The 'run_id' input must be a run id: digits only."
+            exit 1
+          fi
+          run=$(gh api "repos/$GH_REPO/actions/runs/$RUN_ID" --jq '[.path, .head_branch, .conclusion] | join(" ")')
+          if [ "$run" != ".github/workflows/azure-static-web-apps.yml main success" ]; then
+            echo "::error::Run $RUN_ID is not a successful run of this workflow on main."
+            exit 1
+          fi
+
+      - name: Download the kept bundle
+        if: inputs.run_id != ''
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dist
+          path: dist
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Download the kept attestation
+        if: inputs.run_id != ''
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dist-attestation
+          path: dist-attestation
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Read the kept bundle's commit
+        id: keptsha
+        if: inputs.run_id != ''
+        shell: bash
+        run: |
+          sha=$(cat dist-attestation/commit 2>/dev/null || true)
+          if [[ ! $sha =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::The kept attestation names no commit. Only runs since #574 keep one; dispatch with 'sha' instead."
+            exit 1
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
       # Under workflow_run, `github.sha` is the default branch's head when this
       # run was queued — not the commit CI graded, and possibly one CI has not
       # finished with. So the commit is resolved explicitly: the newest push to
@@ -242,6 +317,7 @@ jobs:
       # set is exempt, because a rollback goes backwards on purpose.
       - name: Resolve commit
         id: target
+        if: inputs.run_id == ''
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -316,7 +392,7 @@ jobs:
         id: verify
         shell: bash
         env:
-          SHA: ${{ steps.target.outputs.sha }}
+          SHA: ${{ steps.target.outputs.sha || steps.keptsha.outputs.sha }}
         run: |
           if ! full=$(git rev-parse --verify --quiet "${SHA}^{commit}"); then
             echo "::error::Refusing to deploy $SHA: no such commit in this repository's history."
@@ -339,11 +415,13 @@ jobs:
       # the toolchain that passed CI. `.nvmrc` is read from the target commit,
       # checked out by the step above.
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: inputs.run_id == ''
         with:
           node-version-file: .nvmrc
           cache: npm
 
       - name: Install dependencies
+        if: inputs.run_id == ''
         # --ignore-scripts: install scripts are the one place a
         # compromised or typo-squatted dependency runs code without anyone
         # importing it. This job does not hold the deployment token, but it
@@ -360,6 +438,7 @@ jobs:
         run: npm ci --ignore-scripts
 
       - name: Verify the regex engine's WebAssembly
+        if: inputs.run_id == ''
         # This is the job that ships pcre2.wasm, so it is the one that most
         # needs the check (#504): the dependency is a git one with no
         # integrity hash in the lockfile, and the package's own checksum is
@@ -376,19 +455,32 @@ jobs:
           if [ -f ../../pcre2.wasm.sha256 ]; then sha256sum --check --strict ../../pcre2.wasm.sha256; fi
 
       - name: Build
+        if: inputs.run_id == ''
         run: npm run build
 
       # dist/ holds no dotfiles (staticwebapp.config.json comes from public/),
       # so upload-artifact's default of skipping hidden files loses nothing.
-      # One day is plenty: the deploy job downloads it minutes from now, and a
-      # rollback rebuilds from the commit rather than reusing an old artifact.
+      # Kept 30 days, so a later dispatch with `run_id` can deploy this exact
+      # bundle again (#574). A kept bundle is uploaded again as this run's, so
+      # the deploy job reads one artifact name whichever way it was made.
       - name: Upload build
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: dist
           path: dist/
           if-no-files-found: error
-          retention-days: 1
+          retention-days: 30
+
+      # The Attest job is skipped for a kept bundle: its own attestation comes
+      # with it.
+      - name: Upload the kept attestation
+        if: inputs.run_id != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dist-attestation
+          path: dist-attestation/
+          if-no-files-found: error
+          retention-days: 30
 
   # A build attestation for the bundle the deploy job will upload (#518), and
   # the reason it is a job of its own.
@@ -421,6 +513,7 @@ jobs:
   # shipping unattested.
   attest:
     needs: build
+    if: inputs.run_id == ''
     runs-on: ubuntu-latest
     timeout-minutes: 10
     name: Attest
@@ -458,10 +551,21 @@ jobs:
       # The attestation is also stored on GitHub for `gh attestation verify`,
       # but the deploy job is given the bundle directly: verifying against a
       # bundle needs no API call, so the deploy job's empty token is enough.
-      - name: Keep the bundle beside the manifest
+      # The commit travels with the manifest, for a later rollback to this
+      # bundle (#574): the deployment URL names it. It is not part of what is
+      # signed, which is the manifest; it says which commit to name, not what
+      # may ship.
+      - name: Keep the bundle and the commit beside the manifest
         env:
           BUNDLE: ${{ steps.attest.outputs.bundle-path }}
-        run: cp "$BUNDLE" attestation/dist.sha256.jsonl
+          SHA: ${{ needs.build.outputs.sha }}
+        run: |
+          cp "$BUNDLE" attestation/dist.sha256.jsonl
+          if [[ ! $SHA =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::The build job's commit is not a full hash."
+            exit 1
+          fi
+          echo "$SHA" > attestation/commit
 
       - name: Upload attestation
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -469,10 +573,15 @@ jobs:
           name: dist-attestation
           path: attestation/
           if-no-files-found: error
-          retention-days: 1
+          retention-days: 30
 
   deploy:
     needs: [build, attest]
+    # Attest is skipped for a kept bundle, and a skipped need would skip this
+    # job too; the build must still have passed.
+    if: >-
+      !cancelled() && needs.build.result == 'success' &&
+      (needs.attest.result == 'success' || needs.attest.result == 'skipped')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     name: Deploy
@@ -737,3 +846,24 @@ jobs:
           check "$script" '^(text|application)/javascript'
           check "$wasm" '^application/wasm($|;)'
           exit "$fail"
+
+  # A failed automatic deploy opens an issue, or comments on the open one, as
+  # a failed scheduled run does (#573). Before, a deploy that stopped (the
+  # commit lookup that gave up, a header check that failed) was a red run that
+  # nobody was told about (#574). A dispatch is watched by whoever started it.
+  report:
+    needs: [build, attest, deploy]
+    if: failure() && github.event_name == 'workflow_run'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - uses: Bimmiest/shared-workflows/.github/actions/open-or-update-issue@5f68ca4788224cfb9fd210be687f9c00f7284b4a # v1.3.1
+        with:
+          label: deploy-failed
+          title: An automatic deploy failed
+          body: |
+            If the Build job failed, nothing was deployed: the site serves what it served before. If "Verify the deployed headers" failed, the site serves the new bundle with the headers that step names. To put the previous bundle back, follow the rollback steps in docs/deployment.md, with `run_id` set to the last successful run of this workflow.
+
+            Run: {run}
