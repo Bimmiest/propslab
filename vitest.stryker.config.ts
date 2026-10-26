@@ -57,6 +57,11 @@ export default defineConfig({
   test: {
     ...base.test,
     projects: undefined,
+    // Instrumented code is slower. Once responseBudget.ts was mutated (#571),
+    // the dry run's serializeSimulation test, which calls it in its loops,
+    // passed 20 s and every full run stopped before mutating anything (#728).
+    // Each mutant still gets Stryker's own timeout, from the dry run's times.
+    testTimeout: 120_000,
     setupFiles: (base.test?.setupFiles as string[] | undefined)?.filter((f) => !f.includes('recordDirectiveEvidence')),
     // The engine's tests, those of the two utils the engine runs on, those of
     // the MCP server modules in stryker.config.mjs's `mutate`, and those of the
