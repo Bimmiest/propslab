@@ -63,6 +63,13 @@ export default defineConfig({
     // sometimes over passes on the second try. No retries, so a run over budget
     // fails as measured. Run alone with `playwright test --project=perf`.
     // `perf.spec.ts` and `perf-*.spec.ts` (the Web Vitals budgets) belong here.
+    // The smoke spec again in Firefox (#572): module workers, the Monaco
+    // chunk split, the CSP and Trusted Types had only ever run in Chromium.
+    {
+      name: 'firefox',
+      use: { ...devices['Desktop Firefox'] },
+      testMatch: /smoke\.spec\.ts$/,
+    },
     {
       name: 'perf',
       use: { ...devices['Desktop Chrome'] },

@@ -11,7 +11,7 @@ const APACHE = /Apache Access Log/i;
  * Nothing is excluded, Monaco included — its colours come from our own
  * splunk-light/splunk-dark themes, so its violations are ours to fix.
  */
-async function expectNoViolations(page: Page, label: string): Promise<void> {
+async function expectNoViolations(page: Page, label: string, disableRules: string[] = []): Promise<void> {
   // Let transitions and entrances settle so contrast is measured on final
   // colours. Not an endless one (the processing pulse), which never finishes.
   await page.evaluate(() =>
@@ -25,6 +25,7 @@ async function expectNoViolations(page: Page, label: string): Promise<void> {
 
   const results = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'])
+    .disableRules(disableRules)
     .analyze();
 
   const report = results.violations.map((v) => ({
@@ -36,6 +37,14 @@ async function expectNoViolations(page: Page, label: string): Promise<void> {
   // Soft, so one test reports every view's violations rather than the first.
   expect.soft(report, `axe violations in ${label}`).toEqual([]);
 }
+
+/**
+ * Off while a menu or tooltip is open: `region` (best practice, not WCAG)
+ * wants all content inside a landmark, and Radix portals these popups to
+ * <body>, outside every landmark, as axe already allows for dialogs. The scans
+ * at rest check `region` for the page itself.
+ */
+const POPUP_RULES_OFF = ['region'];
 
 for (const theme of ['dark', 'light'] as const) {
   test.describe(`accessibility (${theme})`, () => {
@@ -101,6 +110,44 @@ for (const theme of ['dark', 'light'] as const) {
       await page.getByRole('button', { name: 'Open pipeline reference' }).click();
       await expect(page.getByRole('button', { name: 'Close panel' })).toBeVisible();
       await expectNoViolations(page, 'pipeline reference');
+    });
+
+    // The overlays the scans above never open (#572): each is scanned while
+    // it is showing, which is the only time its contrast and roles exist.
+    test('confirm dialog', async ({ page }) => {
+      await openApp(page);
+      await loadExample(page, APACHE);
+      await pasteInto(page, 1, '[edited]\n');
+      await page.getByRole('banner').getByRole('button', { name: 'Examples' }).click();
+      await page
+        .getByRole('group', { name: 'Examples' })
+        .getByRole('button', { name: /Linux SSH/i })
+        .click();
+      await expect(page.getByRole('alertdialog')).toBeVisible();
+      await expectNoViolations(page, 'confirm dialog');
+    });
+
+    test('scaffold dialog', async ({ page }) => {
+      await openApp(page);
+      await loadExample(page, APACHE);
+      await page.getByRole('button', { name: 'Scaffold' }).click();
+      await expect(page.getByRole('dialog')).toBeVisible();
+      await expectNoViolations(page, 'scaffold dialog');
+    });
+
+    test('event context menu', async ({ page }) => {
+      await openApp(page);
+      await loadExample(page, APACHE);
+      await page.getByRole('textbox', { name: 'Event text' }).first().click({ button: 'right' });
+      await expect(page.getByRole('menu')).toBeVisible();
+      await expectNoViolations(page, 'event context menu', POPUP_RULES_OFF);
+    });
+
+    test('tooltip', async ({ page }) => {
+      await openApp(page);
+      await page.getByRole('tab', { name: 'Dictionary' }).hover();
+      await expect(page.getByRole('tooltip')).toBeVisible();
+      await expectNoViolations(page, 'tooltip', POPUP_RULES_OFF);
     });
 
     test('mobile layout', async ({ page }) => {
