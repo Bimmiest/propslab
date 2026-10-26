@@ -73,13 +73,15 @@ export default {
   clearText: { reportMutants: false, reportTests: false },
 
   // `break` is the floor: below it the run exits non-zero, which is what fails
-  // the mutation workflow. Measured, not chosen — set just under what the suite
-  // scores today (79.6%, see CONTRIBUTING.md). Raise it when tests raise the score;
-  // never lower it to make a branch green.
+  // the mutation workflow. Measured, not chosen: 3 points under the 84.90% the
+  // whole engine scored on 2026-10-26, the slack the coverage ratchet uses. At
+  // 1.6 points, one change that killed fewer mutants turned the weekly run red
+  // with no PR to blame (#571). Raise it when tests raise the score; never lower
+  // it to make a branch green.
   //
   // `low` is the edge of the warning band: a score between `break` and `low`
   // passes but is flagged in the report. It sat at `break`, so the band was empty
   // and the first sign of a slide was a red build (#508). Now a few points
   // above, so a run drifting toward the floor is visible before it fails.
-  thresholds: { high: 85, low: 82, break: 78 },
+  thresholds: { high: 85, low: 83, break: 81 },
 };

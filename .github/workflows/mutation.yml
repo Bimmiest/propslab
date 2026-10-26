@@ -45,13 +45,15 @@ jobs:
     # limit was set. By 2026-10-19 it was 12,713 mutants and had reached 82%
     # at the 120-minute limit (two weekly runs cancelled), so the weekly limit
     # went to 180. On 2026-10-25 a run was at 96% when 180 cancelled it, and
-    # no full run had finished since 2026-10-05 (#571), so it is 240.
+    # no full run had finished since 2026-10-05 (#571), so it went to 240. On
+    # 2026-10-26 a full run finished in 225 minutes, so it is 300, inside
+    # GitHub's 6-hour job limit.
     #
     # A PR run mutates the files it changes, and the sources its changed tests
     # import. A test-only change to a property suite brings the parser it
     # imports: #723's property suites brought 3,621 mutants and were two-thirds
     # through at 48 minutes, so a PR gets 90.
-    timeout-minutes: ${{ github.event_name == 'pull_request' && 90 || 240 }}
+    timeout-minutes: ${{ github.event_name == 'pull_request' && 90 || 300 }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
