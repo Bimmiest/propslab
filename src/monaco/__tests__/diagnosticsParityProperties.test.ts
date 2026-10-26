@@ -28,7 +28,7 @@ import { parseConf } from '../../engine/parser/confParser';
 import { fcSeed } from '../../test/fcSeed';
 import { isIntegerLiteral } from '../../engine/utils/directiveValues';
 
-fc.configureGlobal({ seed: fcSeed(371), numRuns: 300 });
+fc.configureGlobal({ seed: fcSeed(5724), numRuns: 300 });
 
 const model = fakeModel;
 

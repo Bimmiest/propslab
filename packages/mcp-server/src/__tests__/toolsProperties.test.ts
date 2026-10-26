@@ -41,7 +41,7 @@ import type { ConfInput, ProcessingResult, SplunkEvent, ValidationDiagnostic } f
 import { fcSeed } from '../../../../src/test/fcSeed';
 import { makeEvent } from '../../../../src/test/makeEvent';
 
-fc.configureGlobal({ seed: fcSeed(371), numRuns: 100 });
+fc.configureGlobal({ seed: fcSeed(5725), numRuns: 100 });
 
 /** Built by `pretest`; see tools.test.ts. */
 const WORKER_PATH = fileURLToPath(new URL('../../dist/simulateWorker.js', import.meta.url));

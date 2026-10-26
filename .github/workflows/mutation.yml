@@ -49,9 +49,9 @@ jobs:
     #
     # A PR run mutates the files it changes, and the sources its changed tests
     # import. A test-only change to a property suite brings the parser it
-    # imports: #723 had 3,494 mutants and was two-thirds through at 28 minutes,
-    # so a PR gets 50.
-    timeout-minutes: ${{ github.event_name == 'pull_request' && 50 || 240 }}
+    # imports: #723's property suites brought 3,621 mutants and were two-thirds
+    # through at 48 minutes, so a PR gets 90.
+    timeout-minutes: ${{ github.event_name == 'pull_request' && 90 || 240 }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:

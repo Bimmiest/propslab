@@ -339,8 +339,9 @@ describe('cancellation', () => {
       workerPath: SLEEP_WORKER,
       limiter,
     });
-    // Let the worker actually start before cancelling it.
-    await new Promise((r) => setTimeout(r, 300));
+    // runInWorker spawns the worker in the same step that takes the slot, so
+    // a slot held means a worker started: cancel only then (#572).
+    await vi.waitFor(() => expect(limiter.active).toBe(1));
 
     const abortedAt = Date.now();
     controller.abort();

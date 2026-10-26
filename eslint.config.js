@@ -120,6 +120,23 @@ export default defineConfig([
       // restore it after a spy), and the rule guards against accidental `this`
       // rebinding in shipped code, which is where it stays enabled.
       '@typescript-eslint/unbound-method': 'off',
+      // A test says which clock it runs under (runCtx.ts, #507): runPipeline
+      // falls back to Date.now(), and a date that is fine today trips
+      // MAX_DAYS_AGO in a few years. Its options, the fifth argument, carry
+      // `now`: a literal must name it, or pass something that does
+      // (FIXED_NOW, AT_FIXED_NOW, runCtx()). #572.
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "CallExpression[callee.name='runPipeline'][arguments.length<5]:not(:has(> SpreadElement))",
+          message: 'Pass runPipeline its options with `now` (FIXED_NOW from src/engine/__tests__/runCtx.ts).',
+        },
+        {
+          selector:
+            "CallExpression[callee.name='runPipeline'] > ObjectExpression:nth-child(5):not(:has(> Property[key.name='now'])):not(:has(> SpreadElement))",
+          message: 'runPipeline options need `now` (FIXED_NOW from src/engine/__tests__/runCtx.ts).',
+        },
+      ],
     },
   },
   {

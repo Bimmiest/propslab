@@ -74,7 +74,7 @@ describe('compileWildcard', () => {
           .map((c) => c.join('')),
         (pattern, s) => compileWildcard(pattern)(s) === reference(pattern).test(s),
       ),
-      { seed: fcSeed(371), numRuns: 2000 },
+      { seed: fcSeed(5723), numRuns: 2000 },
     );
   });
 

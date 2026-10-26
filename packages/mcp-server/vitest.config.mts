@@ -7,6 +7,8 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['src/**/*.test.ts'],
+    // Refuses to test a dist/ older than its sources (#572).
+    globalSetup: ['src/__tests__/distFreshness.ts'],
     restoreMocks: true,
     unstubGlobals: true,
     unstubEnvs: true,

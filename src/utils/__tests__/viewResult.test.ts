@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { runPipeline } from '../../engine/pipeline';
+import { AT_FIXED_NOW } from '../../engine/__tests__/runCtx';
 import type { ProcessingResult, ProcessingStep, SplunkEvent } from '../../engine/types';
 import { summarizeSteps, toViewResult } from '../viewResult';
 import { makeEvent } from '../../test/makeEvent';
@@ -149,7 +150,7 @@ describe('toViewResult', () => {
       'EVAL-n = len(user)',
     ].join('\n');
     const transforms = '[set_host]\nREGEX = host=(\\S+)\nFORMAT = host::$1\nDEST_KEY = MetaData:Host\n';
-    const { result } = runPipeline(raw, meta, props, transforms);
+    const { result } = runPipeline(raw, meta, props, transforms, AT_FIXED_NOW);
     const view = toViewResult(result);
     expect(view.events).toHaveLength(30);
     view.events.forEach((viewEvent, i) => {

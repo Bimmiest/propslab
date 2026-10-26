@@ -9,6 +9,7 @@ import { act, renderHook } from '@testing-library/react';
 import { useApplyDirective } from '../useApplyDirective';
 import { useAppStore } from '../../../../../store/useAppStore';
 import { runPipeline } from '../../../../../engine/pipeline';
+import { AT_FIXED_NOW } from '../../../../../engine/__tests__/runCtx';
 import { toViewResult } from '../../../../../utils/viewResult';
 import type { EventMetadata } from '../../../../../engine/types';
 
@@ -16,7 +17,7 @@ const initial = useAppStore.getState();
 
 /** Put a real run of `props` over `metadata` in the store, as the pipeline hook does. */
 function settle(props: string, metadata: EventMetadata): void {
-  const { result } = runPipeline('user=bob', metadata, props, '', { perEventPipeline: false });
+  const { result } = runPipeline('user=bob', metadata, props, '', AT_FIXED_NOW);
   useAppStore.setState({ ...initial, metadata, propsConf: props, processingResult: toViewResult(result) }, true);
 }
 

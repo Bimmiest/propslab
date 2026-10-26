@@ -6,6 +6,7 @@ import { normalizeSourcetype, detectSourcetypeHygiene } from '../analyzers/sourc
 import { renderStanza, appendStanza } from '../serialize';
 import { scaffoldConfig } from '../scaffoldConfig';
 import { runPipeline } from '../../pipeline';
+import { AT_FIXED_NOW } from '../../__tests__/runCtx';
 import type { ScaffoldSuggestion } from '../types';
 
 const splitLines = (s: string) => s.split(/\r?\n/);
@@ -252,7 +253,7 @@ describe('scaffoldConfig end to end — one event per multi-line object', () => 
       sourcetype,
       suggestions.filter((s) => s.enabledByDefault),
     );
-    const { result } = runPipeline(raw, { ...META, sourcetype }, props, '');
+    const { result } = runPipeline(raw, { ...META, sourcetype }, props, '', AT_FIXED_NOW);
     expect(result.events.map((e) => e._raw)).toEqual(objects);
   });
 });
@@ -275,7 +276,7 @@ describe('scaffoldConfig end to end — TRUNCATE sized to the whole object', () 
       sourcetype,
       suggestions.filter((s) => s.enabledByDefault),
     );
-    const { result } = runPipeline(raw, { ...META, sourcetype }, props, '');
+    const { result } = runPipeline(raw, { ...META, sourcetype }, props, '', AT_FIXED_NOW);
     expect(result.events.map((e) => e._raw)).toEqual([raw]);
     expect(result.events[0]?.fields['meta']).toBeUndefined();
   });

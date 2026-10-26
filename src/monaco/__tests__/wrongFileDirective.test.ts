@@ -5,6 +5,7 @@
 import { describe, it, expect } from 'vitest';
 import { computeDiagnostics } from '../splunkConfDiagnostics';
 import { runPipeline } from '../../engine/pipeline';
+import { FIXED_NOW } from '../../engine/__tests__/runCtx';
 import { wrongFileCanonical } from '../../engine/directiveRegistry';
 import type { EventMetadata, ValidationDiagnostic } from '../../engine/types';
 import { fakeModel } from '../../test/fakeModel';
@@ -15,6 +16,7 @@ function engineDiagnostics(props: string, transforms: string): ValidationDiagnos
   return runPipeline('2026-01-15T10:00:00Z hello\n', metadata, props, transforms, {
     perEventPipeline: false,
     captureOffsets: false,
+    now: FIXED_NOW,
   }).diagnostics;
 }
 

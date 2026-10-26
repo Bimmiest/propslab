@@ -107,11 +107,14 @@ class FakeWorker {
 const latest = () => FakeWorker.instances[FakeWorker.instances.length - 1]!;
 
 /**
- * Long enough for an inline run, had one been started, to have written its
- * result: the engine is preloaded in beforeAll, so the dynamic import resolves
- * in a microtask or two. Used where the assertion is that nothing ran inline.
+ * Whether any run of this test went to the main thread. The hook sets
+ * pipelineOnMainThread as it chooses the main thread, before the engine
+ * loads, so a subscription for the whole test sees it however fast or slow
+ * the run is. It replaced a 50 ms sleep, which an inline run slower than that
+ * passed unseen (#572).
  */
-const settleInline = () => act(() => new Promise<void>((resolve) => setTimeout(resolve, 50)));
+let ranInline = false;
+let stopWatchingInline = () => {};
 
 describe('useProcessingPipeline', () => {
   // The inline fallback loads the engine with a dynamic import(). The first
@@ -128,9 +131,14 @@ describe('useProcessingPipeline', () => {
     useAppStore.setState(initial, true);
     FakeWorker.instances = [];
     FakeWorker.failAfter = Infinity;
+    ranInline = false;
+    stopWatchingInline = useAppStore.subscribe((state) => {
+      if (state.pipelineOnMainThread) ranInline = true;
+    });
   });
 
   afterEach(() => {
+    stopWatchingInline();
     vi.useRealTimers();
     vi.unstubAllGlobals();
   });
@@ -168,7 +176,7 @@ describe('useProcessingPipeline', () => {
     act(() => FakeWorker.instances[0]!.crash());
 
     expect(FakeWorker.instances[0]!.terminated).toBe(true);
-    await settleInline();
+    expect(ranInline).toBe(false);
     let state = useAppStore.getState();
     expect(state.processingResult).toBeNull();
     expect(state.isProcessing).toBe(false);
@@ -430,7 +438,7 @@ describe('useProcessingPipeline', () => {
     expect(useAppStore.getState().isProcessing).toBe(true);
 
     act(() => FakeWorker.instances[3]!.crash('out of memory'));
-    await settleInline();
+    expect(ranInline).toBe(false);
     const state = useAppStore.getState();
     expect(state.processingResult).toBeNull();
     expect(state.isProcessing).toBe(false);
@@ -457,7 +465,7 @@ describe('useProcessingPipeline', () => {
     act(() => FakeWorker.instances[2]!.failToLoad());
     expect(FakeWorker.instances).toHaveLength(3);
 
-    await settleInline();
+    expect(ranInline).toBe(false);
     const state = useAppStore.getState();
     expect(state.processingResult).toBeNull();
     expect(state.isProcessing).toBe(false);
@@ -480,9 +488,8 @@ describe('useProcessingPipeline', () => {
       return { replay, policy: lifecycle.configs[lifecycle.configs.length - 1]! };
     }
 
-    async function expectNotRunInline() {
-      vi.useRealTimers();
-      await settleInline();
+    function expectNotRunInline() {
+      expect(ranInline).toBe(false);
       const state = useAppStore.getState();
       expect(state.processingResult).toBeNull();
       expect(state.isProcessing).toBe(false);
@@ -490,7 +497,7 @@ describe('useProcessingPipeline', () => {
       expect(state.validationDiagnostics[0]?.message).toMatch(/no replacement worker could be started/);
     }
 
-    it('is not run inline when the replacement outlasts a run budget and then fails to load', async () => {
+    it('is not run inline when the replacement outlasts a run budget and then fails to load', () => {
       const { replay } = crashIntoReplay();
       // Past the run budget: the load is not the replay's to time.
       act(() => void vi.advanceTimersByTime(5_000));
@@ -498,10 +505,10 @@ describe('useProcessingPipeline', () => {
       act(() => FakeWorker.instances[1]!.failToLoad());
       expect(FakeWorker.instances[2]!.posted).toEqual([replay]);
       act(() => FakeWorker.instances[2]!.failToLoad());
-      await expectNotRunInline();
+      expectNotRunInline();
     });
 
-    it('is not run inline after a timeout before load, whatever the retry count', async () => {
+    it('is not run inline after a timeout before load, whatever the retry count', () => {
       // A timeout with loaded=false, as the lifecycle reported before #420:
       // it must neither reset the retry count nor mark the replay unrun.
       const { replay, policy } = crashIntoReplay();
@@ -509,12 +516,12 @@ describe('useProcessingPipeline', () => {
       act(() => FakeWorker.instances[1]!.failToLoad());
       act(() => FakeWorker.instances[2]!.failToLoad());
       expect(FakeWorker.instances).toHaveLength(3);
-      await expectNotRunInline();
+      expectNotRunInline();
 
       // With the cap spent and the retry count cleared by giving up, only the
       // sticky crash mark stands between a late timeout and the main thread.
       act(() => policy.onTimeout(replay, [], false));
-      await expectNotRunInline();
+      expectNotRunInline();
     });
   });
 
@@ -566,7 +573,7 @@ describe('useProcessingPipeline', () => {
       act(() => FakeWorker.instances[0]!.ready());
       act(() => FakeWorker.instances[0]!.crash());
       act(() => FakeWorker.instances[1]!.crash());
-      await settleInline();
+      expect(ranInline).toBe(false);
       expect(useAppStore.getState().validationDiagnostics[0]?.message).toMatch(/crashed repeatedly/);
       expect(useAppStore.getState().processingResult).toBeNull();
       expect(FakeWorker.instances).toHaveLength(3);
@@ -600,7 +607,7 @@ describe('useProcessingPipeline', () => {
       expect(useAppStore.getState().validationDiagnostics).toEqual([]);
     });
 
-    it('never re-runs inline an input that hung a worker that had loaded', async () => {
+    it('never re-runs inline an input that hung a worker that had loaded', () => {
       vi.useFakeTimers();
       vi.stubGlobal('Worker', FakeWorker);
       seed();
@@ -612,8 +619,7 @@ describe('useProcessingPipeline', () => {
 
       act(() => FakeWorker.instances[1]!.failToLoad());
       act(() => FakeWorker.instances[2]!.failToLoad());
-      vi.useRealTimers();
-      await settleInline();
+      expect(ranInline).toBe(false);
       const state = useAppStore.getState();
       expect(state.processingResult).toBeNull();
       expect(state.validationDiagnostics[0]?.message).toMatch(/backtracking/);

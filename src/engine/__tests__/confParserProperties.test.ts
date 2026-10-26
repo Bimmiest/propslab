@@ -22,7 +22,7 @@ import { parseConf } from '../parser/confParser';
 import { fcSeed } from '../../test/fcSeed';
 import { prng } from '../../test/prng';
 
-fc.configureGlobal({ seed: fcSeed(371), numRuns: 200 });
+fc.configureGlobal({ seed: fcSeed(5722), numRuns: 200 });
 
 // ── Model ───────────────────────────────────────────────
 
