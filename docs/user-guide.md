@@ -87,7 +87,12 @@ The strftime completions show the same rendered time. Thus you can choose betwee
 
 **Pipeline tab.** Right-click a step, or move to it with Tab and press `Shift+F10` or the Menu key, to open its menu. **Jump to config** moves the props.conf cursor to the directive that the step ran. For a `TRANSFORMS-` or `REPORT-` step, the menu also moves to the transforms.conf stanza. The menu also opens the directive in the dictionary and copies the description of the step.
 
-**"Did not fire".** This list appears in the Pipeline and Extractions tabs when a directive ran against the loaded events and changed nothing. Without the list, the preview shows this failure as a usual event that did not change. Each row gives the directive, the number of events that it had no effect on, and the reason. The reason is one of these:
+**"Did not fire".** This list appears in the Pipeline and Extractions tabs when a directive ran against the loaded events and changed nothing. Without the list, the preview shows this failure as a usual event that did not change. The list has two groups:
+
+- **Did not fire** shows each directive that had no effect on all of the events, with a warning. Each row gives the directive, the number of events and the reason.
+- **Fired on some events** shows each directive that had no effect on some of the events only. This is usual when a sourcetype has more than one log structure, because a directive is often written for one structure. This group is collapsed. Each row gives the directive and the number of events. Select **Why** to see the reasons.
+
+The Extractions tab counts all of the events that the filters show, on all pages. The reason is one of these:
 
 - The transforms stanza that it references is not defined.
 - Its pattern did not compile.
@@ -97,7 +102,7 @@ The strftime completions show the same rendered time. Thus you can choose betwee
 - The pattern matched, but it has no named capture group, or none of its named groups took part in the match.
 - An `EVAL` expression evaluated to null.
 
-The list covers `EXTRACT`, `TRANSFORMS`/`REPORT`, `SEDCMD`, `FIELDALIAS` and `EVAL`. When you click the line reference, the editor moves to that line.
+The list covers `EXTRACT`, `TRANSFORMS`/`REPORT`, `SEDCMD`, `FIELDALIAS` and `EVAL`. A `FIELDALIAS` line with more than one alias has one row for each alias. When you click the line reference, the editor moves to that line.
 
 **Effective config tab.** This tab shows what `splunk btool props list <sourcetype> --debug` prints, resolved for the metadata that you configured. It shows these items:
 

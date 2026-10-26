@@ -15,6 +15,7 @@ import {
   noOpDirectiveKey,
   type NoOpReason,
 } from '../noOpExplainer';
+import { validateRegex } from '../../utils/splunkRegex';
 
 describe('longestPartialMatch', () => {
   it('reports where the pattern stopped agreeing with the text', () => {
@@ -58,6 +59,24 @@ describe('longestPartialMatch', () => {
     expect(longestPartialMatch(String.raw`ZZZ\d+`, 'nothing alike here')).toBeNull();
   });
 
+  it('reads an escaped parenthesis as a literal, not a group', () => {
+    expect(longestPartialMatch(String.raw`\(\d+\)X`, '(12)y')).toEqual({ end: 4, prefix: String.raw`\(\d+\)` });
+  });
+
+  it('reads a parenthesis inside a character class as a literal', () => {
+    expect(longestPartialMatch('[(]+X', '((y')).toEqual({ end: 2, prefix: '[(]+' });
+  });
+
+  it('keeps a counted quantifier with the atom it governs', () => {
+    // Cut inside `{2,3}`, the prefix reads `{` as a literal and stops agreeing
+    // after one `a`.
+    expect(longestPartialMatch('a{2,3}b', 'aac')).toEqual({ end: 2, prefix: 'a{2,3}' });
+  });
+
+  it('reports nothing when only the first alternative agrees', () => {
+    expect(longestPartialMatch('ERRORX|FATAL', 'ERROR here')).toBeNull();
+  });
+
   it('reports nothing for a top-level alternation rather than an empty-matching prefix (#365)', () => {
     // `ERROR|` matches the empty string at 0, which is not agreement.
     expect(longestPartialMatch('ERROR|FATAL', 'all good here')).toBeNull();
@@ -85,6 +104,17 @@ describe('explainRegexNoOp', () => {
   it('names a pattern that does not compile', () => {
     const reason = explainRegexNoOp('(unbalanced', 'anything', '_raw');
     expect(reason?.kind).toBe('regex-invalid');
+  });
+
+  it('gives the compiler error, not a generic message', () => {
+    const error = validateRegex('(unbalanced');
+    expect(error).toBeTruthy();
+    expect(explainRegexNoOp('(unbalanced', 'anything', '_raw')).toEqual({ kind: 'regex-invalid', error });
+  });
+
+  it('says the pattern stopped at a limit rather than that it did not match', () => {
+    const reason = explainRegexNoOp('^(?<v>(?:a|b)*)$', 'ab'.repeat(600), '_raw', { depthLimit: 1000 });
+    expect(reason?.kind).toBe('regex-limit');
   });
 
   it('reports an empty source before blaming the pattern', () => {
@@ -144,6 +174,24 @@ describe('describeNoOp', () => {
     expect(describeNoOp({ kind: 'fields-already-set', fields: ['a'] })).toContain('was already set');
     expect(describeNoOp({ kind: 'no-named-groups' })).toContain('has no named capture group');
     expect(describeNoOp({ kind: 'groups-unset', fields: ['a', 'b'] })).toContain('a, b took no part in the match');
+  });
+
+  it('says an EVAL computed null without guessing why (#772)', () => {
+    // In a sourcetype with several record types the usual cause is a case()
+    // that returns null on purpose, with every field it reads present.
+    expect(describeNoOp({ kind: 'eval-null', expression: 'len(x)' })).toBe(
+      '`len(x)` evaluated to null, so no field was written',
+    );
+  });
+
+  it('names each field in the exact sentences', () => {
+    expect(describeNoOp({ kind: 'fields-already-set', fields: ['a', 'b'] })).toBe(
+      'it matched, but a, b were already set by an earlier rule',
+    );
+    expect(describeNoOp({ kind: 'values-empty', fields: ['a', 'b'] })).toBe(
+      'it matched, but a, b captured only whitespace, and an empty value creates no field',
+    );
+    expect(describeNoOp({ kind: 'regex-invalid', error: 'missing )' })).toBe('the pattern did not compile: missing )');
   });
 
   it('says plainly when an event was past the explanation limit', () => {

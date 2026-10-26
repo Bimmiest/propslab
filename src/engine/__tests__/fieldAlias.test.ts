@@ -36,13 +36,23 @@ describe('applyFieldAliases — literal', () => {
     expect(e.processingTrace).toEqual([]);
     expect(e.noOps).toEqual([
       {
-        directive: 'FIELDALIAS-a',
+        directive: 'FIELDALIAS-a → ip AS ipaddress',
         file: 'props.conf',
         line: 1,
         phase: 'search-time',
         reason: { kind: 'source-key-empty', sourceKey: 'ip' },
       },
     ]);
+  });
+
+  it('names the alias that missed when one line holds several (#772)', () => {
+    const e = applyFieldAliases(
+      [event({ pid: '1' })],
+      [dir('a', 'pid AS process_id op AS signature')],
+      runCtx(FIXED_NOW),
+    )[0]!;
+    expect(e.fields['process_id']).toBe('1');
+    expect(e.noOps?.map((n) => n.directive)).toEqual(['FIELDALIAS-a → op AS signature']);
   });
 });
 

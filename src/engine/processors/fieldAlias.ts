@@ -38,9 +38,11 @@ export function applyFieldAliases(events: SplunkEvent[], directives: ConfDirecti
     const removed = new Map<string, string>();
 
     const noOps: DirectiveNoOp[] = [];
-    const noteNoOp = (alias: { directive: ConfDirective }, reason: NoOpReason) => {
+    const noteNoOp = (alias: CompiledAlias, reason: NoOpReason) => {
       noOps.push({
-        directive: alias.directive.key,
+        // Named per alias: one FIELDALIAS line can hold several, and each one
+        // misses on its own events (#772).
+        directive: `${alias.directive.key} → ${alias.source} ${alias.mode} ${alias.target}`,
         file: 'props.conf',
         line: alias.directive.line,
         phase: 'search-time',

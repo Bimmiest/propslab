@@ -70,6 +70,10 @@ export function HighlightedTab({ items, allEvents, currentPage, eventsPerPage, f
     [pinMatches, pinnedOverflow],
   );
 
+  // Every event the filters leave, not this page's: a directive that fires only
+  // on another page would otherwise read as never fired (#772).
+  const noOpEvents = useMemo(() => allEvents.map((item) => item.event), [allEvents]);
+
   const tree = useMemo(
     () => buildFieldTree(fieldColorMap, containerFields, categories.fieldProcessorMap),
     [fieldColorMap, containerFields, categories.fieldProcessorMap],
@@ -123,12 +127,12 @@ export function HighlightedTab({ items, allEvents, currentPage, eventsPerPage, f
           <FieldSplitLayout storageKey="highlighted-split-layout" collapsed={sidebarCollapsed} sidebar={sidebar}>
             {pinnedOverflow && <PinnedOverflowNote total={pinMatches.length} />}
             {/*
-            Extraction directives that ran against these events and produced no
-            field — the case where this tab otherwise shows an event with
-            nothing highlighted and no reason why.
+            Extraction directives that ran and produced no field — the case
+            where this tab otherwise shows an event with nothing highlighted
+            and no reason why.
           */}
             <div className="mb-2">
-              <DirectiveNoOpList events={filteredItems.map(({ item }) => item.event)} phase="search-time" />
+              <DirectiveNoOpList events={noOpEvents} phase="search-time" />
             </div>
             {filteredItems.map(({ item, globalIdx }, idx) => (
               <HighlightedEventCard
