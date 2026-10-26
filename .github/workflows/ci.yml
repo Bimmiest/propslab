@@ -209,6 +209,12 @@ jobs:
       - name: Playwright browser
         uses: Bimmiest/shared-workflows/.github/actions/playwright-browser@5f68ca4788224cfb9fd210be687f9c00f7284b4a # v1.3.1
 
+      # The smoke spec runs in Firefox too (playwright.config.ts, #572).
+      - name: Playwright browser (Firefox)
+        uses: Bimmiest/shared-workflows/.github/actions/playwright-browser@5f68ca4788224cfb9fd210be687f9c00f7284b4a # v1.3.1
+        with:
+          browser: firefox
+
       - name: End-to-end smoke tests
         id: e2e
         # Runs against a production build. Guards the things vitest cannot

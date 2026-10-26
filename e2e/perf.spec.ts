@@ -13,6 +13,12 @@ const EVENTS = 20_000;
 // Measured 1.7–4.6 s over eight runs, and up to 5.5 s on a loaded machine;
 // paste to status bar.
 const PIPELINE_BUDGET_MS = 12_000;
+/**
+ * How long to wait for a result before giving up, well past every budget: a
+ * run over its budget is reported as a number against the budget, not as an
+ * element that never became visible (#572).
+ */
+const RESULT_WAIT_MS = 60_000;
 // Measured 4–880 ms per tab over eight runs, rarely above 250; the outliers
 // are GC pauses, which land on whichever tab is switching.
 const TAB_BUDGET_MS = 1_500;
@@ -91,8 +97,9 @@ test('a 20k-event paste stays within the pipeline and tab-switch budgets', async
 
   const started = Date.now();
   await pasteInto(page, 0, kvLines(EVENTS));
-  await expect(page.getByText(`${EVENTS} events`, { exact: true })).toBeVisible({ timeout: PIPELINE_BUDGET_MS });
+  await expect(page.getByText(`${EVENTS} events`, { exact: true })).toBeVisible({ timeout: RESULT_WAIT_MS });
   const pipelineMs = Date.now() - started;
+  expect.soft(pipelineMs, 'paste to status bar (ms)').toBeLessThan(PIPELINE_BUDGET_MS);
 
   const timings: Record<string, number> = {};
   const previewSubTabs = ['Timestamp', 'Extractions', 'Diff', 'Regex', 'Raw'];
@@ -208,10 +215,9 @@ test('a regex-heavy config over large events stays within its budget', async ({ 
 
   const started = Date.now();
   await pasteInto(page, 0, largeLines(REGEX_EVENTS));
-  await expect(page.getByText(`${REGEX_EVENTS} events`, { exact: true })).toBeVisible({
-    timeout: REGEX_PIPELINE_BUDGET_MS,
-  });
+  await expect(page.getByText(`${REGEX_EVENTS} events`, { exact: true })).toBeVisible({ timeout: RESULT_WAIT_MS });
   const pipelineMs = Date.now() - started;
+  expect.soft(pipelineMs, 'paste to status bar (ms)').toBeLessThan(REGEX_PIPELINE_BUDGET_MS);
 
   const timings: Record<string, number> = {};
   for (const name of ['Fields', 'Pipeline', 'Preview']) timings[name] = await timeTabSwitch(page, name);
