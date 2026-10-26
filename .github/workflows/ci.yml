@@ -189,7 +189,10 @@ jobs:
 
   e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # 25, not 15: on 2026-10-26 an apt mirror served the browser's system
+    # packages at about 35 kB/s, and their install took 10 to 12 minutes, so
+    # the suite was cancelled mid-run.
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -217,8 +220,8 @@ jobs:
         #
         # The Playwright webServer builds first, so the suite tests this
         # commit's dist/ and never a stale one. This job has no Build step of
-        # its own to skip that for.
-        run: npm run test:e2e
+        # its own to skip that for. Firefox is e2e-firefox's.
+        run: npm run test:e2e -- --project chromium --project perf
 
       - name: Upload Playwright report
         # Scoped to the e2e step rather than the job. A bare `failure()` also
@@ -232,11 +235,35 @@ jobs:
           path: playwright-report/
           retention-days: 7
 
+  # The smoke spec in Firefox (playwright.config.ts, #572): module workers, the
+  # Monaco chunk split, the CSP and Trusted Types had only run in Chromium. A
+  # job of its own, so its browser install does not add to e2e's time.
+  e2e-firefox:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - uses: Bimmiest/shared-workflows/.github/actions/setup-node-project@5f68ca4788224cfb9fd210be687f9c00f7284b4a # v1.3.1
+
+      - name: Verify the regex engine's WebAssembly
+        run: node scripts/check-wasm-checksum.mjs
+
+      - name: Playwright browser
+        uses: Bimmiest/shared-workflows/.github/actions/playwright-browser@5f68ca4788224cfb9fd210be687f9c00f7284b4a # v1.3.1
+        with:
+          browser: firefox
+
+      - name: Smoke tests in Firefox
+        run: npm run test:e2e -- --project firefox
+
   # The required check. Skipped counts as passed for dependency-review alone,
   # which runs on pull requests only; any other job that did not succeed fails
   # this one.
   ci:
-    needs: [static, unit, e2e, mcp-server, workflow-lint, dependency-review]
+    needs: [static, unit, e2e, e2e-firefox, mcp-server, workflow-lint, dependency-review]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 2

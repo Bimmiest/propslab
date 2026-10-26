@@ -23,7 +23,11 @@ import type React from 'react';
 // disables Fast Refresh for this whole file. Declaring it is also what the other
 // five exports here already do.
 export function ContextMenu(props: React.ComponentProps<typeof RCM.Root>) {
-  return <RCM.Root {...props} />;
+  // Not modal (#572). Radix's modal menu sets aria-hidden on the rest of the
+  // page while it is open, which leaves every focusable control there inside
+  // aria-hidden (axe aria-hidden-focus) and hides the page's h1. A menu is not
+  // a dialog: Escape and a press outside still close it.
+  return <RCM.Root modal={false} {...props} />;
 }
 
 export function ContextMenuTrigger({ children, asChild = true }: { children: React.ReactNode; asChild?: boolean }) {

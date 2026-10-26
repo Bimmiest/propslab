@@ -5,9 +5,11 @@
 // A `simulated` directive is a claim that the engine reproduces Splunk. Two
 // things can stand behind it, stronger first:
 //
-//   cited     a test that really runs it through the pipeline, in a file whose
-//             comments say the expectation was derived from the spec ("Doc-derived",
-//             the .spec file, and the directive's name in one comment).
+//   cited     a test that really runs it through the pipeline, under a comment
+//             that says the expectation was derived from the spec ("Doc-derived",
+//             the .spec file, and the directive's name in one comment), placed
+//             above that test, above a describe it is in, or at the top of its
+//             file (#569). A comment above another test in the file does not count.
 //   exercised a test runs it through the pipeline, and nothing more is said.
 //
 // A directive with neither is a claim with no evidence, and this file fails on
@@ -62,6 +64,8 @@ interface Fs {
 interface Recording {
   testFile: string;
   keys: string[];
+  /** Test name ("describe > it", as vitest names it) -> the keys that test ran. */
+  tests: Record<string, string[]>;
 }
 
 /**
@@ -84,7 +88,7 @@ const PRIVATE_DIR = 'src/engine/__tests__/private/';
  * Simulated directives that are exercised and have no documentation-citing
  * test. Each is a claim resting on a test that says nothing about
  * where its expectation came from. Fix an entry by adding the citation (see
- * `isCitedIn`) or by reclassifying the directive `documented`, and delete it
+ * `isCitedFor`) or by reclassifying the directive `documented`, and delete it
  * here. The list may not grow: DOC_UNCITED_CEILING is its length today.
  *
  * MUST_NOT_BREAK_BEFORE is simulated as having no effect, which is observed
@@ -121,17 +125,68 @@ function readRecordings(): Recording[] {
     .map((name) => JSON.parse(fs.readFileSync(`${dir}/${name}`, 'utf8')) as Recording);
 }
 
+const escapeRegex = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const COMMENT = /^\s*(?:\/\/|\/\*|\*)/;
+/** A comment line at the left margin: a section banner, outside every describe. */
+const TOP_LEVEL_COMMENT = /^(?:\/\/|\/\*|\s\*)/;
+
+/** The comment lines directly above line `index` of `lines`, as one block. */
+function commentAbove(lines: string[], index: number): string {
+  let start = index;
+  while (start > 0 && COMMENT.test(lines[start - 1] ?? '')) start--;
+  return lines.slice(start, index).join('\n');
+}
+
+/** The comment lines directly below line `index`: the first lines of a describe's or a test's body. */
+function commentBelow(lines: string[], index: number): string {
+  let end = index + 1;
+  while (end < lines.length && COMMENT.test(lines[end] ?? '')) end++;
+  return lines.slice(index + 1, end).join('\n');
+}
+
+/** The nearest section banner above line `index`: a block of comment lines at the left margin. */
+function sectionAbove(lines: string[], index: number): string {
+  let end = index;
+  while (end > 0 && !TOP_LEVEL_COMMENT.test(lines[end - 1] ?? '')) end--;
+  let start = end;
+  while (start > 0 && TOP_LEVEL_COMMENT.test(lines[start - 1] ?? '')) start--;
+  return lines.slice(start, end).join('\n');
+}
+
 /**
- * Whether `testFile` carries a citation for `key`: one comment block that says
- * "doc-derived", names a .spec file, and names the directive. The file is the
- * unit because that is what the recording knows; a comment for one test in a
- * file whose other tests run the directive is close enough to be worth having.
+ * The comment blocks that speak for `testName` in `source`, for each describe
+ * and the test in its name (found by their literal titles): the block directly
+ * above the call, the block that opens its body, and the section banner above
+ * it; and the file's own header. A title built at run time (a template,
+ * `it.each`) is not found, so a citation for such a test goes on its describe.
  */
-function isCitedIn(testFile: string, key: string): boolean {
-  const source = ENGINE_TEST_SOURCES.get(testFile) ?? '';
-  const named = new RegExp(`(?<![A-Za-z0-9_])${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![A-Za-z0-9_])`);
-  const blocks = source.match(/\/\*[\s\S]*?\*\/|(?:^[ \t]*\/\/.*(?:\n|$))+/gm) ?? [];
-  return blocks.some(
+function commentsFor(source: string, testName: string): string[] {
+  const lines = source.split('\n');
+  const header = lines
+    .slice(
+      0,
+      lines.findIndex((l) => !/^\s*(?:\/\/|\/\*|\*|$)/.test(l)),
+    )
+    .join('\n');
+  const blocks = [header];
+  for (const title of testName.split(' > ')) {
+    const call = new RegExp(`^\\s*(?:describe|it|test)(?:\\.\\w+)*\\(\\s*(['"\`])${escapeRegex(title)}\\1`);
+    lines.forEach((line, i) => {
+      if (call.test(line)) blocks.push(commentAbove(lines, i), commentBelow(lines, i), sectionAbove(lines, i));
+    });
+  }
+  return blocks;
+}
+
+/**
+ * Whether `testName` in `testFile` is cited for `key`: one comment block that
+ * speaks for it says "doc-derived", names a .spec file, and names the
+ * directive.
+ */
+function isCitedFor(testFile: string, testName: string, key: string): boolean {
+  const named = new RegExp(`(?<![A-Za-z0-9_])${escapeRegex(key)}(?![A-Za-z0-9_])`);
+  return commentsFor(ENGINE_TEST_SOURCES.get(testFile) ?? '', testName).some(
     (block) => /doc-derived/i.test(block) && /\b(?:props|transforms)\.conf\.spec\b/.test(block) && named.test(block),
   );
 }
@@ -153,7 +208,13 @@ for (const r of counted) {
   for (const key of r.keys) exercisedBy.set(key, [...(exercisedBy.get(key) ?? []), r.testFile]);
 }
 
-const cited = new Set(simulated.filter((key) => (exercisedBy.get(key) ?? []).some((file) => isCitedIn(file, key))));
+const cited = new Set(
+  simulated.filter((key) =>
+    counted.some((r) =>
+      Object.entries(r.tests).some(([testName, keys]) => keys.includes(key) && isCitedFor(r.testFile, testName, key)),
+    ),
+  ),
+);
 
 describe.skipIf(!recording)('simulated directive evidence (#505)', () => {
   it('has the recordings it reads', () => {
@@ -192,6 +253,13 @@ describe.skipIf(!recording)('simulated directive evidence (#505)', () => {
         'directive name, beside a test that asserts the documented behaviour -- or reclassify the directive ' +
         '`documented` in directiveSupport.ts. Adding it to DOC_UNCITED is not the answer: that list only shrinks.',
     ).toEqual([]);
+  });
+
+  it('has no engine test that mocks the pipeline, which would hide its runs from the recorder (#569)', () => {
+    const mocking = [...ENGINE_TEST_SOURCES]
+      .filter(([, source]) => /vi\.(?:do)?[mM]ock\(\s*['"][./]*(?:[\w./]*\/)?pipeline['"]/.test(source))
+      .map(([file]) => file);
+    expect(mocking, 'these mock the pipeline, so nothing they run is recorded as evidence').toEqual([]);
   });
 
   it('keeps DOC_UNCITED to directives that still lack a citation', () => {

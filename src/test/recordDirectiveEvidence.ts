@@ -15,7 +15,14 @@
 // input's, each event's as the run left it (a CLONE_SOURCETYPE copy, a
 // DEST_KEY = MetaData:* rewrite) and a `rename` target. This is still a proxy:
 // it does not see whether the directive changed anything, or whether the test
-// asserted on it.
+// asserted on it. The trace has a step per processor, not per directive, so
+// that would take a second run without each directive; #569 chose not to pay
+// for that on every full run.
+//
+// Keys are recorded per test as well as per file, so a citation counts only
+// for the tests it sits above (#569). Only engine test files are recorded:
+// they are the only ones the gate counts, and parsing every conf a component
+// test runs cost time for nothing.
 //
 // Why files, and one per test file. Vitest runs test files in parallel workers
 // that share no memory. Each worker appends nothing to anything shared: it
@@ -36,7 +43,7 @@ interface Fs {
   writeFileSync(path: string, data: string): void;
 }
 
-const recorded = vi.hoisted(() => ({ keys: new Set<string>() }));
+const recorded = vi.hoisted(() => ({ keys: new Set<string>(), tests: new Map<string, Set<string>>() }));
 
 /** props.conf keys whose value names transforms.conf stanzas. */
 const REFERENCES = new Set(['TRANSFORMS', 'REPORT', 'RULESET']);
@@ -51,6 +58,14 @@ vi.mock('../engine/pipeline', async (importOriginal) => {
 
   const runPipeline: typeof actual.runPipeline = (raw, metadata, props, transforms, options) => {
     const output = actual.runPipeline(raw, metadata, props, transforms, options);
+    const { testPath, currentTestName } = expect.getState();
+    if (!testPath?.includes('/src/engine/')) return output;
+    const testKeys = recorded.tests.get(currentTestName ?? '') ?? new Set<string>();
+    recorded.tests.set(currentTestName ?? '', testKeys);
+    const record = (key: string) => {
+      recorded.keys.add(key);
+      testKeys.add(key);
+    };
     // Recording must never change what a test observes, so a conf the parser
     // cannot read is left for runPipeline to report as it always has.
     try {
@@ -66,7 +81,7 @@ vi.mock('../engine/pipeline', async (importOriginal) => {
       const named = new Set<string>();
       for (const stanza of applied) {
         for (const d of stanza.directives) {
-          recorded.keys.add(d.directiveType);
+          record(d.directiveType);
           if (REFERENCES.has(d.directiveType)) for (const name of d.value.split(',')) named.add(name.trim());
         }
       }
@@ -75,9 +90,9 @@ vi.mock('../engine/pipeline', async (importOriginal) => {
       const dormant = propsStanzas
         .filter((stanza) => stanza.directives.some((d) => d.directiveType === 'disabled'))
         .map((stanza) => ({ ...stanza, directives: stanza.directives.filter((d) => d.directiveType !== 'disabled') }));
-      if (metas.some((m) => matchStanzas(dormant, m).length > 0)) recorded.keys.add('disabled');
+      if (metas.some((m) => matchStanzas(dormant, m).length > 0)) record('disabled');
       for (const stanza of parseConf(transforms, 'transforms.conf').stanzas) {
-        if (named.has(stanza.name)) for (const d of stanza.directives) recorded.keys.add(d.directiveType);
+        if (named.has(stanza.name)) for (const d of stanza.directives) record(d.directiveType);
       }
     } catch {
       // see above
@@ -102,6 +117,10 @@ afterAll(() => {
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(
     `${dir}/${testFile.replaceAll('/', '__')}.json`,
-    JSON.stringify({ testFile, keys: [...recorded.keys].sort() }),
+    JSON.stringify({
+      testFile,
+      keys: [...recorded.keys].sort(),
+      tests: Object.fromEntries([...recorded.tests].map(([name, keys]) => [name, [...keys].sort()])),
+    }),
   );
 });

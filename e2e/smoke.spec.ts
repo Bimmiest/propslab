@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import type { Page } from '@playwright/test';
 import {
   test,
@@ -25,21 +26,35 @@ test.describe('boot', () => {
   });
 
   test('serves the tightened policy from the built artifact', async ({ page }) => {
-    await page.goto('/');
-    const policy = await page.locator('meta[http-equiv="Content-Security-Policy"]').getAttribute('content');
+    const response = await page.goto('/');
+    const meta = await page.locator('meta[http-equiv="Content-Security-Policy"]').getAttribute('content');
+    // The header is the copy the workers obey. It must be the built artifact's
+    // policy in full, as the deploy checks against Azure's response (#572).
+    const header = response?.headers()['content-security-policy'];
+    const artifact = (
+      JSON.parse(readFileSync('dist/staticwebapp.config.json', 'utf8')) as {
+        globalHeaders: Record<string, string>;
+      }
+    ).globalHeaders['Content-Security-Policy'];
+    expect(header).toBe(artifact);
 
-    expect(policy).toBeTruthy();
-    // 'unsafe-eval' was removed once the editor moved to monaco's slim
-    // `monaco-editor/editor` entry; nothing may quietly put it back. 'wasm-unsafe-eval'
-    // is the narrower grant PCRE2's WebAssembly needs, and only that.
-    expect(policy).not.toContain("'unsafe-eval'");
-    expect(policy).toContain("'wasm-unsafe-eval'");
-    expect(policy).toContain("base-uri 'self'");
-    expect(policy).toContain("object-src 'none'");
-    expect(policy).toContain('img-src');
-    expect(policy).toContain("form-action 'none'");
-    // Every worker is a same-origin file; see the comment above the tag.
-    expect(policy).not.toContain('blob:');
+    for (const [copy, policy] of [
+      ['<meta>', meta],
+      ['header', header],
+    ] as const) {
+      expect(policy, copy).toBeTruthy();
+      // 'unsafe-eval' was removed once the editor moved to monaco's slim
+      // `monaco-editor/editor` entry; nothing may quietly put it back. 'wasm-unsafe-eval'
+      // is the narrower grant PCRE2's WebAssembly needs, and only that.
+      expect(policy, copy).not.toContain("'unsafe-eval'");
+      expect(policy, copy).toContain("'wasm-unsafe-eval'");
+      expect(policy, copy).toContain("base-uri 'self'");
+      expect(policy, copy).toContain("object-src 'none'");
+      expect(policy, copy).toContain('img-src');
+      expect(policy, copy).toContain("form-action 'none'");
+      // Every worker is a same-origin file; see the comment above the tag.
+      expect(policy, copy).not.toContain('blob:');
+    }
   });
 });
 
@@ -381,9 +396,17 @@ test.describe('accessibility affordances', () => {
     }
   });
 
-  test('a raw-event selection can be made and acted on from the keyboard', async ({ page, complaints }) => {
+  test('a raw-event selection can be made and acted on from the keyboard', async ({
+    page,
+    complaints,
+    browserName,
+  }) => {
     // Token selection from the keyboard. Shift+F10 is delivered as a
     // `contextmenu` event on the focused element, which is what opens the menu.
+    // Firefox fires that event natively, but Playwright's Firefox fires no
+    // `contextmenu` for Shift+F10 or the ContextMenu key, even at the
+    // document (measured, #572), so there is nothing here to test it with.
+    test.skip(browserName === 'firefox', "Playwright's Firefox fires no contextmenu event from the keyboard");
     await openApp(page);
     await loadExample(page, APACHE);
 
