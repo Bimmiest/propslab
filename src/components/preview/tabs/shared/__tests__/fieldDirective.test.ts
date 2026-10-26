@@ -5,7 +5,14 @@
 // ---------------------------------------------------------------------------
 
 import { describe, it, expect } from 'vitest';
-import { fieldAliasDirective, fieldDirectiveLine, processorsOf } from '../fieldDirective';
+import {
+  fieldAliasDirective,
+  fieldDirectiveLine,
+  processorsOf,
+  stepDictionaryKey,
+  stepDirectiveLine,
+  stepTransformsLine,
+} from '../fieldDirective';
 import { makeEvent } from '../../../../../test/makeEvent';
 import { toViewResult } from '../../../../../utils/viewResult';
 
@@ -82,5 +89,42 @@ describe('fieldAliasDirective', () => {
       value: "'event.user' AS user",
     });
     expect(fieldAliasDirective('a', 'b.c')).toEqual({ key: 'FIELDALIAS-b_c', value: "a AS 'b.c'" });
+  });
+});
+
+describe('the directive a Pipeline step ran (#760)', () => {
+  const at = (processor: string, props = PROPS) => stepDirectiveLine(processor, props, [META]);
+
+  it('finds the key a step is named for, and the first EVAL or FIELDALIAS for those steps', () => {
+    expect(at('EXTRACT-user')).toBe(2);
+    expect(at('KV_MODE(json)')).toBe(3);
+    expect(at('FIELDALIAS')).toBe(4);
+    expect(at('EVAL')).toBe(5);
+    expect(at('REPORT-kv:kv_pairs')).toBe(6);
+  });
+
+  it('maps the stages named after themselves to the keys that drive them', () => {
+    const props = '[web]\nTRUNCATE = 100\nSHOULD_LINEMERGE = false\nTIME_FORMAT = %s\n';
+    expect(at('truncator', props)).toBe(2);
+    expect(at('lineBreaker', props)).toBe(3);
+    expect(at('timestampExtractor', props)).toBe(4);
+  });
+
+  it('gives null for a step props.conf has no line for', () => {
+    expect(at('INGEST_EVAL')).toBeNull();
+    expect(at('StanzaRematch')).toBeNull();
+  });
+
+  it('finds the transforms.conf stanza of a transforms step', () => {
+    expect(stepTransformsLine('REPORT-kv:kv_pairs', '# x\n[other]\nREGEX = a\n\n[kv_pairs]\nREGEX = b')).toBe(5);
+    expect(stepTransformsLine('REPORT-kv:missing', '[kv_pairs]\nREGEX = b')).toBeNull();
+    expect(stepTransformsLine('EVAL', '[kv_pairs]')).toBeNull();
+  });
+
+  it('names the directive as the dictionary does', () => {
+    expect(stepDictionaryKey('KV_MODE(json)')).toBe('KV_MODE');
+    expect(stepDictionaryKey('TRANSFORMS-route:send')).toBe('TRANSFORMS');
+    expect(stepDictionaryKey('lineBreaker')).toBe('LINE_BREAKER');
+    expect(stepDictionaryKey('StanzaRematch')).toBeUndefined();
   });
 });

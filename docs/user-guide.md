@@ -83,6 +83,8 @@ The examples are dated October 2026. Until 2032 they are inside the default `MAX
 
 The strftime completions show the same rendered time. Thus you can choose between five opaque token strings when you see what each one makes. An unsimulated specifier also gets an informational marker in the editor. The config can be correct for a real indexer, but this preview does not resolve `_time` from it.
 
+**Pipeline tab.** Right-click a step, or move to it with Tab and press `Shift+F10` or the Menu key, to open its menu. **Jump to config** moves the props.conf cursor to the directive that the step ran. For a `TRANSFORMS-` or `REPORT-` step, the menu also moves to the transforms.conf stanza. The menu also opens the directive in the dictionary and copies the description of the step.
+
 **"Did not fire".** This list appears in the Pipeline and Extractions tabs when a directive ran against the loaded events and changed nothing. Without the list, the preview shows this failure as a usual event that did not change. Each row gives the directive, the number of events that it had no effect on, and the reason. The reason is one of these:
 
 - The transforms stanza that it references is not defined.

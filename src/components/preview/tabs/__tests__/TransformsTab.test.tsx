@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import type React from 'react';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render as rtlRender, fireEvent, within, act } from '@testing-library/react';
 import * as RadixTooltip from '@radix-ui/react-tooltip';
 import { TransformsTab } from '../TransformsTab';
@@ -8,6 +8,14 @@ import { useAppStore } from '../../../../store/useAppStore';
 import type { SplunkEvent, ProcessingStep } from '../../../../engine/types';
 import { toViewResult, type ViewResult } from '../../../../utils/viewResult';
 import { makeEvent } from '../../../../test/makeEvent';
+
+const reveal = vi.hoisted(() => vi.fn());
+vi.mock('../../../editor/revealInEditor', () => ({ revealInEditor: reveal }));
+const copied = vi.hoisted(() => vi.fn());
+vi.mock('../../../../utils/clipboard', () => ({
+  copyQuietly: copied,
+  copyToClipboard: vi.fn(() => Promise.resolve()),
+}));
 
 function eventWithTrace(traces: ProcessingStep[]): SplunkEvent {
   return makeEvent('', { processingTrace: traces });
@@ -135,5 +143,61 @@ describe('TransformsTab', () => {
       fireEvent.focus(chip);
     });
     expect(within(document.body).getAllByText(hint).length).toBeGreaterThan(0);
+  });
+});
+
+describe("TransformsTab — a step's context menu (#760)", () => {
+  const step = (processor: string, description = 'did it'): ProcessingStep => ({
+    processor,
+    phase: 'search-time',
+    description,
+  });
+
+  beforeEach(() => {
+    reveal.mockClear();
+    copied.mockClear();
+    useAppStore.setState({
+      metadata: { index: 'main', host: '', source: '', sourcetype: 'web' },
+      propsConf: '[web]\nKV_MODE = none\nREPORT-kv = kv_pairs\nEVAL-a = 1\n',
+      transformsConf: '# pairs\n[kv_pairs]\nREGEX = (\\w+)=(\\w+)\n',
+      processingResult: {
+        ...resultOf([
+          eventWithTrace([step('REPORT-kv:kv_pairs', 'Extracted 2 pairs'), step('EVAL'), step('StanzaRematch')]),
+        ]),
+        inputMetadata: { index: 'main', host: '', source: '', sourcetype: 'web' },
+      },
+    });
+  });
+
+  const openMenuOn = (processor: string) => {
+    const { container } = render(<TransformsTab />);
+    fireEvent.contextMenu(
+      within(container).getByRole('group', { name: new RegExp(`: ${processor.replace(/[-:]/g, '.')}$`) }),
+    );
+    return within(document.body).getByRole('menu');
+  };
+
+  it('jumps to the directive in props.conf and to the stanza in transforms.conf', () => {
+    const menu = openMenuOn('REPORT-kv:kv_pairs');
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Jump to config' }));
+    expect(reveal).toHaveBeenCalledWith('props.conf', 3);
+    fireEvent.contextMenu(document.body.querySelector('[aria-label="Step 1: REPORT-kv:kv_pairs"]')!);
+    fireEvent.click(within(document.body).getByRole('menuitem', { name: 'Jump to [kv_pairs] in transforms.conf' }));
+    expect(reveal).toHaveBeenCalledWith('transforms.conf', 2);
+  });
+
+  it("looks the directive up, and copies the step's description", () => {
+    const menu = openMenuOn('REPORT-kv:kv_pairs');
+    fireEvent.click(within(menu).getByRole('menuitem', { name: "Copy the step's description" }));
+    expect(copied).toHaveBeenCalledWith('REPORT-kv:kv_pairs: Extracted 2 pairs');
+    fireEvent.contextMenu(document.body.querySelector('[aria-label="Step 1: REPORT-kv:kv_pairs"]')!);
+    fireEvent.click(within(document.body).getByRole('menuitem', { name: 'Look up REPORT in the Dictionary' }));
+    expect(useAppStore.getState()).toMatchObject({ activeView: 'dictionary', dictionarySelection: 'REPORT' });
+  });
+
+  it('disables the jump for a step props.conf has no line for, and offers no lookup', () => {
+    const menu = openMenuOn('StanzaRematch');
+    expect(within(menu).getByRole('menuitem', { name: 'Jump to config' })).toHaveAttribute('aria-disabled', 'true');
+    expect(within(menu).queryByRole('menuitem', { name: /Look up/ })).not.toBeInTheDocument();
   });
 });
