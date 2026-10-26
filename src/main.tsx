@@ -9,10 +9,15 @@ import App from './App.tsx';
 import { loadRegexEngine } from './utils/regexEngineLoader';
 import { applyTheme } from './hooks/useTheme';
 import { useAppStore } from './store/useAppStore';
+import { installStaleChunkReload, restoreStaleChunkReload } from './staleChunkReload';
 
 // Before the engine await, not in useTheme's effect alone: otherwise the page
 // paints light, whatever the saved theme, until the wasm has loaded.
 applyTheme(useAppStore.getState().theme);
+
+// Before the first render, so the pipeline's first run sees the restored inputs.
+restoreStaleChunkReload();
+installStaleChunkReload();
 
 // Render a minimal loading indicator before the async load starts.
 const rootElement = document.getElementById('root');

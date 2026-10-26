@@ -14,8 +14,9 @@ export function noteBoundaryReset(): void {
  * React.lazy, but a failed import can be retried.
  *
  * React caches a lazy component's rejected promise forever, so after a chunk
- * fails to load (a flaky network, or a redeploy that removed the old hashed
- * chunks) an ErrorBoundary's "Try Again" would only rethrow the same error.
+ * fails to load (a flaky network, say) an ErrorBoundary's "Try Again" would
+ * only rethrow the same error. A redeploy, which deletes the old hashed chunks,
+ * needs a reload instead: see staleChunkReload.ts.
  * This builds a fresh lazy() once a boundary has been reset since the failure.
  * Keying on the reset, not merely on the failure, matters: React re-renders a
  * throwing component before committing the error, and rebuilding there would

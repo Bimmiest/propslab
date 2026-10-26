@@ -527,6 +527,35 @@ test.describe('dictionary', () => {
 
     await expect(page.getByRole('heading', { level: 2, name: 'TIME_PREFIX' })).toBeVisible();
   });
+
+  test('a tab left open across a redeploy reloads onto the new build and keeps its edits (#706)', async ({ page }) => {
+    await openApp(page);
+    // The redeploy deleted the chunk this tab knows: its first fetch 404s, as the old hash would.
+    let deleted = true;
+    await page.route(/\/assets\/DictionaryView-[^/]+\.js$/, (route) => {
+      if (!deleted) return route.continue();
+      deleted = false;
+      return route.fulfill({ status: 404 });
+    });
+    let prompts = 0;
+    page.on('dialog', (dialog) => {
+      if (dialog.type() === 'beforeunload') prompts++;
+      void dialog.dismiss();
+    });
+    const props = page.locator('.monaco-editor').nth(1);
+    await props.click();
+    await page.keyboard.type('[web]');
+
+    const reloaded = page.waitForEvent('load');
+    await page.getByRole('tab', { name: 'Dictionary' }).click();
+    await reloaded;
+
+    await expect(page.getByRole('listbox', { name: 'Splunk directives' })).toBeVisible({ timeout: 30_000 });
+    // The edits were saved for the reload, so there was nothing to ask about.
+    expect(prompts).toBe(0);
+    await page.getByRole('tab', { name: 'Simulator' }).click();
+    await expect(props).toContainText('[web]');
+  });
 });
 
 /**

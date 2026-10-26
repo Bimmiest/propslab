@@ -25,6 +25,7 @@ All notable changes to Propslab are documented here, newest first. Entries say w
 
 ### Fixed
 
+- **A tab that was open during a deploy can open the Dictionary** ([#706](https://github.com/Bimmiest/propslab/issues/706)). Before, the Dictionary, the Scaffold dialog and the output tabs other than Preview showed `error loading dynamically imported module`, and **Try Again** showed the same error. Now the page reloads to get the new version. It keeps the raw data, the configuration and the view that you opened.
 - **The list of examples fits in the window and scrolls** ([#694](https://github.com/Bimmiest/propslab/issues/694)). Before, the list from **Load an example** went below the bottom of the output pane, and you could not see the last examples.
 - **The Apache Access Log example loads with no warning** ([#666](https://github.com/Bimmiest/propslab/issues/666)). Its dates were in 2000, so `MAX_DAYS_AGO` rejected them. Both existing examples now use documentation addresses, and they map more fields to the CIM.
 - **A fast Tab no longer leaves a long Fields table or field list** ([#572](https://github.com/Bimmiest/propslab/issues/572)). The list now shows the rows next to the focused row before it scrolls. Before, a second Tab that came before the scroll found no next row, and focus left the list.
