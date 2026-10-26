@@ -159,6 +159,13 @@ export interface SplunkEvent {
    */
   clonedFrom?: string;
   /**
+   * Set as search time starts when a matched stanza's `rename` points
+   * elsewhere: the sourcetype the event is searched as, which the search-time
+   * `sourcetype` field reads. `metadata.sourcetype` stays the one it is indexed
+   * under, and `_sourcetype` reads that (ADR 0002).
+   */
+  renamedSourcetype?: string;
+  /**
    * Transient: every index-time rewrite of `_raw`, consumed and stripped by
    * `attributeRawMutations` at the end of the pipeline. Never present on the
    * events a caller receives.

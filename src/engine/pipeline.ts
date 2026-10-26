@@ -339,14 +339,21 @@ function runSearchTimeStages(
 
 const metaKey = (m: EventMetadata) => `${m.sourcetype}|${m.host}|${m.source}`;
 
+/** The event as search time sees it: under the `rename` target, when there is one. */
+function searchedAs(event: SplunkEvent, renamed: string | undefined): SplunkEvent {
+  return renamed !== undefined && renamed !== event.metadata.sourcetype
+    ? { ...event, renamedSourcetype: renamed }
+    : event;
+}
+
 /**
  * Per-event search time: resolve each event's directives from its own
  * metadata, re-matching stanzas for events whose metadata changed at index time.
  */
 function runSearchTimePerEvent(events: SplunkEvent[], run: PipelineRun, originalMetaKey: string): SplunkEvent[] {
   const { propsConf } = run;
-  const directivesCache = new Map<string, ConfDirective[]>();
-  directivesCache.set(originalMetaKey, run.searchTimeDirectives);
+  const directivesCache = new Map<string, { directives: ConfDirective[]; renamed: string | undefined }>();
+  directivesCache.set(originalMetaKey, { directives: run.searchTimeDirectives, renamed: run.renamedSourcetype });
 
   const eventDirectives = events.map((event) => {
     const key = metaKey(event.metadata);
@@ -361,9 +368,9 @@ function runSearchTimePerEvent(events: SplunkEvent[], run: PipelineRun, original
     const matched = matchStanzas(propsConf.stanzas, event.metadata);
     const renamed = getRenamedSourcetype(matched);
     const stanzas = renamed ? matchStanzas(propsConf.stanzas, { ...event.metadata, sourcetype: renamed }) : matched;
-    const resolvedDirs = mergeDirectives(stanzas);
-    directivesCache.set(key, resolvedDirs);
-    return resolvedDirs;
+    const resolved = { directives: mergeDirectives(stanzas), renamed };
+    directivesCache.set(key, resolved);
+    return resolved;
   });
 
   // Each processor is called once PER EVENT here, so a diagnostic describing a
@@ -379,8 +386,9 @@ function runSearchTimePerEvent(events: SplunkEvent[], run: PipelineRun, original
   const { onStage: _onStage, ...quiet } = withDiagnostics(run.ctx, run.ctx.diagnostics.deduplicating());
   const ctx: RunContext = Object.freeze(quiet);
   return events.flatMap((event, i) => {
-    const evDirs = eventDirectives[i] ?? [];
-    return runSearchTimeStages([traceRematch(event, originalMetaKey, evDirs.length)], evDirs, run, ctx);
+    const { directives: evDirs = [], renamed } = eventDirectives[i] ?? {};
+    const rematched = traceRematch(event, originalMetaKey, evDirs.length);
+    return runSearchTimeStages([searchedAs(rematched, renamed)], evDirs, run, ctx);
   });
 }
 
@@ -522,7 +530,12 @@ export function runPipeline(
     events = runSearchTimePerEvent(events, run, originalMetaKey);
   } else {
     warnBatchMetadataRewrites(events, originalMetaKey, diagnostics);
-    events = runSearchTimeStages(events, run.searchTimeDirectives, run, ctx);
+    events = runSearchTimeStages(
+      events.map((e) => searchedAs(e, run.renamedSourcetype)),
+      run.searchTimeDirectives,
+      run,
+      ctx,
+    );
   }
 
   // Belt and braces: a processor that threw leaves `rawMutations` in place, and

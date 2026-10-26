@@ -212,6 +212,36 @@ describe('rename — a search-time-only sourcetype change', () => {
     expect(d?.message).toContain('no longer apply');
   });
 
+  // Doc-derived (props.conf.spec, rename): with renaming, a search finds the
+  // events by sourcetype=<the new name>, and the original name is in the
+  // _sourcetype field (#757).
+  describe('the search-time sourcetype field', () => {
+    const props =
+      '[original]\nrename = renamed\n\n' +
+      '[renamed]\nEVAL-st = sourcetype\nEVAL-orig = _sourcetype\nFIELDALIAS-st = sourcetype AS st_alias\n';
+
+    it('is the new name, and _sourcetype the original, while the event stays indexed as the original', () => {
+      const event = run(props).result.events[0]!;
+      expect(event.fields).toMatchObject({ st: 'renamed', orig: 'original', st_alias: 'renamed' });
+      expect(event.metadata.sourcetype).toBe('original');
+    });
+
+    it('is the same in per-event mode', () => {
+      const { result } = runPipeline('2026-01-15T10:00:00Z user=alice\n', metadata, props, '', {
+        perEventPipeline: true,
+        captureOffsets: false,
+        now: FIXED_NOW,
+      });
+      expect(result.events[0]!.fields).toMatchObject({ st: 'renamed', orig: 'original' });
+    });
+
+    it('is the indexed name when nothing renames it', () => {
+      const event = run('[original]\nEVAL-st = sourcetype\nEVAL-orig = _sourcetype\n').result.events[0]!;
+      expect(event.fields).toMatchObject({ st: 'original', orig: 'original' });
+      expect(event.renamedSourcetype).toBeUndefined();
+    });
+  });
+
   it('composes with an input-time sourcetype assignment', () => {
     // source:: assigns `assigned`; that stanza then renames to `renamed` for
     // search time only.
