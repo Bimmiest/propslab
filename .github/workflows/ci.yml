@@ -323,7 +323,18 @@ jobs:
 
       - name: Test
         # With the coverage floor in vitest.config.mts, as the app's Test step.
-        run: npm run test:coverage
+        # The JSON report is for the next step.
+        run: npm run test:coverage -- --reporter=default --reporter=json --outputFile.json=vitest-results.json
+
+      - name: Report skipped tests
+        # A guard that skips a test writes nothing to the log. The summary
+        # lists every skip on each leg, so a test that stops running on Linux
+        # is visible (#572). bash and jq are on all three runner images.
+        if: ${{ !cancelled() && hashFiles('packages/mcp-server/vitest-results.json') != '' }}
+        shell: bash
+        run: |
+          skipped=$(jq -r '[.testResults[].assertionResults[] | select(.status == "skipped" or .status == "pending" or .status == "todo") | "- " + .fullName] | if length == 0 then "None." else join("\n") end' vitest-results.json)
+          printf '### Skipped MCP server tests on %s\n\n%s\n' "$RUNNER_OS" "$skipped" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Coverage floors are tight
         # As the app's job: the floors in vitest.config.mts must stay within 3
