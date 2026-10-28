@@ -21,7 +21,7 @@ permissions:
 
 jobs:
   scorecard:
-    uses: Bimmiest/shared-workflows/.github/workflows/scorecard.yml@d8fe1212e8569b10ca241d597d5f13ea0c04bb04 # v1.6.0
+    uses: Bimmiest/shared-workflows/.github/workflows/scorecard.yml@b2584f28206b1e528d29c8403b1cdebf0e7fce8d # v1.7.0
     with:
       publish-results: true
       upload-sarif: true
