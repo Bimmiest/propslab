@@ -94,6 +94,15 @@ On the Linux leg it also runs the coverage ratchet against `vitest.config.mts` a
 
 **`Settings`**: [`settings.yml`](.github/workflows/settings.yml), weekly. The `repo-settings-check` action of `shared-workflows` compares the repository settings with the repo-template checklist, and a failure opens an issue. `.repo-settings.json` names the checks that main requires. When the ruleset requires a new check, add its name there too. The action needs `SETTINGS_READ_TOKEN`, a fine-grained token with "Administration: read". [`environment.yml`](.github/workflows/environment.yml) still checks the `production` environment.
 
+If a check fails only in CI, compare a full run with a full run:
+
+1. Run the workflow on `main` to get a baseline: `gh workflow run ci.yml --ref main`.
+2. Compare two runs on `main` with the runs on your branch. One run is not evidence.
+3. Compare the duration of each test in the job logs. If only the failed test changed, the cause is a race, not a slow runner.
+4. Make the failed assertion show the value that it has. Push this change as a temporary commit.
+
+A test that runs alone proves nothing. It can pass alone and fail in the order of the full suite. A push cancels the run of that branch that is in progress. Thus, do not start a run again and push at the same time.
+
 A few things worth knowing:
 
 - **Formatting is Prettier's, and not discussed in review.** `.prettierrc.json` is the style the code already had: single quotes, semicolons, two-space indents and trailing commas, with a line width of 120. That width fits 98.6% of the existing code lines and changes about 40% fewer lines than a width of 100 would. It covers `.ts`, `.tsx`, `.js`, `.mjs` and `.mts` (not Markdown, JSON, CSS or the lockfile), and `.prettierignore` leaves out the generated `cimModelsData.ts`. `npm run format` rewrites the files. The commit that applied it to the whole tree is listed in `.git-blame-ignore-revs`, so `git blame` looks through it: run `git config blame.ignoreRevsFile .git-blame-ignore-revs` once to get the same locally (GitHub reads the file by itself).
@@ -172,6 +181,10 @@ The module lives in its own repository, [`Bimmiest/pcre2-wasm-utf16`](https://gi
 `supply-chain.yml` watches what Dependabot cannot. It runs `npm run check:overrides` (the `overrides` below against what the lockfile resolves) on pull requests that touch `package.json`, the lockfile or `.nvmrc`, and monthly. Monthly it also compares `.nvmrc` with the newest release on its Node line (`scripts/check-node-patch.mjs`) and fails when it is behind; on a pull request that check only annotates. The deploy attests the `dist/` it uploads, in a job with the signing permissions and nothing else, and refuses to upload anything the attestation does not cover; the comments in `azure-static-web-apps.yml` say what that proves and what it does not. To check a deployed bundle later, `gh attestation verify` the `dist.sha256` manifest from that run's `dist-attestation` artifact (kept 30 days) with `--signer-workflow`.
 
 Every production dependency's licence is on `.licence-allowlist.json` (`packages/mcp-server/.licence-allowlist.json` for the server's lockfile), or the package is named there with the version somebody read and why it is acceptable; `pcre2-wasm-utf16` is, because the PCRE2 licence's attribution condition is met by `NOTICE`. A bump past a named version fails until the new version is read too.
+
+**Read the lockfile diff of each Dependabot pull request.** A nested copy, such as `+ "packages/mcp-server/node_modules/<package>"`, tells you that the top level cannot take that version. `npm ci` then installs the package with a peer dependency that is not satisfied, and the checks can stay green. To correct this, run `npm dedupe`, or update the related packages in one change.
+
+**Do not fix a group on the Dependabot branch.** If one package of a group merges separately, Dependabot closes the group, deletes its branch and opens a new group. Put the fix on a `chore/` branch from `origin/main`, and close the group as superseded.
 
 ### The Radix overrides
 
