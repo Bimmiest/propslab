@@ -10,6 +10,8 @@ Open an issue for anything larger than a typo, before writing the code. The issu
 
 An open question that has to be settled before code is written is an issue labelled `decision`. The answer becomes an ADR ([`docs/adr/`](docs/adr/README.md)).
 
+Work that operates now but must change later, such as a held version or a workaround, is an issue with the label `tech-debt`. Open it in the pull request that makes the compromise: a compromise that has no issue is not visible, and nobody plans to remove it ([when and how](docs/development.md#tech-debt)).
+
 ## Branches
 
 Trunk-based: `main` is the only long-lived branch, and every change reaches it through a pull request.
