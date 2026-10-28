@@ -43,7 +43,7 @@ jobs:
   # exist so that the first false positive lands in a file that already says
   # what an entry needs, and which of its lines are load-bearing.
   security:
-    uses: Bimmiest/shared-workflows/.github/workflows/security.yml@3ef90f03b0c9d3b07e9ae9a1ee7005116988ffd0 # v1.5.0
+    uses: Bimmiest/shared-workflows/.github/workflows/security.yml@d8fe1212e8569b10ca241d597d5f13ea0c04bb04 # v1.6.0
     # `pull-requests: read` because on a pull request gitleaks lists the PR's
     # commits to work out what to scan, and the restricted token 403s without
     # it. Read, not write: the findings are in the job summary, and a job
@@ -63,7 +63,7 @@ jobs:
     permissions:
       issues: write
     steps:
-      - uses: Bimmiest/shared-workflows/.github/actions/open-or-update-issue@3ef90f03b0c9d3b07e9ae9a1ee7005116988ffd0 # v1.5.0
+      - uses: Bimmiest/shared-workflows/.github/actions/open-or-update-issue@d8fe1212e8569b10ca241d597d5f13ea0c04bb04 # v1.6.0
         with:
           label: scheduled-security
           title: The weekly security scan failed

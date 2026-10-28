@@ -37,7 +37,17 @@ type: how-to
 
 Each repository has the same six topic files: `development.md`, `ci.md`, `testing.md`, `code-style.md`, `dependencies.md` and `documentation.md`. This repository adds topic files for its own areas, for example `recipes.md`, `releasing.md`, `engine.md` and `fidelity.md`. A recipe, a trap or a troubleshooting step goes in the topic file of its area, not in `CONTRIBUTING.md`. If a topic file gets to its limit, split it by subtopic.
 
-**Put technical detail in `docs/`.** If a topic needs more than a few lines, add it to the file in `docs/` that has the topic. If no file has the topic, give it a file of its own, and add a row for the file in the Documentation table of the README. Do not use a wiki. A wiki change gets no review and no link check.
+## The index
+
+`docs/README.md` lists each topic file in `docs/`, with one row for each
+file, in path order. GitHub shows it when a reader opens `docs/`. When you
+add, rename or remove a topic file, change its row there, and only there.
+The docs check fails a file that has no row, a row that has no file, and a
+row out of order (`docsIndex` in `.docs-check.json`). The other documents
+(`CONTRIBUTING.md`, `CHANGELOG.md`, `SECURITY.md` and the like) are listed in
+the README.
+
+**Put technical detail in `docs/`.** If a topic needs more than a few lines, add it to the file in `docs/` that has the topic. If no file has the topic, give it a file of its own, and add a row for the file in the index, `docs/README.md`. Do not use a wiki. A wiki change gets no review and no link check.
 
 ## ASD-STE100
 
@@ -61,7 +71,8 @@ Each new or changed text follows these rules. [CONTRIBUTING.md](../CONTRIBUTING.
 3. **Overview:** what the product does, how mature it is, and what it is not.
 4. **Demo:** a screenshot or a short GIF, from `docs/assets/`.
 5. **Usage** and **Installation:** one or two commands each.
-6. **Documentation:** a table of the documents, with a row for each file in `docs/`.
+6. **Documentation:** one line that links the index, `docs/README.md`, and a
+   list of the other documents.
 7. **Contributing and feedback**, and **Licence**.
 
 Two facts in the README have a test. `src/engine/__tests__/directiveSupport.test.ts` reads the count for each support level from the table in the Overview. It also reads the count of the attributes that the registry does not know. Keep both in the README.

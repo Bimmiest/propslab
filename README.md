@@ -89,28 +89,14 @@ To make the production build in `dist/`, run `npm run build`. [docs/development.
 
 ## Documentation
 
-| Document | What it holds |
-|---|---|
-| [docs/user-guide.md](docs/user-guide.md) | The app for a user: the layout, the output tabs, the editor and the dictionary |
-| [docs/pipeline.md](docs/pipeline.md) | How the simulation runs: the order of the stages, stanza precedence and the eval expression engine |
-| [docs/fidelity.md](docs/fidelity.md) | What Propslab simulates, what it does not simulate, and where it diverges from Splunk |
-| [docs/engine.md](docs/engine.md) | The engine as a library: `PipelineOptions`, layered conf input with override provenance, and the regex engine and its caveats |
-| [packages/mcp-server/README.md](packages/mcp-server/README.md) | The MCP server: its tools, its setup and its security model |
-| [docs/architecture.md](docs/architecture.md) | The internals for contributors: the project structure, the store, the workers, the Monaco bundle, accessibility and the tech stack |
-| [docs/development.md](docs/development.md) | How to set up a checkout, the npm scripts, and what to do if the installation or a test fails |
-| [docs/recipes.md](docs/recipes.md) | Where each change goes, the steps for a simulated directive, and the recipes for the common changes |
-| [docs/ci.md](docs/ci.md) | Each CI job, what makes it fail, and how to run it locally |
-| [docs/testing.md](docs/testing.md) | The rules for tests, the unit tests, the end-to-end suite and mutation testing |
-| [docs/code-style.md](docs/code-style.md) | The rules for the layout, the lint, the types and the code comments |
-| [docs/dependencies.md](docs/dependencies.md) | The supply-chain checks, the binary of the regex engine, the overrides and the review of a Dependabot pull request |
-| [docs/documentation.md](docs/documentation.md) | The classes of documents and their line limits, the topic types, the STE rules and the sections of the README |
-| [docs/deployment.md](docs/deployment.md) | The CI jobs, the deploy workflow, the production environment and how to do a rollback |
-| [docs/releasing.md](docs/releasing.md) | How to make a release |
-| [docs/adr/](docs/adr/README.md) | The design decisions, and the reasons for them |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | The rules for a change: issues, branches, commits, pull requests and releases, with a link to the detail of each area |
-| [CHANGELOG.md](CHANGELOG.md) | What changed for a user, newest first |
-| [SECURITY.md](SECURITY.md) | How to report a vulnerability, and the attack surface |
-| [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | The Contributor Covenant |
+The topic files are listed in [docs/README.md](docs/README.md). The documents
+outside `docs/`:
+
+- [packages/mcp-server/README.md](packages/mcp-server/README.md) — The MCP server: its tools, its setup and its security model
+- [CONTRIBUTING.md](CONTRIBUTING.md) — The rules for a change: issues, branches, commits, pull requests and releases, with a link to the detail of each area
+- [CHANGELOG.md](CHANGELOG.md) — What changed for a user, newest first
+- [SECURITY.md](SECURITY.md) — How to report a vulnerability, and the attack surface
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) — The Contributor Covenant
 
 ## Contributing and feedback
 
