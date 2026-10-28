@@ -67,5 +67,12 @@
       "reference",
       "explanation"
     ]
+  },
+  "docsIndex": {
+    "file": "docs/README.md",
+    "glob": "docs/**/*.md",
+    "exclude": [
+      "docs/adr/[0-9]*.md"
+    ]
   }
 }

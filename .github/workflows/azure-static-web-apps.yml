@@ -859,7 +859,7 @@ jobs:
     permissions:
       issues: write
     steps:
-      - uses: Bimmiest/shared-workflows/.github/actions/open-or-update-issue@3ef90f03b0c9d3b07e9ae9a1ee7005116988ffd0 # v1.5.0
+      - uses: Bimmiest/shared-workflows/.github/actions/open-or-update-issue@d8fe1212e8569b10ca241d597d5f13ea0c04bb04 # v1.6.0
         with:
           label: deploy-failed
           title: An automatic deploy failed
