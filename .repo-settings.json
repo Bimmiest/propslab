@@ -8,8 +8,7 @@
     "pr-hygiene",
     "security / gitleaks",
     "security / trivy",
-    "Analyze (actions)",
-    "Analyze (javascript-typescript)"
+    "CodeQL"
   ],
   "exceptions": []
 }
