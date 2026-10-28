@@ -1,0 +1,23 @@
+name: Tech debt
+description: Something that works now but must change later, such as a version move, a held dependency or a workaround to remove
+labels: [tech-debt]
+body:
+  - type: textarea
+    id: debt
+    attributes:
+      label: The debt
+      description: What is behind or worked around, and where. For a version move, give the version in use and the version to move to.
+    validations:
+      required: true
+  - type: textarea
+    id: cost
+    attributes:
+      label: What it costs
+      description: What it blocks or puts at risk while it stays, and any deadline, such as an end-of-life date.
+    validations:
+      required: true
+  - type: textarea
+    id: way-out
+    attributes:
+      label: The way out
+      description: The change that pays it off, and what blocks that change now.
