@@ -25,10 +25,12 @@
 [extend]
 useDefault = true
 
-[allowlist]
-description = "Fixtures whose contents are shaped like secrets on purpose"
-paths = [
-  # One regex per line, each under a comment saying what the file is and why
-  # its contents cannot be a credential. For example:
-  #   '''src/redaction/__tests__/redaction\.test\.ts''',
-]
+# Uncomment [allowlist] when it gets its first entry. gitleaks 8.25 and later
+# refuse to load an allowlist with no entries (repo-template#34).
+# [allowlist]
+# description = "Fixtures whose contents are shaped like secrets on purpose"
+# paths = [
+#   # One regex per line, each under a comment saying what the file is and why
+#   # its contents cannot be a credential. For example:
+#   #   '''src/redaction/__tests__/redaction\.test\.ts''',
+# ]
