@@ -223,7 +223,7 @@ export default defineConfig([
     },
   },
   {
-    // The comment rules in CONTRIBUTING ("Code comments") that a tool can
+    // The comment rules in docs/code-style.md ("Code comments") that a tool can
     // check: a TODO names its issue, and code is not kept in a comment. From
     // repo-template, as in propslab-sb and propslab-ent (#731).
     files: ['**/*.{ts,tsx,js,mjs}'],

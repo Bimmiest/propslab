@@ -1,7 +1,7 @@
 // @ts-check
 // Mutation testing for the engine (#370): `npm run test:mutation`. Coverage
 // says a line ran; this says whether any test would notice the line being
-// wrong. See CONTRIBUTING.md for how to read a run and when CI runs it.
+// wrong. See docs/testing.md for how to read a run and when CI runs it.
 /** @type {import('@stryker-mutator/api/core').PartialStrykerOptions} */
 export default {
   testRunner: 'vitest',
@@ -35,7 +35,7 @@ export default {
     // src/monaco is not here: its providers are tested against a fake of
     // Monaco's model, so a mutant there is killed or spared by how faithful the
     // fake is, and the run's cost is the jsdom start of a dozen test files per
-    // mutant. See CONTRIBUTING.md.
+    // mutant. See docs/testing.md.
     'src/workers/workerLifecycle.ts',
     // Was under src/engine until #566 moved the worker plumbing to src/workers.
     'src/workers/workerProtocol.ts',

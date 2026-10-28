@@ -18,7 +18,7 @@ import { CIM_MODELS, CIM_VERSION } from '../engine/cim/cimModelsData';
  *    hand edit to the generated file, fails here.
  *
  * What stays manual: that the field lists still match the add-on's current
- * version. See CONTRIBUTING.md, "Add or update a CIM model".
+ * version. See docs/recipes.md, "Add or update a CIM model".
  *
  * The script and the committed file are read through import.meta.glob, as
  * docs.test.ts reads the markdown: the app's tsconfig has no Node types, and the
