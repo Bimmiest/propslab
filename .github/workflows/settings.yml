@@ -33,7 +33,7 @@ jobs:
           node-version-file: .nvmrc
 
       - name: The settings match the template
-        uses: Bimmiest/shared-workflows/.github/actions/repo-settings-check@d8fe1212e8569b10ca241d597d5f13ea0c04bb04 # v1.6.0
+        uses: Bimmiest/shared-workflows/.github/actions/repo-settings-check@b2584f28206b1e528d29c8403b1cdebf0e7fce8d # v1.7.0
         with:
           token: ${{ secrets.SETTINGS_READ_TOKEN }}
 
@@ -48,7 +48,7 @@ jobs:
     permissions:
       issues: write
     steps:
-      - uses: Bimmiest/shared-workflows/.github/actions/open-or-update-issue@d8fe1212e8569b10ca241d597d5f13ea0c04bb04 # v1.6.0
+      - uses: Bimmiest/shared-workflows/.github/actions/open-or-update-issue@b2584f28206b1e528d29c8403b1cdebf0e7fce8d # v1.7.0
         with:
           label: scheduled-settings
           title: A repository setting differs from the template
