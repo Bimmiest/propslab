@@ -1,3 +1,7 @@
+---
+type: reference
+---
+
 # Using the engine as a library
 
 `src/engine/**` is pure logic with no React imports, and it runs unchanged in the browser, in a Web Worker, and under Node. Its one runtime dependency is the PCRE2 WebAssembly module every user pattern runs on ([below](#the-regex-engine)), which has to be initialised once before the first run. `runPipeline` is the entry point:

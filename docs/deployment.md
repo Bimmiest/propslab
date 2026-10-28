@@ -1,6 +1,10 @@
+---
+type: reference
+---
+
 # CI and deployment
 
-This file describes the path from a commit to production: the CI jobs, the deploy workflow, and how to do a rollback. [CONTRIBUTING.md](../CONTRIBUTING.md#the-ci-checks) tells you how to run each CI check locally.
+This file describes the path from a commit to production: the CI jobs, the deploy workflow, and how to do a rollback. [ci.md](ci.md) tells you how to run each CI check locally.
 
 ## CI
 
@@ -90,4 +94,4 @@ To do a rollback:
 
 The Azure action is pinned to a commit, but that pin applies only to its wrapper. Its Dockerfile uses `mcr.microsoft.com/appsvc/staticappsclient:stable` as its base, and that is a movable tag. Thus the client that receives the deployment token is the client that Microsoft publishes there at that time. The workflow file explains why this stays as it is.
 
-Node is pinned one time, in `.nvmrc`. Both workflows and the `engines` field of `package.json` follow it. `supply-chain.yml` checks the Radix overrides. Monthly, it also checks that `.nvmrc` is the newest patch of its line. The deploy attests the bundle that it uploads, and it verifies the attestation before it gives the bundle to Azure. [CONTRIBUTING.md](../CONTRIBUTING.md#supply-chain-checks) has more information about this.
+Node is pinned one time, in `.nvmrc`. Both workflows and the `engines` field of `package.json` follow it. `supply-chain.yml` checks the Radix overrides. Monthly, it also checks that `.nvmrc` is the newest patch of its line. The deploy attests the bundle that it uploads, and it verifies the attestation before it gives the bundle to Azure. [dependencies.md](dependencies.md#supply-chain-checks) has more information about this.

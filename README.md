@@ -97,23 +97,24 @@ To make the production build in `dist/`, run `npm run build`. [docs/development.
 | [docs/engine.md](docs/engine.md) | The engine as a library: `PipelineOptions`, layered conf input with override provenance, and the regex engine and its caveats |
 | [packages/mcp-server/README.md](packages/mcp-server/README.md) | The MCP server: its tools, its setup and its security model |
 | [docs/architecture.md](docs/architecture.md) | The internals for contributors: the project structure, the store, the workers, the Monaco bundle, accessibility and the tech stack |
-| [docs/development.md](docs/development.md) | The npm scripts, and what to do if the installation or a test fails |
-| [docs/testing.md](docs/testing.md) | The unit tests and the end-to-end suite |
+| [docs/development.md](docs/development.md) | How to set up a checkout, the npm scripts, and what to do if the installation or a test fails |
+| [docs/recipes.md](docs/recipes.md) | Where each change goes, the steps for a simulated directive, and the recipes for the common changes |
+| [docs/ci.md](docs/ci.md) | Each CI job, what makes it fail, and how to run it locally |
+| [docs/testing.md](docs/testing.md) | The rules for tests, the unit tests, the end-to-end suite and mutation testing |
+| [docs/code-style.md](docs/code-style.md) | The rules for the layout, the lint, the types and the code comments |
+| [docs/dependencies.md](docs/dependencies.md) | The supply-chain checks, the binary of the regex engine, the overrides and the review of a Dependabot pull request |
+| [docs/documentation.md](docs/documentation.md) | The classes of documents and their line limits, the topic types, the STE rules and the sections of the README |
 | [docs/deployment.md](docs/deployment.md) | The CI jobs, the deploy workflow, the production environment and how to do a rollback |
+| [docs/releasing.md](docs/releasing.md) | How to make a release |
 | [docs/adr/](docs/adr/README.md) | The design decisions, and the reasons for them |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | How work happens here: issues, branches, the CI checks, the recipes and releases |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | The rules for a change: issues, branches, commits, pull requests and releases, with a link to the detail of each area |
 | [CHANGELOG.md](CHANGELOG.md) | What changed for a user, newest first |
 | [SECURITY.md](SECURITY.md) | How to report a vulnerability, and the attack surface |
 | [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | The Contributor Covenant |
 
 ## Contributing and feedback
 
-To report a bug or to suggest a change, open an [issue](https://github.com/Bimmiest/propslab/issues/new/choose). If the output is different from what real Splunk does, use the Fidelity question form. Before you open a pull request, read [CONTRIBUTING.md](CONTRIBUTING.md). It describes these topics:
-
-- the development environment
-- the CI checks
-- where a change goes
-- the recipes to add directives, eval functions, CIM models and preview tabs.
+To report a bug or to suggest a change, open an [issue](https://github.com/Bimmiest/propslab/issues/new/choose). If the output is different from what real Splunk does, use the Fidelity question form. Before you open a pull request, read [CONTRIBUTING.md](CONTRIBUTING.md). It gives the rules for a change, and a link to the file in `docs/` that has the detail of each area.
 
 ## Licence
 

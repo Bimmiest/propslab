@@ -125,7 +125,7 @@ permissions: {}
 # again. It guarantees nothing for a dispatch made while the variable is
 # unset: the rollback will not stick.
 #
-# Rollback procedure (also in docs/deployment.md and CONTRIBUTING):
+# Rollback procedure (also in docs/deployment.md and docs/ci.md):
 #   1. Settings → Secrets and variables → Actions → Variables: set
 #      DEPLOY_PAUSED to `true`.
 #   2. Dispatch this workflow on main with `sha` = the commit to put back.
@@ -859,7 +859,7 @@ jobs:
     permissions:
       issues: write
     steps:
-      - uses: Bimmiest/shared-workflows/.github/actions/open-or-update-issue@5f68ca4788224cfb9fd210be687f9c00f7284b4a # v1.3.1
+      - uses: Bimmiest/shared-workflows/.github/actions/open-or-update-issue@3ef90f03b0c9d3b07e9ae9a1ee7005116988ffd0 # v1.5.0
         with:
           label: deploy-failed
           title: An automatic deploy failed

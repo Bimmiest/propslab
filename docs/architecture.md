@@ -1,3 +1,7 @@
+---
+type: explanation
+---
+
 # Architecture notes
 
 This file describes the internals for contributors: the project structure, the store, the workers, the Monaco bundle, the accessibility patterns and the tech stack. [pipeline.md](pipeline.md) gives the order of the stages and stanza precedence. [user-guide.md](user-guide.md) gives the layout. The architecture decision records in [`docs/adr/`](adr/README.md) give the reasons for the design choices of the engine, and the issues that caused them.

@@ -66,7 +66,7 @@ export function overrideMismatches(overrides, lockPackages, checkPackages = radi
  * Each scoped override (`"parent": { "dep": "^x.y.z" }`) that its parent no
  * longer needs: no copy of the parent in the lockfile still asks for a `dep`
  * older than `x.y.z`. These overrides lift a dependency that the parent pins
- * past an advisory (CONTRIBUTING, "The Radix overrides"). One left behind after
+ * past an advisory (docs/dependencies.md, "The Radix overrides"). One left behind after
  * the parent caught up would hold the dependency back without a reason.
  * A version that cannot be read (`*`, a git URL) counts as still needing it.
  * @param {Record<string, string | Record<string, string>>} overrides package.json's `overrides`

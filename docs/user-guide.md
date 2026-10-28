@@ -1,3 +1,7 @@
+---
+type: reference
+---
+
 # Using the app
 
 This file describes the app for a user: the layout, the output tabs, the editor and the dictionary. [pipeline.md](pipeline.md) describes what the simulation does with the input.

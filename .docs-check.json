@@ -1,5 +1,4 @@
 {
-  "readmeMaxLines": 200,
   "ste": [
     "README.md",
     "docs/deployment.md",
@@ -8,5 +7,65 @@
     "docs/pipeline.md",
     "docs/testing.md",
     "docs/user-guide.md"
-  ]
+  ],
+  "maxLines": [
+    {
+      "glob": "CHANGELOG.md",
+      "max": null
+    },
+    {
+      "glob": "CODE_OF_CONDUCT.md",
+      "max": null
+    },
+    {
+      "glob": "README.md",
+      "max": 200,
+      "hint": "The README keeps the fundamentals. Move the detail to a topic file in docs/, and link it from the README."
+    },
+    {
+      "glob": "CLAUDE.md",
+      "max": 80,
+      "hint": "CLAUDE.md names only the rules that people break. Move the rest to CONTRIBUTING.md or docs/."
+    },
+    {
+      "glob": "AGENTS.md",
+      "max": 80,
+      "hint": "AGENTS.md names only the rules that people break. Move the rest to CONTRIBUTING.md or docs/."
+    },
+    {
+      "glob": "CONTRIBUTING.md",
+      "max": 300,
+      "hint": "CONTRIBUTING.md holds the rules that a contributor must follow. Move recipes, traps and troubleshooting to docs/<topic>.md, and link them."
+    },
+    {
+      "glob": "SECURITY.md",
+      "max": 80
+    },
+    {
+      "glob": ".github/**/*.md",
+      "max": 80
+    },
+    {
+      "glob": "docs/adr/*.md",
+      "max": 300,
+      "hint": "An ADR gives the context, the decision and the consequences. Link the evidence, and do not copy it."
+    },
+    {
+      "glob": "**/*.md",
+      "max": 500,
+      "hint": "A topic file covers one topic. Split it by subtopic, and link the parts."
+    }
+  ],
+  "docTypes": {
+    "glob": "docs/**/*.md",
+    "exclude": [
+      "docs/adr/**"
+    ],
+    "allowed": [
+      "tutorial",
+      "how-to",
+      "reference",
+      "explanation"
+    ]
+  }
 }

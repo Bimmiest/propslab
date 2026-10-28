@@ -1,4 +1,4 @@
-// The two comment rules in CONTRIBUTING ("Code comments") that a tool can
+// The two comment rules in docs/code-style.md ("Code comments") that a tool can
 // check. A local plugin, not a dependency: each rule is a few lines.
 import tseslint from 'typescript-eslint';
 

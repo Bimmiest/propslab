@@ -34,7 +34,7 @@ the `no-changelog` label.
 - Write the files in `.docs-check.json` in ASD-STE100. Keep the README to the
   fundamentals, in a maximum of 200 lines.
 - Update the documents that your change makes wrong, in the same change.
-- Code comments follow [the rules](./CONTRIBUTING.md#code-comments). A comment
+- Code comments follow [the rules](./docs/code-style.md#code-comments). A comment
   says why, for the code as it is now. For history, link the issue or the ADR.
 
 ## Engine fidelity

@@ -1,3 +1,7 @@
+---
+type: explanation
+---
+
 # How the simulation runs
 
 This file describes how Propslab runs a simulation: the path of the input, the order of the stages, stanza precedence and the eval expression engine. [architecture.md](architecture.md) describes the internals for contributors.

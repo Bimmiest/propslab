@@ -1,3 +1,7 @@
+---
+type: reference
+---
+
 # Simulation fidelity
 
 The correctness oracle of a simulator is "matches real Splunk". That target is closed-source, versioned and partly undocumented. Thus it is not possible to _prove_ that the fidelity is complete, but it is possible to give it a boundary. This file gives that boundary in one place:
