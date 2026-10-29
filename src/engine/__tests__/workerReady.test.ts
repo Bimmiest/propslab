@@ -62,6 +62,8 @@ describe('worker entries post WORKER_READY (#339)', () => {
   /**
    * Until the engine's load has settled and scheduled its task. Polled by
    * hand: vi.waitFor advances fake timers itself, which would run that task.
+   * The limit is real time, not a count of turns: a slow runner compiles the
+   * WASM in more turns, and a count of 1000 ran out on CI (#806).
    */
   const loaded = async () => {
     const { setImmediate } = (
@@ -69,7 +71,8 @@ describe('worker entries post WORKER_READY (#339)', () => {
         process: { getBuiltinModule(id: 'node:timers'): { setImmediate(cb: () => void): void } };
       }
     ).process.getBuiltinModule('node:timers');
-    for (let i = 0; i < 1000 && vi.getTimerCount() === 0; i++) await new Promise<void>((r) => setImmediate(r));
+    const deadline = performance.now() + 10_000;
+    while (vi.getTimerCount() === 0 && performance.now() < deadline) await new Promise<void>((r) => setImmediate(r));
     expect(vi.getTimerCount()).toBeGreaterThan(0);
   };
   /** Let the engine load, then run the task that acts on the outcome. */
