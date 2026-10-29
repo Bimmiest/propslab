@@ -8,7 +8,7 @@ This file tells you how to set up a checkout, lists the npm scripts, says when t
 
 ## Prerequisites
 
-- Node 24. The file `.nvmrc` gives the exact version. To select that version, run `nvm use` or `fnm use`.
+- Node 26. The file `.nvmrc` gives the exact version. To select that version, run `nvm use` or `fnm use`.
 - npm.
 - Git.
 

@@ -117,10 +117,8 @@ reviewed. `docs/engine.md`'s closing section is the spec this implements:
   launcher adds none: it still moves to `dist/`, and names on stderr every
   `--allow-…` grant beyond its own, so a broader one does not apply
   silently. Without `--allow-child-process` it cannot re-exec, and says so.
-  **On Node 24 the permission model does not cover the network.** Nothing
-  in the server or the engine opens a connection, but nothing stops one
-  either. Node 26 adds `--allow-net`; the launcher grants none, so under
-  Node 26 or later the server and its workers cannot reach the network.
+  **The server and its workers cannot reach the network**: the launcher
+  grants no `--allow-net`.
 - **The server gets only the environment node reads**: `PATH`,
   `NODE_OPTIONS`, `SystemRoot`, `windir`, `TEMP`, `TMP`, `TMPDIR`, `TZ`,
   `LANG` and `LC_*`. MCP clients often start servers with API keys in the

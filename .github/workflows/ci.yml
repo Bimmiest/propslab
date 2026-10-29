@@ -60,9 +60,8 @@ jobs:
       # "engines". The pin tracks Active LTS rather than latest, and the two
       # failure modes it steers between have both bitten here: CI once built
       # on an end-of-life Node 20 while .nvmrc pinned a non-LTS 25.x, so
-      # neither matched the other nor what the deploy ran. 22 entered
-      # maintenance in October 2025, which puts the actively supported line at
-      # 24 until October 2026.
+      # neither matched the other nor what the deploy ran. 26 entered Active
+      # LTS on 2026-10-28 and 24 entered maintenance (#717).
       #
       # --ignore-scripts, as the deploy build installs (azure-static-web-apps.yml):
       # CI must test the tree that ships, not one that also ran install scripts.

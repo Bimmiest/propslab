@@ -77,12 +77,11 @@ updates:
       # the code runs on, and `.nvmrc` is what decides that. A types major that
       # arrives ahead of the runtime is worse than a stale one: it describes
       # APIs that do not exist yet, so `tsc` accepts code that fails when it
-      # runs. Both the root and packages/mcp-server follow `.nvmrc`, which says 24.
+      # runs. Both the root and packages/mcp-server follow `.nvmrc`.
       #
       # The cost is the one the Azure exclusion below also carries: this pin
-      # does not advance on its own. When the Node line moves — 26 becomes
-      # Active LTS in October 2026 — delete this entry and take the types major
-      # in the same change that moves `.nvmrc`, not before it.
+      # does not advance on its own. Take the types major by hand, in the same
+      # change that moves `.nvmrc` to a new line, not before it.
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
       # `marked` is a devDependency only so the hover tests can render Markdown
