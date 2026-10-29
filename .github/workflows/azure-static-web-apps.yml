@@ -588,22 +588,19 @@ jobs:
     # The job that holds the deployment token runs in an environment, so
     # the rules around *who and what may deploy* live in repo settings, where
     # no branch can edit them — unlike the checks in this file, which a
-    # dispatched ref supplies itself. Naming the environment does nothing on
-    # its own; it needs two settings changes by a repo admin:
+    # dispatched ref supplies itself. The `production` environment holds both
+    # (#799, checked 2026-10-29):
     #
-    #   - Move AZURE_STATIC_WEB_APPS_API_TOKEN from repository secrets to the
-    #     `production` environment's secrets, and delete the repository-level
-    #     copy. Until then any workflow on any branch can still read it.
-    #   - Under the environment's deployment branches and tags, choose
-    #     "Selected branches and tags" and allow the branch `main` and nothing
-    #     else — no tag patterns. `workflow_run` runs report the
-    #     default branch as their ref, so the gated path is unaffected, and a
-    #     rollback is a dispatch on main with the `sha` input. A dispatch from
-    #     any other branch or tag is refused before this job's first step.
-    #     Required reviewers are optional on top.
+    #   - AZURE_STATIC_WEB_APPS_API_TOKEN is an environment secret, and there
+    #     is no repository-level copy, so only this job can read it.
+    #   - Its deployment branch policy allows the branch `main` and nothing
+    #     else, no tag patterns. `workflow_run` runs report the default branch
+    #     as their ref, so the gated path is unaffected, and a rollback is a
+    #     dispatch on main with the `sha` input. A dispatch from any other
+    #     branch or tag is refused before this job's first step.
     #
-    # With the secret scoped this way, a ref that rewrites this file can still
-    # start a run, but not one that can see the token.
+    # So a ref that rewrites this file can still start a run, but not one that
+    # can see the token.
     #
     # The URL makes the deployment link to the site it deployed, on the
     # repository's Deployments page and sidebar. It is the deploy step's own
