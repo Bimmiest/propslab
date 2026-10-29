@@ -5,7 +5,7 @@
   "description": "MCP server over the propslab simulation engine: simulate, validate, explain_precedence, lookup_directive.",
   "license": "MIT",
   "engines": {
-    "node": ">=24.0.0"
+    "node": ">=26.0.0"
   },
   "bin": {
     "propslab-mcp": "dist/index.js"
@@ -13,8 +13,8 @@
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
     "build": "npm run typecheck && npm run build:index && npm run build:worker && npm run build:regex-engine",
-    "build:index": "esbuild src/index.ts --bundle --platform=node --target=node24 --format=cjs --outdir=dist --sourcemap --alias:pcre2-wasm-utf16=pcre2-wasm-utf16 --banner:js=\"#!/usr/bin/env node\"",
-    "build:worker": "esbuild src/simulateWorker.ts --bundle --platform=node --target=node24 --format=cjs --outdir=dist --sourcemap --alias:pcre2-wasm-utf16=pcre2-wasm-utf16",
+    "build:index": "esbuild src/index.ts --bundle --platform=node --target=node26 --format=cjs --outdir=dist --sourcemap --alias:pcre2-wasm-utf16=pcre2-wasm-utf16 --banner:js=\"#!/usr/bin/env node\"",
+    "build:worker": "esbuild src/simulateWorker.ts --bundle --platform=node --target=node26 --format=cjs --outdir=dist --sourcemap --alias:pcre2-wasm-utf16=pcre2-wasm-utf16",
     "build:regex-engine": "node ../../scripts/check-wasm-checksum.mjs && node -e \"require('node:fs').copyFileSync(require.resolve('pcre2-wasm-utf16/pcre2.wasm'), 'dist/pcre2.wasm')\"",
     "start": "node dist/index.js",
     "pretest": "npm run build",
@@ -28,7 +28,7 @@
     "zod": "^4.6.6"
   },
   "devDependencies": {
-    "@types/node": "^24.19.2",
+    "@types/node": "^26.6.6",
     "@vitest/coverage-v8": "^5.0.5",
     "esbuild": "^0.28.2",
     "fast-check": "^4.10.2",
