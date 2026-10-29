@@ -16,7 +16,7 @@ documents at the root are listed in the [README](../README.md#documentation).
 | [code-style.md](code-style.md) | The rules for the layout, the lint, the types and the code comments |
 | [dependencies.md](dependencies.md) | The supply-chain checks, the binary of the regex engine, the overrides and the review of a Dependabot pull request |
 | [deployment.md](deployment.md) | The CI jobs, the deploy workflow, the production environment and how to do a rollback |
-| [development.md](development.md) | How to set up a checkout, the npm scripts, and what to do if the installation or a test fails |
+| [development.md](development.md) | How to set up a checkout, the npm scripts, when to record tech debt, and what to do if the installation or a test fails |
 | [documentation.md](documentation.md) | The classes of documents and their line limits, the topic types, the STE rules and the sections of the README |
 | [engine.md](engine.md) | The engine as a library: `PipelineOptions`, layered conf input with override provenance, and the regex engine and its caveats |
 | [fidelity.md](fidelity.md) | What Propslab simulates, what it does not simulate, and where it diverges from Splunk |
