@@ -13,16 +13,19 @@
 
 import { vi } from 'vitest';
 
-window.matchMedia = (query: string) => ({
-  matches: false,
-  media: query,
-  addEventListener() {},
-  removeEventListener() {},
-  addListener() {},
-  removeListener() {},
-  onchange: null,
-  dispatchEvent: () => false,
-});
+// Monaco does not call the deprecated `addListener` and `removeListener`, so
+// the mock leaves them out.
+window.matchMedia = (query: string) => {
+  const list: Omit<MediaQueryList, 'addListener' | 'removeListener'> = {
+    matches: false,
+    media: query,
+    addEventListener() {},
+    removeEventListener() {},
+    onchange: null,
+    dispatchEvent: () => false,
+  };
+  return list as MediaQueryList;
+};
 
 vi.doMock('monaco-editor/editor/editor.worker?worker', () => ({ default: vi.fn() }));
 for (const feature of [
