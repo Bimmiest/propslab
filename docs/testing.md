@@ -19,7 +19,7 @@ Each layer finds a failure that the other layers cannot find. Before you write a
 
 | Layer | Where | The failure that only this layer finds |
 |---|---|---|
-| Unit | `src/**/__tests__/`, `npm test` | One function gives a wrong result for one input. The failure names the function, and the test runs in milliseconds. |
+| Unit | `src/**/__tests__/`, and `scripts/**/*.test.ts` next to each script, `npm test` | One function gives a wrong result for one input. The failure names the function, and the test runs in milliseconds. |
 | Integration | The tests that call `runPipeline` from end to end, most of them in `src/engine/__tests__/` (`grep -rl runPipeline src --include='*.test.ts'` lists them). `packages/mcp-server/src/__tests__/server.e2e.test.ts` starts the built MCP server. | Each stage is correct alone, and the stages are wrong together: a stage runs in the wrong order, or a stage gives the next stage a value that it does not expect. The MCP test finds a tool that the build or the transport breaks. |
 | Property | The tests that use fast-check, each seeded through `fcSeed` | An input that nobody wrote down breaks an invariant, for example statelessness or a round trip. |
 | Mutation | Stryker, in [Mutation testing](#mutation-testing) | A line that a test runs, but that no assertion checks. Coverage cannot find this, because coverage counts only the lines that ran. |
@@ -29,7 +29,7 @@ Each layer finds a failure that the other layers cannot find. Before you write a
 
 ## Unit tests (`npm test`)
 
-The tests are in `src/**/__tests__/`, and they run under vitest. The engine tests are for the modules with the highest risk:
+The tests are in `src/**/__tests__/`, and they run under vitest. The test of a script in `scripts/` is next to the script, and `tsconfig.node.json` type-checks it with the Node types and no DOM. The one exception is `src/__tests__/generateCimModels.test.ts`: it reads its script through `import.meta.glob`, which is a Vite type. The engine tests are for the modules with the highest risk:
 
 - line breaking
 - eval

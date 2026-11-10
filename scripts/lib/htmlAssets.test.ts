@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { documentAssets } from '../../scripts/lib/htmlAssets.mjs';
+import { documentAssets } from './htmlAssets.mjs';
 
 // The CI gates (check-entry-graph.mjs, check-bundle-size.mjs) read the startup
 // assets through this; a reference it misses is one the gates never check.
