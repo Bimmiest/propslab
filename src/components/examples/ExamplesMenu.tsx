@@ -117,9 +117,9 @@ export function ExamplesMenu({ prominent = false }: { prominent?: boolean }) {
         >
           {GROUPS.map(([category, samples]) => (
             <section key={category} aria-label={category}>
-              <h3 className="px-3 pt-2 pb-1 text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
+              <h2 className="px-3 pt-2 pb-1 text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
                 {category}
-              </h3>
+              </h2>
               {samples.map((sample) => (
                 <button
                   key={sample.name}
