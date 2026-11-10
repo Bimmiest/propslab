@@ -199,3 +199,43 @@ describe('computeDiagnostics — booleans read as the engine reads them (#301)',
     expect(markers.some((m) => m.message.includes('Set SHOULD_LINEMERGE = false'))).toBe(false);
   });
 });
+
+describe('computeDiagnostics — stanza headers and malformed lines', () => {
+  /** The markers of line `lineNumber`, as message, severity and columns. */
+  function markersOn(text: string, lineNumber: number) {
+    return computeDiagnostics(fakeModel(text), 'props.conf')
+      .filter((m) => m.startLineNumber === lineNumber)
+      .map((m) => [m.message, m.severity, m.startColumn, m.endColumn]);
+  }
+
+  it('calls "[]" an empty header, and an unclosed one a missing bracket, over the whole line', () => {
+    expect(markersOn('[]', 1)).toEqual([['Empty stanza header — expected "[name]"', 8, 1, 3]]);
+    expect(markersOn('[abc', 1)).toEqual([['Missing closing bracket "]" for stanza header', 8, 1, 5]]);
+  });
+
+  it('warns on a repeated stanza, by its trimmed name, over the whole header', () => {
+    expect(markersOn('[a]\nX = 1\n[ a ]', 3)).toEqual([
+      [
+        'Duplicate stanza "a" — Splunk merges duplicate stanzas key-by-key (a later key overrides the same earlier key; keys only in the earlier stanza are kept)',
+        4,
+        1,
+        6,
+      ],
+    ]);
+    expect(markersOn('[a]\nX = 1\n[b]', 3)).toEqual([]);
+  });
+
+  it('says why a line is malformed, and an indented one differently', () => {
+    expect(markersOn('[a]\ngarbage', 2)).toEqual([
+      [
+        'Malformed line — expected "key = value" or a stanza header. Splunk .conf lines are "key = value", "[stanza]", or a "#" comment.',
+        8,
+        1,
+        8,
+      ],
+    ]);
+    const [indented] = markersOn('[a]\n  garbage', 2);
+    expect(indented?.[0]).toMatch(/cannot be indented; Splunk continues a value with a trailing backslash/);
+    expect(indented?.slice(1)).toEqual([8, 1, 10]);
+  });
+});

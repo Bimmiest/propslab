@@ -92,4 +92,36 @@ describe('mis-cased attribute quick fix (#89)', () => {
     // offer a rename against it.
     expect(actionsFor('[t1]\nREGEX = (unbalanced', 'transforms.conf')).toEqual([]);
   });
+
+  it('marks the fix as the preferred one', () => {
+    expect(actionsFor('[st]\ntime_format = %s')[0]?.isPreferred).toBe(true);
+  });
+});
+
+describe('a mis-cased marker that the line no longer matches', () => {
+  /** Markers from `before`, offered against the model of `after`, as when the user edits before Monaco re-lints. */
+  function staleActions(before: string, after: string, recode?: string) {
+    const markers = toMarkerData(computeDiagnostics(fakeModel(before), 'props.conf')).map((m) =>
+      recode === undefined ? m : { ...m, code: recode },
+    );
+    const context: languages.CodeActionContext = { markers, trigger: monacoLanguages.CodeActionTriggerType.Invoke };
+    const wholeFile = { startLineNumber: 1, startColumn: 1, endLineNumber: 1, endColumn: 1 } as Range;
+    const result = createCodeActionProvider('props.conf').provideCodeActions(fakeModel(after), wholeFile, context, {
+      isCancellationRequested: false,
+      onCancellationRequested: () => ({ dispose: () => undefined }),
+    });
+    return (result as languages.CodeActionList | undefined)?.actions ?? [];
+  }
+
+  it.each([
+    ['is a comment now', '# time_format = %s'],
+    ['has no key now', ' = %s'],
+    ['is spelled correctly now', 'TIME_FORMAT = %s'],
+  ])('offers nothing when the line %s', (_, line) => {
+    expect(staleActions('[st]\ntime_format = %s', `[st]\n${line}`)).toEqual([]);
+  });
+
+  it('offers nothing for a marker of another kind, on a mis-cased line', () => {
+    expect(staleActions('[st]\ntime_format = %s', '[st]\ntime_format = %s', 'another-code')).toEqual([]);
+  });
 });
