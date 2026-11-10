@@ -1,1 +1,17 @@
-* @Bimmiest
+# The owner is asked to review a change to a gate: a workflow, a file that a
+# check reads, or this file. No review is required (repo-template ADR 0003).
+/.github/workflows/ @Bimmiest
+/.github/CODEOWNERS @Bimmiest
+/.github/dependabot.yml @Bimmiest
+/.gitleaks.toml @Bimmiest
+/.trivyignore.yaml @Bimmiest
+/.docs-check.json @Bimmiest
+/.repo-settings.json @Bimmiest
+/.audit-exceptions.json @Bimmiest
+/.licence-allowlist.json @Bimmiest
+/eslint.config.js @Bimmiest
+/scripts/eslint-comments.mjs @Bimmiest
+/scripts/lint-allowlist.json @Bimmiest
+/tsconfig.base.json @Bimmiest
+/vitest.config.ts @Bimmiest
+/stryker.config.mjs @Bimmiest
