@@ -331,18 +331,27 @@ export default defineConfig([
     rules: { '@typescript-eslint/no-implied-eval': 'off' },
   },
   {
-    // No rule is turned off at a call site (CLAUDE.md): an exception goes in
-    // this file, scoped to its files, with its reason. With inline config off,
-    // an `eslint-disable` comment has no effect, so the rule that it hid fails
-    // the lint. The files below keep theirs until the supported-browser floor
-    // decides whether their fallbacks for older browsers go (#774).
-    files: ['**/*.{ts,tsx,js,mjs}', 'packages/mcp-server/**/*.mts'],
-    ignores: [
+    // The fallbacks that the supported-browser rule keeps (ADR 0022). Each
+    // calls an API that no-deprecated reports, on purpose:
+    // - SelectableRaw: caretRangeFromPoint, until caretPositionFromPoint is
+    //   Baseline widely available (#833); its test stubs that fallback.
+    // - useUnloadWarning: returnValue, which MDN still sets for older browsers.
+    // - clipboard: execCommand('copy'), for an insecure context, where
+    //   navigator.clipboard does not exist.
+    files: [
       'src/components/preview/tabs/shared/SelectableRaw.tsx',
       'src/components/preview/tabs/shared/__tests__/SelectableRaw.test.tsx',
       'src/hooks/useUnloadWarning.ts',
       'src/utils/clipboard.ts',
     ],
+    rules: { '@typescript-eslint/no-deprecated': 'off' },
+  },
+  {
+    // No rule is turned off at a call site (CLAUDE.md): an exception goes in
+    // this file, scoped to its files, with its reason. With inline config off,
+    // an `eslint-disable` comment has no effect, so the rule that it hid fails
+    // the lint (#774).
+    files: ['**/*.{ts,tsx,js,mjs}', 'packages/mcp-server/**/*.mts'],
     linterOptions: { noInlineConfig: true },
   },
 ]);
