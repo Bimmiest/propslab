@@ -6,11 +6,7 @@
     "useDefineForClassFields": true,
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "types": ["vite/client"],
-    "jsx": "react-jsx",
-    // Tests import scripts/**/*.mjs and take their types from the JSDoc, so
-    // there is no second declaration to fall out of step with it (#575).
-    // scripts/lib/mutationTargets.d.mts is the exception, and says why.
-    "allowJs": true
+    "jsx": "react-jsx"
   },
   "include": ["src"]
 }

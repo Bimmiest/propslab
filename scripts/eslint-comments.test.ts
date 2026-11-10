@@ -3,7 +3,7 @@
 import { describe, it, expect } from 'vitest';
 import { Linter } from 'eslint';
 import tseslint from 'typescript-eslint';
-import comments from '../../scripts/eslint-comments.mjs';
+import comments from './eslint-comments.mjs';
 
 function reports(code: string): (string | null)[] {
   return new Linter()

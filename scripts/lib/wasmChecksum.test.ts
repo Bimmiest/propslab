@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { expectedChecksum, verifyChecksum } from '../../scripts/lib/wasmChecksum.mjs';
+import { expectedChecksum, verifyChecksum } from './wasmChecksum.mjs';
 
 // The comparison behind scripts/check-wasm-checksum.mjs (#504); locating the
 // installed package is the script's own.

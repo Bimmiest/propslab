@@ -4,7 +4,12 @@
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.node.tsbuildinfo",
     "target": "ES2023",
     "lib": ["ES2023"],
-    "types": ["node"]
+    "types": ["node"],
+    // The tests of the scripts import scripts/**/*.mjs and take their types
+    // from the JSDoc, so there is no second declaration to fall out of step
+    // with it (#575). scripts/lib/mutationTargets.d.mts is the exception, and
+    // says why. They sit next to their scripts, in this Node project (#822).
+    "allowJs": true
   },
-  "include": ["vite.config.ts", "vitest.config.ts", "vitest.stryker.config.ts", "playwright.config.ts"]
+  "include": ["vite.config.ts", "vitest.config.ts", "vitest.stryker.config.ts", "playwright.config.ts", "scripts/**/*.test.ts"]
 }
