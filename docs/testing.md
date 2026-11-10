@@ -4,7 +4,7 @@ type: reference
 
 # Tests
 
-This file describes the two test suites: the unit tests under vitest, and the end-to-end suite under Playwright. [development.md](development.md#scripts) lists the scripts that run them. This file also gives the rules for tests, the coverage floors and mutation testing. [CONTRIBUTING.md](../CONTRIBUTING.md#tests) has the summary.
+This file describes the test layers and the two test suites: the unit tests under vitest, and the end-to-end suite under Playwright. [development.md](development.md#scripts) lists the scripts that run them. This file also gives the rules for tests, the coverage floors and mutation testing. [CONTRIBUTING.md](../CONTRIBUTING.md#tests) has the summary.
 
 ## The rules
 
@@ -12,6 +12,20 @@ This file describes the two test suites: the unit tests under vitest, and the en
 - **Coverage is a floor, and a ratchet.** The thresholds live in `vitest.config.ts` (and `packages/mcp-server/vitest.config.mts`) so a local run gives the same verdict CI does. The engine is held to a higher bar than the app as a whole, because a simulator whose UI is under-tested is annoying while one whose pipeline is under-tested is wrong; `src/components`, `hooks`, `monaco`, `store`, `utils` and `workers` each have a floor too, so the engine's number cannot hide a fall elsewhere. Each floor is the measured figure minus one point, and shared-workflows' coverage-ratchet (run by CI after the tests, with `slack: 3`) fails when one is more than 3 points under. It prints the measured figure rounded down as the floor to write; write one point under that, which keeps the MCP server's floors clear of its Windows and macOS legs. So a change that raises coverage also raises the floor, in the same commit; do not lower one to make a branch green. Nothing is excluded to flatter the numbers: files only the Playwright suite exercises stay counted at or near 0%.
 - **Test scaffolding is shared.** `src/test/makeEvent.ts` builds a `SplunkEvent` (`makeEvent(raw, { fields })`), `src/test/fakeModel.ts` a Monaco text model, and `src/test/fcSeed.ts` every fast-check seed: a property test passes `fcSeed(<its default>)` and never a bare number, so `FC_SEED` can re-seed it. The weekly `randomised` job in `ci.yml` draws a fresh `FC_SEED`, shuffles the order, and runs under another timezone and locale; it prints the seed and the command that replays the run. A new test file uses these rather than defining its own event literal or model stand-in.
 - **A test does not time itself.** No `performance.now()`, `Date.now()` or `toBeLessThan(<ms>)` in a unit test: a stopwatch assertion fails on a loaded runner and passes on a fast one. Pick the bound that is about the claim instead. For a linear-time claim, count the work: `expectLinearWork` in `src/test/scanWork.ts` runs a function at size *n* and *2n* and fails when the length its slices, joins and searches touch more than triples (linear doubles, quadratic quadruples), and a spy on the built-in the fix removed (`indexOf` in `wildcardMatch.test.ts`, `RegExp.prototype.test` in `redosHeuristic.test.ts`) counts calls. Where the cost hides inside one regex call and nothing can be counted, size the input so the quadratic version cannot finish inside the test's own timeout. For "answers promptly" or "frees the slot" in the MCP server, make the alternative outlast the test's timeout (a worker that sleeps 60 s in a 20 s test) or assert the order events happened in. Check that a new bound bites by reintroducing the bug once. The Playwright timing budgets live in their own non-retried `perf` project.
+
+## The test layers
+
+Each layer finds a failure that the other layers cannot find. Before you write a test, name the failure that it must catch. Then write the test in the layer that finds that failure. Do not write the same test in each layer.
+
+| Layer | Where | The failure that only this layer finds |
+|---|---|---|
+| Unit | `src/**/__tests__/`, `npm test` | One function gives a wrong result for one input. The failure names the function, and the test runs in milliseconds. |
+| Integration | The tests that call `runPipeline` from end to end, most of them in `src/engine/__tests__/` (`grep -rl runPipeline src --include='*.test.ts'` lists them). `packages/mcp-server/src/__tests__/server.e2e.test.ts` starts the built MCP server. | Each stage is correct alone, and the stages are wrong together: a stage runs in the wrong order, or a stage gives the next stage a value that it does not expect. The MCP test finds a tool that the build or the transport breaks. |
+| Property | The tests that use fast-check, each seeded through `fcSeed` | An input that nobody wrote down breaks an invariant, for example statelessness or a round trip. |
+| Mutation | Stryker, in [Mutation testing](#mutation-testing) | A line that a test runs, but that no assertion checks. Coverage cannot find this, because coverage counts only the lines that ran. |
+| End-to-end | `e2e/`, `npm run test:e2e` | A failure that occurs only in a production build in a browser: the CSP, the worker bundle, the WebAssembly load, the Monaco chunk split and accessibility. |
+| Performance | The `perf` Playwright project, and `expectLinearWork` in the unit tests | A change that gives the correct result too slowly. |
+| Fidelity | The private fidelity suite | The engine agrees with the documentation, and not with real Splunk. The suite compares the engine with output that Splunk recorded. [ADR 0016](adr/0016-recorded-splunk-output-is-not-distributed.md) keeps that output out of this repository. |
 
 ## Unit tests (`npm test`)
 
