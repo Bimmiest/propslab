@@ -11,14 +11,12 @@ type DirectiveEntryInfo = Extract<DictionaryEntry, { kind: 'directive' }>['info'
 type StanzaEntryInfo = Extract<DictionaryEntry, { kind: 'stanza' }>['stanza'];
 
 /**
- * Page frame. Capped and centred so the two columns below keep a stable
- * relationship to each other instead of drifting apart as the window grows.
- * The cap is also the reading measure: every block fills its column, and 52rem
- * keeps the longest line of a paragraph beside the aside to about 80
- * characters (#824).
+ * Page frame. Capped and centred so prose does not run to a 2000px measure on a
+ * wide monitor, and so the two columns below keep a stable relationship to each
+ * other instead of drifting apart as the window grows.
  */
 function Page({ children }: { children: React.ReactNode }) {
-  return <article className="mx-auto w-full max-w-[52rem] px-6 py-6 sm:px-8 sm:py-7">{children}</article>;
+  return <article className="mx-auto w-full max-w-5xl px-6 py-6 sm:px-8 sm:py-7">{children}</article>;
 }
 
 /**
