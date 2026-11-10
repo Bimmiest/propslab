@@ -32,14 +32,16 @@ export default {
     // The worker lifecycle (post, ready, watchdog, crash) and the app store
     // (#508): state machines with real logic, and tests that ran in the app's
     // suite but were never asked whether they would notice a wrong edit.
-    // src/monaco is not here: its providers are tested against a fake of
-    // Monaco's model, so a mutant there is killed or spared by how faithful the
-    // fake is, and the run's cost is the jsdom start of a dozen test files per
-    // mutant. See docs/testing.md.
     'src/workers/workerLifecycle.ts',
     // Was under src/engine until #566 moved the worker plumbing to src/workers.
     'src/workers/workerProtocol.ts',
     'src/store/**/*.ts',
+    // The editor's language support (#816). Its providers run against
+    // src/test/fakeModel.ts, which fakeModel.contract.test.ts holds to a real
+    // model. The two files below are under the floor until #836.
+    'src/monaco/*.ts',
+    '!src/monaco/timeFormatPreview.ts',
+    '!src/monaco/timePrefixMatcher.ts',
     '!src/store/**/__tests__/**',
     '!src/engine/**/__tests__/**',
     '!src/engine/**/*.test.ts',
