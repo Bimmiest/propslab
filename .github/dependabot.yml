@@ -95,7 +95,8 @@ updates:
       # typescript-eslint declares the range it supports; a major it has not
       # accepted cannot install, let alone pass. TypeScript moves when
       # typescript-eslint does, the two bumped together by hand. From
-      # repo-template (#602).
+      # repo-template (#602). On 6.0 since #795, so this holds 7.x, which
+      # typescript-eslint does not accept yet.
       - dependency-name: "typescript"
         update-types: ["version-update:semver-major"]
 
@@ -138,7 +139,7 @@ updates:
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
       # As the root entry (#236 was the same 7.0 proposal here). The package
-      # pins the root's `~5.9.3`, and both move together.
+      # pins the root's `~6.0.3`, and both move together.
       - dependency-name: "typescript"
         update-types: ["version-update:semver-major"]
 

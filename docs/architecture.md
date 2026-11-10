@@ -192,7 +192,7 @@ Under `prefers-reduced-motion` every animation and transition is instant, and
 
 - React 19
 - Vite 8
-- TypeScript 5.9
+- TypeScript 6.0
 - Tailwind CSS 4 (CSS-first config)
 - Monaco Editor 0.57 (mounted directly by `MonacoEditor.tsx`)
 - Zustand 5
