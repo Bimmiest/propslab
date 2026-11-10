@@ -174,11 +174,14 @@ describe('DictionaryDetail layout', () => {
     useAppStore.setState(initial, true);
   });
 
-  it('leads with the category as an eyebrow above the key', () => {
+  it('starts the header with the key, and keeps the category in the Specification card', () => {
     useAppStore.setState({ dictionarySelection: 'KV_MODE' });
     renderDictionary();
+    const title = screen.getByRole('heading', { level: 2, name: 'KV_MODE' });
+    const header = title.closest('header');
+    expect(header?.firstElementChild).toBe(title);
+    expect(header).not.toHaveTextContent('Field Extraction');
     expect(screen.getAllByText('Field Extraction').length).toBeGreaterThan(0);
-    expect(screen.getByRole('heading', { level: 2, name: 'KV_MODE' })).toBeInTheDocument();
   });
 
   it('labels the example card with the conf file it belongs in', () => {

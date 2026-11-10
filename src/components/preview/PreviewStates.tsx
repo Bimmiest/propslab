@@ -11,12 +11,7 @@ import { ExamplesMenu } from '../examples/ExamplesMenu';
 export function FailureState({ message }: { message: string }) {
   return (
     <div className="flex flex-col items-center justify-center h-full gap-3 px-8 text-center" role="alert">
-      <div
-        className="w-14 h-14 rounded-2xl flex items-center justify-center"
-        style={{ backgroundColor: 'var(--color-bg-secondary)' }}
-      >
-        <Icon name="warning" className="w-7 h-7 text-[var(--color-error)]" />
-      </div>
+      <Icon name="warning" className="w-8 h-8 text-[var(--color-error)]" />
       <div>
         <p className="text-sm font-semibold text-[var(--color-text-primary)]">Processing failed</p>
         <p className="text-xs text-[var(--color-text-muted)] max-w-md mt-1">{message}</p>
@@ -33,12 +28,7 @@ export function EmptyState() {
   return (
     <div className="flex flex-col items-center justify-center-safe h-full gap-8 px-8 py-8 text-center">
       <div className="flex flex-col items-center gap-3">
-        <div
-          className="w-14 h-14 rounded-2xl flex items-center justify-center"
-          style={{ backgroundColor: 'var(--color-bg-secondary)' }}
-        >
-          <Icon name="eye" className="w-7 h-7 text-[var(--color-text-muted)]" />
-        </div>
+        <Icon name="eye" className="w-8 h-8 text-[var(--color-text-muted)]" />
         <div>
           <p className="text-sm font-semibold text-[var(--color-text-primary)]">No data yet</p>
           <p className="text-xs text-[var(--color-text-muted)] max-w-xs mt-1">

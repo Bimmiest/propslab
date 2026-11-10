@@ -19,18 +19,14 @@ function Page({ children }: { children: React.ReactNode }) {
   return <article className="mx-auto w-full max-w-5xl px-6 py-6 sm:px-8 sm:py-7">{children}</article>;
 }
 
-function Eyebrow({ children }: { children: React.ReactNode }) {
-  return <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--color-text-muted)]">{children}</p>;
-}
-
 /**
- * Header block: category, key, badges, then a rule that separates the identity
- * of the thing from everything said about it.
+ * Header block: key, badges, then a rule that separates the identity of the
+ * thing from everything said about it. The category is in the Specification
+ * card, so the header does not repeat it above the key (#824).
  */
-function PageHeader({ eyebrow, title, badges }: { eyebrow: string; title: string; badges: React.ReactNode }) {
+function PageHeader({ title, badges }: { title: string; badges: React.ReactNode }) {
   return (
     <header className="flex flex-col gap-2 pb-5 mb-6 border-b" style={{ borderColor: 'var(--color-border-subtle)' }}>
-      <Eyebrow>{eyebrow}</Eyebrow>
       <h2 className="text-xl sm:text-2xl font-semibold font-mono tracking-tight text-[var(--color-text-primary)]">
         {title}
       </h2>
@@ -53,7 +49,7 @@ function Columns({ main, aside }: { main: React.ReactNode; aside: React.ReactNod
 }
 
 function Lede({ children }: { children: React.ReactNode }) {
-  return <p className="text-[13px] leading-[1.7] text-[var(--color-text-secondary)] max-w-prose">{children}</p>;
+  return <p className="text-[13px] leading-[1.7] text-[var(--color-text-secondary)]">{children}</p>;
 }
 
 /** Boxed group used for both the code sample and the reference tables. */
@@ -131,7 +127,7 @@ function Callout({
   const color = tone === 'danger' ? 'var(--color-error)' : 'var(--color-text-secondary)';
   return (
     <p
-      className="flex items-start gap-2 rounded-md px-3 py-2.5 text-[12px] leading-relaxed max-w-prose"
+      className="flex items-start gap-2 rounded-md px-3 py-2.5 text-[12px] leading-relaxed"
       style={{
         color,
         backgroundColor: tone === 'danger' ? tint('var(--color-error)', 10) : 'var(--color-bg-secondary)',
@@ -155,7 +151,6 @@ export function DictionaryDetail({ entry }: { entry: DictionaryEntry }) {
   return (
     <Page>
       <PageHeader
-        eyebrow={info.category}
         title={info.isClassBased ? `${info.key}-<class>` : info.key}
         badges={<DirectiveBadges info={info} />}
       />
@@ -298,7 +293,6 @@ function StanzaDetail({ stanza }: { stanza: StanzaEntryInfo }) {
   return (
     <Page>
       <PageHeader
-        eyebrow="Stanza header"
         title={stanza.label}
         badges={
           <>

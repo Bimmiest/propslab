@@ -42,9 +42,10 @@
   --color-brand-mark: #e2c08d;
   --color-text-on-error: #ffffff;
 
-  /* Status colours double as text on their own /10 tint: ≥4.5:1 there too. */
+  /* Status colours double as text on their own /10 tint: ≥4.5:1 there too,
+     even when the tint sits on a selected row's accent /10 (#824). */
   --color-error: #991b1b;
-  --color-warning: #9a3412;
+  --color-warning: #973312;
   --color-success: #166534;
   --color-info: #6e4e14;
 }

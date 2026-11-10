@@ -37,12 +37,16 @@ const ratio = (a: string, b: string) => {
   const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x) as [number, number];
   return (hi + 0.05) / (lo + 0.05);
 };
-/** `fg` at `pct` over `bg`: what `tint()` and a `/10` utility paint. */
+/**
+ * `fg` at `pct` over `bg`: what `tint()` and a `/10` utility paint. The alpha
+ * is rounded to 8 bits as Chromium paints it (10% is 26/255), which is what
+ * the pixels of two stacked tints match (#824).
+ */
 const over = (bg: string, fg: string, pct: number) =>
   `#${[0, 1, 2]
     .map((i) => {
       const [b, f] = [bg, fg].map((h) => parseInt(h.slice(1 + i * 2, 3 + i * 2), 16)) as [number, number];
-      return Math.round(b + (f - b) * pct)
+      return Math.round(b + (f - b) * (Math.round(pct * 255) / 255))
         .toString(16)
         .padStart(2, '0');
     })
@@ -89,11 +93,23 @@ describe.each([
     expect(failures(pairs)).toEqual([]);
   });
 
+  // A dictionary row's chip is its tone's /10 tint, on the selected row's
+  // accent /10 over the list's bg-secondary: two tints, which darken each other.
+  it('gives a chip on a selected dictionary row 4.5:1', () => {
+    const row = over(get('bg-secondary'), get('accent'), 0.1);
+    const pairs = ['accent', 'error', 'warning', 'text-primary'].map(
+      (c) => [`${c} chip on a selected row`, get(c), over(row, get(c), 0.1), 4.5] as [string, string, string, number],
+    );
+    expect(failures(pairs)).toEqual([]);
+  });
+
   it('gives text on an accent or error fill 4.5:1', () => {
     expect(
       failures([
         ['text-on-accent on accent', get('text-on-accent'), get('accent'), 4.5],
         ['text-on-accent on accent-hover', get('text-on-accent'), get('accent-hover'), 4.5],
+        // The count pill of an active filter inverts the button's colours.
+        ['accent on text-on-accent', get('accent'), get('text-on-accent'), 4.5],
         ['text-on-error on error', get('text-on-error'), get('error'), 4.5],
       ]),
     ).toEqual([]);

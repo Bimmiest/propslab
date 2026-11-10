@@ -12,7 +12,7 @@ export function ResizeHandle({ direction = 'vertical' }: { direction?: 'horizont
     >
       <div
         className={`
-          rounded-full bg-[var(--color-text-muted)] group-hover:bg-white transition-colors
+          rounded-full bg-[var(--color-text-muted)] group-hover:bg-[var(--color-text-on-accent)] transition-colors
           ${direction === 'vertical' ? 'h-0.5 w-8' : 'w-0.5 h-8'}
         `}
       />

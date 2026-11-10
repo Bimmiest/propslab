@@ -1,5 +1,4 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
-import { tint } from '../../utils/tint';
 import { noteBoundaryReset } from './retryableLazy';
 
 interface Props {
@@ -109,28 +108,23 @@ export class ErrorBoundary extends Component<Props, State> {
       return (
         <div role="alert" className="flex flex-col items-center justify-center h-full p-6 bg-[var(--color-bg-primary)]">
           <div className="max-w-md text-center">
-            <div
-              className="w-12 h-12 mx-auto mb-4 rounded-full flex items-center justify-center"
-              style={{ backgroundColor: tint('var(--color-error)', 15) }}
+            <svg
+              className="w-8 h-8 mx-auto mb-3"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+              style={{ color: 'var(--color-error)' }}
             >
-              <svg
-                className="w-6 h-6"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-                style={{ color: 'var(--color-error)' }}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"
-                />
-              </svg>
-            </div>
-            <h3 className="text-lg font-semibold text-[var(--color-text-primary)] mb-2">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"
+              />
+            </svg>
+            <h2 className="text-lg font-semibold text-[var(--color-text-primary)] mb-2">
               {this.props.panelName ? `${this.props.panelName} Error` : 'Something went wrong'}
-            </h3>
+            </h2>
             <p className="text-sm text-[var(--color-text-secondary)] mb-4">
               {this.state.error?.message ?? 'An unexpected error occurred.'}
             </p>
