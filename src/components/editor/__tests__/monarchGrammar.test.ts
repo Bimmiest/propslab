@@ -9,30 +9,14 @@
 // nothing. The editor's DOM is not needed for that, and jsdom is enough.
 // ---------------------------------------------------------------------------
 
-import { describe, it, expect, beforeAll, vi } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import fc from 'fast-check';
 import * as monaco from 'monaco-editor/editor';
 import { ensureSplunkMonaco, PROPS_LANGUAGE_ID } from '../splunkMonacoSetup';
 import { parseConf } from '../../../engine/parser/confParser';
 import { fcSeed } from '../../../test/fcSeed';
 
-// jsdom has no matchMedia, which Monaco's theme service reads when it is created.
-vi.hoisted(() => {
-  // Monaco does not call the deprecated `addListener` and `removeListener`, so
-  // the mock leaves them out.
-  window.matchMedia = (query: string) => {
-    const list: Omit<MediaQueryList, 'addListener' | 'removeListener'> = {
-      matches: false,
-      media: query,
-      addEventListener() {},
-      removeEventListener() {},
-      onchange: null,
-      dispatchEvent: () => false,
-    };
-    return list as MediaQueryList;
-  };
-});
-
+// Monaco's theme service reads matchMedia when it is created; src/test/setup.ts stubs it.
 beforeAll(() => {
   ensureSplunkMonaco();
 });

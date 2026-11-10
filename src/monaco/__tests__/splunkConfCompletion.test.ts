@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import type { editor, languages, Position } from 'monaco-editor';
 import { languages as monaco } from 'monaco-editor/editor';
 import { createCompletionProvider } from '../splunkConfCompletion';
@@ -43,13 +43,19 @@ function completeIn(
 
 const labelOf = (item: languages.CompletionItem) => (typeof item.label === 'string' ? item.label : item.label.label);
 
+// Each list is built inside its test, not in the describe body: Stryker turns a
+// mutant on for the run, after the file is collected, so a list built at
+// collection would always be the unmutated one (#816).
 describe.each<ConfFile>(['props.conf', 'transforms.conf'])('directive completion in %s', (fileType) => {
-  const items = completeList(fileType, '');
-  const labels = items.map(labelOf);
+  let items: languages.CompletionItem[] = [];
+  let labels: string[] = [];
   const directives = getDirectivesForFile(fileType);
+  beforeEach(() => {
+    items = completeList(fileType, '');
+    labels = items.map(labelOf);
+  });
 
-  // Unsimulated directives carry an object label; the "uncategorised" pass
-  // must still recognise them as already listed.
+  // Unsimulated directives carry an object label, and are still listed once.
   it('lists every label once', () => {
     const dupes = labels.filter((l, i) => labels.indexOf(l) !== i);
     expect(dupes).toEqual([]);
@@ -77,7 +83,10 @@ describe.each<ConfFile>(['props.conf', 'transforms.conf'])('directive completion
 });
 
 describe('directive completion — insert text', () => {
-  const items = completeList('props.conf', '');
+  let items: languages.CompletionItem[] = [];
+  beforeEach(() => {
+    items = completeList('props.conf', '');
+  });
 
   it('inserts a class placeholder for a class-based directive', () => {
     const extract = items.find((i) => labelOf(i) === 'EXTRACT')!;
@@ -241,5 +250,152 @@ describe('value completion', () => {
     const line = 'TIME_FORMAT = %Y';
     const [first] = completeList('props.conf', line, 17, { word: 'Y', startColumn: 16, endColumn: 17 });
     expect(first?.range).toMatchObject({ startColumn: 15, endColumn: 17 });
+  });
+});
+
+describe('the completion provider', () => {
+  it('triggers on "=", "[" and a new line', () => {
+    expect(createCompletionProvider('props.conf').triggerCharacters).toEqual(['=', '[', '\n']);
+  });
+
+  it('lists the stanza prefixes with their details and snippets', () => {
+    expect(completeList('props.conf', '[').map((i) => [labelOf(i), i.detail, i.insertText])).toEqual([
+      ['default', 'Default stanza - applies to all sourcetypes', 'default]'],
+      ['source::', 'Source-based stanza (highest precedence)', 'source::${1:path}]'],
+      ['host::', 'Host-based stanza', 'host::${1:hostname}]'],
+      ['rule::', 'Rule-based sourcetype classification', 'rule::${1:rulename}]'],
+      ['delayedrule::', 'Delayed rule-based sourcetype classification (checked last)', 'delayedrule::${1:rulename}]'],
+    ]);
+  });
+});
+
+describe('a line that starts with "="', () => {
+  it('completes the bare key when the caret is before the "="', () => {
+    const kv = completeList('props.conf', '= json', 1).find((i) => labelOf(i) === 'KV_MODE');
+    expect(kv?.insertText).toBe('KV_MODE');
+  });
+
+  it('suggests no value after it, because there is no key', () => {
+    expect(completeList('props.conf', '= json', 2)).toEqual([]);
+  });
+});
+
+describe('a directive suggestion', () => {
+  let items: languages.CompletionItem[] = [];
+  beforeEach(() => {
+    items = completeList('props.conf', '');
+  });
+  const byLabel = (label: string) => items.find((i) => labelOf(i) === label)!;
+  const category = (key: string) => getDirectivesForFile('props.conf').find((d) => d.key === key)!.category;
+
+  it('describes a simulated directive in full', () => {
+    const kv = getDirectivesForFile('props.conf').find((d) => d.key === 'KV_MODE')!;
+    expect(byLabel('KV_MODE')).toMatchObject({
+      label: 'KV_MODE',
+      kind: monaco.CompletionItemKind.Property,
+      detail: `${kv.category} (${kv.phase})`,
+      documentation: {
+        value: [
+          '**KV_MODE**',
+          '',
+          kv.description,
+          '',
+          `**Default:** \`auto\` &nbsp; **Phase:** ${kv.phase} &nbsp; **Type:** ${kv.valueType}`,
+          '',
+          '**Example:**',
+          '```',
+          kv.example,
+          '```',
+        ].join('\n'),
+      },
+      insertText: 'KV_MODE = ${1:auto}',
+      insertTextRules: monaco.CompletionItemInsertTextRule.InsertAsSnippet,
+    });
+  });
+
+  it('says "out of scope" for a documented directive, in the label, the detail and the documentation', () => {
+    const dir = getDirectivesForFile('props.conf').find((d) => d.key === 'LINE_BREAKER_LOOKBEHIND')!;
+    const item = byLabel('LINE_BREAKER_LOOKBEHIND');
+    expect(item.label).toEqual({ label: 'LINE_BREAKER_LOOKBEHIND', description: 'out of scope' });
+    expect(item.detail).toBe(`${dir.category} (${dir.phase}) — out of scope`);
+    expect((item.documentation as { value: string }).value.split('\n').slice(0, 5)).toEqual([
+      '**LINE_BREAKER_LOOKBEHIND**',
+      '',
+      `> ℹ️ **Outside the simulation.** ${dir.supportNote}`,
+      '',
+      dir.description,
+    ]);
+  });
+
+  it('writes (none) for an empty default, and inserts a value placeholder', () => {
+    const item = byLabel('TIME_PREFIX');
+    expect((item.documentation as { value: string }).value).toContain('**Default:** `(none)` &nbsp;');
+    expect(item.insertText).toBe('TIME_PREFIX = ${1:value}');
+  });
+
+  it('pairs each class-based directive with its pattern snippet, next in order', () => {
+    const index = items.findIndex((i) => labelOf(i) === 'EXTRACT');
+    const [main, snippet] = [items[index]!, items[index + 1]!];
+    expect(main.kind).toBe(monaco.CompletionItemKind.Snippet);
+    expect(snippet).toMatchObject({
+      label: 'EXTRACT-',
+      kind: monaco.CompletionItemKind.Snippet,
+      detail: `EXTRACT-<class> (${category('EXTRACT')})`,
+      insertText: 'EXTRACT-${1:classname} = ${2:value}',
+      insertTextRules: monaco.CompletionItemInsertTextRule.InsertAsSnippet,
+    });
+    expect(Number(snippet.sortText)).toBe(Number(main.sortText) + 1);
+    expect(items.some((i) => labelOf(i) === 'KV_MODE-')).toBe(false);
+  });
+
+  it('numbers the sort keys from 0000', () => {
+    expect(items[0]?.sortText).toBe('0000');
+  });
+
+  it('inserts the bare key as plain text with a value already on the line, and a class key still as a snippet', () => {
+    const withValue = completeList('props.conf', 'X = 1', 1);
+    const kv = withValue.find((i) => labelOf(i) === 'KV_MODE')!;
+    expect(kv.insertText).toBe('KV_MODE');
+    expect(kv).not.toHaveProperty('insertTextRules');
+    const extract = withValue.find((i) => labelOf(i) === 'EXTRACT')!;
+    expect(extract.insertText).toBe('EXTRACT-${1:classname}');
+    expect(extract.insertTextRules).toBe(monaco.CompletionItemInsertTextRule.InsertAsSnippet);
+    expect(withValue.find((i) => labelOf(i) === 'EXTRACT-')?.insertText).toBe('EXTRACT-${1:classname}');
+  });
+});
+
+describe('value suggestions, in detail', () => {
+  it('labels and describes true and false', () => {
+    const dir = getDirectivesForFile('props.conf').find((d) => d.valueType === 'boolean')!;
+    expect(completeList('props.conf', `${dir.key} = `).map((i) => [i.insertText, i.detail])).toEqual([
+      ['true', 'Boolean true'],
+      ['false', 'Boolean false'],
+    ]);
+  });
+
+  it('names the directive in each enumerated value', () => {
+    expect(completeList('props.conf', 'KV_MODE = ').every((i) => i.detail === 'Valid value for KV_MODE')).toBe(true);
+  });
+
+  it('offers five named strftime formats, each with its rendering', () => {
+    const items = completeList('props.conf', 'TIME_FORMAT = ');
+    expect(items.map((i) => [i.insertText, i.detail])).toEqual([
+      ['%Y-%m-%dT%H:%M:%S', 'ISO 8601 datetime'],
+      ['%Y-%m-%d %H:%M:%S', 'Standard datetime'],
+      ['%b %d %H:%M:%S', 'Syslog format'],
+      ['%s', 'Epoch seconds'],
+      ['%Y-%m-%dT%H:%M:%S.%3N%z', 'ISO 8601 with milliseconds and timezone'],
+    ]);
+    expect(items.every((i) => (i.documentation as { value: string }).value.startsWith('**Now:**'))).toBe(true);
+  });
+
+  it('replaces only the word when no "%" is before it', () => {
+    const [first] = completeList('props.conf', 'KV_MODE = js', 13, { word: 'js', startColumn: 11, endColumn: 13 });
+    expect(first?.range).toEqual({ startLineNumber: 1, startColumn: 11, endLineNumber: 1, endColumn: 13 });
+  });
+
+  it('inserts at the caret when it is on no word', () => {
+    const [first] = completeList('props.conf', 'KV_MODE = ', 11);
+    expect(first?.range).toEqual({ startLineNumber: 1, startColumn: 11, endLineNumber: 1, endColumn: 11 });
   });
 });

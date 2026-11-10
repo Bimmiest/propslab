@@ -62,6 +62,7 @@ What follows, good and bad: what the rule costs, what it rules out, and what to 
 | [0019](0019-a-run-stops-at-its-time-budget.md)                    | A run stops at its time budget, and a match cannot take more than 10,000,000 steps                                   | `src/utils/splunkRegex.ts`, `src/engine/pipeline.ts`, `src/engine/runContext.ts` |
 | [0020](0020-one-maintainer-and-no-required-review.md)             | Propslab has one maintainer, and main requires no approving review                                                   | `scripts/lib/branchProtection.mjs`, `.github/CODEOWNERS`, `SECURITY.md`          |
 | [0021](0021-transform-whitespace-and-truncate-order-follow-recorded-splunk.md) | Transform whitespace and the TRUNCATE order follow recorded Splunk behaviour | `src/engine/transforms/regexTransform.ts`, `src/engine/processors/lineBreaker.ts` |
+| [0022](0022-the-supported-browsers-are-baseline-widely-available.md) | The supported browsers are the Baseline "widely available" set | `eslint.config.js`, `src/components/preview/tabs/shared/SelectableRaw.tsx`, `src/hooks/useUnloadWarning.ts`, `src/utils/clipboard.ts` |
 
 The index has a **Code** column where `repo-template`'s has **Status**: it names the files each decision governs, which is what a reader arrives looking for. Every record's status is on its first lines.
 

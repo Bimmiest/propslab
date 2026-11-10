@@ -1,10 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {
-  obsoleteScopedOverrides,
-  overrideMismatches,
-  radixDependencies,
-  radixPackages,
-} from '../../scripts/lib/radixOverrides.mjs';
+import { obsoleteScopedOverrides, overrideMismatches, radixDependencies, radixPackages } from './radixOverrides.mjs';
 
 // The comparison behind scripts/check-radix-overrides.mjs: an override that
 // pins a @radix-ui package to a version its dependents do not ask for. Reading

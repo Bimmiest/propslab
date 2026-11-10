@@ -1,5 +1,5 @@
 import type { languages, editor, Position, CancellationToken, MarkdownStringTrustedOptions } from 'monaco-editor';
-import { getDirectiveInfo, getClassBasedDirectiveBase } from '../engine/directiveRegistry';
+import { getDirectiveInfo } from '../engine/directiveRegistry';
 import { classifyStanza } from '../engine/stanzaRegistry';
 import { getStagesForDirective } from '../engine/pipelineStages';
 import { OPEN_DICTIONARY_COMMAND_ID, openDictionaryCommandUri } from './dictionaryCommand';
@@ -125,17 +125,8 @@ export function createHoverProvider(fileType: 'props.conf' | 'transforms.conf'):
       // Check if hovering over a directive key (before =)
       if (eqIdx > 0 && position.column - 1 <= eqIdx) {
         const key = line.substring(0, eqIdx).trim();
-
-        // Try exact match first
-        let info = getDirectiveInfo(key, fileType);
-
-        // Try class-based match
-        if (!info) {
-          const parsed = getClassBasedDirectiveBase(key);
-          if (parsed) {
-            info = getDirectiveInfo(parsed.base, fileType);
-          }
-        }
+        // getDirectiveInfo resolves a class-based key (EXTRACT-x) to its base itself.
+        const info = getDirectiveInfo(key, fileType);
 
         if (info) {
           const keyStart = line.indexOf(key) + 1;

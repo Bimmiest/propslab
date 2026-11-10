@@ -4,7 +4,7 @@ type: reference
 
 # Tests
 
-This file describes the two test suites: the unit tests under vitest, and the end-to-end suite under Playwright. [development.md](development.md#scripts) lists the scripts that run them. This file also gives the rules for tests, the coverage floors and mutation testing. [CONTRIBUTING.md](../CONTRIBUTING.md#tests) has the summary.
+This file describes the test layers and the two test suites: the unit tests under vitest, and the end-to-end suite under Playwright. [development.md](development.md#scripts) lists the scripts that run them. This file also gives the rules for tests, the coverage floors and mutation testing. [CONTRIBUTING.md](../CONTRIBUTING.md#tests) has the summary.
 
 ## The rules
 
@@ -13,9 +13,23 @@ This file describes the two test suites: the unit tests under vitest, and the en
 - **Test scaffolding is shared.** `src/test/makeEvent.ts` builds a `SplunkEvent` (`makeEvent(raw, { fields })`), `src/test/fakeModel.ts` a Monaco text model, and `src/test/fcSeed.ts` every fast-check seed: a property test passes `fcSeed(<its default>)` and never a bare number, so `FC_SEED` can re-seed it. The weekly `randomised` job in `ci.yml` draws a fresh `FC_SEED`, shuffles the order, and runs under another timezone and locale; it prints the seed and the command that replays the run. A new test file uses these rather than defining its own event literal or model stand-in.
 - **A test does not time itself.** No `performance.now()`, `Date.now()` or `toBeLessThan(<ms>)` in a unit test: a stopwatch assertion fails on a loaded runner and passes on a fast one. Pick the bound that is about the claim instead. For a linear-time claim, count the work: `expectLinearWork` in `src/test/scanWork.ts` runs a function at size *n* and *2n* and fails when the length its slices, joins and searches touch more than triples (linear doubles, quadratic quadruples), and a spy on the built-in the fix removed (`indexOf` in `wildcardMatch.test.ts`, `RegExp.prototype.test` in `redosHeuristic.test.ts`) counts calls. Where the cost hides inside one regex call and nothing can be counted, size the input so the quadratic version cannot finish inside the test's own timeout. For "answers promptly" or "frees the slot" in the MCP server, make the alternative outlast the test's timeout (a worker that sleeps 60 s in a 20 s test) or assert the order events happened in. Check that a new bound bites by reintroducing the bug once. The Playwright timing budgets live in their own non-retried `perf` project.
 
+## The test layers
+
+Each layer finds a failure that the other layers cannot find. Before you write a test, name the failure that it must catch. Then write the test in the layer that finds that failure. Do not write the same test in each layer.
+
+| Layer | Where | The failure that only this layer finds |
+|---|---|---|
+| Unit | `src/**/__tests__/`, and `scripts/**/*.test.ts` next to each script, `npm test` | One function gives a wrong result for one input. The failure names the function, and the test runs in milliseconds. |
+| Integration | The tests that call `runPipeline` from end to end, most of them in `src/engine/__tests__/` (`grep -rl runPipeline src --include='*.test.ts'` lists them). `packages/mcp-server/src/__tests__/server.e2e.test.ts` starts the built MCP server. | Each stage is correct alone, and the stages are wrong together: a stage runs in the wrong order, or a stage gives the next stage a value that it does not expect. The MCP test finds a tool that the build or the transport breaks. |
+| Property | The tests that use fast-check, each seeded through `fcSeed` | An input that nobody wrote down breaks an invariant, for example statelessness or a round trip. |
+| Mutation | Stryker, in [Mutation testing](#mutation-testing) | A line that a test runs, but that no assertion checks. Coverage cannot find this, because coverage counts only the lines that ran. |
+| End-to-end | `e2e/`, `npm run test:e2e` | A failure that occurs only in a production build in a browser: the CSP, the worker bundle, the WebAssembly load, the Monaco chunk split and accessibility. |
+| Performance | The `perf` Playwright project, and `expectLinearWork` in the unit tests | A change that gives the correct result too slowly. |
+| Fidelity | The private fidelity suite | The engine agrees with the documentation, and not with real Splunk. The suite compares the engine with output that Splunk recorded. [ADR 0016](adr/0016-recorded-splunk-output-is-not-distributed.md) keeps that output out of this repository. |
+
 ## Unit tests (`npm test`)
 
-The tests are in `src/**/__tests__/`, and they run under vitest. The engine tests are for the modules with the highest risk:
+The tests are in `src/**/__tests__/`, and they run under vitest. The test of a script in `scripts/` is next to the script, and `tsconfig.node.json` type-checks it with the Node types and no DOM. The one exception is `src/__tests__/generateCimModels.test.ts`: it reads its script through `import.meta.glob`, which is a Vite type. The engine tests are for the modules with the highest risk:
 
 - line breaking
 - eval
@@ -67,7 +81,7 @@ If you extend the suite, remember this. The app runs the pipeline one time on mo
 
 ## Mutation testing
 
-Coverage says a line ran; it does not say a test would notice the line being wrong. [Stryker](https://stryker-mutator.io/) answers that by making small edits to `src/engine/**`, the two utils it runs on (`strftime.ts`, `splunkRegex.ts`), and five modules of the MCP server (`requestId.ts`, `messageLimit.ts`, `serialize.ts`, `responseBudget.ts`, `tools.ts`), the worker lifecycle and its message protocol (`src/workers/workerLifecycle.ts`, `src/workers/workerProtocol.ts`) and the store (`src/store`) — flipping a `<`, emptying a string, deleting a call — and rerunning the tests that reach each one. A mutant no test fails on has *survived*, and marks behaviour nothing asserts.
+Coverage says a line ran; it does not say a test would notice the line being wrong. [Stryker](https://stryker-mutator.io/) answers that by making small edits to `src/engine/**`, the two utils it runs on (`strftime.ts`, `splunkRegex.ts`), and five modules of the MCP server (`requestId.ts`, `messageLimit.ts`, `serialize.ts`, `responseBudget.ts`, `tools.ts`), the worker lifecycle and its message protocol (`src/workers/workerLifecycle.ts`, `src/workers/workerProtocol.ts`), the store (`src/store`) and the editor's language support (`src/monaco`, less two files) — flipping a `<`, emptying a string, deleting a call — and rerunning the tests that reach each one. A mutant no test fails on has *survived*, and marks behaviour nothing asserts.
 
 ```bash
 npm run test:mutation                  # full run; about 2½ hours on 4 cores (12,713 mutants in October 2026)
@@ -83,5 +97,5 @@ Open `reports/mutation/mutation.html` for the survivors, line by line. The engin
 - **A change to formatting or comments only is not mutated.** `scripts/drop-format-only.mjs` drops a changed file when Prettier prints its old and new text identically, or when the two parse to the same code once comments are removed, so a reformat or a comment edit does not re-mutate the whole engine. A change to a `Stryker disable` or `Stryker restore` comment, and any change to code, keeps the file in.
 - **Kill a survivor with a test that asserts behaviour**, not one written to move the number. Some survivors are *equivalent* — the mutant cannot change any result (a cache miss that recomputes the same value, a `??` whose left side is never nullish). Leave those.
 - **Module-level constants are skipped** (`ignoreStatic`): they cost a full suite each, and there are about 900. Run `MUTATION_STATIC=1 npm run test:mutation -- --mutate <file>` when you change one (Stryker's `--ignoreStatic` flag can only switch the option on, so `--ignoreStatic false` fails). CI does not run them: with them a whole-engine run needs 6 to 12 hours on four cores, past GitHub's 6-hour job limit (#571).
-- **`src/monaco` is not mutated, yet.** Measured once (#508): 1,200 mutants, 18 minutes on 4 cores, and a score of 66.9% (`splunkConfHover.ts` 42%, `splunkConfCompletion.ts` 57%, `timePrefixMatcher.ts` 67%; `splunkConfFolding.ts` and `markdown.ts` are above 90%). Adding it now would fail the 81% floor on every PR that touches a provider, before it made a single one better. The way in: raise the two weakest files with tests that assert the provider's output, then add `src/monaco/*.ts` to `mutate` in `stryker.config.mjs` and `src/monaco/__tests__/*.test.ts` to `include` in `vitest.stryker.config.ts`.
+- **`src/monaco` is mutated, apart from two files.** Its providers run against `src/test/fakeModel.ts`, which `fakeModel.contract.test.ts` holds to a real Monaco model. On 2026-11-10 the mutated files scored 90%, and each one was above the floor (#816). `timeFormatPreview.ts` and `timePrefixMatcher.ts` scored 70% and 71%, so they stay out until tests raise them (#836). A test must build what it asserts inside its own `it` or `beforeEach`, not in the `describe` body. Stryker turns a mutant on after it collects the file, so a value built at collection is always the unmutated one.
 - **`vitest.stryker.config.ts` carries a compatibility shim** for `@stryker-mutator/vitest-runner` 10 on vitest 5, without which every mutant inside a `describe()` is reported as surviving. When you bump either package, check that a run still kills mutants; the comment in that file says what to look for. `npm run test:mutation:canary` does it: it mutates one small, thoroughly tested file (`wildcardMatch.ts`, about 40 seconds) and `scripts/check-mutation-canary.mjs` fails if nearly all its mutants survive, which is what a broken shim looks like. `mutation.yml` runs it before every mutation run.

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { importedSources, isTestFile, MUTATE_GLOBS, selectMutated } from '../../scripts/lib/mutationTargets.mjs';
+import { importedSources, isTestFile, MUTATE_GLOBS, selectMutated } from './mutationTargets.mjs';
 
 // The PR selection in mutation.yml (#571): which changed files a mutation run
 // mutates, read from Stryker's own `mutate` list.

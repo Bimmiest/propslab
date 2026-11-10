@@ -4,7 +4,7 @@
 // branch" (an array of { type, parameters, ruleset_id }), "Get a repository
 // ruleset" and "Get branch protection".
 import { describe, it, expect } from 'vitest';
-import { ApiError, evaluateMainProtection, REQUIRED_CHECKS } from '../../scripts/lib/branchProtection.mjs';
+import { ApiError, evaluateMainProtection, REQUIRED_CHECKS } from './branchProtection.mjs';
 
 const RULESET = 18484915;
 const checks = (...names: string[]) => names.map((context) => ({ context, integration_id: 15368 }));

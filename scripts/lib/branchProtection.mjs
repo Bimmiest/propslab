@@ -5,7 +5,7 @@
 // check-production-environment.mjs: given what the GitHub API returned, decide
 // whether `main` is protected as the deploy's trust model requires. It performs
 // no I/O of its own; the caller injects the two readers, so the decision can be
-// tested with mocked responses (src/__tests__/branchProtection.test.ts).
+// tested with mocked responses (branchProtection.test.ts, beside this file).
 //
 // Protection can come from two places, and either is enough for a requirement:
 //

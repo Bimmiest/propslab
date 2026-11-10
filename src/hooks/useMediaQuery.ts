@@ -13,9 +13,7 @@ export function useMediaQuery(query: string): boolean {
   // listener on (almost) every render.
   const subscribe = useCallback(
     (callback: () => void) => {
-      // jsdom has no matchMedia, whatever the DOM types say.
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-      if (typeof window === 'undefined' || !window.matchMedia) return () => {};
+      if (typeof window === 'undefined') return () => {};
       const mql = window.matchMedia(query);
       mql.addEventListener('change', callback);
       return () => mql.removeEventListener('change', callback);
@@ -23,11 +21,7 @@ export function useMediaQuery(query: string): boolean {
     [query],
   );
 
-  const getSnapshot = useCallback(
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- as in subscribe
-    () => typeof window !== 'undefined' && !!window.matchMedia && window.matchMedia(query).matches,
-    [query],
-  );
+  const getSnapshot = useCallback(() => typeof window !== 'undefined' && window.matchMedia(query).matches, [query]);
 
   return useSyncExternalStore(subscribe, getSnapshot, () => false);
 }

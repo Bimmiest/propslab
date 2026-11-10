@@ -16,7 +16,6 @@ export function isApplePlatform(): boolean {
     // Fallback if userAgentData is not available
   }
   // Fallback: check navigator.platform for older browsers
-  // eslint-disable-next-line @typescript-eslint/no-deprecated -- the fallback for older browsers
   return /^(Mac|iPhone|iPad|iPod)/.test(navigator.platform);
 }
 

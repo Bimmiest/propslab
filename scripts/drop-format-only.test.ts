@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { run } from '../../scripts/drop-format-only.mjs';
+import { run } from './drop-format-only.mjs';
 
 // The filter mutation.yml runs on a PR's changed engine files. Telling
 // formatting and comments from code is formatOnly.test.ts's; this is the

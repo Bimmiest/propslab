@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isCommentOnly } from '../../scripts/lib/formatOnly.mjs';
+import { isCommentOnly } from './formatOnly.mjs';
 
 // mutation.yml skips a file whose change this calls formatting or comments
 // only, so a false "yes" would let a real change through unmutated.
