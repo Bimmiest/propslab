@@ -3,7 +3,7 @@
 # It is advice. It is never a required check, and nothing merges because of
 # it. shared-workflows' docs/consuming.md describes the two jobs: the facts
 # job has no secret and reads the pull request's checkout; the review job
-# holds the key and does not check out the pull request.
+# holds the credential and does not check out the pull request.
 name: Dependabot review
 
 on:
@@ -37,7 +37,7 @@ jobs:
         with:
           node-version-file: .nvmrc
 
-      - uses: Bimmiest/shared-workflows/.github/actions/dependabot-review-facts@c7eb22cdb11494cfa6b575cd8c48a5aadcd1d950 # v1.9.0
+      - uses: Bimmiest/shared-workflows/.github/actions/dependabot-review-facts@70ba9ba1189f19063ddee2207d04808fbe99ecdf # v1.10.0
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -47,29 +47,27 @@ jobs:
 
   review:
     needs: facts
+    # GitHub gives a pull request from a fork no identity token.
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
+      id-token: write
       pull-requests: write
-    env:
-      # Until the Dependabot secret exists, the job does nothing rather than fail.
-      HAS_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
     steps:
-      - name: No API key, so no review
-        if: env.HAS_KEY != 'true'
-        run: echo "::notice::The ANTHROPIC_API_KEY Dependabot secret is not set, so this update gets no advisory review."
-
-      - if: env.HAS_KEY == 'true'
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: lts/*
 
-      - if: env.HAS_KEY == 'true'
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: dependabot-review-facts
 
-      - if: env.HAS_KEY == 'true'
-        uses: Bimmiest/shared-workflows/.github/actions/dependabot-review@c7eb22cdb11494cfa6b575cd8c48a5aadcd1d950 # v1.9.0
+      - uses: Bimmiest/shared-workflows/.github/actions/dependabot-review@70ba9ba1189f19063ddee2207d04808fbe99ecdf # v1.10.0
         with:
-          api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Not secrets: the rule in the Anthropic Console decides which runs
+          # get a token (#842).
+          federation-rule-id: fdrl_019JuogS4vtpW2xbixkUqfwE
+          organization-id: 0be07ec3-20d1-498d-883a-27c3b01be27b
+          service-account-id: svac_018n1Tu5qTKSKzknFjtUX83p
+          workspace-id: wrkspc_01VnVpMBnQmEBHrE7F4DjTrH
