@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { CANARY_FILE, MIN_KILLED, MIN_SCORE, tally, verdict } from '../../scripts/check-mutation-canary.mjs';
+import { CANARY_FILE, MIN_KILLED, MIN_SCORE, tally, verdict } from './check-mutation-canary.mjs';
 
 // The canary for the Stryker/vitest testNamePattern shim (#508). Reading the
 // report is the script's own; what can be wrong is deciding from it.

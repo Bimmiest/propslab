@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { budgetRows, chunkKey, initialLoadFiles, staleBudgets } from '../../scripts/lib/bundleBudget.mjs';
+import { budgetRows, chunkKey, initialLoadFiles, staleBudgets } from './bundleBudget.mjs';
 
 // The decisions of scripts/check-bundle-size.mjs; reading dist/ and gzipping it
 // are the script's own.

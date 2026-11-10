@@ -33,8 +33,10 @@ describe('staleChunkReload', () => {
     sessionStorage.clear();
     reload.mockClear();
     // A plain stand-in for Location: its prototype is not wanted, only its fields and a spy.
-    // eslint-disable-next-line @typescript-eslint/no-misused-spread
-    Object.defineProperty(window, 'location', { value: { ...originalLocation, reload }, configurable: true });
+    Object.defineProperty(window, 'location', {
+      value: Object.assign({}, originalLocation, { reload }),
+      configurable: true,
+    });
   });
 
   afterEach(() => {
