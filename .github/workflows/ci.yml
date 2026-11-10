@@ -71,7 +71,7 @@ jobs:
       # a launcher shim for it; the binary arrives through optionalDependencies
       # and the package works without the swap. pcre2-wasm-utf16 is prebuilt
       # and has no install or prepare script.
-      - uses: Bimmiest/shared-workflows/.github/actions/setup-node-project@b00f69f45abd2442821c1503a268f05ae09fd204 # v1.7.1
+      - uses: Bimmiest/shared-workflows/.github/actions/setup-node-project@171cd386717395c01be5e23ab926823c7b246cf6 # v1.11.0
         with:
           # Both lockfiles: this job installs the MCP server's deps too (see
           # the next step), so its lockfile belongs in the cache key.
@@ -100,6 +100,12 @@ jobs:
 
       - name: Lint
         run: npm run lint
+
+      # The lint has each rule in scripts/lint-allowlist.json off for its file.
+      # This lints those files with the rules on again, and fails when a count
+      # is higher (new code) or lower (a fix that did not lower the count).
+      - name: Lint allowlist
+        uses: Bimmiest/shared-workflows/.github/actions/lint-allowlist-check@171cd386717395c01be5e23ab926823c7b246cf6 # v1.11.0
 
       - name: Format check
         # Prettier over the TypeScript and JavaScript sources (.prettierrc.json,
@@ -135,19 +141,19 @@ jobs:
       # docs/development.md as well; this covers the files that test does not
       # read.
       - name: Documentation links and the ADR index
-        uses: Bimmiest/shared-workflows/.github/actions/docs-check@b00f69f45abd2442821c1503a268f05ae09fd204 # v1.7.1
+        uses: Bimmiest/shared-workflows/.github/actions/docs-check@171cd386717395c01be5e23ab926823c7b246cf6 # v1.11.0
 
       # Each file of repo-template's baseline is here, or excepted in
       # .baseline-exceptions.json with its reason.
       - name: The baseline files of repo-template
-        uses: Bimmiest/shared-workflows/.github/actions/baseline-check@b00f69f45abd2442821c1503a268f05ae09fd204 # v1.7.1
+        uses: Bimmiest/shared-workflows/.github/actions/baseline-check@171cd386717395c01be5e23ab926823c7b246cf6 # v1.11.0
 
       # Every production dependency's licence is on .licence-allowlist.json,
       # read from the lockfile, so it needs no network and sees exactly what
       # `npm ci --omit=dev` installs. The MCP server's lockfile is checked in
       # its own job.
       - name: Production dependency licences
-        uses: Bimmiest/shared-workflows/.github/actions/licence-check@b00f69f45abd2442821c1503a268f05ae09fd204 # v1.7.1
+        uses: Bimmiest/shared-workflows/.github/actions/licence-check@171cd386717395c01be5e23ab926823c7b246cf6 # v1.11.0
 
   unit:
     name: unit tests
@@ -158,7 +164,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: Bimmiest/shared-workflows/.github/actions/setup-node-project@b00f69f45abd2442821c1503a268f05ae09fd204 # v1.7.1
+      - uses: Bimmiest/shared-workflows/.github/actions/setup-node-project@171cd386717395c01be5e23ab926823c7b246cf6 # v1.11.0
         with:
           cache-dependency-path: |
             package-lock.json
@@ -187,7 +193,7 @@ jobs:
         # slack rather than the shared default of one, because each floor here
         # is the measured figure minus one point (see vitest.config.ts) and the
         # MCP server's must hold on its Windows and macOS legs too.
-        uses: Bimmiest/shared-workflows/.github/actions/coverage-ratchet@b00f69f45abd2442821c1503a268f05ae09fd204 # v1.7.1
+        uses: Bimmiest/shared-workflows/.github/actions/coverage-ratchet@171cd386717395c01be5e23ab926823c7b246cf6 # v1.11.0
         with:
           slack: '3'
 
@@ -202,7 +208,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: Bimmiest/shared-workflows/.github/actions/setup-node-project@b00f69f45abd2442821c1503a268f05ae09fd204 # v1.7.1
+      - uses: Bimmiest/shared-workflows/.github/actions/setup-node-project@171cd386717395c01be5e23ab926823c7b246cf6 # v1.11.0
 
       - name: Verify the regex engine's WebAssembly
         run: node scripts/check-wasm-checksum.mjs
@@ -214,7 +220,7 @@ jobs:
       # @playwright/test version, so a bump invalidates it on its own, and
       # installs the apt packages either way.
       - name: Playwright browser
-        uses: Bimmiest/shared-workflows/.github/actions/playwright-browser@b00f69f45abd2442821c1503a268f05ae09fd204 # v1.7.1
+        uses: Bimmiest/shared-workflows/.github/actions/playwright-browser@171cd386717395c01be5e23ab926823c7b246cf6 # v1.11.0
 
       - name: End-to-end smoke tests
         id: e2e
@@ -250,13 +256,13 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: Bimmiest/shared-workflows/.github/actions/setup-node-project@b00f69f45abd2442821c1503a268f05ae09fd204 # v1.7.1
+      - uses: Bimmiest/shared-workflows/.github/actions/setup-node-project@171cd386717395c01be5e23ab926823c7b246cf6 # v1.11.0
 
       - name: Verify the regex engine's WebAssembly
         run: node scripts/check-wasm-checksum.mjs
 
       - name: Playwright browser
-        uses: Bimmiest/shared-workflows/.github/actions/playwright-browser@b00f69f45abd2442821c1503a268f05ae09fd204 # v1.7.1
+        uses: Bimmiest/shared-workflows/.github/actions/playwright-browser@171cd386717395c01be5e23ab926823c7b246cf6 # v1.11.0
         with:
           browser: firefox
 
@@ -313,7 +319,7 @@ jobs:
       # to that copy. Installing only the package is what proves it.
       # --ignore-scripts for the reason given in the app's job above. The
       # action's steps take their own working directory, not the job's default.
-      - uses: Bimmiest/shared-workflows/.github/actions/setup-node-project@b00f69f45abd2442821c1503a268f05ae09fd204 # v1.7.1
+      - uses: Bimmiest/shared-workflows/.github/actions/setup-node-project@171cd386717395c01be5e23ab926823c7b246cf6 # v1.11.0
         with:
           cache-dependency-path: packages/mcp-server/package-lock.json
           working-directory: packages/mcp-server
@@ -346,7 +352,7 @@ jobs:
         # Linux's: the launcher tests skip elsewhere, so the floors are set for
         # the lowest leg and the others sit further above them.
         if: matrix.os == 'ubuntu-latest'
-        uses: Bimmiest/shared-workflows/.github/actions/coverage-ratchet@b00f69f45abd2442821c1503a268f05ae09fd204 # v1.7.1
+        uses: Bimmiest/shared-workflows/.github/actions/coverage-ratchet@171cd386717395c01be5e23ab926823c7b246cf6 # v1.11.0
         with:
           config: vitest.config.mts
           slack: '3'
@@ -357,7 +363,7 @@ jobs:
         # run on the machine of whoever starts it. Linux only, because the
         # lockfile is the same on every leg.
         if: matrix.os == 'ubuntu-latest'
-        uses: Bimmiest/shared-workflows/.github/actions/licence-check@b00f69f45abd2442821c1503a268f05ae09fd204 # v1.7.1
+        uses: Bimmiest/shared-workflows/.github/actions/licence-check@171cd386717395c01be5e23ab926823c7b246cf6 # v1.11.0
         with:
           working-directory: packages/mcp-server
 
@@ -391,7 +397,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: Bimmiest/shared-workflows/.github/actions/setup-node-project@b00f69f45abd2442821c1503a268f05ae09fd204 # v1.7.1
+      - uses: Bimmiest/shared-workflows/.github/actions/setup-node-project@171cd386717395c01be5e23ab926823c7b246cf6 # v1.11.0
 
       - name: Verify the regex engine's WebAssembly
         run: node scripts/check-wasm-checksum.mjs
@@ -478,7 +484,7 @@ jobs:
     permissions:
       issues: write
     steps:
-      - uses: Bimmiest/shared-workflows/.github/actions/open-or-update-issue@b00f69f45abd2442821c1503a268f05ae09fd204 # v1.7.1
+      - uses: Bimmiest/shared-workflows/.github/actions/open-or-update-issue@171cd386717395c01be5e23ab926823c7b246cf6 # v1.11.0
         with:
           label: scheduled-ci
           title: The weekly CI run failed

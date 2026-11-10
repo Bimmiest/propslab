@@ -43,12 +43,12 @@ jobs:
       # touches `.github/workflows/`. The rules themselves are the action's,
       # pinned by sha; `dependabot[bot]` is exempt by author, and the
       # `no-issue` label exempts a change from the issue rules.
-      - uses: Bimmiest/shared-workflows/.github/actions/pr-hygiene@b00f69f45abd2442821c1503a268f05ae09fd204 # v1.7.1
+      - uses: Bimmiest/shared-workflows/.github/actions/pr-hygiene@171cd386717395c01be5e23ab926823c7b246cf6 # v1.11.0
 
       # CONTRIBUTING asks for a CHANGELOG entry for a change a user can see
       # (#577). These are the files that reach a user: the app, the MCP
       # server and the static files. Tests are ignored by the action's
       # default; the `no-changelog` label exempts a change no user can see.
-      - uses: Bimmiest/shared-workflows/.github/actions/changelog-check@b00f69f45abd2442821c1503a268f05ae09fd204 # v1.7.1
+      - uses: Bimmiest/shared-workflows/.github/actions/changelog-check@171cd386717395c01be5e23ab926823c7b246cf6 # v1.11.0
         with:
           paths: src/**,packages/mcp-server/src/**,public/**,index.html
