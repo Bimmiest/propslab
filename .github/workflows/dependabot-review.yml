@@ -18,7 +18,11 @@ concurrency:
 
 jobs:
   facts:
-    if: github.event.pull_request.user.login == 'dependabot[bot]' || contains(github.event.pull_request.labels.*.name, 'claude-review')
+    # A GitHub Actions update changes this workflow, so its run would use the
+    # new, unreviewed actions in the job that holds the credential (#840).
+    if: >-
+      (github.event.pull_request.user.login == 'dependabot[bot]' || contains(github.event.pull_request.labels.*.name, 'claude-review'))
+      && !startsWith(github.head_ref, 'dependabot/github_actions/')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
