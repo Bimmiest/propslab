@@ -34,8 +34,21 @@ if (typeof window !== 'undefined') {
   // Nor scrollIntoView, which any list that keeps a keyboard selection in view
   // will call. jsdom has no layout, so a no-op is the honest stand-in — without
   // it the call throws and surfaces as an unhandled error beside passing tests.
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- absent under jsdom, whatever the types say
-  if (!Element.prototype.scrollIntoView) {
-    Element.prototype.scrollIntoView = function scrollIntoView() {};
-  }
+  // This branch runs only under jsdom, which never has it, so no guard (#774).
+  Element.prototype.scrollIntoView = function scrollIntoView() {};
+
+  // Nor matchMedia, which useMediaQuery and Monaco's theme service read. No
+  // query matches, which is the desktop layout. A test that needs a match
+  // stubs its own with vi.stubGlobal (#774).
+  window.matchMedia = (query: string) => {
+    const list: Omit<MediaQueryList, 'addListener' | 'removeListener'> = {
+      matches: false,
+      media: query,
+      addEventListener() {},
+      removeEventListener() {},
+      onchange: null,
+      dispatchEvent: () => false,
+    };
+    return list as MediaQueryList;
+  };
 }

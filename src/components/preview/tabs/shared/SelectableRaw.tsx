@@ -44,11 +44,9 @@ function offsetFromPoint(container: HTMLElement, x: number, y: number): number |
       off = pos.offset;
     }
   } else if (
-    // The fallback for older browsers without caretPositionFromPoint.
-    // eslint-disable-next-line @typescript-eslint/no-deprecated
+    // The fallback for older browsers without caretPositionFromPoint (ADR 0022, #833).
     typeof doc.caretRangeFromPoint === 'function'
   ) {
-    // eslint-disable-next-line @typescript-eslint/no-deprecated
     const r = doc.caretRangeFromPoint(x, y);
     if (r) {
       node = r.startContainer;

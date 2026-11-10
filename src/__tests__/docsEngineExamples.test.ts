@@ -153,7 +153,7 @@ describe('docs/engine.md examples', () => {
       defaultTransforms: '',
       localTransforms: '',
     };
-    // eslint-disable-next-line @typescript-eslint/no-implied-eval -- running the documented snippet is the test
+    // Running the documented snippet is the test; eslint.config.js allows the implied eval here (#774).
     const run = new Function(...Object.keys(scope), js) as (...values: unknown[]) => void;
     run(...Object.values(scope));
 
