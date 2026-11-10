@@ -71,5 +71,3 @@ jobs:
           organization-id: 0be07ec3-20d1-498d-883a-27c3b01be27b
           service-account-id: svac_018n1Tu5qTKSKzknFjtUX83p
           workspace-id: wrkspc_01VnVpMBnQmEBHrE7F4DjTrH
-          # The fallback, until a Dependabot run logs that federation worked.
-          api-key: ${{ secrets.ANTHROPIC_API_KEY }}
