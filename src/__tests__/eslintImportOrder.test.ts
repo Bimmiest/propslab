@@ -54,7 +54,7 @@ describe('the import-order rule', () => {
       'src/engine/a.ts',
       'packages/mcp-server/src/tools.ts',
       'e2e/a.spec.ts',
-      'scripts/check-node-patch.mjs',
+      'scripts/check-radix-overrides.mjs',
       'eslint.config.js',
     ]) {
       expect((await linterFor(file)).enabled, file).toBe(true);

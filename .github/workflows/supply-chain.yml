@@ -27,7 +27,6 @@ on:
       - package-lock.json
       - .nvmrc
       - scripts/check-radix-overrides.mjs
-      - scripts/check-node-patch.mjs
       - .github/workflows/supply-chain.yml
 
 permissions:
@@ -68,12 +67,6 @@ jobs:
 
       - name: .nvmrc is the newest patch of its Node line
         # Annotate on a pull request; fail on the schedule and a manual run.
-        # shared-workflows' node-patch-check runs the same logic. It replaces
-        # this script once the script's unit test, which lives under src/, can
-        # be deleted in the same change (#602).
-        env:
-          WARN_ONLY: ${{ github.event_name == 'pull_request' && '--warn-only' || '' }}
-        run: |
-          # Unquoted on purpose: empty must expand to no argument at all.
-          # shellcheck disable=SC2086
-          node scripts/check-node-patch.mjs $WARN_ONLY
+        uses: Bimmiest/shared-workflows/.github/actions/node-patch-check@b00f69f45abd2442821c1503a268f05ae09fd204 # v1.7.1
+        with:
+          warn-only: ${{ github.event_name == 'pull_request' }}
