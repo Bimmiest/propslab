@@ -67,6 +67,9 @@ jobs:
 
       - name: .nvmrc is the newest patch of its Node line
         # Annotate on a pull request; fail on the schedule and a manual run.
-        uses: Bimmiest/shared-workflows/.github/actions/node-patch-check@b00f69f45abd2442821c1503a268f05ae09fd204 # v1.7.1
+        uses: Bimmiest/shared-workflows/.github/actions/node-patch-check@171cd386717395c01be5e23ab926823c7b246cf6 # v1.11.0
         with:
           warn-only: ${{ github.event_name == 'pull_request' }}
+          # A scheduled run fails 90 days before the Node line ends, so the
+          # move to the next line is filed as work, not found at end of life.
+          eol-days: 90

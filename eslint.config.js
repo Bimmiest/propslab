@@ -7,6 +7,7 @@ import importX from 'eslint-plugin-import-x';
 import tseslint from 'typescript-eslint';
 import { defineConfig, globalIgnores } from 'eslint/config';
 import comments from './scripts/eslint-comments.mjs';
+import lintAllowlist from './scripts/lint-allowlist.json' with { type: 'json' };
 
 // Flat config merges `globals` across matching blocks rather than replacing
 // them, so a later `globals: globals.node` would leave every browser global
@@ -354,4 +355,14 @@ export default defineConfig([
     files: ['**/*.{ts,tsx,js,mjs}', 'packages/mcp-server/**/*.mts'],
     linterOptions: { noInlineConfig: true },
   },
+  // The findings that existed when a rule was adopted, off for their files
+  // only (docs/code-style.md). Last, so that it wins over the blocks that turn
+  // the rules on. CI's lint-allowlist-check lints the same files with the
+  // rules on again and fails when a count changes, so this hides no new code.
+  // Each path is escaped, because `files` takes a glob and `[id]` is a
+  // character class.
+  ...Object.entries(lintAllowlist.files).map(([file, rules]) => ({
+    files: [file.replace(/[\\[\]{}()*?!+@]/g, '\\$&')],
+    rules: Object.fromEntries(Object.keys(rules).map((rule) => [rule, 'off'])),
+  })),
 ]);

@@ -37,7 +37,7 @@ jobs:
         with:
           node-version-file: .nvmrc
 
-      - uses: Bimmiest/shared-workflows/.github/actions/dependabot-review-facts@70ba9ba1189f19063ddee2207d04808fbe99ecdf # v1.10.0
+      - uses: Bimmiest/shared-workflows/.github/actions/dependabot-review-facts@171cd386717395c01be5e23ab926823c7b246cf6 # v1.11.0
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -63,7 +63,7 @@ jobs:
         with:
           name: dependabot-review-facts
 
-      - uses: Bimmiest/shared-workflows/.github/actions/dependabot-review@70ba9ba1189f19063ddee2207d04808fbe99ecdf # v1.10.0
+      - uses: Bimmiest/shared-workflows/.github/actions/dependabot-review@171cd386717395c01be5e23ab926823c7b246cf6 # v1.11.0
         with:
           # Not secrets: the rule in the Anthropic Console decides which runs
           # get a token (#842).
