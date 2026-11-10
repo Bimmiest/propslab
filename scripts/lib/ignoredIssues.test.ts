@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { classifyIssue, ignoredDirectives } from '../../scripts/lib/ignoredIssues.mjs';
+import { classifyIssue, ignoredDirectives } from './ignoredIssues.mjs';
 
 // The decisions of scripts/check-ignored-issues.mjs: which directives are
 // tracked, and what the API says about the issue behind each. The calls

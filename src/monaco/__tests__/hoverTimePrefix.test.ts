@@ -120,3 +120,33 @@ describe('firstNonBlankLine', () => {
     );
   });
 });
+
+describe('the TIME_FORMAT value hover', () => {
+  const line = 'TIME_FORMAT = %Y';
+  async function valueHover(cancelled = false) {
+    const result = createHoverProvider('props.conf').provideHover(
+      fakeModel(line),
+      { lineNumber: 1, column: line.indexOf('=') + 3 } as Position,
+      { isCancellationRequested: cancelled } as never,
+      undefined,
+    );
+    return await Promise.resolve<languages.Hover | null | undefined>(result);
+  }
+
+  it('renders the preview over the value, from after the "=" to the end of the line', async () => {
+    build.mockResolvedValue({ rendered: '2026', sample: null, unsupported: [] });
+    const hover = await valueHover();
+    expect(hover?.contents).toEqual([{ value: '**Now:** `2026`' }]);
+    // The "=" is at index 12, so the value starts at column 14.
+    expect(hover?.range).toEqual({ startLineNumber: 1, startColumn: 14, endLineNumber: 1, endColumn: line.length + 1 });
+  });
+
+  it('gives no hover when the preview renders to nothing, is cancelled, or is null', async () => {
+    build.mockResolvedValue({ rendered: null, sample: null, unsupported: [] });
+    expect(await valueHover()).toBeNull();
+    build.mockResolvedValue({ rendered: '2026', sample: null, unsupported: [] });
+    expect(await valueHover(true)).toBeNull();
+    build.mockResolvedValue(null);
+    expect(await valueHover()).toBeNull();
+  });
+});

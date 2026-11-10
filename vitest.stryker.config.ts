@@ -88,6 +88,8 @@ export default defineConfig({
       'src/workers/__tests__/workerLifecycle*.test.ts',
       'src/workers/__tests__/workerRequestQueue.test.ts',
       'src/store/__tests__/*.test.ts',
+      // The editor's language support (#816).
+      'src/monaco/__tests__/*.test.ts',
     ],
     exclude: [
       ...configDefaults.exclude,

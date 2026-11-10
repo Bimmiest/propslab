@@ -33,7 +33,8 @@ if (fullRun || process.env['CI']) {
   });
 }
 
-const UNIT_TESTS = ['src/**/*.test.{ts,tsx}'];
+// The tests of the scripts sit next to them (#822).
+const UNIT_TESTS = ['src/**/*.test.{ts,tsx}', 'scripts/**/*.test.ts'];
 const EVIDENCE_TEST = 'src/engine/__tests__/directiveEvidence.test.ts';
 
 export default defineConfig({
@@ -160,10 +161,10 @@ export default defineConfig({
           lines: 95,
         },
         'src/monaco/**': {
-          statements: 91,
-          branches: 83,
-          functions: 95,
-          lines: 92,
+          statements: 94,
+          branches: 93,
+          functions: 97,
+          lines: 95,
         },
         'src/store/**': {
           statements: 99,

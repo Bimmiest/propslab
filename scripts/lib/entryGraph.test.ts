@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { FORBIDDEN, checkEntryGraph, resolveImport, staticImports } from '../../scripts/lib/entryGraph.mjs';
+import { FORBIDDEN, checkEntryGraph, resolveImport, staticImports } from './entryGraph.mjs';
 
 // The walk behind scripts/check-entry-graph.mjs (#467): the startup path must
 // not reach the Monaco chunk. Reading dist/ is the script's own.

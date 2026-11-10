@@ -104,9 +104,9 @@ const NAME_START =
   '\\u200C-\\u200D\\u2070-\\u218F\\u2C00-\\u2FEF\\u3001-\\uD7FF\\uF900-\\uFDCF\\uFDF0-\\uFFFD' +
   '\\u{10000}-\\u{EFFFF}';
 const NAME_CHAR = `${NAME_START}\\-.0-9\\u00B7\\u0300-\\u036F\\u203F-\\u2040`;
-// The rule reads the U+0300–U+036F combining-mark *range* as a combined
-// character; it is a range endpoint, not a glyph sequence.
-// eslint-disable-next-line no-misleading-character-class
+// no-misleading-character-class reads the U+0300–U+036F combining-mark *range*
+// as a combined character; it is a range endpoint, not a glyph sequence, so
+// eslint.config.js turns the rule off for this file (#774).
 const NAME_RE = new RegExp(`[${NAME_START}][${NAME_CHAR}]*`, 'uy');
 /** The end of a run of character data: the next markup or reference. Global, so `lastIndex` sets where it starts. */
 const TEXT_END_RE = /[<&]/g;

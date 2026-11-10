@@ -319,4 +319,39 @@ export default defineConfig([
       ],
     },
   },
+  {
+    // A false positive: the rule reads the U+0300–U+036F combining-mark range
+    // in NAME_CHAR as a combined character, and it is a range endpoint (#774).
+    files: ['src/engine/utils/xmlReader.ts'],
+    rules: { 'no-misleading-character-class': 'off' },
+  },
+  {
+    // The test runs each documented engine snippet, which is code in a string.
+    files: ['src/__tests__/docsEngineExamples.test.ts'],
+    rules: { '@typescript-eslint/no-implied-eval': 'off' },
+  },
+  {
+    // The fallbacks that the supported-browser rule keeps (ADR 0022). Each
+    // calls an API that no-deprecated reports, on purpose:
+    // - SelectableRaw: caretRangeFromPoint, until caretPositionFromPoint is
+    //   Baseline widely available (#833); its test stubs that fallback.
+    // - useUnloadWarning: returnValue, which MDN still sets for older browsers.
+    // - clipboard: execCommand('copy'), for an insecure context, where
+    //   navigator.clipboard does not exist.
+    files: [
+      'src/components/preview/tabs/shared/SelectableRaw.tsx',
+      'src/components/preview/tabs/shared/__tests__/SelectableRaw.test.tsx',
+      'src/hooks/useUnloadWarning.ts',
+      'src/utils/clipboard.ts',
+    ],
+    rules: { '@typescript-eslint/no-deprecated': 'off' },
+  },
+  {
+    // No rule is turned off at a call site (CLAUDE.md): an exception goes in
+    // this file, scoped to its files, with its reason. With inline config off,
+    // an `eslint-disable` comment has no effect, so the rule that it hid fails
+    // the lint (#774).
+    files: ['**/*.{ts,tsx,js,mjs}', 'packages/mcp-server/**/*.mts'],
+    linterOptions: { noInlineConfig: true },
+  },
 ]);

@@ -41,17 +41,14 @@ the `no-changelog` label.
 - Code comments follow [the rules](./docs/code-style.md#code-comments). A comment
   says why, for the code as it is now. For history, link the issue or the ADR.
 
-## Engine fidelity
+## Areas with their own CLAUDE.md
 
-- **A directive test asserts the documentation, and says so:** a comment with
-  "Doc-derived", the `.spec` file and the directive, above the test or its
-  `describe`. The evidence gate counts a citation only there.
-- **No recorded Splunk output in this repository**
-  ([ADR 0016](./docs/adr/0016-recorded-splunk-output-is-not-distributed.md)).
-  A rule that follows a capture gets an ADR and a code comment; the capture
-  and its tests go to the private fidelity suite.
-- **propslab-sb and propslab-ent vendor this engine byte-exact.** Keep the
-  Node pin, the gates and the template standard the same in all three.
+`src/engine/` and `packages/mcp-server/` each have a `CLAUDE.md` with the
+rules for that area. Claude Code loads one when it works in that directory.
+
+- **propslab-sb and propslab-ent vendor the engine byte-exact,** with its
+  `CLAUDE.md`. Keep the Node pin, the gates and the template standard the
+  same in all three.
 
 ## Expensive to get wrong
 

@@ -163,8 +163,7 @@ describe('RootErrorBoundary', () => {
     const reload = vi.fn();
     const original = window.location;
     // A plain stand-in for Location: its prototype is not wanted, only its fields and a spy.
-    // eslint-disable-next-line @typescript-eslint/no-misused-spread
-    Object.defineProperty(window, 'location', { value: { ...original, reload }, configurable: true });
+    Object.defineProperty(window, 'location', { value: Object.assign({}, original, { reload }), configurable: true });
     try {
       render(
         <RootErrorBoundary>
