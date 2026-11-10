@@ -319,4 +319,30 @@ export default defineConfig([
       ],
     },
   },
+  {
+    // A false positive: the rule reads the U+0300–U+036F combining-mark range
+    // in NAME_CHAR as a combined character, and it is a range endpoint (#774).
+    files: ['src/engine/utils/xmlReader.ts'],
+    rules: { 'no-misleading-character-class': 'off' },
+  },
+  {
+    // The test runs each documented engine snippet, which is code in a string.
+    files: ['src/__tests__/docsEngineExamples.test.ts'],
+    rules: { '@typescript-eslint/no-implied-eval': 'off' },
+  },
+  {
+    // No rule is turned off at a call site (CLAUDE.md): an exception goes in
+    // this file, scoped to its files, with its reason. With inline config off,
+    // an `eslint-disable` comment has no effect, so the rule that it hid fails
+    // the lint. The files below keep theirs until the supported-browser floor
+    // decides whether their fallbacks for older browsers go (#774).
+    files: ['**/*.{ts,tsx,js,mjs}', 'packages/mcp-server/**/*.mts'],
+    ignores: [
+      'src/components/preview/tabs/shared/SelectableRaw.tsx',
+      'src/components/preview/tabs/shared/__tests__/SelectableRaw.test.tsx',
+      'src/hooks/useUnloadWarning.ts',
+      'src/utils/clipboard.ts',
+    ],
+    linterOptions: { noInlineConfig: true },
+  },
 ]);
