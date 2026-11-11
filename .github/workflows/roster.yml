@@ -46,3 +46,22 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/check-ignored-issues.mjs
+
+  # A failed scheduled run opens an issue, or comments on the open one
+  # (#889). See environment.yml's `report` job.
+  report:
+    needs: [ignored-issues]
+    if: failure() && github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - uses: Bimmiest/shared-workflows/.github/actions/open-or-update-issue@171cd386717395c01be5e23ab926823c7b246cf6 # v1.11.0
+        with:
+          label: scheduled-roster
+          title: An ignored directive points at a closed issue
+          body: |
+            The weekly roster check found an ignored directive whose issue is closed, or it could not read the issue. The run log names each directive.
+
+            Run: {run}
