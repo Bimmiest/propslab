@@ -13,6 +13,14 @@ on:
   schedule:
     - cron: '0 8 * * 1'
   workflow_dispatch:
+    inputs:
+      # The weekly run cannot include them until their cost is known (#857).
+      # A run by hand with this on measures it: eight shards, so each one stays
+      # inside the same limit, and each shard's minutes go to the summary.
+      static:
+        description: Also run the static mutants (MUTATION_STATIC=1), in eight shards
+        type: boolean
+        default: false
   # Only the engine source files the PR changes are mutated, so the check costs
   # minutes whatever else is going on. Nothing is cached between runs: a PR's
   # cost never depends on how recently something else ran.
@@ -53,7 +61,8 @@ jobs:
         # (#851). scripts/mutation-shard.mjs gives each shard about the same
         # share of the `mutate` list, by file size. To add a shard, add a number.
         # A pull request mutates only what it changed, in one job: shard 0.
-        shard: ${{ fromJSON(github.event_name == 'pull_request' && '[0]' || '[1, 2, 3, 4]') }}
+        # A run by hand with `static` on uses eight: see the input above.
+        shard: ${{ fromJSON(github.event_name == 'pull_request' && '[0]' || (inputs.static && '[1, 2, 3, 4, 5, 6, 7, 8]' || '[1, 2, 3, 4]')) }}
     # A shard does about a quarter of the 254 minutes, plus its setup. When a
     # shard gets near its limit, add a shard; do not raise the limit.
     #
@@ -167,6 +176,7 @@ jobs:
           SHARD: ${{ matrix.shard }}
           SHARDS: ${{ strategy.job-total }}
           MUTATION_SHARD: '1'
+          MUTATION_STATIC: ${{ inputs.static && '1' || '0' }}
         run: |
           files=$(node scripts/mutation-shard.mjs "$SHARDS" "$SHARD")
           echo "Shard $SHARD of $SHARDS mutates $(tr ',' '\n' <<<"$files" | wc -l) files: \`$files\`" >> "$GITHUB_STEP_SUMMARY"
