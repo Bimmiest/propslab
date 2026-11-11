@@ -13,12 +13,6 @@
     "scripts/check-wasm-checksum.mjs": {
       "no-restricted-syntax": 1
     },
-    "src/components/editor/revealInEditor.ts": {
-      "no-restricted-syntax": 1
-    },
-    "src/components/editor/splunkMonacoSetup.ts": {
-      "no-restricted-syntax": 1
-    },
     "src/components/preview/tabs/fields/fieldRows.ts": {
       "max-params": 1
     },
@@ -27,9 +21,6 @@
     },
     "src/components/preview/tabs/shared/HighlightedRaw.tsx": {
       "max-params": 1
-    },
-    "src/components/ui/retryableLazy.tsx": {
-      "no-restricted-syntax": 1
     },
     "src/engine/__tests__/evalBuiltinFidelity.test.ts": {
       "max-params": 1
@@ -88,15 +79,6 @@
     "src/monaco/timeFormatPreview.ts": {
       "max-params": 1
     },
-    "src/monaco/timePrefixMatcher.ts": {
-      "no-restricted-syntax": 1
-    },
-    "src/staleChunkReload.ts": {
-      "no-restricted-syntax": 2
-    },
-    "src/test/fcSeed.ts": {
-      "no-restricted-syntax": 1
-    },
     "src/test/recordDirectiveEvidence.ts": {
       "max-params": 1
     },
@@ -105,9 +87,6 @@
     },
     "src/utils/strftime.ts": {
       "max-params": 3
-    },
-    "src/workers/regexEngineLoader.ts": {
-      "no-restricted-syntax": 1
     }
   }
 }
