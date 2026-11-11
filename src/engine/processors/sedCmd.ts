@@ -364,9 +364,14 @@ export function applySedCommands(events: SplunkEvent[], directives: ConfDirectiv
           reason:
             limitHit !== undefined
               ? { kind: 'regex-limit', error: limitHit }
-              : cmd.pattern
-                ? explainNoMatch(cmd.pattern.source, before, ctx.explanations.take(noOpDirectiveKey(site)))
-                : { kind: 'no-match' },
+              : cmd.pattern?.test(before)
+                ? // Unchanged `_raw` does not mean no match: the replacement can equal the
+                  // text it replaced, and a partial-match analysis would send the user to
+                  // debug a correct pattern (#875).
+                  { kind: 'replacement-identical' }
+                : cmd.pattern
+                  ? explainNoMatch(cmd.pattern.source, before, ctx.explanations.take(noOpDirectiveKey(site)))
+                  : { kind: 'no-match' },
         });
       }
     }
