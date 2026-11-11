@@ -92,6 +92,8 @@ The directive levels above do not apply to eval _functions_. The functions have 
 
 - **`PAIR_RE` in transform `FORMAT` does not handle escaped quotes in quoted values.** `"([^"]*)"` stops at the first inner `"`, so `field::"say \"hi\""` parses as `field=say \`. The behaviour of real Splunk here is under-documented. Treat it as an edge case.
 
+- **Time zone of `strftime()`.** Eval `strftime()` shows the time in the time zone of the host. The host is the browser in the app, and the Node process in the MCP server. Thus the same input can give different output in the two, and in two zones (`%H` and `%Z` are examples). The `TIME_FORMAT` hover preview of the editor also uses the zone of the browser. Splunk uses the time zone setting of the user, and the simulator does not model this setting. A run has an injected `now`, but no injected zone. To compare results, run both with the same `TZ`.
+
 ## Guesses that no recording confirms
 
 Propslab does these things in a way that no Splunk recording confirms. The note of each directive in the dictionary and the editor hover says the same.

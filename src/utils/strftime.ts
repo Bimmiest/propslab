@@ -982,9 +982,10 @@ function assembleTimestamp(
 // the editor's TIME_FORMAT preview. See docs/adr/0003-one-strftime-directive-table.md.
 // ---------------------------------------------------------------------------
 /**
- * Format a Date with a Splunk strftime string. Uses the browser's local timezone
- * (a documented browser-tool divergence — real Splunk uses the configured/indexer
- * TZ). Renders every specifier the parser reads, from the same table; anything
+ * Format a Date with a Splunk strftime string. Uses the time zone of the host
+ * (the browser, or the MCP server process), because a run has no zone input and
+ * Splunk's user time zone setting is not modelled. docs/fidelity.md, "Time zone
+ * of `strftime()`", gives the divergence (#877). Renders every specifier the parser reads, from the same table; anything
  * else is left as literal text, which unsupportedSpecifiers flags. `dialect`
  * says whose reading a directive takes where TIME_FORMAT and eval's
  * `strftime()` differ (`%l`).
