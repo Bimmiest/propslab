@@ -5,7 +5,7 @@
 /** @type {import('@stryker-mutator/api/core').PartialStrykerOptions} */
 export default {
   testRunner: 'vitest',
-  // Engine tests only, plus a vitest 5 compatibility shim; the file says why.
+  // Engine tests only; the file says why.
   vitest: { configFile: 'vitest.stryker.config.ts' },
 
   // src/engine is where correctness lives, so it is what gets mutated. Left out:

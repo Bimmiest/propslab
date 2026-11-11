@@ -1,15 +1,17 @@
 #!/usr/bin/env node
-// Canary for the Stryker/vitest testNamePattern shim (#508).
+// Canary for Stryker's test filter (#508, #796).
 //
-// vitest.stryker.config.ts patches `testNamePattern` because Stryker and vitest 5
-// join test names differently; without the patch every test inside a describe()
-// is filtered out, zero tests run per mutant, and every mutant reads as SURVIVED.
-// The run then "looks healthy" and simply scores near zero — a whole-engine score
-// only notices it hours later, and only if it falls under `thresholds.break`.
+// Stryker runs each mutant against only the tests that cover it, by giving
+// vitest a `testNamePattern` of their full names. If the runner and vitest
+// disagree on how a full name is joined (vitest 5 uses " > "), every test inside
+// a describe() is filtered out, zero tests run per mutant, and every mutant
+// reads as SURVIVED. The run then "looks healthy" and simply scores near zero —
+// a whole-engine score only notices it hours later, and only if it falls under
+// `thresholds.break`.
 //
 // This checks a report from a run over one small, thoroughly tested file
 // (`npm run test:mutation:canary`, and the first step of mutation.yml). Its
-// tests all sit inside describe() blocks, so with the shim broken nearly every
+// tests all sit inside describe() blocks, so with the filter broken nearly every
 // mutant survives; with it working nearly all are killed. Exit 1 says which.
 //
 // Usage: node scripts/check-mutation-canary.mjs [report.json] [file]
@@ -23,7 +25,7 @@ export const CANARY_FILE = 'src/engine/utils/wildcardMatch.ts';
 /**
  * A run of this file measures 39 killed of 43 (90.7%). The margins are wide on
  * purpose: this detects a broken harness, not a weakened test — the score gate
- * in stryker.config.mjs does that. A broken shim gives ~0 killed.
+ * in stryker.config.mjs does that. A broken filter gives ~0 killed.
  */
 export const MIN_KILLED = 25;
 export const MIN_SCORE = 70;
@@ -45,8 +47,8 @@ export function verdict(report, file = CANARY_FILE) {
     return (
       `${file}: only ${killed} of ${total} mutants killed (${score.toFixed(1)}%; expected at least ` +
       `${MIN_KILLED} and ${MIN_SCORE}%). A file this well tested that scores this low means the tests are ` +
-      `not running per mutant: check the testNamePattern shim in vitest.stryker.config.ts against the ` +
-      `installed @stryker-mutator/vitest-runner and vitest.`
+      `not running per mutant: check how the installed @stryker-mutator/vitest-runner joins test names ` +
+      `for its testNamePattern against how the installed vitest joins them.`
     );
   }
   return null;
@@ -59,5 +61,5 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
     console.error(`Mutation canary failed: ${problem}`);
     process.exit(1);
   }
-  console.log('Mutation canary: known-killable mutants are being killed; the testNamePattern shim works.');
+  console.log('Mutation canary: known-killable mutants are being killed; Stryker runs the tests of each mutant.');
 }
