@@ -88,30 +88,34 @@ describe('classNameError', () => {
 describe('addBlockReason', () => {
   const inputs = ['a'];
   const ok = { pattern: 'a', status: 'ok' as const, inputs };
+  const run = { validationError: null, match: ok, requestedPattern: 'a', rawInputs: inputs };
 
   it('has nothing to say without a valid pattern', () => {
-    expect(addBlockReason('', null, ok, '', inputs)).toEqual({ reason: null, isError: false });
-    expect(addBlockReason('(', 'bad', ok, '', inputs)).toEqual({ reason: null, isError: false });
+    expect(addBlockReason('', { ...run, requestedPattern: '' })).toEqual({ reason: null, isError: false });
+    expect(addBlockReason('(', { ...run, validationError: 'bad', requestedPattern: '' })).toEqual({
+      reason: null,
+      isError: false,
+    });
   });
 
   it('allows a settled ok run of this pattern over these inputs', () => {
-    expect(addBlockReason('a', null, ok, 'a', inputs)).toEqual({ reason: null, isError: false });
+    expect(addBlockReason('a', run)).toEqual({ reason: null, isError: false });
   });
 
   it('blocks a timed-out or uncompilable pattern as an error', () => {
-    const timedOut = addBlockReason('a', null, { ...ok, status: 'timeout' }, 'a', inputs);
+    const timedOut = addBlockReason('a', { ...run, match: { ...ok, status: 'timeout' } });
     expect(timedOut.reason).toMatch(/timed out/);
     expect(timedOut.isError).toBe(true);
-    const invalid = addBlockReason('a', null, { ...ok, status: 'invalid' }, 'a', inputs);
+    const invalid = addBlockReason('a', { ...run, match: { ...ok, status: 'invalid' } });
     expect(invalid.reason).toMatch(/won't compile/);
     expect(invalid.isError).toBe(true);
   });
 
   it('waits while the results belong to another pattern or other inputs', () => {
     const wait = { reason: 'Wait for the pattern to finish testing before adding it.', isError: false };
-    expect(addBlockReason('ab', null, ok, 'ab', inputs)).toEqual(wait);
-    expect(addBlockReason('a', null, { ...ok, status: 'pending' }, 'a', inputs)).toEqual(wait);
-    expect(addBlockReason('a', null, ok, 'a', ['a'])).toEqual(wait);
+    expect(addBlockReason('ab', { ...run, requestedPattern: 'ab' })).toEqual(wait);
+    expect(addBlockReason('a', { ...run, match: { ...ok, status: 'pending' } })).toEqual(wait);
+    expect(addBlockReason('a', { ...run, rawInputs: ['a'] })).toEqual(wait);
   });
 });
 

@@ -45,7 +45,7 @@ export function FieldsTab() {
   );
 
   const fieldSummary = useMemo(
-    () => buildFieldRows(aggregatedFields, search, phaseFilter, sortKey, sortDir),
+    () => buildFieldRows(aggregatedFields, { search, phaseFilter, sortKey, sortDir }),
     [aggregatedFields, search, sortKey, sortDir, phaseFilter],
   );
 

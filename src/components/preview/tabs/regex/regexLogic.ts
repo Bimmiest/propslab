@@ -63,6 +63,18 @@ export function classNameError(name: string): string | null {
   return null;
 }
 
+/** The state of the pattern's match run that `addBlockReason` reads. */
+export interface AddBlockReasonOptions {
+  /** Why the pattern does not compile, or null when it does. */
+  validationError: string | null;
+  /** The latest match run, which can belong to an earlier pattern or earlier events. */
+  match: Pick<RegexMatchState, 'pattern' | 'status' | 'inputs'>;
+  /** The pattern that the tab asked the match run for. */
+  requestedPattern: string;
+  /** The text of the events that the pattern must have run over. */
+  rawInputs: string[];
+}
+
 /**
  * Why the pattern cannot be added yet, or null when it can.
  *
@@ -75,10 +87,7 @@ export function classNameError(name: string): string | null {
  */
 export function addBlockReason(
   pattern: string,
-  validationError: string | null,
-  match: Pick<RegexMatchState, 'pattern' | 'status' | 'inputs'>,
-  requestedPattern: string,
-  rawInputs: string[],
+  { validationError, match, requestedPattern, rawInputs }: AddBlockReasonOptions,
 ): { reason: string | null; isError: boolean } {
   if (!pattern || validationError) return { reason: null, isError: false };
   const current = match.pattern === requestedPattern;
