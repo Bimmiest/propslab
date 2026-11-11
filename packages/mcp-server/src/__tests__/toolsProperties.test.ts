@@ -258,14 +258,16 @@ describe('serializeSimulation — the response stays under MAX_PAYLOAD_BYTES', (
   it('whatever the events, traces, diagnostics, max_events and include_snapshots', () => {
     fc.assert(
       fc.property(
-        fc.integer({ min: 0, max: 600 }),
-        fc.constantFrom(10, 1_000, 20_000, 400_000),
-        fc.integer({ min: 0, max: 4 }),
-        fc.integer({ min: 0, max: 300 }),
-        fc.constantFrom(50, 5_000, 300_000),
-        fc.integer({ min: 1, max: 500 }),
-        fc.boolean(),
-        (eventCount, rawLength, steps, diagnosticCount, messageLength, maxEvents, includeSnapshots) => {
+        fc.record({
+          eventCount: fc.integer({ min: 0, max: 600 }),
+          rawLength: fc.constantFrom(10, 1_000, 20_000, 400_000),
+          steps: fc.integer({ min: 0, max: 4 }),
+          diagnosticCount: fc.integer({ min: 0, max: 300 }),
+          messageLength: fc.constantFrom(50, 5_000, 300_000),
+          maxEvents: fc.integer({ min: 1, max: 500 }),
+          includeSnapshots: fc.boolean(),
+        }),
+        ({ eventCount, rawLength, steps, diagnosticCount, messageLength, maxEvents, includeSnapshots }) => {
           const e = event(rawLength, steps);
           const result = { events: Array(eventCount).fill(e), eventCount } as unknown as ProcessingResult;
           const message = raw(messageLength);
@@ -293,14 +295,16 @@ describe('tool handlers — random input never throws out of the handler', () =>
   it('simulate: a result under the cap for any sample, conf and output options', async () => {
     await fc.assert(
       fc.asyncProperty(
-        sample,
-        confInput('props.conf'),
-        confInput('transforms.conf'),
-        fc.integer({ min: 1, max: 500 }),
-        fc.boolean(),
-        fc.boolean(),
-        fc.boolean(),
-        async (raw, props, transforms, maxEvents, includeSnapshots, perEvent, captureOffsets) => {
+        fc.record({
+          raw: sample,
+          props: confInput('props.conf'),
+          transforms: confInput('transforms.conf'),
+          maxEvents: fc.integer({ min: 1, max: 500 }),
+          includeSnapshots: fc.boolean(),
+          perEvent: fc.boolean(),
+          captureOffsets: fc.boolean(),
+        }),
+        async ({ raw, props, transforms, maxEvents, includeSnapshots, perEvent, captureOffsets }) => {
           const result = await handleSimulate(
             {
               raw,

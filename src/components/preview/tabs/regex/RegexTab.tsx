@@ -36,8 +36,8 @@ export function RegexTab(props: RegexTabProps) {
   const groupColorMap = useMemo(() => buildGroupColorMap(namedGroups, theme), [namedGroups, theme]);
 
   const results = useRegexResults(pattern, validationError, props);
-  const { status, refreshing, countExact, matchStats } = results;
-  const block = addBlockReason(pattern, validationError, results.match, results.requestedPattern, results.rawInputs);
+  const { status, refreshing, countExact, matchStats, match, requestedPattern, rawInputs } = results;
+  const block = addBlockReason(pattern, { validationError, match, requestedPattern, rawInputs });
   const showGroups = namedGroups.length > 0 && !validationError;
 
   return (

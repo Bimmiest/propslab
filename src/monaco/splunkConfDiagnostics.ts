@@ -57,10 +57,12 @@ type DirectiveInfo = NonNullable<ReturnType<typeof getDirectiveInfo>>;
 /** A marker on one line, from `startColumn` to (exclusive) `endColumn`. */
 function lineMarker(
   line: number,
-  severity: DiagnosticMarker['severity'],
-  message: string,
-  startColumn: number,
-  endColumn: number,
+  {
+    severity,
+    message,
+    startColumn,
+    endColumn,
+  }: Pick<DiagnosticMarker, 'severity' | 'message' | 'startColumn' | 'endColumn'>,
 ): DiagnosticMarker {
   return { severity, message, startLineNumber: line, startColumn, endLineNumber: line, endColumn };
 }
@@ -78,15 +80,14 @@ function checkStanzaHeader(
   const trimmed = line.trim();
   if (!STANZA_RE.test(line)) {
     markers.push(
-      lineMarker(
-        i,
-        8,
-        trimmed.endsWith(']')
+      lineMarker(i, {
+        severity: 8,
+        message: trimmed.endsWith(']')
           ? 'Empty stanza header — expected "[name]"'
           : 'Missing closing bracket "]" for stanza header',
-        1,
-        line.length + 1,
-      ),
+        startColumn: 1,
+        endColumn: line.length + 1,
+      }),
     );
     return null;
   }
@@ -94,13 +95,12 @@ function checkStanzaHeader(
   const stanzaName = trimmed.slice(1, -1).trim();
   if (seenStanzas.has(stanzaName)) {
     markers.push(
-      lineMarker(
-        i,
-        4,
-        `Duplicate stanza "${stanzaName}" — Splunk merges duplicate stanzas key-by-key (a later key overrides the same earlier key; keys only in the earlier stanza are kept)`,
-        1,
-        line.length + 1,
-      ),
+      lineMarker(i, {
+        severity: 4,
+        message: `Duplicate stanza "${stanzaName}" — Splunk merges duplicate stanzas key-by-key (a later key overrides the same earlier key; keys only in the earlier stanza are kept)`,
+        startColumn: 1,
+        endColumn: line.length + 1,
+      }),
     );
   }
   seenStanzas.add(stanzaName);
@@ -108,17 +108,16 @@ function checkStanzaHeader(
 }
 
 function malformedLineMarker(line: string, i: number): DiagnosticMarker {
-  return lineMarker(
-    i,
-    8,
-    `Malformed line — expected "key = value" or a stanza header. ${
+  return lineMarker(i, {
+    severity: 8,
+    message: `Malformed line — expected "key = value" or a stanza header. ${
       /^\s/.test(line)
         ? 'Directives, headers and comments cannot be indented; Splunk continues a value with a trailing backslash, not with leading whitespace.'
         : 'Splunk .conf lines are "key = value", "[stanza]", or a "#" comment.'
     }`,
-    1,
-    line.length + 1,
-  );
+    startColumn: 1,
+    endColumn: line.length + 1,
+  });
 }
 
 /** The registry entry for `key`, looking through a class-based key to its base. */
@@ -146,7 +145,15 @@ function unknownDirectiveMarker(
   const canonical = miscasedCanonical(key, fileType);
   if (canonical !== undefined) {
     // Warning — this config is dead on a real indexer.
-    return { ...lineMarker(i, 4, MISCASED_MESSAGE(key, canonical), 1, eqIdx + 1), code: MISCASED_MARKER_CODE };
+    return {
+      ...lineMarker(i, {
+        severity: 4,
+        message: MISCASED_MESSAGE(key, canonical),
+        startColumn: 1,
+        endColumn: eqIdx + 1,
+      }),
+      code: MISCASED_MARKER_CODE,
+    };
   }
 
   // A real attribute of the other conf file is not a typo either: Splunk
@@ -156,7 +163,12 @@ function unknownDirectiveMarker(
   // moving a line into another file's stanza is not a safe automatic edit.
   const belongsIn = wrongFileCanonical(key, fileType);
   if (belongsIn !== undefined) {
-    return lineMarker(i, 4, WRONG_FILE_MESSAGE(key, fileType, belongsIn), 1, eqIdx + 1);
+    return lineMarker(i, {
+      severity: 4,
+      message: WRONG_FILE_MESSAGE(key, fileType, belongsIn),
+      startColumn: 1,
+      endColumn: eqIdx + 1,
+    });
   }
 
   // A valid attribute the registry has not documented yet is not a typo,
@@ -165,7 +177,12 @@ function unknownDirectiveMarker(
   // the same way it does for a documented-but-`ignored` key — so say
   // nothing more here rather than contradicting it.
   if (isUndocumentedAttribute(key)) return null;
-  return lineMarker(i, 2, `Unknown directive "${key}" — possible typo?`, 1, eqIdx + 1);
+  return lineMarker(i, {
+    severity: 2,
+    message: `Unknown directive "${key}" — possible typo?`,
+    startColumn: 1,
+    endColumn: eqIdx + 1,
+  });
 }
 
 /** One directive line, as the value checks read it. */
@@ -195,13 +212,12 @@ function checkStrftime(d: DirectiveLine, markers: DiagnosticMarker[]): void {
   const valueStartColumn = d.eqIdx + 2 + (rawValue.length - rawValue.trimStart().length);
   for (const { specifier, index } of unsupportedSpecifiers(d.value)) {
     markers.push(
-      lineMarker(
-        d.i,
-        2,
-        `${specifier} is not simulated — the preview treats it as literal text, so _time may not resolve here even if a real indexer parses it.`,
-        valueStartColumn + index,
-        valueStartColumn + index + specifier.length,
-      ),
+      lineMarker(d.i, {
+        severity: 2,
+        message: `${specifier} is not simulated — the preview treats it as literal text, so _time may not resolve here even if a real indexer parses it.`,
+        startColumn: valueStartColumn + index,
+        endColumn: valueStartColumn + index + specifier.length,
+      }),
     );
   }
 }
@@ -235,26 +251,35 @@ function checkKnownDirective(info: DirectiveInfo, d: DirectiveLine, markers: Dia
   if (info.valueType === 'strftime' && value && !d.continued) checkStrftime(d, markers);
 
   const problem = value ? valueTypeProblem(info, baseKey, value) : null;
-  if (problem) markers.push(lineMarker(i, problem[0], problem[1], eqIdx + 2, line.length + 1));
+  if (problem) {
+    markers.push(
+      lineMarker(i, { severity: problem[0], message: problem[1], startColumn: eqIdx + 2, endColumn: line.length + 1 }),
+    );
+  }
 
   // Best practice warnings
   // Check for a real CAPTURING group — not an escaped `\(` literal and not a
   // non-capturing `(?:…)` / lookaround `(?=…)` group.
   if (baseKey === 'LINE_BREAKER' && value && !hasCapturingGroup(value)) {
     markers.push(
-      lineMarker(
-        i,
-        4,
-        'LINE_BREAKER regex should contain at least one capturing group () — the captured content defines the break point',
-        eqIdx + 2,
-        line.length + 1,
-      ),
+      lineMarker(i, {
+        severity: 4,
+        message:
+          'LINE_BREAKER regex should contain at least one capturing group () — the captured content defines the break point',
+        startColumn: eqIdx + 2,
+        endColumn: line.length + 1,
+      }),
     );
   }
 
   if (info.deprecated) {
     markers.push(
-      lineMarker(i, 2, `"${baseKey}" is deprecated — consider using the recommended alternative`, 1, eqIdx + 1),
+      lineMarker(i, {
+        severity: 2,
+        message: `"${baseKey}" is deprecated — consider using the recommended alternative`,
+        startColumn: 1,
+        endColumn: eqIdx + 1,
+      }),
     );
   }
 }

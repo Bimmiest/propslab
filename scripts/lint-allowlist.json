@@ -1,18 +1,6 @@
 {
   "$comment": "The lint findings in code that was written before a rule was adopted, by file and by rule, as counted on the day the rule arrived: { \"src/a.ts\": { \"<rule>\": <count> } }. eslint.config.js turns each listed rule off for each listed file, and CI's lint-allowlist-check lints those files with the rules on again and fails when a count differs. Higher is new code, which gets no exception. Lower is a fix, which lowers the count here in the same change. The list only gets shorter (docs/code-style.md).",
   "files": {
-    "packages/mcp-server/src/__tests__/toolsProperties.test.ts": {
-      "max-params": 2
-    },
-    "src/components/preview/tabs/fields/fieldRows.ts": {
-      "max-params": 1
-    },
-    "src/components/preview/tabs/regex/regexLogic.ts": {
-      "max-params": 1
-    },
-    "src/components/preview/tabs/shared/HighlightedRaw.tsx": {
-      "max-params": 1
-    },
     "src/engine/__tests__/evalBuiltinFidelity.test.ts": {
       "max-params": 1
     },
@@ -57,21 +45,6 @@
     },
     "src/engine/utils/flattenJson.ts": {
       "max-params": 3
-    },
-    "src/hooks/useWindowedRows.ts": {
-      "max-params": 1
-    },
-    "src/monaco/splunkConfCompletion.ts": {
-      "max-params": 1
-    },
-    "src/monaco/splunkConfDiagnostics.ts": {
-      "max-params": 1
-    },
-    "src/monaco/timeFormatPreview.ts": {
-      "max-params": 1
-    },
-    "src/test/recordDirectiveEvidence.ts": {
-      "max-params": 1
     },
     "src/utils/splunkRegex.ts": {
       "no-restricted-syntax": 1

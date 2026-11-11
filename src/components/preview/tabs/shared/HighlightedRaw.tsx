@@ -28,10 +28,12 @@ interface HighlightedRawProps {
 /** Every span of `raw` a field's value occupies, coloured by field. */
 function collectHighlights(
   raw: string,
-  fieldColorMap: Map<string, string>,
-  fieldValues: Map<string, string | string[]>,
-  fieldSourceKeys: Record<string, string> | undefined,
-  fieldOffsets: Record<string, Array<[number, number]>> | undefined,
+  {
+    fieldColorMap,
+    fieldValues,
+    fieldSourceKeys,
+    fieldOffsets,
+  }: Pick<HighlightedRawProps, 'fieldColorMap' | 'fieldValues' | 'fieldSourceKeys' | 'fieldOffsets'>,
 ): Highlight[] {
   const highlights: Highlight[] = [];
 
@@ -136,7 +138,7 @@ export function HighlightedRaw({
   // Segmentation depends only on the raw text and the field/value/offset maps, so
   // it survives anything that re-renders the card without changing them.
   const atomic = useMemo(
-    () => atomicSegments(raw, collectHighlights(raw, fieldColorMap, fieldValues, fieldSourceKeys, fieldOffsets)),
+    () => atomicSegments(raw, collectHighlights(raw, { fieldColorMap, fieldValues, fieldSourceKeys, fieldOffsets })),
     [raw, fieldColorMap, fieldValues, fieldOffsets, fieldSourceKeys],
   );
 

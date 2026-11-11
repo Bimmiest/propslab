@@ -56,8 +56,9 @@ vi.mock('../engine/pipeline', async (importOriginal) => {
   const dir = env['PROPSLAB_EVIDENCE_DIR'];
   if (!dir) return actual;
 
-  const runPipeline: typeof actual.runPipeline = (raw, metadata, props, transforms, options) => {
-    const output = actual.runPipeline(raw, metadata, props, transforms, options);
+  const runPipeline: typeof actual.runPipeline = (...args) => {
+    const output = actual.runPipeline(...args);
+    const [, metadata, props, transforms] = args;
     const { testPath, currentTestName } = expect.getState();
     if (!testPath?.includes('/src/engine/')) return output;
     const testKeys = recorded.tests.get(currentTestName ?? '') ?? new Set<string>();
