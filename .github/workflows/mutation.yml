@@ -61,8 +61,10 @@ jobs:
         # share of the `mutate` list, by file size. To add a shard, add a number.
         # A pull request mutates only what it changed, in one job: shard 0.
         shard: ${{ fromJSON(github.event_name == 'pull_request' && '[0]' || '[1, 2, 3, 4]') }}
-    # A shard does about a quarter of the 254 minutes, plus its setup. When a
-    # shard gets near its limit, add a shard; do not raise the limit.
+    # Measured on 2026-11-11: four shards without the static mutants took 25 to
+    # 40 minutes each, and the static mutants add about 40 minutes of work in
+    # all (#857), so a shard takes about 45 to 55. When a shard gets near its
+    # limit, add a shard; do not raise the limit.
     #
     # A PR run mutates the files it changes, and the sources its changed tests
     # import. A test-only change to a property suite brings the parser it
