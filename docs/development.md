@@ -14,7 +14,7 @@ This file tells you how to set up a checkout, lists the npm scripts, says when t
 
 ## Set up
 
-Node is pinned in [`.nvmrc`](../.nvmrc), matched by `engines` in `package.json`, and used by CI. Use that version. A different major version causes failures that have no relation to your change. `.npmrc` sets `engine-strict=true` (and so does `packages/mcp-server/.npmrc`), so npm refuses to install on a Node older than `engines` instead of failing later.
+Node is pinned in [`.nvmrc`](../.nvmrc), matched by `engines` in `package.json`, and used by CI. Use that version. A different major version causes failures that have no relation to your change. `.npmrc` sets `engine-strict=true` (and so does `packages/mcp-server/.npmrc`), so npm refuses to install on a Node older than `engines` instead of failing later. CI fails a pull request when `.nvmrc` is outside the `engines` range of either `package.json`, or when the app's range starts on a different major. Thus, when the major changes, change `.nvmrc` and both `engines` fields together.
 
 ```bash
 nvm use            # or: fnm use

@@ -148,6 +148,22 @@ jobs:
       - name: The baseline files of repo-template
         uses: Bimmiest/shared-workflows/.github/actions/baseline-check@171cd386717395c01be5e23ab926823c7b246cf6 # v1.11.0
 
+      # .nvmrc is in the Node range of each package.json, so a move to the next
+      # major cannot leave one behind (#858). The app's `engines` is its own
+      # toolchain, so its lower bound must also be on the major of .nvmrc. The
+      # MCP server's `engines` says which Node its users can run, so it only
+      # has to include .nvmrc. Neither has `devEngines` yet: that is skipped.
+      - name: .nvmrc agrees with engines (app)
+        uses: Bimmiest/shared-workflows/.github/actions/node-version-check@6d9565a7d992fe10a1368249d3bdef47688a08c5 # v1.13.0
+        with:
+          engines-major: 'true'
+
+      - name: .nvmrc agrees with engines (MCP server)
+        uses: Bimmiest/shared-workflows/.github/actions/node-version-check@6d9565a7d992fe10a1368249d3bdef47688a08c5 # v1.13.0
+        with:
+          working-directory: packages/mcp-server
+          nvmrc: ../../.nvmrc
+
       # Every production dependency's licence is on .licence-allowlist.json,
       # read from the lockfile, so it needs no network and sees exactly what
       # `npm ci --omit=dev` installs. The MCP server's lockfile is checked in
