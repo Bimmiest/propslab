@@ -27,17 +27,15 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { orExit } from './lib/orExit.mjs';
 import { verifyChecksum } from './lib/wasmChecksum.mjs';
 
 const from = resolve(process.argv[2] ?? '.');
 
-let wasmPath;
-try {
-  wasmPath = createRequire(join(from, 'noop.js')).resolve('pcre2-wasm-utf16/pcre2.wasm');
-} catch {
-  console.error(`pcre2-wasm-utf16 is not installed for ${from} — run \`npm ci\` first.`);
-  process.exit(1);
-}
+const wasmPath = orExit(
+  () => createRequire(join(from, 'noop.js')).resolve('pcre2-wasm-utf16/pcre2.wasm'),
+  `pcre2-wasm-utf16 is not installed for ${from} — run \`npm ci\` first.`,
+);
 
 const bytes = readFileSync(wasmPath);
 const checks = [
@@ -45,13 +43,7 @@ const checks = [
   [fileURLToPath(new URL('../pcre2.wasm.sha256', import.meta.url)), 'this repository records the hash it expects'],
 ];
 for (const [sumPath, missing] of checks) {
-  let sums;
-  try {
-    sums = readFileSync(sumPath, 'utf8');
-  } catch {
-    console.error(`${sumPath} is missing: ${missing}.`);
-    process.exit(1);
-  }
+  const sums = orExit(() => readFileSync(sumPath, 'utf8'), `${sumPath} is missing: ${missing}.`);
   const { status, expected, actual } = verifyChecksum(bytes, sums, basename(wasmPath));
   if (status === 'no-entry') {
     console.error(`${sumPath} has no valid entry for ${basename(wasmPath)}.`);

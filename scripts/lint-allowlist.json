@@ -1,15 +1,6 @@
 {
   "$comment": "The lint findings in code that was written before a rule was adopted, by file and by rule, as counted on the day the rule arrived: { \"src/a.ts\": { \"<rule>\": <count> } }. eslint.config.js turns each listed rule off for each listed file, and CI's lint-allowlist-check lints those files with the rules on again and fails when a count differs. Higher is new code, which gets no exception. Lower is a fix, which lowers the count here in the same change. The list only gets shorter (docs/code-style.md).",
   "files": {
-    "scripts/check-bundle-size.mjs": {
-      "no-restricted-syntax": 2
-    },
-    "scripts/check-entry-graph.mjs": {
-      "no-restricted-syntax": 1
-    },
-    "scripts/check-wasm-checksum.mjs": {
-      "no-restricted-syntax": 1
-    },
     "src/components/editor/revealInEditor.ts": {
       "no-restricted-syntax": 1
     },
