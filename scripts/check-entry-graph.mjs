@@ -20,16 +20,14 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { checkEntryGraph } from './lib/entryGraph.mjs';
+import { orExit } from './lib/orExit.mjs';
 
 const distDir = process.argv[2] ?? 'dist';
 
-let html;
-try {
-  html = readFileSync(join(distDir, 'index.html'), 'utf8');
-} catch {
-  console.error(`No build output at ${distDir}/index.html — run \`npm run build\` first.`);
-  process.exit(1);
-}
+const html = orExit(
+  () => readFileSync(join(distDir, 'index.html'), 'utf8'),
+  `No build output at ${distDir}/index.html — run \`npm run build\` first.`,
+);
 
 const { problems, seen } = checkEntryGraph(html, (file) => {
   try {
