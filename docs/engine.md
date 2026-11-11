@@ -103,7 +103,7 @@ Replacement syntax is not PCRE2's. Splunk does not expose `pcre2_substitute`, so
 
 ### MATCH_LIMIT and DEPTH_LIMIT
 
-`EXTRACT` runs under its props.conf stanza's `MATCH_LIMIT` and `DEPTH_LIMIT`, `REPORT` and `TRANSFORMS` under the transform stanza's own; unset, they are Splunk's defaults of 100000 and 1000, and 0 means no limit. A match that reaches either is no match, as in Splunk, and the preview says which limit stopped it. Patterns outside field extraction run under PCRE2's own defaults (ten million each), and backtracking memory is capped at 64 MiB per match.
+`EXTRACT` runs under its props.conf stanza's `MATCH_LIMIT` and `DEPTH_LIMIT`, `REPORT` and `TRANSFORMS` under the transform stanza's own; unset, they are Splunk's defaults of 100000 and 1000, and 0 means no limit. A match that reaches either is no match, as in Splunk, and the preview says which limit stopped it. A scan for each match (a global `SEDCMD`, eval `replace()`, a search-time extraction, or `REPEAT_MATCH`) that reaches a limit after a match keeps the matches before the limit, and a warning names the directive and says that the result is incomplete. Patterns outside field extraction run under PCRE2's own defaults (ten million each), and backtracking memory is capped at 64 MiB per match.
 
 Two caveats, both from running PCRE2 rather than the PCRE1 the limits were named for:
 
