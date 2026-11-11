@@ -241,11 +241,44 @@ export default defineConfig([
     rules: {
       'max-lines-per-function': ['error', { max: 100, skipBlankLines: true, skipComments: true }],
       complexity: ['error', 25],
+      // Past four positional parameters a call is a row of bare values matched
+      // by position, and a caller passes a default only to reach a later one,
+      // so a function that needs more takes one options object (#856, from
+      // repo-template). Four, not three: three reports callbacks whose list a
+      // library defines, where the author does not choose it.
+      'max-params': ['error', 4],
     },
   },
   {
-    // Tests are exempt: a describe() callback holds a whole suite, so its length
-    // counts cases, and a table of cases is not branching logic.
+    // State that changes at module level is a hidden input to every function
+    // that reads it: two callers in one process share it, and a test cannot
+    // give a function another value without changing the module. It belongs to
+    // the object that owns the operation, passed in that operation's context
+    // (#856, from repo-template). A module-level `const` holding a Map or a Set
+    // is not matched; a cache of that shape is left to review.
+    //
+    // Tests are exempt: a `let` that `beforeEach` sets is how a suite shares a
+    // fixture. They are left out with `ignores` rather than overridden, because
+    // a later block's `no-restricted-syntax` replaces an earlier block's list
+    // for the same file instead of adding to it; the runPipeline block above
+    // covers test files only, so the two lists never meet on one file.
+    files: ['**/*.{ts,tsx}', 'packages/mcp-server/**/*.mts', 'scripts/**/*.{js,mjs}'],
+    ignores: ['**/__tests__/**', '**/*.test.{ts,tsx,mts,mjs}', 'e2e/**', 'packages/*/test/**'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: ':matches(Program, ExportNamedDeclaration) > VariableDeclaration[kind="let"]',
+          message: 'Do not keep state that changes at module level. Pass it in the context of the operation.',
+        },
+      ],
+    },
+  },
+  {
+    // Tests are exempt from length and branching: a describe() callback holds a
+    // whole suite, so its length counts cases, and a table of cases is not
+    // branching logic. `max-params` stays on, because a test helper with many
+    // positional arguments is as hard to read as shipped code.
     files: ['**/__tests__/**/*.{ts,tsx}', '**/*.test.{ts,tsx}', 'e2e/**/*.ts', 'packages/*/test/**/*.ts'],
     rules: {
       'max-lines-per-function': 'off',
