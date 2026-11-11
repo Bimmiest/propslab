@@ -14,7 +14,7 @@ This file tells you how to set up a checkout, lists the npm scripts, says when t
 
 ## Set up
 
-Node is pinned in [`.nvmrc`](../.nvmrc), matched by `engines` in `package.json`, and used by CI. Use that version; a different major will produce failures that have nothing to do with your change. `.npmrc` sets `engine-strict=true` (and so does `packages/mcp-server/.npmrc`), so npm refuses to install on a Node older than `engines` instead of failing later.
+Node is pinned in [`.nvmrc`](../.nvmrc), matched by `engines` in `package.json`, and used by CI. Use that version. A different major version causes failures that have no relation to your change. `.npmrc` sets `engine-strict=true` (and so does `packages/mcp-server/.npmrc`), so npm refuses to install on a Node older than `engines` instead of failing later.
 
 ```bash
 nvm use            # or: fnm use
@@ -23,7 +23,7 @@ npm ci --prefix packages/mcp-server
 npm run dev        # http://localhost:5173
 ```
 
-The `npm ci --prefix packages/mcp-server` is not optional if you intend to lint. `npm run lint` is type-aware over the whole repository, including `packages/mcp-server`, and that package resolves `@modelcontextprotocol/sdk` and `zod` from its own `node_modules`. Without them those types don't resolve and every use reports as an unsafe `any` — a wall of errors that have nothing to do with your change.
+The `npm ci --prefix packages/mcp-server` is not optional if you intend to lint. `npm run lint` is type-aware over the whole repository, including `packages/mcp-server`, and that package resolves `@modelcontextprotocol/sdk` and `zod` from its own `node_modules`. Without them those types do not resolve and every use reports as an unsafe `any` — a wall of errors that have nothing to do with your change.
 
 `CLAUDE.md` names the rules that are expensive to break here, for people and for coding agents, as in `repo-template`. `.claude/` is git-ignored, for each contributor's local agent configuration.
 
