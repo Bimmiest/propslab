@@ -65,10 +65,17 @@ const OMITTED = Symbol('omitted');
  */
 async function attemptSample(
   format: string,
-  fullSampleLine: string,
-  timePrefix: string | undefined,
-  matchPrefix: PrefixMatcher,
-  token: CancellationLike | undefined,
+  {
+    sampleLine: fullSampleLine,
+    timePrefix,
+    matchPrefix,
+    token,
+  }: {
+    sampleLine: string;
+    timePrefix: string | undefined;
+    matchPrefix: PrefixMatcher;
+    token: CancellationLike | undefined;
+  },
 ): Promise<TimeFormatPreview['sample'] | typeof CANCELLED | typeof OMITTED> {
   const sampleLine = fullSampleLine.slice(0, MAX_PREVIEW_SAMPLE_LENGTH);
   if (timePrefix) {
@@ -148,13 +155,12 @@ export async function buildTimeFormatPreview(
     return preview;
   }
 
-  const attempted = await attemptSample(
-    trimmed,
-    options.sampleLine,
-    options.timePrefix,
-    options.matchPrefix ?? matchTimePrefix,
-    options.token,
-  );
+  const attempted = await attemptSample(trimmed, {
+    sampleLine: options.sampleLine,
+    timePrefix: options.timePrefix,
+    matchPrefix: options.matchPrefix ?? matchTimePrefix,
+    token: options.token,
+  });
   if (attempted === CANCELLED) return null;
   return { ...preview, sample: attempted === OMITTED ? null : attempted };
 }

@@ -254,13 +254,19 @@ export function nestFields(
   return result;
 }
 
+/** The search, phase filter and sort that choose and order the table's rows. */
+export interface BuildFieldRowsOptions {
+  /** Matched against each field's name and aliases, case-insensitively. Empty keeps every field. */
+  search: string;
+  phaseFilter: PhaseFilter;
+  sortKey: SortKey;
+  sortDir: SortDir;
+}
+
 /** The rows the table shows for a search, phase filter and sort. */
 export function buildFieldRows(
   aggregated: AggregatedField[],
-  search: string,
-  phaseFilter: PhaseFilter,
-  sortKey: SortKey,
-  sortDir: SortDir,
+  { search, phaseFilter, sortKey, sortDir }: BuildFieldRowsOptions,
 ): FieldRow[] {
   // Filtered into a new array; the aggregated entries themselves are shared
   // with later passes and never mutated here.

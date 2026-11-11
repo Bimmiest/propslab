@@ -119,7 +119,7 @@ function getDirectiveSuggestions(
   let sortOrder = 0;
   for (const [category, categoryDirectives] of categories) {
     for (const dir of categoryDirectives) {
-      const item = directiveToCompletionItem(dir, range, category, sortOrder++, hasValue);
+      const item = directiveToCompletionItem(dir, { range, category, sortOrder: sortOrder++, hasValue });
       items.push(item);
 
       // For class-based directives, also add the pattern with placeholder
@@ -144,10 +144,12 @@ function getDirectiveSuggestions(
 
 function directiveToCompletionItem(
   dir: DirectiveInfo,
-  range: languages.CompletionItem['range'],
-  category: string,
-  sortOrder: number,
-  hasValue: boolean,
+  {
+    range,
+    category,
+    sortOrder,
+    hasValue,
+  }: { range: languages.CompletionItem['range']; category: string; sortOrder: number; hasValue: boolean },
 ): languages.CompletionItem {
   // With `= value` already on the line, only the key is inserted.
   const insertText = dir.isClassBased

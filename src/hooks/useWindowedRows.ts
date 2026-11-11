@@ -20,6 +20,22 @@ const FALLBACK_VIEWPORT = 800;
  */
 const SCROLL_STEP = 64;
 
+/** The scroll state and the settings that `computeWindow` reads. */
+export interface ComputeWindowOptions {
+  /** The scroll position of the container, in pixels. */
+  scrollTop: number;
+  /** The height of the container, in pixels. 0 before layout, when a default height is assumed. */
+  viewport: number;
+  /** The height of one row, in pixels. */
+  rowHeight: number;
+  /** Rows rendered beyond each edge of the viewport, and on each side of the pinned row. */
+  overscan: number;
+  /** At or below this many rows, every row is rendered. */
+  threshold: number;
+  /** The index of the row that holds focus, or null. */
+  pinned: number | null;
+}
+
 /**
  * The rows to render for a scroll position, as segments in order.
  *
@@ -32,12 +48,7 @@ const SCROLL_STEP = 64;
  */
 export function computeWindow(
   count: number,
-  scrollTop: number,
-  viewport: number,
-  rowHeight: number,
-  overscan: number,
-  threshold: number,
-  pinned: number | null,
+  { scrollTop, viewport, rowHeight, overscan, threshold, pinned }: ComputeWindowOptions,
 ): WindowSegment[] {
   const rows = (from: number, to: number): WindowSegment[] =>
     Array.from({ length: Math.max(0, to - from) }, (_, i) => ({ kind: 'row' as const, index: from + i }));
@@ -113,7 +124,7 @@ export function useWindowedRows(
   }, [scrollRef, active]);
 
   const segments = useMemo(
-    () => computeWindow(count, scrollTop, viewport, rowHeight, overscan, threshold, pinned),
+    () => computeWindow(count, { scrollTop, viewport, rowHeight, overscan, threshold, pinned }),
     [count, scrollTop, viewport, rowHeight, overscan, threshold, pinned],
   );
 

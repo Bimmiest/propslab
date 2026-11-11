@@ -265,7 +265,7 @@ describe('buildFieldRows', () => {
     field('user', { phases: new Set(['search-time']), aliases: ['Account'] }),
   ];
   const names = (search: string, phase: 'all' | 'index-time' | 'search-time') =>
-    buildFieldRows(aggregated, search, phase, 'name', 'asc').map((r) => r.name);
+    buildFieldRows(aggregated, { search, phaseFilter: phase, sortKey: 'name', sortDir: 'asc' }).map((r) => r.name);
 
   it('filters by name or alias, case-insensitively', () => {
     expect(names('HOS', 'all')).toEqual(['host']);
