@@ -86,6 +86,9 @@ export function applyFieldAliases(events: SplunkEvent[], directives: ConfDirecti
     if (created.size === 0 && removed.size === 0) return { ...event, ...withNoOps };
 
     const fieldAliases = [...created].map(([target, source]) => ({ target, source }));
+    // A target that the event had before is overwritten, not added (#900).
+    const targets = [...created.keys()];
+    const overwritten = targets.filter((f) => hasField(event.fields, f));
     const description: string[] = [];
     if (created.size > 0) {
       description.push(`Created aliases: ${fieldAliases.map((a) => `${a.target} (from ${a.source})`).join(', ')}`);
@@ -106,7 +109,8 @@ export function applyFieldAliases(events: SplunkEvent[], directives: ConfDirecti
           processor: 'FIELDALIAS',
           phase: 'search-time' as const,
           description: description.join('; '),
-          fieldsAdded: [...created.keys()],
+          fieldsAdded: targets.filter((f) => !hasField(event.fields, f)),
+          ...(overwritten.length > 0 ? { fieldsModified: overwritten } : {}),
           ...(removed.size > 0 ? { fieldsRemoved: [...removed.keys()] } : {}),
           fieldAliases,
         },

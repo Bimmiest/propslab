@@ -402,6 +402,18 @@ test.describe('engine output reaches the tabs', () => {
     await page.getByRole('tab', { name: /^Pipeline$/ }).click();
     await expect(page.locator('#main-content')).toContainText(/EXTRACT|EVAL|lineBreaker/);
   });
+
+  test('Pipeline marks a field EVAL changed as modified, not added (#900)', async ({ page }) => {
+    await openApp(page);
+    await loadExample(page, /Palo Alto Firewall/i);
+    await page.getByRole('tab', { name: /^Pipeline$/ }).click();
+    const report = page.getByRole('group', { name: /: REPORT-pan_traffic/ });
+    const evalStep = page.getByRole('group', { name: /: EVAL$/ });
+    await expect(report.getByText('+action', { exact: true })).toBeVisible();
+    await expect(evalStep.getByText('~action', { exact: true })).toBeVisible();
+    await expect(evalStep.getByText('+action', { exact: true })).toHaveCount(0);
+    await expect(evalStep.getByText('+bytes_total', { exact: true })).toBeVisible();
+  });
 });
 
 test.describe('accessibility affordances', () => {
