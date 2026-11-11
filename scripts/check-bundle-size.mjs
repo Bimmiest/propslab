@@ -29,6 +29,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { budgetRows, initialLoadFiles, staleBudgets } from './lib/bundleBudget.mjs';
+import { orExit } from './lib/orExit.mjs';
 
 /**
  * Budgets in kB (1000 bytes, as Vite reports) of gzip output, keyed by
@@ -67,13 +68,10 @@ const DEFAULT_KB = 25;
 const INITIAL_LOAD_BUDGET_KB = 260;
 
 const dir = join(process.argv[2] ?? 'dist', 'assets');
-let files;
-try {
-  files = readdirSync(dir).filter((f) => /\.(js|css|wasm|ttf)$/.test(f));
-} catch {
-  console.error(`No build output at ${dir} — run \`npm run build\` first.`);
-  process.exit(1);
-}
+const files = orExit(
+  () => readdirSync(dir).filter((f) => /\.(js|css|wasm|ttf)$/.test(f)),
+  `No build output at ${dir} — run \`npm run build\` first.`,
+);
 
 const rows = budgetRows(
   files.map((file) => ({ file, kb: gzipSync(readFileSync(join(dir, file))).length / 1000 })),
@@ -83,13 +81,10 @@ const rows = budgetRows(
 
 // The initial-load set, straight from the HTML: `src` of the entry script,
 // `href` of each modulepreload and stylesheet.
-let html;
-try {
-  html = readFileSync(join(dirname(dir), 'index.html'), 'utf8');
-} catch {
-  console.error(`No index.html next to ${dir} — run \`npm run build\` first.`);
-  process.exit(1);
-}
+const html = orExit(
+  () => readFileSync(join(dirname(dir), 'index.html'), 'utf8'),
+  `No index.html next to ${dir} — run \`npm run build\` first.`,
+);
 const initialFiles = initialLoadFiles(html);
 const initialKb = initialFiles.reduce((sum, f) => sum + gzipSync(readFileSync(join(dir, f))).length / 1000, 0);
 const initialOver = initialKb > INITIAL_LOAD_BUDGET_KB;

@@ -4,15 +4,6 @@
     "packages/mcp-server/src/__tests__/toolsProperties.test.ts": {
       "max-params": 2
     },
-    "scripts/check-bundle-size.mjs": {
-      "no-restricted-syntax": 2
-    },
-    "scripts/check-entry-graph.mjs": {
-      "no-restricted-syntax": 1
-    },
-    "scripts/check-wasm-checksum.mjs": {
-      "no-restricted-syntax": 1
-    },
     "src/components/preview/tabs/fields/fieldRows.ts": {
       "max-params": 1
     },
