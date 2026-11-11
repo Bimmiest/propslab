@@ -128,7 +128,9 @@ permissions: {}
 # Rollback procedure (also in docs/deployment.md and docs/ci.md):
 #   1. Settings → Secrets and variables → Actions → Variables: set
 #      DEPLOY_PAUSED to `true`.
-#   2. Dispatch this workflow on main with `sha` = the commit to put back.
+#   2. Dispatch this workflow on main with `run_id` = the last good run of
+#      this workflow (no rebuild; the bundle is kept 30 days). If that run is
+#      older, use `sha` = the commit to put back instead.
 #   3. Once the fix is merged and main's push CI is green, delete
 #      DEPLOY_PAUSED (or set it to anything but `true`), then dispatch with
 #      `sha` empty, or wait for the next push, to resume automatic deploys.
@@ -205,7 +207,7 @@ jobs:
       # persist-credentials: false — no later step fetches from the remote
       # with git, and the build runs dependency code that has no business
       # finding a token in .git/config.
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: main
           lfs: false
