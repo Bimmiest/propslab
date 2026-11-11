@@ -29,12 +29,19 @@ import { fakeModel } from '../../test/fakeModel';
 
 class FakeWorker {
   static instances: FakeWorker[] = [];
+  /** Set to make the constructor throw, as `new Worker` does when no worker can be had. */
+  static refuse = false;
   onmessage: ((e: MessageEvent<TimestampMatchResponse>) => void) | null = null;
   onerror: ((e: Event) => void) | null = null;
   posted: TimestampMatchRequest[] = [];
   terminated = false;
   loaded = false;
-  constructor() {
+  readonly url: string;
+  readonly options: WorkerOptions | undefined;
+  constructor(url: URL | string, options?: WorkerOptions) {
+    if (FakeWorker.refuse) throw new DOMException('Worker refused', 'SecurityError');
+    this.url = String(url);
+    this.options = options;
     FakeWorker.instances.push(this);
   }
   /** The module finished evaluating: what every worker entry posts first. */
@@ -57,6 +64,12 @@ class FakeWorker {
   }
   terminate() {
     this.terminated = true;
+  }
+  /** Answer `request` with the error the real worker sends when probing throws. */
+  answerWithError(request: TimestampMatchRequest, error: string) {
+    this.ready();
+    const data: TimestampMatchResponse = { id: request.id, probes: [], error };
+    this.onmessage?.({ data } as MessageEvent<TimestampMatchResponse>);
   }
   /** Answer the last request the way the real worker would, by running it. */
   answer(request: TimestampMatchRequest = this.posted[this.posted.length - 1]!) {
@@ -111,6 +124,7 @@ describe('TIME_FORMAT hover — TIME_PREFIX in a worker (#334)', () => {
   beforeEach(() => {
     resetTimePrefixMatcherForTests();
     FakeWorker.instances = [];
+    FakeWorker.refuse = false;
     vi.stubGlobal('Worker', FakeWorker);
     useAppStore.getState().setRawData(SAMPLE);
   });
@@ -150,6 +164,45 @@ describe('TIME_FORMAT hover — TIME_PREFIX in a worker (#334)', () => {
 
     worker().answer({ ...worker().posted[0]!, config: { ...worker().posted[0]!.config, timeFormat: '%Y-%m-%d' } });
     expect(text(await pending)).toContain('**Sample:** matched `2024-01-15`');
+  });
+
+  it("builds the Timestamp tab's worker, as a module worker", async () => {
+    // The worker entry imports the engine, so a classic worker could not load it.
+    // Vite adds a query to the URL in the test run, and Stryker's instrumented
+    // copy keeps it bare.
+    const pending = matchTimePrefix('ts=', SAMPLE);
+    expect(worker().url).toMatch(/\/src\/engine\/timestampMatchWorker\.ts(\?|$)/);
+    expect(worker().options).toEqual({ type: 'module' });
+    worker().answer();
+    await expect(pending).resolves.toEqual({ status: 'matched', end: 8 });
+  });
+
+  it('asks for the prefix span alone, with no lookahead, when there is no TIME_FORMAT', async () => {
+    const pending = matchTimePrefix('ts=', SAMPLE);
+    expect(worker().posted).toEqual([
+      { id: 1, raws: [SAMPLE], config: { timePrefix: 'ts=', timeFormat: null, maxLookahead: 0, tz: null } },
+    ]);
+    worker().answer();
+    await expect(pending).resolves.toEqual({ status: 'matched', end: 8 });
+  });
+
+  it('reports a prefix that matches nowhere in the sample as no match', async () => {
+    // With a TIME_FORMAT too: with no prefix match, there is no place to
+    // search for the timestamp from.
+    const alone = matchTimePrefix('when=', SAMPLE);
+    worker().answer();
+    await expect(alone).resolves.toEqual({ status: 'no-match' });
+
+    const withFormat = matchTimePrefix('when=', SAMPLE, undefined, '%Y-%m-%d');
+    worker().answer();
+    await expect(withFormat).resolves.toEqual({ status: 'no-match' });
+  });
+
+  it('reports the error that the worker returns, with its message', async () => {
+    const pending = matchTimePrefix('ts=', SAMPLE);
+    worker().answerWithError(worker().posted[0]!, 'No events to probe');
+    await expect(pending).resolves.toEqual({ status: 'error', message: 'No events to probe' });
+    expect(worker().terminated).toBe(false);
   });
 
   it('keeps one worker alive across hovers', async () => {
@@ -262,6 +315,20 @@ describe('TIME_FORMAT hover — TIME_PREFIX in a worker (#334)', () => {
     });
   });
 
+  it('answers cancelled, and builds no worker, for a token that is cancelled before the call', async () => {
+    const { token, cancel } = cancellable();
+    cancel();
+    await expect(matchTimePrefix('ts=', SAMPLE, token)).resolves.toEqual({ status: 'cancelled' });
+    expect(FakeWorker.instances).toHaveLength(0);
+  });
+
+  it('accepts a token that cannot announce a cancellation', async () => {
+    // CancellationLike makes onCancellationRequested optional.
+    const pending = matchTimePrefix('ts=', SAMPLE, { isCancellationRequested: false });
+    worker().answer();
+    await expect(pending).resolves.toEqual({ status: 'matched', end: 8 });
+  });
+
   it('does not post at all for an already-cancelled token', async () => {
     const { token, cancel } = cancellable();
     cancel();
@@ -299,6 +366,40 @@ describe('TIME_FORMAT hover — TIME_PREFIX in a worker (#334)', () => {
     const pending = matchTimePrefix('ts=', SAMPLE);
     worker().crash('boom');
     await expect(pending).resolves.toEqual({ status: 'error', message: 'boom' });
+  });
+
+  it('gives a reason for a crash that has no message', async () => {
+    // A worker that has loaded and then fails with a plain Event: nothing to quote.
+    const pending = matchTimePrefix('ts=', SAMPLE);
+    worker().ready();
+    worker().onerror?.(new Event('error'));
+    await expect(pending).resolves.toEqual({ status: 'error', message: 'the preview worker failed' });
+  });
+
+  it('blames nothing for a crash with no request in flight, and builds a fresh worker for the next', async () => {
+    const first = matchTimePrefix('ts=', SAMPLE);
+    worker().answer();
+    await expect(first).resolves.toEqual({ status: 'matched', end: 8 });
+    worker().crash('idle');
+
+    const next = matchTimePrefix('ts=', SAMPLE);
+    expect(FakeWorker.instances).toHaveLength(2);
+    worker().answer();
+    await expect(next).resolves.toEqual({ status: 'matched', end: 8 });
+  });
+
+  it('omits a request queued behind a hang when no replacement worker can be built', async () => {
+    // The queued request never ran, so it is not blamed: it goes quiet, as when
+    // no worker loads.
+    vi.useFakeTimers();
+    const first = matchTimePrefix('(a|aa)+b', 'a'.repeat(4000));
+    worker().ready();
+    const second = matchTimePrefix('ts=', SAMPLE);
+    FakeWorker.refuse = true;
+    vi.advanceTimersByTime(TIME_PREFIX_TIMEOUT_MS);
+    await expect(first).resolves.toEqual({ status: 'timed-out' });
+    await expect(second).resolves.toEqual({ status: 'unavailable' });
+    expect(FakeWorker.instances).toHaveLength(1);
   });
 
   describe('lifecycle (#339)', () => {

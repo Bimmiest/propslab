@@ -161,10 +161,10 @@ export default defineConfig({
           lines: 95,
         },
         'src/monaco/**': {
-          statements: 94,
-          branches: 93,
+          statements: 97,
+          branches: 95,
           functions: 97,
-          lines: 95,
+          lines: 98,
         },
         'src/store/**': {
           statements: 99,

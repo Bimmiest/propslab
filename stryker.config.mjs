@@ -36,12 +36,10 @@ export default {
     // Was under src/engine until #566 moved the worker plumbing to src/workers.
     'src/workers/workerProtocol.ts',
     'src/store/**/*.ts',
-    // The editor's language support (#816). Its providers run against
+    // The editor's language support (#816, #836). Its providers run against
     // src/test/fakeModel.ts, which fakeModel.contract.test.ts holds to a real
-    // model. The two files below are under the floor until #836.
+    // model, and the TIME_FORMAT preview's worker runs against a fake worker.
     'src/monaco/*.ts',
-    '!src/monaco/timeFormatPreview.ts',
-    '!src/monaco/timePrefixMatcher.ts',
     '!src/store/**/__tests__/**',
     '!src/engine/**/__tests__/**',
     '!src/engine/**/*.test.ts',
