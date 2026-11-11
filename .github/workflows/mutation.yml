@@ -140,13 +140,13 @@ jobs:
           node scripts/check-wasm-checksum.mjs
           node scripts/check-wasm-checksum.mjs packages/mcp-server
 
-      # One small, well-tested file, mutated first. vitest.stryker.config.ts
-      # patches the test-name filter Stryker hands vitest; if a vitest or Stryker
-      # upgrade breaks the patch, no test runs per mutant, every mutant reads as
-      # SURVIVED, and the run only looks like a low score (#508). This fails with
-      # the cause named, before the long run starts, on every trigger. It is the
-      # check `npm run test:mutation:canary` runs locally.
-      - name: Canary (the test-name shim still filters correctly)
+      # One small, well-tested file, mutated first. Stryker hands vitest a
+      # test-name filter for each mutant; if a vitest or Stryker upgrade makes the
+      # two join names differently, no test runs per mutant, every mutant reads
+      # as SURVIVED, and the run only looks like a low score (#508, #796). This
+      # fails with the cause named, before the long run starts, on every trigger.
+      # It is the check `npm run test:mutation:canary` runs locally.
+      - name: Canary (Stryker still runs the tests of each mutant)
         if: github.event_name != 'pull_request' || steps.changed.outputs.files != ''
         run: npm run test:mutation:canary
 

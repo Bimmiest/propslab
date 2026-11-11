@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { CANARY_FILE, MIN_KILLED, MIN_SCORE, verdict } from './check-mutation-canary.mjs';
 
-// The canary for the Stryker/vitest testNamePattern shim (#508). Reading the
-// report is the script's own; what can be wrong is deciding from it.
+// The canary for Stryker's test filter (#508). Reading the report is the
+// script's own; what can be wrong is deciding from it.
 const mutants = (counts: Record<string, number>) =>
   Object.entries(counts).flatMap(([status, n]) => Array.from({ length: n }, () => ({ status })));
 const report = (counts: Record<string, number>, file = CANARY_FILE) => ({
@@ -14,10 +14,10 @@ describe('verdict', () => {
     expect(verdict(report({ Killed: 39, Survived: 4 }))).toBeNull();
   });
 
-  it('fails a run in which almost nothing is killed, the signature of the broken shim', () => {
+  it('fails a run in which almost nothing is killed, the signature of a broken test filter', () => {
     const problem = verdict(report({ Killed: 1, Survived: 42 }));
     expect(problem).toMatch(/only 1 of 43 mutants killed/);
-    expect(problem).toMatch(/testNamePattern shim/);
+    expect(problem).toMatch(/joins test names for its testNamePattern/);
   });
 
   it('needs both the count and the score', () => {
