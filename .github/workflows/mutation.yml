@@ -42,8 +42,10 @@ permissions:
   contents: read
 
 # Same rule as ci.yml: supersede on PRs, never on main.
+# A push gets a group of its own commit, as in ci.yml, so no main commit loses
+# its run to a newer pending one (#888).
 concurrency:
-  group: mutation-${{ github.ref }}
+  group: mutation-${{ github.event_name == 'push' && github.sha || github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
