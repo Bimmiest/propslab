@@ -56,13 +56,12 @@ export default {
   coverageAnalysis: 'perTest',
   // A "static" mutant changes a module-level value (a regex constant, a lookup
   // table) that is built once at import, so no single test can be said to cover
-  // it and Stryker has to rerun the whole suite for each. There are ~900 of
-  // them and they cost more than every other mutant combined, which would put a
-  // full run past three hours. They are reported as Ignored, not counted either
-  // way; `MUTATION_STATIC=1 npm run test:mutation -- --mutate <file>` runs them
-  // when you are changing one of those constants. CI does not: a whole-engine run
-  // with them needs 6 to 12 hours on four cores, past GitHub's 6-hour job limit,
-  // so the monthly run that was to report them never finished (#571).
+  // it and Stryker has to rerun the whole suite for each. There are about 900.
+  // The full run in CI includes them: mutation.yml sets MUTATION_STATIC=1, and
+  // they add about 40 minutes of work, split across its shards (#857). A PR run
+  // and a local run skip them, to stay fast, and report them as Ignored;
+  // `MUTATION_STATIC=1 npm run test:mutation -- --mutate <file>` runs them when
+  // you change one of those constants.
   //
   // An environment variable, because Stryker's `--ignoreStatic` flag can only
   // switch the option on: `--ignoreStatic false` reads `false` as the path of a
