@@ -50,7 +50,7 @@ On the Linux leg it also runs the coverage ratchet against `vitest.config.mts` a
 
 **`Scorecard`**: [`scorecard.yml`](../.github/workflows/scorecard.yml), weekly and on each push to main. It runs the OpenSSF Scorecard workflow of `shared-workflows`. The result goes to the README badge and to code scanning. It reports, and does not fail.
 
-**`Settings`**: [`settings.yml`](../.github/workflows/settings.yml), weekly. The `repo-settings-check` action of `shared-workflows` compares the repository settings with the repo-template checklist, and a failure opens an issue. `.repo-settings.json` names the checks that main requires. When the ruleset requires a new check, add its name there too. The action needs `SETTINGS_READ_TOKEN`, a fine-grained token with "Administration: read". [`environment.yml`](../.github/workflows/environment.yml) still checks the `production` environment.
+**`Settings`**: [`settings.yml`](../.github/workflows/settings.yml), weekly. The `repo-settings-check` action of `shared-workflows` compares the repository settings with the repo-template checklist, and a failure opens an issue. `.repo-settings.json` names the checks that main requires. When the ruleset requires a new check, add its name there too. The environment check reads the same list. The mutation run is not a required check, because `mutation.yml` is filtered by path and would not report on each PR; the weekly run holds the floor. The action needs `SETTINGS_READ_TOKEN`, a fine-grained token with "Administration: read". [`environment.yml`](../.github/workflows/environment.yml) still checks the `production` environment.
 
 ## A check that fails only in CI
 
