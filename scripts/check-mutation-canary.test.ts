@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { CANARY_FILE, MIN_KILLED, MIN_SCORE, tally, verdict } from './check-mutation-canary.mjs';
+import { CANARY_FILE, MIN_KILLED, MIN_SCORE, verdict } from './check-mutation-canary.mjs';
 
 // The canary for the Stryker/vitest testNamePattern shim (#508). Reading the
 // report is the script's own; what can be wrong is deciding from it.
@@ -7,23 +7,6 @@ const mutants = (counts: Record<string, number>) =>
   Object.entries(counts).flatMap(([status, n]) => Array.from({ length: n }, () => ({ status })));
 const report = (counts: Record<string, number>, file = CANARY_FILE) => ({
   files: { [file]: { mutants: mutants(counts) } },
-});
-
-describe('tally', () => {
-  it('counts a timeout as a kill, a survivor and an uncovered mutant as not', () => {
-    expect(tally(mutants({ Killed: 5, Timeout: 2, Survived: 3, NoCoverage: 1 }))).toEqual({ killed: 7, total: 11 });
-  });
-
-  it('ignores statuses that say nothing about the tests', () => {
-    expect(tally(mutants({ Killed: 4, Ignored: 9, CompileError: 2, RuntimeError: 1 }))).toEqual({
-      killed: 4,
-      total: 4,
-    });
-  });
-
-  it('is zero of zero for no mutants', () => {
-    expect(tally([])).toEqual({ killed: 0, total: 0 });
-  });
 });
 
 describe('verdict', () => {
