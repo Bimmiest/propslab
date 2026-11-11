@@ -3,9 +3,11 @@
 //
 // The pure half of the `main` protection check in
 // check-production-environment.mjs: given what the GitHub API returned, decide
-// whether `main` is protected as the deploy's trust model requires. It performs
-// no I/O of its own; the caller injects the two readers, so the decision can be
-// tested with mocked responses (branchProtection.test.ts, beside this file).
+// whether `main` is protected as the deploy's trust model requires. It reads
+// one local file, .repo-settings.json, for the list of required checks. It
+// performs no other I/O; the caller injects the two API readers, so the
+// decision can be tested with mocked responses (branchProtection.test.ts,
+// beside this file).
 //
 // Protection can come from two places, and either is enough for a requirement:
 //
@@ -22,6 +24,7 @@
 // are required by name, force-pushes and deletion are blocked, and nobody can
 // bypass the rulesets that say so.
 // ---------------------------------------------------------------------------
+import { readFileSync } from 'node:fs';
 
 /** An HTTP failure from the GitHub API, carrying the status so callers never parse messages. */
 export class ApiError extends Error {
@@ -43,20 +46,14 @@ function hasStatus(error, ...statuses) {
 }
 
 /**
- * The checks `main` must require by name: ci.yml's `ci`, which passes only when
- * every job of that workflow did (#573), with two of its jobs by their own
- * names as before; audit.yml's job; and the two jobs of the Security workflow
- * (#549), whose check names carry the calling job's name because the workflow
- * is a reusable one.
+ * The checks `main` must require by name. The list is the `requiredChecks` of
+ * .repo-settings.json, which the weekly settings check reads too, so the two
+ * checks cannot disagree about it (#887). The names of the Security workflow
+ * jobs carry the calling job's name because that workflow is a reusable one.
  */
-export const REQUIRED_CHECKS = [
-  'ci',
-  'audit',
-  'mcp-server',
-  'workflow-lint',
-  'security / gitleaks',
-  'security / trivy',
-];
+export const REQUIRED_CHECKS = /** @type {{ requiredChecks: string[] }} */ (
+  JSON.parse(readFileSync(new URL('../../.repo-settings.json', import.meta.url), 'utf8'))
+).requiredChecks;
 
 /** The required checks among `names` that are missing. */
 function missingChecks(names) {
