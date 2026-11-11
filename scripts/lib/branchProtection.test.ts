@@ -3,6 +3,7 @@
 // responses. Payload shapes follow GitHub's REST reference: "Get rules for a
 // branch" (an array of { type, parameters, ruleset_id }), "Get a repository
 // ruleset" and "Get branch protection".
+import { readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
 import { ApiError, evaluateMainProtection, REQUIRED_CHECKS } from './branchProtection.mjs';
 
@@ -25,16 +26,7 @@ const liveRules = [
     type: 'required_status_checks',
     ruleset_id: RULESET,
     parameters: {
-      required_status_checks: checks(
-        'ci',
-        'audit',
-        'mcp-server',
-        'workflow-lint',
-        'Analyze (actions)',
-        'Analyze (javascript-typescript)',
-        'security / gitleaks',
-        'security / trivy',
-      ),
+      required_status_checks: checks(...REQUIRED_CHECKS, 'Analyze (actions)', 'Analyze (javascript-typescript)'),
     },
   },
 ];
@@ -54,6 +46,16 @@ const ok =
     Promise.resolve(value);
 const fails = (status: number) => () => Promise.reject(new ApiError('/x', status));
 const without = (type: string) => liveRules.filter((rule) => rule.type !== type);
+
+describe('REQUIRED_CHECKS', () => {
+  it('is the list of .repo-settings.json, so the two checks cannot disagree (#887)', () => {
+    const settings = JSON.parse(readFileSync(new URL('../../.repo-settings.json', import.meta.url), 'utf8')) as {
+      requiredChecks: string[];
+    };
+    expect(REQUIRED_CHECKS).toEqual(settings.requiredChecks);
+    expect(REQUIRED_CHECKS).toEqual(expect.arrayContaining(['ci', 'pr-hygiene', 'CodeQL']));
+  });
+});
 
 describe('evaluateMainProtection', () => {
   it("accepts main's live ruleset", async () => {
@@ -89,7 +91,7 @@ describe('evaluateMainProtection', () => {
       getRuleset: ok(noBypass),
     });
     expect(result.missing).toEqual([
-      'required status checks: audit, mcp-server, workflow-lint, security / gitleaks, security / trivy',
+      'required status checks: audit, mcp-server, workflow-lint, pr-hygiene, security / gitleaks, security / trivy, CodeQL',
     ]);
   });
 
@@ -159,7 +161,7 @@ describe('evaluateMainProtection', () => {
       'changes only through a pull request',
       'force-pushes blocked',
       'no bypass actors',
-      'required status checks: audit, mcp-server, workflow-lint, security / gitleaks, security / trivy',
+      'required status checks: audit, mcp-server, workflow-lint, pr-hygiene, security / gitleaks, security / trivy, CodeQL',
     ]);
   });
 
@@ -174,7 +176,7 @@ describe('evaluateMainProtection', () => {
     ];
     const classic = {
       ...fullClassic,
-      required_status_checks: { contexts: ['mcp-server', 'workflow-lint', 'security / gitleaks', 'security / trivy'] },
+      required_status_checks: { contexts: REQUIRED_CHECKS.filter((name: string) => !['ci', 'audit'].includes(name)) },
     };
     const result = await evaluateMainProtection({
       getRules: ok(rules),
