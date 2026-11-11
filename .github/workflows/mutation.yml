@@ -2,12 +2,13 @@ name: Mutation
 
 # Coverage says a line ran; it does not say a test would notice if the line were
 # wrong. Stryker answers that second question by breaking src/engine/** one small
-# edit at a time and checking that some test fails. A full run takes over an
-# hour, so it lives here rather than in ci.yml, and pull requests mutate only
-# the engine files they change.
+# edit at a time and checking that some test fails. A full run takes over four
+# hours of work, so it lives here rather than in ci.yml, is divided across the
+# jobs of a matrix, and pull requests mutate only the engine files they change.
 on:
-  # The whole engine, from scratch, held to the floor in stryker.config.mjs.
-  # Later in the morning than ci.yml's weekly run so the two do not share a queue.
+  # The whole engine, from scratch, in shards whose combined score is held to
+  # the floor in stryker.config.mjs (the `score` job). Later in the morning
+  # than ci.yml's weekly run so the two do not share a queue.
   # Static mutants are not run here: see `ignoreStatic` in stryker.config.mjs.
   schedule:
     - cron: '0 8 * * 1'
@@ -41,19 +42,26 @@ concurrency:
 jobs:
   mutation:
     runs-on: ubuntu-latest
-    # A full run measured 76 minutes on a standard 4-core runner when the
-    # limit was set. By 2026-10-19 it was 12,713 mutants and had reached 82%
-    # at the 120-minute limit (two weekly runs cancelled), so the weekly limit
-    # went to 180. On 2026-10-25 a run was at 96% when 180 cancelled it, and
-    # no full run had finished since 2026-10-05 (#571), so it went to 240. On
-    # 2026-10-26 a full run finished in 225 minutes, so it is 300, inside
-    # GitHub's 6-hour job limit.
+    strategy:
+      # A shard that fails must not cancel the others: their reports still name
+      # the mutants that survived.
+      fail-fast: false
+      matrix:
+        # A full run was one job, and it grew past every limit it was given:
+        # 120, 180, 240 and 300 minutes (#571), and 254 minutes on 2026-11-09.
+        # GitHub stops a job at 6 hours, so the full run is divided into shards
+        # (#851). scripts/mutation-shard.mjs gives each shard about the same
+        # share of the `mutate` list, by file size. To add a shard, add a number.
+        # A pull request mutates only what it changed, in one job: shard 0.
+        shard: ${{ fromJSON(github.event_name == 'pull_request' && '[0]' || '[1, 2, 3, 4]') }}
+    # A shard does about a quarter of the 254 minutes, plus its setup. When a
+    # shard gets near its limit, add a shard; do not raise the limit.
     #
     # A PR run mutates the files it changes, and the sources its changed tests
     # import. A test-only change to a property suite brings the parser it
     # imports: #723's property suites brought 3,621 mutants and were two-thirds
     # through at 48 minutes, so a PR gets 90.
-    timeout-minutes: ${{ github.event_name == 'pull_request' && 90 || 300 }}
+    timeout-minutes: ${{ github.event_name == 'pull_request' && 90 || 150 }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -151,22 +159,59 @@ jobs:
           FILES: ${{ steps.changed.outputs.files }}
         run: npm run test:mutation -- --mutate "$FILES"
 
-      - name: Mutation test (whole engine)
+      # MUTATION_SHARD=1 turns off the floor for one shard: the `score` job
+      # applies it to the shards together.
+      - name: Mutation test (shard ${{ matrix.shard }} of ${{ strategy.job-total }})
         if: github.event_name != 'pull_request'
-        run: npm run test:mutation
+        env:
+          SHARD: ${{ matrix.shard }}
+          SHARDS: ${{ strategy.job-total }}
+          MUTATION_SHARD: '1'
+        run: |
+          files=$(node scripts/mutation-shard.mjs "$SHARDS" "$SHARD")
+          echo "Shard $SHARD of $SHARDS mutates $(tr ',' '\n' <<<"$files" | wc -l) files: \`$files\`" >> "$GITHUB_STEP_SUMMARY"
+          start=$SECONDS
+          npm run test:mutation -- --mutate "$files"
+          echo "Shard $SHARD of $SHARDS took $(( (SECONDS - start) / 60 )) minutes." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload mutation report
         if: ${{ !cancelled() && (github.event_name != 'pull_request' || steps.changed.outputs.files != '') }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: mutation-report
+          # The `score` job finds the shards' reports by this name.
+          name: ${{ matrix.shard == 0 && 'mutation-report' || format('mutation-report-{0}-of-{1}', matrix.shard, strategy.job-total) }}
           path: reports/mutation/
           retention-days: 14
+
+  # The floor for the full run: the shards' reports scored together. It runs
+  # only when every shard finished, and fails when a report is missing.
+  score:
+    needs: [mutation]
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      # The check reads stryker.config.mjs and scripts/ only: no install.
+      - uses: Bimmiest/shared-workflows/.github/actions/setup-node-project@171cd386717395c01be5e23ab926823c7b246cf6 # v1.11.0
+        with:
+          install: 'false'
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: mutation-report-*-of-*
+          path: reports/shards
+
+      - name: Combined score against the floor
+        run: node scripts/check-mutation-score.mjs reports/shards >> "$GITHUB_STEP_SUMMARY"
 
   # A failed scheduled run opens an issue, or comments on the open one
   # (#573). See environment.yml's `report` job.
   report:
-    needs: [mutation]
+    needs: [mutation, score]
     if: failure() && github.event_name == 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -178,6 +223,6 @@ jobs:
           label: scheduled-mutation
           title: The scheduled mutation run failed
           body: |
-            The full run scored under the floor in stryker.config.mjs, or did not finish. The report artifact lists the surviving mutants.
+            The full run scored under the floor in stryker.config.mjs, or a shard did not finish. The report artifact of each shard lists its surviving mutants.
 
             Run: {run}

@@ -17,6 +17,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { tally } from './lib/mutationShards.mjs';
 
 /** The file the canary run mutates; keep in step with package.json and mutation.yml. */
 export const CANARY_FILE = 'src/engine/utils/wildcardMatch.ts';
@@ -27,13 +28,6 @@ export const CANARY_FILE = 'src/engine/utils/wildcardMatch.ts';
  */
 export const MIN_KILLED = 25;
 export const MIN_SCORE = 70;
-
-/** Killed and total counts, ignoring statuses that say nothing about the tests. */
-export function tally(mutants) {
-  const counted = mutants.filter((m) => ['Killed', 'Timeout', 'Survived', 'NoCoverage'].includes(m.status));
-  const killed = counted.filter((m) => m.status === 'Killed' || m.status === 'Timeout').length;
-  return { killed, total: counted.length };
-}
 
 /** A problem description, or null when the canary run looks healthy. */
 export function verdict(report, file = CANARY_FILE) {

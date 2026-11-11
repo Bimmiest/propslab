@@ -87,5 +87,9 @@ export default {
   // passes but is flagged in the report. It sat at `break`, so the band was empty
   // and the first sign of a slide was a red build (#508). Now a few points
   // above, so a run drifting toward the floor is visible before it fails.
-  thresholds: { high: 85, low: 83, break: 81 },
+  //
+  // A shard of the weekly run (MUTATION_SHARD=1) has no floor of its own:
+  // scripts/check-mutation-score.mjs holds the shards' combined score to
+  // `break` (#851). One shard alone can be below the floor while the run is not.
+  thresholds: { high: 85, low: 83, break: process.env.MUTATION_SHARD === '1' ? null : 81 },
 };
