@@ -1,8 +1,8 @@
-import { configDefaults, defineConfig, type Plugin } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
 import base from './vitest.config';
 
 // The vitest config Stryker runs (`npm run test:mutation`, stryker.config.mjs).
-// It is the normal one with four changes.
+// It is the normal one with three changes.
 //
 // 1. Only the engine's own tests. Mutants live in src/engine/**, and the
 //    component tests that also import the engine start jsdom per file — most
@@ -17,31 +17,7 @@ import base from './vitest.config';
 //    other test was ever given the chance to kill. The worker entry points are
 //    outside `mutate` anyway, and CI still runs these tests.
 //
-// 3. A shim for a Stryker/vitest 5 mismatch that otherwise makes every result
-//    meaningless. Stryker runs each mutant against only the tests that cover
-//    it, by setting `testNamePattern` to their names joined with spaces
-//    ("suite test"). Vitest 5 matches that pattern against names joined with
-//    " > " ("suite > test"), so any test inside a describe() is filtered out,
-//    zero tests run, and the mutant is reported as SURVIVED — the run looks
-//    healthy and scores near zero. The setter below accepts either separator.
-//    Remove it once @stryker-mutator/vitest-runner joins names the way vitest
-//    does; the tell is a run where a mutant nothing could miss survives.
-const strykerTestNamePattern: Plugin = {
-  name: 'propslab:stryker-test-name-pattern',
-  configureVitest({ project }) {
-    let pattern: RegExp | undefined;
-    Object.defineProperty(project.config, 'testNamePattern', {
-      configurable: true,
-      enumerable: true,
-      get: () => pattern,
-      set: (value: RegExp | undefined) => {
-        pattern = value && new RegExp(value.source.replaceAll(' ', '(?: > | )'), value.flags);
-      },
-    });
-  },
-};
-
-// 4. None of the directive-evidence machinery. The base config records what
+// 3. None of the directive-evidence machinery. The base config records what
 //    tests feed `runPipeline` (src/test/recordDirectiveEvidence.ts) for the one
 //    test that reads it back, which needs the whole suite in one invocation
 //    across two projects. A mutant run is neither, so the recorder is dropped,
@@ -53,7 +29,6 @@ delete process.env['PROPSLAB_EVIDENCE_DIR'];
 // include to the base one instead of replacing it.
 export default defineConfig({
   ...base,
-  plugins: [...(base.plugins ?? []), strykerTestNamePattern],
   test: {
     ...base.test,
     projects: undefined,

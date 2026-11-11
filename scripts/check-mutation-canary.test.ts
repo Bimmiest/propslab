@@ -1,29 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { CANARY_FILE, MIN_KILLED, MIN_SCORE, tally, verdict } from './check-mutation-canary.mjs';
+import { CANARY_FILE, MIN_KILLED, MIN_SCORE, verdict } from './check-mutation-canary.mjs';
 
-// The canary for the Stryker/vitest testNamePattern shim (#508). Reading the
-// report is the script's own; what can be wrong is deciding from it.
+// The canary for Stryker's test filter (#508). Reading the report is the
+// script's own; what can be wrong is deciding from it.
 const mutants = (counts: Record<string, number>) =>
   Object.entries(counts).flatMap(([status, n]) => Array.from({ length: n }, () => ({ status })));
 const report = (counts: Record<string, number>, file = CANARY_FILE) => ({
   files: { [file]: { mutants: mutants(counts) } },
-});
-
-describe('tally', () => {
-  it('counts a timeout as a kill, a survivor and an uncovered mutant as not', () => {
-    expect(tally(mutants({ Killed: 5, Timeout: 2, Survived: 3, NoCoverage: 1 }))).toEqual({ killed: 7, total: 11 });
-  });
-
-  it('ignores statuses that say nothing about the tests', () => {
-    expect(tally(mutants({ Killed: 4, Ignored: 9, CompileError: 2, RuntimeError: 1 }))).toEqual({
-      killed: 4,
-      total: 4,
-    });
-  });
-
-  it('is zero of zero for no mutants', () => {
-    expect(tally([])).toEqual({ killed: 0, total: 0 });
-  });
 });
 
 describe('verdict', () => {
@@ -31,10 +14,10 @@ describe('verdict', () => {
     expect(verdict(report({ Killed: 39, Survived: 4 }))).toBeNull();
   });
 
-  it('fails a run in which almost nothing is killed, the signature of the broken shim', () => {
+  it('fails a run in which almost nothing is killed, the signature of a broken test filter', () => {
     const problem = verdict(report({ Killed: 1, Survived: 42 }));
     expect(problem).toMatch(/only 1 of 43 mutants killed/);
-    expect(problem).toMatch(/testNamePattern shim/);
+    expect(problem).toMatch(/joins test names for its testNamePattern/);
   });
 
   it('needs both the count and the score', () => {
