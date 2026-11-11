@@ -6,7 +6,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { AjvJsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/ajv';
 import type { JsonSchemaType } from '@modelcontextprotocol/sdk/validation';
-import { createServer } from '../server';
+import { createServer, SERVER_INSTRUCTIONS } from '../server';
 import { DEFAULT_MAX_CONCURRENT_WORKERS, DEFAULT_MAX_QUEUED_CALLS } from '../runInWorker';
 import { resultText } from './resultText';
 import { STALLING_RAW, stallingStanza } from './stallingConf';
@@ -23,6 +23,7 @@ import { STALLING_RAW, stallingStanza } from './stallingConf';
  */
 const WORKER_PATH = fileURLToPath(new URL('../../dist/simulateWorker.js', import.meta.url));
 const PACKAGE_JSON = fileURLToPath(new URL('../../package.json', import.meta.url));
+const TOOLS_SOURCE = fileURLToPath(new URL('../tools.ts', import.meta.url));
 
 type TextResult = {
   content: { type: string; text: string }[];
@@ -302,6 +303,45 @@ describe('MCP server end to end', () => {
       'unknown arguments `props` (did you mean `props_conf`?), `foo`. This tool takes: props_conf, transforms_conf, timeout_ms.',
     );
   });
+
+  it('gives instructions with the order lookup_directive, validate, simulate (#885)', () => {
+    const instructions = client.getInstructions();
+    expect(instructions).toBe(SERVER_INSTRUCTIONS);
+    const at = (tool: string) => SERVER_INSTRUCTIONS.indexOf(`${tool}:`);
+    expect(at('lookup_directive')).toBeGreaterThan(-1);
+    expect(at('lookup_directive')).toBeLessThan(at('validate'));
+    expect(at('validate')).toBeLessThan(at('simulate'));
+  });
+
+  it('names in its descriptions every error code a tool returns (#885)', async () => {
+    // Read from the source, so a new code that no description names fails
+    // here. `cancelled` never reaches a client: the SDK drops the response.
+    const codes = new Set(
+      [...readFileSync(TOOLS_SOURCE, 'utf8').matchAll(/error: '([a-z_]+)'/g)].map(([, code]) => code),
+    );
+    codes.delete('cancelled');
+    expect(codes.size).toBeGreaterThan(5);
+    const { tools } = await client.listTools();
+    const descriptions = tools.map((t) => t.description ?? '').join('\n');
+    for (const code of codes) expect(descriptions, code).toContain(code);
+  });
+
+  it('sends progress notifications to a client that sends a progressToken (#885)', async () => {
+    const notes: { progress: number; message?: string }[] = [];
+    const result = await client.callTool(
+      { name: 'validate', arguments: { props_conf: '[st]\nSHOULD_LINEMERGE = false\n' } },
+      undefined,
+      { onprogress: (p) => notes.push(p) },
+    );
+    expect(result.isError).toBeFalsy();
+    // At least the worker's start, which is reported when it happens.
+    expect(notes.length).toBeGreaterThan(0);
+    expect(notes[0]?.message).toMatch(/^(Starting the sandbox worker|Waiting for a sandbox slot)/);
+    for (const [i, note] of notes.entries()) {
+      expect(note.progress).toBe(i + 1);
+      expect(note.message).toBeTruthy();
+    }
+  }, 20_000);
 
   it('rejects input the schema does not allow before anything runs', async () => {
     const result = await client.callTool({

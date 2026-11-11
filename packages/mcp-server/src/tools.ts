@@ -31,6 +31,7 @@ import {
   MAX_RESPONSE_BYTES,
 } from './responseBudget';
 import { explainOutputShape, lookupOutputShape, simulateOutputShape, validateOutputShape } from './outputSchemas';
+import { progressNotifier, type ToolExtra } from './progressNotifications';
 
 // ---------------------------------------------------------------------------
 // Input schemas
@@ -713,14 +714,29 @@ const annotations = {
   openWorldHint: false,
 } as const;
 
+/**
+ * The error codes an engine tool's result can carry, for its description: an
+ * agent that knows them can tell "change the input" from "retry later"
+ * without a failed call first. A test holds this to the codes the handlers
+ * return.
+ */
+const ENGINE_ERRORS =
+  'An error result (isError) carries JSON with an `error` code: input_too_large (the conf ' +
+  'text is over the limit), timeout (the budget ran out; it says where, and whether a regex ' +
+  'is the likely cause), out_of_memory (the input is too large for the sandbox), busy and ' +
+  'start_timeout (the server is loaded; retry, the input is not at fault), response_too_large ' +
+  '(ask for less), engine_failure (a fault in the server). An argument the input schema ' +
+  'refuses comes back as plain text that names it.';
+
 export function registerTools(server: McpServer, options?: { workerPath?: string }): void {
   const workerPath = options?.workerPath;
   // Each call carries its own request's cancellation signal, so a cancelled
-  // (or disconnected) request frees its concurrency slot — see runInWorker.
-  const worker = (extra: { signal: AbortSignal }): RunInWorkerOptions => ({
-    workerPath,
-    signal: extra.signal,
-  });
+  // (or disconnected) request frees its concurrency slot — see runInWorker —
+  // and, when the client sent a progressToken, reports where it is.
+  const worker = (extra: ToolExtra): RunInWorkerOptions => {
+    const onProgress = progressNotifier(extra);
+    return { workerPath, signal: extra.signal, ...(onProgress ? { onProgress } : {}) };
+  };
 
   server.registerTool(
     'simulate',
@@ -732,7 +748,8 @@ export function registerTools(server: McpServer, options?: { workerPath?: string
         'fields, indexed fields, and a processingTrace naming every processor that touched ' +
         'the event, plus config diagnostics. Use this to VERIFY what a config actually does ' +
         'to real data instead of predicting it; read the diagnostics too — they name ' +
-        'directives the simulator recognises but does not honour.',
+        'directives the simulator recognises but does not honour. ' +
+        ENGINE_ERRORS,
       inputSchema: simulateInputSchema,
       outputSchema: simulateOutputShape,
       annotations,
@@ -749,7 +766,8 @@ export function registerTools(server: McpServer, options?: { workerPath?: string
         'keys, values of the wrong type, TRANSFORMS-/REPORT- references to missing stanzas, ' +
         'settings that are inert in the phase they are used in, directives the simulator ' +
         'does not honour, and regexes (in every stanza) that PCRE will not compile. Use it to ' +
-        'check a config you have drafted before simulating it.',
+        'check a config you have drafted before simulating it. ' +
+        ENGINE_ERRORS,
       inputSchema: validateInputSchema,
       outputSchema: validateOutputShape,
       annotations,
@@ -767,7 +785,8 @@ export function registerTools(server: McpServer, options?: { workerPath?: string
         'definition won (`overrides`) and which lost (`overriddenBy`). For props.conf, pass a ' +
         'sourcetype to also resolve which stanzas match such an event and get the effective ' +
         'merged directive set, i.e. what `btool props list --debug` would answer. A sourcetype ' +
-        'with transforms.conf is an error (argument_not_applicable).',
+        'with transforms.conf is an error (argument_not_applicable). ' +
+        ENGINE_ERRORS,
       inputSchema: explainInputSchema,
       outputSchema: explainOutputShape,
       annotations,
@@ -784,7 +803,9 @@ export function registerTools(server: McpServer, options?: { workerPath?: string
         'example, default, value type, phase (index-time/search-time), deprecation, and ' +
         'crucially the simulation-support level (simulated/ignored/documented). Cite this ' +
         'instead of recalling Splunk documentation from memory. Omit `key` to list all ' +
-        'known directives.',
+        'known directives. A key the registry does not know is an error result (isError) ' +
+        'with `error: unknown_directive` and, for a mis-cased key, the correct case in ' +
+        '`suggestions`.',
       inputSchema: lookupInputSchema,
       outputSchema: lookupOutputShape,
       annotations,

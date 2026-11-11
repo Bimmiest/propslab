@@ -48,6 +48,11 @@
  * the queue bounded at four calls per slot no call waits behind more than four
  * of those — and the MCP client's request timeout remains the outer limit.
  * See docs/adr/0015-mcp-timeouts-start-on-ready-and-report-progress.md.
+ *
+ * That wait can be longer than a client waits for a call, so a caller can ask
+ * for `onProgress`: where the call is, while it queues and while its worker
+ * runs, read from the same shared word the timeout reads (#885). The tools
+ * send it as MCP progress notifications.
  */
 import { Worker, type ResourceLimits } from 'node:worker_threads';
 import os from 'node:os';
@@ -56,6 +61,12 @@ import type { WorkerData, WorkerMessage, WorkerRequest } from './protocol';
 import type { SuspectList } from './suspects';
 import { createProgressBuffer, readProgress, type RunProgress } from './progress';
 import { regexEngineModule } from './regexEngine';
+
+/**
+ * Where a call is: waiting for a slot, with the slots in use and the calls
+ * queued (this one included), or what its worker last recorded.
+ */
+export type CallProgress = RunProgress | { phase: 'queued'; running: number; queued: number };
 
 export class WorkerTimeoutError extends Error {
   readonly budgetMs: number;
@@ -216,9 +227,10 @@ export class Semaphore {
    * cancelled request must not keep its place in line, or everything queued
    * behind it waits on a run nobody will read. If no slot is free and the
    * queue already holds `maxQueued` callers, this rejects with
-   * `WorkerBusyError` at once.
+   * `WorkerBusyError` at once. `onQueued` runs once the caller is in the
+   * queue, and not at all when a slot is free.
    */
-  async acquire(signal?: AbortSignal): Promise<() => void> {
+  async acquire(signal?: AbortSignal, onQueued?: () => void): Promise<() => void> {
     if (signal?.aborted) throw new WorkerCancelledError(false, signal.reason);
     if (this.held < this.max) {
       this.held++;
@@ -244,6 +256,7 @@ export class Semaphore {
         };
         this.waiters.push(waiter);
         signal?.addEventListener('abort', onAbort, { once: true });
+        onQueued?.();
       });
     }
     let released = false;
@@ -283,6 +296,13 @@ export const DEFAULT_MAX_QUEUED_CALLS = 4 * DEFAULT_MAX_CONCURRENT_WORKERS;
  */
 export const DEFAULT_STARTUP_LIMIT_MS = 10_000;
 
+/**
+ * How often a call with `onProgress` reports where it is. A client that resets
+ * its request timeout on progress needs one inside its timeout, which is
+ * commonly 60 s; once a second costs a few hundred bytes a second per call.
+ */
+export const DEFAULT_PROGRESS_INTERVAL_MS = 1_000;
+
 const defaultLimiter = new Semaphore(DEFAULT_MAX_CONCURRENT_WORKERS, DEFAULT_MAX_QUEUED_CALLS);
 
 export interface RunInWorkerOptions {
@@ -302,6 +322,28 @@ export interface RunInWorkerOptions {
    * worker; either way the call rejects with `WorkerCancelledError`.
    */
   signal?: AbortSignal;
+  /**
+   * Called with where the call is: at once when it has to queue, when its
+   * worker starts, when the worker reports ready, and every
+   * `progressIntervalMs` between, until the call settles; never after. It must
+   * not throw: it runs from a timer.
+   */
+  onProgress?: (progress: CallProgress) => void;
+  /** Overrides `DEFAULT_PROGRESS_INTERVAL_MS`. */
+  progressIntervalMs?: number;
+}
+
+/**
+ * Reports `read()` to `onProgress` on demand and on an interval, until
+ * stopped. Absent without an `onProgress`, so a call nobody watches sets no
+ * timer.
+ */
+function progressTicker(options: RunInWorkerOptions, read: () => CallProgress) {
+  const { onProgress } = options;
+  if (onProgress === undefined) return undefined;
+  const tick = () => onProgress(read());
+  const timer = setInterval(tick, options.progressIntervalMs ?? DEFAULT_PROGRESS_INTERVAL_MS);
+  return { tick, stop: () => clearInterval(timer) };
 }
 
 export async function runInWorker<T>(
@@ -312,33 +354,47 @@ export async function runInWorker<T>(
   const options: RunInWorkerOptions =
     typeof workerPathOrOptions === 'string' ? { workerPath: workerPathOrOptions } : (workerPathOrOptions ?? {});
   const { signal } = options;
-  const release = await (options.limiter ?? defaultLimiter).acquire(signal);
-  // The slot can be handed over in the same tick the request is cancelled
-  // (the hand-off wins that race inside acquire). Spawning then would run a
-  // worker for nobody, so give the slot straight back instead.
-  if (signal?.aborted) {
-    release();
-    throw new WorkerCancelledError(false, signal.reason);
-  }
-  let run: { result: Promise<T>; exited: Promise<void> };
+  const limiter = options.limiter ?? defaultLimiter;
+  // Created before the slot is taken so the ticker reads one place: no buffer
+  // yet means the call is still queued.
+  let progress: SharedArrayBuffer | undefined;
+  const ticker = progressTicker(options, () =>
+    progress ? readProgress(progress) : { phase: 'queued', running: limiter.active, queued: limiter.queued },
+  );
   try {
-    run = spawnAndWait<T>(request, timeoutMs, options);
-  } catch (err) {
-    release();
-    throw err;
+    const release = await limiter.acquire(signal, ticker?.tick);
+    // The slot can be handed over in the same tick the request is cancelled
+    // (the hand-off wins that race inside acquire). Spawning then would run a
+    // worker for nobody, so give the slot straight back instead.
+    if (signal?.aborted) {
+      release();
+      throw new WorkerCancelledError(false, signal.reason);
+    }
+    progress = createProgressBuffer();
+    let run: { result: Promise<T>; exited: Promise<void> };
+    try {
+      run = spawnAndWait<T>(request, timeoutMs, options, { progress, onReady: ticker?.tick });
+    } catch (err) {
+      release();
+      throw err;
+    }
+    // The slot frees when the thread has actually exited, not when the call
+    // settles. terminate() is asynchronous, and a timed-out worker is by
+    // definition one that was busy — releasing on settle would let the cap
+    // count it as gone while it is still burning a core.
+    void run.exited.then(release);
+    ticker?.tick();
+    return await run.result;
+  } finally {
+    ticker?.stop();
   }
-  // The slot frees when the thread has actually exited, not when the call
-  // settles. terminate() is asynchronous, and a timed-out worker is by
-  // definition one that was busy — releasing on settle would let the cap
-  // count it as gone while it is still burning a core.
-  void run.exited.then(release);
-  return run.result;
 }
 
 function spawnAndWait<T>(
   request: WorkerRequest,
   timeoutMs: number,
   options: RunInWorkerOptions,
+  run: { progress: SharedArrayBuffer; onReady: (() => void) | undefined },
 ): { result: Promise<T>; exited: Promise<void> } {
   // Resolved lazily: in the esbuild CJS bundle `__dirname` is the dist
   // directory and the worker is the sibling bundle; tests running from source
@@ -349,7 +405,7 @@ function spawnAndWait<T>(
 
   // Compiled (once per process) before the worker exists and before its
   // budget starts, so no request pays for it.
-  const progress = createProgressBuffer();
+  const { progress } = run;
   const workerData: WorkerData = {
     ...request,
     regexEngine: regexEngineModule(),
@@ -410,8 +466,10 @@ function spawnAndWait<T>(
     worker.on('message', (message: WorkerMessage) => {
       if ('kind' in message) {
         if (settled) return;
-        if (message.kind === 'ready') startBudget();
-        else suspects = message.list;
+        if (message.kind === 'ready') {
+          startBudget();
+          run.onReady?.();
+        } else suspects = message.list;
         return;
       }
       settle(() => {
