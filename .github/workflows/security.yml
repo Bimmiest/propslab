@@ -24,8 +24,10 @@ on:
 
 # A new push supersedes an in-flight run for the same ref. Never cancel main:
 # its result is the record of whether the default branch is clean.
+# A push gets a group of its own commit: a group keeps one pending run, so with
+# one group for main a commit pushed between two others lost its run (#888).
 concurrency:
-  group: security-${{ github.ref }}
+  group: security-${{ github.event_name == 'push' && github.sha || github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions:
