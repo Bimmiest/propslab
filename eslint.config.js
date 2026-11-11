@@ -19,6 +19,47 @@ const nodeOnlyGlobals = {
   ...globals.node,
 };
 
+/**
+ * The rule against a module-level `let` (#856), with `names` allowed. Only the
+ * page-level singletons below pass names; every other `let` in their files is
+ * still reported.
+ * @param {string[]} names
+ */
+const moduleLetRule = (names = []) => [
+  'error',
+  {
+    selector:
+      ':matches(Program, ExportNamedDeclaration) > VariableDeclaration[kind="let"]' +
+      (names.length > 0 ? `:not(:has(> VariableDeclarator[id.name=/^(${names.join('|')})$/]))` : ''),
+    message: 'Do not keep state that changes at module level. Pass it in the context of the operation.',
+  },
+];
+
+// State that is one per page, or one per process, by design: not the state of
+// one operation, so the rule above does not fit it (#865). Each file keeps the
+// rule for any other `let`; only these names pass, each for its reason.
+const PAGE_SINGLETONS = {
+  // Two facts about this page load: it came from a stale-chunk reload, and a
+  // reload is under way. A reload ends the page, and both with it.
+  'src/staleChunkReload.ts': ['carriedOver', 'reloading'],
+  // The one jump to a line that is waiting for its editor: a newer click
+  // cancels it, whichever component asked.
+  'src/components/editor/revealInEditor.ts': ['cancelPending'],
+  // The count of error-boundary resets that each lazy component reads. The
+  // file says why it is not a context: one lazy component sits under several
+  // boundaries.
+  'src/components/ui/retryableLazy.tsx': ['resetEpoch'],
+  // Monaco's languages, providers and themes are global to the page, so they
+  // are registered one time.
+  'src/components/editor/splunkMonacoSetup.ts': ['registration'],
+  // The page has one TIME_PREFIX worker client, and a request id is unique to it.
+  'src/monaco/timePrefixMatcher.ts': ['nextId'],
+  // The regex engine compiles one time in each realm: the page, and each worker.
+  'src/workers/regexEngineLoader.ts': ['loading'],
+  // The FC_SEED notice prints one time in each test process.
+  'src/test/fcSeed.ts': ['seedLogged'],
+};
+
 export default defineConfig([
   // All generated: build output (the app's and any package's), and the
   // reports the test suites write.
@@ -265,15 +306,13 @@ export default defineConfig([
     files: ['**/*.{ts,tsx}', 'packages/mcp-server/**/*.mts', 'scripts/**/*.{js,mjs}'],
     ignores: ['**/__tests__/**', '**/*.test.{ts,tsx,mts,mjs}', 'e2e/**', 'packages/*/test/**'],
     rules: {
-      'no-restricted-syntax': [
-        'error',
-        {
-          selector: ':matches(Program, ExportNamedDeclaration) > VariableDeclaration[kind="let"]',
-          message: 'Do not keep state that changes at module level. Pass it in the context of the operation.',
-        },
-      ],
+      'no-restricted-syntax': moduleLetRule(),
     },
   },
+  ...Object.entries(PAGE_SINGLETONS).map(([file, names]) => ({
+    files: [file],
+    rules: { 'no-restricted-syntax': moduleLetRule(names) },
+  })),
   {
     // Tests are exempt from length and branching: a describe() callback holds a
     // whole suite, so its length counts cases, and a table of cases is not
