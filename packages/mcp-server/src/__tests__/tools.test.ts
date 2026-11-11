@@ -2,6 +2,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import {
+  closestArgument,
   explainInputShape,
   handleExplainPrecedence,
   handleLookupDirective,
@@ -330,7 +331,6 @@ describe('explain_precedence', () => {
         {
           file: 'transforms.conf',
           conf: '[t]\nREGEX = x\n',
-          sourcetype: 'access_log',
           index: 'main',
           host: 'localhost',
           source: '/var/log/x',
@@ -341,6 +341,30 @@ describe('explain_precedence', () => {
     );
     expect(out.stanzas.map((s: { name: string }) => s.name)).toEqual(['t']);
     expect(out).not.toHaveProperty('resolution');
+  });
+
+  it('refuses a sourcetype with transforms.conf rather than ignore it (#884)', async () => {
+    // A worker that does not exist: the refusal comes before any run.
+    const result = await handleExplainPrecedence(
+      {
+        file: 'transforms.conf',
+        conf: '[t]\nREGEX = x\n',
+        sourcetype: 'access_log',
+        index: 'main',
+        host: 'localhost',
+        source: '/var/log/x',
+        timeout_ms: 10_000,
+      },
+      '/nonexistent/worker.js',
+    );
+    expect(result.isError).toBe(true);
+    expect(result).not.toHaveProperty('structuredContent');
+    expect(payload(result)).toMatchObject({
+      error: 'argument_not_applicable',
+      argument: 'sourcetype',
+      file: 'transforms.conf',
+    });
+    expect(payload(result).guidance).toMatch(/file="props\.conf"/);
   });
 });
 
@@ -758,4 +782,34 @@ describe('response size cap (#414)', () => {
     expect(out.truncation_note).toMatch(/regex directives/);
     expect(out.regex_directives[0].key).toBe('EXTRACT-boom');
   }, 60_000);
+});
+
+describe('closestArgument (#884)', () => {
+  const simulateArgsKnown = ['raw', 'sourcetype', 'props_conf', 'transforms_conf', 'timeout_ms'];
+
+  it('names the argument that contains the unknown one', () => {
+    expect(closestArgument('props', simulateArgsKnown)).toBe('props_conf');
+    expect(closestArgument('transforms', simulateArgsKnown)).toBe('transforms_conf');
+    expect(closestArgument('timeout', simulateArgsKnown)).toBe('timeout_ms');
+  });
+
+  it('names the argument the unknown one contains', () => {
+    expect(closestArgument('raw_data', simulateArgsKnown)).toBe('raw');
+  });
+
+  it('names an argument within two edits, ignoring case', () => {
+    expect(closestArgument('sourcetyp', simulateArgsKnown)).toBe('sourcetype');
+    expect(closestArgument('SourceType', simulateArgsKnown)).toBe('sourcetype');
+    expect(closestArgument('props-conf', simulateArgsKnown)).toBe('props_conf');
+  });
+
+  it('prefers the fewest edits when more than one argument is close', () => {
+    expect(closestArgument('conf', ['transforms_conf', 'props_conf'])).toBe('props_conf');
+  });
+
+  it('names nothing when no argument is close', () => {
+    expect(closestArgument('banana', simulateArgsKnown)).toBeNull();
+    // Too short to match by containment: `r` is in raw, sourcetype and more.
+    expect(closestArgument('xr', ['raw_sample'])).toBeNull();
+  });
 });
