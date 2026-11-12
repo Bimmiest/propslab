@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import { HighlightedTab } from '../HighlightedTab';
 import { useAppStore } from '../../../../store/useAppStore';
 import type { EnrichedEvent } from '../../enrichEvents';
 import type { SplunkEvent, ProcessingStep } from '../../../../engine/types';
 import { makeEvent } from '../../../../test/makeEvent';
+import { NARROW_QUERY } from '../../../../hooks/useMediaQuery';
 
 function eventWithTrace(raw: string, fields: Record<string, string | string[]>, traces: ProcessingStep[]): SplunkEvent {
   return makeEvent(raw, { fields, processingTrace: traces });
@@ -92,6 +93,19 @@ describe('HighlightedTab', () => {
     expect(screen.getByPlaceholderText(/Filter fields/i)).toBeInTheDocument();
     fireEvent.click(fieldsBtn);
     expect(screen.queryByPlaceholderText(/Filter fields/i)).not.toBeInTheDocument();
+  });
+
+  it('starts with the sidebar hidden below 1100 px, and the Fields button shows it (#893)', () => {
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: query === NARROW_QUERY,
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }));
+    render(<HighlightedTab items={items} allEvents={items} currentPage={1} eventsPerPage={10} />);
+    expect(screen.queryByPlaceholderText(/Filter fields/i)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /^Fields/ }));
+    expect(screen.getByPlaceholderText(/Filter fields/i)).toBeInTheDocument();
   });
 
   it('renders "events match pinned" counter when a field is pinned via Fields sidebar', () => {

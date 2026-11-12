@@ -3,6 +3,7 @@ import { Panel, Group } from 'react-resizable-panels';
 import type { Layout } from 'react-resizable-panels';
 import { ResizeHandle } from '../../../ui/ResizeHandle';
 import { safeStorage } from '../../../../utils/safeStorage';
+import { MOBILE_QUERY, useMediaQuery } from '../../../../hooks/useMediaQuery';
 
 const eventsId = (storageKey: string) => `${storageKey}-events`;
 const sidebarId = (storageKey: string) => `${storageKey}-sidebar`;
@@ -56,9 +57,45 @@ interface FieldSplitLayoutProps {
   collapsed: boolean;
   sidebar: ReactNode;
   children: ReactNode;
+  /** Hides the sidebar: Escape in the phone's drawer calls it. */
+  onCollapse?: () => void;
 }
 
-export function FieldSplitLayout({ storageKey, collapsed, sidebar, children }: FieldSplitLayoutProps) {
+export function FieldSplitLayout(props: FieldSplitLayoutProps) {
+  const isMobile = useMediaQuery(MOBILE_QUERY);
+  return isMobile ? <FieldDrawerLayout {...props} /> : <FieldPanelLayout {...props} />;
+}
+
+/**
+ * On a phone the sidebar is a drawer over the events, not a column beside
+ * them: a fifth of 390 px cut every field name to one letter (#893).
+ */
+function FieldDrawerLayout({ collapsed, sidebar, children, onCollapse }: FieldSplitLayoutProps) {
+  return (
+    <div className="relative flex-1 min-w-0 h-full">
+      <div className="h-full overflow-auto p-3 space-y-3" {...SCROLL_REGION}>
+        {children}
+      </div>
+      {!collapsed && (
+        // The keys bubble up from the sidebar's own controls; the wrapper is not itself interactive.
+        <div
+          data-state="open"
+          className="drawer-slide absolute inset-y-0 right-0 z-10 w-72 max-w-[85%] border-l border-[var(--color-border)] shadow-lg"
+          onKeyDown={(e) => {
+            if (e.key === 'Escape' && onCollapse) {
+              e.stopPropagation();
+              onCollapse();
+            }
+          }}
+        >
+          {sidebar}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FieldPanelLayout({ storageKey, collapsed, sidebar, children }: FieldSplitLayoutProps) {
   // The split to show when the sidebar is (re-)shown: the saved one at mount,
   // then each one the user drags to. The group lays a re-added panel out from
   // its current `defaultLayout`, so this is what that prop carries, rather
@@ -90,7 +127,9 @@ export function FieldSplitLayout({ storageKey, collapsed, sidebar, children }: F
       </Panel>
       {!collapsed && <ResizeHandle direction="horizontal" />}
       {!collapsed && (
-        <Panel defaultSize="15" minSize="10" id={sidebarId(storageKey)}>
+        // A floor in rem, not a share: a share of a pane about 800 px wide
+        // cut bytes_received, bytes_sent and bytes_total all to "byt…" (#893).
+        <Panel defaultSize="15" minSize="9rem" id={sidebarId(storageKey)}>
           {sidebar}
         </Panel>
       )}

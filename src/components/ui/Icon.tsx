@@ -27,7 +27,8 @@ export type IconName =
   | 'play'
   | 'book'
   | 'sliders'
-  | 'sort';
+  | 'sort'
+  | 'more';
 
 const PATHS: Record<IconName, React.ReactNode> = {
   'chevron-down': <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />,
@@ -159,6 +160,14 @@ const PATHS: Record<IconName, React.ReactNode> = {
   ),
   // Up and down arrows: a sortable column that is not the sorted one.
   sort: <path strokeLinecap="round" strokeLinejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />,
+  // Three dots in a row: a menu of the actions that do not fit.
+  more: (
+    <>
+      <circle cx="5" cy="12" r="1" />
+      <circle cx="12" cy="12" r="1" />
+      <circle cx="19" cy="12" r="1" />
+    </>
+  ),
 };
 
 interface IconProps {

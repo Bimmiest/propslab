@@ -42,9 +42,10 @@ export function HighlightedFilterBar({
 
   return (
     <div className="flex-shrink-0 px-3 py-2 border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
-      <div className="flex items-center gap-2">
+      {/* Wraps, and the choices do not shrink: on a phone the row cut off "All" (#893). */}
+      <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs text-[var(--color-text-muted)]">Show:</span>
-        <div className="inline-flex rounded-md border border-[var(--color-border)] overflow-hidden">
+        <div className="shrink-0 inline-flex rounded-md border border-[var(--color-border)] overflow-hidden">
           {filterButtons.map(({ id, label, count }) => (
             <button
               key={id}

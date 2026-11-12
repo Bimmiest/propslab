@@ -252,3 +252,33 @@ details[open] > :not(summary) { animation: reveal var(--motion-base) var(--ease-
   scrollbar-width: thin;
   scrollbar-color: var(--color-border-hover) var(--color-bg-secondary);
 }
+
+/* A horizontal scroller that cuts off content fades out at that edge, so the
+   cut reads as "more this way" and not as a clipped label (#893).
+   useScrollFade sets the marks. A mask, not an overlay, so it works on any
+   background; the vertical scrollbar (--scroll-gutter) stays opaque. */
+.scroll-fade {
+  --scroll-fade: 1.5rem;
+  --scroll-fade-end: calc(100% - var(--scroll-gutter, 0px));
+}
+.scroll-fade[data-cut-start] {
+  mask-image: linear-gradient(to right, transparent, #000 var(--scroll-fade));
+}
+.scroll-fade[data-cut-end] {
+  mask-image: linear-gradient(
+    to right,
+    #000 calc(var(--scroll-fade-end) - var(--scroll-fade)),
+    transparent var(--scroll-fade-end),
+    #000 var(--scroll-fade-end)
+  );
+}
+.scroll-fade[data-cut-start][data-cut-end] {
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 var(--scroll-fade),
+    #000 calc(var(--scroll-fade-end) - var(--scroll-fade)),
+    transparent var(--scroll-fade-end),
+    #000 var(--scroll-fade-end)
+  );
+}

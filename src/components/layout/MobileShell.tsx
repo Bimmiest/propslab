@@ -8,6 +8,7 @@ import { Icon } from '../ui/Icon';
 import type { IconName } from '../ui/Icon';
 import { useAppStore, type MobileView as SimulatorMobileView } from '../../store/useAppStore';
 import { useRovingTabs } from '../../hooks/useRovingTabs';
+import { useScrollFade } from '../../hooks/useScrollFade';
 
 type MobileView = SimulatorMobileView | 'dictionary';
 
@@ -52,6 +53,7 @@ export function MobileShell() {
 
   // Roving-tabindex keyboard navigation, matching the shared Tabs component.
   const { ref, onKeyDown } = useRovingTabs(VIEW_IDS, view, setView);
+  useScrollFade(ref);
 
   return (
     <div className="h-full flex flex-col">
@@ -60,7 +62,7 @@ export function MobileShell() {
         role="tablist"
         aria-label="Workspace panels"
         onKeyDown={onKeyDown}
-        className="shrink-0 flex items-stretch border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)] overflow-x-auto"
+        className="scroll-fade shrink-0 flex items-stretch border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)] overflow-x-auto"
       >
         {VIEWS.map((v) => {
           const isActive = v.id === view;
@@ -76,7 +78,10 @@ export function MobileShell() {
               tabIndex={isActive ? 0 : -1}
               onClick={() => setView(v.id)}
               className={[
-                'flex-1 min-w-0 flex flex-col items-center justify-center gap-0.5 px-2 py-1.5',
+                // Equal shares, but never narrower than the label (#893): on a
+                // screen too narrow for all five the strip scrolls, with a
+                // fade at the cut edge, rather than cutting "transforms".
+                'flex-1 min-w-max flex flex-col items-center justify-center gap-0.5 px-2 py-1.5',
                 'text-xs font-medium cursor-pointer border-b-2 -mb-px outline-none focus-visible:ring-2 transition-colors',
                 isActive
                   ? 'text-[var(--color-accent)] border-b-[var(--color-accent)]'
@@ -84,7 +89,7 @@ export function MobileShell() {
               ].join(' ')}
             >
               <Icon name={v.icon} className="w-4 h-4 shrink-0" />
-              <span className="truncate max-w-full">{v.label}</span>
+              <span className="whitespace-nowrap">{v.label}</span>
             </button>
           );
         })}

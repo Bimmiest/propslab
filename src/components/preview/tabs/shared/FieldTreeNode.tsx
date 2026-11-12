@@ -8,6 +8,7 @@ import { ContextMenu, ContextMenuTrigger, ContextMenuContent } from '../../../ui
 import { FieldMenuItems } from './FieldMenuItems';
 import { tint } from '../../../../utils/tint';
 import { Icon } from '../../../ui/Icon';
+import { MiddleTruncate } from '../../../ui/MiddleTruncate';
 
 interface FieldTreeProps {
   collapsed: Set<string>;
@@ -126,11 +127,11 @@ function FieldTreeRow({
       )}
 
       <span
-        className="text-xs truncate"
+        className="flex min-w-0 text-xs"
         style={{ color: hasChildren ? 'var(--color-text-secondary)' : 'var(--color-text-primary)' }}
         title={node.name}
       >
-        {node.depth > 0 ? `.${node.leafName}` : node.name}
+        <MiddleTruncate text={node.depth > 0 ? `.${node.leafName}` : node.name} />
       </span>
 
       {hasChildren && (

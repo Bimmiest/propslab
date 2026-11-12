@@ -12,6 +12,7 @@ import { useGroupCollapse } from './shared/useGroupCollapse';
 import { HighlightedFilterBar } from './highlighted/HighlightedFilterBar';
 import { HighlightedSidebar } from './highlighted/HighlightedSidebar';
 import { HighlightedEventCard } from './highlighted/HighlightedEventCard';
+import { NARROW_QUERY, matchesNow } from '../../../hooks/useMediaQuery';
 
 /**
  * Upper bound on rows rendered while a field is pinned. A pin filters the whole
@@ -35,7 +36,8 @@ export interface HighlightedTabProps {
 
 export function HighlightedTab({ items, allEvents, currentPage, eventsPerPage, fieldStats }: HighlightedTabProps) {
   const [fieldFilter, setFieldFilter] = useState<FieldFilter>('all');
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  // Closed by default where the pane is too narrow for it beside the events (#893).
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => matchesNow(NARROW_QUERY));
   const { store: focusStore, pinnedFields, togglePin, setHoveredField } = useFieldFocus();
 
   const { categories, containerFields, fieldColorMap, highlightColorMap } = useFieldColoring(
@@ -107,24 +109,18 @@ export function HighlightedTab({ items, allEvents, currentPage, eventsPerPage, f
           categories={categories}
           fieldFilter={fieldFilter}
           setFieldFilter={setFieldFilter}
-          pinned={
-            pinnedFields.size > 0
-              ? {
-                  matching: pinMatches.length,
-                  total: allEvents.length,
-                  count: pinnedFields.size,
-                  clear: () => {
-                    for (const f of pinnedFields) togglePin(f);
-                  },
-                }
-              : null
-          }
+          pinned={pinSummary(pinnedFields, togglePin, pinMatches.length, allEvents.length)}
           sidebarCollapsed={sidebarCollapsed}
           toggleSidebar={() => setSidebarCollapsed((v) => !v)}
         />
 
         <div className="flex-1 min-h-0 flex">
-          <FieldSplitLayout storageKey="highlighted-split-layout" collapsed={sidebarCollapsed} sidebar={sidebar}>
+          <FieldSplitLayout
+            storageKey="highlighted-split-layout"
+            collapsed={sidebarCollapsed}
+            sidebar={sidebar}
+            onCollapse={() => setSidebarCollapsed(true)}
+          >
             {pinnedOverflow && <PinnedOverflowNote total={pinMatches.length} />}
             {/*
             Extraction directives that ran and produced no field — the case
@@ -153,6 +149,15 @@ export function HighlightedTab({ items, allEvents, currentPage, eventsPerPage, f
       </div>
     </FieldFocusContext.Provider>
   );
+}
+
+/** The filter bar's summary of the pins, or null with nothing pinned. */
+function pinSummary(pinnedFields: Set<string>, togglePin: (field: string) => void, matching: number, total: number) {
+  if (pinnedFields.size === 0) return null;
+  const clear = () => {
+    for (const f of pinnedFields) togglePin(f);
+  };
+  return { matching, total, count: pinnedFields.size, clear };
 }
 
 function PinnedOverflowNote({ total }: { total: number }) {

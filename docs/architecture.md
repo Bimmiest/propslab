@@ -78,6 +78,7 @@ e2e/                           # Playwright tests (production build, Chromium)
 ├── fixtures.ts                # Console/CSP error collection + readiness helpers
 ├── smoke.spec.ts
 ├── a11y.spec.ts               # axe-core over every main view, both themes
+├── responsive.spec.ts         # No overflow or cut control at 390, 820 and 1024 px
 ├── perf.spec.ts               # 20k-event, regex-heavy and 3,000-field budgets
 ├── perf-vitals.spec.ts        # LCP, TBT and transferred bytes on first load
 └── perfSummary.ts             # Writes the perf numbers to the job summary

@@ -1,5 +1,6 @@
 import type React from 'react';
 import { useRovingTabs } from '../../hooks/useRovingTabs';
+import { useScrollFade } from '../../hooks/useScrollFade';
 import { tabId, tabPanelId } from './tabIds';
 
 interface TabItem {
@@ -38,6 +39,7 @@ export function Tabs({
     activeTab,
     onTabChange,
   );
+  useScrollFade(ref);
 
   return (
     <div
@@ -45,7 +47,9 @@ export function Tabs({
       role="tablist"
       aria-label={ariaLabel}
       className={
-        variant === 'secondary' ? 'flex gap-0.5 p-1 overflow-x-auto min-w-0' : 'flex gap-1 overflow-x-auto min-w-0'
+        variant === 'secondary'
+          ? 'scroll-fade flex gap-0.5 p-1 overflow-x-auto min-w-0'
+          : 'scroll-fade flex gap-1 overflow-x-auto min-w-0'
       }
       onKeyDown={onKeyDown}
     >

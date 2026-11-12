@@ -7,6 +7,7 @@ import { ClearButton } from '../editor/ClearButton';
 import { Tooltip } from '../ui/Tooltip';
 import { countByLevel } from '../../utils/diagnosticCounts';
 import { ExamplesMenu } from '../examples/ExamplesMenu';
+import { HeaderMenu } from './HeaderMenu';
 import { getModifierName, isApplePlatform } from '../../utils/platform';
 
 /**
@@ -96,14 +97,18 @@ export function Header() {
         borderBottom: '1px solid var(--color-border)',
       }}
     >
-      <div className="flex items-center justify-between px-4 h-12">
-        <div className="flex items-center gap-2">
+      {/* A container: below 36rem (a phone) Clear All shows its icon only,
+          and settings, the pipeline reference and the theme go into one menu,
+          so the row fits without a wrap or a cut (#893). The title gives up
+          its room first; the buttons do not shrink. */}
+      <div className="@container flex items-center justify-between gap-2 px-4 h-12">
+        <div className="flex items-center gap-2 min-w-0">
           <BrandMark />
-          <h1 className="text-sm font-bold tracking-wide" style={{ color: 'var(--color-text-primary)' }}>
+          <h1 className="text-sm font-bold tracking-wide truncate" style={{ color: 'var(--color-text-primary)' }}>
             Propslab
           </h1>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <ExamplesMenu />
           <Tooltip content={`Command palette (${modifierName}+K)`} side="bottom">
             {/* The name is the visible text, "Commands" and the shortcut (WCAG
@@ -126,22 +131,29 @@ export function Header() {
               </kbd>
             </button>
           </Tooltip>
-          {hasAnyContent && <ClearButton onClear={resetAll} label="Clear All" />}
-          <PanelToggle
-            tooltip="Settings"
-            label="Open settings"
-            icon="settings"
-            open={settingsOpen}
-            onClick={toggleSettings}
-          />
-          <PanelToggle
-            tooltip="Pipeline reference"
-            label="Open pipeline reference"
-            icon="info"
-            open={helpOpen}
-            onClick={toggleHelp}
-          />
-          <ThemeToggle />
+          {hasAnyContent && (
+            <ClearButton onClear={resetAll} label="Clear All" labelClassName="whitespace-nowrap @max-xl:hidden" />
+          )}
+          <div className="@max-xl:hidden flex items-center gap-2">
+            <PanelToggle
+              tooltip="Settings"
+              label="Open settings"
+              icon="settings"
+              open={settingsOpen}
+              onClick={toggleSettings}
+            />
+            <PanelToggle
+              tooltip="Pipeline reference"
+              label="Open pipeline reference"
+              icon="info"
+              open={helpOpen}
+              onClick={toggleHelp}
+            />
+            <ThemeToggle />
+          </div>
+          <div className="@xl:hidden">
+            <HeaderMenu />
+          </div>
         </div>
       </div>
       {isProcessing && <ProgressBar label="Processing" />}

@@ -187,6 +187,23 @@ for (const theme of ['dark', 'light'] as const) {
         await expectNoViolations(page, `mobile › ${panel}`);
       }
     });
+
+    // What only the phone shows (#893): the field drawer over the events and
+    // the header's one menu.
+    test('mobile layout: the field drawer and the header menu', async ({ page }) => {
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.goto('/');
+      await expect(page.locator('.monaco-editor').first()).toBeVisible({ timeout: 30_000 });
+      await loadExample(page, APACHE);
+      await page.getByRole('tab', { name: 'Output', exact: true }).click();
+      await page.getByRole('tab', { name: /^Extractions$/ }).click();
+      await page.getByTitle('Show fields sidebar').click();
+      await expect(page.getByRole('textbox', { name: 'Filter fields' })).toBeVisible();
+      await expectNoViolations(page, 'mobile › field drawer');
+      await page.getByRole('button', { name: 'More' }).click();
+      await expect(page.getByRole('group', { name: 'More' })).toBeVisible();
+      await expectNoViolations(page, 'mobile › header menu');
+    });
   });
 }
 

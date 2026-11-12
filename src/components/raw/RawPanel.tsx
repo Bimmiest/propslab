@@ -3,7 +3,7 @@ import type { editor } from 'monaco-editor';
 import { useAppStore } from '../../store/useAppStore';
 import { MetadataButton } from '../metadata/MetadataButton';
 import { Icon } from '../ui/Icon';
-import { ClearButton } from '../editor/ClearButton';
+import { ClearButton, PANE_LABEL } from '../editor/ClearButton';
 import { MonacoEditor } from '../editor/LazyEditors';
 import { registerEditor, unregisterEditor } from '../editor/editorRegistry';
 import { EditorValidationList } from '../editor/EditorValidationList';
@@ -76,9 +76,10 @@ export function RawPanel() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-[var(--color-border-subtle)] bg-[var(--color-bg-secondary)]">
-        <Icon name="document" className="w-3.5 h-3.5 text-[var(--color-accent)]" />
-        <span className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">
+      {/* A container, so Scaffold turns to an icon in a narrow pane (#893). */}
+      <div className="@container flex items-center gap-2 px-3 py-2 border-b border-[var(--color-border-subtle)] bg-[var(--color-bg-secondary)]">
+        <Icon name="document" className="w-3.5 h-3.5 shrink-0 text-[var(--color-accent)]" />
+        <span className="shrink-0 whitespace-nowrap text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">
           Raw Log
         </span>
         <div className="ml-auto flex items-center gap-1 min-w-0">
@@ -87,10 +88,11 @@ export function RawPanel() {
             onClick={toggleScaffold}
             disabled={!hasText}
             title="Scaffold a starter props.conf from this sample"
-            className="flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium cursor-pointer border-none text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-tertiary)] press disabled:opacity-40 disabled:cursor-not-allowed"
+            aria-label="Scaffold"
+            className="shrink-0 flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium cursor-pointer border-none text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-tertiary)] press disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            <Icon name="sparkles" className="w-3.5 h-3.5 text-[var(--color-accent)]" />
-            Scaffold
+            <Icon name="sparkles" className="w-3.5 h-3.5 shrink-0 text-[var(--color-accent)]" />
+            <span className={PANE_LABEL}>Scaffold</span>
           </button>
         </div>
       </div>
@@ -121,7 +123,7 @@ export function RawPanel() {
         )}
       </div>
 
-      <div className="flex items-center justify-between px-3 py-1 text-xs shrink-0 bg-[var(--color-bg-secondary)] border-t border-[var(--color-border)]">
+      <div className="@container flex items-center justify-between gap-2 px-3 py-1 text-xs shrink-0 bg-[var(--color-bg-secondary)] border-t border-[var(--color-border)]">
         <span className="flex items-center gap-2 min-w-0 text-[var(--color-text-muted)]">
           {format && (
             <span
@@ -137,7 +139,7 @@ export function RawPanel() {
             {rawData.length.toLocaleString()} chars
           </span>
         </span>
-        <div className="flex items-center gap-3 min-w-0">
+        <div className="flex items-center gap-3 shrink-0">
           <CursorPosition editor={editorInstance} withBytes />
           {rawData && <ClearButton onClear={() => setRawData('')} label="Clear" />}
         </div>
