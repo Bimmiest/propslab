@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { useAppStore, type FieldAliasRequest } from '../../../../store/useAppStore';
 import { DirectiveDialog, DirectiveForm } from './DirectiveDialog';
+import { Identifier } from '../../../ui/Identifier';
 import { AddedLine } from './ExtractNameDialog';
 import { useApplyDirective } from './useApplyDirective';
 import { fieldAliasDirective } from './fieldDirective';
@@ -72,7 +73,7 @@ function FieldAliasForm({ request, onClose }: { request: FieldAliasRequest; onCl
           style={{ color: 'var(--color-text-secondary)' }}
         >
           {'source' in request ? 'Alias for ' : 'Field to alias as '}
-          <code className="font-mono normal-case">{fixed}</code>
+          <Identifier>{fixed}</Identifier>
         </label>
         <input
           id="field-alias-name"
