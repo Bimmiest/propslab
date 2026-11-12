@@ -46,10 +46,10 @@
     "src/engine/utils/flattenJson.ts": {
       "max-params": 3
     },
-    "src/utils/splunkRegex.ts": {
+    "src/engine/utils/splunkRegex.ts": {
       "no-restricted-syntax": 1
     },
-    "src/utils/strftime.ts": {
+    "src/engine/utils/strftime.ts": {
       "max-params": 3
     }
   }

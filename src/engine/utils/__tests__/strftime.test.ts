@@ -11,7 +11,7 @@ import {
   supportedSpecifiers,
   unsupportedSpecifiers,
 } from '../strftime';
-import { fcSeed } from '../../test/fcSeed';
+import { fcSeed } from '../../../test/fcSeed';
 
 /** Helper: ISO string of a parsed timestamp, or null. */
 function iso(text: string, format: string, tz?: string): string | null {

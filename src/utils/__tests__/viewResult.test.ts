@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { runPipeline } from '../../engine/pipeline';
-import { AT_FIXED_NOW } from '../../engine/__tests__/runCtx';
-import type { ProcessingResult, ProcessingStep, SplunkEvent } from '../../engine/types';
+import { runPipeline, type ProcessingResult, type ProcessingStep, type SplunkEvent } from '../../engine';
+import { AT_FIXED_NOW } from '../../test/runCtx';
 import { fieldsWritten, summarizeSteps, toViewResult } from '../viewResult';
 import { makeEvent } from '../../test/makeEvent';
 

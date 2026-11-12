@@ -10,7 +10,7 @@
 // node:fs, because the app's tsconfig has no Node types (see docs.test.ts).
 import { describe, it, expect } from 'vitest';
 import * as tsNamespace from 'typescript';
-import { runPipeline } from '../engine/pipeline';
+import { runPipeline } from '../engine';
 
 // typescript is CommonJS: depending on the loader its API is on the namespace
 // or on `default`.
@@ -46,7 +46,7 @@ function tsBlocks(markdown: string): Block[] {
  * fails the type-check with "Cannot find name"; declare it here.
  */
 const AMBIENT = `
-import type { EventMetadata as AmbientMetadata } from './src/engine/types';
+import type { EventMetadata as AmbientMetadata } from './src/engine';
 declare global { interface ImportMeta { url: string } }
 declare const rawData: string;
 declare const raw: string;

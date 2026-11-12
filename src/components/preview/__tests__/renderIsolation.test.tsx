@@ -13,7 +13,7 @@ import { PreviewPanel } from '../PreviewPanel';
 import type { EnrichedEvent } from '../enrichEvents';
 import { HighlightedTab } from '../tabs/HighlightedTab';
 import { useAppStore } from '../../../store/useAppStore';
-import type { SplunkEvent } from '../../../engine/types';
+import type { SplunkEvent } from '../../../engine';
 import { toViewResult } from '../../../utils/viewResult';
 import { makeEvent } from '../../../test/makeEvent';
 

@@ -2,7 +2,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { ArchitecturePanel } from '../ArchitecturePanel';
-import type { EventMetadata } from '../../../engine/types';
+import type { EventMetadata } from '../../../engine';
 
 const reveal = vi.hoisted(() => vi.fn());
 vi.mock('../../editor/revealInEditor', () => ({ revealInEditor: reveal }));

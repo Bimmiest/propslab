@@ -2,12 +2,12 @@ import { useCallback, useEffect, useRef, useMemo, type RefObject } from 'react';
 import { useAppStore, type PipelineInputs } from '../store/useAppStore';
 import { useDebounce } from './useDebounce';
 import { PIPELINE_DEBOUNCE_MS, createManagedWorker, type ManagedWorker } from '../workers/workerLifecycle';
-import type { PipelineWorkerRequest, PipelineWorkerResponse } from '../engine/pipelineWorker';
-import type { EventMetadata } from '../engine/types';
+import type { PipelineWorkerRequest, PipelineWorkerResponse } from '../workers/pipelineWorker';
+import type { EventMetadata } from '../engine';
 import { toViewResult } from '../utils/viewResult';
 
 // Vite worker import — bundled as a separate chunk
-const createWorker = () => new Worker(new URL('../engine/pipelineWorker.ts', import.meta.url), { type: 'module' });
+const createWorker = () => new Worker(new URL('../workers/pipelineWorker.ts', import.meta.url), { type: 'module' });
 
 const WORKER_TIMEOUT_MS = 5_000;
 /**
@@ -303,7 +303,7 @@ function runPipelineInline(
   sinks.setIsProcessing(true);
   // For the status bar: no watchdog covers this run (#403).
   useAppStore.getState().setPipelineOnMainThread(true);
-  import('../engine/pipeline')
+  import('../engine')
     .then(({ runPipeline }) => {
       if (request.id !== refs.requestIdRef.current) return; // superseded while loading
       if (refs.latestRef.current?.request === request) refs.latestRef.current.state = 'done';

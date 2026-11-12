@@ -7,7 +7,7 @@ import { type Node, parseExpression } from './eval/parser';
 import { evalNode } from './eval/evaluator';
 import { regexFailureMessage, regexLimitMessage } from './eval/builtins';
 import type { RunContext, DiagnosticSink } from '../runContext';
-import { RegexDeadlineError } from '../../utils/splunkRegex';
+import { RegexDeadlineError } from '../utils/splunkRegex';
 
 // EVAL- as a props processor: which directives run, how their results land on
 // the event, and the diagnostics they raise. The expression language itself is

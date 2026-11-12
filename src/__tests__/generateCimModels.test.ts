@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { CIM_MODELS, CIM_VERSION } from '../engine/cim/cimModelsData';
+import { CIM_MODELS, CIM_VERSION } from '../engine';
 
 /**
  * The CIM generator (#518).

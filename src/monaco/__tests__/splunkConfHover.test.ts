@@ -5,9 +5,7 @@ import { createHoverProvider } from '../splunkConfHover';
 import { OPEN_DICTIONARY_COMMAND_ID, openDictionaryCommandUri } from '../dictionaryCommand';
 import { escapeMarkdown, inlineCode } from '../markdown';
 import { fakeModel } from '../../test/fakeModel';
-import { getDirectiveInfo, type DirectiveInfo } from '../../engine/directiveRegistry';
-import { classifyStanza } from '../../engine/stanzaRegistry';
-import { getStagesForDirective } from '../../engine/pipelineStages';
+import { getDirectiveInfo, type DirectiveInfo, classifyStanza, getStagesForDirective } from '../../engine';
 
 /**
  * No directive is `ignored` today, so the hover's "Not simulated" branch is fed
@@ -18,8 +16,8 @@ const SYNTHETIC: Record<string, Partial<DirectiveInfo>> = {
   ZZ_IGNORED_BARE: { support: 'ignored' },
   ZZ_DOCUMENTED_BARE: { support: 'documented' },
 };
-vi.mock('../../engine/directiveRegistry', async (importOriginal) => {
-  const original = await importOriginal<typeof import('../../engine/directiveRegistry')>();
+vi.mock('../../engine', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../../engine')>();
   return {
     ...original,
     getDirectiveInfo: (key: string, file: 'props.conf' | 'transforms.conf') => {

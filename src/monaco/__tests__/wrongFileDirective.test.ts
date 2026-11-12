@@ -4,10 +4,8 @@
 // beside the editor tests because the point is that the two validators agree.
 import { describe, it, expect } from 'vitest';
 import { computeDiagnostics } from '../splunkConfDiagnostics';
-import { runPipeline } from '../../engine/pipeline';
-import { FIXED_NOW } from '../../engine/__tests__/runCtx';
-import { wrongFileCanonical } from '../../engine/directiveRegistry';
-import type { EventMetadata, ValidationDiagnostic } from '../../engine/types';
+import { runPipeline, wrongFileCanonical, type EventMetadata, type ValidationDiagnostic } from '../../engine';
+import { FIXED_NOW } from '../../test/runCtx';
 import { fakeModel } from '../../test/fakeModel';
 
 const metadata: EventMetadata = { index: 'main', host: 'h', source: 's', sourcetype: 'st' };

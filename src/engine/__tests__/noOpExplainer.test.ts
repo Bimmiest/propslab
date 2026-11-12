@@ -15,7 +15,7 @@ import {
   noOpDirectiveKey,
   type NoOpReason,
 } from '../noOpExplainer';
-import { validateRegex } from '../../utils/splunkRegex';
+import { validateRegex } from '../utils/splunkRegex';
 
 describe('longestPartialMatch', () => {
   it('reports where the pattern stopped agreeing with the text', () => {

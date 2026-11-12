@@ -20,7 +20,7 @@
 import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';
 import { parseTimestamp } from '../strftime';
-import { fcSeed } from '../../test/fcSeed';
+import { fcSeed } from '../../../test/fcSeed';
 
 const SEED = fcSeed(399);
 const MIN = 60_000;

@@ -11,15 +11,14 @@
  *         TimestampMatchResponse, or a WorkerSkippedResponse, per request
  */
 
-import { probeTimestamps } from './timestampMatch';
-import type { TimeConfig, TimestampProbe } from './timestampMatch';
-import { serveWithRegexEngine } from '../workers/regexEngineLoader';
+import { probeTimestamps, type TimeConfig, type TimestampProbe } from '../engine';
+import { serveWithRegexEngine } from './regexEngineLoader';
 import {
   createRequestQueue,
   type QueuedRequest,
   type WorkerInputsMessage,
   type WorkerSkippedResponse,
-} from '../workers/workerProtocol';
+} from './workerProtocol';
 
 export interface TimestampMatchRequest extends QueuedRequest {
   /**

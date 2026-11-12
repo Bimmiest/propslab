@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useTimestampMatch, type TimestampMatchStatus } from '../../../../hooks/useTimestampMatch';
 import { useAppStore } from '../../../../store/useAppStore';
-import type { TimeConfig, TimestampProbe } from '../../../../engine/timestampMatch';
+import type { TimeConfig, TimestampProbe } from '../../../../engine';
 import { usePipelineInputs } from '../shared/usePipelineInputs';
 import type { EnrichedEvent } from '../../enrichEvents';
 import { pageStart } from '../../../../utils/pagination';

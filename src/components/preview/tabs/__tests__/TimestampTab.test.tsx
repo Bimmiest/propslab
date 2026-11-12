@@ -9,9 +9,8 @@ import { TimestampTab } from '../timestamp';
 import { useAppStore } from '../../../../store/useAppStore';
 import type { EnrichedEvent } from '../../enrichEvents';
 import { makeEvent } from '../../../../test/makeEvent';
-import { extractTimestamps } from '../../../../engine/processors/timestampExtractor';
-import { runCtx } from '../../../../engine/__tests__/runCtx';
-import type { ConfDirective, SplunkEvent } from '../../../../engine/types';
+import { extractTimestamps, type ConfDirective, type SplunkEvent } from '../../../../engine';
+import { runCtx } from '../../../../test/runCtx';
 import { toViewResult } from '../../../../utils/viewResult';
 import { answerRun } from '../../../../test/answerRun';
 

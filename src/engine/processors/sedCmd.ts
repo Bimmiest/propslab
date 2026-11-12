@@ -1,6 +1,6 @@
 import type { SplunkEvent, ConfDirective, DirectiveNoOp, RawMutation, ValidationDiagnostic } from '../types';
 import { explainNoMatch, noOpDirectiveKey } from '../noOpExplainer';
-import { safeRegex, validateRegex, type RegexMatch, type SplunkRegex } from '../../utils/splunkRegex';
+import { safeRegex, validateRegex, type RegexMatch, type SplunkRegex } from '../utils/splunkRegex';
 import { byClassName } from '../utils/asciiCompare';
 import { changeWindow } from '../utils/changeWindow';
 import { atDirective } from '../parser/provenance';

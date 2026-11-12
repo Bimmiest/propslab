@@ -3,11 +3,10 @@
 // `toString` finds the inherited Object.prototype member and its source text
 // leaks into a diagnostic (#426).
 import { describe, it, expect } from 'vitest';
-import { runPipeline } from '../pipeline';
-import { computeDiagnostics } from '../../monaco/splunkConfDiagnostics';
-import type { EventMetadata } from '../types';
+import { runPipeline, type EventMetadata } from '../../engine';
+import { computeDiagnostics } from '../splunkConfDiagnostics';
 import { fakeModel } from '../../test/fakeModel';
-import { FIXED_NOW } from './runCtx';
+import { FIXED_NOW } from '../../test/runCtx';
 
 const PROTO_NAMES = Object.getOwnPropertyNames(Object.prototype);
 

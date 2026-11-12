@@ -1,6 +1,6 @@
 import type { SplunkEvent, ConfDirective, TimeFallback } from '../types';
-import { validateRegex } from '../../utils/splunkRegex';
-import { parseTimestampDetailed, parseTzAlias, type CalendarDate, type ParsedTimestamp } from '../../utils/strftime';
+import { validateRegex } from '../utils/splunkRegex';
+import { parseTimestampDetailed, parseTzAlias, type CalendarDate, type ParsedTimestamp } from '../utils/strftime';
 import { atDirective } from '../parser/provenance';
 import { setField } from '../utils/fieldBag';
 import { effectiveBool, effectiveDirective, effectiveValue } from '../utils/directiveValues';

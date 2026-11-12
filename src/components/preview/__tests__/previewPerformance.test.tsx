@@ -17,7 +17,7 @@ import { ArchitecturePanel } from '../../architecture/ArchitecturePanel';
 import { useAppStore } from '../../../store/useAppStore';
 import { toViewResult } from '../../../utils/viewResult';
 import { makeEvent } from '../../../test/makeEvent';
-import type { EventMetadata } from '../../../engine/types';
+import type { EventMetadata } from '../../../engine';
 
 const initial = useAppStore.getState();
 const meta: EventMetadata = { index: 'main', host: 'h', source: 's', sourcetype: 'st' };

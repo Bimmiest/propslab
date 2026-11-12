@@ -6,8 +6,8 @@ import { RegexTab } from '../regex';
 import { FLASH_MS } from '../regex/useRegexResults';
 import type { EnrichedEvent } from '../../enrichEvents';
 import { makeEvent } from '../../../../test/makeEvent';
-import { matchInputs } from '../../../../engine/regexMatch';
-import type { RegexMatchRequest, RegexMatchResponse } from '../../../../engine/regexMatchWorker';
+import { matchInputs } from '../../../../engine';
+import type { RegexMatchRequest, RegexMatchResponse } from '../../../../workers/regexMatchWorker';
 import { lastInputs, lastRequest, requestsIn } from '../../../../test/workerInputs';
 
 function makeItem(raw: string): EnrichedEvent {

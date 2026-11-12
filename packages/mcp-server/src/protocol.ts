@@ -8,10 +8,9 @@
  * whole conf, so it runs there too, under the same time and heap limits.
  * Only `lookup_directive`, which reads the static registry, stays in-process.
  */
-import type { ConfInput, EventMetadata, ValidationDiagnostic } from '../../../src/engine/types';
+import type { ConfInput, EventMetadata, ValidationDiagnostic, RegexEngineModule } from '../../../src/engine';
 import type { SerializedSimulation } from './serialize';
 import type { SuspectList } from './suspects';
-import type { RegexEngineModule } from '../../../src/utils/splunkRegex';
 
 export interface SimulateRequest {
   op: 'simulate';

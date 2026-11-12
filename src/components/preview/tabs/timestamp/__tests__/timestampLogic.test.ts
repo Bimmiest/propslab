@@ -14,12 +14,16 @@ import {
   timestampStepOf,
   timestampTextOf,
 } from '../timestampLogic';
-import { extractTimestamps } from '../../../../../engine/processors/timestampExtractor';
-import { runCtx } from '../../../../../engine/__tests__/runCtx';
+import {
+  extractTimestamps,
+  supportedSpecifiers,
+  probeTimestamp,
+  type TimeConfig,
+  type ConfDirective,
+  type SplunkEvent,
+} from '../../../../../engine';
+import { runCtx } from '../../../../../test/runCtx';
 import { STRPTIME_REFERENCE } from '../data';
-import { supportedSpecifiers } from '../../../../../utils/strftime';
-import { probeTimestamp, type TimeConfig } from '../../../../../engine/timestampMatch';
-import type { ConfDirective, SplunkEvent } from '../../../../../engine/types';
 import { makeEvent } from '../../../../../test/makeEvent';
 
 const metadata = { index: 'main', host: 'h', source: 's', sourcetype: 'st' };

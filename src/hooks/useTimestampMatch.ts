@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useWorkerRequest } from './useWorkerRequest';
-import { probeTimestamps } from '../engine/timestampMatch';
-import type { TimeConfig, TimestampProbe } from '../engine/timestampMatch';
-import type { TimestampMatchResponse } from '../engine/timestampMatchWorker';
+import { probeTimestamps, type TimeConfig, type TimestampProbe } from '../engine';
+import type { TimestampMatchResponse } from '../workers/timestampMatchWorker';
 
 const createWorker = () =>
-  new Worker(new URL('../engine/timestampMatchWorker.ts', import.meta.url), { type: 'module' });
+  new Worker(new URL('../workers/timestampMatchWorker.ts', import.meta.url), { type: 'module' });
 
 // Matches the Regex tab's tester: this re-runs whenever props.conf changes, so a
 // runaway TIME_PREFIX should be cut quickly rather than held for the pipeline's 5 s.

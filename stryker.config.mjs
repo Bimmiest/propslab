@@ -9,16 +9,13 @@ export default {
   vitest: { configFile: 'vitest.stryker.config.ts' },
 
   // src/engine is where correctness lives, so it is what gets mutated. Left out:
-  // type-only modules (no code to mutate), the worker entry points (a
-  // `self.onmessage` wrapper the Node suite cannot instantiate), and the
-  // generated or hand-written data tables — the directive registry, the CIM
-  // models and the support roster — whose mutants are edits to description
-  // prose that no behavioural test should be asserting.
+  // type-only modules (no code to mutate), and the generated or hand-written
+  // data tables — the directive registry, the CIM models and the support
+  // roster — whose mutants are edits to description prose that no behavioural
+  // test should be asserting. The worker entry points are in src/workers, and
+  // are not mutated: each is a `self.onmessage` wrapper.
   mutate: [
     'src/engine/**/*.ts',
-    // The date parser and the regex adapter the engine runs on.
-    'src/utils/strftime.ts',
-    'src/utils/splunkRegex.ts',
     // The MCP server's pure functions (#455): the oversize-message limiter,
     // the request-id scan behind its error, and the response serializer.
     'packages/mcp-server/src/requestId.ts',
@@ -45,7 +42,6 @@ export default {
     '!src/engine/**/*.test.ts',
     '!src/engine/types.ts',
     '!src/engine/scaffold/types.ts',
-    '!src/engine/*Worker.ts',
     '!src/engine/cim/cimModelsData.ts',
     '!src/engine/registry/**',
     '!src/engine/directiveSupport.ts',

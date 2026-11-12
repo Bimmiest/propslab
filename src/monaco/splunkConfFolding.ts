@@ -3,8 +3,7 @@ import type { languages, editor, CancellationToken } from 'monaco-editor';
 // barrel would drag editor.main (every language + its web worker) into the
 // bundle. See the import comment in MonacoEditor.tsx.
 import { languages as monacoLanguages } from 'monaco-editor/editor';
-import { DIRECTIVE_RE, STANZA_RE } from '../engine/parser/confParser';
-import { endsWithContinuation } from '../engine/utils/directiveValues';
+import { DIRECTIVE_RE, STANZA_RE, endsWithContinuation } from '../engine';
 
 type LineKind = 'header' | 'comment' | 'other';
 

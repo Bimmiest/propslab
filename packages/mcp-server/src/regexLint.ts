@@ -10,11 +10,14 @@
  * executes it, but this still runs in the worker with everything else
  * validate does.
  */
-import { parseSedExpression } from '../../../src/engine/processors/sedCmd';
-import { regexFailureMessage } from '../../../src/engine/processors/eval/builtins';
-import { atDirective } from '../../../src/engine/parser/provenance';
-import type { ParsedConf, ValidationDiagnostic } from '../../../src/engine/types';
-import { validateRegex } from '../../../src/utils/splunkRegex';
+import {
+  parseSedExpression,
+  regexFailureMessage,
+  atDirective,
+  type ParsedConf,
+  type ValidationDiagnostic,
+  validateRegex,
+} from '../../../src/engine';
 import { directivePatterns } from './directivePatterns';
 
 export function lintRegexDirectives(propsConf: ParsedConf, transformsConf: ParsedConf): ValidationDiagnostic[] {

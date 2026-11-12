@@ -4,7 +4,7 @@ import { Tabs } from '../ui/Tabs';
 import { tabId, tabPanelId } from '../ui/tabIds';
 import { Icon } from '../ui/Icon';
 import { retryableLazy } from '../ui/retryableLazy';
-import type { OutputTabId } from '../../engine/types';
+import type { OutputTabId } from '../../engine';
 import { useDebounce } from '../../hooks/useDebounce';
 import { EmptyState, FailureState } from './PreviewStates';
 import { PreviewSubTab } from './PreviewSubTab';

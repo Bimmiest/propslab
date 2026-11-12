@@ -11,7 +11,7 @@
  * `RUN_STAGES` plus one, zero for none), events in bits 0–22.
  * See docs/adr/0015-mcp-timeouts-start-on-ready-and-report-progress.md.
  */
-import { RUN_STAGES, type RunStage } from '../../../src/engine/runStages';
+import { RUN_STAGES, type RunStage } from '../../../src/engine';
 
 /**
  * - `starting`: loading, before the worker posted `ready`.

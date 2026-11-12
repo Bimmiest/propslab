@@ -9,8 +9,7 @@ import {
   STANZA_GROUP,
   STANZA_ID_PREFIX,
 } from '../entries';
-import { getAllDirectives } from '../../../engine/directiveRegistry';
-import { STANZA_KINDS } from '../../../engine/stanzaRegistry';
+import { getAllDirectives, STANZA_KINDS } from '../../../engine';
 
 const ENTRIES = buildEntries();
 

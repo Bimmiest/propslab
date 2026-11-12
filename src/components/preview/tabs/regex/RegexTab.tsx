@@ -1,5 +1,5 @@
 import { useId, useMemo } from 'react';
-import { validateRegex } from '../../../../utils/splunkRegex';
+import { validateRegex } from '../../../../engine';
 import { useAppStore } from '../../../../store/useAppStore';
 import { addBlockReason, buildGroupColorMap, extractNamedGroups } from './regexLogic';
 import { useFlashFlag, useRegexResults, type RegexTabProps } from './useRegexResults';

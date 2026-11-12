@@ -9,8 +9,7 @@
 // repository says nothing, the answer is "not known", not a guess.
 // ---------------------------------------------------------------------------
 
-import { parseConf } from '../../engine/parser/confParser';
-import { getDirectiveInfo } from '../../engine/directiveRegistry';
+import { parseConf, getDirectiveInfo } from '../../engine';
 
 /**
  * A box of the Architecture tab. `heavy-forwarder` is the parsing tier: the

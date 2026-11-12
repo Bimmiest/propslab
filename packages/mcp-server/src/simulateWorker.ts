@@ -10,12 +10,16 @@
  */
 import './v8Flags';
 import { parentPort, workerData, type MessagePort } from 'node:worker_threads';
-import { lintConfigs } from '../../../src/engine/configLint';
-import { runPipeline } from '../../../src/engine/pipeline';
-import { parseConf } from '../../../src/engine/parser/confParser';
-import { mergeDirectives, resolveStanzasForEvent } from '../../../src/engine/parser/stanzaMatcher';
-import type { ConfDirective, ConfStanza } from '../../../src/engine/types';
-import { initRegexEngineSync } from '../../../src/utils/splunkRegex';
+import {
+  lintConfigs,
+  runPipeline,
+  parseConf,
+  mergeDirectives,
+  resolveStanzasForEvent,
+  type ConfDirective,
+  type ConfStanza,
+  initRegexEngineSync,
+} from '../../../src/engine';
 import type {
   ExplainDirective,
   ExplainRequest,

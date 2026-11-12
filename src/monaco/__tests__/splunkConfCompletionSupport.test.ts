@@ -6,8 +6,8 @@ import type { languages, Position } from 'monaco-editor';
 import { createCompletionProvider } from '../splunkConfCompletion';
 import { fakeModel } from '../../test/fakeModel';
 
-vi.mock('../../engine/directiveRegistry', async (importOriginal) => {
-  const original = await importOriginal<typeof import('../../engine/directiveRegistry')>();
+vi.mock('../../engine', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../../engine')>();
   const base = original.getDirectivesForFile('props.conf').find((d) => d.key === 'KV_MODE')!;
   const synthetic = [
     {

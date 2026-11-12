@@ -1,5 +1,5 @@
 import { recognizeTimestamp, type RecognizedTimestamp } from '../../processors/timestampRecognizer';
-import { escapeRegex } from '../../../utils/splunkRegex';
+import { escapeRegex } from '../../utils/splunkRegex';
 import type { Confidence, ScaffoldSuggestion } from '../types';
 
 const SAMPLE_SIZE = 20;

@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, fireEvent, within } from '@testing-library/react';
 import { FieldsTab } from '../fields';
 import { useAppStore } from '../../../../store/useAppStore';
-import type { SplunkEvent, ProcessingStep } from '../../../../engine/types';
+import type { SplunkEvent, ProcessingStep } from '../../../../engine';
 import { toViewResult } from '../../../../utils/viewResult';
 import { makeEvent } from '../../../../test/makeEvent';
 

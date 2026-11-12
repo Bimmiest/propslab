@@ -125,7 +125,7 @@ export default defineConfig({
       // `index.ts` barrels) are deliberately still counted, at 0%: that is the
       // honest figure for "covered by vitest", and it is why
       // `src/components/**` sits below `src/engine/**`. main.tsx and
-      // src/engine/*Worker.ts were once excluded as "cannot be instantiated
+      // src/workers/*Worker.ts were once excluded as "cannot be instantiated
       // under node"; main.test.tsx and the worker tests do instantiate them, so
       // they are measured like the rest.
       thresholds: {
@@ -172,17 +172,20 @@ export default defineConfig({
           functions: 99,
           lines: 99,
         },
+        // Both measured again when ADR 0023 moved the engine's four modules out
+        // of src/utils and its three worker entry points into src/workers: the
+        // entry points are less covered than the lifecycle beside them.
         'src/utils/**': {
           statements: 95,
-          branches: 89,
+          branches: 91,
           functions: 99,
           lines: 96,
         },
         'src/workers/**': {
-          statements: 95,
-          branches: 91,
-          functions: 99,
-          lines: 95,
+          statements: 91,
+          branches: 84,
+          functions: 85,
+          lines: 92,
         },
       },
     },

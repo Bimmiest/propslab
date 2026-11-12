@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useAppStore } from '../../../store/useAppStore';
-import { validateCimCompliance } from '../../../engine/cim/cimModels';
+import { validateCimCompliance } from '../../../engine';
 import { ProgressBar } from '../../ui/ProgressBar';
 import { Icon } from '../../ui/Icon';
 import { copyQuietly } from '../../../utils/clipboard';

@@ -1,5 +1,4 @@
-import { getAllDirectives, type DirectiveInfo } from '../../engine/directiveRegistry';
-import { STANZA_KINDS, type StanzaKind } from '../../engine/stanzaRegistry';
+import { getAllDirectives, type DirectiveInfo, STANZA_KINDS, type StanzaKind } from '../../engine';
 
 /**
  * One selectable thing in the dictionary. Stanza headers and directives are

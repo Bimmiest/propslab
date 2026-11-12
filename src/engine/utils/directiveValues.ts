@@ -6,7 +6,7 @@
  * attribute on and be ignored by the next.
  */
 import type { ConfDirective } from '../types';
-import { validateRegex } from '../../utils/splunkRegex';
+import { validateRegex } from './splunkRegex';
 
 /**
  * The directive that takes effect for `key`: the LAST one in the list.

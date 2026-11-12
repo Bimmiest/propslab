@@ -1,4 +1,4 @@
-import type { ProcessingResult, ProcessingStep, SplunkEvent } from '../engine/types';
+import type { ProcessingResult, ProcessingStep, SplunkEvent } from '../engine';
 import { computeFieldStats, type FieldStats } from './fieldStats';
 
 /**

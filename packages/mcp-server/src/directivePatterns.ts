@@ -20,12 +20,15 @@
  * out: each is matched against a source or host name rather than event text,
  * and under Splunk's default match limits.
  */
-import { getDirectiveInfo } from '../../../src/engine/directiveRegistry';
-import { parseExtractValue } from '../../../src/engine/processors/fieldExtractor';
-import { sedPattern } from '../../../src/engine/processors/sedCmd';
-import { parseExpression, type Node } from '../../../src/engine/processors/eval/parser';
-import { ingestEvalTrees } from '../../../src/engine/transforms/ingestEval';
-import type { ConfDirective } from '../../../src/engine/types';
+import {
+  getDirectiveInfo,
+  parseExtractValue,
+  sedPattern,
+  parseExpression,
+  type Node,
+  ingestEvalTrees,
+  type ConfDirective,
+} from '../../../src/engine';
 
 export interface DirectivePattern {
   pattern: string;

@@ -10,10 +10,7 @@
 import type { PointerEvent, ReactNode } from 'react';
 import type { editor } from 'monaco-editor';
 import { useAppStore } from '../../store/useAppStore';
-import { getDirectiveInfo } from '../../engine/directiveRegistry';
-import { parseConf } from '../../engine/parser/confParser';
-import { resolveStanzasForEvent } from '../../engine/parser/stanzaMatcher';
-import { parseExtractValue } from '../../engine/processors/fieldExtractor';
+import { getDirectiveInfo, parseConf, resolveStanzasForEvent, parseExtractValue } from '../../engine';
 import { toggleComment } from './toggleComment';
 import { copyQuietly, copyToClipboard } from '../../utils/clipboard';
 import { getModifierName } from '../../utils/platform';

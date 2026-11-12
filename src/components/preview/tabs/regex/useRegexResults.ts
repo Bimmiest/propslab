@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRegexMatch } from '../../../../hooks/useRegexMatch';
-import type { RegexMatchInfo } from '../../../../engine/regexMatch';
+import type { RegexMatchInfo } from '../../../../engine';
 import type { EnrichedEvent } from '../../enrichEvents';
 import { pageStart } from '../../../../utils/pagination';
 import { NO_RESULTS, alignResults, countMatched } from './regexLogic';

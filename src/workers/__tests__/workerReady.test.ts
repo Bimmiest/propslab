@@ -11,9 +11,9 @@
 // ---------------------------------------------------------------------------
 
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { WORKER_READY } from '../../workers/workerProtocol';
+import { WORKER_READY } from '../workerProtocol';
 import { stubFailingWasmFetch, stubWasmFetch } from '../../test/wasmFetch';
-import { serveWithRegexEngine } from '../../workers/regexEngineLoader';
+import { serveWithRegexEngine } from '../regexEngineLoader';
 
 type Handler = ((e: MessageEvent) => void) | null;
 

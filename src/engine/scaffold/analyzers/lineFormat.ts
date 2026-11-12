@@ -1,5 +1,5 @@
 import type { Confidence, ScaffoldSuggestion } from '../types';
-import { escapeRegex } from '../../../utils/splunkRegex';
+import { escapeRegex } from '../../utils/splunkRegex';
 
 /**
  * Detect the line/event format and propose the matching props.conf directives

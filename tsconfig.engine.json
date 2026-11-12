@@ -17,6 +17,5 @@
   },
   "include": ["src/engine"],
   // Tests use vitest and Vite globals and run under Node, not in a worker.
-  // Worker entry points need `self` and are checked by tsconfig.worker.json.
-  "exclude": ["src/engine/**/__tests__", "src/engine/**/*.test.ts", "src/engine/*Worker.ts"]
+  "exclude": ["src/engine/**/__tests__", "src/engine/**/*.test.ts"]
 }

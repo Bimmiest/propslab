@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { countByLevel } from '../diagnosticCounts';
-import type { DiagnosticLevel, ValidationDiagnostic } from '../../engine/types';
+import type { DiagnosticLevel, ValidationDiagnostic } from '../../engine';
 
 const diag = (level: DiagnosticLevel): ValidationDiagnostic => ({ level, message: level, file: 'props.conf' });
 

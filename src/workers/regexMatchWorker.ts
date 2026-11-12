@@ -11,15 +11,14 @@
  *         RegexMatchResponse, or a WorkerSkippedResponse, per request
  */
 
-import { matchInputs } from './regexMatch';
-import type { RegexMatchInfo } from './regexMatch';
-import { serveWithRegexEngine } from '../workers/regexEngineLoader';
+import { matchInputs, type RegexMatchInfo } from '../engine';
+import { serveWithRegexEngine } from './regexEngineLoader';
 import {
   createRequestQueue,
   type QueuedRequest,
   type WorkerInputsMessage,
   type WorkerSkippedResponse,
-} from '../workers/workerProtocol';
+} from './workerProtocol';
 
 export interface RegexMatchRequest extends QueuedRequest {
   pattern: string;

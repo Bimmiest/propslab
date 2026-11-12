@@ -1,7 +1,6 @@
 import type { languages, editor, Position, CancellationToken } from 'monaco-editor';
 import { languages as monacoLanguages } from 'monaco-editor/editor';
-import { getDirectivesForFile, getDirectivesByCategory, type DirectiveInfo } from '../engine/directiveRegistry';
-import { endsWithContinuation } from '../engine/utils/directiveValues';
+import { getDirectivesForFile, getDirectivesByCategory, type DirectiveInfo, endsWithContinuation } from '../engine';
 import { describeTimeFormat, renderTimeFormatPreview } from './timeFormatPreview';
 
 // The runtime enum from the editor API, not a hand-kept copy of its numbers: the

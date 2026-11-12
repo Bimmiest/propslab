@@ -12,14 +12,14 @@ describe('selectMutated', () => {
         [
           'src/engine/pipeline.ts',
           'src/engine/processors/lineBreaker.ts',
-          'src/utils/splunkRegex.ts',
+          'src/engine/utils/splunkRegex.ts',
           'src/store/useAppStore.ts',
           'src/engine/types.ts',
-          'src/engine/pipelineWorker.ts',
+          'src/workers/pipelineWorker.ts',
           'src/engine/registry/propsDirectives.ts',
           'src/engine/directiveSupport.ts',
           'src/engine/__tests__/lineBreaker.test.ts',
-          'src/utils/regexSyntax.ts',
+          'src/utils/viewResult.ts',
           'packages/mcp-server/src/runInWorker.ts',
           'docs/engine.md',
         ],
@@ -28,7 +28,7 @@ describe('selectMutated', () => {
     ).toEqual([
       'src/engine/pipeline.ts',
       'src/engine/processors/lineBreaker.ts',
-      'src/utils/splunkRegex.ts',
+      'src/engine/utils/splunkRegex.ts',
       'src/store/useAppStore.ts',
     ]);
   });

@@ -12,7 +12,10 @@ import { stubWasmFetch } from '../../test/wasmFetch';
 // A plain variable rather than a `vi.fn`: vitest fails a test whose mock
 // throws, even when the code under test catches it, and throwing is the point.
 let probeImpl: () => unknown[] = () => [];
-vi.mock('../timestampMatch', () => ({ probeTimestamps: (): unknown[] => probeImpl() }));
+vi.mock('../../engine', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../engine')>()),
+  probeTimestamps: (): unknown[] => probeImpl(),
+}));
 
 const CONFIG = { timePrefix: null, timeFormat: '%Y', maxLookahead: 128, tz: null };
 

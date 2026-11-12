@@ -4,7 +4,7 @@ import { act, render, screen, fireEvent } from '@testing-library/react';
 import { useAppStore } from '../../../../store/useAppStore';
 import { RawTab } from '../RawTab';
 import type { EnrichedEvent } from '../../enrichEvents';
-import type { SplunkEvent } from '../../../../engine/types';
+import type { SplunkEvent } from '../../../../engine';
 import { EMPTY_FIELD_STATS } from '../../../../utils/fieldStats';
 import { makeEvent } from '../../../../test/makeEvent';
 

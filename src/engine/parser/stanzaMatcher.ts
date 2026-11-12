@@ -1,7 +1,7 @@
 import type { ConfStanza, EventMetadata } from '../types';
-import { DEFAULT_DEPTH_LIMIT, DEFAULT_MATCH_LIMIT, safeRegex, validateRegex } from '../../utils/splunkRegex';
-import { classEnd } from '../../utils/regexSyntax';
-import { detached } from '../../utils/redosHeuristic';
+import { DEFAULT_DEPTH_LIMIT, DEFAULT_MATCH_LIMIT, safeRegex, validateRegex } from '../utils/splunkRegex';
+import { classEnd } from '../utils/regexSyntax';
+import { detached } from '../utils/redosHeuristic';
 import { effectiveDirective, parseSplunkBool } from '../utils/directiveValues';
 import { asciiCompare } from '../utils/asciiCompare';
 

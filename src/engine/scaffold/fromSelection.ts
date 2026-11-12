@@ -1,4 +1,4 @@
-import { escapeRegex } from '../../utils/splunkRegex';
+import { escapeRegex } from '../utils/splunkRegex';
 import { derivePrefix } from './analyzers/timestamp';
 
 export interface GeneratedDirective {

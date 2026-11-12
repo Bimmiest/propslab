@@ -1,4 +1,4 @@
-import type { TimeSource } from '../../../../engine/types';
+import type { TimeSource } from '../../../../engine';
 
 // Theme-aware highlight colours (no hard-coded hex — see design system in CLAUDE.md).
 export const PREFIX_COLOR = 'var(--color-info)';

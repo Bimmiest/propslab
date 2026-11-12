@@ -5,8 +5,7 @@
 // each view walking every event's fields again on the main thread.
 // ---------------------------------------------------------------------------
 
-import type { EventMetadata } from '../engine/types';
-import { METADATA_FIELD_NAMES } from '../engine/utils/metadataFields';
+import { type EventMetadata, METADATA_FIELD_NAMES } from '../engine';
 
 /** The part of an event this module reads. */
 interface WithFields {

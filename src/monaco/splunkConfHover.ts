@@ -1,15 +1,17 @@
 import type { languages, editor, Position, CancellationToken, MarkdownStringTrustedOptions } from 'monaco-editor';
-import { getDirectiveInfo } from '../engine/directiveRegistry';
-import { classifyStanza } from '../engine/stanzaRegistry';
-import { getStagesForDirective } from '../engine/pipelineStages';
+import {
+  getDirectiveInfo,
+  classifyStanza,
+  getStagesForDirective,
+  parseConf,
+  mergeDirectives,
+  readTimestampLocation,
+  type ConfDirective,
+} from '../engine';
 import { OPEN_DICTIONARY_COMMAND_ID, openDictionaryCommandUri } from './dictionaryCommand';
 import { escapeMarkdown, inlineCode } from './markdown';
 import { buildTimeFormatPreview, renderTimeFormatPreview } from './timeFormatPreview';
 import { useAppStore } from '../store/useAppStore';
-import { parseConf } from '../engine/parser/confParser';
-import { mergeDirectives } from '../engine/parser/stanzaMatcher';
-import { readTimestampLocation } from '../engine/processors/timestampRecognizer';
-import type { ConfDirective } from '../engine/types';
 
 /**
  * The first line of `raw` with something on it, without splitting the whole
@@ -163,7 +165,7 @@ const DIRECTIVE_HOVER_TRUST: MarkdownStringTrustedOptions = {
  * Markdown for a directive-key hover. `actualKey` is document text, so it (and
  * the class name cut from it) is escaped; everything else is registry text.
  */
-function formatDirectiveHover(info: import('../engine/directiveRegistry').DirectiveInfo, actualKey: string): string {
+function formatDirectiveHover(info: import('../engine').DirectiveInfo, actualKey: string): string {
   const parts: string[] = [];
 
   parts.push(`### ${escapeMarkdown(actualKey)}`);

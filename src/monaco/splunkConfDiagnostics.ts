@@ -4,9 +4,7 @@ import {
   getClassBasedDirectiveBase,
   wrongFileCanonical,
   WRONG_FILE_MESSAGE,
-} from '../engine/directiveRegistry';
-import { isUndocumentedAttribute } from '../engine/directiveSupport';
-import {
+  isUndocumentedAttribute,
   endsWithContinuation,
   isDisallowedNegative,
   isEnumMember,
@@ -14,10 +12,14 @@ import {
   isSplunkBoolLiteral,
   parseSplunkBool,
   regexProblem,
-} from '../engine/utils/directiveValues';
-import { DIRECTIVE_RE, STANZA_RE, miscasedCanonical, MISCASED_MESSAGE } from '../engine/parser/confParser';
-import { misspelledCanonical, MISSPELLED_MESSAGE } from '../engine/misspelledDirective';
-import { unsupportedSpecifiers } from '../utils/strftime';
+  DIRECTIVE_RE,
+  STANZA_RE,
+  miscasedCanonical,
+  MISCASED_MESSAGE,
+  misspelledCanonical,
+  MISSPELLED_MESSAGE,
+  unsupportedSpecifiers,
+} from '../engine';
 
 /**
  * One directive as the linter saw it, for the stanza-scoped checks below.

@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import type { RegexMatchInfo } from '../../../../engine/regexMatch';
+import type { RegexMatchInfo } from '../../../../engine';
 import { tint } from '../../../../utils/tint';
 import { EventCardHeader, EventNumber } from '../shared/EventCardHeader';
 import { highlightSegments, type HighlightSegment } from './regexLogic';

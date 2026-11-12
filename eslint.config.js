@@ -174,12 +174,14 @@ export default defineConfig([
         'error',
         {
           selector: "CallExpression[callee.name='runPipeline'][arguments.length<5]:not(:has(> SpreadElement))",
-          message: 'Pass runPipeline its options with `now` (FIXED_NOW from src/engine/__tests__/runCtx.ts).',
+          message:
+            'Pass runPipeline its options with `now` (FIXED_NOW from runCtx.ts in src/test, or in src/engine/__tests__ for an engine test).',
         },
         {
           selector:
             "CallExpression[callee.name='runPipeline'] > ObjectExpression:nth-child(5):not(:has(> Property[key.name='now'])):not(:has(> SpreadElement))",
-          message: 'runPipeline options need `now` (FIXED_NOW from src/engine/__tests__/runCtx.ts).',
+          message:
+            'runPipeline options need `now` (FIXED_NOW from runCtx.ts in src/test, or in src/engine/__tests__ for an engine test).',
         },
       ],
     },
@@ -390,6 +392,31 @@ export default defineConfig([
                 'monaco-editor/*',
               ],
               message: 'The engine must stay UI-free. Do not import React, zustand or Monaco.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    // The other side of the boundary (ADR 0023): code outside src/engine,
+    // tests included, imports the engine from src/engine/index.ts only. That
+    // file is the API that the engine's own repository exports, so an import of
+    // a module inside the engine cannot survive the move.
+    //
+    // The test setup file is the exception. It starts the regex engine for
+    // every test file, so it imports splunkRegex itself: the entry point would
+    // load every engine module before a test's vi.mock, and the mock would miss.
+    files: ['src/**/*.{ts,tsx}', 'packages/mcp-server/src/**/*.ts'],
+    ignores: ['src/engine/**', 'src/test/setup.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['**/engine/*'],
+              message: 'Import the engine from its entry point (src/engine/index.ts), not from a module inside it.',
             },
           ],
         },

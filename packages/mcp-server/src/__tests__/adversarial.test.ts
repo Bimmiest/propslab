@@ -27,8 +27,8 @@ const WORKER_PATH = fileURLToPath(new URL('../../dist/simulateWorker.js', import
 
 // Counts the confs parsed on this thread. The parser itself still runs.
 const parseCalls = vi.hoisted(() => ({ count: 0 }));
-vi.mock('../../../../src/engine/parser/confParser', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../../src/engine/parser/confParser')>();
+vi.mock('../../../../src/engine', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../../src/engine')>();
   return {
     ...actual,
     parseConf: (...args: Parameters<typeof actual.parseConf>) => {

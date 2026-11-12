@@ -4,7 +4,7 @@ import { render, screen, fireEvent, within } from '@testing-library/react';
 import { HighlightedTab } from '../HighlightedTab';
 import { useAppStore } from '../../../../store/useAppStore';
 import type { EnrichedEvent } from '../../enrichEvents';
-import type { SplunkEvent, ProcessingStep } from '../../../../engine/types';
+import type { SplunkEvent, ProcessingStep } from '../../../../engine';
 import { makeEvent } from '../../../../test/makeEvent';
 import { NARROW_QUERY } from '../../../../hooks/useMediaQuery';
 

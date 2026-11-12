@@ -1,13 +1,18 @@
 import { useMemo, useState } from 'react';
 import { DialogButton, DialogFooter, DialogFrame, DialogHeader } from '../ui/DialogFrame';
 import { useAppStore } from '../../store/useAppStore';
-import { scaffoldConfig } from '../../engine/scaffold/scaffoldConfig';
-import { renderStanza, appendStanza, stanzaNameError } from '../../engine/scaffold/serialize';
-import type { Confidence, ScaffoldSuggestion } from '../../engine/scaffold/types';
+import {
+  scaffoldConfig,
+  renderStanza,
+  appendStanza,
+  stanzaNameError,
+  type Confidence,
+  type ScaffoldSuggestion,
+  escapeRegex,
+} from '../../engine';
 
 type ScaffoldResult = ReturnType<typeof scaffoldConfig>;
 import { computeDiff } from '../../utils/diffEngine';
-import { escapeRegex } from '../../utils/splunkRegex';
 import { Icon } from '../ui/Icon';
 import { DiffLines } from '../ui/DiffLines';
 import { Badge } from '../ui/Badge';

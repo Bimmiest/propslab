@@ -2,8 +2,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { TimePrefixDialog } from '../TimePrefixDialog';
-import { matchInputs } from '../../../../../engine/regexMatch';
-import type { RegexMatchRequest, RegexMatchResponse } from '../../../../../engine/regexMatchWorker';
+import { matchInputs } from '../../../../../engine';
+import type { RegexMatchRequest, RegexMatchResponse } from '../../../../../workers/regexMatchWorker';
 import { lastRequest, requestsIn } from '../../../../../test/workerInputs';
 
 // TIME_PREFIX is a user regex like EXTRACT's, so "Set TIME_PREFIX" gets the

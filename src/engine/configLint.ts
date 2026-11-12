@@ -6,7 +6,7 @@ import { wrongFileCanonical, WRONG_FILE_MESSAGE } from './directiveRegistry';
 import { lintInertTransformSettings, lintDirectiveValues } from './directiveLint';
 import { effectiveBool, effectiveDirective } from './utils/directiveValues';
 import { stanzaPatternProblem } from './parser/stanzaMatcher';
-import { MAX_REGEX_LIMIT } from '../utils/splunkRegex';
+import { MAX_REGEX_LIMIT } from './utils/splunkRegex';
 
 // Config lint: the diagnostics `runPipeline` reports about the conf files
 // themselves, split out of the pipeline so that file reads as the order of

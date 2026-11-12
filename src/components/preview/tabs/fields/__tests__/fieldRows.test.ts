@@ -16,7 +16,7 @@ import {
   METADATA_SOURCE,
   type AggregatedField,
 } from '../fieldRows';
-import type { ProcessingStep, SplunkEvent } from '../../../../../engine/types';
+import type { ProcessingStep, SplunkEvent } from '../../../../../engine';
 import { makeEvent } from '../../../../../test/makeEvent';
 import { toViewResult } from '../../../../../utils/viewResult';
 

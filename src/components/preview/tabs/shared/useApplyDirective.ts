@@ -8,8 +8,7 @@
 // ---------------------------------------------------------------------------
 
 import { useAppStore } from '../../../../store/useAppStore';
-import { upsertDirectiveInStanza } from '../../../../engine/scaffold/serialize';
-import { getDirectiveInfo } from '../../../../engine/directiveRegistry';
+import { upsertDirectiveInStanza, getDirectiveInfo } from '../../../../engine';
 
 const PLACEHOLDER_STANZA = 'my:sourcetype';
 

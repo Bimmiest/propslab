@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import type { editor, languages, Position } from 'monaco-editor';
 import { languages as monaco } from 'monaco-editor/editor';
 import { createCompletionProvider } from '../splunkConfCompletion';
-import { getDirectivesForFile } from '../../engine/directiveRegistry';
+import { getDirectivesForFile } from '../../engine';
 import { fakeModel } from '../../test/fakeModel';
 
 type ConfFile = 'props.conf' | 'transforms.conf';

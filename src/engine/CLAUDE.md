@@ -26,8 +26,11 @@ change this directory: change it in propslab, and sync it.
 - **The engine has no UI.** It does not import from `components`, `hooks`,
   `store` or `monaco`, or import React, zustand or Monaco. The lint refuses
   these imports.
+- **The public API is `index.ts`.** Code outside the engine imports only from
+  it, and the lint refuses a deeper import. When a consumer needs a name,
+  export it there.
 - **One runtime dependency, `pcre2-wasm-utf16`.** A pattern that a user wrote
-  compiles through `safeRegex` in `src/utils/splunkRegex.ts`, never
+  compiles through `safeRegex` in `src/engine/utils/splunkRegex.ts`, never
   `new RegExp`.
 
 ## Gates

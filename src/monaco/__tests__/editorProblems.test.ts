@@ -8,10 +8,8 @@
 import { describe, it, expect } from 'vitest';
 import { fileProblems, lintConf, textLines } from '../editorProblems';
 import { computeDiagnostics, MISSPELLED_MARKER_CODE, type DiagnosticMarker } from '../splunkConfDiagnostics';
-import type { ValidationDiagnostic } from '../../engine/types';
-import { runPipeline } from '../../engine/pipeline';
-import { SAMPLE_CONFIGS } from '../../engine/sampleData';
-import { AT_FIXED_NOW } from '../../engine/__tests__/runCtx';
+import { type ValidationDiagnostic, runPipeline, SAMPLE_CONFIGS } from '../../engine';
+import { AT_FIXED_NOW } from '../../test/runCtx';
 import { countByLevel } from '../../utils/diagnosticCounts';
 import { fakeModel } from '../../test/fakeModel';
 

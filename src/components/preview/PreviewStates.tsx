@@ -5,7 +5,7 @@
 
 import { useAppStore } from '../../store/useAppStore';
 import { Icon } from '../ui/Icon';
-import { SAMPLE_CONFIGS } from '../../engine/sampleData';
+import { SAMPLE_CONFIGS } from '../../engine';
 import { ExamplesMenu } from '../examples/ExamplesMenu';
 
 export function FailureState({ message }: { message: string }) {

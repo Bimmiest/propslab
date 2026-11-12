@@ -11,7 +11,7 @@ import {
   isRegexEngineReady,
   regexEngineModule as compiledModule,
   type RegexEngineModule,
-} from '../../../src/utils/splunkRegex';
+} from '../../../src/engine';
 
 /**
  * Where the module is: beside the bundle (the build copies it into dist/, so

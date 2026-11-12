@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useAppStore, selectSessionDirty } from '../useAppStore';
-import { SAMPLE_CONFIGS } from '../../engine/sampleData';
+import { SAMPLE_CONFIGS } from '../../engine';
 
 const SETTINGS_KEY = 'propslab:settings';
 const initial = useAppStore.getState();

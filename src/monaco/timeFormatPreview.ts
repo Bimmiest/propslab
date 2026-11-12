@@ -9,8 +9,7 @@
 // and is there anything in it the simulator will not honour.
 // ---------------------------------------------------------------------------
 
-import { formatStrftime, strftimeToRegex, unsupportedSpecifiers } from '../utils/strftime';
-import { validateRegex } from '../utils/splunkRegex';
+import { formatStrftime, strftimeToRegex, unsupportedSpecifiers, validateRegex } from '../engine';
 import { escapeMarkdown, inlineCode } from './markdown';
 import { matchTimePrefix, TIME_PREFIX_TIMEOUT_MS } from './timePrefixMatcher';
 import type { CancellationLike, PrefixMatcher } from './timePrefixMatcher';

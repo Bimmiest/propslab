@@ -28,7 +28,13 @@ async function restricted(filePath: string, code: string): Promise<string[]> {
   const linter = new Linter();
   const messages = linter.verify(
     code,
-    [{ files: ['**/*.ts'], languageOptions: { sourceType: 'module' }, rules: { [RULE]: setting as Linter.RuleEntry } }],
+    [
+      {
+        files: ['**/*.{ts,tsx}'],
+        languageOptions: { sourceType: 'module' },
+        rules: { [RULE]: setting as Linter.RuleEntry },
+      },
+    ],
     { filename: filePath },
   );
   return messages.map((m) => m.message);
@@ -61,8 +67,8 @@ describe('the engine import boundary', () => {
   it.each([
     ['src/engine/a.ts', './types'],
     ['src/engine/processors/b.ts', '../types'],
-    ['src/engine/processors/eval/c.ts', '../../../utils/splunkRegex'],
-    ['src/engine/a.ts', '../utils/strftime'],
+    ['src/engine/processors/eval/c.ts', '../../utils/splunkRegex'],
+    ['src/engine/a.ts', './utils/strftime'],
     ['src/engine/a.ts', 'pcre2-wasm-utf16'],
     ['src/engine/a.ts', 'node:path'],
   ])('allows %s importing %s', async (file, specifier) => {
@@ -82,5 +88,27 @@ describe('the engine import boundary', () => {
     expect(await restricted('src/engine/__tests__/x.test.ts', importing('../../monaco/splunkConfDiagnostics'))).toEqual(
       [],
     );
+  });
+});
+
+// The other side (ADR 0023): outside the engine, only its entry point.
+describe('the engine entry point', () => {
+  it.each([
+    ['src/hooks/a.ts', '../engine/types'],
+    ['src/components/preview/tabs/B.tsx', '../../../engine/parser/confParser'],
+    ['src/utils/c.ts', '../engine/utils/splunkRegex'],
+    ['src/hooks/__tests__/d.test.ts', '../../engine/pipeline'],
+    ['packages/mcp-server/src/e.ts', '../../../src/engine/types'],
+  ])('reports %s importing %s', async (file, specifier) => {
+    expect(await restricted(file, importing(specifier))).toHaveLength(1);
+  });
+
+  it.each([
+    ['src/hooks/a.ts', '../engine'],
+    ['src/components/preview/tabs/B.tsx', '../../../engine'],
+    ['packages/mcp-server/src/e.ts', '../../../src/engine'],
+    ['src/engine/a.ts', './parser/confParser'],
+  ])('allows %s importing %s', async (file, specifier) => {
+    expect(await restricted(file, importing(specifier))).toEqual([]);
   });
 });
