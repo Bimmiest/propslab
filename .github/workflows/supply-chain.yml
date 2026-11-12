@@ -41,7 +41,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -57,7 +57,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -73,3 +73,23 @@ jobs:
           # A scheduled run fails 90 days before the Node line ends, so the
           # move to the next line is filed as work, not found at end of life.
           eol-days: 90
+
+  # A failed scheduled run opens an issue, or comments on the open one
+  # (#889). See environment.yml's `report` job. A pull request run only
+  # annotates and does not report.
+  report:
+    needs: [radix-overrides, node-patch]
+    if: failure() && github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - uses: Bimmiest/shared-workflows/.github/actions/open-or-update-issue@171cd386717395c01be5e23ab926823c7b246cf6 # v1.11.0
+        with:
+          label: scheduled-supply-chain
+          title: The scheduled supply-chain check failed
+          body: |
+            A Radix override no longer matches the lockfile, or .nvmrc is behind the newest patch of its Node line, or its Node line ends soon. The run log says which.
+
+            Run: {run}

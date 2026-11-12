@@ -27,6 +27,12 @@ export interface TransformResult {
    * be a second implementation to keep in step.
    */
   noOp?: NoOpReason;
+  /**
+   * Set when a scan for every match stopped at MATCH_LIMIT or DEPTH_LIMIT
+   * after the first match: the result holds only the matches before the
+   * limit. The error PCRE2 gave.
+   */
+  limitHit?: string;
 }
 
 // Cache compiled regexes per stanza to avoid re-compiling on every event.
@@ -248,6 +254,17 @@ interface MatchedRun {
 }
 
 /**
+ * Every match of REGEX in the source. A limit hit ends the scan where it
+ * happened, so the result is marked as built from part of the matches.
+ */
+function allMatches(run: MatchedRun): RegexMatch[] {
+  const matches = run.compiled.matchAll(run.sourceValue);
+  const limitHit = run.compiled.lastError;
+  if (limitHit !== undefined) run.result.limitHit = limitHit;
+  return matches;
+}
+
+/**
  * Write FORMAT's expansion to DEST_KEY.
  *
  * DEST_KEY=_raw replaces the ENTIRE event with the FORMAT expansion of the
@@ -269,7 +286,7 @@ function writeDestKey(run: MatchedRun, format: string, destKey: string, priorDes
   // only, since without it the REGEX runs once. The matches build one value
   // between them, so what DEST_KEY held before (`$0`) is carried once, by the
   // first match, rather than repeated by every match.
-  const matches = run.settings.repeatMatch ? run.compiled.matchAll(run.sourceValue) : [firstMatch];
+  const matches = run.settings.repeatMatch ? allMatches(run) : [firstMatch];
   const values = matches.map((m, i) => expandFormat(format, m, i === 0 ? priorDestValue : ''));
   if (values.length > 0) {
     result.destKey = destKey;
@@ -293,7 +310,7 @@ function extractFormatPairs(run: MatchedRun, format: string): void {
   const pairs = parseFormatPairs(format).filter((p) => !/\$0(?!\d)/.test(p.key) && !/\$0(?!\d)/.test(p.value));
   const keepFirstMatchOnly = run.phase === 'search-time' && !settings.mvAdd;
   // Index time without REPEAT_MATCH: the REGEX runs once.
-  for (const m of settings.scanAll ? run.compiled.matchAll(run.sourceValue) : [run.firstMatch]) {
+  for (const m of settings.scanAll ? allMatches(run) : [run.firstMatch]) {
     for (const pair of pairs) {
       // Cleaned because FORMAT can name a field from the DATA (`$1::$2`), so
       // the key is only as well-formed as whatever the capture group caught.
@@ -323,7 +340,7 @@ function extractFormatPairs(run: MatchedRun, format: string): void {
  */
 function extractNamedGroups(run: MatchedRun): void {
   const { result, settings, cleanName } = run;
-  const matches = settings.scanAll ? run.compiled.matchAll(run.sourceValue) : [run.firstMatch];
+  const matches = settings.scanAll ? allMatches(run) : [run.firstMatch];
 
   // Whether a field captured again by a later match keeps the later value.
   // The same rule as `keepFirstMatchOnly` in the FORMAT path, stated the other

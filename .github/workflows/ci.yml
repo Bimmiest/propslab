@@ -51,7 +51,7 @@ jobs:
     steps:
       # Nothing in these jobs talks to the remote after checkout, and they
       # run dependency code that has no business finding a token in .git/config.
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -152,7 +152,11 @@ jobs:
       # major cannot leave one behind (#858). The app's `engines` is its own
       # toolchain, so its lower bound must also be on the major of .nvmrc. The
       # MCP server's `engines` says which Node its users can run, so it only
-      # has to include .nvmrc. Neither has `devEngines` yet: that is skipped.
+      # has to include .nvmrc. Both have `devEngines` (#862), and the check reads it.
+#
+# This step is at shared-workflows v1.13.0 and the other shared actions are at
+# v1.11.0. Dependabot raises the pins; do not align them by hand to a release
+# that nobody has read the notes of.
       - name: .nvmrc agrees with engines (app)
         uses: Bimmiest/shared-workflows/.github/actions/node-version-check@6d9565a7d992fe10a1368249d3bdef47688a08c5 # v1.13.0
         with:
@@ -176,7 +180,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -220,7 +224,7 @@ jobs:
     # the suite was cancelled mid-run.
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -268,7 +272,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -326,7 +330,7 @@ jobs:
       run:
         working-directory: packages/mcp-server
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -409,7 +413,7 @@ jobs:
           - tz: America/Los_Angeles
             lang: de_DE.UTF-8
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -449,7 +453,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
