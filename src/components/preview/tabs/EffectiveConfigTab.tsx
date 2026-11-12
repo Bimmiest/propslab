@@ -30,11 +30,34 @@ import type { PipelineInputs } from './shared/usePipelineInputs';
 const jumpTo = (line: number) => revealInEditor('props.conf', line);
 
 const STANZA_TYPE_LABEL: Record<EffectiveDirective['stanza']['type'], string> = {
-  source: 'source::',
-  host: 'host::',
-  sourcetype: 'sourcetype',
-  default: 'default',
+  source: 'source stanza',
+  host: 'host stanza',
+  sourcetype: 'sourcetype stanza',
+  default: 'default stanza',
 };
+
+interface StanzaGroup {
+  stanza: EffectiveDirective['stanza'];
+  directives: EffectiveDirective[];
+}
+
+/** The input is in precedence order, so the directives of a stanza are adjacent. */
+function groupByStanza(directives: EffectiveDirective[]): StanzaGroup[] {
+  const groups: StanzaGroup[] = [];
+  for (const directive of directives) {
+    const last = groups[groups.length - 1];
+    if (
+      last !== undefined &&
+      last.stanza.name === directive.stanza.name &&
+      last.stanza.line === directive.stanza.line
+    ) {
+      last.directives.push(directive);
+    } else {
+      groups.push({ stanza: directive.stanza, directives: [directive] });
+    }
+  }
+  return groups;
+}
 
 function StanzaBadge({ type }: { type: EffectiveDirective['stanza']['type'] }) {
   return (
@@ -89,35 +112,39 @@ function DirectiveRowBody({ directive }: { directive: EffectiveDirective }) {
     <div className="border-b border-[var(--color-border-subtle)] last:border-b-0">
       <div className="flex items-start gap-2 px-3 py-2 hover:bg-[var(--color-bg-tertiary)] transition-colors">
         <div className="flex-1 min-w-0">
-          <div className="flex items-baseline gap-2 flex-wrap">
-            <span className="text-xs font-mono text-[var(--color-text-primary)]">{directive.key}</span>
-            <span className="text-xs font-mono text-[var(--color-text-secondary)] truncate">= {directive.value}</span>
+          {/* A hanging indent keeps a wrapped value under the key, and the value
+              is never cut: this tab exists to show the whole resolved config. */}
+          <div className="text-xs font-mono pl-4 -indent-4 whitespace-pre-wrap break-words">
+            <span className="text-[var(--color-text-primary)]">{directive.key}</span>{' '}
+            <span className="text-[var(--color-text-secondary)]">= {directive.value}</span>
           </div>
-          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-            <StanzaBadge type={directive.stanza.type} />
-            <button
-              type="button"
-              onClick={() => jumpTo(directive.line)}
-              className="text-xs font-mono text-[var(--color-accent)] cursor-pointer hover:underline bg-transparent border-none p-0"
-            >
-              [{directive.stanza.name}]:{directive.line}
-            </button>
-            {directive.layer !== undefined && (
-              <span className="text-xs text-[var(--color-text-muted)]">{directive.layer}</span>
-            )}
-            {contested && (
-              <button
-                type="button"
-                onClick={() => setExpanded(!expanded)}
-                aria-expanded={expanded}
-                className="text-xs text-[var(--color-warning)] cursor-pointer hover:underline bg-transparent border-none p-0"
-              >
-                overrides {directive.overriddenByStanza.length} other
-                {directive.overriddenByStanza.length !== 1 ? 's' : ''}
-              </button>
-            )}
-          </div>
+          {(directive.layer !== undefined || contested) && (
+            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+              {directive.layer !== undefined && (
+                <span className="text-xs text-[var(--color-text-muted)]">{directive.layer}</span>
+              )}
+              {contested && (
+                <button
+                  type="button"
+                  onClick={() => setExpanded(!expanded)}
+                  aria-expanded={expanded}
+                  className="text-xs text-[var(--color-warning)] cursor-pointer hover:underline bg-transparent border-none p-0"
+                >
+                  overrides {directive.overriddenByStanza.length} other
+                  {directive.overriddenByStanza.length !== 1 ? 's' : ''}
+                </button>
+              )}
+            </div>
+          )}
         </div>
+        <button
+          type="button"
+          onClick={() => jumpTo(directive.line)}
+          aria-label={`Jump to line ${directive.line} of props.conf`}
+          className="shrink-0 text-xs font-mono text-[var(--color-accent)] cursor-pointer hover:underline bg-transparent border-none p-0"
+        >
+          :{directive.line}
+        </button>
       </div>
 
       {expanded && (
@@ -239,11 +266,26 @@ export function EffectiveConfigTab({ inputs }: EffectiveConfigTabProps) {
         </p>
       )}
 
-      <div>
-        {shown.map((directive) => (
-          <DirectiveRow key={`${directive.stanza.name}-${directive.key}`} directive={directive} />
-        ))}
-      </div>
+      {groupByStanza(shown).map((group) => (
+        <section key={`${group.stanza.name}-${group.stanza.line}`} aria-label={`[${group.stanza.name}]`}>
+          <div className="flex items-baseline gap-2 flex-wrap px-3 py-1.5 bg-[var(--color-bg-secondary)] border-b border-[var(--color-border-subtle)]">
+            <button
+              type="button"
+              onClick={() => jumpTo(group.stanza.line)}
+              className="text-xs font-mono font-semibold text-[var(--color-text-primary)] cursor-pointer hover:underline bg-transparent border-none p-0 text-left break-all"
+            >
+              [{group.stanza.name}]
+            </button>
+            <span className="text-xs text-[var(--color-text-muted)]">
+              {STANZA_TYPE_LABEL[group.stanza.type]}
+              {group.stanza.layer !== undefined && ` · ${group.stanza.layer}`}
+            </span>
+          </div>
+          {group.directives.map((directive) => (
+            <DirectiveRow key={`${directive.stanza.name}-${directive.key}`} directive={directive} />
+          ))}
+        </section>
+      ))}
 
       <p className="px-3 py-2 text-xs text-[var(--color-text-muted)]">
         Resolved for the props.conf and metadata the pipeline last ran with, the same way the preview resolves it.

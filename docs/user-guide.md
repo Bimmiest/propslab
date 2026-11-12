@@ -124,13 +124,12 @@ The list covers `EXTRACT`, `TRANSFORMS`/`REPORT`, `SEDCMD`, `FIELDALIAS` and `EV
 
 **Effective config tab.** This tab shows what `splunk btool props list <sourcetype> --debug` prints, resolved for the metadata that you configured. It shows these items:
 
-- each directive that applies
-- the stanza that the directive won from
+- each directive that applies, in a group under a heading for its stanza and the kind of that stanza
 - the definitions that the directive beat, in stanzas of lower precedence. You can expand each row to see them.
 
-When you click a line reference, the props.conf editor moves to that line. `Show contested only` shows only the keys that two or more matched stanzas define. Precedence surprises occur in these keys. The tab resolves the configuration, not the output. Thus it gives an answer before Propslab processes any data.
+When you click a line number or a stanza heading, the props.conf editor moves to that line. A long value wraps and is not cut. `Show contested only` shows only the keys that two or more matched stanzas define. Precedence surprises occur in these keys. The tab resolves the configuration, not the output. Thus it gives an answer before Propslab processes any data.
 
-**Context menus in the Effective config, CIM Models and Diff tabs.** Right-click a directive in the Effective config tab to move to it in props.conf, copy it, or open it in the dictionary. Right-click a missing field in the CIM Models tab to copy it, copy all the missing fields, or **Create FIELDALIAS…**. In that dialog, the missing field is the alias, and you type the field that the events already have. Right-click a changed event in the Diff tab to copy the line, or the event before or after the pipeline.
+**Context menus in the Effective config, CIM Models and Diff tabs.** Right-click a directive in the Effective config tab to move to it in props.conf, copy it, or open it in the dictionary. Right-click a missing field in the CIM Models tab to copy it, copy all the missing fields, or **Create FIELDALIAS…**. In that dialog, the missing field is the alias, and you type the field that the events already have. Right-click a changed event in the Diff tab to copy the line, or the event before or after the pipeline. When no event changed, the Diff tab says that no `SEDCMD`, and no `TRANSFORMS` with `DEST_KEY = _raw`, rewrote `_raw`.
 
 **CIM Models tab.** This tab validates the extracted fields against 27 CIM datasets:
 
