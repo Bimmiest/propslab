@@ -164,6 +164,19 @@ function warnMatched(
   transformStanza: TransformStanza,
 ): void {
   const { diagnostics } = run;
+  // The fields or the DEST_KEY value come from part of the matches, and
+  // nothing else on the event says so (#874).
+  if (result.limitHit !== undefined) {
+    diagnostics.report(warnKey(run, 'scanLimit', stanzaName), {
+      level: 'warning',
+      message:
+        `Transform "${stanzaName}" stopped at a regex limit (${result.limitHit}) while it looked for each match ` +
+        'of its REGEX, so its result is incomplete: it holds only the matches before the limit. ' +
+        'Simplify the REGEX, or raise MATCH_LIMIT / DEPTH_LIMIT.',
+      file: 'transforms.conf',
+      ...positionOfKeyOrStanza(transformStanza, 'REGEX'),
+    });
+  }
   if (run.phase === 'index-time') {
     warnIndexTimeNoWriteMeta(result, stanzaName, transformStanza, diagnostics, warnKey(run, 'noWriteMeta', stanzaName));
   }
