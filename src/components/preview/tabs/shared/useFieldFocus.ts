@@ -103,3 +103,17 @@ export function useFieldFocusState(field?: string): 'none' | 'active' | 'dim' {
     return field !== undefined && active.has(field) ? 'active' : 'dim';
   });
 }
+
+/**
+ * `useFieldFocusState` for a highlighted value, which also reports a pin for
+ * its `aria-pressed`: `pinned` draws as `active`. One subscription, not two.
+ */
+export function useFieldSpanState(field: string): 'none' | 'active' | 'dim' | 'pinned' {
+  const store = useContext(FieldFocusContext);
+  return useSyncExternalStore(store?.subscribe ?? noSubscribe, () => {
+    const active = store?.getActive() ?? null;
+    if (active === null) return 'none';
+    if (!active.has(field)) return 'dim';
+    return store?.getPinned().has(field) ? 'pinned' : 'active';
+  });
+}

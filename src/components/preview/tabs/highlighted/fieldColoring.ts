@@ -8,6 +8,7 @@
 import type { EnrichedEvent } from '../../enrichEvents';
 import { fieldColorAt } from '../shared/fieldColors';
 import { isJsonContainer, type FieldStats } from '../../../../utils/fieldStats';
+import { fieldsWritten } from '../../../../utils/viewResult';
 
 const AUTO_PROCESSORS = ['KV_MODE', 'INDEXED_EXTRACTIONS'];
 const MANUAL_PROCESSORS = ['EXTRACT', 'REPORT', 'TRANSFORMS', 'RULESET', 'SEDCMD'];
@@ -45,19 +46,21 @@ export function classifyFields(allEvents: EnrichedEvent[]): FieldCategories {
     if (event.processingTrace === previous) continue;
     previous = event.processingTrace;
     for (const step of event.processingTrace) {
-      if (!step.fieldsAdded) continue;
+      // A field EVAL wrote over is calculated, as one it added is (#900).
+      const written = fieldsWritten(step);
+      if (written.length === 0) continue;
       if (isAutoProcessor(step.processor)) {
-        for (const f of step.fieldsAdded) {
+        for (const f of written) {
           auto.add(f);
           if (!processorMap.has(f)) processorMap.set(f, step.processor);
         }
       } else if (isManualProcessor(step.processor)) {
-        for (const f of step.fieldsAdded) {
+        for (const f of written) {
           manual.add(f);
           processorMap.set(f, step.processor);
         }
       } else if (step.processor === 'EVAL') {
-        for (const f of step.fieldsAdded) {
+        for (const f of written) {
           calc.add(f);
           processorMap.set(f, 'EVAL');
         }

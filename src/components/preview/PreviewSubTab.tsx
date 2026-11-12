@@ -4,7 +4,7 @@
 // one of five sub-tabs over a shared filter bar and pagination.
 // ---------------------------------------------------------------------------
 
-import { memo, useEffect, useId, useMemo } from 'react';
+import { memo, useEffect, useId, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useAppStore, type PreviewFilters } from '../../store/useAppStore';
 import { Tabs } from '../ui/Tabs';
@@ -12,6 +12,7 @@ import { tabId, tabPanelId } from '../ui/tabIds';
 import type { PreviewSubTabId } from '../../engine/types';
 import { RawTab } from './tabs/RawTab';
 import { HighlightedTab } from './tabs/HighlightedTab';
+import type { PinnedView } from './tabs/highlighted/usePinnedRows';
 import { DiffTab } from './tabs/DiffTab';
 import { TimestampTab } from './tabs/timestamp';
 import { RegexTab } from './tabs/regex';
@@ -19,7 +20,6 @@ import { PreviewFilterBar } from './PreviewFilterBar';
 import { EventPagination, MIN_PAGE_SIZE } from './EventPagination';
 import { usePagination } from '../../hooks/usePagination';
 import { useDebounce } from '../../hooks/useDebounce';
-import type { PipelineInputs } from './tabs/shared/usePipelineInputs';
 import { enrichEvents, type EnrichedEvent } from './enrichEvents';
 import type { FieldStats } from '../../utils/fieldStats';
 import { anyFilter, filterOptions, matchesFilters, pruneSelection } from './previewFilters';
@@ -35,9 +35,6 @@ const PREVIEW_SUB_TABS: { id: PreviewSubTabId; label: string }[] = [
   { id: 'regex', label: 'Regex' },
 ];
 
-/** What the preview's sub-tabs read of the pipeline inputs: the Timestamp tab's config. */
-export type PreviewInputs = Pick<PipelineInputs, 'propsConf' | 'metadata'>;
-
 /** What the sub-tabs read between them; each takes the part it needs. */
 interface SubTabData {
   items: EnrichedEvent[];
@@ -46,7 +43,7 @@ interface SubTabData {
   eventsPerPage: number;
   search: string;
   fieldStats: FieldStats | undefined;
-  inputs: PreviewInputs;
+  onPinnedViewChange: (view: PinnedView | null) => void;
 }
 
 /** The active sub-tab. Called in place, not rendered as a component, so the tab is the panel's direct child. */
@@ -62,14 +59,13 @@ function subTabContent(subTab: PreviewSubTabId, d: SubTabData): ReactNode {
           currentPage={d.currentPage}
           eventsPerPage={d.eventsPerPage}
           fieldStats={d.fieldStats}
+          onPinnedViewChange={d.onPinnedViewChange}
         />
       );
     case 'diff':
       return <DiffTab items={d.items} currentPage={d.currentPage} eventsPerPage={d.eventsPerPage} />;
     case 'timestamp':
-      return (
-        <TimestampTab items={d.items} currentPage={d.currentPage} eventsPerPage={d.eventsPerPage} inputs={d.inputs} />
-      );
+      return <TimestampTab items={d.items} currentPage={d.currentPage} eventsPerPage={d.eventsPerPage} />;
     case 'regex':
       return (
         <RegexTab items={d.items} allEvents={d.allEvents} currentPage={d.currentPage} eventsPerPage={d.eventsPerPage} />
@@ -110,7 +106,7 @@ function useLiveSelections(
   return live;
 }
 
-export const PreviewSubTab = memo(function PreviewSubTab({ pipelineInputs }: { pipelineInputs: PreviewInputs }) {
+export const PreviewSubTab = memo(function PreviewSubTab() {
   const result = useAppStore((s) => s.processingResult);
   const events = useMemo(() => result?.events ?? [], [result]);
   const originalRaw = result?.originalRaw ?? '';
@@ -161,8 +157,13 @@ export const PreviewSubTab = memo(function PreviewSubTab({ pipelineInputs }: { p
     return enrichedEvents.filter((item) => matchesFilters(item, filters));
   }, [enrichedEvents, debouncedSearch, live.fields, live.status, live.changeState]);
 
+  // While a field is pinned in the Extractions tab, the pager pages through
+  // the events with that field, which the tab reports, not through every event.
+  const [pinnedView, setPinnedView] = useState<PinnedView | null>(null);
+  const pagedView = subTab === 'highlighted' ? pinnedView : null;
+
   const { paginatedItems, currentPage, totalPages, eventsPerPage, totalItems, setCurrentPage, setEventsPerPage } =
-    usePagination(filteredEvents);
+    usePagination(filteredEvents, pagedView?.total);
   // Present while there is a choice of page size to make: with more events
   // than the smallest page. Shown only past the current page size, choosing a
   // larger size hid the control, and it could not be set back down.
@@ -214,7 +215,7 @@ export const PreviewSubTab = memo(function PreviewSubTab({ pipelineInputs }: { p
           eventsPerPage,
           search: debouncedSearch,
           fieldStats,
-          inputs: pipelineInputs,
+          onPinnedViewChange: setPinnedView,
         })}
       </div>
 
@@ -227,6 +228,7 @@ export const PreviewSubTab = memo(function PreviewSubTab({ pipelineInputs }: { p
           eventsPerPage={eventsPerPage}
           onPageChange={setCurrentPage}
           onEventsPerPageChange={setEventsPerPage}
+          scope={pagedView?.scope}
         />
       )}
     </div>

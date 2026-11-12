@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { timePrefixFromSelection } from '../../../../engine/scaffold/fromSelection';
 import { DirectiveDialog, DirectiveForm } from './DirectiveDialog';
+import { Identifier } from '../../../ui/Identifier';
 import { useLiveCapture, isSettledCapture, type Capture } from './useLiveCapture';
 
 /**
@@ -100,7 +101,7 @@ function TimePrefixForm({ raw, selection, selectionStart, stanza, onApply, onClo
           className="text-xs font-semibold uppercase tracking-wider mb-1"
           style={{ color: 'var(--color-text-secondary)' }}
         >
-          Adds to <code className="font-mono">[{stanza}]</code>
+          Adds to <Identifier>[{stanza}]</Identifier>
         </div>
         <pre
           className="text-xs font-mono rounded border p-2 overflow-x-auto whitespace-pre-wrap break-all"

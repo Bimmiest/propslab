@@ -132,13 +132,29 @@ describe('applyFieldAliases — a source with no value (#445)', () => {
     expect(step?.fieldsRemoved).toEqual(['x']);
   });
 
-  it('reports a target removed and then aliased again as created', () => {
+  it('reports a target removed and then aliased again as modified, since the event had it before', () => {
     const e = run({ a: '1', x: 'old' }, 'missing AS x  a AS x');
     expect(e.fields).toEqual({ a: '1', x: '1' });
     const [step] = e.processingTrace;
     expect(step?.description).toBe('Created aliases: x (from a)');
-    expect(step?.fieldsAdded).toEqual(['x']);
+    expect(step?.fieldsAdded).toEqual([]);
+    expect(step?.fieldsModified).toEqual(['x']);
     expect(step?.fieldsRemoved).toBeUndefined();
+  });
+
+  // #900: the step's lists say what the event had before it.
+  it('puts a target the event had before in fieldsModified, and a new one in fieldsAdded', () => {
+    const e = run({ a: '1', x: 'old' }, 'a AS x  a AS y');
+    expect(e.fields).toEqual({ a: '1', x: '1', y: '1' });
+    const [step] = e.processingTrace;
+    expect(step?.fieldsAdded).toEqual(['y']);
+    expect(step?.fieldsModified).toEqual(['x']);
+  });
+
+  it('leaves fieldsModified out when every target is new', () => {
+    const [step] = run({ a: '1' }, 'a AS y').processingTrace;
+    expect(step?.fieldsAdded).toEqual(['y']);
+    expect(step).not.toHaveProperty('fieldsModified');
   });
 
   it('reports a target aliased twice once, from the alias that set it', () => {

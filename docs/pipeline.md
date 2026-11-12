@@ -63,4 +63,6 @@ The engine also accepts layered conf input (`default/` + `local/`), and it retur
 
 For each event, the engine evaluates all of the expressions before it applies any of them. This agrees with the semantics of Splunk.
 
+The EVAL step in the trace puts a field that the event did not have in `fieldsAdded`, and a field that the event had in `fieldsModified`. A null result removes a field that the event had (`fieldsRemoved`). When the event did not have the field, a null result is a no-op: it is in `noOps`, and it is not in the step. REPORT, KV_MODE and FIELDALIAS use `fieldsModified` in the same way ([#900](https://github.com/Bimmiest/propslab/issues/900)).
+
 [fidelity.md](fidelity.md#stubbed-eval-functions) names the eval functions that are stubs.

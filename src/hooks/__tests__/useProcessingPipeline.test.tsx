@@ -152,6 +152,8 @@ describe('useProcessingPipeline', () => {
     expect(useAppStore.getState().isProcessing).toBe(false);
     // The status bar says so rather than "Worker idle" (#403).
     expect(useAppStore.getState().pipelineOnMainThread).toBe(true);
+    // Recorded beside the result, for the tabs that describe the run (#879).
+    expect(useAppStore.getState().runInputs).toEqual({ propsConf: PROPS, transformsConf: '', metadata: META });
   });
 
   it('runs inline, rather than throwing from the effect, when construction fails', async () => {
@@ -204,8 +206,51 @@ describe('useProcessingPipeline', () => {
     expect(state.isProcessing).toBe(false);
     expect(state.processingResult).toBeNull();
     expect(state.validationDiagnostics[0]?.message).toMatch(/timed out.*backtracking/);
+    expect(state.runInputs?.propsConf).toBe(PROPS);
     expect(FakeWorker.instances[0]!.terminated).toBe(true);
     expect(FakeWorker.instances).toHaveLength(2);
+  });
+
+  it('records with each answer the inputs its request was made with, not edits made during the run (#879)', () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('Worker', FakeWorker);
+    seed();
+    renderHook(() => useProcessingPipeline());
+    act(() => void vi.advanceTimersByTime(300));
+    const first = latest().posted[0]!;
+
+    // The editors move on while the worker runs the first request.
+    const EDITED = `${PROPS}TRUNCATE = 0\n`;
+    act(() => useAppStore.setState({ propsConf: EDITED, transformsConf: '[t]\n' }));
+    act(() => latest().answer(first.id));
+    expect(useAppStore.getState().runInputs).toEqual({ propsConf: PROPS, transformsConf: '', metadata: META });
+
+    act(() => void vi.advanceTimersByTime(300));
+    const second = latest().posted.at(-1)!;
+    expect(second.id).not.toBe(first.id);
+    // The answer to a superseded request records nothing.
+    act(() => latest().answer(first.id));
+    expect(useAppStore.getState().runInputs?.propsConf).toBe(PROPS);
+
+    act(() => latest().answer(second.id));
+    expect(useAppStore.getState().runInputs).toEqual({ propsConf: EDITED, transformsConf: '[t]\n', metadata: META });
+  });
+
+  it('records the inputs of a run that answers with an error (#879)', () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('Worker', FakeWorker);
+    seed();
+    renderHook(() => useProcessingPipeline());
+    act(() => void vi.advanceTimersByTime(300));
+    const { id } = latest().posted[0]!;
+    act(() => {
+      latest().ready();
+      latest().onmessage?.({ data: { id, error: 'bad' } } as unknown as MessageEvent);
+    });
+    const state = useAppStore.getState();
+    expect(state.processingResult).toBeNull();
+    expect(state.validationDiagnostics[0]?.message).toBe('Pipeline error: bad');
+    expect(state.runInputs?.propsConf).toBe(PROPS);
   });
   it('stops recreating a worker whose script never loads, and finishes inline (#309)', async () => {
     vi.stubGlobal('Worker', FakeWorker);
