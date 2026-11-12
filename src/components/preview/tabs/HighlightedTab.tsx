@@ -6,19 +6,13 @@ import { buildFieldTree } from './shared/fieldTreeUtils';
 import { DirectiveNoOpList } from './shared/DirectiveNoOpList';
 import type { FieldStats } from '../../../utils/fieldStats';
 import { fieldNamesInView, type FieldFilter } from './highlighted/fieldColoring';
-import { NO_BADGES, eventBadges, groupNames, selectRows } from './highlighted/eventRows';
+import { NO_BADGES, eventBadges, groupNames } from './highlighted/eventRows';
+import { usePinnedRows, type PinnedView } from './highlighted/usePinnedRows';
 import { useFieldColoring } from './highlighted/useHighlightedFields';
 import { useGroupCollapse } from './shared/useGroupCollapse';
 import { HighlightedFilterBar } from './highlighted/HighlightedFilterBar';
 import { HighlightedSidebar } from './highlighted/HighlightedSidebar';
 import { HighlightedEventCard } from './highlighted/HighlightedEventCard';
-
-/**
- * Upper bound on rows rendered while a field is pinned. A pin filters the whole
- * dataset rather than the current page, so without a cap a common field renders
- * every event at once.
- */
-const MAX_PINNED_ROWS = 100;
 
 export interface HighlightedTabProps {
   items: EnrichedEvent[];
@@ -31,9 +25,18 @@ export interface HighlightedTabProps {
    * walked; the JSON containers always are.
    */
   fieldStats?: FieldStats;
+  /** Told the pinned view while a field is pinned, and null when no field is, or the tab unmounts. */
+  onPinnedViewChange?: (view: PinnedView | null) => void;
 }
 
-export function HighlightedTab({ items, allEvents, currentPage, eventsPerPage, fieldStats }: HighlightedTabProps) {
+export function HighlightedTab({
+  items,
+  allEvents,
+  currentPage,
+  eventsPerPage,
+  fieldStats,
+  onPinnedViewChange,
+}: HighlightedTabProps) {
   const [fieldFilter, setFieldFilter] = useState<FieldFilter>('all');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const { store: focusStore, pinnedFields, togglePin, setHoveredField } = useFieldFocus();
@@ -53,21 +56,10 @@ export function HighlightedTab({ items, allEvents, currentPage, eventsPerPage, f
   );
   useLayoutEffect(() => focusStore.retainPins(runFields), [focusStore, runFields]);
 
-  const pinMatches = useMemo(
-    () => selectRows({ items, allEvents, currentPage, eventsPerPage }, pinnedFields),
-    [items, allEvents, pinnedFields, currentPage, eventsPerPage],
-  );
-
-  // A pin spans the whole dataset by design, but rendering every match at once
-  // locked the UI for seconds to minutes: pinning a field present in every event
-  // (`host`, or any KV field common to all lines) mounted a FieldEventCard per
-  // event, each running value segmentation and a context-menu root per span.
-  // Cap the rendered window and say what was left out, rather than silently
-  // truncating or silently hanging.
-  const pinnedOverflow = pinnedFields.size > 0 && pinMatches.length > MAX_PINNED_ROWS;
-  const filteredItems = useMemo(
-    () => (pinnedOverflow ? pinMatches.slice(0, MAX_PINNED_ROWS) : pinMatches),
-    [pinMatches, pinnedOverflow],
+  const { pinMatches, rows: filteredItems } = usePinnedRows(
+    { items, allEvents, currentPage, eventsPerPage },
+    pinnedFields,
+    onPinnedViewChange,
   );
 
   // Every event the filters leave, not this page's: a directive that fires only
@@ -125,7 +117,6 @@ export function HighlightedTab({ items, allEvents, currentPage, eventsPerPage, f
 
         <div className="flex-1 min-h-0 flex">
           <FieldSplitLayout storageKey="highlighted-split-layout" collapsed={sidebarCollapsed} sidebar={sidebar}>
-            {pinnedOverflow && <PinnedOverflowNote total={pinMatches.length} />}
             {/*
             Extraction directives that ran and produced no field — the case
             where this tab otherwise shows an event with nothing highlighted
@@ -152,21 +143,5 @@ export function HighlightedTab({ items, allEvents, currentPage, eventsPerPage, f
         </div>
       </div>
     </FieldFocusContext.Provider>
-  );
-}
-
-function PinnedOverflowNote({ total }: { total: number }) {
-  return (
-    <div
-      className="px-3 py-2 mb-2 text-xs rounded"
-      style={{
-        backgroundColor: 'var(--color-bg-tertiary)',
-        color: 'var(--color-text-secondary)',
-        border: '1px solid var(--color-border-subtle)',
-      }}
-    >
-      Showing the first {MAX_PINNED_ROWS.toLocaleString()} of {total.toLocaleString()} events with a pinned field.
-      Narrow the set with the search box, or unpin to page through every event.
-    </div>
   );
 }
