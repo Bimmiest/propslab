@@ -26,6 +26,8 @@ Below 768px, the labelled tab strip of `MobileShell` replaces the rail. The rail
 
 **Keyboard:** `Ctrl/Cmd+K` opens the command palette. The palette has four groups: Examples, Navigate, Look up (for a directive) and Actions. The header info button (ⓘ) opens a slide-out reference to the 11 pipeline stages.
 
+**Context menus from the keyboard:** `Shift+F10` or the Menu key opens the context menu of the item that has the focus. The app handles these keys itself, so they also work in Safari. On a Mac keyboard, press `Shift+Fn+F10` if the top row does media functions.
+
 **Status bar:** the status bar shows these items:
 
 - the worker status
@@ -90,6 +92,12 @@ The examples are dated October 2026. Until 2032 they are inside the default `MAX
 The strftime completions show the same rendered time. Thus you can choose between five opaque token strings when you see what each one makes. An unsimulated specifier also gets an informational marker in the editor. The config can be correct for a real indexer, but this preview does not resolve `_time` from it.
 
 **Pipeline tab.** Right-click a step, or move to it with Tab and press `Shift+F10` or the Menu key, to open its menu. **Jump to config** moves the props.conf cursor to the directive that the step ran. For a `TRANSFORMS-` or `REPORT-` step, the menu also moves to the transforms.conf stanza. The menu also opens the directive in the dictionary and copies the description of the step.
+
+Each step shows the fields that it changed, with a mark and a colour for each type of change. Put the pointer on a mark to see the reason.
+
+- `+name` is a new field.
+- `~name` is a field that the event had before the step, and that the step changed. At index time, a rewrite of `_raw` changed the value that an extraction finds. At search time, the step wrote a new value: for example, `EVAL-action` changes the `action` field that a `REPORT` extracted.
+- `−name` is a field that the step removed.
 
 **"Did not fire".** This list appears in the Pipeline and Extractions tabs when a directive ran against the loaded events and changed nothing. Without the list, the preview shows this failure as a usual event that did not change. The list has two groups:
 

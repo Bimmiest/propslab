@@ -41,6 +41,18 @@ All four tools are annotated `readOnlyHint: true`, `destructiveHint: false`,
 and the static registry, reach nothing outside the process, and answer the
 same input the same way, so a client need not ask before running one.
 
+Every tool's input schema is closed (`additionalProperties: false`), so an
+argument the tool does not know fails the call instead of being dropped
+(#884): a misspelled `props` for `props_conf` used to run on the empty
+default and look like a correct answer. The SDK returns the refusal as an
+`isError` result whose text names each unknown argument, the closest known
+argument where one is close (`unknown argument \`props\` (did you mean
+\`props_conf\`?)`), and the arguments the tool takes. `explain_precedence`
+with `file: "transforms.conf"` and a `sourcetype` is refused as
+`{"error": "argument_not_applicable", "argument": "sourcetype", …}`: no event
+matches a transforms.conf stanza, so the call could not give the resolution
+it asked for.
+
 `simulate`, `validate` and `explain_precedence` accept conf input as either
 one flat string or an ordered list of layers, lowest precedence first — an
 agent pointed at a real app directory hands over `default/` + `local/` and

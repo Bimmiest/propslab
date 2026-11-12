@@ -84,6 +84,7 @@ const noOpReason = z.discriminatedUnion('kind', [
     partialEnd: z.number().int().optional(),
     partialPattern: z.string().optional(),
   }),
+  z.looseObject({ kind: z.literal('replacement-identical') }),
   z.looseObject({ kind: z.literal('fields-already-set'), fields: z.array(z.string()) }),
   z.looseObject({ kind: z.literal('no-named-groups') }),
   z.looseObject({ kind: z.literal('groups-unset'), fields: z.array(z.string()) }),
