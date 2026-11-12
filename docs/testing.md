@@ -75,6 +75,8 @@ The suite is for the things that vitest cannot reach, because of its structure. 
 
 If you extend the suite, remember this. The app runs the pipeline one time on mount, with an empty raw log. `runPipeline` returns a real result for empty input (`eventCount: 0`). Thus the status bar shows "Worker idle · 0 events" *before* any data loads. Wait for an event count that is not zero, as `loadExample` does. Do not wait for the idle state.
 
+Playwright's WebKit tells the page that it runs on macOS, on all hosts. Thus Monaco takes Cmd for its shortcuts there, and Ctrl in the other browsers. In a test, press the keys that the `keys` fixture gives, not `Control`.
+
 To test the watchdog or the recovery after a crash, use `failPipelineWorker` in `e2e/fixtures.ts`. It serves the first fetches of the pipeline worker script as a script that sends the ready signal and then hangs or throws. The app has no test hook for this. An input cannot cause these failures reliably: the run budget and the match limits stop a slow regex before the watchdog does.
 
 `@playwright/test` is pinned to `~1.64.1`. The pin matches a specific Chromium revision, so that local development is consistent. You can bump it at any time. CI installs the browser that agrees with each version, so the pin has no effect on CI runs.

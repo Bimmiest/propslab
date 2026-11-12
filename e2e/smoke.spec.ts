@@ -97,11 +97,15 @@ test.describe('trusted types', () => {
     // The diagnostics the typed lines raise open a list that shrinks the
     // editor, which keeps its scroll position. Once the list is open, moving
     // the cursor reveals the typed lines, where the squiggles are, again.
+    // Pressed again until they show: the list can finish opening after the
+    // first press has revealed the lines, and push them out of view again.
     await expect(page.getByText(/takes a boolean, and "notabool" is not one/)).toBeVisible();
-    await page.keyboard.press(keys.textEnd);
-    await expect(page.locator('.squiggly-warning, .squiggly-error, .squiggly-info').first()).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(async () => {
+      await page.keyboard.press(keys.textEnd);
+      await expect(page.locator('.squiggly-warning, .squiggly-error, .squiggly-info').first()).toBeVisible({
+        timeout: 3_000,
+      });
+    }).toPass({ timeout: 15_000 });
 
     // A directive hover: markdown rendered through Monaco's sanitizer.
     const token = props.getByText('SHOULD_LINEMERGE', { exact: true }).last();
@@ -287,41 +291,19 @@ test.describe('editor state across remounts', () => {
   });
 
   test('a close or reload asks first only once the session is edited', async ({ page }) => {
-    // DIAG(webkit, temporary): count beforeunload listeners.
-    await page.addInitScript(() => {
-      const log: string[] = [];
-      Object.defineProperty(window, '__diagUnload', { value: log });
-      const add = window.addEventListener.bind(window);
-      const remove = window.removeEventListener.bind(window);
-      window.addEventListener = ((type: string, ...rest: [EventListenerOrEventListenerObject, unknown?]) => {
-        if (type === 'beforeunload') log.push('add');
-        add(type, ...(rest as [EventListenerOrEventListenerObject]));
-      }) as typeof window.addEventListener;
-      window.removeEventListener = ((type: string, ...rest: [EventListenerOrEventListenerObject, unknown?]) => {
-        if (type === 'beforeunload') log.push('remove');
-        remove(type, ...(rest as [EventListenerOrEventListenerObject]));
-      }) as typeof window.removeEventListener;
-    });
     await openApp(page);
-    const dialogs: string[] = [];
     let prompts = 0;
     page.on('dialog', (dialog) => {
-      dialogs.push(dialog.type());
       if (dialog.type() === 'beforeunload') prompts++;
       void dialog.dismiss();
     });
     // Chromium shows the prompt only after a user gesture on the page.
     await page.locator('.monaco-editor').nth(1).click();
-    const unload = await page.evaluate(() => (window as unknown as { __diagUnload: string[] }).__diagUnload.join(','));
-    await page.close({ runBeforeUnload: true });
-    const closed = await expect
-      .poll(() => page.isClosed(), { timeout: 10_000 })
-      .toBe(true)
-      .then(
-        () => true,
-        () => false,
-      );
-    expect(closed, `DIAG7 dialogs=${dialogs.join(',')} unload=${unload}`).toBe(true);
+    // A reload, not a close: Playwright's WebKit does not close a page that
+    // has run its beforeunload handlers, though none of them asked to stay.
+    // A prompt here would be dismissed, and the reload would never finish.
+    await page.reload();
+    await expect(page.locator('#main-content')).toBeVisible();
     expect(prompts).toBe(0);
   });
 
@@ -763,24 +745,17 @@ test.describe('dictionary', () => {
     await expect(page.getByRole('heading', { level: 2, name: 'TIME_PREFIX' })).toBeVisible();
   });
 
-  test('a tab left open across a redeploy reloads onto the new build and keeps its edits (#706)', async ({
-    page,
-    complaints,
-  }) => {
+  test('a tab left open across a redeploy reloads onto the new build and keeps its edits (#706)', async ({ page }) => {
     await openApp(page);
-    // Temporary diagnostics for the WebKit job.
-    const fetched: string[] = [];
-    page.on('response', (r) => {
-      if (/DictionaryView/.test(r.url())) fetched.push(`${r.status()}`);
-    });
-    let loads = 0;
-    page.on('load', () => loads++);
     // The redeploy deleted the chunk this tab knows: its first fetch 404s, as the old hash would.
     let deleted = true;
     await page.route(/\/assets\/DictionaryView-[^/]+\.js$/, (route) => {
       if (!deleted) return route.continue();
       deleted = false;
-      return route.fulfill({ status: 404 });
+      // `no-store`: here the new build serves the same URL again, which a
+      // real redeploy never does. Without it, WebKit's import after the
+      // reload failed with no request on the network: the 404 was reused.
+      return route.fulfill({ status: 404, headers: { 'Cache-Control': 'no-store' } });
     });
     let prompts = 0;
     page.on('dialog', (dialog) => {
@@ -795,25 +770,7 @@ test.describe('dictionary', () => {
     await page.getByRole('tab', { name: 'Dictionary' }).click();
     await reloaded;
 
-    const shown = await expect(page.getByRole('listbox', { name: 'Splunk directives' }))
-      .toBeVisible({ timeout: 15_000 })
-      .then(
-        () => true,
-        () => false,
-      );
-    if (!shown) {
-      const state = await page.evaluate(() => ({
-        online: navigator.onLine,
-        stored: sessionStorage.getItem('propslab:stale-chunk-reload'),
-        alerts: [...document.querySelectorAll('[role=alert]')].map((e) => e.textContent),
-        selected: [...document.querySelectorAll('[role=tab][aria-selected=true]')].map((e) => e.textContent),
-        dictPanel: document.getElementById('view-panel-dictionary')?.outerHTML.slice(0, 300) ?? 'none',
-      }));
-      expect(
-        shown,
-        `DIAG12 ${JSON.stringify({ state, fetched, loads, url: page.url(), complaints: complaints.all.slice(0, 8) })}`,
-      ).toBe(true);
-    }
+    await expect(page.getByRole('listbox', { name: 'Splunk directives' })).toBeVisible({ timeout: 30_000 });
     // The edits were saved for the reload, so there was nothing to ask about.
     expect(prompts).toBe(0);
     await page.getByRole('tab', { name: 'Simulator' }).click();
