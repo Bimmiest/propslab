@@ -81,6 +81,8 @@ The examples are dated October 2026. Until 2032 they are inside the default `MAX
 - **Create FIELDALIAS…**, which adds `FIELDALIAS-<alias> = <field> AS <alias>` to the stanza of the sourcetype
 - **Jump to config**, which moves the props.conf cursor to the directive that made the field. This item is not available when no line in props.conf made the field, for example a default field or `KV_MODE = auto`.
 
+**Field values from the keyboard.** In the Extractions view, press Tab to move to the first highlighted value of an event. The Left and Right arrow keys move to the other values of the event, and Home and End move to the first and the last value. Enter or Space pins the field. `Shift+F10` or the Menu key opens the field menu for that value. Press Tab again to go to the next event.
+
 **Event menu.** Right-click an event in the Raw or Extractions view to open its menu. It copies the event, its fields as JSON, or its metadata as `index=… host=… source=… sourcetype=…`. For each props.conf stanza that applies to the event, a **Jump to [stanza]** item moves the props.conf cursor to the stanza header. With text selected, the menu also copies the selection and makes an `EXTRACT` or a `TIME_PREFIX` from it.
 
 **TIME_FORMAT preview.** When you hover over a `TIME_FORMAT` value, the editor does three things:
