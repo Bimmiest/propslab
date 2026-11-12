@@ -341,6 +341,20 @@ export function applySedCommands(events: SplunkEvent[], directives: ConfDirectiv
       }
 
       if (raw !== before) {
+        // A global scan that stopped at a limit replaced only the matches
+        // before it, and a part-masked event looks like a masked one (#874).
+        const limitHit = cmd.pattern?.lastError;
+        if (limitHit !== undefined) {
+          const { directive } = cmd;
+          diagnostics.report(
+            `SEDCMD limit|${directive.layer ?? ''}|${directive.line}|${directive.key}`,
+            sedWarning(
+              directive,
+              `the scan for each match stopped at a regex limit (${limitHit}), so the substitution is incomplete: ` +
+                'only the matches before the limit were replaced, and the rest of the event is unchanged.',
+            ),
+          );
+        }
         // Each command is attributed separately: two SEDCMDs masking two
         // different fields must not collapse into one undifferentiated "masking
         // happened" note.
