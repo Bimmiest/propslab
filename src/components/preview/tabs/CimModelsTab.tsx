@@ -12,6 +12,7 @@ import {
   ContextMenuTrigger,
 } from '../../ui/ContextMenu';
 import { CIM_MATCH_THRESHOLD_PERCENT, matchesModel, rankModels } from '../../../utils/cimMatching';
+import { Identifier } from '../../ui/Identifier';
 
 export function CimModelsTab() {
   const result = useAppStore((s) => s.processingResult);
@@ -163,7 +164,9 @@ function MissingFieldMenuItems({ field, missing }: { field: string; missing: str
   const setFieldAlias = useAppStore((s) => s.setFieldAlias);
   return (
     <>
-      <ContextMenuLabel>{field}</ContextMenuLabel>
+      <ContextMenuLabel>
+        <Identifier>{field}</Identifier>
+      </ContextMenuLabel>
       <ContextMenuItem onSelect={() => setFieldAlias({ alias: field })}>Create FIELDALIAS…</ContextMenuItem>
       <ContextMenuItem onSelect={() => copyQuietly(field)}>Copy field name</ContextMenuItem>
       <ContextMenuItem onSelect={() => copyQuietly(missing.join(', '))}>Copy the missing fields</ContextMenuItem>

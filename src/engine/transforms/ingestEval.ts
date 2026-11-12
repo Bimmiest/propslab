@@ -1,5 +1,5 @@
 import type { SplunkEvent, ConfDirective } from '../types';
-import { regexFailureMessage } from '../processors/evalProcessor';
+import { regexFailureMessage, regexLimitMessage } from '../processors/evalProcessor';
 import { evalNode } from '../processors/eval/evaluator';
 import { type Node, parseExpression } from '../processors/eval/parser';
 import { stripLeadingUnderscoreForField } from '../utils/internalFields';
@@ -144,6 +144,17 @@ function reportStub(fn: string, dir: ConfDirective, diagnostics: DiagnosticsColl
   });
 }
 
+/** A regex argument that did not compile or stopped at a limit, once per message per run. */
+function reportRegexWarning(message: string, dir: ConfDirective, diagnostics: DiagnosticsCollector): void {
+  diagnostics.report(transformsMessageKey(message), {
+    level: 'warning',
+    message,
+    file: 'transforms.conf',
+    ...atDirective(dir),
+    directiveKey: dir.key,
+  });
+}
+
 /**
  * One `field=expr` assignment of an INGEST_EVAL, parsed: its expression tree,
  * or the error parsing it raised, which is reported when the assignment is
@@ -222,14 +233,18 @@ export function applyIngestEval(
             reportStub(fn, ingestEvalDir, diagnostics);
           },
           onRegexError: (fn, pattern) => {
-            const message = `INGEST_EVAL ${fieldName}: ${regexFailureMessage(fn, pattern)}`;
-            diagnostics.report(transformsMessageKey(message), {
-              level: 'warning',
-              message,
-              file: 'transforms.conf',
-              ...atDirective(ingestEvalDir),
-              directiveKey: ingestEvalDir.key,
-            });
+            reportRegexWarning(
+              `INGEST_EVAL ${fieldName}: ${regexFailureMessage(fn, pattern)}`,
+              ingestEvalDir,
+              diagnostics,
+            );
+          },
+          onRegexLimit: (fn, pattern, error) => {
+            reportRegexWarning(
+              `INGEST_EVAL ${fieldName}: ${regexLimitMessage(fn, pattern, error)}`,
+              ingestEvalDir,
+              diagnostics,
+            );
           },
         });
         // Refused as in EVAL-: the assignment writes nothing, not "true".

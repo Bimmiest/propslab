@@ -341,6 +341,20 @@ export function applySedCommands(events: SplunkEvent[], directives: ConfDirectiv
       }
 
       if (raw !== before) {
+        // A global scan that stopped at a limit replaced only the matches
+        // before it, and a part-masked event looks like a masked one (#874).
+        const limitHit = cmd.pattern?.lastError;
+        if (limitHit !== undefined) {
+          const { directive } = cmd;
+          diagnostics.report(
+            `SEDCMD limit|${directive.layer ?? ''}|${directive.line}|${directive.key}`,
+            sedWarning(
+              directive,
+              `the scan for each match stopped at a regex limit (${limitHit}), so the substitution is incomplete: ` +
+                'only the matches before the limit were replaced, and the rest of the event is unchanged.',
+            ),
+          );
+        }
         // Each command is attributed separately: two SEDCMDs masking two
         // different fields must not collapse into one undifferentiated "masking
         // happened" note.
@@ -364,9 +378,14 @@ export function applySedCommands(events: SplunkEvent[], directives: ConfDirectiv
           reason:
             limitHit !== undefined
               ? { kind: 'regex-limit', error: limitHit }
-              : cmd.pattern
-                ? explainNoMatch(cmd.pattern.source, before, ctx.explanations.take(noOpDirectiveKey(site)))
-                : { kind: 'no-match' },
+              : cmd.pattern?.test(before)
+                ? // Unchanged `_raw` does not mean no match: the replacement can equal the
+                  // text it replaced, and a partial-match analysis would send the user to
+                  // debug a correct pattern (#875).
+                  { kind: 'replacement-identical' }
+                : cmd.pattern
+                  ? explainNoMatch(cmd.pattern.source, before, ctx.explanations.take(noOpDirectiveKey(site)))
+                  : { kind: 'no-match' },
         });
       }
     }

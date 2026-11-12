@@ -1,4 +1,4 @@
-import { memo, type ReactNode } from 'react';
+import { memo } from 'react';
 import { Panel, Group } from 'react-resizable-panels';
 import { RawPanel } from '../raw/RawPanel';
 import { PropsConfEditor } from '../editor/PropsConfEditor';
@@ -6,21 +6,8 @@ import { TransformsConfEditor } from '../editor/TransformsConfEditor';
 import { PreviewPanel } from '../preview/PreviewPanel';
 import { ErrorBoundary } from '../ui/ErrorBoundary';
 import { ResizeHandle } from '../ui/ResizeHandle';
+import { OutputBoundary } from './OutputBoundary';
 import { useAppStore } from '../../store/useAppStore';
-
-/**
- * The Output panel's boundary, reset by each new result so that fixing the
- * input recovers a panel a render error took down (#563). A leaf of its own,
- * so a run re-renders it alone: its children are SimulatorView's element.
- */
-function OutputBoundary({ children }: { children: ReactNode }) {
-  const result = useAppStore((s) => s.processingResult);
-  return (
-    <ErrorBoundary panelName="Output" resetKeys={[result]}>
-      {children}
-    </ErrorBoundary>
-  );
-}
 
 /**
  * The simulator workspace: inputs on the left, pipeline output on the right.
