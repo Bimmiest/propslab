@@ -36,8 +36,8 @@ describe('MultiSelect', () => {
 
   it('renders only the options near the viewport when there are thousands (#565)', () => {
     const fields = Array.from({ length: 3000 }, (_, i) => `field_${i}`);
-    render(<MultiSelect label="Fields" options={fields} selected={new Set(['field_2'])} onChange={vi.fn()} />);
-    fireEvent.click(screen.getByRole('button', { name: /Fields/ }));
+    render(<MultiSelect label="Filter by field" options={fields} selected={new Set(['field_2'])} onChange={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: /Filter by field/ }));
     const boxes = screen.getAllByRole('checkbox');
     expect(boxes.length).toBeGreaterThan(0);
     expect(boxes.length).toBeLessThan(200);
@@ -98,15 +98,15 @@ describe('MultiSelect', () => {
   // A selection can outlive its options; the popup must still open to clear it (#432).
   it('offers Clear all when a selection remains but no options do', () => {
     const onChange = vi.fn();
-    render(<MultiSelect label="Fields" options={[]} selected={new Set(['gone'])} onChange={onChange} />);
-    fireEvent.click(screen.getByRole('button', { name: /Fields/ }));
+    render(<MultiSelect label="Filter by field" options={[]} selected={new Set(['gone'])} onChange={onChange} />);
+    fireEvent.click(screen.getByRole('button', { name: /Filter by field/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Clear all' }));
     expect(onChange).toHaveBeenCalledWith(new Set());
   });
 
   it('opens nothing when there are no options and nothing selected', () => {
-    render(<MultiSelect label="Fields" options={[]} selected={new Set()} onChange={vi.fn()} />);
-    fireEvent.click(screen.getByRole('button', { name: /Fields/ }));
+    render(<MultiSelect label="Filter by field" options={[]} selected={new Set()} onChange={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: /Filter by field/ }));
     expect(screen.queryByRole('group')).not.toBeInTheDocument();
   });
 });

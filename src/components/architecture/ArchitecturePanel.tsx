@@ -5,9 +5,8 @@ import { revealInEditor } from '../editor/revealInEditor';
 
 /**
  * Where each part of the configuration runs. Drawn from the props.conf and
- * transforms.conf the pipeline last ran with (`usePipelineInputs`), like the
- * other output tabs: debounced as the pipeline is, and frozen in manual-apply
- * mode, rather than re-parsed on every keystroke.
+ * transforms.conf of the run on screen (`usePipelineInputs`), like the other
+ * output tabs, rather than from the editors.
  */
 export function ArchitecturePanel({ inputs, embedded }: { inputs: PipelineInputs; embedded?: boolean }) {
   const { propsConf } = inputs;

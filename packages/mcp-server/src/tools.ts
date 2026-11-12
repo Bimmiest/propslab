@@ -51,8 +51,8 @@ const MAX_CONF_LAYERS = 20;
  *
  * Enforced in two places: `confInputSchema` refuses one conf over it during
  * validation, and `confTooLarge` refuses the two files' sum in the handlers,
- * since a raw zod shape (what `registerTool` takes) cannot refine across
- * fields.
+ * where the refusal can carry the counts as a structured error, which a
+ * schema's validation message cannot.
  */
 export const MAX_TOTAL_CONF_CHARS = 2_000_000;
 
@@ -196,7 +196,8 @@ export const explainInputShape = {
     .optional()
     .describe(
       'props.conf only: also resolve which stanzas match an event with this ' +
-        'sourcetype and return the effective merged directive set for it.',
+        'sourcetype and return the effective merged directive set for it. With ' +
+        'file=transforms.conf the call is refused.',
     ),
   index: z.string().max(1024).default('main'),
   host: z.string().max(1024).default('localhost'),
@@ -215,6 +216,65 @@ export const lookupInputShape = {
     ),
   file: fileSchema.optional().describe('Restrict the lookup to one conf file; omitted = search both.'),
 };
+
+/**
+ * The argument an unknown one most likely meant: one that contains it or that
+ * it contains (`props` for `props_conf`), or one within two edits
+ * (`sourcetyp`), ignoring case; the fewest edits wins. Null when none is
+ * close. Exported for tests.
+ */
+export function closestArgument(unknown: string, known: readonly string[]): string | null {
+  const lower = unknown.toLowerCase();
+  let best: { key: string; distance: number } | null = null;
+  for (const key of known) {
+    const candidate = key.toLowerCase();
+    const distance = editDistance(lower, candidate);
+    const contains = lower.length >= 3 && (candidate.includes(lower) || lower.includes(candidate));
+    if ((contains || distance <= 2) && (best === null || distance < best.distance)) best = { key, distance };
+  }
+  return best?.key ?? null;
+}
+
+/** Levenshtein distance; argument names are short, so the full table is cheap. */
+function editDistance(a: string, b: string): number {
+  let previous = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const current = [i];
+    for (let j = 1; j <= b.length; j++) {
+      const substitution = (previous[j - 1] ?? 0) + (a[i - 1] === b[j - 1] ? 0 : 1);
+      current.push(Math.min((previous[j] ?? 0) + 1, (current[j - 1] ?? 0) + 1, substitution));
+    }
+    previous = current;
+  }
+  return previous[b.length] ?? 0;
+}
+
+/**
+ * A tool's input as a strict object. A plain zod object drops a key it does
+ * not know, so a misspelled `props` for `props_conf` ran on the empty default
+ * and looked like a correct answer (#884). Strict, the SDK refuses the call
+ * with this message, and the advertised JSON Schema says
+ * `additionalProperties: false`.
+ */
+function strictInput<Shape extends z.ZodRawShape>(shape: Shape) {
+  const known = Object.keys(shape);
+  return z.strictObject(shape, {
+    error: (issue) => {
+      if (issue.code !== 'unrecognized_keys') return undefined;
+      const named = issue.keys.map((key) => {
+        const meant = closestArgument(key, known);
+        return meant === null ? `\`${key}\`` : `\`${key}\` (did you mean \`${meant}\`?)`;
+      });
+      const noun = named.length === 1 ? 'argument' : 'arguments';
+      return `unknown ${noun} ${named.join(', ')}. This tool takes: ${known.join(', ')}.`;
+    },
+  });
+}
+
+export const simulateInputSchema = strictInput(simulateInputShape);
+export const validateInputSchema = strictInput(validateInputShape);
+export const explainInputSchema = strictInput(explainInputShape);
+export const lookupInputSchema = strictInput(lookupInputShape);
 
 // ---------------------------------------------------------------------------
 // Handlers
@@ -488,10 +548,10 @@ export function workerFailure(err: unknown, context: TimeoutContext): ToolText {
   );
 }
 
-type SimulateArgs = z.infer<z.ZodObject<typeof simulateInputShape>>;
-type ValidateArgs = z.infer<z.ZodObject<typeof validateInputShape>>;
-type ExplainArgs = z.infer<z.ZodObject<typeof explainInputShape>>;
-type LookupArgs = z.infer<z.ZodObject<typeof lookupInputShape>>;
+type SimulateArgs = z.infer<typeof simulateInputSchema>;
+type ValidateArgs = z.infer<typeof validateInputSchema>;
+type ExplainArgs = z.infer<typeof explainInputSchema>;
+type LookupArgs = z.infer<typeof lookupInputSchema>;
 
 export async function handleSimulate(args: SimulateArgs, worker?: string | RunInWorkerOptions): Promise<ToolText> {
   const tooLarge = confTooLarge(args.props_conf, args.transforms_conf);
@@ -543,14 +603,36 @@ export async function handleExplainPrecedence(
   args: ExplainArgs,
   worker?: string | RunInWorkerOptions,
 ): Promise<ToolText> {
+  // Refused rather than noted in the result: the agent asked for a
+  // resolution it cannot get, and a success without it looks like an answer.
+  // This is how the tools already report a call that is well formed but
+  // wrong (input_too_large, unknown_directive).
+  if (args.file === 'transforms.conf' && args.sourcetype !== undefined) {
+    return json(
+      {
+        error: 'argument_not_applicable',
+        argument: 'sourcetype',
+        file: args.file,
+        message:
+          'sourcetype selects the props.conf stanzas that match an event. No event matches a ' +
+          'transforms.conf stanza, so the call would ignore it.',
+        guidance:
+          'Omit sourcetype to explain transforms.conf. To see what applies to a sourcetype, call ' +
+          'again with file="props.conf", the props.conf that references these transforms, and the sourcetype.',
+      },
+      true,
+    );
+  }
   // The schema already refuses one conf over the limit; checked again for
   // direct callers of the handler, which skip the schema.
   const tooLarge = confTooLarge(args.conf);
   if (tooLarge) return tooLarge;
+  // Only props.conf gets here with a sourcetype: transforms.conf with one was
+  // refused above.
   const metadata: EventMetadata | undefined =
-    args.file === 'props.conf' && args.sourcetype
-      ? { index: args.index, host: args.host, source: args.source, sourcetype: args.sourcetype }
-      : undefined;
+    args.sourcetype === undefined
+      ? undefined
+      : { index: args.index, host: args.host, source: args.source, sourcetype: args.sourcetype };
   try {
     const response = await runInWorker<ExplainResponse>(
       { op: 'explain', file: args.file, conf: args.conf, ...(metadata ? { metadata } : {}) },
@@ -653,7 +735,7 @@ export function registerTools(server: McpServer, options?: { workerPath?: string
         'the event, plus config diagnostics. Use this to VERIFY what a config actually does ' +
         'to real data instead of predicting it; read the diagnostics too — they name ' +
         'directives the simulator recognises but does not honour.',
-      inputSchema: simulateInputShape,
+      inputSchema: simulateInputSchema,
       outputSchema: simulateOutputShape,
       annotations,
     },
@@ -670,7 +752,7 @@ export function registerTools(server: McpServer, options?: { workerPath?: string
         'settings that are inert in the phase they are used in, directives the simulator ' +
         'does not honour, and regexes (in every stanza) that PCRE will not compile. Use it to ' +
         'check a config you have drafted before simulating it.',
-      inputSchema: validateInputShape,
+      inputSchema: validateInputSchema,
       outputSchema: validateOutputShape,
       annotations,
     },
@@ -686,8 +768,9 @@ export function registerTools(server: McpServer, options?: { workerPath?: string
         'stanza with full provenance: which layer defines it, and for each attribute which ' +
         'definition won (`overrides`) and which lost (`overriddenBy`). For props.conf, pass a ' +
         'sourcetype to also resolve which stanzas match such an event and get the effective ' +
-        'merged directive set, i.e. what `btool props list --debug` would answer.',
-      inputSchema: explainInputShape,
+        'merged directive set, i.e. what `btool props list --debug` would answer. A sourcetype ' +
+        'with transforms.conf is an error (argument_not_applicable).',
+      inputSchema: explainInputSchema,
       outputSchema: explainOutputShape,
       annotations,
     },
@@ -704,7 +787,7 @@ export function registerTools(server: McpServer, options?: { workerPath?: string
         'crucially the simulation-support level (simulated/ignored/documented). Cite this ' +
         'instead of recalling Splunk documentation from memory. Omit `key` to list all ' +
         'known directives.',
-      inputSchema: lookupInputShape,
+      inputSchema: lookupInputSchema,
       outputSchema: lookupOutputShape,
       annotations,
     },

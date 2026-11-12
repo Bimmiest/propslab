@@ -20,6 +20,58 @@ function choose(label: string) {
   fireEvent.click(screen.getByRole('option', { name: new RegExp(`^${label}`) }));
 }
 
+/** The examples are on a second level, behind one "Load example…" entry. */
+function chooseExample(name: string) {
+  choose('Load example…');
+  choose(`Load: ${name}`);
+}
+
+describe('CommandPalette — the two levels', () => {
+  beforeEach(() => {
+    useAppStore.setState(initial, true);
+  });
+
+  it('opens on the commands, with the examples behind one entry', () => {
+    openPalette();
+    const options = screen.getAllByRole('option').map((o) => o.textContent);
+    expect(options[0]).toMatch(/^Load example…/);
+    expect(options.some((o) => o.startsWith('Scaffold config'))).toBe(true);
+    expect(options.some((o) => o.startsWith('Load: '))).toBe(false);
+  });
+
+  it('shows only the examples on the second level, and Back returns', () => {
+    openPalette();
+    choose('Load example…');
+    expect(screen.getAllByRole('option').filter((o) => /^Load: /.test(o.textContent))).toHaveLength(
+      SAMPLE_CONFIGS.length,
+    );
+    expect(screen.queryByRole('option', { name: /^Clear all editors/ })).not.toBeInTheDocument();
+    choose('Back to all commands');
+    expect(screen.getByRole('option', { name: /^Clear all editors/ })).toBeInTheDocument();
+  });
+
+  it('goes back on Backspace in an empty query', () => {
+    openPalette();
+    choose('Load example…');
+    fireEvent.keyDown(screen.getByRole('combobox'), { key: 'Backspace' });
+    expect(screen.getByRole('option', { name: /^Clear all editors/ })).toBeInTheDocument();
+  });
+
+  it('finds an example by name from the first level', () => {
+    openPalette();
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: sample.name } });
+    expect(screen.getByRole('option', { name: new RegExp(`^Load: ${sample.name}`) })).toBeInTheDocument();
+  });
+
+  it('starts at the first level on the next opening', () => {
+    openPalette();
+    choose('Load example…');
+    act(() => useAppStore.getState().toggleCommandPalette());
+    act(() => useAppStore.getState().toggleCommandPalette());
+    expect(screen.getByRole('option', { name: /^Load example…/ })).toBeInTheDocument();
+  });
+});
+
 describe('CommandPalette — replacing the inputs', () => {
   beforeEach(() => {
     useAppStore.setState(initial, true);
@@ -27,7 +79,7 @@ describe('CommandPalette — replacing the inputs', () => {
 
   it('loads an example straight away into an untouched session', () => {
     openPalette();
-    choose(`Load: ${sample.name}`);
+    chooseExample(sample.name);
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
     expect(useAppStore.getState().rawData).toBe(sample.rawData);
   });
@@ -35,7 +87,7 @@ describe('CommandPalette — replacing the inputs', () => {
   it('loads over an example that has not been edited without asking', () => {
     useAppStore.getState().loadInputs(SAMPLE_CONFIGS[1]!);
     openPalette();
-    choose(`Load: ${sample.name}`);
+    chooseExample(sample.name);
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
     expect(useAppStore.getState().rawData).toBe(sample.rawData);
   });
@@ -43,7 +95,7 @@ describe('CommandPalette — replacing the inputs', () => {
   it('asks before an example overwrites edited work, and Cancel keeps it', () => {
     useAppStore.getState().setPropsConf('[mine]\nTRUNCATE = 0');
     openPalette();
-    choose(`Load: ${sample.name}`);
+    chooseExample(sample.name);
 
     const dialog = screen.getByRole('alertdialog', { name: 'Replace your current work?' });
     expect(dialog).toHaveTextContent(sample.name);
@@ -60,7 +112,7 @@ describe('CommandPalette — replacing the inputs', () => {
   it('replaces edited work once confirmed', () => {
     useAppStore.getState().setMetadataField('host', 'web01');
     openPalette();
-    choose(`Load: ${sample.name}`);
+    chooseExample(sample.name);
     fireEvent.click(screen.getByRole('button', { name: 'Load example' }));
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
     expect(useAppStore.getState().metadata).toEqual(sample.metadata);

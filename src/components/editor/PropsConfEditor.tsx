@@ -25,7 +25,7 @@ export function PropsConfEditor() {
           <button
             type="button"
             onClick={() => toggleCollapse('props.conf')}
-            className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+            className="flex items-center gap-2 min-h-[24px] hover:opacity-80 transition-opacity"
             title="Expand props.conf"
           >
             <Icon name="chevron-down" className="w-3.5 h-3.5 text-[var(--color-text-muted)] -rotate-90" />
@@ -44,7 +44,7 @@ export function PropsConfEditor() {
         <button
           type="button"
           onClick={() => toggleCollapse('props.conf')}
-          className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+          className="flex items-center gap-2 min-h-[24px] hover:opacity-80 transition-opacity"
           title="Collapse props.conf"
         >
           <Icon name="chevron-down" className="w-3.5 h-3.5 text-[var(--color-text-muted)] transition-transform" />

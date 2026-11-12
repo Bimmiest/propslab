@@ -2,16 +2,18 @@
 // splunkConfCodeActions.ts
 // Quick fixes for the markers computeDiagnostics produces.
 //
-// Only one so far: renaming a mis-cased attribute to its canonical spelling.
-// It is the fix worth making one click because the diagnostic already
-// knows the exact answer -- `time_format` can only have meant `TIME_FORMAT` --
-// and because the failure it prevents is invisible: Splunk ignores the line and
-// the default applies, so nothing about the config's behaviour says it is dead.
+// Only one so far: renaming a mis-cased or misspelled attribute to its canonical
+// spelling. It is the fix worth making one click because the diagnostic already
+// knows the exact answer -- `time_format` and `TIME_FROMAT` can only have meant
+// `TIME_FORMAT` -- and because the failure it prevents is invisible: Splunk
+// ignores the line and the default applies, so nothing about the config's
+// behaviour says it is dead.
 // ---------------------------------------------------------------------------
 
 import type { editor, languages, IRange } from 'monaco-editor';
-import { MISCASED_MARKER_CODE } from './splunkConfDiagnostics';
+import { MISCASED_MARKER_CODE, MISSPELLED_MARKER_CODE } from './splunkConfDiagnostics';
 import { miscasedCanonical } from '../engine/parser/confParser';
+import { misspelledCanonical } from '../engine/misspelledDirective';
 import { DIRECTIVE_RE } from '../engine/parser/confParser';
 
 /**
@@ -49,7 +51,13 @@ export function createCodeActionProvider(fileType: 'props.conf' | 'transforms.co
       const actions: languages.CodeAction[] = [];
 
       for (const marker of context.markers) {
-        if (marker.code !== MISCASED_MARKER_CODE) continue;
+        const rename =
+          marker.code === MISCASED_MARKER_CODE
+            ? miscasedCanonical
+            : marker.code === MISSPELLED_MARKER_CODE
+              ? misspelledCanonical
+              : undefined;
+        if (rename === undefined) continue;
 
         const found = keyRange(model, marker.startLineNumber);
         if (!found) continue;
@@ -57,7 +65,7 @@ export function createCodeActionProvider(fileType: 'props.conf' | 'transforms.co
         // Re-derive rather than trusting the marker's message: the user may have
         // edited the line since it was computed, and renaming to a stale
         // canonical would be a worse outcome than offering nothing.
-        const canonical = miscasedCanonical(found.key, fileType);
+        const canonical = rename(found.key, fileType);
         if (canonical === undefined) continue;
 
         actions.push({

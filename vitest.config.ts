@@ -131,7 +131,7 @@ export default defineConfig({
       thresholds: {
         statements: 94,
         branches: 89,
-        functions: 92,
+        functions: 94,
         lines: 95,
         // The engine is held to a much higher bar than the app as a whole. It
         // is where correctness lives — a simulator whose UI is under-tested is
@@ -147,8 +147,8 @@ export default defineConfig({
           lines: 97,
         },
         'src/components/**': {
-          statements: 90,
-          branches: 81,
+          statements: 92,
+          branches: 83,
           functions: 89,
           lines: 93,
         },
@@ -156,7 +156,7 @@ export default defineConfig({
         // src/workers; the hooks themselves are covered as before.
         'src/hooks/**': {
           statements: 93,
-          branches: 81,
+          branches: 83,
           functions: 95,
           lines: 95,
         },
