@@ -67,7 +67,11 @@ test.describe('boot', () => {
  * new string reaching a script or HTML sink, shows up here as a violation.
  */
 test.describe('trusted types', () => {
-  test('the editor, hovers, the palette and the dictionary run with no violation', async ({ page, complaints }) => {
+  test('the editor, hovers, the palette and the dictionary run with no violation', async ({
+    page,
+    complaints,
+    keys,
+  }) => {
     await page.addInitScript(() => {
       const seen: string[] = [];
       Object.defineProperty(window, '__e2eViolations', { value: seen });
@@ -86,7 +90,7 @@ test.describe('trusted types', () => {
     // Typing, the suggest widget and the lint squiggles.
     const props = page.locator('.monaco-editor').nth(1);
     await props.click();
-    await page.keyboard.press('Control+End');
+    await page.keyboard.press(keys.textEnd);
     await page.keyboard.type('\n[tt]\nSHOULD_LINEMERGE = notabool\nTIME_PRE');
     await expect(page.locator('.suggest-widget')).toBeVisible();
     await page.keyboard.press('Escape');
@@ -94,7 +98,7 @@ test.describe('trusted types', () => {
     // editor, which keeps its scroll position. Once the list is open, moving
     // the cursor reveals the typed lines, where the squiggles are, again.
     await expect(page.getByText(/takes a boolean, and "notabool" is not one/)).toBeVisible();
-    await page.keyboard.press('Control+End');
+    await page.keyboard.press(keys.textEnd);
     await expect(page.locator('.squiggly-warning, .squiggly-error, .squiggly-info').first()).toBeVisible({
       timeout: 15_000,
     });
@@ -191,18 +195,19 @@ test.describe('editor context menu (#745)', () => {
     await expect(page.getByRole('tabpanel', { name: 'Dictionary' })).toBeVisible();
   });
 
-  test('Ctrl+/ comments out the line in props.conf, as the menu does (#762)', async ({ page }) => {
+  test('Ctrl+/ comments out the line in props.conf, as the menu does (#762)', async ({ page, keys }) => {
     await openApp(page);
     await loadExample(page, APACHE);
     const line = page.locator('.monaco-editor').nth(1).locator('.view-line').nth(1);
     await line.click();
-    await page.keyboard.press('ControlOrMeta+/');
+    await page.keyboard.press(`${keys.mod}+/`);
     await expect(line).toHaveText(/^#\sTIME_PREFIX/);
   });
 
   test('Shift+F10 opens the menu from the keyboard, and Find opens the find widget', async ({ page, browserName }) => {
     // See 'a raw-event selection can be made and acted on from the keyboard'.
     test.skip(browserName === 'firefox', "Playwright's Firefox fires no contextmenu event from the keyboard");
+    test.fixme(browserName === 'webkit', 'Safari sends no contextmenu event for Shift+F10 (#933)');
     await openApp(page);
     await loadExample(page, APACHE);
     const props = page.locator('.monaco-editor').nth(1);
@@ -229,14 +234,14 @@ test.describe('monaco contributions', () => {
     await expect(suggest.getByText('TIME_PREFIX').first()).toBeVisible();
   });
 
-  test('a quick fix renames a mis-cased key', async ({ page }) => {
+  test('a quick fix renames a mis-cased key', async ({ page, keys }) => {
     await typeIntoProps(page, '[web]\ntime_prefix = x');
     await expect(page.locator('.squiggly-warning, .squiggly-error, .squiggly-info').first()).toBeVisible({
       timeout: 15_000,
     });
 
     await page.keyboard.press('Home');
-    await page.keyboard.press('Control+.');
+    await page.keyboard.press(`${keys.mod}+.`);
     await expect(page.getByText('Change "time_prefix" to "TIME_PREFIX"')).toBeVisible();
     await page.keyboard.press('Enter');
     await expect(page.locator('.monaco-editor').nth(1).locator('.view-lines')).toContainText('TIME_PREFIX = x');
@@ -250,9 +255,9 @@ test.describe('monaco contributions', () => {
     await expect(props.locator('.view-lines')).not.toContainText('TRUNCATE = 1');
   });
 
-  test('find opens its widget', async ({ page }) => {
+  test('find opens its widget', async ({ page, keys }) => {
     await typeIntoProps(page, '[web]\nTRUNCATE = 1');
-    await page.keyboard.press('Control+f');
+    await page.keyboard.press(`${keys.mod}+f`);
     await expect(page.locator('.monaco-editor').nth(1).locator('.find-widget.visible')).toBeVisible();
   });
 });
@@ -260,7 +265,7 @@ test.describe('monaco contributions', () => {
 test.describe('editor state across remounts', () => {
   // Collapsing a panel remounts the editors; each file's model is kept, so
   // what was typed before the collapse can still be undone after it (#453).
-  test('undo still works after props.conf is collapsed and expanded', async ({ page, complaints }) => {
+  test('undo still works after props.conf is collapsed and expanded', async ({ page, complaints, keys }) => {
     await openApp(page);
     const props = () => page.locator('.monaco-editor').nth(1);
     await props().click();
@@ -275,23 +280,48 @@ test.describe('editor state across remounts', () => {
 
     await props().locator('.view-lines').click();
     await expect(async () => {
-      await page.keyboard.press('Control+z');
+      await page.keyboard.press(`${keys.mod}+z`);
       await expect(props().locator('.view-lines')).not.toContainText('TRUNCATE', { timeout: 500 });
     }).toPass({ timeout: 10_000 });
     expect(complaints.all).toEqual([]);
   });
 
   test('a close or reload asks first only once the session is edited', async ({ page }) => {
+    // DIAG(webkit, temporary): count beforeunload listeners.
+    await page.addInitScript(() => {
+      const log: string[] = [];
+      Object.defineProperty(window, '__diagUnload', { value: log });
+      const add = window.addEventListener.bind(window);
+      const remove = window.removeEventListener.bind(window);
+      window.addEventListener = ((type: string, ...rest: [EventListenerOrEventListenerObject, unknown?]) => {
+        if (type === 'beforeunload') log.push('add');
+        add(type, ...(rest as [EventListenerOrEventListenerObject]));
+      }) as typeof window.addEventListener;
+      window.removeEventListener = ((type: string, ...rest: [EventListenerOrEventListenerObject, unknown?]) => {
+        if (type === 'beforeunload') log.push('remove');
+        remove(type, ...(rest as [EventListenerOrEventListenerObject]));
+      }) as typeof window.removeEventListener;
+    });
     await openApp(page);
+    const dialogs: string[] = [];
     let prompts = 0;
     page.on('dialog', (dialog) => {
+      dialogs.push(dialog.type());
       if (dialog.type() === 'beforeunload') prompts++;
       void dialog.dismiss();
     });
     // Chromium shows the prompt only after a user gesture on the page.
     await page.locator('.monaco-editor').nth(1).click();
+    const unload = await page.evaluate(() => (window as unknown as { __diagUnload: string[] }).__diagUnload.join(','));
     await page.close({ runBeforeUnload: true });
-    await expect.poll(() => page.isClosed()).toBe(true);
+    const closed = await expect
+      .poll(() => page.isClosed(), { timeout: 10_000 })
+      .toBe(true)
+      .then(
+        () => true,
+        () => false,
+      );
+    expect(closed, `DIAG7 dialogs=${dialogs.join(',')} unload=${unload}`).toBe(true);
     expect(prompts).toBe(0);
   });
 
@@ -325,7 +355,7 @@ test.describe('pipeline worker', () => {
     expect(Number(/(\d+) fields?/.exec(text)?.[1] ?? 0)).toBeGreaterThan(0);
   });
 
-  test('recomputes when props.conf changes', async ({ page }) => {
+  test('recomputes when props.conf changes', async ({ page, keys }) => {
     await openApp(page);
     await loadExample(page, APACHE);
 
@@ -339,7 +369,7 @@ test.describe('pipeline worker', () => {
 
     // Add an EVAL that must produce a new field, then wait for it to appear.
     await page.locator('.monaco-editor').nth(1).click();
-    await page.keyboard.press('Control+End');
+    await page.keyboard.press(keys.textEnd);
     await page.keyboard.type('\nEVAL-e2e_marker = "present"\n');
 
     await expect(page.getByText('e2e_marker', { exact: true })).toBeVisible({ timeout: 20_000 });
@@ -414,7 +444,7 @@ test.describe('pipeline settings', () => {
   const fieldRow = (page: Page, name: string) => page.locator('tbody').getByText(name, { exact: true });
   const outOfDate = (page: Page) => page.getByRole('contentinfo').getByText('● Out of date');
 
-  test('manual apply runs an edit only on Run or Ctrl+Enter', async ({ page }) => {
+  test('manual apply runs an edit only on Run or Ctrl+Enter', async ({ page, keys }) => {
     await openApp(page);
     await toggleSetting(page, 'Manual apply');
     // Loading an example is a decision to look at it, so it runs (#492).
@@ -433,7 +463,7 @@ test.describe('pipeline settings', () => {
     await appendLines(page, 1, ['EVAL-e2e_key = "shortcut"']);
     await expect(outOfDate(page)).toBeVisible();
     await expect(fieldRow(page, 'e2e_key')).toHaveCount(0);
-    await page.keyboard.press('Control+Enter');
+    await page.keyboard.press(`${keys.mod}+Enter`);
     await expect(fieldRow(page, 'e2e_key')).toBeVisible({ timeout: 20_000 });
     await expect(outOfDate(page)).toHaveCount(0);
   });
@@ -507,6 +537,7 @@ test.describe('engine output reaches the tabs', () => {
   }) => {
     // See 'a raw-event selection can be made and acted on from the keyboard'.
     test.skip(browserName === 'firefox', "Playwright's Firefox fires no contextmenu event from the keyboard");
+    test.fixme(browserName === 'webkit', 'Safari sends no contextmenu event for Shift+F10 (#933)');
     await openApp(page);
     await loadExample(page, APACHE);
     await page.getByRole('tab', { name: /^Fields$/ }).click();
@@ -587,6 +618,7 @@ test.describe('accessibility affordances', () => {
     // `contextmenu` for Shift+F10 or the ContextMenu key, even at the
     // document (measured, #572), so there is nothing here to test it with.
     test.skip(browserName === 'firefox', "Playwright's Firefox fires no contextmenu event from the keyboard");
+    test.fixme(browserName === 'webkit', 'Safari sends no contextmenu event for Shift+F10 (#933)');
     await openApp(page);
     await loadExample(page, APACHE);
 
@@ -731,8 +763,18 @@ test.describe('dictionary', () => {
     await expect(page.getByRole('heading', { level: 2, name: 'TIME_PREFIX' })).toBeVisible();
   });
 
-  test('a tab left open across a redeploy reloads onto the new build and keeps its edits (#706)', async ({ page }) => {
+  test('a tab left open across a redeploy reloads onto the new build and keeps its edits (#706)', async ({
+    page,
+    complaints,
+  }) => {
     await openApp(page);
+    // Temporary diagnostics for the WebKit job.
+    const fetched: string[] = [];
+    page.on('response', (r) => {
+      if (/DictionaryView/.test(r.url())) fetched.push(`${r.status()}`);
+    });
+    let loads = 0;
+    page.on('load', () => loads++);
     // The redeploy deleted the chunk this tab knows: its first fetch 404s, as the old hash would.
     let deleted = true;
     await page.route(/\/assets\/DictionaryView-[^/]+\.js$/, (route) => {
@@ -753,7 +795,25 @@ test.describe('dictionary', () => {
     await page.getByRole('tab', { name: 'Dictionary' }).click();
     await reloaded;
 
-    await expect(page.getByRole('listbox', { name: 'Splunk directives' })).toBeVisible({ timeout: 30_000 });
+    const shown = await expect(page.getByRole('listbox', { name: 'Splunk directives' }))
+      .toBeVisible({ timeout: 15_000 })
+      .then(
+        () => true,
+        () => false,
+      );
+    if (!shown) {
+      const state = await page.evaluate(() => ({
+        online: navigator.onLine,
+        stored: sessionStorage.getItem('propslab:stale-chunk-reload'),
+        alerts: [...document.querySelectorAll('[role=alert]')].map((e) => e.textContent),
+        selected: [...document.querySelectorAll('[role=tab][aria-selected=true]')].map((e) => e.textContent),
+        dictPanel: document.getElementById('view-panel-dictionary')?.outerHTML.slice(0, 300) ?? 'none',
+      }));
+      expect(
+        shown,
+        `DIAG12 ${JSON.stringify({ state, fetched, loads, url: page.url(), complaints: complaints.all.slice(0, 8) })}`,
+      ).toBe(true);
+    }
     // The edits were saved for the reload, so there was nothing to ask about.
     expect(prompts).toBe(0);
     await page.getByRole('tab', { name: 'Simulator' }).click();
@@ -944,7 +1004,7 @@ test.describe('regex engine', () => {
   // compilation ever turns into the multi-second, fully optimised kind.
   const LOAD_BUDGET_MS = 2_000;
 
-  test('loads fast, from the one built asset, and every worker runs on it', async ({ page, complaints }) => {
+  test('loads fast, from the one built asset, and every worker runs on it', async ({ page, complaints, keys }) => {
     const wasmFetches: string[] = [];
     page.on('request', (request) => {
       if (/\.wasm$/.test(new URL(request.url()).pathname)) wasmFetches.push(request.url());
@@ -964,7 +1024,7 @@ test.describe('regex engine', () => {
     await expect.poll(() => workerReplies(page, /\/timestampMatchWorker[^/]*\.js$/)).toBeGreaterThan(0);
 
     await page.locator('.monaco-editor').nth(1).click();
-    await page.keyboard.press('Control+End');
+    await page.keyboard.press(keys.textEnd);
     await page.keyboard.type('\nEXTRACT-e2e = HTTP/\\K(?<e2e_ver>[\\d.]++)\n');
     await page.getByRole('tab', { name: /^Fields$/ }).click();
     await expect(page.getByText('e2e_ver', { exact: true })).toBeVisible({ timeout: 20_000 });

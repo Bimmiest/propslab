@@ -70,13 +70,12 @@ export default defineConfig({
       use: { ...devices['Desktop Firefox'] },
       testMatch: /smoke\.spec\.ts$/,
     },
-    // And in WebKit (#891): ADR 0022's Baseline includes Safari. Not the
-    // 'Desktop Safari' device, whose macOS user agent makes Monaco bind its
-    // keys for a Mac (Cmd, not Ctrl) while the runner's keyboard is Linux's,
-    // so a Ctrl shortcut would fail for a reason no user meets.
+    // And in WebKit (#891): ADR 0022's Baseline includes Safari. Playwright's
+    // WebKit reports a macOS user agent on every host, so the page binds its
+    // keys as on a Mac; the specs read them from `keys` (fixtures.ts).
     {
       name: 'webkit',
-      use: { browserName: 'webkit', viewport: { width: 1280, height: 720 } },
+      use: { ...devices['Desktop Safari'] },
       testMatch: /smoke\.spec\.ts$/,
     },
     {

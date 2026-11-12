@@ -13,7 +13,28 @@ export interface BrowserComplaints {
   csp: string[];
 }
 
-export const test = base.extend<{ complaints: BrowserComplaints }>({
+/**
+ * The keys of the shortcuts, as the page reads them. Monaco takes its
+ * platform from the user agent, and Playwright's WebKit reports macOS on
+ * every host, so there the editor takes Cmd where it takes Ctrl elsewhere,
+ * and goes to the end of the text with Cmd+Down, as Safari's users press.
+ */
+export interface ShortcutKeys {
+  /** Ctrl, or Cmd on a Mac. */
+  mod: 'Control' | 'Meta';
+  /** To the end of an editor's text. */
+  textEnd: 'Control+End' | 'Meta+ArrowDown';
+}
+
+export async function shortcutKeys(page: Page): Promise<ShortcutKeys> {
+  const mac = await page.evaluate(() => navigator.userAgent.includes('Macintosh'));
+  return mac ? { mod: 'Meta', textEnd: 'Meta+ArrowDown' } : { mod: 'Control', textEnd: 'Control+End' };
+}
+
+export const test = base.extend<{ complaints: BrowserComplaints; keys: ShortcutKeys }>({
+  keys: async ({ page }, use) => {
+    await use(await shortcutKeys(page));
+  },
   complaints: async ({ page }, use) => {
     const all: string[] = [];
     const csp: string[] = [];
@@ -127,7 +148,7 @@ export async function loadExample(page: Page, name: RegExp): Promise<void> {
  */
 export async function appendLines(page: Page, editor: number, lines: string[]): Promise<void> {
   await page.locator('.monaco-editor').nth(editor).click();
-  await page.keyboard.press('Control+End');
+  await page.keyboard.press((await shortcutKeys(page)).textEnd);
   for (const line of lines) {
     await page.keyboard.press('Escape');
     await page.keyboard.press('Enter');
