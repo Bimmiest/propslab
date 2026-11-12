@@ -24,11 +24,12 @@ import { tally } from './lib/mutationShards.mjs';
 /** The file the canary run mutates; keep in step with package.json and mutation.yml. */
 export const CANARY_FILE = 'src/monaco/markdown.ts';
 /**
- * A run of this file measures 39 killed of 43 (90.7%). The margins are wide on
- * purpose: this detects a broken harness, not a weakened test — the score gate
- * in stryker.config.mjs does that. A broken filter gives ~0 killed.
+ * A run of this file measures 22 killed of 22 (100%), on 2026-11-12. The
+ * margins are wide on purpose: this detects a broken harness, not a weakened
+ * test — the score gate in stryker.config.mjs does that. A broken filter gives
+ * ~0 killed.
  */
-export const MIN_KILLED = 25;
+export const MIN_KILLED = 15;
 export const MIN_SCORE = 70;
 
 /** A problem description, or null when the canary run looks healthy. */
