@@ -48,10 +48,10 @@ export default defineConfig({
       },
     },
   },
-  // The engine sources the tests import live outside this package, so their
-  // `pcre2-wasm-utf16` import would resolve from the repository root. Dedupe
-  // resolves it from here instead: the copy this package declares.
+  // The shared test builders the tests import live outside this package, so
+  // their imports of these two would resolve from the repository root. Dedupe
+  // resolves them from here instead: the copies this package declares.
   resolve: {
-    dedupe: ['pcre2-wasm-utf16'],
+    dedupe: ['pcre2-wasm-utf16', 'propslab-engine'],
   },
 });
