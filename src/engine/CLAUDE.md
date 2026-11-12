@@ -29,6 +29,9 @@ change this directory: change it in propslab, and sync it.
 - **The public API is `index.ts`.** Code outside the engine imports only from
   it, and the lint refuses a deeper import. When a consumer needs a name,
   export it there.
+- **No module does anything when it is imported.** `package.json` declares
+  `"sideEffects": false`, so a bundler drops each module whose exports the
+  app does not use. A module that registers itself at import is dropped too.
 - **One runtime dependency, `pcre2-wasm-utf16`.** A pattern that a user wrote
   compiles through `safeRegex` in `src/engine/utils/splunkRegex.ts`, never
   `new RegExp`.

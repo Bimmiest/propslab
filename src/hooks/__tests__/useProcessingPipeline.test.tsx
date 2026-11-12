@@ -124,7 +124,7 @@ describe('useProcessingPipeline', () => {
   // rather than the hook. Loading it once up front keeps that cost out of
   // every assertion window.
   beforeAll(async () => {
-    await import('../../engine');
+    await import('../../workers/pipeline');
   });
 
   beforeEach(() => {

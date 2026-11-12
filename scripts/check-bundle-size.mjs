@@ -45,7 +45,10 @@ const BUDGETS_KB = {
   'index.js': 165,
   'index.css': 9.5, // 8.5
   'react-vendor.js': 77, // 67.5
-  'pipeline.js': 33, // 32.7
+  // 35.2 kB; 32.1 kB until the engine's entry point (ADR 0023) moved code that
+  // the startup chunk and this one share into this one. Loaded only when no
+  // worker can start.
+  'pipeline.js': 37,
   'editorRuntime.js': 11, // 10.6
   // Workers: off the startup path, but each is a whole download of its own.
   // 71.4 kB; 62.9 kB before the fidelity answers (#442–#451, #522) added the

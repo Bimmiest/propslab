@@ -48,7 +48,7 @@ src/
 │
 ├── store/useAppStore.ts       # Zustand store (flat; subscribe per slice)
 ├── hooks/                     # useProcessingPipeline, useDebounce, useTheme, usePagination
-├── workers/                   # No React: the three worker entry points (pipelineWorker…),
+├── workers/                   # No React: the three worker entry points (pipelineWorker…), pipeline.ts,
 │                              #   workerLifecycle, workerProtocol, regexEngineLoader
 ├── utils/                     # diffEngine, fieldHighlight, countLines, viewResult
 │
