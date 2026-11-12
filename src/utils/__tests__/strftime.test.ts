@@ -487,6 +487,38 @@ describe('formatStrftime then parseTimestamp agree for every specifier (#429)', 
   });
 });
 
+describe('#872 — a run of spaces compiles to one quantifier', () => {
+  it('writes n spaces as one \\s{n,}, and one space as \\s+', () => {
+    expect(strftimeToRegex('%Y      %m').source).toBe('(\\d{4})\\s{6,}(\\d{1,2})');
+    expect(strftimeToRegex('%Y %m').source).toBe('(\\d{4})\\s+(\\d{1,2})');
+    expect(strftimeToRegex('a  b c').source).toBe('a\\s{2,}b\\s+c');
+  });
+
+  it('drops the pad space of %e and %k after spaces, and keeps it elsewhere', () => {
+    expect(strftimeToRegex('%b %e').source).toBe(`${strftimeToRegex('%b').source}\\s+(\\d{1,2})`);
+    expect(strftimeToRegex('%H:%M  %k').source).toBe('(\\d{1,2}):(\\d{1,2})\\s{2,}(\\d{1,2})');
+    expect(strftimeToRegex('%e').source).toBe('(\\s?\\d{1,2})');
+    expect(strftimeToRegex('x%k').source).toBe('x(\\s?\\d{1,2})');
+  });
+
+  it('still reads at least one whitespace character per space in the format', () => {
+    expect(iso('2026  05', '%Y  %m')).toBe('2026-05-01T00:00:00.000Z');
+    expect(iso('2026\t \t05', '%Y  %m')).toBe('2026-05-01T00:00:00.000Z');
+    expect(iso('2026 05', '%Y  %m')).toBeNull();
+    expect(iso('Jan  5 2026', '%b %e %Y')).toBe('2026-01-05T00:00:00.000Z');
+    expect(iso('Jan  15 2026', '%b  %e %Y')).toBe('2026-01-15T00:00:00.000Z');
+    expect(iso('Jan 15 2026', '%b  %e %Y')).toBeNull();
+  });
+
+  it('fails fast on a long run of whitespace that does not complete the match', () => {
+    // n adjacent \s+ backtrack O(len^n) here: twelve of them would not finish
+    // inside the test's timeout. One quantifier is O(len^2) at worst.
+    const spaces = ' '.repeat(4000);
+    expect(parseTimestamp(`2026${spaces}x no month here`, `%Y${' '.repeat(12)}%m`)).toBeNull();
+    expect(parseTimestamp(`Jan${spaces}x no day here`, `%b${' '.repeat(12)}%e`)).toBeNull();
+  });
+});
+
 describe('tokenise cache (#436)', () => {
   it('stays bounded, keeps recently used formats, and re-tokenises an evicted one', () => {
     const cold = strftimeToRegex('%Y-%m-%d cold');

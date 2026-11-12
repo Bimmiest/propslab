@@ -15,6 +15,7 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from '../../ui/ContextMenu';
+import { Identifier } from '../../ui/Identifier';
 import { currentStepDirectiveLine, stepDictionaryKey, stepTransformsLine } from './shared/fieldDirective';
 
 /** Per-event detail rows rendered at first, and added per "show more". */
@@ -70,9 +71,29 @@ const PHASE_HINTS: Record<string, string> = {
  * every other step that reports one rewrote the `_raw` an extraction reads.
  */
 function removedFieldHint(processor: string, field: string): string {
-  return processor === 'FIELDALIAS'
-    ? `The alias's source field has no value, so FIELDALIAS … AS removed "${field}". ASNEW would have kept it.`
-    : `This step deleted the text "${field}" is extracted from, so the field no longer extracts at all. The extraction itself is not at fault.`;
+  if (processor === 'FIELDALIAS') {
+    return `The alias's source field has no value, so FIELDALIAS … AS removed "${field}". ASNEW would have kept it.`;
+  }
+  if (processor === 'EVAL') return `EVAL-${field} returned null, so EVAL removed "${field}".`;
+  return `This step deleted the text "${field}" is extracted from, so the field no longer extracts at all. The extraction itself is not at fault.`;
+}
+
+/**
+ * Why a step modified a field. At index time a rewrite of `_raw` changed the
+ * value an extraction finds; at search time the step wrote over a field that
+ * the event had before (#900).
+ */
+function modifiedFieldHint(step: StepSummary, field: string): string {
+  if (step.phase === 'index-time') {
+    return `This step rewrote _raw and changed the value of "${field}". The extraction still works — the value it finds is no longer the original.`;
+  }
+  if (step.processor === 'EVAL') {
+    return `"${field}" existed before EVAL, and EVAL-${field} replaced its value. It is not a new field.`;
+  }
+  if (step.processor === 'FIELDALIAS') {
+    return `"${field}" existed before FIELDALIAS, and FIELDALIAS … AS replaced its value. ASNEW would have kept it.`;
+  }
+  return `"${field}" existed before this step, and this step changed its value. It is not a new field.`;
 }
 
 function StepSection({ title, steps, phaseColor }: { title: string; steps: StepSummary[]; phaseColor: string }) {
@@ -134,14 +155,12 @@ function StepSection({ title, steps, phaseColor }: { title: string; steps: StepS
                           +{f}
                         </span>
                       ))}
-                      {/* A masked field still extracts — it just carries a destroyed
-                      value. Flagging it separately stops "looks empty" from being
-                      read as "never extracted", which invites the wrong fix. */}
+                      {/* A field the step changed but did not create. A masked field
+                      still extracts with a destroyed value, and "looks empty" must
+                      not read as "never extracted"; a field EVAL wrote over must
+                      not read as a new one. The ~ says so without the colour. */}
                       {step.fieldsModified.map((f) => (
-                        <Tooltip
-                          key={`~${f}`}
-                          content={`This step rewrote _raw and changed the value of "${f}". The extraction still works — the value it finds is no longer the original.`}
-                        >
+                        <Tooltip key={`~${f}`} content={modifiedFieldHint(step, f)}>
                           <span className="px-1.5 py-0.5 text-xs rounded bg-[var(--color-warning)]/10 text-[var(--color-warning)] cursor-default">
                             ~{f}
                           </span>
@@ -179,7 +198,9 @@ function StepMenuItems({ step }: { step: StepSummary }) {
   const description = [`${step.processor}: ${step.summaryText}`, ...step.descriptions.slice(1)].join('\n');
   return (
     <>
-      <ContextMenuLabel>{step.processor}</ContextMenuLabel>
+      <ContextMenuLabel>
+        <Identifier>{step.processor}</Identifier>
+      </ContextMenuLabel>
       <ContextMenuItem
         disabled={propsLine === null}
         onSelect={() => propsLine !== null && revealInEditor('props.conf', propsLine)}

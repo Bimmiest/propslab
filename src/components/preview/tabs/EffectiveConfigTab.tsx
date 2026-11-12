@@ -23,6 +23,7 @@ import {
   ContextMenuLabel,
   ContextMenuTrigger,
 } from '../../ui/ContextMenu';
+import { Identifier } from '../../ui/Identifier';
 import { Icon } from '../../ui/Icon';
 import type { PipelineInputs } from './shared/usePipelineInputs';
 
@@ -49,7 +50,9 @@ function DirectiveMenuItems({ directive }: { directive: EffectiveDirective }) {
   const dictionaryKey = getDirectiveInfo(directive.key, 'props.conf')?.key;
   return (
     <>
-      <ContextMenuLabel>{directive.key}</ContextMenuLabel>
+      <ContextMenuLabel>
+        <Identifier>{directive.key}</Identifier>
+      </ContextMenuLabel>
       <ContextMenuItem onSelect={() => jumpTo(directive.line)}>Jump to config</ContextMenuItem>
       <ContextMenuItem onSelect={() => copyQuietly(`${directive.key} = ${directive.value}`)}>
         Copy {directive.key} = …
