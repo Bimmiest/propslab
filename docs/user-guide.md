@@ -135,6 +135,13 @@ When you click a line number or a stanza heading, the props.conf editor moves to
 
 **Context menus in the Effective config, CIM Models and Diff tabs.** Right-click a directive in the Effective config tab to move to it in props.conf, copy it, or open it in the dictionary. Right-click a missing field in the CIM Models tab to copy it, copy all the missing fields, or **Create FIELDALIAS…**. In that dialog, the missing field is the alias, and you type the field that the events already have. Right-click a changed event in the Diff tab to copy the line, or the event before or after the pipeline. When no event changed, the Diff tab says that no `SEDCMD`, and no `TRANSFORMS` with `DEST_KEY = _raw`, rewrote `_raw`.
 
+**Architecture tab.** This tab shows where each props.conf directive runs in a Splunk deployment. It has a box for each tier: universal forwarder, heavy forwarder, indexer and search head. Each box lists the directives that run on that tier, by stanza. A box that the config uses has a border in the accent colour and the text **Used**. The other boxes are grey and have the text **Not used by this config**. Select a directive to move the props.conf cursor to its line. The tab uses these rules:
+
+- A search-time directive runs on the search head.
+- An index-time directive runs on the first full Splunk instance on the path of the data. This is the heavy forwarder, or the indexer when there is no heavy forwarder. `SEGMENTATION` runs on the indexer, and a `RULESET-` runs on the heavy forwarder and on the indexer.
+- `EVENT_BREAKER`, `EVENT_BREAKER_ENABLE`, `force_local_processing` and the directives of the input layer, for example `CHARSET`, run on the universal forwarder. The tier of XML extraction comes from `XML_INDEXED_EXTRACTIONS_PIPELINE`.
+- When Propslab cannot find the tier of a directive, the directive goes under **Tier not known**, with the reason. Examples are the other `INDEXED_EXTRACTIONS` formats and a key that is not in the directive registry.
+
 **CIM Models tab.** This tab validates the extracted fields against 27 CIM datasets:
 
 - Alerts

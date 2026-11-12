@@ -588,6 +588,21 @@ test.describe('engine output reaches the tabs', () => {
     await expect(page.getByText('Ln 15, Col 1', { exact: true })).toBeVisible();
   });
 
+  test('Architecture lists each directive on its tier, and a click goes to its line (#901)', async ({ page }) => {
+    await openApp(page);
+    await loadExample(page, APACHE);
+    await page.getByRole('tab', { name: /^Architecture$/ }).click();
+    const heavyForwarder = page.getByRole('region', { name: 'Heavy forwarder' });
+    await expect(heavyForwarder.getByRole('button', { name: /^SHOULD_LINEMERGE = false/ })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Universal forwarder' })).toContainText('Not used by this config');
+    // EVAL-action is line 15 of the example's props.conf.
+    await page
+      .getByRole('region', { name: 'Search head' })
+      .getByRole('button', { name: /^EVAL-action / })
+      .click();
+    await expect(page.getByText('Ln 15, Col 1', { exact: true })).toBeVisible();
+  });
+
   test('Pipeline lists the processors that ran', async ({ page }) => {
     await openApp(page);
     await loadExample(page, APACHE);

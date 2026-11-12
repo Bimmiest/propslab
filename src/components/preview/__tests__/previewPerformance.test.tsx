@@ -14,7 +14,6 @@ import { EffectiveConfigTab } from '../tabs/EffectiveConfigTab';
 import { HighlightedTab } from '../tabs/HighlightedTab';
 import { useApplyDirective } from '../tabs/shared/useApplyDirective';
 import { ArchitecturePanel } from '../../architecture/ArchitecturePanel';
-import { deploymentTiers } from '../../architecture/deploymentTiers';
 import { useAppStore } from '../../../store/useAppStore';
 import { toViewResult } from '../../../utils/viewResult';
 import { makeEvent } from '../../../test/makeEvent';
@@ -116,43 +115,12 @@ describe('subscriptions', () => {
 });
 
 describe('Architecture', () => {
-  it("reads each directive's phase from the registry", () => {
-    expect(deploymentTiers('[st]\nEXTRACT-a = (?<a>x)\n', '')).toEqual({
-      hasIndexTime: false,
-      hasSearchTime: true,
-      hasRouting: false,
-    });
-    expect(deploymentTiers('[st]\nMAX_DAYS_AGO = 10\n', '')).toEqual({
-      hasIndexTime: true,
-      hasSearchTime: false,
-      hasRouting: false,
-    });
-    expect(deploymentTiers('[st]\nTRANSFORMS-r = route\n', '')).toEqual({
-      hasIndexTime: true,
-      hasSearchTime: false,
-      hasRouting: true,
-    });
-    expect(deploymentTiers('[st]\nRULESET-r = route\n', '').hasRouting).toBe(true);
-    // Settings that qualify other directives are neither tier.
-    expect(deploymentTiers('[st]\nMATCH_LIMIT = 10\n', '')).toEqual({
-      hasIndexTime: false,
-      hasSearchTime: false,
-      hasRouting: false,
-    });
-  });
-
-  it('counts a transforms.conf rule that writes the queue or metadata as routing', () => {
-    expect(deploymentTiers('', '[drop]\nREGEX = .\nDEST_KEY = queue\nFORMAT = nullQueue\n').hasRouting).toBe(true);
-    expect(deploymentTiers('', '[idx]\nREGEX = .\nDEST_KEY = _MetaData:Index\nFORMAT = x\n').hasRouting).toBe(true);
-    expect(deploymentTiers('', '[f]\nREGEX = (?<a>.)\nFORMAT = a::$1\n').hasRouting).toBe(false);
-  });
-
   it('draws the inputs it is given, not the live editor', () => {
     const inputs = { propsConf: '[st]\nEXTRACT-a = (?<a>x)\n', transformsConf: '', metadata: meta };
     useAppStore.setState({ propsConf: '[st]\nLINE_BREAKER = ([\\r\\n]+)\n' });
     render(<ArchitecturePanel inputs={inputs} embedded />);
-    expect(screen.getByText('Search-time field extraction')).toBeInTheDocument();
-    expect(screen.queryByText('Index-time processing & storage')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^EXTRACT-a/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^LINE_BREAKER/ })).not.toBeInTheDocument();
   });
 });
 
