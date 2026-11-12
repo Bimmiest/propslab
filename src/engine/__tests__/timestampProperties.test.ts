@@ -7,9 +7,11 @@
 // instant's wall clock in that zone is rendered with a strftime layout: ISO,
 // Apache, RFC 2822, 12-hour, compact and day-of-year dates, fractions of every
 // width from 1 to 9 digits, and the zone as `Z`, `±HH:MM` or `±HHMM`, attached
-// or after a space. Instants cluster on year boundaries and 29 February as
-// well as spreading over years 1–9999. Reading the text back must give the
-// instant, truncated to what the fraction carries, at millisecond precision.
+// or after a space. Each space of a layout can be a run of spaces, and the
+// text can carry more whitespace than the format names (#872). Instants
+// cluster on year boundaries and 29 February as well as spreading over years
+// 1–9999. Reading the text back must give the instant, truncated to what the
+// fraction carries, at millisecond precision.
 //
 // Every parse runs with the host zone faked to a generated offset: the local
 // Date getters are replaced, as strftime.test.ts does, so a parser that read
@@ -141,15 +143,21 @@ const stamp = fc
     bareN: fc.boolean(),
     sep: fc.constantFrom('.', ','),
     longNames: fc.boolean(),
+    /** The spaces each space of the layout becomes in the format. */
+    spaceRun: fc.integer({ min: 1, max: 4 }),
+    /** The whitespace the text adds to each run, past what the format names. */
+    extraSpace: fc.constantFrom('', ' ', '  ', '\t'),
   })
   .map((g): Stamp => {
     const w = g.width;
     const fraction = w === 0 ? '' : `${g.sep}${w === 9 && g.bareN ? '%N' : `%${w}N`}`;
     const zoneSpec = g.zone === undefined ? '' : `${g.spaceBeforeZone ? ' ' : ''}%z`;
-    const format = g.layout.replace('{F}', fraction).replace('{Z}', zoneSpec);
+    const layoutFormat = g.layout.replace('{F}', fraction).replace('{Z}', zoneSpec);
+    const format = layoutFormat.replaceAll(' ', ' '.repeat(g.spaceRun));
+    const textFormat = layoutFormat.replaceAll(' ', ' '.repeat(g.spaceRun) + g.extraSpace);
     const digits = String(new Date(g.at).getUTCMilliseconds()).padStart(3, '0') + String(g.subMs).padStart(6, '0');
     const kept = digits.slice(0, w);
-    const text = render(format, g.at, offsetOf(g.zone ?? { spelling: 'Z' }), g.zone, kept, g.longNames);
+    const text = render(textFormat, g.at, offsetOf(g.zone ?? { spelling: 'Z' }), g.zone, kept, g.longNames);
     const expected = g.at - new Date(g.at).getUTCMilliseconds() + Number(kept.padEnd(3, '0').slice(0, 3));
     return { format, text, expected };
   });
@@ -330,7 +338,7 @@ describe('parseTimestamp — a yearless stamp is the most recent one it can be',
       // The stamp's own instant, from well before now to a little after it.
       back: fc.integer({ min: -3 * DAY, max: 800 * DAY }),
       zone: fc.option(zone, { nil: undefined }),
-      format: fc.constantFrom('%b %e %H:%M:%S', '%b %d %H:%M:%S', '%m-%d %H:%M:%S'),
+      format: fc.constantFrom('%b %e %H:%M:%S', '%b  %e %H:%M:%S', '%b %d %H:%M:%S', '%m-%d %H:%M:%S'),
       host: hostOffset,
     })
     .chain((g) =>
