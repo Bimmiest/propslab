@@ -340,3 +340,44 @@ export function controlledRowIds(
   if (collapsed) return undefined;
   return childIds?.filter((id) => rendered.has(id)).join(' ') || undefined;
 }
+
+/**
+ * How many fields are of each kind, for the count above the Fields table.
+ * Each field counts once, so the kinds add up to `total`: a default field
+ * (host, source, sourcetype, index) when metadata is its only source, else
+ * an index-time field when any index-time step made it, else a search-time
+ * field, else a field that no step is credited with (`noPhase`).
+ */
+export interface FieldKinds {
+  total: number;
+  default: number;
+  indexTime: number;
+  searchTime: number;
+  noPhase: number;
+}
+
+export function countFieldKinds(aggregated: readonly AggregatedField[]): FieldKinds {
+  const kinds: FieldKinds = { total: aggregated.length, default: 0, indexTime: 0, searchTime: 0, noPhase: 0 };
+  for (const f of aggregated) {
+    if (f.sources.size === 1 && f.sources.has(METADATA_SOURCE)) kinds.default++;
+    else if (f.phases.has('index-time')) kinds.indexTime++;
+    else if (f.phases.has('search-time')) kinds.searchTime++;
+    else kinds.noPhase++;
+  }
+  return kinds;
+}
+
+/** "33 fields (4 default, 7 index-time, 22 search-time)", or "5 of 33 fields (...)" when a filter leaves `shown` rows. */
+export function fieldCountLabel(shown: number, kinds: FieldKinds): string {
+  const noun = `field${kinds.total === 1 ? '' : 's'}`;
+  const head = shown === kinds.total ? `${kinds.total} ${noun}` : `${shown} of ${kinds.total} ${noun}`;
+  const parts = [
+    [kinds.default, 'default'],
+    [kinds.indexTime, 'index-time'],
+    [kinds.searchTime, 'search-time'],
+    [kinds.noPhase, 'no phase'],
+  ]
+    .filter(([n]) => n !== 0)
+    .map(([n, name]) => `${n} ${name}`);
+  return parts.length === 0 ? head : `${head} (${parts.join(', ')})`;
+}

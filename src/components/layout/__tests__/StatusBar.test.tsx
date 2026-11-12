@@ -109,6 +109,45 @@ describe('StatusBar', () => {
     expect(screen.getByText('4 fields')).toBeInTheDocument();
   });
 
+  it('defines the field count in a tooltip, with the split of the Fields tab and the aliases (#894)', async () => {
+    const events = [
+      makeEvent('', {
+        fields: { a: '1', b: '2', al: '1' },
+        metadata: { index: 'main', host: 'h', source: '', sourcetype: '' },
+        processingTrace: [
+          { processor: 'EXTRACT-a', phase: 'search-time', description: '', fieldsAdded: ['a', 'b'] },
+          {
+            processor: 'FIELDALIAS-al',
+            phase: 'search-time',
+            description: '',
+            fieldsAdded: ['al'],
+            fieldAliases: [{ target: 'al', source: 'a' }],
+          },
+        ],
+      }),
+    ];
+    useAppStore.setState({
+      processingResult: toViewResult({
+        events,
+        originalRaw: '',
+        eventCount: 1,
+        processingSteps: [],
+        inputMetadata: { index: 'main', host: 'h', source: '', sourcetype: '' },
+      }),
+      validationDiagnostics: [],
+    });
+    renderStatusBar();
+    // a, b, the alias al, and the default fields host and index.
+    const figure = screen.getByText('5 fields');
+    expect(figure).toHaveAttribute('tabindex', '0');
+    fireEvent.focus(figure);
+    const tips = await screen.findAllByText(/5 field names in the events after the pipeline/);
+    expect(tips.length).toBeGreaterThan(0);
+    // The Fields tab lists 4 of them: 2 default, 2 search-time. The alias is the fifth.
+    const split = await screen.findAllByText(/The Fields tab lists 4 fields \(2 default, 2 search-time\)\./);
+    expect(split[0]).toHaveTextContent('The other 1 is an alias.');
+  });
+
   it('shows error / warning counts when diagnostics are present', () => {
     const diags: ValidationDiagnostic[] = [
       { level: 'error', message: 'e1', file: 'props.conf' },

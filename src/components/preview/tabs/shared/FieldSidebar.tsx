@@ -53,7 +53,7 @@ export function FieldSidebar({ fieldCount, activeFields, onCollapse, renderItems
           />
         </div>
         <div className="flex items-center justify-between">
-          <span className="text-xs text-[var(--color-text-muted)]">{fieldCount} fields</span>
+          <span className="text-xs text-[var(--color-text-muted)]">{fieldCount} extracted</span>
           {renderControls?.(lowerSearch)}
         </div>
       </div>
