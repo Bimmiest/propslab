@@ -5,7 +5,7 @@ import { atDirective } from '../parser/provenance';
 import { BOOLEAN_ASSIGNMENT_ERROR, type EvalValue } from './eval/values';
 import { type Node, parseExpression } from './eval/parser';
 import { evalNode } from './eval/evaluator';
-import { regexFailureMessage } from './eval/builtins';
+import { regexFailureMessage, regexLimitMessage } from './eval/builtins';
 import type { RunContext, DiagnosticSink } from '../runContext';
 import { RegexDeadlineError } from '../../utils/splunkRegex';
 
@@ -15,7 +15,7 @@ import { RegexDeadlineError } from '../../utils/splunkRegex';
 // two exports below are re-exported so INGEST_EVAL and STOP_PROCESSING_IF keep
 // importing them from here.
 export { evaluateExpression } from './eval/evaluator';
-export { regexFailureMessage };
+export { regexFailureMessage, regexLimitMessage };
 
 /**
  * Hint for the common mistake of referencing a nested JSON field unquoted: the
@@ -92,6 +92,23 @@ class EvalReporter {
     });
   }
 
+  /**
+   * Once per class and message, so once per pattern and limit: a scan that
+   * stops at a limit on one event may stop on many.
+   */
+  regexLimit(dir: ConfDirective, fieldName: string, detail: string): void {
+    const message = `EVAL-${fieldName}: ${detail}`;
+    if (!this.diagnostics || this.reportedRegex.has(message)) return;
+    this.reportedRegex.add(message);
+    this.diagnostics.push({
+      level: 'warning',
+      message,
+      file: 'props.conf',
+      ...atDirective(dir),
+      directiveKey: dir.key,
+    });
+  }
+
   error(dir: ConfDirective, fieldName: string, msg: string): void {
     if (!this.diagnostics || this.reportedErrors.has(fieldName)) return;
     this.reportedErrors.add(fieldName);
@@ -144,6 +161,8 @@ function evaluateAll(event: SplunkEvent, compiled: CompiledEval[], reporter: Eva
         now,
         onStubWarning: (fn) => reporter.stub(c.dir, fn),
         onRegexError: (fn, pattern) => reporter.regex(c.dir, c.fieldName, fn, pattern),
+        onRegexLimit: (fn, pattern, error) =>
+          reporter.regexLimit(c.dir, c.fieldName, regexLimitMessage(fn, pattern, error)),
       });
       // Splunk refuses the assignment outright; writing "true" would show a
       // field the real search never produces.

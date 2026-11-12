@@ -32,6 +32,8 @@ export interface EvalCtx {
   onStubWarning?: ((fn: string) => void) | undefined;
   /** A regex argument would not compile; the caller turns it into a diagnostic. */
   onRegexError?: ((fn: string, pattern: string) => void) | undefined;
+  /** A regex scan stopped at a PCRE2 limit; the caller turns it into a diagnostic. */
+  onRegexLimit?: ((fn: string, pattern: string, error: string) => void) | undefined;
 }
 
 /**
@@ -50,6 +52,14 @@ const REGEX_FAILURE_RESULT: Readonly<Record<string, string>> = {
 export function regexFailureMessage(fn: string, pattern: string): string {
   const why = validateRegex(pattern) ?? 'invalid regex';
   return `${fn}() pattern "${pattern}" could not be compiled (${why}), so it ${REGEX_FAILURE_RESULT[fn] ?? 'failed'}.`;
+}
+
+/** The shared tail of a warning for an eval regex scan that stopped at a limit. */
+export function regexLimitMessage(fn: string, pattern: string, error: string): string {
+  return (
+    `${fn}() pattern "${pattern}" stopped at a regex limit (${error}), so the result is incomplete: ` +
+    'only the matches before the limit were replaced.'
+  );
 }
 
 /** Compile an eval regex argument, reporting a pattern that will not compile. */
@@ -189,7 +199,10 @@ const STRING_BUILTINS: Record<string, Builtin> = {
     if (s === null) return null;
     const regex = evalRegex(ctx, 'replace', toStr(args[1]));
     if (!regex) return s;
-    return regex.replace(s, splunkReplacement(toStr(args[2])), true);
+    const replaced = regex.replace(s, splunkReplacement(toStr(args[2])), true);
+    // The scan ends at a limit with the matches it found, and replaces those.
+    if (regex.lastError !== undefined) ctx.onRegexLimit?.('replace', regex.source, regex.lastError);
+    return replaced;
   },
   trim: trimFrom('both'),
   ltrim: trimFrom('left'),
