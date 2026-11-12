@@ -286,17 +286,27 @@ function directiveAt(format: string, i: number): { spec: string; meta: Directive
   return null;
 }
 
+/** The start of `%e` and `%k`, whose value may carry one pad space. */
+const PAD_SPACE_PREFIX = '(\\s?';
+
 function tokeniseUncached(format: string): TokenisedFormat {
   const expanded = expandComposites(format);
   const captures: CaptureName[] = [];
   let regexStr = '';
   let i = 0;
+  let afterSpaces = false;
 
   while (i < expanded.length) {
+    const spacesBefore = afterSpaces;
+    afterSpaces = false;
     if (expanded[i] === '%') {
       const directive = directiveAt(expanded, i);
       if (directive) {
-        regexStr += directive.meta.regex;
+        const { regex } = directive.meta;
+        // A run of spaces then `\s?` matches what the run alone matches, in
+        // twice the ways: the pad space joins the run before it.
+        regexStr +=
+          spacesBefore && regex.startsWith(PAD_SPACE_PREFIX) ? `(${regex.slice(PAD_SPACE_PREFIX.length)}` : regex;
         captures.push(directive.meta.capture);
         i += directive.spec.length;
         continue;
@@ -314,12 +324,20 @@ function tokeniseUncached(format: string): TokenisedFormat {
       i += 1;
     } else {
       // Literal character -- allow flexible whitespace matching when the
-      // format contains a space (Splunk is lenient).
+      // format contains a space (Splunk is lenient): each space reads one or
+      // more. A run of n spaces is one `\s{n,}`, which matches what n
+      // adjacent `\s+` match; those backtrack polynomially over a long run of
+      // whitespace that fails the match, and a JS RegExp has no match limit
+      // to stop it (#872).
       if (expanded.charAt(i) === ' ') {
-        regexStr += '\\s+';
-      } else {
-        regexStr += escapeRegex(expanded.charAt(i));
+        const runStart = i;
+        while (expanded.charAt(i) === ' ') i += 1;
+        const run = i - runStart;
+        regexStr += run === 1 ? '\\s+' : `\\s{${run},}`;
+        afterSpaces = true;
+        continue;
       }
+      regexStr += escapeRegex(expanded.charAt(i));
       i += 1;
     }
   }
@@ -964,9 +982,10 @@ function assembleTimestamp(
 // the editor's TIME_FORMAT preview. See docs/adr/0003-one-strftime-directive-table.md.
 // ---------------------------------------------------------------------------
 /**
- * Format a Date with a Splunk strftime string. Uses the browser's local timezone
- * (a documented browser-tool divergence — real Splunk uses the configured/indexer
- * TZ). Renders every specifier the parser reads, from the same table; anything
+ * Format a Date with a Splunk strftime string. Uses the time zone of the host
+ * (the browser, or the MCP server process), because a run has no zone input and
+ * Splunk's user time zone setting is not modelled. docs/fidelity.md, "Time zone
+ * of `strftime()`", gives the divergence (#877). Renders every specifier the parser reads, from the same table; anything
  * else is left as literal text, which unsupportedSpecifiers flags. `dialect`
  * says whose reading a directive takes where TIME_FORMAT and eval's
  * `strftime()` differ (`%l`).

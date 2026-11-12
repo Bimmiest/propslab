@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { runPipeline } from '../pipeline';
 import type { EventMetadata, ValidationDiagnostic } from '../types';
 import { AT_FIXED_NOW, FIXED_NOW } from './runCtx';
@@ -477,5 +477,158 @@ describe('runPipeline — $0 in FORMAT for a metadata DEST_KEY (#620)', () => {
       now: FIXED_NOW,
     });
     expect(result.events[0]?.metadata.host).toBe('h.example.com');
+  });
+});
+
+// Not Splunk behaviour: the defaults runPipeline gives the options a caller leaves out.
+describe('runPipeline — options a caller leaves out', () => {
+  const meta: EventMetadata = { index: 'main', host: 'h', source: 's', sourcetype: 'st' };
+  const props = '[st]\nEXTRACT-u = user=(?<user>\\w+)\n';
+
+  it('keeps the offsets of each field unless the caller declines them', () => {
+    const { result } = runPipeline('user=alice', meta, props, '', AT_FIXED_NOW);
+    expect(result.events[0]?.fields['user']).toBe('alice');
+    expect(result.events[0]?.fieldOffsets?.['user']).toEqual([[5, 10]]);
+  });
+
+  it('keeps no offsets when the caller declines them', () => {
+    const { result } = runPipeline('user=alice', meta, props, '', { ...AT_FIXED_NOW, captureOffsets: false });
+    expect(result.events[0]?.fields['user']).toBe('alice');
+    expect(result.events[0]?.fieldOffsets?.['user']).toBeUndefined();
+  });
+
+  it('returns no events and parses no conf for input that is only whitespace', () => {
+    expect(runPipeline(' \n\t', meta, 'not a setting\n', 'nor this\n', AT_FIXED_NOW)).toEqual({
+      result: { events: [], originalRaw: ' \n\t', eventCount: 0, processingSteps: [], inputMetadata: meta },
+      diagnostics: [],
+    });
+  });
+
+  it('reports a malformed transforms.conf line against transforms.conf', () => {
+    const { diagnostics } = runPipeline('x', meta, '', 'not a setting\n', AT_FIXED_NOW);
+    expect(diagnostics.filter((d) => d.message.startsWith('Malformed line')).map((d) => d.file)).toEqual([
+      'transforms.conf',
+    ]);
+  });
+
+  // runLimits.test.ts holds where a run stops; these pin what the stop says.
+  // The clock jumps past a 1 s budget when `spent` starts, and a stage with no
+  // regex to run notices only at the start of the next one.
+  function stopsAfter(spent: string, props: string) {
+    let clock = 0;
+    const spy = vi.spyOn(Date, 'now').mockImplementation(() => clock);
+    try {
+      const { diagnostics } = runPipeline('one', meta, props, '', {
+        ...AT_FIXED_NOW,
+        limits: { maxRunMs: 1_000 },
+        onStage: (s) => {
+          if (s === spent) clock = 2_000;
+        },
+      });
+      return diagnostics.filter((d) => d.message.startsWith('The run stopped'));
+    } finally {
+      spy.mockRestore();
+    }
+  }
+
+  it('says what a stop at the time budget does to the events, and what usually causes it', () => {
+    expect(stopsAfter('EXTRACT', props).map((d) => d.message)).toEqual([
+      `The run stopped at stage "EXTRACT" because it used its time budget of ${(1_000).toLocaleString()} ms. ` +
+        'Events pass through that stage and the stages after it unchanged. A pattern that backtracks a lot is ' +
+        'the usual cause.',
+    ]);
+  });
+
+  it.each([
+    ['TRUNCATE', 'Timestamp', 'props.conf'],
+    ['Timestamp', 'INDEXED_EXTRACTIONS', 'props.conf'],
+    ['SEDCMD', 'TRANSFORMS', 'transforms.conf'],
+    ['TRANSFORMS', 'CLONE_SOURCETYPE', 'transforms.conf'],
+  ])('with the budget spent in %s, stops at %s and names %s', (spent, stage, file) => {
+    const found = stopsAfter(spent, '[st]\nSHOULD_LINEMERGE = false\n');
+    expect(found.map((d) => [/"([^"]+)"/.exec(d.message)?.[1], d.file])).toEqual([[stage, file]]);
+  });
+
+  it('gives the caller no raw mutations, which only the stages read', () => {
+    const { result } = runPipeline('user=alice', meta, '[st]\nSEDCMD-m = s/alice/bob/\n', '', AT_FIXED_NOW);
+    expect(result.events[0]?._raw).toBe('user=bob');
+    expect(result.events[0]).not.toHaveProperty('rawMutations');
+  });
+});
+
+// Not Splunk behaviour: the wording and the location of the notes the pipeline
+// adds about which stanzas it read, which the diagnostics panel shows.
+describe('runPipeline — the notes on stanza resolution', () => {
+  it('says which sourcetype an input-time assignment gave the events', () => {
+    const meta: EventMetadata = { index: 'main', host: 'h', source: '/a.log', sourcetype: 'st' };
+    const { diagnostics } = runPipeline('x', meta, '[source::/a.log]\nsourcetype = foo\n', '', AT_FIXED_NOW);
+    expect(diagnostics).toContainEqual({
+      level: 'info',
+      message:
+        'sourcetype assigned at input: "st" → "foo". ' +
+        'Stanzas were resolved against the assigned sourcetype, so props for it apply from here on.',
+      file: 'props.conf',
+      directiveKey: 'sourcetype',
+    });
+  });
+
+  it('says where search-time settings come from after a rename', () => {
+    const meta: EventMetadata = { index: 'main', host: 'h', source: 's', sourcetype: 'orig' };
+    const { diagnostics } = runPipeline('x', meta, '[orig]\nrename = renamed\n', '', AT_FIXED_NOW);
+    expect(diagnostics).toContainEqual({
+      level: 'info',
+      message:
+        'rename: search-time processing uses sourcetype "renamed" instead of "orig". Events stay indexed as ' +
+        '"orig", and search-time settings come from "renamed" alone — EXTRACT, REPORT, FIELDALIAS and EVAL on ' +
+        'the original stanza no longer apply.',
+      file: 'props.conf',
+      directiveKey: 'rename',
+    });
+  });
+
+  it('marks no event as renamed when nothing renames, or a stanza renames to its own sourcetype', () => {
+    const meta: EventMetadata = { index: 'main', host: 'h', source: 's', sourcetype: 'orig' };
+    for (const props of ['[orig]\nKV_MODE = none\n', '[orig]\nrename = orig\n']) {
+      const { result } = runPipeline('x', meta, props, '', AT_FIXED_NOW);
+      expect(result.events[0]).not.toHaveProperty('renamedSourcetype');
+    }
+  });
+
+  it('warns about clones and about a metadata rewrite in batch mode, each in its own words', () => {
+    const meta: EventMetadata = { index: 'main', host: 'h', source: '/a.log', sourcetype: 'st' };
+    const props = '[st]\nSHOULD_LINEMERGE = false\nTRANSFORMS-c = copy\nTRANSFORMS-r = to_bar\n';
+    const transforms =
+      '[copy]\nREGEX = a\nCLONE_SOURCETYPE = cloned\n\n' +
+      '[to_bar]\nREGEX = b\nDEST_KEY = MetaData:Sourcetype\nFORMAT = sourcetype::bar\n';
+    const { diagnostics } = runPipeline('a\nb', meta, props, transforms, AT_FIXED_NOW);
+    expect(diagnostics.filter((d) => d.file === 'transforms.conf' && d.level === 'warning')).toEqual([
+      {
+        level: 'warning',
+        message:
+          'CLONE_SOURCETYPE copied events to sourcetype "cloned". Their index-time SEDCMD and TRANSFORMS come ' +
+          'from the new sourcetype, but in batch mode search-time processors (EXTRACT, REPORT, FIELDALIAS, EVAL) ' +
+          'still use the original stanza match for the copies. Enable "Re-match stanzas after metadata rewrites" ' +
+          'in Settings to simulate this correctly.',
+        file: 'transforms.conf',
+      },
+      {
+        level: 'warning',
+        message:
+          'One or more events had their sourcetype/host/source rewritten at index-time by a DEST_KEY = ' +
+          'MetaData:* transform or an INGEST_EVAL assignment. In batch mode, search-time processors (EXTRACT, ' +
+          'REPORT, FIELDALIAS, EVAL) still use the original stanza match and will not apply directives from the ' +
+          'new sourcetype. Enable "Re-match stanzas after metadata rewrites" in Settings to simulate this correctly.',
+        file: 'transforms.conf',
+      },
+    ]);
+  });
+
+  it('does not count a rewritten event as a clone', () => {
+    const meta: EventMetadata = { index: 'main', host: 'h', source: '/a.log', sourcetype: 'st' };
+    const props = '[st]\nSHOULD_LINEMERGE = false\nTRANSFORMS-r = to_bar\n';
+    const transforms = '[to_bar]\nREGEX = b\nDEST_KEY = MetaData:Sourcetype\nFORMAT = sourcetype::bar\n';
+    const { diagnostics } = runPipeline('a\nb', meta, props, transforms, AT_FIXED_NOW);
+    expect(diagnostics.some((d) => d.message.startsWith('CLONE_SOURCETYPE copied'))).toBe(false);
+    expect(diagnostics.some((d) => d.message.startsWith('One or more events had'))).toBe(true);
   });
 });

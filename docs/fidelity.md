@@ -69,6 +69,9 @@ The directive levels above do not apply to eval _functions_. The functions have 
 
   In edge cases, the results can be different from Splunk. Each of these functions emits a warning when it is evaluated. Thus a stub result is never mistaken for a computed result.
 
+- **Functions with no implementation.** Splunk has more eval functions, for example `printf()`, `lookup()`, the `json_*` functions, the trigonometric functions and the `bit_*` functions. Each of these returns null and emits the same warning. `UNSIMULATED_FUNCTIONS` in `builtins.ts` lists them.
+- **A name that is not an eval function.** Splunk fails the expression, and Propslab does the same. The EVAL writes no field, and an error names the function ([#876](https://github.com/Bimmiest/propslab/issues/876)).
+
 ## Simplified
 
 - **`SEDCMD` occurrence flag.** The `s/` substitute form and the `y/` transliterate form are both simulated. Each of these emits a warning, and Propslab does not drop it silently:
@@ -91,6 +94,8 @@ The directive levels above do not apply to eval _functions_. The functions have 
   No capture pins the names of attributes. An attribute keeps its bare name. The exception is a `Name` attribute: it follows the Windows event-log convention, and it names the field itself.
 
 - **`PAIR_RE` in transform `FORMAT` does not handle escaped quotes in quoted values.** `"([^"]*)"` stops at the first inner `"`, so `field::"say \"hi\""` parses as `field=say \`. The behaviour of real Splunk here is under-documented. Treat it as an edge case.
+
+- **Time zone of `strftime()`.** Eval `strftime()` shows the time in the time zone of the host. The host is the browser in the app, and the Node process in the MCP server. Thus the same input can give different output in the two, and in two zones (`%H` and `%Z` are examples). The `TIME_FORMAT` hover preview of the editor also uses the zone of the browser. Splunk uses the time zone setting of the user, and the simulator does not model this setting. A run has an injected `now`, but no injected zone. To compare results, run both with the same `TZ`.
 
 ## Guesses that no recording confirms
 

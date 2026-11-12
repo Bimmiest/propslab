@@ -239,6 +239,7 @@ export default defineConfig([
       'vitest.config.ts',
       'playwright.config.ts',
       'packages/mcp-server/vitest.config.mts',
+      'packages/mcp-server/perf/*.mjs',
     ],
     extends: [js.configs.recommended],
     languageOptions: {

@@ -48,10 +48,15 @@ export interface ProcessingStep {
   outputSnapshot?: string;
   fieldsAdded?: string[];
   /**
-   * Fields that still extract after this step but whose value changed — the
-   * signature of a mask rule eating a value that an extraction does find.
-   * Populated for steps that rewrite `_raw` (SEDCMD, DEST_KEY = _raw) by
-   * `attributeRawMutations`, which runs after search-time extraction.
+   * Fields that the event had before this step, and whose value the step changed.
+   *
+   * At index time, fields that still extract after a `_raw` rewrite (SEDCMD,
+   * DEST_KEY = _raw) but with another value — the signature of a mask rule
+   * eating a value that an extraction does find. `attributeRawMutations` sets
+   * them, after search-time extraction.
+   *
+   * At search time, fields that a step wrote over: REPORT, KV_MODE, FIELDALIAS
+   * and EVAL put such a field here, not in `fieldsAdded` (#900).
    */
   fieldsModified?: string[];
   /**
@@ -61,7 +66,8 @@ export interface ProcessingStep {
    * devalued), so the two are never merged.
    *
    * FIELDALIAS steps use it for the alias targets they deleted: with `AS`, a
-   * source field that has no value removes the target.
+   * source field that has no value removes the target. EVAL steps use it for
+   * a field whose expression returned null.
    */
   fieldsRemoved?: string[];
   /**
