@@ -22,6 +22,7 @@ import type {
   ValidationDiagnostic,
 } from '../types';
 import { getCanonicalDirectiveKey } from '../directiveRegistry';
+import { misspelledCanonical, MISSPELLED_MESSAGE } from '../misspelledDirective';
 import { classifyStanza } from '../stanzaRegistry';
 import { endsWithContinuation } from '../utils/directiveValues';
 
@@ -367,6 +368,22 @@ function parseLayer(text: string, fileName: 'props.conf' | 'transforms.conf', la
           directiveKey: rawKey,
           suggestion: MISCASED_SUGGESTION(rawKey, canonical),
         });
+      } else if (className === undefined) {
+        // One edit from a real attribute, such as `TIME_FROMAT`: as dead as a
+        // mis-cased key, and as silent in Splunk. A key with a class prefix is
+        // not checked: the prefix is real, and the class name is the user's.
+        const intended = misspelledCanonical(rawKey, fileName);
+        if (intended !== undefined) {
+          errors.push({
+            level: 'warning',
+            message: MISSPELLED_MESSAGE(rawKey, intended, fileName),
+            file: fileName,
+            ...from,
+            line: lineNumber,
+            directiveKey: rawKey,
+            suggestion: MISCASED_SUGGESTION(rawKey, intended),
+          });
+        }
       }
 
       const directive: ConfDirective = {

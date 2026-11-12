@@ -170,6 +170,23 @@ describe('StatusBar', () => {
     expect(screen.queryByText('✓ Valid')).not.toBeInTheDocument();
   });
 
+  it("counts the editors' problems as their panels list them, the linter's included (#899)", () => {
+    useAppStore.setState({
+      // An error the linter finds (line 2), and a warning only the run has (line 3).
+      propsConf: '[st]\ngarbage\nLOOKUP-x = foo a OUTPUT b\n',
+      transformsConf: '[t]\nREGEX = (\n',
+      validationDiagnostics: [
+        { level: 'error', message: 'Malformed line: "garbage"', file: 'props.conf', line: 2 },
+        { level: 'warning', message: 'LOOKUP-x is not simulated', file: 'props.conf', line: 3 },
+        { level: 'warning', message: 'no events', file: 'raw' },
+      ],
+    });
+    renderStatusBar();
+    // props.conf: the malformed line once; transforms.conf: the bad REGEX.
+    expect(screen.getByText('2 errors')).toBeInTheDocument();
+    expect(screen.getByText('2 warnings')).toBeInTheDocument();
+  });
+
   it('shows per-event-pipeline chip when setting enabled; click opens settings', () => {
     useAppStore.setState({
       settings: { perEventPipeline: true, manualApply: true },

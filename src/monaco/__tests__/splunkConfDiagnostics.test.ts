@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { computeDiagnostics } from '../splunkConfDiagnostics';
+import { computeDiagnostics, MISSPELLED_MARKER_CODE } from '../splunkConfDiagnostics';
+import { MISSPELLED_MESSAGE } from '../../engine/misspelledDirective';
 import { fakeModel } from '../../test/fakeModel';
 import { expectLinearWork } from '../../test/scanWork';
 
@@ -136,6 +137,22 @@ describe('computeDiagnostics — undocumented attributes are not typos (#178)', 
 
   it('still flags a key that resembles nothing at all', () => {
     expect(typoMarkers('[st]\nNOT_A_REAL_DIRECTIVE = 1')).toHaveLength(1);
+  });
+});
+
+describe('computeDiagnostics — a key one edit from an attribute (#899)', () => {
+  it('warns on the key with the sentence the engine uses, tagged for the quick fix', () => {
+    expect(computeDiagnostics(fakeModel('[st]\nTIME_FROMAT = %Y'), 'props.conf')).toEqual([
+      {
+        severity: 4,
+        message: MISSPELLED_MESSAGE('TIME_FROMAT', 'TIME_FORMAT', 'props.conf'),
+        startLineNumber: 2,
+        startColumn: 1,
+        endLineNumber: 2,
+        endColumn: 'TIME_FROMAT '.length + 1,
+        code: MISSPELLED_MARKER_CODE,
+      },
+    ]);
   });
 });
 

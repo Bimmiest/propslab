@@ -202,6 +202,31 @@ describe('the lint pass', () => {
     expect(markers().length).toBeGreaterThan(0);
   });
 
+  it("marks the run's diagnostics with its own, each line once, as the panel lists them (#899)", () => {
+    const text = '[st]\nKV_MODE = auto\ngarbage\nLOOKUP-x = foo a OUTPUT b\n';
+    mount({ value: text });
+    act(() =>
+      useAppStore.setState({
+        validationDiagnostics: [
+          { level: 'error', message: 'Malformed line: "garbage"', file: 'props.conf', line: 3 },
+          { level: 'warning', message: 'LOOKUP-x is not simulated', file: 'props.conf', line: 4 },
+          { level: 'warning', message: 'in the other file', file: 'transforms.conf', line: 2 },
+        ],
+      }),
+    );
+    // Nothing before the first lint, the run's diagnostics included.
+    expect(markers()).toEqual([]);
+    vi.advanceTimersByTime(LINT_DELAY_MS);
+    expect(markers().map((m) => [m.startLineNumber, m.message])).toEqual([
+      [3, expect.stringMatching(/^Malformed line — /)],
+      [4, 'LOOKUP-x is not simulated'],
+    ]);
+
+    // A new run marks at once, against the lint already made.
+    act(() => useAppStore.setState({ validationDiagnostics: [] }));
+    expect(markers().map((m) => m.startLineNumber)).toEqual([3]);
+  });
+
   it('sets no markers after unmount, even with a pass pending', () => {
     // The pending timer is cleared on unmount, and a disposed editor has no
     // model to mark either: two guards, so this asserts the outcome only.
