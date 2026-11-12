@@ -112,6 +112,39 @@ test.describe('trusted types', () => {
     // token is looked for in the text lines only: the hover names the key
     // too, and the last match would be the hover itself, not the token.
     const token = props.locator('.view-lines').getByText('SHOULD_LINEMERGE', { exact: true }).last();
+    // Temporary diagnostics for the WebKit job.
+    {
+      await page.mouse.move(0, 0);
+      const { x, y } = await pointIn(token)();
+      await page.mouse.move(x, y);
+      await page.mouse.move(x + 1, y);
+      const ok = await expect(page.getByText('Open in dictionary'))
+        .toBeVisible({ timeout: 6_000 })
+        .then(
+          () => true,
+          () => false,
+        );
+      if (!ok) {
+        const state = await page.evaluate(
+          ({ px, py }) => {
+            const hit = document.elementFromPoint(px, py);
+            const hovers = [...document.querySelectorAll('.monaco-hover')].map((h) => ({
+              hidden: h.classList.contains('hidden'),
+              text: h.textContent.slice(0, 160),
+              box: JSON.stringify(h.getBoundingClientRect()),
+            }));
+            return {
+              hit: hit ? `${hit.tagName}.${hit.className} ${hit.textContent.slice(0, 60)}` : 'none',
+              active: `${document.activeElement?.tagName}.${String(document.activeElement?.className)}`,
+              hovers,
+              vh: window.innerHeight,
+            };
+          },
+          { px: x, py: y },
+        );
+        expect(ok, `DIAGTT ${JSON.stringify({ x, y, state })}`).toBe(true);
+      }
+    }
     await dwellUntilVisible(page, pointIn(token), page.getByText('Open in dictionary'));
 
     await page.keyboard.press('Control+k');
