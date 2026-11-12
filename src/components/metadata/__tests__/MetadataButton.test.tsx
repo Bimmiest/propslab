@@ -46,3 +46,10 @@ describe('MetadataButton', () => {
     expect(useAppStore.getState().metadata.host).toBe('fw-01');
   });
 });
+
+describe('MetadataButton — target size (WCAG 2.5.8)', () => {
+  it('is at least 24 px high', () => {
+    render(<MetadataButton />);
+    expect(screen.getByRole('button', { name: /^Metadata/ }).className).toContain('min-h-[24px]');
+  });
+});

@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 @custom-variant dark (&:where(.dark, .dark *));
 
@@ -19,12 +19,12 @@
   /* Hover and pressed fills */
   --color-bg-tertiary: #e0ddd5;
 
-  --color-text-primary: #222831;       /* the palette's charcoal: ≥7:1 on every surface */
-  --color-text-secondary: #393e46;     /* the palette's second charcoal */
-  --color-text-muted: #595b5f;         /* ≥4.5:1 on every surface, incl. the hover fill */
+  --color-text-primary: #222831; /* the palette's charcoal: ≥7:1 on every surface */
+  --color-text-secondary: #393e46; /* the palette's second charcoal */
+  --color-text-muted: #595b5f; /* ≥4.5:1 on every surface, incl. the hover fill */
 
-  --color-border: #cbc7bd;             /* dividers between panes: decorative */
-  --color-border-subtle: rgba(203,199,189,0.5);  /* internal dividers */
+  --color-border: #cbc7bd; /* dividers between panes: decorative */
+  --color-border-subtle: rgba(203, 199, 189, 0.5); /* internal dividers */
   --color-border-hover: #9a958a;
   /* The edge of a control (an input, a dropdown): just over 3:1 on the
      surfaces a control sits on, the non-text contrast WCAG 1.4.11 asks of a
@@ -60,14 +60,14 @@
   /* Hover and pressed fills: the palette's second charcoal */
   --color-bg-tertiary: #393e46;
 
-  --color-text-primary: #f3ede3;       /* the sand, lightened: ≥7:1 on every surface */
-  --color-text-secondary: #dfd0b8;     /* the palette's sand */
-  --color-text-muted: #bab2a6;         /* ≥4.5:1 on every surface, incl. the hover fill */
+  --color-text-primary: #f3ede3; /* the sand, lightened: ≥7:1 on every surface */
+  --color-text-secondary: #dfd0b8; /* the palette's sand */
+  --color-text-muted: #bab2a6; /* ≥4.5:1 on every surface, incl. the hover fill */
 
-  --color-border: #454b55;             /* dividers between panes */
-  --color-border-subtle: rgba(69,75,85,0.5);
+  --color-border: #454b55; /* dividers between panes */
+  --color-border-subtle: rgba(69, 75, 85, 0.5);
   --color-border-hover: #6b7079;
-  --color-border-control: #7a7d84;     /* just over 3:1 on a control's surfaces (#564, #695) */
+  --color-border-control: #7a7d84; /* just over 3:1 on a control's surfaces (#564, #695) */
 
   /* Gold, from the palette's bronze: ≥4.5:1 as text on every surface and on
      its own /10 tint, which makes it too light for white text: text on an
@@ -86,7 +86,9 @@
   --color-info: #e2c08d;
 }
 
-html, body, #root {
+html,
+body,
+#root {
   height: 100%;
   margin: 0;
   padding: 0;
@@ -96,7 +98,9 @@ body {
   background-color: var(--color-bg-primary);
   color: var(--color-text-primary);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  transition: background-color 0.2s, color 0.2s;
+  transition:
+    background-color 0.2s,
+    color 0.2s;
 }
 
 /* Unified theme transition for all surfaces.
@@ -106,7 +110,9 @@ body {
  * `transition-opacity`, `transition-transform` and `transition-all` (all in
  * @layer utilities). Here a utility wins, as it should. */
 @layer base {
-  *, *::before, *::after {
+  *,
+  *::before,
+  *::after {
     transition-property: background-color, border-color, color;
     transition-duration: 0.15s;
     transition-timing-function: ease;
@@ -129,9 +135,15 @@ body {
 
 /* Indeterminate progress bar animation */
 @keyframes indeterminate {
-  0%   { transform: translateX(-100%); }
-  50%  { transform: translateX(100%); }
-  100% { transform: translateX(300%); }
+  0% {
+    transform: translateX(-100%);
+  }
+  50% {
+    transform: translateX(100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
 }
 
 /* Same shape as the indeterminate keyframes above, as a class so the
@@ -144,51 +156,119 @@ body {
    app. An entrance decelerates and an exit accelerates and is shorter, so a
    closing overlay gets out of the way. Theme-independent, so not in .dark. */
 :root {
-  --motion-fast: 120ms;  /* press feedback, exits */
-  --motion-base: 180ms;  /* popups, tooltips, tab content, disclosures */
-  --motion-slow: 240ms;  /* dialogs, drawers, backdrops */
+  --motion-fast: 120ms; /* press feedback, exits */
+  --motion-base: 180ms; /* popups, tooltips, tab content, disclosures */
+  --motion-slow: 240ms; /* dialogs, drawers, backdrops */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-in: cubic-bezier(0.4, 0, 1, 1);
 }
 
 /* `from`-only keyframes end at the element's own style, whatever it is. */
-@keyframes fade-in { from { opacity: 0; } }
-@keyframes fade-out { to { opacity: 0; } }
-@keyframes pop-in { from { opacity: 0; transform: translateY(4px) scale(0.98); } }
-@keyframes pop-out { to { opacity: 0; transform: scale(0.98); } }
-@keyframes reveal { from { opacity: 0; transform: translateY(-4px); } }
-@keyframes slide-in { from { opacity: 0; transform: translate(var(--slide-x, 0), var(--slide-y, 0)); } }
-@keyframes drawer-in { from { transform: translateX(100%); } }
-@keyframes drawer-out { to { transform: translateX(100%); } }
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes fade-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+}
+@keyframes pop-out {
+  to {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+}
+@keyframes reveal {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+@keyframes slide-in {
+  from {
+    opacity: 0;
+    transform: translate(var(--slide-x, 0), var(--slide-y, 0));
+  }
+}
+@keyframes drawer-in {
+  from {
+    transform: translateX(100%);
+  }
+}
+@keyframes drawer-out {
+  to {
+    transform: translateX(100%);
+  }
+}
 
 /* Overlays animate on Radix's data-state with keyframes, not transitions:
    Presence keeps a closing overlay mounted only while an exit animation runs,
    and a transition would be cut off by the unmount. */
-.motion-fade[data-state='open']    { animation: fade-in var(--motion-slow) var(--ease-out); }
-.motion-fade[data-state='closed']  { animation: fade-out var(--motion-fast) var(--ease-in); }
-.motion-pop[data-state='open']     { animation: pop-in var(--motion-slow) var(--ease-out); }
-.motion-pop[data-state='closed']   { animation: pop-out var(--motion-fast) var(--ease-in); }
-.drawer-slide[data-state='open']   { animation: drawer-in var(--motion-slow) var(--ease-out); }
-.drawer-slide[data-state='closed'] { animation: drawer-out var(--motion-base) var(--ease-in); }
+.motion-fade[data-state='open'] {
+  animation: fade-in var(--motion-slow) var(--ease-out);
+}
+.motion-fade[data-state='closed'] {
+  animation: fade-out var(--motion-fast) var(--ease-in);
+}
+.motion-pop[data-state='open'] {
+  animation: pop-in var(--motion-slow) var(--ease-out);
+}
+.motion-pop[data-state='closed'] {
+  animation: pop-out var(--motion-fast) var(--ease-in);
+}
+.drawer-slide[data-state='open'] {
+  animation: drawer-in var(--motion-slow) var(--ease-out);
+}
+.drawer-slide[data-state='closed'] {
+  animation: drawer-out var(--motion-base) var(--ease-in);
+}
 
 /* A tooltip comes in from the side it opens on (Radix sets data-side). Its
    open states are delayed-open and instant-open. */
-.motion-tooltip[data-state$='open']  { animation: slide-in var(--motion-base) var(--ease-out); }
-.motion-tooltip[data-state='closed'] { animation: fade-out var(--motion-fast) var(--ease-in); }
-.motion-tooltip[data-side='top']    { --slide-y: 4px; }
-.motion-tooltip[data-side='bottom'] { --slide-y: -4px; }
-.motion-tooltip[data-side='left']   { --slide-x: 4px; }
-.motion-tooltip[data-side='right']  { --slide-x: -4px; }
+.motion-tooltip[data-state$='open'] {
+  animation: slide-in var(--motion-base) var(--ease-out);
+}
+.motion-tooltip[data-state='closed'] {
+  animation: fade-out var(--motion-fast) var(--ease-in);
+}
+.motion-tooltip[data-side='top'] {
+  --slide-y: 4px;
+}
+.motion-tooltip[data-side='bottom'] {
+  --slide-y: -4px;
+}
+.motion-tooltip[data-side='left'] {
+  --slide-x: 4px;
+}
+.motion-tooltip[data-side='right'] {
+  --slide-x: -4px;
+}
 
 /* Entrances only, for what React mounts and unmounts itself (no data-state):
    a popup, the content of a tab, the body of a disclosure. Tab content fades
    without a transform, which would make it the containing block of anything
    fixed inside it. */
-.motion-pop-in  { animation: pop-in var(--motion-base) var(--ease-out); }
-.motion-fade-in { animation: fade-in var(--motion-base) var(--ease-out); }
-.motion-reveal  { animation: reveal var(--motion-base) var(--ease-out); }
+.motion-pop-in {
+  animation: pop-in var(--motion-base) var(--ease-out);
+}
+.motion-fade-in {
+  animation: fade-in var(--motion-base) var(--ease-out);
+}
+.motion-reveal {
+  animation: reveal var(--motion-base) var(--ease-out);
+}
 /* A native <details> opens the same way as the app's own disclosures. */
-details[open] > :not(summary) { animation: reveal var(--motion-base) var(--ease-out); }
+details[open] > :not(summary) {
+  animation: reveal var(--motion-base) var(--ease-out);
+}
 
 /* Press feedback for a button: it gives a little under the pointer. `scale`,
    not `transform`, so it composes with a translate or rotate utility. Brings
@@ -197,7 +277,9 @@ details[open] > :not(summary) { animation: reveal var(--motion-base) var(--ease-
   transition-property: color, background-color, border-color, opacity, scale;
   transition-duration: var(--motion-fast);
   transition-timing-function: var(--ease-out);
-  &:active:not(:disabled) { scale: 0.97; }
+  &:active:not(:disabled) {
+    scale: 0.97;
+  }
 }
 
 /* Reduced motion, for everything: transitions and animations collapse to an
@@ -206,15 +288,23 @@ details[open] > :not(summary) { animation: reveal var(--motion-base) var(--ease-
    drops its animation outright, the indeterminate bar, whose keyframes end
    off-screen, becomes a still segment, and a pressed button does not shrink. */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
+  *,
+  *::before,
+  *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
-  .drawer-slide[data-state] { animation: none; }
-  .progress-indeterminate { animation: none; }
-  .press:active:not(:disabled) { scale: none; }
+  .drawer-slide[data-state] {
+    animation: none;
+  }
+  .progress-indeterminate {
+    animation: none;
+  }
+  .press:active:not(:disabled) {
+    scale: none;
+  }
 }
 
 /* Resizable panel handle styles */

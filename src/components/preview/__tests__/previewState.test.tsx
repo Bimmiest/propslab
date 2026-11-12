@@ -154,3 +154,30 @@ describe('Extractions pins', () => {
     expect(container.textContent).toContain('0/1 events match 1 pinned field');
   });
 });
+
+describe('the Preview filter bar', () => {
+  it('shows on the tabs it filters, and not on Timestamp or Regex', () => {
+    useAppStore.setState({ processingResult: resultOf([{ user: 'alice' }, { user: 'bob' }]) });
+    render(<PreviewPanel />);
+    for (const tab of ['Raw', 'Extractions', 'Diff']) {
+      fireEvent.click(screen.getByRole('tab', { name: tab }));
+      expect(screen.getByRole('textbox', { name: 'Search events' })).toBeInTheDocument();
+    }
+    for (const tab of ['Timestamp', 'Regex']) {
+      fireEvent.click(screen.getByRole('tab', { name: tab }));
+      expect(screen.queryByRole('textbox', { name: 'Search events' })).not.toBeInTheDocument();
+    }
+  });
+
+  it('does not hide events on Timestamp behind a search that is out of sight', () => {
+    useAppStore.setState({
+      propsConf: '[st]\nTIME_FORMAT = %Y\n',
+      processingResult: resultOf([{ user: 'alice' }, { user: 'bob' }]),
+    });
+    render(<PreviewPanel />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Raw' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search events' }), { target: { value: 'alice' } });
+    fireEvent.click(screen.getByRole('tab', { name: 'Timestamp' }));
+    expect(screen.getByText(/Event #2/)).toBeInTheDocument();
+  });
+});
