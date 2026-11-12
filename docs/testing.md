@@ -45,7 +45,7 @@ The engine tests use the `node` environment by default. Each component test sele
 
 ## End-to-end (`npm run test:e2e`)
 
-A small Playwright suite in `e2e/` runs Chromium against a **production build**. `playwright.config.ts` rebuilds before it serves the app, because an old `dist/` gives wrong answers with confidence. `npm run test:e2e:ui` opens the interactive runner.
+A small Playwright suite in `e2e/` runs Chromium against a **production build**. The `firefox` and `webkit` projects run `smoke.spec.ts` again in those two engines, because module workers, the WebAssembly load, the CSP and Trusted Types are different in each engine. `playwright.config.ts` rebuilds before it serves the app, because an old `dist/` gives wrong answers with confidence. `npm run test:e2e:ui` opens the interactive runner.
 
 **The e2e suite runs against `dist/`, not the dev server.** A change that works under `vite dev` and not in a production build will pass locally and fail in CI.
 
@@ -63,7 +63,7 @@ The suite is for the things that vitest cannot reach, because of its structure. 
   - It answers in all three workers.
   - Fetch, compile and instantiate stay inside a 2 s budget. The measured time is about 80 ms.
 - **The Monaco chunk split.** `MonacoEditor.tsx` imports the slim `monaco-editor/editor` entry, and `vite.config.ts` hand-rolls a `codeSplitting` group around it. A bad split passes the type-check and the build, and then the editor does not mount. Each hand-picked editor contribution (suggest, code actions, folding, find, hover) has a test, because the absence of a contribution also fails silently.
-- **Accessibility.** `a11y.spec.ts` runs axe-core over each main view, in both themes. The main views are the simulator, each output tab, the dictionary, the command palette, the settings, the pipeline reference and the mobile layout. The test fails on any WCAG 2.2 AA or best-practice violation. Nothing is excluded, and that includes Monaco, because its colours come from our own themes.
+- **Accessibility.** `a11y.spec.ts` runs axe-core over each main view, in both themes. The main views are the simulator, each output tab, the dictionary, the command palette, the settings, the pipeline reference and the mobile layout. The scans also include the failure states: an error boundary as a panel and as a line, a run that failed, and a dialog over that run. The test fails on any WCAG 2.2 AA or best-practice violation. Nothing is excluded, and that includes Monaco, because its colours come from our own themes.
 - **Layout at narrow widths.** `responsive.spec.ts` loads an example at 390, 820 and 1024 px. It measures the boxes of the header, the tab rows, the pane headers and the field list, and fails when one of them overflows, when a label wraps or is cut, or when a control is off the screen. At 390 px it also edits props.conf, goes to Output, and reads the new field. jsdom does no layout, so only a browser can find these faults.
 - **Performance.** `perf.spec.ts` does three things:
   - It pastes 20k events into the raw log.
@@ -74,7 +74,13 @@ The suite is for the things that vitest cannot reach, because of its structure. 
 
   `perf-vitals.spec.ts` loads the production build cold. It holds LCP, total blocking time and transferred bytes to budgets that come from measurements. Budgets for the size of each chunk are not sufficient alone: one time, they let the entry preload all of Monaco. These tests run in the `perf` Playwright project, which has no retries. They write their numbers to the job summary, with the budget next to each number.
 
+  The MCP server has the same kind of budgets in `packages/mcp-server/perf/budgets.mjs`: cold start, `simulate` on a large sample with many regexes, and peak memory. The `mcp-perf` job runs them with no retry ([ci.md](ci.md)).
+
 If you extend the suite, remember this. The app runs the pipeline one time on mount, with an empty raw log. `runPipeline` returns a real result for empty input (`eventCount: 0`). Thus the status bar shows "Worker idle · 0 events" *before* any data loads. Wait for an event count that is not zero, as `loadExample` does. Do not wait for the idle state.
+
+Playwright's WebKit tells the page that it runs on macOS, on all hosts. Thus Monaco takes Cmd for its shortcuts there, and Ctrl in the other browsers. In a test, press the keys that the `keys` fixture gives, not `Control`.
+
+To test the watchdog or the recovery after a crash, use `failPipelineWorker` in `e2e/fixtures.ts`. It serves the first fetches of the pipeline worker script as a script that sends the ready signal and then hangs or throws. The app has no test hook for this. An input cannot cause these failures reliably: the run budget and the match limits stop a slow regex before the watchdog does.
 
 `@playwright/test` is pinned to `~1.64.1`. The pin matches a specific Chromium revision, so that local development is consistent. You can bump it at any time. CI installs the browser that agrees with each version, so the pin has no effect on CI runs.
 

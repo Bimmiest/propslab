@@ -36,10 +36,25 @@ export interface StepSummary {
   eventsAffected: number;
   totalEvents: number;
   fieldsAdded: string[];
-  /** Fields this step left extractable but devalued (e.g. a mask rule). */
+  /**
+   * Fields the event had before this step, whose value it changed: at index
+   * time a `_raw` rewrite that devalued them (a mask rule), at search time a
+   * step that wrote over them (EVAL, FIELDALIAS, REPORT, KV_MODE).
+   */
   fieldsModified: string[];
   /** Fields this step made unextractable by deleting the text they anchor on. */
   fieldsRemoved: string[];
+}
+
+/**
+ * The fields a step gave a value: the ones it added and, at search time, the
+ * ones it wrote over (#900). At index time `fieldsModified` holds the fields
+ * that a `_raw` rewrite devalued, and the step is not where their value comes from.
+ */
+export function fieldsWritten(step: Pick<TraceStep, 'phase' | 'fieldsAdded' | 'fieldsModified'>): readonly string[] {
+  const added = step.fieldsAdded ?? [];
+  const modified = step.phase === 'search-time' ? (step.fieldsModified ?? []) : [];
+  return modified.length > 0 ? [...added, ...modified] : added;
 }
 
 export interface ViewResult extends Omit<ProcessingResult, 'events' | 'processingSteps'> {

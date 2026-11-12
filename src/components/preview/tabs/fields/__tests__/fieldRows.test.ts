@@ -4,6 +4,8 @@ import {
   buildAliasMap,
   buildFieldRows,
   buildRowIds,
+  countFieldKinds,
+  fieldCountLabel,
   controlledRowIds,
   countChildren,
   fieldComparator,
@@ -71,6 +73,19 @@ describe('aggregateFields', () => {
   it('marks a field an index-time rewrite changed as masked by that step', () => {
     expect(byName.get('a')!.maskedBy).toEqual(new Set(['SEDCMD-mask']));
     expect(byName.get('b')!.maskedBy.size).toBe(0);
+  });
+
+  // #900: a search-time step that wrote over a field is where its value comes from.
+  it('credits a field a search-time step wrote over as a source, not as masked', () => {
+    const evs = [
+      eventWith({ action: 'allowed' }, [
+        { processor: 'REPORT-pan', phase: 'search-time', description: '', fieldsAdded: ['action'] },
+        { processor: 'EVAL', phase: 'search-time', description: '', fieldsAdded: [], fieldsModified: ['action'] },
+      ]),
+    ];
+    const [action] = aggregateFields(evs, new Map());
+    expect(action?.sources).toEqual(new Set(['REPORT-pan', 'EVAL']));
+    expect(action?.maskedBy.size).toBe(0);
   });
 
   it('folds an alias into its source field rather than giving it a row', () => {
@@ -181,10 +196,11 @@ describe("aggregateFields with the run's statistics", () => {
     const walked = aggregateFields(view.events, aliases);
     expect(plain(aggregateFields(view.events, aliases, view.fieldStats))).toEqual(plain(walked));
     expect(plain(walked).find((f) => f.name === 'b')).toMatchObject({ count: 2, sources: ['EXTRACT-a'] });
+    // A search-time step that modified `a` wrote over it: a source, not a mask (#900).
     expect(plain(walked).find((f) => f.name === 'a')).toMatchObject({
       count: 3,
-      sources: ['EXTRACT-a'],
-      maskedBy: ['KV_MODE'],
+      sources: ['EXTRACT-a', 'KV_MODE'],
+      maskedBy: [],
     });
   });
 
@@ -330,5 +346,45 @@ describe('fieldComparator — sample values (#496)', () => {
       'early',
       'late',
     ]);
+  });
+});
+
+describe('countFieldKinds and fieldCountLabel (#894)', () => {
+  const rows = [
+    field('host', { sources: new Set([METADATA_SOURCE]), phases: new Set(['index-time']) }),
+    field('sourcetype', { sources: new Set([METADATA_SOURCE]), phases: new Set(['index-time']) }),
+    field('idx', { sources: new Set(['INDEXED_EXTRACTIONS']), phases: new Set(['index-time']) }),
+    // Made by both phases: counted once, as index-time.
+    field('both', { sources: new Set(['a', 'b']), phases: new Set(['index-time', 'search-time']) }),
+    field('s1', { sources: new Set(['EXTRACT-x']), phases: new Set(['search-time']) }),
+    field('s2', { sources: new Set(['EVAL']), phases: new Set(['search-time']) }),
+    field('s3', { sources: new Set(['EVAL']), phases: new Set(['search-time']) }),
+    // Extracted in some events and default in others: not a default field.
+    field('mixed', { sources: new Set([METADATA_SOURCE, 'EXTRACT-y']), phases: new Set(['search-time']) }),
+    field('bare'),
+  ];
+
+  it('puts each field in one kind, so the kinds add up to the total', () => {
+    const kinds = countFieldKinds(rows);
+    expect(kinds).toEqual({ total: 9, default: 2, indexTime: 2, searchTime: 4, noPhase: 1 });
+    expect(kinds.default + kinds.indexTime + kinds.searchTime + kinds.noPhase).toBe(kinds.total);
+  });
+
+  it('counts nothing for no fields', () => {
+    expect(countFieldKinds([])).toEqual({ total: 0, default: 0, indexTime: 0, searchTime: 0, noPhase: 0 });
+  });
+
+  it('names the split, leaves out a kind with none, and gives the plural', () => {
+    expect(fieldCountLabel(9, countFieldKinds(rows))).toBe(
+      '9 fields (2 default, 2 index-time, 4 search-time, 1 no phase)',
+    );
+    expect(fieldCountLabel(2, countFieldKinds(rows.slice(4, 6)))).toBe('2 fields (2 search-time)');
+    expect(fieldCountLabel(1, countFieldKinds(rows.slice(2, 3)))).toBe('1 field (1 index-time)');
+    expect(fieldCountLabel(0, countFieldKinds([]))).toBe('0 fields');
+  });
+
+  it('says how many a filter leaves, of all', () => {
+    expect(fieldCountLabel(3, countFieldKinds(rows.slice(4, 7)))).toBe('3 fields (3 search-time)');
+    expect(fieldCountLabel(1, countFieldKinds(rows.slice(4, 7)))).toBe('1 of 3 fields (3 search-time)');
   });
 });

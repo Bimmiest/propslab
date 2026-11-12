@@ -57,6 +57,25 @@ describe('EditorContextMenu', () => {
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
   });
 
+  it("opens on Shift+F10 in Monaco's textarea, with no contextmenu event from the browser (#933)", () => {
+    const host = document.createElement('div');
+    const ed = monaco.editor.create(host, { value: 'hello', language: 'plaintext' });
+    render(
+      <EditorContextMenu editor={ed} file="raw">
+        <div ref={(el) => void el?.appendChild(host)} />
+      </EditorContextMenu>,
+    );
+    const textarea = host.querySelector('textarea');
+    expect(textarea).not.toBeNull();
+    act(() => textarea?.focus());
+    fireEvent.keyDown(textarea ?? host, { key: 'F10', shiftKey: true });
+    expect(item(screen.getByRole('menu'), 'Find')).toBeInTheDocument();
+    // Chromium sends its own event for the key as well; it opens no second menu.
+    fireEvent.contextMenu(textarea ?? host);
+    expect(screen.getAllByRole('menu')).toHaveLength(1);
+    ed.dispose();
+  });
+
   it('copies the selection, and cuts it only once it is on the clipboard', async () => {
     const { ed, menu } = openMenu('hello world', 'raw', new monaco.Selection(1, 1, 1, 6));
     fireEvent.click(item(menu, 'Cut'));

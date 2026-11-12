@@ -2,7 +2,15 @@ import { useState, useMemo, useCallback, useId } from 'react';
 import { useAppStore } from '../../../../store/useAppStore';
 import { buildParentIndex, isFieldVisible } from '../shared/fieldCollapse';
 import { COLUMNS, type PhaseFilter, type SortDir, type SortKey } from './data';
-import { aggregateFields, buildAliasMap, buildFieldRows, buildRowIds, countChildren } from './fieldRows';
+import {
+  aggregateFields,
+  buildAliasMap,
+  buildFieldRows,
+  buildRowIds,
+  countChildren,
+  countFieldKinds,
+  fieldCountLabel,
+} from './fieldRows';
 import { useGroupCollapse } from '../shared/useGroupCollapse';
 import { FieldsToolbar } from './FieldsToolbar';
 import { FieldsTable } from './FieldsTable';
@@ -44,6 +52,9 @@ export function FieldsTab() {
     [events, aliasMap, result],
   );
 
+  // Of all the fields, not of the rows that a search or a phase filter leaves.
+  const fieldKinds = useMemo(() => countFieldKinds(aggregatedFields), [aggregatedFields]);
+
   const fieldSummary = useMemo(
     () => buildFieldRows(aggregatedFields, { search, phaseFilter, sortKey, sortDir }),
     [aggregatedFields, search, sortKey, sortDir, phaseFilter],
@@ -77,7 +88,7 @@ export function FieldsTab() {
       <FieldsToolbar
         search={search}
         setSearch={setSearch}
-        fieldCount={fieldSummary.length}
+        countLabel={fieldCountLabel(fieldSummary.length, fieldKinds)}
         phaseFilter={phaseFilter}
         setPhaseFilter={setPhaseFilter}
         collapseToggle={

@@ -1,4 +1,4 @@
-import { createContext, memo, Suspense, useContext, useId, useMemo, type ReactNode } from 'react';
+import { memo, Suspense, useId, useMemo } from 'react';
 import { useAppStore } from '../../store/useAppStore';
 import { Tabs } from '../ui/Tabs';
 import { tabId, tabPanelId } from '../ui/tabIds';
@@ -8,7 +8,7 @@ import type { OutputTabId } from '../../engine/types';
 import { useDebounce } from '../../hooks/useDebounce';
 import { EmptyState, FailureState } from './PreviewStates';
 import { PreviewSubTab } from './PreviewSubTab';
-import { usePipelineInputs, type PipelineInputs } from './tabs/shared/usePipelineInputs';
+import { usePipelineInputs } from './tabs/shared/usePipelineInputs';
 
 // The output tabs other than Preview, out of the entry chunk (#566): each is
 // mounted only when selected, so the cost is one chunk fetch on first open,
@@ -30,30 +30,6 @@ const ArchitecturePanel = retryableLazy(() =>
  * Most runs take tens of milliseconds, and an overlay on each one only flashes.
  */
 export const PROCESSING_OVERLAY_DELAY_MS = 150;
-
-const PipelineInputsContext = createContext<PipelineInputs | null>(null);
-
-/**
- * Holds the last run's inputs for the tabs below. Held here rather than in the
- * Effective config tab, which unmounts when another output tab is selected: in
- * manual-apply mode the inputs of the last run have to survive the edits made
- * while it is hidden.
- *
- * A component of its own because usePipelineInputs subscribes to props.conf:
- * called in PreviewPanel, every keystroke re-rendered the whole output. Here
- * only this provider re-renders; `children` is the same element each time, so
- * React skips it until the settled inputs themselves change.
- */
-function PipelineInputsProvider({ children }: { children: ReactNode }) {
-  const pipelineInputs = usePipelineInputs();
-  return <PipelineInputsContext.Provider value={pipelineInputs}>{children}</PipelineInputsContext.Provider>;
-}
-
-function usePipelineInputsContext(): PipelineInputs {
-  const inputs = useContext(PipelineInputsContext);
-  if (!inputs) throw new Error('usePipelineInputsContext outside PipelineInputsProvider');
-  return inputs;
-}
 
 export const PreviewPanel = memo(function PreviewPanel() {
   const activeTab = useAppStore((s) => s.activeOutputTab);
@@ -110,14 +86,12 @@ export const PreviewPanel = memo(function PreviewPanel() {
         aria-labelledby={tabId(tabsId, activeTab)}
         aria-busy={isProcessing}
       >
-        <PipelineInputsProvider>
-          {/* Keyed so a new tab's content fades in; the tab mounts afresh on a switch anyway. */}
-          <div key={activeTab} className="motion-fade-in h-full">
-            <Suspense fallback={null}>
-              <TabContent tab={activeTab} hasData={!!result && result.events.length > 0} failure={failure} />
-            </Suspense>
-          </div>
-        </PipelineInputsProvider>
+        {/* Keyed so a new tab's content fades in; the tab mounts afresh on a switch anyway. */}
+        <div key={activeTab} className="motion-fade-in h-full">
+          <Suspense fallback={null}>
+            <TabContent tab={activeTab} hasData={!!result && result.events.length > 0} failure={failure} />
+          </Suspense>
+        </div>
         {showOverlay && (
           <div
             className="motion-fade-in absolute inset-0 flex items-center justify-center pointer-events-none"
@@ -143,15 +117,10 @@ const TabContent = memo(function TabContent({
   hasData: boolean;
   failure: string | null;
 }) {
-  const pipelineInputs = usePipelineInputsContext();
-  // What the preview's tabs read of the inputs, kept by identity while those
-  // parts are unchanged, so an edit that only the Architecture tab reads (in
-  // transforms.conf) does not re-render the preview beneath it.
-  const { propsConf, metadata } = pipelineInputs;
-  const previewInputs = useMemo(() => ({ propsConf, metadata }), [propsConf, metadata]);
+  const pipelineInputs = usePipelineInputs();
   if (tab === 'architecture') return <ArchitecturePanel inputs={pipelineInputs} embedded />;
-  // Resolves the last run's props.conf and metadata, so it has an answer
-  // before any data has been processed — the same reason Architecture sits
+  // Resolves the props.conf and metadata of the run on screen, so it has an
+  // answer when the run produced no events — the same reason Architecture sits
   // above the gate rather than inside the switch.
   if (tab === 'effective') return <EffectiveConfigTab inputs={pipelineInputs} />;
 
@@ -165,7 +134,7 @@ const TabContent = memo(function TabContent({
 
   switch (tab) {
     case 'preview':
-      return <PreviewSubTab pipelineInputs={previewInputs} />;
+      return <PreviewSubTab />;
     case 'cim':
       return <CimModelsTab />;
     case 'fields':

@@ -4,14 +4,15 @@ import type { PhaseFilter } from './data';
 export function FieldsToolbar({
   search,
   setSearch,
-  fieldCount,
+  countLabel,
   phaseFilter,
   setPhaseFilter,
   collapseToggle,
 }: {
   search: string;
   setSearch: (value: string) => void;
-  fieldCount: number;
+  /** What the list counts, with its split: see `fieldCountLabel`. */
+  countLabel: string;
   phaseFilter: PhaseFilter;
   setPhaseFilter: (value: PhaseFilter) => void;
   /** The expand/collapse-all control, when there are parents to fold. */
@@ -34,7 +35,7 @@ export function FieldsToolbar({
           className="w-full pl-7 pr-2 py-1.5 text-xs rounded border border-[var(--color-border-control)] bg-[var(--color-bg-elevated)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent)] transition-colors"
         />
       </div>
-      <span className="text-xs text-[var(--color-text-muted)]">{fieldCount} fields</span>
+      <span className="text-xs text-[var(--color-text-muted)]">{countLabel}</span>
       <div className="flex items-center gap-0.5 rounded border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-px">
         {(['all', 'index-time', 'search-time'] as const).map((f) => (
           <button

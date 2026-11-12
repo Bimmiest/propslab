@@ -1,5 +1,5 @@
 import type { Locator, Page } from '@playwright/test';
-import { test, expect, loadExample } from './fixtures';
+import { test, expect, loadExample, pasteInto } from './fixtures';
 
 /**
  * The layout between a phone and a small laptop (#893): each control is
@@ -106,7 +106,7 @@ test.describe('the phone layout at 390 px (#893)', () => {
     await expect(filter).toHaveCount(0);
     // The last of the category choices is not cut off by the row.
     await expectOnScreen(page, page.getByRole('button', { name: /^All\s*\(\d+\)$/ }));
-    await page.getByTitle('Show fields sidebar').click();
+    await page.getByRole('button', { name: 'Field list', exact: true }).click();
     await expectOnScreen(page, filter);
     // Wide enough to read the names: it was a fifth of the width.
     expect((await box(filter)).width).toBeGreaterThan(200);
@@ -178,7 +178,7 @@ for (const width of [820, 1024]) {
       await page.getByRole('tab', { name: /^Extractions$/ }).click();
       const filter = page.getByRole('textbox', { name: 'Filter fields' });
       await expect(filter).toHaveCount(0);
-      await page.getByTitle('Show fields sidebar').click();
+      await page.getByRole('button', { name: 'Field list', exact: true }).click();
       await expect(filter).toBeVisible();
       for (const name of ['bytes_received', 'bytes_sent', 'bytes_total']) {
         const row = page.locator(`[data-field-row="${name}"]`);
@@ -214,9 +214,8 @@ test('at 390 px an edit to props.conf reaches the Output panel (#891)', async ({
   await loadExample(page, APACHE);
 
   await page.getByRole('tab', { name: 'props', exact: true }).click();
-  await page.locator('.monaco-editor').first().click();
-  await page.keyboard.press('Control+End');
-  await page.keyboard.type('\nEVAL-phone_marker = "on a phone"\n');
+  // The phone mounts one editor: the props.conf one is the first.
+  await pasteInto(page, 0, '\nEVAL-phone_marker = "on a phone"\n', 'end');
 
   await page.getByRole('tab', { name: 'Output', exact: true }).click();
   await page.getByRole('tab', { name: /^Fields$/ }).click();

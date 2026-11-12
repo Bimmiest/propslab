@@ -1,11 +1,10 @@
-import { useMemo } from 'react';
 import { useAppStore, EMPTY_INPUTS } from '../../store/useAppStore';
 import { ThemeToggle } from '../ui/ThemeToggle';
 import { ProgressBar } from '../ui/ProgressBar';
 import { Icon, type IconName } from '../ui/Icon';
 import { ClearButton } from '../editor/ClearButton';
 import { Tooltip } from '../ui/Tooltip';
-import { countByLevel } from '../../utils/diagnosticCounts';
+import { useProblemCounts } from '../editor/useFileProblems';
 import { ExamplesMenu } from '../examples/ExamplesMenu';
 import { HeaderMenu } from './HeaderMenu';
 import { getModifierName, isApplePlatform } from '../../utils/platform';
@@ -66,7 +65,6 @@ function PanelToggle({
 }
 
 export function Header() {
-  const diagnostics = useAppStore((s) => s.validationDiagnostics);
   const isProcessing = useAppStore((s) => s.isProcessing);
   const result = useAppStore((s) => s.processingResult);
   const loadInputs = useAppStore((s) => s.loadInputs);
@@ -85,7 +83,8 @@ export function Header() {
   // re-renders on every keystroke even though hasAnyContent never changes.
   const hasAnyContent = useAppStore((s) => Boolean(s.rawData || s.propsConf || s.transformsConf));
 
-  const { error: errorCount, warning: warningCount } = useMemo(() => countByLevel(diagnostics), [diagnostics]);
+  // The problems the editors' panels list, so the counts agree with them (#899).
+  const { error: errorCount, warning: warningCount } = useProblemCounts();
 
   const modifierName = getModifierName();
 
