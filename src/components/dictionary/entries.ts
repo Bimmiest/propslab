@@ -1,4 +1,4 @@
-import { getAllDirectives, type DirectiveInfo, STANZA_KINDS, type StanzaKind } from '../../engine';
+import { getAllDirectives, type DirectiveInfo, STANZA_KINDS, type StanzaKind } from 'propslab-engine';
 
 /**
  * One selectable thing in the dictionary. Stanza headers and directives are

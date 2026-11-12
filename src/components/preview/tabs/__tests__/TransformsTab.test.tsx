@@ -3,9 +3,9 @@ import type React from 'react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render as rtlRender, fireEvent, within, act } from '@testing-library/react';
 import * as RadixTooltip from '@radix-ui/react-tooltip';
+import type { SplunkEvent, ProcessingStep } from 'propslab-engine';
 import { TransformsTab } from '../TransformsTab';
 import { useAppStore } from '../../../../store/useAppStore';
-import type { SplunkEvent, ProcessingStep } from '../../../../engine';
 import { toViewResult, type ViewResult } from '../../../../utils/viewResult';
 import { makeEvent } from '../../../../test/makeEvent';
 

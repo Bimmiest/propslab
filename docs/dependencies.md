@@ -4,7 +4,7 @@ type: reference
 
 # Dependencies
 
-The pins that move by hand, the supply-chain checks, the regex engine's binary, the overrides, and how to review a Dependabot pull request. [CONTRIBUTING.md](../CONTRIBUTING.md#dependencies) has the summary.
+The pins that move by hand, the supply-chain checks, the engine and its regex engine, the overrides, and how to review a Dependabot pull request. [CONTRIBUTING.md](../CONTRIBUTING.md#dependencies) has the summary.
 
 ## Pins that move by hand
 
@@ -14,15 +14,23 @@ Dependabot ignores each pin in this table, so no tool tells you when one can mov
 | ------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
 | `marked` `14.0.0`         | `package.json` devDependencies; ignored in `.github/dependabot.yml` | The hover tests must render Markdown with the copy that Monaco bundles.                                 | `monaco-editor` declares a different `marked`. A test (`src/__tests__/dependencyPins.test.ts`) fails and gives the version to set, so there is no reminder to remember. | `npx vitest run src/__tests__/dependencyPins.test.ts` |
 | `typescript` `~6.0.3`     | `package.json`; semver-major ignored in `.github/dependabot.yml`    | `typescript-eslint` declares the peer range `>=4.8.4 <6.1.0`, so TypeScript 7 does not install cleanly. | A `typescript-eslint` release accepts TypeScript 7. Tracked in [#930](https://github.com/Bimmiest/propslab/issues/930).                                                 | `npm view typescript-eslint peerDependencies`         |
-| `pcre2-wasm-utf16` commit | Both `package.json` files, and `pcre2.wasm.sha256` at the root      | A commit hash cannot move. The root hash lets a reviewer see a change of the binary.                    | A new release of the module. The change is yours to make: see [the regex engine's binary](#the-regex-engines-binary).                                                   | `node scripts/check-wasm-checksum.mjs`                |
+| `propslab-engine` commit, and the `pcre2-wasm-utf16` commit with it | Both `package.json` files | A git dependency is pinned by commit, and Dependabot does not move it. The engine owns the regex engine's pin, so both copies here follow it. | A new release of the engine: see [the engine and its regex engine](#the-engine-and-its-regex-engine). | `server.e2e.test.ts`, and `node scripts/check-wasm-checksum.mjs` |
 | `qs` override             | `package.json` `overrides`, under `typed-rest-client`               | Stryker 10 gets a `qs` with denial-of-service advisories.                                               | Stryker depends on a `typed-rest-client` with a fixed `qs`. Tracked in [#797](https://github.com/Bimmiest/propslab/issues/797).                                         | `npm run check:overrides`                             |
 | `dompurify` override      | `package.json` `overrides`, under `monaco-editor`                   | `monaco-editor` 0.57 declares `dompurify` 3.4.15 exactly, and that version carries advisories.          | A `monaco-editor` release inlines a fixed `dompurify`. Tracked in [#798](https://github.com/Bimmiest/propslab/issues/798).                                              | `npm run check:overrides`                             |
 
 The `@radix-ui/*` overrides are not in the table: they are removed. [The Radix packages](#the-radix-packages) says why.
 
-## The regex engine's binary
+## The engine and its regex engine
 
-The module lives in its own repository, [`Bimmiest/pcre2-wasm-utf16`](https://github.com/Bimmiest/pcre2-wasm-utf16), and this one depends on it by commit (`package.json`), not by tag: a tag can be moved, a commit hash cannot. That repository commits `pcre2.wasm`, built from a pinned PCRE2 release with clang 18 and `wasm-ld`, and its CI rebuilds it and fails unless the result is byte-identical, so the binary is known to come from the source. To change it — a PCRE2 upgrade, a bridge change — make the change there, tag a release, and move the commit in `package.json` here and in `packages/mcp-server/package.json`, which declares it too (a test in the package fails while the two differ). Copy the new `pcre2.wasm.sha256` of the release to the root of this repository in the same change. Thus the reviewer sees the hash change (#567). Both lockfiles record the dependency as `git+ssh://git@github.com/...#<commit>`, with no integrity hash. That is how npm writes every GitHub dependency, and no `package.json` spelling changes it (tried: the `git+https://` form resolves to the same line). It is not what an install does: npm fetches such a dependency over https first (the commit's tarball, then a clone) and tries ssh only after that fails, so CI needs no ssh key; checked by running `npm ci` with ssh unavailable. With no hash in the lockfile, two copies of `pcre2.wasm.sha256` vouch for the binary: the copy in the package and the copy at the root of this repository. `scripts/check-wasm-checksum.mjs` verifies the binary against both in every job that installs it.
+The engine is the [`propslab-engine`](https://github.com/Bimmiest/propslab-engine) package, and both `package.json` files depend on it by commit. It owns the pin of [`pcre2-wasm-utf16`](https://github.com/Bimmiest/pcre2-wasm-utf16), the PCRE2 WebAssembly module, and its checksum ([ADR 0023](adr/0023-the-engine-moves-to-a-repository-of-its-own.md)). The app still declares the module itself, because it imports the module's asset URL, and the MCP server copies the binary into its build.
+
+To take a new release of the engine, in one pull request:
+
+1. Move the `propslab-engine` commit in both `package.json` files to the commit of the release's tag.
+2. Move the `pcre2-wasm-utf16` commit in both files to the commit that the engine's `package.json` declares.
+3. Run `npm install` in the root and in `packages/mcp-server`, and the gates.
+
+`server.e2e.test.ts` fails when the two `package.json` files or the two lockfiles differ, or when the regex engine's pin differs from the engine's. Both lockfiles record a GitHub dependency as `git+ssh://git@github.com/...#<commit>`, with no integrity hash. That is how npm writes every GitHub dependency, and no `package.json` spelling changes it. It is not what an install does: npm fetches such a dependency over https first (the commit's tarball, then a clone), so CI needs no ssh key. With no hash in the lockfile, `scripts/check-wasm-checksum.mjs` verifies the binary against the `pcre2.wasm.sha256` that the module ships, and against the one that the engine ships, in every job that installs it.
 
 ## Supply-chain checks
 

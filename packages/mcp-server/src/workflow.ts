@@ -6,7 +6,7 @@
  */
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { getDirectivesForFile } from '../../../src/engine';
+import { getDirectivesForFile } from 'propslab-engine';
 
 export const DIRECTIVE_REGISTRY_URI = 'propslab://directives';
 

@@ -26,7 +26,7 @@ The repository also contains [`packages/mcp-server`](packages/mcp-server/README.
 ## In scope
 
 - **Cross-site scripting**, particularly through the paths that render user-controlled text: event `_raw`, extracted field names and values, diagnostic messages, and Monaco hover/completion content.
-- **Prototype pollution** through field names. Extracted names come from user data and are written into plain objects; `src/engine/utils/fieldBag.ts` exists specifically to make that safe, and a bypass of it is a real finding.
+- **Prototype pollution** through field names. Extracted names come from user data and are written into plain objects; the engine's `src/utils/fieldBag.ts` ([propslab-engine](https://github.com/Bimmiest/propslab-engine)) exists specifically to make that safe, and a bypass of it is a real finding.
 - **Content Security Policy weaknesses.** The policy ships twice — a `<meta>` tag in `index.html` and a response header from `public/staticwebapp.config.json`, which is the copy the Web Workers obey — and the e2e suite runs the production build under both; a way to load or execute anything it is meant to forbid is in scope.
 - **Dependency vulnerabilities** that are actually reachable from this application's code. CI runs `npm audit` on production dependencies for every PR.
 - **Secrets in the repository or its history.** CI scans the whole history on every pull request and weekly; a hit is rotated, never allowlisted.

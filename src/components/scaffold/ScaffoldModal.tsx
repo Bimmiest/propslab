@@ -1,6 +1,4 @@
 import { useMemo, useState } from 'react';
-import { DialogButton, DialogFooter, DialogFrame, DialogHeader } from '../ui/DialogFrame';
-import { useAppStore } from '../../store/useAppStore';
 import {
   scaffoldConfig,
   renderStanza,
@@ -9,7 +7,9 @@ import {
   type Confidence,
   type ScaffoldSuggestion,
   escapeRegex,
-} from '../../engine';
+} from 'propslab-engine';
+import { DialogButton, DialogFooter, DialogFrame, DialogHeader } from '../ui/DialogFrame';
+import { useAppStore } from '../../store/useAppStore';
 
 type ScaffoldResult = ReturnType<typeof scaffoldConfig>;
 import { computeDiff } from '../../utils/diffEngine';

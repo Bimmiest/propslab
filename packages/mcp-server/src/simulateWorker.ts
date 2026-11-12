@@ -19,7 +19,7 @@ import {
   type ConfDirective,
   type ConfStanza,
   initRegexEngineSync,
-} from '../../../src/engine';
+} from 'propslab-engine';
 import type {
   ExplainDirective,
   ExplainRequest,

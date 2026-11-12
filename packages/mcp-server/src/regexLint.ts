@@ -17,7 +17,7 @@ import {
   type ParsedConf,
   type ValidationDiagnostic,
   validateRegex,
-} from '../../../src/engine';
+} from 'propslab-engine';
 import { directivePatterns } from './directivePatterns';
 
 export function lintRegexDirectives(propsConf: ParsedConf, transformsConf: ParsedConf): ValidationDiagnostic[] {

@@ -1,8 +1,8 @@
+import { METADATA_FIELD_NAMES, getMetadataField } from 'propslab-engine';
 import { fieldsWritten, type TraceStep, type ViewEvent } from '../../../../utils/viewResult';
 import { fieldCollator, type FieldStats } from '../../../../utils/fieldStats';
 import type { WindowSegment } from '../../../../hooks/useWindowedRows';
 import type { PhaseFilter, SortDir, SortKey } from './data';
-import { METADATA_FIELD_NAMES, getMetadataField } from '../../../../engine';
 
 /** The source a default field (host, source, sourcetype, index) is credited to. */
 export const METADATA_SOURCE = 'metadata';

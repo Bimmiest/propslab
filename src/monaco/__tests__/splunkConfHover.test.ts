@@ -1,11 +1,11 @@
 import { describe, it, expect, vi } from 'vitest';
 import { marked, type Tokens } from 'marked';
 import type { Position, languages } from 'monaco-editor';
+import { getDirectiveInfo, type DirectiveInfo, classifyStanza, getStagesForDirective } from 'propslab-engine';
 import { createHoverProvider } from '../splunkConfHover';
 import { OPEN_DICTIONARY_COMMAND_ID, openDictionaryCommandUri } from '../dictionaryCommand';
 import { escapeMarkdown, inlineCode } from '../markdown';
 import { fakeModel } from '../../test/fakeModel';
-import { getDirectiveInfo, type DirectiveInfo, classifyStanza, getStagesForDirective } from '../../engine';
 
 /**
  * No directive is `ignored` today, so the hover's "Not simulated" branch is fed
@@ -16,8 +16,8 @@ const SYNTHETIC: Record<string, Partial<DirectiveInfo>> = {
   ZZ_IGNORED_BARE: { support: 'ignored' },
   ZZ_DOCUMENTED_BARE: { support: 'documented' },
 };
-vi.mock('../../engine', async (importOriginal) => {
-  const original = await importOriginal<typeof import('../../engine')>();
+vi.mock('propslab-engine', async (importOriginal) => {
+  const original = await importOriginal<typeof import('propslab-engine')>();
   return {
     ...original,
     getDirectiveInfo: (key: string, file: 'props.conf' | 'transforms.conf') => {

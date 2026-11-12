@@ -48,10 +48,9 @@ async function fixed(filePath: string, code: string): Promise<string> {
 const FILE = 'src/utils/a.ts';
 
 describe('the import-order rule', () => {
-  it('is on for the app, the engine, the MCP server, the e2e specs and the scripts', async () => {
+  it('is on for the app, the MCP server, the e2e specs and the scripts', async () => {
     for (const file of [
       'src/components/A.tsx',
-      'src/engine/a.ts',
       'packages/mcp-server/src/tools.ts',
       'e2e/a.spec.ts',
       'scripts/check-radix-overrides.mjs',

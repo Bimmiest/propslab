@@ -2,9 +2,9 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import * as RadixTooltip from '@radix-ui/react-tooltip';
+import type { ValidationDiagnostic, SplunkEvent } from 'propslab-engine';
 import { StatusBar } from '../StatusBar';
 import { useAppStore } from '../../../store/useAppStore';
-import type { ValidationDiagnostic, SplunkEvent } from '../../../engine';
 import { toViewResult, type ViewResult } from '../../../utils/viewResult';
 import { EMPTY_FIELD_STATS } from '../../../utils/fieldStats';
 import { makeEvent } from '../../../test/makeEvent';

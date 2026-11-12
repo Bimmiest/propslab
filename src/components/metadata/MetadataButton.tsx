@@ -7,8 +7,8 @@
 // ---------------------------------------------------------------------------
 
 import { useState, type KeyboardEvent } from 'react';
+import type { EventMetadata } from 'propslab-engine';
 import { useAppStore } from '../../store/useAppStore';
-import type { EventMetadata } from '../../engine';
 import { DialogButton, DialogFooter, DialogFrame, DialogHeader } from '../ui/DialogFrame';
 import { Icon } from '../ui/Icon';
 

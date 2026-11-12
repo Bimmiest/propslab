@@ -1,7 +1,7 @@
 {
   // The options every project here shares. Each project sets its own target,
   // lib, types and build-info file, which differ on purpose (see
-  // tsconfig.engine.json). packages/mcp-server has its own install and keeps
+  // tsconfig.worker.json). packages/mcp-server has its own install and keeps
   // its own copy.
   "compilerOptions": {
     "module": "ESNext",

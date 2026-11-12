@@ -32,15 +32,7 @@ Propslab is a browser-based simulator of the Splunk pipeline that applies `props
 
 You give Propslab a raw log, its metadata, a `props.conf` and a `transforms.conf`. Propslab divides the log into events, and runs the 11 stages of the pipeline in the order that Splunk uses. It resolves stanza precedence as Splunk does. The output tabs show the events, the timestamps, the extracted fields, a diff of `_raw`, the CIM coverage and the effective configuration. All of the simulation runs in the browser.
 
-**Maturity.** Propslab is at version 1.3.0 ([CHANGELOG](CHANGELOG.md)). Each commit on `main` that passes CI goes to production. Each directive that the registry knows has one of three support levels. [`src/engine/directiveSupport.ts`](src/engine/directiveSupport.ts) declares them:
-
-| Level | Count | What it means |
-|---|---|---|
-| **simulated** | 77 | The engine implements it, and tests assert the behaviour. |
-| **documented** | 72 | Recognised on purpose, and outside the simulation for a reason that does not change. It belongs to a layer that a browser cannot access, or it has no observable effect on the output. |
-| **ignored** | 0 | Must be simulated, but is not yet. Its entry names the issue that tracks it. Each one of these is a known wrong answer. |
-
-A test asserts the counts against the table itself, so they cannot become incorrect. **0** attributes are valid in Splunk 10.4.3 and absent from the registry.
+**Maturity.** Propslab is at version 1.3.0 ([CHANGELOG](CHANGELOG.md)). Each commit on `main` that passes CI goes to production. The simulation is the [`propslab-engine`](https://github.com/Bimmiest/propslab-engine) package. Its README gives the support level of each directive that the registry knows: simulated, documented or ignored.
 
 **What it is not.** Propslab is not Splunk, and it does not prove that a config is correct. It does not simulate lookups, the forwarder and input layers, or segmentation. Propslab does not distribute recorded outputs from Splunk Enterprise, so the engine tests assert against the documentation ([ADR 0016](docs/adr/0016-recorded-splunk-output-is-not-distributed.md)). If an output looks suspicious, verify it against a real indexer before you rely on it. [Simulation fidelity](docs/fidelity.md) gives the full boundary.
 
@@ -63,7 +55,7 @@ Open [propslab.vero-labs.net](https://propslab.vero-labs.net), or run the app lo
 
 ### MCP server
 
-[`packages/mcp-server`](packages/mcp-server) is an MCP server over the same engine. It has four tools: `simulate`, `validate`, `explain_precedence` and `lookup_directive`. It also has a prompt for the draft, simulate and fix workflow, and a resource that holds the directive registry with the support level of each directive. With these tools, an LLM agent can run a config against real sample data, and it does not have to guess. The server obeys the rules for untrusted regexes that [docs/engine.md](docs/engine.md) gives. Each engine run occurs in a worker thread that the server can stop, within a wall-clock budget.
+[`packages/mcp-server`](packages/mcp-server) is an MCP server over the same engine. It has four tools: `simulate`, `validate`, `explain_precedence` and `lookup_directive`. It also has a prompt for the draft, simulate and fix workflow, and a resource that holds the directive registry with the support level of each directive. With these tools, an LLM agent can run a config against real sample data, and it does not have to guess. The server obeys the rules for untrusted regexes that [the engine's API guide](https://github.com/Bimmiest/propslab-engine/blob/main/docs/api.md) gives. Each engine run occurs in a worker thread that the server can stop, within a wall-clock budget.
 
 To build the server and add it to Claude Code, run these commands from the root of a clone:
 

@@ -11,7 +11,7 @@
  */
 
 import wasmUrl from 'pcre2-wasm-utf16/pcre2.wasm?url';
-import { initRegexEngine } from '../engine';
+import { initRegexEngine } from 'propslab-engine';
 import { WORKER_READY } from './workerProtocol';
 
 let loading: Promise<void> | null = null;

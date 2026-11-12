@@ -1,7 +1,7 @@
 # propslab-mcp
 
 An [MCP](https://modelcontextprotocol.io) server over the propslab simulation
-engine (`src/engine/**`), so an LLM agent can *simulate* a Splunk config
+engine ([`propslab-engine`](https://github.com/Bimmiest/propslab-engine)), so an LLM agent can *simulate* a Splunk config
 against real sample data instead of guessing about it — draft a props.conf,
 run it, read the per-event `processingTrace`, and fix its own mistake.
 Implements [#202](https://github.com/Bimmiest/propslab/issues/202).
@@ -133,7 +133,7 @@ launcher still re-execs node with the regex-fallback flags either way.
 ## Security model
 
 The server executes regexes the agent wrote and the user may not have
-reviewed. `docs/engine.md`'s closing section is the spec this implements:
+reviewed. The closing section of the engine's [API guide](https://github.com/Bimmiest/propslab-engine/blob/main/docs/api.md) is the spec this implements:
 
 - **Every engine run happens in a worker thread with a wall-clock budget**
   (default 5s, `timeout_ms` per call) and hard `worker.terminate()` on
@@ -345,6 +345,6 @@ within a fixed bound of its budget, with the server's event loop never
 stalled for a second. A change that lets agent input wedge the server
 should fail it.
 
-The engine is imported from `../../src/engine` as-is; this package makes no
+The engine is the `propslab-engine` package, at the tag that the app pins; this package makes no
 engine changes, which is the boundary #202 draws — if one ever seems needed,
 that's an issue to file, not a patch to hide here.

@@ -12,8 +12,8 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { Position, languages, CancellationToken } from 'monaco-editor';
+import { probeTimestamps, SplunkRegex } from 'propslab-engine';
 import type { TimestampMatchRequest, TimestampMatchResponse } from '../../workers/timestampMatchWorker';
-import { probeTimestamps, SplunkRegex } from '../../engine';
 import { useAppStore } from '../../store/useAppStore';
 import { LOAD_WAIT_FACTOR } from '../../workers/workerLifecycle';
 import { createHoverProvider } from '../splunkConfHover';

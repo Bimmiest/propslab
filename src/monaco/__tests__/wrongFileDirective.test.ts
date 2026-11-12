@@ -3,8 +3,8 @@
 // in — rather than "recognised but not simulated" or "possible typo?". Lives
 // beside the editor tests because the point is that the two validators agree.
 import { describe, it, expect } from 'vitest';
+import { runPipeline, wrongFileCanonical, type EventMetadata, type ValidationDiagnostic } from 'propslab-engine';
 import { computeDiagnostics } from '../splunkConfDiagnostics';
-import { runPipeline, wrongFileCanonical, type EventMetadata, type ValidationDiagnostic } from '../../engine';
 import { FIXED_NOW } from '../../test/runCtx';
 import { fakeModel } from '../../test/fakeModel';
 

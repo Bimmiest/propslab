@@ -3,7 +3,7 @@
 // Which of an event's metadata keys the run rewrote, and by which transform.
 // ---------------------------------------------------------------------------
 
-import type { EventMetadata } from '../../../../engine';
+import type { EventMetadata } from 'propslab-engine';
 import type { ViewEvent } from '../../../../utils/viewResult';
 
 /** Map from metadata key to the DEST_KEY name used in transforms.conf */

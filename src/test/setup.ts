@@ -4,7 +4,7 @@
 // The module itself, not the engine's entry point: importing the entry point here
 // would load every engine module before a test's vi.mock registers, and the
 // mock would then miss the module it names.
-import { initRegexEngineSync } from '../engine/utils/splunkRegex';
+import { initRegexEngineSync } from 'propslab-engine';
 
 type GetBuiltinModule = (id: 'node:fs') => { readFileSync(path: string): Uint8Array };
 

@@ -13,7 +13,7 @@
  * The bounding runs in the sandbox worker wherever the payload is built
  * there, so an oversized result never crosses to the server's thread.
  */
-import type { ValidationDiagnostic } from '../../../src/engine';
+import type { ValidationDiagnostic } from 'propslab-engine';
 import type { ExplainResponse, ExplainStanza, ValidateResponse } from './protocol';
 
 /**

@@ -6,7 +6,7 @@
 // ---------------------------------------------------------------------------
 
 import { useCallback, useId, useLayoutEffect, useRef, useState } from 'react';
-import { SAMPLE_CONFIGS, type SampleConfig } from '../../engine';
+import { SAMPLE_CONFIGS, type SampleConfig } from 'propslab-engine';
 import { usePopoverDismiss } from '../../hooks/usePopoverDismiss';
 import { Icon, type IconName } from '../ui/Icon';
 import { useReplaceInputs } from '../ui/useReplaceInputs';

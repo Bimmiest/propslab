@@ -57,7 +57,7 @@ Until the admin completes these steps, any workflow on any branch can read the t
 
 ## Scheduled runs
 
-`ci.yml`, `audit.yml`, `security.yml`, `mutation.yml`, `environment.yml`, `settings.yml`, `roster.yml` and `supply-chain.yml` also run on a schedule, to find problems that occur without a push. If a scheduled run fails, its `report` job opens an issue with a `scheduled-*` label. If an issue with that label is open, the job adds a comment to it. Close the issue when the fix is on main.
+`ci.yml`, `audit.yml`, `security.yml`, `mutation.yml`, `environment.yml`, `settings.yml` and `supply-chain.yml` also run on a schedule, to find problems that occur without a push. If a scheduled run fails, its `report` job opens an issue with a `scheduled-*` label. If an issue with that label is open, the job adds a comment to it. Close the issue when the fix is on main.
 
 If an automatic deploy fails, the `report` job of the deploy workflow opens an issue with the label `deploy-failed`, or adds a comment to the open issue. If the header check failed, the site serves the new bundle. The issue tells you how to restore the previous bundle.
 

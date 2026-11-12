@@ -1,6 +1,6 @@
 import { PassThrough } from 'node:stream';
 import { describe, expect, it, vi } from 'vitest';
-import type { ValidationDiagnostic } from '../../../../src/engine';
+import type { ValidationDiagnostic } from 'propslab-engine';
 import type { ExplainResponse, ExplainStanza } from '../protocol';
 import {
   boundExplain,

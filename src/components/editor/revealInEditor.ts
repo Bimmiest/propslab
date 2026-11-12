@@ -1,5 +1,5 @@
 import type { editor } from 'monaco-editor';
-import type { DiagnosticTarget } from '../../engine';
+import type { DiagnosticTarget } from 'propslab-engine';
 import { useAppStore, type MobileView } from '../../store/useAppStore';
 import { getEditor, onEditorRegistered } from './editorRegistry';
 

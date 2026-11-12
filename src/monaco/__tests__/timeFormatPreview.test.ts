@@ -9,6 +9,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { marked } from 'marked';
+import { probeTimestamps, unsupportedSpecifiers } from 'propslab-engine';
 import {
   buildTimeFormatPreview as buildWith,
   describeTimeFormat,
@@ -18,7 +19,6 @@ import {
   type TimeFormatPreviewOptions,
 } from '../timeFormatPreview';
 import { TIME_PREFIX_TIMEOUT_MS, type PrefixMatchOutcome, type PrefixMatcher } from '../timePrefixMatcher';
-import { probeTimestamps, unsupportedSpecifiers } from '../../engine';
 
 /**
  * Stands in for the worker by running what the worker runs — the Timestamp

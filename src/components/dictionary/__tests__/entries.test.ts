@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { getAllDirectives, STANZA_KINDS } from 'propslab-engine';
 import {
   buildEntries,
   filterEntries,
@@ -9,7 +10,6 @@ import {
   STANZA_GROUP,
   STANZA_ID_PREFIX,
 } from '../entries';
-import { getAllDirectives, STANZA_KINDS } from '../../../engine';
 
 const ENTRIES = buildEntries();
 

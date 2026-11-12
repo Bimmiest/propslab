@@ -7,7 +7,7 @@ import {
   mergeDirectives,
   readTimestampLocation,
   type ConfDirective,
-} from '../engine';
+} from 'propslab-engine';
 import { OPEN_DICTIONARY_COMMAND_ID, openDictionaryCommandUri } from './dictionaryCommand';
 import { escapeMarkdown, inlineCode } from './markdown';
 import { buildTimeFormatPreview, renderTimeFormatPreview } from './timeFormatPreview';
@@ -165,7 +165,7 @@ const DIRECTIVE_HOVER_TRUST: MarkdownStringTrustedOptions = {
  * Markdown for a directive-key hover. `actualKey` is document text, so it (and
  * the class name cut from it) is escaped; everything else is registry text.
  */
-function formatDirectiveHover(info: import('../engine').DirectiveInfo, actualKey: string): string {
+function formatDirectiveHover(info: import('propslab-engine').DirectiveInfo, actualKey: string): string {
   const parts: string[] = [];
 
   parts.push(`### ${escapeMarkdown(actualKey)}`);

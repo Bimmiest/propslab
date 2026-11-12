@@ -6,7 +6,7 @@
 // disagree on how a full name is joined (vitest 5 uses " > "), every test inside
 // a describe() is filtered out, zero tests run per mutant, and every mutant
 // reads as SURVIVED. The run then "looks healthy" and simply scores near zero —
-// a whole-engine score only notices it hours later, and only if it falls under
+// a whole-run score only notices it hours later, and only if it falls under
 // `thresholds.break`.
 //
 // This checks a report from a run over one small, thoroughly tested file
@@ -22,7 +22,7 @@ import { pathToFileURL } from 'node:url';
 import { tally } from './lib/mutationShards.mjs';
 
 /** The file the canary run mutates; keep in step with package.json and mutation.yml. */
-export const CANARY_FILE = 'src/engine/utils/wildcardMatch.ts';
+export const CANARY_FILE = 'src/monaco/markdown.ts';
 /**
  * A run of this file measures 39 killed of 43 (90.7%). The margins are wide on
  * purpose: this detects a broken harness, not a weakened test — the score gate

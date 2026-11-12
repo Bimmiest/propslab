@@ -21,11 +21,11 @@
 
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
+import { SAMPLE_CONFIGS } from 'propslab-engine';
 import { useProcessingPipeline } from '../useProcessingPipeline';
 import { LOAD_WAIT_FACTOR, type ManagedWorkerConfig } from '../../workers/workerLifecycle';
 import { useAppStore } from '../../store/useAppStore';
 import type { PipelineWorkerRequest } from '../../workers/pipelineWorker';
-import { SAMPLE_CONFIGS } from '../../engine';
 
 // The real lifecycle, with each config kept so a test can hand the hook's
 // policy a callback the lifecycle's own timing no longer produces.

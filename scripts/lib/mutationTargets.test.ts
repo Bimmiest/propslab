@@ -10,26 +10,23 @@ describe('selectMutated', () => {
     expect(
       selectMutated(
         [
-          'src/engine/pipeline.ts',
-          'src/engine/processors/lineBreaker.ts',
-          'src/engine/utils/splunkRegex.ts',
+          'src/monaco/markdown.ts',
           'src/store/useAppStore.ts',
-          'src/engine/types.ts',
+          'src/workers/workerLifecycle.ts',
           'src/workers/pipelineWorker.ts',
-          'src/engine/registry/propsDirectives.ts',
-          'src/engine/directiveSupport.ts',
-          'src/engine/__tests__/lineBreaker.test.ts',
+          'src/store/__tests__/useAppStore.test.ts',
           'src/utils/viewResult.ts',
+          'packages/mcp-server/src/tools.ts',
           'packages/mcp-server/src/runInWorker.ts',
-          'docs/engine.md',
+          'docs/testing.md',
         ],
         globs,
       ),
     ).toEqual([
-      'src/engine/pipeline.ts',
-      'src/engine/processors/lineBreaker.ts',
-      'src/engine/utils/splunkRegex.ts',
+      'src/monaco/markdown.ts',
       'src/store/useAppStore.ts',
+      'src/workers/workerLifecycle.ts',
+      'packages/mcp-server/src/tools.ts',
     ]);
   });
 

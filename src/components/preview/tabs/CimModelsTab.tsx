@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
+import { validateCimCompliance } from 'propslab-engine';
 import { useAppStore } from '../../../store/useAppStore';
-import { validateCimCompliance } from '../../../engine';
 import { ProgressBar } from '../../ui/ProgressBar';
 import { Icon } from '../../ui/Icon';
 import { copyQuietly } from '../../../utils/clipboard';

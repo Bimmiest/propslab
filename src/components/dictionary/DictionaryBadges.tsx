@@ -1,5 +1,5 @@
 import type React from 'react';
-import type { DirectiveInfo } from '../../engine';
+import type { DirectiveInfo } from 'propslab-engine';
 import { tint } from '../../utils/tint';
 
 type Tone = 'index' | 'search' | 'neutral' | 'danger';

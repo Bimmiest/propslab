@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { matchInputs, type RegexMatchInfo } from 'propslab-engine';
 import {
   addBlockReason,
   alignResults,
@@ -8,7 +9,6 @@ import {
   extractNamedGroups,
   highlightSegments,
 } from '../regexLogic';
-import { matchInputs, type RegexMatchInfo } from '../../../../../engine';
 import { fieldColorAt } from '../../shared/fieldColors';
 
 /** The first match of `pattern` in `raw`, as the worker reports it. */

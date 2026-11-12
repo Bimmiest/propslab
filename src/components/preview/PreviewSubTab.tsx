@@ -6,10 +6,10 @@
 
 import { memo, useEffect, useId, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
+import type { PreviewSubTabId } from 'propslab-engine';
 import { useAppStore, type PreviewFilters } from '../../store/useAppStore';
 import { Tabs } from '../ui/Tabs';
 import { tabId, tabPanelId } from '../ui/tabIds';
-import type { PreviewSubTabId } from '../../engine';
 import { RawTab } from './tabs/RawTab';
 import { HighlightedTab } from './tabs/HighlightedTab';
 import type { PinnedView } from './tabs/highlighted/usePinnedRows';

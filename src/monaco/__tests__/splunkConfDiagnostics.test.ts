@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import { MISSPELLED_MESSAGE } from 'propslab-engine';
 import { computeDiagnostics, MISSPELLED_MARKER_CODE } from '../splunkConfDiagnostics';
-import { MISSPELLED_MESSAGE } from '../../engine';
 import { fakeModel } from '../../test/fakeModel';
 import { expectLinearWork } from '../../test/scanWork';
 

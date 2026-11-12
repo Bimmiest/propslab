@@ -12,8 +12,8 @@ import { stubWasmFetch } from '../../test/wasmFetch';
 // A plain variable rather than a `vi.fn`: vitest fails a test whose mock
 // throws, even when the code under test catches it, and throwing is the point.
 let probeImpl: () => unknown[] = () => [];
-vi.mock('../../engine', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../engine')>()),
+vi.mock('propslab-engine', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('propslab-engine')>()),
   probeTimestamps: (): unknown[] => probeImpl(),
 }));
 

@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
+import { validateRegex } from 'propslab-engine';
 import { useRegexMatch } from '../../../../hooks/useRegexMatch';
-import { validateRegex } from '../../../../engine';
 
 export type Capture =
   | { state: 'empty' }

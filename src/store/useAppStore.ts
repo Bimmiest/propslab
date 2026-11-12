@@ -1,5 +1,5 @@
 import { create, type StoreApi } from 'zustand';
-import type { EventMetadata, OutputTabId, PreviewSubTabId, ValidationDiagnostic } from '../engine';
+import type { EventMetadata, OutputTabId, PreviewSubTabId, ValidationDiagnostic } from 'propslab-engine';
 import type { ViewResult } from '../utils/viewResult';
 import { safeStorage } from '../utils/safeStorage';
 

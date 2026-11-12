@@ -3,10 +3,10 @@
 // they ask first — but only when that would lose something (#440).
 import { describe, it, expect, beforeEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
+import { SAMPLE_CONFIGS } from 'propslab-engine';
 import { CommandPalette } from '../CommandPalette';
 import { Overlay } from '../Overlay';
 import { useAppStore } from '../../../store/useAppStore';
-import { SAMPLE_CONFIGS } from '../../../engine';
 
 const initial = useAppStore.getState();
 const sample = SAMPLE_CONFIGS[0]!;

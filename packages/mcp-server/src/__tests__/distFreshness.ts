@@ -31,11 +31,10 @@ const builtAt = (file: string) => {
 
 export default function setup(): void {
   const built = Math.min(builtAt('index.js'), builtAt('simulateWorker.js'));
-  // The bundle compiles in the engine and the utilities it imports from the app.
+  // The bundle compiles in the engine, from this package's install of it.
   const sources = Math.max(
     newestSource(path.join(root, 'src')),
-    newestSource(path.join(root, '../../src/engine')),
-    newestSource(path.join(root, '../../src/utils')),
+    newestSource(path.join(root, 'node_modules/propslab-engine/src')),
   );
   if (built < sources) {
     throw new Error(

@@ -7,8 +7,8 @@
 // that two copies of it would eventually become one copy and one bug.
 // ---------------------------------------------------------------------------
 
+import { upsertDirectiveInStanza, getDirectiveInfo } from 'propslab-engine';
 import { useAppStore } from '../../../../store/useAppStore';
-import { upsertDirectiveInStanza, getDirectiveInfo } from '../../../../engine';
 
 const PLACEHOLDER_STANZA = 'my:sourcetype';
 

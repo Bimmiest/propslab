@@ -77,15 +77,14 @@ Prettier sets the layout, ESLint finds mistakes, and TypeScript is strict. [docs
 - **Formatting is Prettier's, and reviews do not discuss it.** `npm run format` rewrites the files.
 - **Do not use `eslint-disable` at a call site.** Turn a wrong rule off in `eslint.config.js`, with the sentence that says why. A deliberate exception gets an inline disable that says so.
 - **Do not use `!` in shipped code.** Narrow the type instead. Tests can use `!`.
-- **`src/engine` does not import the UI, React, zustand or Monaco.** A lint rule enforces this, and a test holds the rule.
 - **A comment says why, for the code as it is now.** For history, link the issue or the ADR.
 
 ## Dependencies
 
-[docs/dependencies.md](docs/dependencies.md) gives the supply-chain checks, the regex engine's binary, the overrides, and how to review a Dependabot pull request. In short:
+[docs/dependencies.md](docs/dependencies.md) gives the supply-chain checks, the engine and its regex engine, the overrides, and how to review a Dependabot pull request. In short:
 
 - **Read the lockfile diff of each Dependabot pull request.** Do not fix a group on the Dependabot branch.
-- **A `pcre2-wasm-utf16` pin bump moves the commit in both `package.json` files.** Copy the release's `pcre2.wasm.sha256` to the root in the same change.
+- **The engine and the regex engine move together.** A `propslab-engine` pin bump moves the commit in both `package.json` files, and moves `pcre2-wasm-utf16` to the commit that the engine declares. `server.e2e.test.ts` fails if they differ.
 - **Each dependency pin that you move by hand has a row in [the table of pins](docs/dependencies.md#pins-that-move-by-hand), with the condition that releases it.** Drop an override when `npm run check:overrides` says that no package needs it.
 - **The licence of each production dependency is on the allowlist.** Otherwise the allowlist names the package, the version that a person read, and why it is acceptable.
 
@@ -93,12 +92,10 @@ Prettier sets the layout, ESLint finds mistakes, and TypeScript is strict. [docs
 
 [docs/recipes.md](docs/recipes.md) gives the directory for each kind of change, and the steps for the common changes. These rules apply to each change:
 
-- **`src/engine/**` has one runtime dependency, the PCRE2 WebAssembly module, and must not gain another.** Other code uses the engine directly as a library.
-- **A user-written pattern compiles through `safeRegex` in `src/engine/utils/splunkRegex.ts`, never `new RegExp`.**
-- **Code outside `src/engine` imports the engine only from `src/engine/index.ts`, its public API ([ADR 0023](docs/adr/0023-the-engine-moves-to-a-repository-of-its-own.md)).** A lint rule enforces this.
-- **An export from `src/engine/index.ts`, `src/monaco` or a vendored file in `src/utils` or `src/workers` is public.** Before you remove or rename an export, search propslab-sb and propslab-ent too.
-- **Each directive in the registry has a classification in `directiveSupport.ts`.** A `simulated` directive has a unit test, and a "Doc-derived" citation of the `.spec` file. `directiveEvidence.test.ts` fails without the citation. [The steps for a simulated directive](docs/recipes.md#adding-or-changing-a-simulated-directive) give the detail.
-- **If real Splunk contradicts a doc-derived test, open an issue** with the input, the stanza and what Splunk produced. Do not put recorded Splunk output in this repository ([ADR 0016](docs/adr/0016-recorded-splunk-output-is-not-distributed.md)).
+- **A change to the simulation goes to [`propslab-engine`](https://github.com/Bimmiest/propslab-engine)**, which has its own rules ([ADR 0023](docs/adr/0023-the-engine-moves-to-a-repository-of-its-own.md)). This repository installs a tag of it, and imports only from `propslab-engine`.
+- **A user-written pattern compiles through the engine's `safeRegex`, never `new RegExp`.**
+- **An export from `src/monaco` or a vendored file in `src/utils` or `src/workers` is public.** Before you remove or rename an export, search propslab-sb and propslab-ent too.
+- **If real Splunk gives a different result, open a fidelity question in [`propslab-engine`](https://github.com/Bimmiest/propslab-engine/issues/new/choose)** with the input, the stanza and what Splunk produced. Do not put recorded Splunk output in either repository ([ADR 0016](docs/adr/0016-recorded-splunk-output-is-not-distributed.md)).
 
 ## Decisions
 

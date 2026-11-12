@@ -19,7 +19,7 @@ import {
   misspelledCanonical,
   MISSPELLED_MESSAGE,
   unsupportedSpecifiers,
-} from '../engine';
+} from 'propslab-engine';
 
 /**
  * One directive as the linter saw it, for the stanza-scoped checks below.

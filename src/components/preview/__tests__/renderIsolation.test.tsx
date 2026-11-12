@@ -9,11 +9,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { createElement, type ComponentProps } from 'react';
+import type { SplunkEvent } from 'propslab-engine';
 import { PreviewPanel } from '../PreviewPanel';
 import type { EnrichedEvent } from '../enrichEvents';
 import { HighlightedTab } from '../tabs/HighlightedTab';
 import { useAppStore } from '../../../store/useAppStore';
-import type { SplunkEvent } from '../../../engine';
 import { toViewResult } from '../../../utils/viewResult';
 import { makeEvent } from '../../../test/makeEvent';
 

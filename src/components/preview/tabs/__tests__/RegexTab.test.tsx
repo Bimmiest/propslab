@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { render, screen, fireEvent, within, act, waitFor } from '@testing-library/react';
+import { matchInputs } from 'propslab-engine';
 import { useAppStore } from '../../../../store/useAppStore';
 import { RegexTab } from '../regex';
 import { FLASH_MS } from '../regex/useRegexResults';
 import type { EnrichedEvent } from '../../enrichEvents';
 import { makeEvent } from '../../../../test/makeEvent';
-import { matchInputs } from '../../../../engine';
 import type { RegexMatchRequest, RegexMatchResponse } from '../../../../workers/regexMatchWorker';
 import { lastInputs, lastRequest, requestsIn } from '../../../../test/workerInputs';
 

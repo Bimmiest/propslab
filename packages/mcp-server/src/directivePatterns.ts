@@ -28,7 +28,7 @@ import {
   type Node,
   ingestEvalTrees,
   type ConfDirective,
-} from '../../../src/engine';
+} from 'propslab-engine';
 
 export interface DirectivePattern {
   pattern: string;

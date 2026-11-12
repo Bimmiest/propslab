@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from 'vitest';
 import { render, fireEvent, within } from '@testing-library/react';
+import type { DirectiveNoOp, SplunkEvent } from 'propslab-engine';
 import { DirectiveNoOpList } from '../DirectiveNoOpList';
-import type { DirectiveNoOp, SplunkEvent } from '../../../../../engine';
 import { makeEvent } from '../../../../../test/makeEvent';
 
 function event(noOps: DirectiveNoOp[]): SplunkEvent {

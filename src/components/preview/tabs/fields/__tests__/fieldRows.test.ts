@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import type { ProcessingStep, SplunkEvent } from 'propslab-engine';
 import {
   aggregateFields,
   buildAliasMap,
@@ -16,7 +17,6 @@ import {
   METADATA_SOURCE,
   type AggregatedField,
 } from '../fieldRows';
-import type { ProcessingStep, SplunkEvent } from '../../../../../engine';
 import { makeEvent } from '../../../../../test/makeEvent';
 import { toViewResult } from '../../../../../utils/viewResult';
 

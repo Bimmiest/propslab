@@ -27,13 +27,6 @@ import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
 import fc from 'fast-check';
 import { z } from 'zod';
-import { handleExplainPrecedence, handleSimulate, handleValidate } from '../tools';
-import { serializeSimulation } from '../serialize';
-import { MAX_PAYLOAD_BYTES, MAX_RESPONSE_BYTES, responseBytes } from '../responseBudget';
-import { explainOutputShape, simulateOutputShape, validateOutputShape } from '../outputSchemas';
-import { lintRegexDirectives } from '../regexLint';
-import { regexEngineModule } from '../regexEngine';
-import { resultText } from './resultText';
 import {
   parseConf,
   getDirectivesForFile,
@@ -42,7 +35,14 @@ import {
   type ProcessingResult,
   type SplunkEvent,
   type ValidationDiagnostic,
-} from '../../../../src/engine';
+} from 'propslab-engine';
+import { handleExplainPrecedence, handleSimulate, handleValidate } from '../tools';
+import { serializeSimulation } from '../serialize';
+import { MAX_PAYLOAD_BYTES, MAX_RESPONSE_BYTES, responseBytes } from '../responseBudget';
+import { explainOutputShape, simulateOutputShape, validateOutputShape } from '../outputSchemas';
+import { lintRegexDirectives } from '../regexLint';
+import { regexEngineModule } from '../regexEngine';
+import { resultText } from './resultText';
 import { fcSeed } from '../../../../src/test/fcSeed';
 import { makeEvent } from '../../../../src/test/makeEvent';
 

@@ -22,9 +22,9 @@
 
 import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';
+import { parseConf, isIntegerLiteral } from 'propslab-engine';
 import { computeDiagnostics } from '../splunkConfDiagnostics';
 import { fakeModel } from '../../test/fakeModel';
-import { parseConf, isIntegerLiteral } from '../../engine';
 import { fcSeed } from '../../test/fcSeed';
 
 fc.configureGlobal({ seed: fcSeed(5724), numRuns: 300 });

@@ -23,7 +23,8 @@ of ownership or association is made or implied.
 Splunk Common Information Model (CIM) add-on
 --------------------------------------------------------------------------
 
-src/engine/cim/cimModelsData.ts contains CIM dataset names, field names, and
+The propslab-engine package, which the app and the MCP server bundle, carries
+in src/cim/cimModelsData.ts CIM dataset names, field names, and
 tag constraints derived from the Splunk Common Information Model add-on
 (Splunk_SA_CIM), distributed by Splunk Inc. on Splunkbase under Splunk's own
 licence terms:
@@ -32,7 +33,7 @@ licence terms:
 
 The add-on is not vendored, redistributed, or fetched by this repository. It is
 not required to build, test, or run Propslab. Generation from it
-(scripts/generate-cim-models.js) is a manual, occasional step run by a
+(propslab-engine's scripts/generate-cim-models.js) is a manual, occasional step run by a
 maintainer against their own separately obtained copy, and nothing in the build
 or install path invokes it.
 
@@ -47,7 +48,7 @@ data models remain with Splunk Inc.
 Configuration directive documentation
 --------------------------------------------------------------------------
 
-src/engine/directiveRegistry.ts describes the props.conf and transforms.conf
+propslab-engine's directive registry describes the props.conf and transforms.conf
 attributes this simulator recognises. Those descriptions are written for this
 project. Where they restate what an attribute does, they describe documented,
 observable behaviour of the software; they are not copied from Splunk's

@@ -6,9 +6,9 @@
 // ---------------------------------------------------------------------------
 
 import { describe, it, expect } from 'vitest';
+import { type ValidationDiagnostic, runPipeline, SAMPLE_CONFIGS } from 'propslab-engine';
 import { fileProblems, lintConf, textLines } from '../editorProblems';
 import { computeDiagnostics, MISSPELLED_MARKER_CODE, type DiagnosticMarker } from '../splunkConfDiagnostics';
-import { type ValidationDiagnostic, runPipeline, SAMPLE_CONFIGS } from '../../engine';
 import { AT_FIXED_NOW } from '../../test/runCtx';
 import { countByLevel } from '../../utils/diagnosticCounts';
 import { fakeModel } from '../../test/fakeModel';

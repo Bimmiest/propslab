@@ -9,14 +9,14 @@
 // ---------------------------------------------------------------------------
 
 import { useMemo, useState } from 'react';
-import { useAppStore } from '../../../store/useAppStore';
 import {
   parseConf,
   resolveStanzasForEvent,
   resolveEffectiveConfig,
   type EffectiveDirective,
   getDirectiveInfo,
-} from '../../../engine';
+} from 'propslab-engine';
+import { useAppStore } from '../../../store/useAppStore';
 import { revealInEditor } from '../../editor/revealInEditor';
 import { copyQuietly } from '../../../utils/clipboard';
 import {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { RUN_STAGES } from '../../../../src/engine';
+import { RUN_STAGES } from 'propslab-engine';
 import { createProgressBuffer, MAX_REPORTED_EVENTS, progressWriter, readProgress, RUN_PHASES } from '../progress';
 
 describe('run progress (#488)', () => {

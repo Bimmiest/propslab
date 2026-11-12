@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
+import { matchInputs } from 'propslab-engine';
 import { TimePrefixDialog } from '../TimePrefixDialog';
-import { matchInputs } from '../../../../../engine';
 import type { RegexMatchRequest, RegexMatchResponse } from '../../../../../workers/regexMatchWorker';
 import { lastRequest, requestsIn } from '../../../../../test/workerInputs';
 

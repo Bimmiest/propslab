@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { ValidationDiagnostic, DiagnosticTarget } from '../../engine';
+import type { ValidationDiagnostic, DiagnosticTarget } from 'propslab-engine';
 import { Icon } from '../ui/Icon';
 import { countByLevel } from '../../utils/diagnosticCounts';
 import { revealInEditor } from './revealInEditor';
