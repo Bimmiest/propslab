@@ -144,6 +144,8 @@ When you click a line reference, the props.conf editor moves to that line. `Show
 - Vulnerabilities
 - Web
 
+The tab lists the models in order of fit: the share of the required fields first, then the share of all the fields. A model *matches* when the data has 50% or more of its required fields, and at least one field of the model. A model with no required fields matches when the data has 50% or more of all its fields. The header of the tab gives the count of matching models and this rule. **Show matching only** hides the other models.
+
 These items all come from the model JSON in the CIM add-on of Splunk (`Splunk_SA_CIM` **8.5.0**):
 
 - the field lists
