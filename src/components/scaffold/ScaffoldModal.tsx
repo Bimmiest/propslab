@@ -12,6 +12,7 @@ import { Icon } from '../ui/Icon';
 import { DiffLines } from '../ui/DiffLines';
 import { Badge } from '../ui/Badge';
 import { tint } from '../../utils/tint';
+import { Identifier } from '../ui/Identifier';
 
 const CONFIDENCE_VARIANT: Record<Confidence, 'success' | 'warning' | 'info'> = {
   high: 'success',
@@ -187,7 +188,7 @@ function ScaffoldDiffPreview({ stanzaName, diff }: { stanzaName: string; diff: R
         className="text-xs font-semibold uppercase tracking-wider mb-1.5"
         style={{ color: 'var(--color-text-secondary)' }}
       >
-        props.conf preview — stanza <code className="font-mono">[{stanzaName}]</code>
+        props.conf preview — stanza <Identifier>[{stanzaName}]</Identifier>
       </div>
       <div
         className="rounded border text-xs font-mono leading-relaxed overflow-x-auto"
@@ -207,8 +208,8 @@ function ExistingStanzaWarning({ stanzaName }: { stanzaName: string }) {
     >
       <Icon name="warning" className="w-4 h-4 shrink-0 mt-0.5" />
       <span>
-        A <code className="font-mono">[{stanzaName}]</code> stanza already exists in props.conf — these directives will
-        be appended as a <strong>second</strong> stanza. Consider merging them into the existing one.
+        A <Identifier>[{stanzaName}]</Identifier> stanza already exists in props.conf — these directives will be
+        appended as a <strong>second</strong> stanza. Consider merging them into the existing one.
       </span>
     </div>
   );

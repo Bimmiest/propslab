@@ -1,19 +1,22 @@
-import { useMemo, useState } from 'react';
-import { useAppStore } from '../../store/useAppStore';
+import { useState } from 'react';
 import type { ValidationDiagnostic, DiagnosticTarget } from '../../engine/types';
 import { Icon } from '../ui/Icon';
 import { countByLevel } from '../../utils/diagnosticCounts';
 import { revealInEditor } from './revealInEditor';
+import { useFileProblems } from './useFileProblems';
 
 interface EditorValidationListProps {
   file: DiagnosticTarget;
 }
 
+/**
+ * The problems of one input, from the list its editor marks (useFileProblems),
+ * so the rows and the markers are the same problems. At most a third of the
+ * pane high, so the editor above keeps its lines; the rows scroll.
+ */
 export function EditorValidationList({ file }: EditorValidationListProps) {
-  const diagnostics = useAppStore((s) => s.validationDiagnostics);
+  const filtered = useFileProblems(file).problems;
   const [expanded, setExpanded] = useState(true);
-
-  const filtered = useMemo(() => diagnostics.filter((d) => d.file === file), [diagnostics, file]);
 
   const { error: errorCount, warning: warningCount, info: infoCount } = countByLevel(filtered);
 
@@ -27,7 +30,7 @@ export function EditorValidationList({ file }: EditorValidationListProps) {
   }
 
   return (
-    <div className="border-t border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
+    <div className="flex flex-col min-h-0 shrink-0 max-h-[33%] border-t border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
       <button
         onClick={() => setExpanded(!expanded)}
         aria-expanded={expanded}
@@ -52,7 +55,14 @@ export function EditorValidationList({ file }: EditorValidationListProps) {
         />
       </button>
       {expanded && (
-        <div className="motion-reveal max-h-32 overflow-auto divide-y divide-[var(--color-border)]">
+        // In a collapsed editor's bar the pane has no height, and a third of
+        // it is none: there a third of the window bounds the rows instead.
+        <div
+          className="motion-reveal min-h-0 flex-1 max-h-[33vh] overflow-auto divide-y divide-[var(--color-border)]"
+          role="region"
+          aria-label={`${file} problems`}
+          tabIndex={0}
+        >
           {filtered.map((diag, idx) => (
             <DiagnosticRow
               key={idx}

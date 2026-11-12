@@ -12,6 +12,7 @@ import { CimModelsTab } from '../CimModelsTab';
 import { DiffTab } from '../DiffTab';
 import { FieldAliasDialog } from '../shared/FieldAliasDialog';
 import { usePipelineInputs } from '../shared/usePipelineInputs';
+import { answerRun } from '../../../../test/answerRun';
 import { useAppStore } from '../../../../store/useAppStore';
 import { computeFieldStats } from '../../../../utils/fieldStats';
 import { makeEvent } from '../../../../test/makeEvent';
@@ -49,6 +50,7 @@ describe('Effective config — a directive row', () => {
       propsConf: '[my_app]\nSHOULD_LINEMERGE = false\nTRUNCATE = 500\n',
       metadata: { index: 'main', host: 'h', source: 's', sourcetype: 'my_app' },
     });
+    answerRun();
   });
 
   it('jumps to the directive, copies it, and looks it up', () => {

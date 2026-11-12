@@ -559,7 +559,7 @@ const NUMBER_RESULT = new Set([
  * that always produces one, and dynamic for the rest. The branching and
  * multivalue functions pass an operand through (if, case, coalesce, nullif,
  * validate, mvindex, mvappend, ...), so their result keeps whatever that
- * operand was, as does an unknown function, which is NULL anyway (#522).
+ * operand was, as does an unsimulated function, which is NULL anyway (#522).
  */
 export function resultType(fn: string): StaticType {
   if (TEXT_RESULT.has(fn)) return 'string';
@@ -571,14 +571,81 @@ export function builtinNames(): string[] {
   return [...BUILTINS.keys()];
 }
 
+/**
+ * The Splunk eval functions that have no builtin here, from the function list
+ * in the Search Reference, "Evaluation functions". A call to one is NULL with
+ * a warning. A name that is in neither this set nor the builtins is not an eval
+ * function, and Splunk fails the expression (#876).
+ */
+const UNSIMULATED_FUNCTIONS: ReadonlySet<string> = new Set([
+  // Comparison, conversion and statistical
+  'lookup',
+  'printf',
+  'ipmask',
+  'sum',
+  'avg',
+  // Multivalue
+  'commands',
+  'mvmap',
+  'mvrange',
+  'mv_to_json_array',
+  // Text
+  'spath',
+  // JSON
+  'json_append',
+  'json_array',
+  'json_array_to_mv',
+  'json_delete',
+  'json_entries',
+  'json_extend',
+  'json_extract',
+  'json_extract_exact',
+  'json_has_key_exact',
+  'json_keys',
+  'json_object',
+  'json_set',
+  'json_set_exact',
+  'json_valid',
+  // Trigonometry and hyperbolic
+  'acos',
+  'acosh',
+  'asin',
+  'asinh',
+  'atan',
+  'atan2',
+  'atanh',
+  'cos',
+  'cosh',
+  'hypot',
+  'sin',
+  'sinh',
+  'tan',
+  'tanh',
+  // Bitwise
+  'bit_and',
+  'bit_or',
+  'bit_not',
+  'bit_xor',
+  'bit_shift_left',
+  'bit_shift_right',
+]);
+
+/** The Splunk eval functions that have no builtin, for the test that keeps the two lists apart. */
+export function unsimulatedNames(): string[] {
+  return [...UNSIMULATED_FUNCTIONS];
+}
+
 /** Non-branching functions: all arguments are already evaluated. */
 export function evalBuiltin(fn: string, args: EvalValue[], ctx: EvalCtx): EvalValue {
   const builtin = BUILTINS.get(fn);
   if (builtin !== undefined) return builtin(args, ctx);
-  // Unknown or not-yet-simulated function — surface a warning rather than
-  // silently returning null (which looks like the field just didn't compute).
-  ctx.onStubWarning?.(fn);
-  return null;
+  // A NULL with no warning would look like an expression that computed nothing.
+  if (UNSIMULATED_FUNCTIONS.has(fn)) {
+    ctx.onStubWarning?.(fn);
+    return null;
+  }
+  // A misspelt name is a fault in the config, not a limit of the simulator.
+  throw new Error(`${fn}() is not an eval function`);
 }
 
 // ── Helpers ─────────────────────────────────────────────
