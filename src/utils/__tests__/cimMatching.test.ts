@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { CIM_MATCH_THRESHOLD_PERCENT, matchesModel, rankModels } from '../cimMatching';
 import { validateCimCompliance, type CimValidationResult } from '../../engine/cim/cimModels';
+import { runPipeline } from '../../engine/pipeline';
+import { SAMPLE_CONFIGS } from '../../engine/sampleData';
+import { AT_FIXED_NOW } from '../../engine/__tests__/runCtx';
 
 const run = (fields: string[]) => validateCimCompliance(new Set(fields), { includeAll: true });
 const find = (results: CimValidationResult[], name: string) => {
@@ -46,45 +49,42 @@ describe('matchesModel (#896)', () => {
 });
 
 describe('rankModels (#896)', () => {
-  it('puts the model with the best required coverage first, ahead of a larger total', () => {
-    // Every required field of Network_Traffic, and 5 of its 38 others.
-    const fields = [...TRAFFIC_REQUIRED, 'user', 'transport', 'src_port', 'vendor_product', 'app', 'src_ip', 'dest_ip'];
-    const results = run(fields);
-    const ranked = rankModels(results);
-    expect(find(ranked, 'Network_Traffic').requiredPercent).toBe(100);
-    // Every model that the data fits in full comes before one that it fits in part.
-    const firstPartial = ranked.findIndex((r) => r.requiredPercent < 100 && r.model.requiredFields.length > 0);
-    expect(ranked.indexOf(find(ranked, 'Network_Traffic'))).toBeLessThan(firstPartial);
-    // Required coverage never rises down the list.
-    const scores = ranked.map((r) => (r.model.requiredFields.length > 0 ? r.requiredPercent : r.totalPercent));
-    expect(scores).toEqual([...scores].sort((x, y) => y - x));
+  it('puts the models that match before the others, whatever their totals', () => {
+    const ranked = rankModels(run(['action', 'app', 'dest']));
+    const flags = ranked.map(matchesModel);
+    expect(flags).toEqual([...flags].sort((x, y) => Number(y) - Number(x)));
+    expect(flags[0]).toBe(true);
+    expect(flags.at(-1)).toBe(false);
   });
 
-  it('ranks 92% required and 29% total above 44% required and 56% total (the issue)', () => {
-    const [a, b] = run(['action']).filter((r) => r.model.requiredFields.length > 0);
-    if (!a || !b) throw new Error('need two models');
-    const traffic = { ...a, requiredPercent: 92, totalPercent: 29 };
-    const intrusion = { ...b, requiredPercent: 44, totalPercent: 56 };
-    expect(rankModels([intrusion, traffic])).toEqual([traffic, intrusion]);
+  it('ranks by the number of required fields present before their share (single required field)', () => {
+    // Performance requires only `dest`: 100% with one field. Network_Traffic has 9 of 13: 69%.
+    const results = run([...TRAFFIC_REQUIRED, 'transport', 'user']);
+    const performance = find(results, 'Performance');
+    const traffic = find(results, 'Network_Traffic');
+    expect(performance.requiredPercent).toBe(100);
+    expect(traffic.requiredPercent).toBeLessThan(performance.requiredPercent);
+    expect(matchesModel(performance) && matchesModel(traffic)).toBe(true);
+    const names = rankModels(results).map((r) => r.model.name);
+    expect(names.indexOf('Network_Traffic')).toBeLessThan(names.indexOf('Performance'));
   });
 
-  it('breaks a tie in required coverage by total coverage', () => {
-    const [a, b] = run(['action']).filter((r) => r.requiredPercent === 0 && r.model.requiredFields.length > 0);
-    if (!a || !b) throw new Error('need two models');
-    const low = { ...a, totalPercent: 10 };
-    const high = { ...b, totalPercent: 40 };
-    expect(rankModels([low, high])).toEqual([high, low]);
-    expect(rankModels([high, low])).toEqual([high, low]);
+  it('breaks a tie in the count by the share, then by the total', () => {
+    const [a, b, c] = run(['action']).filter((r) => r.model.requiredFields.length > 0);
+    if (!a || !b || !c) throw new Error('need three models');
+    const base = { requiredPresent: ['x'], recommendedPresent: [] as string[] };
+    const lowShare = { ...a, ...base, requiredPercent: 60, totalPercent: 90 };
+    const highShare = { ...b, ...base, requiredPercent: 80, totalPercent: 10 };
+    expect(rankModels([lowShare, highShare])).toEqual([highShare, lowShare]);
+    const lowTotal = { ...c, ...base, requiredPercent: 80, totalPercent: 5 };
+    expect(rankModels([lowTotal, highShare])).toEqual([highShare, lowTotal]);
   });
 
-  it('ranks a model with no required field by its total, not as 100%', () => {
-    const ranked = rankModels(run([]));
-    const names = ranked.map((r) => r.model.name);
-    // 0% everywhere: nothing may sit first for having an empty required list.
-    expect(ranked.every((r) => r.totalPercent === 0 || r.model.requiredFields.length === 0)).toBe(true);
-    expect(names.indexOf('Databases')).toBeGreaterThan(-1);
-    const withSessions = rankModels(run(find(run([]), 'Databases').model.recommendedFields));
-    expect(withSessions[0]?.model.name).toBe('Databases');
+  it('ranks a model with no required field by the fields it has', () => {
+    const databases = find(run([]), 'Databases').model.recommendedFields;
+    const results = run([...databases, 'action']);
+    expect(matchesModel(find(results, 'Databases'))).toBe(true);
+    expect(rankModels(results)[0]?.model.name).toBe('Databases');
   });
 
   it('does not change its input', () => {
@@ -92,5 +92,17 @@ describe('rankModels (#896)', () => {
     const copy = [...results];
     rankModels(results);
     expect(results).toEqual(copy);
+  });
+});
+
+describe('the Palo Alto Firewall example (#896)', () => {
+  it('lists Network Traffic first, the model that the example is written for', () => {
+    const pan = SAMPLE_CONFIGS.find((s) => s.name === 'Palo Alto Firewall');
+    if (!pan) throw new Error('no Palo Alto example');
+    const { result } = runPipeline(pan.rawData, pan.metadata, pan.propsConf, pan.transformsConf, AT_FIXED_NOW);
+    const names = new Set(result.events.flatMap((e) => Object.keys(e.fields)));
+    const ranked = rankModels(validateCimCompliance(names, { includeAll: true }));
+    expect(ranked[0]?.model.name).toBe('Network_Traffic');
+    expect(matchesModel(ranked[0] as CimValidationResult)).toBe(true);
   });
 });

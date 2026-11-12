@@ -68,17 +68,16 @@ describe('CimModelsTab "Show matching only" (#495, #896)', () => {
     expect(document.querySelectorAll('[aria-expanded]')).toHaveLength(count);
   });
 
-  it('lists a model by its required fields before its total', () => {
+  it('lists the matching models first, the best fit at the top', () => {
     render(<CimModelsTab />);
-    const cards = [...document.querySelectorAll('[aria-expanded]')].map((c) => c.textContent);
-    // No model has a higher required share than the one above it, where it declares required fields.
-    const declared = cards.flatMap((text) => {
-      const share = /Required(\d+)%/.exec(text)?.[1];
-      return share === undefined ? [] : [Number(share)];
-    });
-    expect(declared).toEqual([...declared].sort((x, y) => y - x));
-    const at = (name: string) => cards.findIndex((c) => c.startsWith(name));
-    expect(at('Network Traffic')).toBeLessThan(at('Authentication'));
+    const cards = () => [...document.querySelectorAll('[aria-expanded]')].map((c) => c.textContent);
+    const all = cards();
+    expect(all[0]).toMatch(/^Network Traffic/);
+    // The models that the toggle keeps are the first ones, in the same order.
+    fireEvent.click(screen.getByRole('button', { name: 'Show matching only' }));
+    const matching = cards();
+    expect(matching.length).toBeLessThan(all.length);
+    expect(all.slice(0, matching.length)).toEqual(matching);
   });
 });
 

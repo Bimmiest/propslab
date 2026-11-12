@@ -18,11 +18,28 @@ export function matchesModel(r: CimValidationResult): boolean {
   return anyPresent && fitScore(r) >= CIM_MATCH_THRESHOLD_PERCENT;
 }
 
+/** How many of the model's key fields the data has: the required ones, or all of them when it requires none. */
+function fitCount(r: CimValidationResult): number {
+  return r.model.requiredFields.length > 0
+    ? r.requiredPresent.length
+    : r.requiredPresent.length + r.recommendedPresent.length;
+}
+
 /**
- * The models in order of fit: required coverage first, total coverage second.
- * A model with a long optional list must not rank below a model that the data
- * does not fit. Returns a new array and keeps the input order for a tie.
+ * The models in order of fit. Matching models come first. Within each group:
+ * the number of required fields present, then the share of them, then the
+ * share of all fields. The count comes before the share so that a model with
+ * one required field (Performance has only `dest`) does not outrank a model
+ * with most of 13 (Network Traffic), as a share alone would. A model with a
+ * long optional list does not fall below a model that the data does not fit.
+ * Returns a new array and keeps the input order for a tie.
  */
 export function rankModels(results: readonly CimValidationResult[]): CimValidationResult[] {
-  return [...results].sort((a, b) => fitScore(b) - fitScore(a) || b.totalPercent - a.totalPercent);
+  return [...results].sort(
+    (a, b) =>
+      Number(matchesModel(b)) - Number(matchesModel(a)) ||
+      fitCount(b) - fitCount(a) ||
+      fitScore(b) - fitScore(a) ||
+      b.totalPercent - a.totalPercent,
+  );
 }
