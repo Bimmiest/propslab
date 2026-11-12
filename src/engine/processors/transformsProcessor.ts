@@ -164,6 +164,19 @@ function warnMatched(
   transformStanza: TransformStanza,
 ): void {
   const { diagnostics } = run;
+  // The fields or the DEST_KEY value come from part of the matches, and
+  // nothing else on the event says so (#874).
+  if (result.limitHit !== undefined) {
+    diagnostics.report(warnKey(run, 'scanLimit', stanzaName), {
+      level: 'warning',
+      message:
+        `Transform "${stanzaName}" stopped at a regex limit (${result.limitHit}) while it looked for each match ` +
+        'of its REGEX, so its result is incomplete: it holds only the matches before the limit. ' +
+        'Simplify the REGEX, or raise MATCH_LIMIT / DEPTH_LIMIT.',
+      file: 'transforms.conf',
+      ...positionOfKeyOrStanza(transformStanza, 'REGEX'),
+    });
+  }
   if (run.phase === 'index-time') {
     warnIndexTimeNoWriteMeta(result, stanzaName, transformStanza, diagnostics, warnKey(run, 'noWriteMeta', stanzaName));
   }
@@ -301,11 +314,30 @@ function applyMatch(
     processor,
     phase,
     description: describeMatch(result, discardedFields, cloneType, metaDropped),
-    fieldsAdded: Object.keys(effective.fields),
+    ...writtenFields(Object.keys(effective.fields), phase, state.event.fields),
     ...(metaChanges.length > 0 ? { metadataChanges: metaChanges } : {}),
   };
   state.event = appendTraceStep(routed, step, beforeRaw);
   if (cloneType) state.clones.push(cloneEvent(state.event, cloneType, processor, phase));
+}
+
+/**
+ * The fields a matched stanza wrote, split at search time into the new ones
+ * and the ones that the event had before (#900). At index time
+ * `fieldsModified` is for a `_raw` rewrite that changed an extracted value
+ * (attributeRawMutations), so every field stays in `fieldsAdded`.
+ */
+function writtenFields(
+  names: string[],
+  phase: Phase,
+  before: SplunkEvent['fields'],
+): Pick<ProcessingStep, 'fieldsAdded' | 'fieldsModified'> {
+  if (phase === 'index-time') return { fieldsAdded: names };
+  const modified = names.filter((f) => hasField(before, f));
+  return {
+    fieldsAdded: names.filter((f) => !hasField(before, f)),
+    ...(modified.length > 0 ? { fieldsModified: modified } : {}),
+  };
 }
 
 /** Run one REGEX (or DELIMS) transform stanza against the event. */

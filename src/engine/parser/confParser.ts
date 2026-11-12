@@ -279,7 +279,10 @@ function createContinuation() {
  * concatenated a line number alone no longer says which file it is in.
  */
 function parseLayer(text: string, fileName: 'props.conf' | 'transforms.conf', layer?: string): ParsedConf {
-  const lines = text.split(/\r?\n/);
+  // A UTF-8 BOM is one character (U+FEFF) before the first header, so it would
+  // make `[stanza]` malformed and move its directives into [default]. Splunk
+  // reads such a file without it (#873). Each layer is one file, so each strips its own.
+  const lines = (text.startsWith('\uFEFF') ? text.slice(1) : text).split(/\r?\n/);
   const stanzas: ConfStanza[] = [];
   const errors: ValidationDiagnostic[] = [];
   const from: { layer?: string } = layer === undefined ? {} : { layer };

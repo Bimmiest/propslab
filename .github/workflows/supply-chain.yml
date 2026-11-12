@@ -4,11 +4,11 @@ name: Supply chain
 # ci.yml so they can run on their own schedule and a red one does not read as a
 # broken build.
 #
-#   - The @radix-ui overrides in package.json are exact pins that Dependabot
-#     cannot bump. Left alone, a Radix release that changes what react-dialog
-#     requires leaves the overrides holding the old version back without any
-#     failure. The check compares them with what the lockfile resolves, on the
-#     pull requests that touch either and once a month on main.
+#   - The overrides in package.json are pins that Dependabot cannot bump. Left
+#     alone, a release that changes what a parent requires leaves an override
+#     holding the old version back without any failure. The check compares
+#     them with what the lockfile resolves, on the pull requests that touch
+#     either and once a month on main.
 #   - .nvmrc is an exact Node version, which Dependabot does not read at all.
 #     Once a month the second job compares it with the newest release on its
 #     line and fails when it is behind: the red run is the reminder. On a pull
@@ -41,7 +41,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -57,7 +57,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -73,3 +73,23 @@ jobs:
           # A scheduled run fails 90 days before the Node line ends, so the
           # move to the next line is filed as work, not found at end of life.
           eol-days: 90
+
+  # A failed scheduled run opens an issue, or comments on the open one
+  # (#889). See environment.yml's `report` job. A pull request run only
+  # annotates and does not report.
+  report:
+    needs: [radix-overrides, node-patch]
+    if: failure() && github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - uses: Bimmiest/shared-workflows/.github/actions/open-or-update-issue@171cd386717395c01be5e23ab926823c7b246cf6 # v1.11.0
+        with:
+          label: scheduled-supply-chain
+          title: The scheduled supply-chain check failed
+          body: |
+            A Radix override no longer matches the lockfile, or .nvmrc is behind the newest patch of its Node line, or its Node line ends soon. The run log says which.
+
+            Run: {run}
