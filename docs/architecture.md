@@ -85,11 +85,11 @@ e2e/                           # Playwright tests (production build; the smoke s
 
 ## State management
 
-Single Zustand store (`src/store/useAppStore.ts`). The store is flat — components subscribe to individual slices rather than reading the whole store. A subscription re-renders its component on every change, so the ones that change per keystroke sit in leaves: the pipeline hook runs in `PipelineController`, which renders nothing, and PreviewPanel reads the run's inputs through a small provider rather than itself.
+Single Zustand store (`src/store/useAppStore.ts`). The store is flat — components subscribe to individual slices rather than reading the whole store. A subscription re-renders its component on every change, so the ones that change per keystroke sit in leaves: the pipeline hook runs in `PipelineController`, which renders nothing. The output tabs read the inputs of the run on screen (`runInputs`), which the store sets together with the result, so they do not change on a keystroke.
 
 ```
 rawData / metadata / propsConf / transformsConf     User inputs (ephemeral)
-processingResult / validationDiagnostics            Pipeline output
+processingResult / runInputs / validationDiagnostics  Pipeline output, and the config it ran with
 isProcessing / lastProcessingMs                     StatusBar telemetry
 theme / activeOutputTab / collapsedPanels / ...     UI state
 activeView / dictionarySelection                    Rail view + dictionary deep link

@@ -130,7 +130,7 @@ export default defineConfig({
       // they are measured like the rest.
       thresholds: {
         statements: 94,
-        branches: 87,
+        branches: 89,
         functions: 92,
         lines: 95,
         // The engine is held to a much higher bar than the app as a whole. It
@@ -156,7 +156,7 @@ export default defineConfig({
         // src/workers; the hooks themselves are covered as before.
         'src/hooks/**': {
           statements: 93,
-          branches: 81,
+          branches: 83,
           functions: 95,
           lines: 95,
         },
