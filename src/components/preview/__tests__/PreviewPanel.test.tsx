@@ -8,6 +8,7 @@ import { useAppStore, selectSessionDirty } from '../../../store/useAppStore';
 import { SAMPLE_CONFIGS } from '../../../engine/sampleData';
 import type { EventMetadata } from '../../../engine/types';
 import { toViewResult, type ViewResult } from '../../../utils/viewResult';
+import { answerRun } from '../../../test/answerRun';
 import { makeEvent } from '../../../test/makeEvent';
 
 const initial = useAppStore.getState();
@@ -198,10 +199,11 @@ describe('PreviewPanel — search is debounced (#335)', () => {
   });
 });
 
-// The Effective config tab unmounts while another output tab is shown,
-// which is when props.conf gets edited, so the inputs of the last run are held
-// by the panel rather than the tab.
-describe('PreviewPanel — Effective config shows the last run in manual-apply mode (#347)', () => {
+// The Effective config tab unmounts while another output tab is shown, which
+// is when props.conf gets edited, and on a phone the whole panel unmounts on
+// each switch away from Output. So the inputs of the run on screen are held
+// by the store, beside its result (#347, #879).
+describe('PreviewPanel — Effective config shows the run on screen in manual-apply mode (#347, #879)', () => {
   beforeEach(() => {
     useAppStore.setState(
       {
@@ -213,6 +215,7 @@ describe('PreviewPanel — Effective config shows the last run in manual-apply m
       },
       true,
     );
+    answerRun();
   });
 
   it('keeps the run config across edits made while the tab was hidden', async () => {
@@ -223,8 +226,19 @@ describe('PreviewPanel — Effective config shows the last run in manual-apply m
     expect(await screen.findByText('= 500')).toBeInTheDocument();
     expect(screen.queryByText('= 123')).not.toBeInTheDocument();
 
-    act(() => useAppStore.getState().triggerManualRun());
+    act(() => answerRun());
     expect(screen.getByText('= 123')).toBeInTheDocument();
+  });
+
+  it('keeps the run config when the panel mounts again after edits, as on a phone', async () => {
+    const first = render(<PreviewPanel />);
+    first.unmount();
+    act(() => useAppStore.getState().setPropsConf('[st]\nTRUNCATE = 123\n'));
+    act(() => useAppStore.getState().setActiveOutputTab('effective'));
+
+    render(<PreviewPanel />);
+    expect(await screen.findByText('= 500')).toBeInTheDocument();
+    expect(screen.queryByText('= 123')).not.toBeInTheDocument();
   });
 });
 

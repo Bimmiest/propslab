@@ -75,6 +75,19 @@ describe('aggregateFields', () => {
     expect(byName.get('b')!.maskedBy.size).toBe(0);
   });
 
+  // #900: a search-time step that wrote over a field is where its value comes from.
+  it('credits a field a search-time step wrote over as a source, not as masked', () => {
+    const evs = [
+      eventWith({ action: 'allowed' }, [
+        { processor: 'REPORT-pan', phase: 'search-time', description: '', fieldsAdded: ['action'] },
+        { processor: 'EVAL', phase: 'search-time', description: '', fieldsAdded: [], fieldsModified: ['action'] },
+      ]),
+    ];
+    const [action] = aggregateFields(evs, new Map());
+    expect(action?.sources).toEqual(new Set(['REPORT-pan', 'EVAL']));
+    expect(action?.maskedBy.size).toBe(0);
+  });
+
   it('folds an alias into its source field rather than giving it a row', () => {
     expect(buildAliasMap(events)).toEqual(new Map([['al', 'a']]));
     expect(byName.get('a')!.aliases).toEqual(['al']);
@@ -183,10 +196,11 @@ describe("aggregateFields with the run's statistics", () => {
     const walked = aggregateFields(view.events, aliases);
     expect(plain(aggregateFields(view.events, aliases, view.fieldStats))).toEqual(plain(walked));
     expect(plain(walked).find((f) => f.name === 'b')).toMatchObject({ count: 2, sources: ['EXTRACT-a'] });
+    // A search-time step that modified `a` wrote over it: a source, not a mask (#900).
     expect(plain(walked).find((f) => f.name === 'a')).toMatchObject({
       count: 3,
-      sources: ['EXTRACT-a'],
-      maskedBy: ['KV_MODE'],
+      sources: ['EXTRACT-a', 'KV_MODE'],
+      maskedBy: [],
     });
   });
 

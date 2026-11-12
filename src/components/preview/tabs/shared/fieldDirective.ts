@@ -11,7 +11,7 @@ import { resolveEffectiveConfig } from '../../../../engine/parser/effectiveConfi
 import { fieldNameNeedsQuoting, unquoteFieldName } from '../../../../engine/utils/fieldRef';
 import { getDirectiveInfo } from '../../../../engine/directiveRegistry';
 import type { EventMetadata } from '../../../../engine/types';
-import type { ViewEvent } from '../../../../utils/viewResult';
+import { fieldsWritten, type ViewEvent } from '../../../../utils/viewResult';
 import { useAppStore } from '../../../../store/useAppStore';
 
 /**
@@ -24,11 +24,11 @@ export function matchedStanzas(propsConf: string, metadata: EventMetadata): { na
   return resolveStanzasForEvent(stanzas, metadata).stanzas.map((s) => ({ name: s.name, line: s.lineRange.start }));
 }
 
-/** The processors of the steps that added `field`, read from the first event that has it. */
+/** The processors of the steps that wrote `field`, read from the first event that has it. */
 export function processorsOf(field: string, events: readonly ViewEvent[]): string[] {
   const event = events.find((e) => Object.hasOwn(e.fields, field));
   if (!event) return [];
-  return event.processingTrace.filter((s) => s.fieldsAdded?.includes(field)).map((s) => s.processor);
+  return event.processingTrace.filter((s) => fieldsWritten(s).includes(field)).map((s) => s.processor);
 }
 
 const ALIAS_TARGET = /\bAS(?:NEW)?\s+('[^']*'|"[^"]*"|\S+)/gi;

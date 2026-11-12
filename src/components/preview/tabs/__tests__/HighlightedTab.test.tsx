@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import { HighlightedTab } from '../HighlightedTab';
 import { useAppStore } from '../../../../store/useAppStore';
@@ -148,31 +148,102 @@ describe('HighlightedTab', () => {
     expect(screen.getByText(/1\/3 events match/)).toBeInTheDocument();
     expect(screen.getByText(/Event #\s*2/)).toBeInTheDocument();
   });
-  // A pin filters the whole dataset, so the render is capped: a field on every
-  // event would otherwise lock the UI.
-  it('caps the rendered rows when a pin matches more than the window', () => {
+  // A pin filters every event, and the pager pages through its matches: the
+  // page size bounds the cards rendered (#880).
+  describe('with a pinned field', () => {
+    // Every third event has `username`: the matches are events 1, 4, 7, …
     const many = Array.from({ length: 150 }, (_, i) =>
       toItem(
-        eventWithTrace(`line ${i}`, { username: `u${i}` }, [
-          { processor: 'EXTRACT-user', phase: 'search-time', description: '', fieldsAdded: ['username'] },
-        ]),
+        i % 3 === 0
+          ? eventWithTrace(`line ${i}`, { username: `u${i}` }, [
+              { processor: 'EXTRACT-user', phase: 'search-time', description: '', fieldsAdded: ['username'] },
+            ])
+          : eventWithTrace(`line ${i}`, { other: `o${i}` }, [
+              { processor: 'EXTRACT-other', phase: 'search-time', description: '', fieldsAdded: ['other'] },
+            ]),
       ),
     );
-    const { container } = render(
-      <HighlightedTab items={many.slice(0, 10)} allEvents={many} currentPage={1} eventsPerPage={10} />,
-    );
-    fireEvent.click(within(container).getAllByText('username')[0]!);
 
-    expect(screen.getAllByText(/Event #/)).toHaveLength(100);
-    expect(screen.getByText(/Showing the first 100 of 150 events/i)).toBeInTheDocument();
-    // The summary counts every match, not just the rendered window (#432).
-    expect(screen.getByText(/150\/150 events match 1 pinned field/)).toBeInTheDocument();
-  });
+    it('shows one page of the matches, numbered as in the dataset', () => {
+      const onPinnedViewChange = vi.fn();
+      const { container, rerender } = render(
+        <HighlightedTab
+          items={many.slice(0, 10)}
+          allEvents={many}
+          currentPage={1}
+          eventsPerPage={10}
+          onPinnedViewChange={onPinnedViewChange}
+        />,
+      );
+      fireEvent.click(within(container).getAllByText('username')[0]!);
 
-  it('does not cap or announce a truncation when the pin matches few events', () => {
-    const { container } = render(<HighlightedTab items={items} allEvents={items} currentPage={1} eventsPerPage={10} />);
-    fireEvent.click(within(container).getAllByText('username')[0]!);
-    expect(screen.queryByText(/Showing the first/i)).not.toBeInTheDocument();
+      expect(screen.getAllByText(/Event #/)).toHaveLength(10);
+      expect(screen.getByText(/Event #\s*28\b/)).toBeInTheDocument();
+      expect(screen.queryByText(/Event #\s*31\b/)).not.toBeInTheDocument();
+      // The summary counts every match, not the page (#432).
+      expect(screen.getByText(/50\/150 events match 1 pinned field/)).toBeInTheDocument();
+      expect(onPinnedViewChange).toHaveBeenLastCalledWith({ total: 50, scope: 'with username' });
+
+      // Page 2 of the matches: the 11th to the 20th match.
+      rerender(
+        <HighlightedTab
+          items={many.slice(10, 20)}
+          allEvents={many}
+          currentPage={2}
+          eventsPerPage={10}
+          onPinnedViewChange={onPinnedViewChange}
+        />,
+      );
+      expect(screen.getAllByText(/Event #/)).toHaveLength(10);
+      expect(screen.getByText(/Event #\s*31\b/)).toBeInTheDocument();
+      expect(screen.getByText(/Event #\s*58\b/)).toBeInTheDocument();
+      expect(screen.queryByText(/Event #\s*28\b/)).not.toBeInTheDocument();
+    });
+
+    it('shows the last page of the matches for a page past them', () => {
+      const { container } = render(
+        <HighlightedTab items={many.slice(140)} allEvents={many} currentPage={15} eventsPerPage={10} />,
+      );
+      fireEvent.click(within(container).getAllByText('username')[0]!);
+      expect(screen.getAllByText(/Event #/)).toHaveLength(10);
+      expect(screen.getByText(/Event #\s*148\b/)).toBeInTheDocument();
+    });
+
+    it('starts the pager at the first page when the pins change', () => {
+      useAppStore.setState({ currentPage: 4 });
+      const { container } = render(
+        <HighlightedTab items={many.slice(30, 40)} allEvents={many} currentPage={4} eventsPerPage={10} />,
+      );
+      expect(useAppStore.getState().currentPage).toBe(4);
+      fireEvent.click(within(container).getAllByText('username')[0]!);
+      expect(useAppStore.getState().currentPage).toBe(1);
+    });
+
+    it('tells the pager when no field is pinned any more, and when the tab goes', () => {
+      const onPinnedViewChange = vi.fn();
+      const { container, unmount } = render(
+        <HighlightedTab
+          items={many.slice(0, 10)}
+          allEvents={many}
+          currentPage={1}
+          eventsPerPage={10}
+          onPinnedViewChange={onPinnedViewChange}
+        />,
+      );
+      expect(onPinnedViewChange).not.toHaveBeenCalled();
+      const pin = () => fireEvent.click(within(container).getAllByText('username')[0]!);
+      pin();
+      expect(onPinnedViewChange).toHaveBeenLastCalledWith({ total: 50, scope: 'with username' });
+      pin();
+      expect(onPinnedViewChange).toHaveBeenLastCalledWith(null);
+      // Back to the page of every event.
+      expect(screen.getAllByText(/Event #/)).toHaveLength(10);
+
+      pin();
+      onPinnedViewChange.mockClear();
+      unmount();
+      expect(onPinnedViewChange).toHaveBeenCalledWith(null);
+    });
   });
 });
 

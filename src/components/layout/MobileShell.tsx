@@ -4,6 +4,7 @@ import { TransformsConfEditor } from '../editor/TransformsConfEditor';
 import { PreviewPanel } from '../preview/PreviewPanel';
 import { DictionaryView } from './lazyViews';
 import { ErrorBoundary } from '../ui/ErrorBoundary';
+import { OutputBoundary } from './OutputBoundary';
 import { Icon } from '../ui/Icon';
 import type { IconName } from '../ui/Icon';
 import { useAppStore, type MobileView as SimulatorMobileView } from '../../store/useAppStore';
@@ -112,9 +113,9 @@ export function MobileShell() {
           </ErrorBoundary>
         )}
         {view === 'output' && (
-          <ErrorBoundary panelName="Output">
+          <OutputBoundary>
             <PreviewPanel />
-          </ErrorBoundary>
+          </OutputBoundary>
         )}
         {view === 'dictionary' && (
           <ErrorBoundary panelName="Dictionary">
