@@ -14,6 +14,7 @@ import { HighlightedTab } from '../tabs/HighlightedTab';
 import { useAppStore } from '../../../store/useAppStore';
 import { toViewResult, type ViewResult } from '../../../utils/viewResult';
 import { makeEvent } from '../../../test/makeEvent';
+import { answerRun } from '../../../test/answerRun';
 import type { EventMetadata } from '../../../engine/types';
 
 const initial = useAppStore.getState();
@@ -208,6 +209,7 @@ describe('the Preview filter bar on Timestamp and Regex', () => {
       propsConf: '[st]\nTIME_FORMAT = %Y\n',
       processingResult: resultOf([{ user: 'alice' }, { user: 'bob' }]),
     });
+    answerRun();
     render(<PreviewPanel />);
     fireEvent.click(screen.getByRole('tab', { name: 'Timestamp' }));
     fireEvent.change(screen.getByRole('textbox', { name: 'Search events' }), { target: { value: 'alice' } });
