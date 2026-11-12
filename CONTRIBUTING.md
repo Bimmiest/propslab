@@ -86,7 +86,7 @@ Prettier sets the layout, ESLint finds mistakes, and TypeScript is strict. [docs
 
 - **Read the lockfile diff of each Dependabot pull request.** Do not fix a group on the Dependabot branch.
 - **A `pcre2-wasm-utf16` pin bump moves the commit in both `package.json` files.** Copy the release's `pcre2.wasm.sha256` to the root in the same change.
-- **When you bump a Radix package, move the overrides to the versions that it pins.** Drop an override when `npm run check:overrides` says that no package needs it.
+- **Each dependency pin that you move by hand has a row in [the table of pins](docs/dependencies.md#pins-that-move-by-hand), with the condition that releases it.** Drop an override when `npm run check:overrides` says that no package needs it.
 - **The licence of each production dependency is on the allowlist.** Otherwise the allowlist names the package, the version that a person read, and why it is acceptable.
 
 ## Where a change goes
