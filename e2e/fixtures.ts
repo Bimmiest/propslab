@@ -118,6 +118,66 @@ export async function loadExample(page: Page, name: RegExp): Promise<void> {
   await expect(page.getByText(/^[1-9]\d* events?$/)).toBeVisible({ timeout: 30_000 });
 }
 
+/**
+ * Type `lines` at the end of an editor's text, each on a new line. Escape
+ * before each Enter closes the suggest widget, which would otherwise take the
+ * Enter and insert its first suggestion: `DEST_KEY = MetaData:Sourcetype` is
+ * itself a suggestion, and accepting it on a value that ends in a colon word
+ * writes the word twice.
+ */
+export async function appendLines(page: Page, editor: number, lines: string[]): Promise<void> {
+  await page.locator('.monaco-editor').nth(editor).click();
+  await page.keyboard.press('Control+End');
+  for (const line of lines) {
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type(line);
+  }
+  await page.keyboard.press('Escape');
+}
+
+/** The pipeline worker's built chunk; the name carries a content hash. */
+export const PIPELINE_WORKER = /\/pipelineWorker[^/]*\.js$/;
+
+/**
+ * Stand-ins for the pipeline worker's script. Each one sends the ready signal
+ * (src/workers/workerProtocol.ts), so the page counts what follows as the
+ * worker's fault, not as a load failure. Then `hang` never answers, and
+ * `crash` throws on each request, which reaches the page as the worker's
+ * `error` event, as a real crash does.
+ */
+const PIPELINE_WORKER_STAND_INS = {
+  hang: `self.postMessage({ type: 'ready' }); self.onmessage = () => {};`,
+  crash: `self.postMessage({ type: 'ready' }); self.onmessage = () => { throw new Error('e2e: the worker crashed'); };`,
+} as const;
+
+/**
+ * Serve the first `times` fetches of the pipeline worker's script as a
+ * stand-in that fails as `behaviour` says, and each later fetch as the real
+ * script. The page's own watchdog and crash handling then run against a real
+ * `Worker` in a real browser, with no test hook in the app. A replacement
+ * worker fetches its script again, so `times` is how many workers in a row
+ * fail. Returns a reader of how many fetches of the script there were.
+ *
+ * Not a pathological input: the engine's run budget and the regex match
+ * limits stop a slow pattern before the 5 s watchdog, by design, and how slow
+ * a pattern is depends on the machine. Nor can an input crash the worker: the
+ * worker catches what the engine throws and answers with it.
+ */
+export async function failPipelineWorker(
+  page: Page,
+  behaviour: keyof typeof PIPELINE_WORKER_STAND_INS,
+  times = 1,
+): Promise<() => number> {
+  let fetches = 0;
+  await page.context().route(PIPELINE_WORKER, (route) => {
+    fetches++;
+    if (fetches > times) return route.continue();
+    return route.fulfill({ contentType: 'text/javascript', body: PIPELINE_WORKER_STAND_INS[behaviour] });
+  });
+  return () => fetches;
+}
+
 /** A point in page coordinates. */
 export interface Point {
   x: number;

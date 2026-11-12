@@ -18,6 +18,8 @@ npm run test:coverage # unit tests: vitest, with the coverage floor enforced
 npm run test:e2e      # e2e: Playwright, against a production build
 ```
 
+**`e2e-firefox`** and **`e2e-webkit`** run `e2e/smoke.spec.ts` in Firefox and in WebKit, each in its own job, so that a browser install does not make `e2e` slower. Locally: `npx playwright install firefox webkit`, then `npm run test:e2e -- --project firefox --project webkit`. On Linux, `npx playwright install-deps webkit` installs the system packages that WebKit needs.
+
 The jobs also run four checks from `shared-workflows`: the coverage ratchet ([testing.md](testing.md#the-rules)), the documentation check, the licences of the production dependencies against `.licence-allowlist.json`, and the baseline check, which fails on a file of repo-template that is missing and has no exception in `.baseline-exceptions.json`. `unit tests` runs the ratchet, and `static checks` runs the other three. The documentation check holds the links, the ADR index, the line limit of each class of file and the type of each topic file ([documentation.md](documentation.md)). It also warns on each word that ASD-STE100 does not allow, in the files that `ste` names in `.docs-check.json`. Add a file to that list when you rewrite it in STE. Each is a Node script with no dependencies. To run one locally, clone `shared-workflows` beside this repository and run its script from here:
 
 ```bash

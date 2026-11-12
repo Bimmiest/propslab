@@ -7,6 +7,9 @@ import {
   loadExample,
   recordWorkerReplies,
   workerReplies,
+  appendLines,
+  failPipelineWorker,
+  PIPELINE_WORKER,
   dwellUntilVisible,
   pointIn,
 } from './fixtures';
@@ -341,6 +344,127 @@ test.describe('pipeline worker', () => {
 
     await expect(page.getByText('e2e_marker', { exact: true })).toBeVisible({ timeout: 20_000 });
     expect(await page.locator('tbody tr').count()).toBeGreaterThan(before);
+  });
+
+  // The watchdog and the crash policy (ADR 0014) against a real Worker (#891).
+  // The unit tests drive them with a fake one. Each stand-in fails the run
+  // that the app makes on mount, with the raw log empty.
+  const failure = (page: Page) => page.getByRole('alert').filter({ hasText: 'Processing failed' });
+
+  test('the watchdog stops a run that hangs its worker, and the next run uses a new worker', async ({ page }) => {
+    const fetches = await failPipelineWorker(page, 'hang');
+    await recordWorkerReplies(page);
+    await openApp(page);
+
+    await expect(failure(page)).toContainText('Pipeline timed out after 5 s', { timeout: 20_000 });
+    await expect(page.getByRole('contentinfo')).toContainText('1 error');
+    // The watchdog built the replacement at once, not at the next request.
+    await expect.poll(fetches).toBe(2);
+
+    await loadExample(page, APACHE);
+    await expect(failure(page)).toHaveCount(0);
+    expect(await workerReplies(page, PIPELINE_WORKER)).toBeGreaterThan(0);
+    await expect(page.getByTestId('pipeline-main-thread')).toHaveCount(0);
+  });
+
+  test('a run that crashes its worker once is run again on a new worker', async ({ page }) => {
+    const fetches = await failPipelineWorker(page, 'crash');
+    await recordWorkerReplies(page);
+    await openApp(page);
+
+    // The replay answers the run, so the user sees no failure.
+    await expect.poll(() => workerReplies(page, PIPELINE_WORKER), { timeout: 20_000 }).toBeGreaterThan(0);
+    await expect.poll(fetches).toBe(2);
+    await expect(failure(page)).toHaveCount(0);
+    await loadExample(page, APACHE);
+  });
+
+  test('a run that crashes two workers is stopped, and the next run uses a third', async ({ page }) => {
+    const fetches = await failPipelineWorker(page, 'crash', 2);
+    await recordWorkerReplies(page);
+    await openApp(page);
+
+    await expect(failure(page)).toContainText('Worker crashed repeatedly while processing this input', {
+      timeout: 20_000,
+    });
+    await expect.poll(fetches).toBe(3);
+
+    // The input that crashed is not run again on the main thread, and the
+    // next one runs on the third worker.
+    await expect(page.getByTestId('pipeline-main-thread')).toHaveCount(0);
+    await loadExample(page, APACHE);
+    await expect(failure(page)).toHaveCount(0);
+    expect(await workerReplies(page, PIPELINE_WORKER)).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * The two pipeline settings (#891). Manual apply holds each edit until Run or
+ * Ctrl+Enter. Per-event mode re-matches the stanzas of an event whose
+ * sourcetype a transform rewrote, and it turns manual apply on.
+ */
+test.describe('pipeline settings', () => {
+  const toggleSetting = async (page: Page, name: string) => {
+    await page.getByRole('button', { name: 'Open settings' }).click();
+    await page.getByRole('switch', { name }).click();
+    await page.getByRole('button', { name: 'Close settings' }).click();
+    await expect(page.getByRole('button', { name: 'Close settings' })).toBeHidden();
+  };
+  // In the Fields table only: the editors show the same names.
+  const fieldRow = (page: Page, name: string) => page.locator('tbody').getByText(name, { exact: true });
+  const outOfDate = (page: Page) => page.getByRole('contentinfo').getByText('● Out of date');
+
+  test('manual apply runs an edit only on Run or Ctrl+Enter', async ({ page }) => {
+    await openApp(page);
+    await toggleSetting(page, 'Manual apply');
+    // Loading an example is a decision to look at it, so it runs (#492).
+    await loadExample(page, APACHE);
+    await page.getByRole('tab', { name: /^Fields$/ }).click();
+    await expect(page.locator('tbody tr').first()).toBeVisible();
+
+    await appendLines(page, 1, ['EVAL-e2e_run = "button"']);
+    await expect(outOfDate(page)).toBeVisible();
+    await expect(fieldRow(page, 'e2e_run')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Run pipeline' }).click();
+    await expect(fieldRow(page, 'e2e_run')).toBeVisible({ timeout: 20_000 });
+    await expect(outOfDate(page)).toHaveCount(0);
+
+    // Ctrl+Enter with the focus in the editor runs too, and adds no line.
+    await appendLines(page, 1, ['EVAL-e2e_key = "shortcut"']);
+    await expect(outOfDate(page)).toBeVisible();
+    await expect(fieldRow(page, 'e2e_key')).toHaveCount(0);
+    await page.keyboard.press('Control+Enter');
+    await expect(fieldRow(page, 'e2e_key')).toBeVisible({ timeout: 20_000 });
+    await expect(outOfDate(page)).toHaveCount(0);
+  });
+
+  test('per-event mode applies the search-time stanza of a rewritten sourcetype', async ({ page }) => {
+    await openApp(page);
+    await loadExample(page, APACHE);
+    // The POST event becomes sourcetype e2e_web, whose stanza adds a field.
+    await appendLines(page, 2, [
+      '[e2e_retype]',
+      'REGEX = POST',
+      'DEST_KEY = MetaData:Sourcetype',
+      'FORMAT = sourcetype::e2e_web',
+    ]);
+    await appendLines(page, 1, ['TRANSFORMS-e2e = e2e_retype', '[e2e_web]', 'EVAL-e2e_rematched = "yes"']);
+
+    // In batch mode the rewrite is reported, and the stanza does not apply.
+    const batchWarning = page.getByText(/One or more events had their sourcetype\/host\/source rewritten/).first();
+    await expect(batchWarning).toBeVisible({ timeout: 20_000 });
+    await page.getByRole('tab', { name: /^Fields$/ }).click();
+    await expect(page.locator('tbody tr').first()).toBeVisible();
+    await expect(fieldRow(page, 'e2e_rematched')).toHaveCount(0);
+
+    await toggleSetting(page, 'Re-match stanzas after metadata rewrites');
+    await expect(page.getByRole('contentinfo').getByRole('button', { name: 'Per-event pipeline' })).toBeVisible();
+    // Per-event mode turned manual apply on, so the change waits for Run.
+    await expect(outOfDate(page)).toBeVisible();
+    await page.getByRole('button', { name: 'Run pipeline' }).click();
+
+    await expect(fieldRow(page, 'e2e_rematched')).toBeVisible({ timeout: 20_000 });
+    await expect(batchWarning).toHaveCount(0);
   });
 });
 
