@@ -84,6 +84,24 @@ for (const theme of ['dark', 'light'] as const) {
       });
     }
 
+    // The Apache example has five events, too few for the pager to show. Not
+    // with a field pinned: that dims the other text on purpose, which axe reads
+    // as low contrast.
+    test('event pager (#881)', async ({ page }) => {
+      await openApp(page);
+      await loadExample(page, APACHE);
+      const lines = Array.from(
+        { length: 12 },
+        (_, i) => `203.0.113.${i} - admin [25/Oct/2026:13:55:38 -0700] "GET /a?x=${i} HTTP/1.0" 200 1`,
+      );
+      await pasteInto(page, 0, lines.join('\n'));
+      await expect(page.getByText('12 events', { exact: true })).toBeVisible({ timeout: 30_000 });
+      await page.getByRole('tab', { name: /^Extractions$/ }).click();
+      await page.getByRole('button', { name: 'Next page' }).click();
+      await expect(page.getByText('Showing events 11-12 of 12', { exact: true })).toBeVisible();
+      await expectNoViolations(page, 'event pager');
+    });
+
     test('dictionary', async ({ page }) => {
       await openApp(page);
       await page.getByRole('tab', { name: 'Dictionary' }).click();
@@ -275,7 +293,8 @@ for (const theme of ['dark', 'light'] as const) {
     test('CIM Models: models with no matching field', async ({ page }) => {
       await openDroppedAndRouted(page);
       await page.getByRole('tab', { name: /^CIM Models$/ }).click();
-      await expect(page.getByRole('button', { name: 'Show matching only' })).toBeVisible();
+      // The header gives the threshold (#896); which models reach it depends on the example.
+      await expect(page.getByText(/A match has 50% or more of its required fields/)).toBeVisible();
       await expectNoViolations(page, 'CIM Models (non-matching)');
     });
 
