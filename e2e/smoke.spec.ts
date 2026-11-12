@@ -211,7 +211,6 @@ test.describe('editor context menu (#745)', () => {
   test('Shift+F10 opens the menu from the keyboard, and Find opens the find widget', async ({ page, browserName }) => {
     // See 'a raw-event selection can be made and acted on from the keyboard'.
     test.skip(browserName === 'firefox', "Playwright's Firefox fires no contextmenu event from the keyboard");
-    test.fixme(browserName === 'webkit', 'Safari sends no contextmenu event for Shift+F10 (#933)');
     await openApp(page);
     await loadExample(page, APACHE);
     const props = page.locator('.monaco-editor').nth(1);
@@ -519,7 +518,6 @@ test.describe('engine output reaches the tabs', () => {
   }) => {
     // See 'a raw-event selection can be made and acted on from the keyboard'.
     test.skip(browserName === 'firefox', "Playwright's Firefox fires no contextmenu event from the keyboard");
-    test.fixme(browserName === 'webkit', 'Safari sends no contextmenu event for Shift+F10 (#933)');
     await openApp(page);
     await loadExample(page, APACHE);
     await page.getByRole('tab', { name: /^Fields$/ }).click();
@@ -612,7 +610,6 @@ test.describe('accessibility affordances', () => {
     // `contextmenu` for Shift+F10 or the ContextMenu key, even at the
     // document (measured, #572), so there is nothing here to test it with.
     test.skip(browserName === 'firefox', "Playwright's Firefox fires no contextmenu event from the keyboard");
-    test.fixme(browserName === 'webkit', 'Safari sends no contextmenu event for Shift+F10 (#933)');
     await openApp(page);
     await loadExample(page, APACHE);
 
