@@ -58,7 +58,7 @@ The examples are dated October 2026. Until 2032 they are inside the default `MAX
 
 **Top-level tabs:** Preview, CIM Models, Fields, Pipeline, Effective config, Architecture.
 
-**Preview sub-tabs**, in this order: Raw → Timestamp → Extractions → Diff → Regex. The search and the filters are above the Raw, Extractions and Diff tabs only. The Timestamp and Regex tabs test every event, so they do not show the filter bar.
+**Preview sub-tabs**, in this order: Raw → Timestamp → Extractions → Diff → Regex.
 
 | Sub-tab | Shows |
 |---|---|

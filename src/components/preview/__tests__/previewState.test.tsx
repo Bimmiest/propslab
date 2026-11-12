@@ -7,7 +7,7 @@
 // ---------------------------------------------------------------------------
 
 import { beforeEach, describe, expect, it } from 'vitest';
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { PreviewPanel } from '../PreviewPanel';
 import type { EnrichedEvent } from '../enrichEvents';
 import { HighlightedTab } from '../tabs/HighlightedTab';
@@ -155,29 +155,18 @@ describe('Extractions pins', () => {
   });
 });
 
-describe('the Preview filter bar', () => {
-  it('shows on the tabs it filters, and not on Timestamp or Regex', () => {
-    useAppStore.setState({ processingResult: resultOf([{ user: 'alice' }, { user: 'bob' }]) });
-    render(<PreviewPanel />);
-    for (const tab of ['Raw', 'Extractions', 'Diff']) {
-      fireEvent.click(screen.getByRole('tab', { name: tab }));
-      expect(screen.getByRole('textbox', { name: 'Search events' })).toBeInTheDocument();
-    }
-    for (const tab of ['Timestamp', 'Regex']) {
-      fireEvent.click(screen.getByRole('tab', { name: tab }));
-      expect(screen.queryByRole('textbox', { name: 'Search events' })).not.toBeInTheDocument();
-    }
-  });
-
-  it('does not hide events on Timestamp behind a search that is out of sight', () => {
+describe('the Preview filter bar on Timestamp and Regex', () => {
+  it('stays, and the Timestamp tab reads the filtered events', async () => {
     useAppStore.setState({
       propsConf: '[st]\nTIME_FORMAT = %Y\n',
       processingResult: resultOf([{ user: 'alice' }, { user: 'bob' }]),
     });
     render(<PreviewPanel />);
-    fireEvent.click(screen.getByRole('tab', { name: 'Raw' }));
-    fireEvent.change(screen.getByRole('textbox', { name: 'Search events' }), { target: { value: 'alice' } });
     fireEvent.click(screen.getByRole('tab', { name: 'Timestamp' }));
-    expect(screen.getByText(/Event #2/)).toBeInTheDocument();
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search events' }), { target: { value: 'alice' } });
+    expect(screen.getByText(/Event #1/)).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText(/Event #2/)).not.toBeInTheDocument());
+    fireEvent.click(screen.getByRole('tab', { name: 'Regex' }));
+    expect(screen.getByRole('textbox', { name: 'Search events' })).toHaveValue('alice');
   });
 });

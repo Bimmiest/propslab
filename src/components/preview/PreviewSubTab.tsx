@@ -35,13 +35,6 @@ const PREVIEW_SUB_TABS: { id: PreviewSubTabId; label: string }[] = [
   { id: 'regex', label: 'Regex' },
 ];
 
-/**
- * The sub-tabs that show the events one by one. The Timestamp and Regex tabs
- * test a config or a pattern against every event, so the search and the
- * filters have no place there: the bar is hidden, and they read all events.
- */
-const FILTERED_SUB_TABS: ReadonlySet<PreviewSubTabId> = new Set(['raw', 'highlighted', 'diff']);
-
 /** What the preview's sub-tabs read of the pipeline inputs: the Timestamp tab's config. */
 export type PreviewInputs = Pick<PipelineInputs, 'propsConf' | 'metadata'>;
 
@@ -168,11 +161,8 @@ export const PreviewSubTab = memo(function PreviewSubTab({ pipelineInputs }: { p
     return enrichedEvents.filter((item) => matchesFilters(item, filters));
   }, [enrichedEvents, debouncedSearch, live.fields, live.status, live.changeState]);
 
-  const filtered = FILTERED_SUB_TABS.has(subTab);
-  const visibleEvents = filtered ? filteredEvents : enrichedEvents;
-
   const { paginatedItems, currentPage, totalPages, eventsPerPage, totalItems, setCurrentPage, setEventsPerPage } =
-    usePagination(visibleEvents);
+    usePagination(filteredEvents);
   // Present while there is a choice of page size to make: with more events
   // than the smallest page. Shown only past the current page size, choosing a
   // larger size hid the control, and it could not be set back down.
@@ -193,23 +183,21 @@ export const PreviewSubTab = memo(function PreviewSubTab({ pipelineInputs }: { p
       </div>
 
       {/* Shared filter bar */}
-      {filtered && (
-        <PreviewFilterBar
-          search={search}
-          onSearchChange={(v) => setFilters({ search: v })}
-          allFields={allFields}
-          selectedFields={live.fields}
-          onFieldsChange={(f) => setFilters({ fields: f })}
-          statusOptions={options.status}
-          selectedStatus={live.status}
-          onStatusChange={(s) => setFilters({ status: s })}
-          changeStateOptions={options.changeState}
-          selectedChangeState={live.changeState}
-          onChangeStateChange={(m) => setFilters({ changeState: m })}
-          filteredCount={filteredEvents.length}
-          totalCount={enrichedEvents.length}
-        />
-      )}
+      <PreviewFilterBar
+        search={search}
+        onSearchChange={(v) => setFilters({ search: v })}
+        allFields={allFields}
+        selectedFields={live.fields}
+        onFieldsChange={(f) => setFilters({ fields: f })}
+        statusOptions={options.status}
+        selectedStatus={live.status}
+        onStatusChange={(s) => setFilters({ status: s })}
+        changeStateOptions={options.changeState}
+        selectedChangeState={live.changeState}
+        onChangeStateChange={(m) => setFilters({ changeState: m })}
+        filteredCount={filteredEvents.length}
+        totalCount={enrichedEvents.length}
+      />
 
       {/* Sub-tab content. Keyed so a new sub-tab fades in, and starts at its top. */}
       <div
@@ -221,10 +209,10 @@ export const PreviewSubTab = memo(function PreviewSubTab({ pipelineInputs }: { p
       >
         {subTabContent(subTab, {
           items: paginatedItems,
-          allEvents: visibleEvents,
+          allEvents: filteredEvents,
           currentPage,
           eventsPerPage,
-          search: filtered ? debouncedSearch : '',
+          search: debouncedSearch,
           fieldStats,
           inputs: pipelineInputs,
         })}
