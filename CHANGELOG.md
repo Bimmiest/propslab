@@ -374,7 +374,7 @@ Entries #341 and #343–#349 are the rest of the fourth review's findings. Engin
     - `like()`, `match()` and `cidrmatch()`.
   - **How NULL is treated.** False in `if()`, `case()` and STOP_PROCESSING_IF, three-valued in NOT/AND/OR/XOR, and an EVAL that yields NULL writes no field.
 - **A `]` straight after `[` or `[^` in a regex is a literal, as in PCRE** ([#341](https://github.com/Bimmiest/propslab/issues/341)), found by the #340 property tests.
-- _\*XML_IE_* wildcard lists are matched as globs in linear time_* ([#344](https://github.com/Bimmiest/propslab/issues/344)) instead of backtracking regexes.
+- _*XML_IE_* wildcard lists are matched as globs in linear time_* ([#344](https://github.com/Bimmiest/propslab/issues/344)) instead of backtracking regexes.
 - **INGEST_EVAL rewrites now show in the trace** ([#346](https://github.com/Bimmiest/propslab/issues/346); [ADR 0010](docs/adr/0010-engine-decisions-are-structured-data-on-the-event.md)).
   - A `_raw=` rewrite records before, after and the fields it destroyed, like `DEST_KEY = _raw`.
   - Metadata assignments show old → new.
