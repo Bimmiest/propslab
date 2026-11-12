@@ -58,9 +58,10 @@ export function FirstRunBanner() {
         borderColor: 'var(--color-border-subtle)',
       }}
     >
-      {/* Steps */}
-      <div className="flex items-center gap-1 flex-1 min-w-0 flex-wrap">
-        {STEPS.map((step, idx) => (
+      {/* Steps. The numbers give the order, so there is no arrow to dangle at the end of a wrapped row, and the
+          descriptions show only where all three steps fit on one row (1500 px and wider). */}
+      <div className="flex items-center gap-2 flex-1 min-w-0 flex-wrap">
+        {STEPS.map((step) => (
           <div key={step.number} className="flex items-center gap-1">
             <div
               className="flex items-center gap-2 px-2.5 py-1 rounded-lg"
@@ -74,13 +75,12 @@ export function FirstRunBanner() {
               </span>
               <div className="hidden sm:block">
                 <span className="text-xs font-semibold text-[var(--color-text-primary)]">{step.label}</span>
-                <span className="text-xs text-[var(--color-text-muted)] ml-1.5 hidden md:inline">{step.detail}</span>
+                <span className="text-xs text-[var(--color-text-muted)] ml-1.5 hidden min-[1500px]:inline">
+                  {step.detail}
+                </span>
               </div>
               <span className="text-xs font-semibold text-[var(--color-text-primary)] sm:hidden">{step.label}</span>
             </div>
-            {idx < STEPS.length - 1 && (
-              <Icon name="arrow-right" className="w-3.5 h-3.5 text-[var(--color-text-muted)] shrink-0 mx-0.5" />
-            )}
           </div>
         ))}
       </div>

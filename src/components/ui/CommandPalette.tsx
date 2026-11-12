@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useState } from 'react';
 import type React from 'react';
 import { Command } from 'cmdk';
 import { useAppStore, EMPTY_INPUTS, type SessionInputs } from '../../store/useAppStore';
@@ -45,10 +45,31 @@ export function CommandPalette() {
   const open = useAppStore((s) => s.commandPaletteOpen);
   const toggleCommandPalette = useAppStore((s) => s.toggleCommandPalette);
   const { replace, confirm } = useReplaceInputs();
+  // The examples are a second level (a cmdk page), so the commands are on the
+  // first screen. `search` is controlled so that entering or leaving the page
+  // can clear it.
+  const [page, setPage] = useState<'root' | 'examples'>('root');
+  const [search, setSearch] = useState('');
 
   const close = useCallback(() => {
     if (open) toggleCommandPalette();
   }, [open, toggleCommandPalette]);
+
+  // Each opening starts at the first level with an empty query. Reset while
+  // rendering, when `open` changes, not in an effect that renders the old page.
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (!open) {
+      setPage('root');
+      setSearch('');
+    }
+  }
+
+  const openExamples = useCallback(() => {
+    setPage('examples');
+    setSearch('');
+  }, []);
 
   // Escape (topmost layer only), the focus trap that `aria-modal` promises, and
   // focus restore on close all come from the shared overlay hook.
@@ -106,18 +127,38 @@ export function CommandPalette() {
           border: '1px solid var(--color-border)',
         }}
       >
-        <Command label="Command palette">
-          <PaletteInput />
+        <Command
+          label="Command palette"
+          onKeyDown={(e) => {
+            // Backspace in an empty query goes up one level, as in a menu.
+            if (e.key === 'Backspace' && page === 'examples' && search === '') {
+              e.preventDefault();
+              setPage('root');
+            }
+          }}
+        >
+          <PaletteInput
+            value={search}
+            onValueChange={setSearch}
+            placeholder={page === 'examples' ? 'Pick an example…' : 'Type a command…'}
+          />
 
           <Command.List className="max-h-80 overflow-y-auto py-1">
             <Command.Empty className="py-6 text-center text-sm" style={{ color: 'var(--color-text-muted)' }}>
               No results found.
             </Command.Empty>
 
-            <ExampleCommands replaceInputs={replaceInputs} />
-            <NavigateCommands run={run} />
-            <LookupCommands run={run} />
-            <ActionCommands run={run} replaceInputs={replaceInputs} />
+            {page === 'examples' ? (
+              <ExampleCommands replaceInputs={replaceInputs} onBack={() => setPage('root')} />
+            ) : (
+              <>
+                <ActionCommands run={run} replaceInputs={replaceInputs} openExamples={openExamples} />
+                <NavigateCommands run={run} />
+                {/* A search finds an example by name without opening the page. */}
+                {search !== '' && <ExampleItems replaceInputs={replaceInputs} />}
+                <LookupCommands run={run} />
+              </>
+            )}
           </Command.List>
         </Command>
       </Overlay>
@@ -125,7 +166,15 @@ export function CommandPalette() {
   );
 }
 
-function PaletteInput() {
+function PaletteInput({
+  value,
+  onValueChange,
+  placeholder,
+}: {
+  value: string;
+  onValueChange: (value: string) => void;
+  placeholder: string;
+}) {
   return (
     <div
       className="flex items-center gap-2 px-3 border-b focus-within:ring-2 focus-within:ring-inset focus-within:ring-[var(--color-accent)]"
@@ -133,7 +182,9 @@ function PaletteInput() {
     >
       <Icon name="search" className="w-4 h-4 shrink-0 text-[var(--color-text-muted)]" />
       <Command.Input
-        placeholder="Type a command…"
+        value={value}
+        onValueChange={onValueChange}
+        placeholder={placeholder}
         className="flex-1 h-11 bg-transparent text-sm outline-none placeholder:text-[var(--color-text-muted)]"
         style={{ color: 'var(--color-text-primary)' }}
         autoFocus
@@ -151,18 +202,24 @@ function PaletteInput() {
   );
 }
 
-function ExampleCommands({ replaceInputs }: { replaceInputs: ReplaceInputs }) {
+function ExampleItems({ replaceInputs }: { replaceInputs: ReplaceInputs }) {
+  return SAMPLE_CONFIGS.map((sample) => (
+    <CommandItem
+      key={sample.name}
+      label={`Load: ${sample.name}`}
+      hint={sample.description}
+      icon="terminal"
+      onSelect={() => replaceInputs(sample, 'Load example', `Loading “${sample.name}”`)}
+    />
+  ));
+}
+
+/** The second level: only the examples, with a way back. */
+function ExampleCommands({ replaceInputs, onBack }: { replaceInputs: ReplaceInputs; onBack: () => void }) {
   return (
-    <CommandGroup heading="Examples">
-      {SAMPLE_CONFIGS.map((sample) => (
-        <CommandItem
-          key={sample.name}
-          label={`Load: ${sample.name}`}
-          hint={sample.description}
-          icon="terminal"
-          onSelect={() => replaceInputs(sample, 'Load example', `Loading “${sample.name}”`)}
-        />
-      ))}
+    <CommandGroup heading="Load example">
+      <CommandItem label="Back to all commands" icon="chevron-left" onSelect={onBack} />
+      <ExampleItems replaceInputs={replaceInputs} />
     </CommandGroup>
   );
 }
@@ -214,10 +271,19 @@ function LookupCommands({ run }: { run: RunCommand }) {
   );
 }
 
-function ActionCommands({ run, replaceInputs }: { run: RunCommand; replaceInputs: ReplaceInputs }) {
+function ActionCommands({
+  run,
+  replaceInputs,
+  openExamples,
+}: {
+  run: RunCommand;
+  replaceInputs: ReplaceInputs;
+  openExamples: () => void;
+}) {
   const toggleTheme = useAppStore((s) => s.toggleTheme);
   return (
     <CommandGroup heading="Actions">
+      <CommandItem label="Load example…" hint="Pick a sample" icon="terminal" onSelect={openExamples} />
       <CommandItem
         label="Scaffold config from sample data"
         hint="Suggest props.conf"
