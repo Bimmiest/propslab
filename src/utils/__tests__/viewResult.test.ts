@@ -75,6 +75,8 @@ describe('toViewResult', () => {
       { processor: 'p', phase: 'index-time', description: '' },
       { processor: 'p', phase: 'search-time', description: '' },
       { processor: 'p', phase: 'index-time', description: '', timeSource: 'TIME_FORMAT' },
+      { processor: 'p', phase: 'index-time', description: '', timeFormat: '%Y' },
+      { processor: 'p', phase: 'index-time', description: '', timeFallback: 'not-found' },
       { processor: 'p', phase: 'index-time', description: '', fieldsAdded: ['x'] },
       { processor: 'p', phase: 'index-time', description: '', fieldsModified: ['x'] },
       { processor: 'p', phase: 'index-time', description: '', fieldsRemoved: ['x'] },

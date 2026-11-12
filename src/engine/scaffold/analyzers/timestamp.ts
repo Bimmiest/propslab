@@ -44,41 +44,67 @@ export function detectTimestamp(lines: string[]): ScaffoldSuggestion[] {
     },
   ];
 
-  const matchEnd = best.match.end;
+  const location = locateTimestamp(best.line, best.match);
   const tsLen = best.match.end - best.match.start;
-  const prefix = derivePrefix(best.line.slice(0, best.match.start));
 
-  if (prefix) {
+  if (location.timePrefix !== null) {
     out.push({
       key: 'TIME_PREFIX',
-      value: escapeRegex(prefix),
+      value: location.timePrefix,
       confidence: 'medium',
-      evidence: `Timestamp follows the literal "${prefix}"`,
+      evidence: `Timestamp follows the literal "${location.prefix}"`,
       enabledByDefault: true,
     });
-    // MAX_TIMESTAMP_LOOKAHEAD is measured from AFTER the TIME_PREFIX match, so cap
-    // it to the timestamp length — Splunk stops scanning once the timestamp is read.
-    // Splunk recommends this as an indexing-performance best practice.
     out.push({
       key: 'MAX_TIMESTAMP_LOOKAHEAD',
-      value: String(tsLen + 1),
+      value: String(location.lookahead),
       confidence: 'medium',
       evidence: `Timestamp is ${tsLen} characters; cap the search just past TIME_PREFIX for indexing performance`,
       enabledByDefault: true,
     });
   } else {
-    // No prefix → lookahead counts from the start of the event. Cap it near the
-    // timestamp's end so Splunk doesn't scan the whole 128-character default window.
     out.push({
       key: 'MAX_TIMESTAMP_LOOKAHEAD',
-      value: String(matchEnd + 10),
+      value: String(location.lookahead),
       confidence,
-      evidence: `Timestamp ends near character ${matchEnd}; cap the search there for indexing performance`,
+      evidence: `Timestamp ends near character ${best.match.end}; cap the search there for indexing performance`,
       enabledByDefault: true,
     });
   }
 
   return out;
+}
+
+/** Where a timestamp is in its text, as TIME_PREFIX and MAX_TIMESTAMP_LOOKAHEAD say it. */
+export interface TimestampLocationDirectives {
+  /** The literal text TIME_PREFIX matches, or '' when there is none. */
+  prefix: string;
+  /** `prefix` as a TIME_PREFIX regex, or null when there is none. */
+  timePrefix: string | null;
+  lookahead: number;
+}
+
+/**
+ * The TIME_PREFIX and MAX_TIMESTAMP_LOOKAHEAD that find the timestamp at
+ * `span` (end exclusive) in `text`, with the TIME_FORMAT that reads it. The
+ * Timestamp tab's "Write this as TIME_FORMAT" uses it as well as the scaffold,
+ * so the two write the same directives.
+ *
+ * A prefix is used only when its first occurrence is the one just before the
+ * timestamp: TIME_PREFIX matches its first occurrence, and the format is read
+ * right after that match. `[INFO] [2024-…` must not get `\[`.
+ */
+export function locateTimestamp(text: string, span: { start: number; end: number }): TimestampLocationDirectives {
+  const prefix = derivePrefix(text.slice(0, span.start));
+  if (prefix && text.indexOf(prefix) + prefix.length === span.start) {
+    // MAX_TIMESTAMP_LOOKAHEAD is measured from AFTER the TIME_PREFIX match, so cap
+    // it to the timestamp length — Splunk stops scanning once the timestamp is read.
+    // Splunk recommends this as an indexing-performance best practice.
+    return { prefix, timePrefix: escapeRegex(prefix), lookahead: span.end - span.start + 1 };
+  }
+  // No prefix → lookahead counts from the start of the event. Cap it near the
+  // timestamp's end so Splunk doesn't scan the whole 128-character default window.
+  return { prefix: '', timePrefix: null, lookahead: span.end + 10 };
 }
 
 /**

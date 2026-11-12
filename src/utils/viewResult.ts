@@ -143,6 +143,8 @@ function stepKey(step: ProcessingStep): string {
     step.processor,
     step.phase,
     step.timeSource ?? '',
+    step.timeFormat ?? '',
+    step.timeFallback ?? '',
     list(step.fieldsAdded),
     list(step.fieldsModified),
     list(step.fieldsRemoved),

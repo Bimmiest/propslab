@@ -690,3 +690,55 @@ describe('extractTimestamps — auto-recognition keeps the zone (#353)', () => {
     expect(auto('2025-12-31 10:00:00 Zookeeper started', [dir('TZ', '+0500')])).toBe('2025-12-31T05:00:00.000Z');
   });
 });
+
+// The Timestamp tab underlines the text each event's `_time` came from and
+// names its format, without TIME_FORMAT to re-derive them from (#898).
+describe('extractTimestamps — what the trace records of the read', () => {
+  const step = (e: SplunkEvent) => e.processingTrace.filter((s) => s.processor === 'timestampExtractor').at(-1);
+
+  it('records the recognised format and where the timestamp is, with no TIME_FORMAT', () => {
+    const raw = '[INFO] at 2024/01/15 10:00:00 started';
+    const e = extractTimestamps([event(raw)], [], runCtx(NOW))[0]!;
+    expect(step(e)?.timeFormat).toBe('%Y/%m/%d %H:%M:%S');
+    expect(step(e)?.timeFallback).toBeUndefined();
+    expect(e.timestampSpan).toEqual({ start: 10, end: 29 });
+    expect(raw.slice(e.timestampSpan!.start, e.timestampSpan!.end)).toBe('2024/01/15 10:00:00');
+  });
+
+  it('measures the span from the event start, not from TIME_PREFIX', () => {
+    const raw = 'id=5 ts=2024-01-15T10:00:00 rest';
+    const e = extractTimestamps([event(raw)], [dir('TIME_PREFIX', 'ts=')], runCtx(NOW))[0]!;
+    expect(e.timestampSpan).toEqual({ start: 8, end: 27 });
+  });
+
+  it('records TIME_FORMAT as the format when it is set', () => {
+    const e = extractTimestamps(
+      [event('x 2024-01-15 10:00:00')],
+      [dir('TIME_FORMAT', '%Y-%m-%d %H:%M:%S')],
+      runCtx(NOW),
+    )[0]!;
+    expect(step(e)?.timeFormat).toBe('%Y-%m-%d %H:%M:%S');
+    expect(e.timestampSpan).toEqual({ start: 2, end: 21 });
+  });
+
+  it('records why an event fell back when no timestamp was found, and no format or span', () => {
+    const [first, second] = extractTimestamps([event('2024-01-15 10:00:00 a'), event('no time here')], [], runCtx(NOW));
+    expect(step(second!)?.timeSource).toBe('previous-event');
+    expect(step(second!)?.timeFallback).toBe('not-found');
+    expect(step(second!)?.timeFormat).toBeUndefined();
+    expect(second!.timestampSpan).toBeUndefined();
+    expect(step(first!)?.timeFallback).toBeUndefined();
+  });
+
+  it('records an out-of-bounds timestamp as such, and no span', () => {
+    const e = extractTimestamps([event('2026-07-01 10:00:00 x')], [dir('MAX_DAYS_AGO', '7')], runCtx(NOW))[0]!;
+    expect(step(e)?.timeSource).toBe('current-time');
+    expect(step(e)?.timeFallback).toBe('out-of-bounds');
+    expect(e.timestampSpan).toBeUndefined();
+  });
+
+  it('records a TIME_FORMAT match that will not parse as not found', () => {
+    const e = extractTimestamps([event('2024-13-45 x')], [dir('TIME_FORMAT', '%Y-%m-%d')], runCtx(NOW))[0]!;
+    expect(step(e)?.timeFallback).toBe('not-found');
+  });
+});

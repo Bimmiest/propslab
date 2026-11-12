@@ -1,11 +1,12 @@
 import { parseConf } from '../../../../engine/parser/confParser';
 import { mergeDirectives, resolveStanzasForEvent } from '../../../../engine/parser/stanzaMatcher';
 import { resolveLookahead } from '../../../../engine/processors/timestampExtractor';
-import type { TimeConfig, TimestampProbe } from '../../../../engine/timestampMatch';
-import type { EventMetadata, TimeSource } from '../../../../engine/types';
-import type { ViewEvent } from '../../../../utils/viewResult';
+import { locateTimestamp } from '../../../../engine/scaffold/analyzers/timestamp';
+import type { TimeConfig, TimestampMatch, TimestampProbe } from '../../../../engine/timestampMatch';
+import { FALLBACK_TIME_SOURCES, type EventMetadata, type TimeSource } from '../../../../engine/types';
+import type { TraceStep, ViewEvent } from '../../../../utils/viewResult';
 import { formatSpecifiers } from '../../../../utils/strftime';
-import { STRPTIME_REFERENCE } from './data';
+import { FALLBACK_LABEL, STRPTIME_REFERENCE } from './data';
 
 // TimeConfig / TimestampMatch / the probe itself now live in
 // `engine/timestampMatch`, so the worker and this tab share one definition.
@@ -69,9 +70,122 @@ export function timestampTextOf(event: ViewEvent): string {
   return event.timestampText ?? event._raw;
 }
 
+/** The trace step that resolved this event's `_time`. */
+export function timestampStepOf(event: ViewEvent): TraceStep | undefined {
+  return event.processingTrace.filter((step) => step.processor === 'timestampExtractor').at(-1);
+}
+
 /** How the pipeline actually resolved this event's `_time`. */
 export function resolvedTimeSource(event: ViewEvent): TimeSource | undefined {
-  return event.processingTrace.filter((step) => step.processor === 'timestampExtractor').at(-1)?.timeSource;
+  return timestampStepOf(event)?.timeSource;
+}
+
+/** Where automatic recognition read this event's `_time`, or null when it did not. */
+export function recognisedRead(event: ViewEvent): { format: string; span: { start: number; end: number } } | null {
+  const step = timestampStepOf(event);
+  const span = event.timestampSpan;
+  if (step?.timeSource !== 'auto-recognition' || step.timeFormat === undefined || span === undefined) return null;
+  return { format: step.timeFormat, span };
+}
+
+/** One format that automatic recognition read, with the first event it read with it. */
+export interface RecognisedFormat {
+  format: string;
+  count: number;
+  example: { text: string; span: { start: number; end: number } };
+}
+
+/** What automatic recognition did across a run, for the tab when no TIME_FORMAT is set. */
+export interface RecognitionSummary {
+  /** The most common first; a tie keeps the order in which the events first used them. */
+  formats: RecognisedFormat[];
+  recognised: number;
+  /** Events whose `_time` came from the previous event, the clock or DATETIME_CONFIG. */
+  fallback: number;
+}
+
+export function summariseRecognition(events: readonly ViewEvent[]): RecognitionSummary {
+  const byFormat = new Map<string, RecognisedFormat>();
+  let recognised = 0;
+  let fallback = 0;
+  for (const event of events) {
+    const read = recognisedRead(event);
+    if (read) {
+      recognised++;
+      const entry = byFormat.get(read.format);
+      if (entry) entry.count++;
+      else
+        byFormat.set(read.format, {
+          format: read.format,
+          count: 1,
+          example: { text: timestampTextOf(event), span: read.span },
+        });
+      continue;
+    }
+    const source = resolvedTimeSource(event);
+    if (source !== undefined && FALLBACK_TIME_SOURCES.includes(source)) fallback++;
+  }
+  // Array.prototype.sort is stable, so equal counts keep first-seen order.
+  const formats = [...byFormat.values()].sort((a, b) => b.count - a.count);
+  return { formats, recognised, fallback };
+}
+
+/**
+ * The directives "Write this as TIME_FORMAT" adds for `format`: the ones the
+ * scaffold writes, located from the first event read with it. A TIME_PREFIX
+ * already set stays, and so does the lookahead measured from it: only
+ * TIME_FORMAT is added then.
+ */
+export function recognisedDirectives(format: RecognisedFormat, config: TimeConfig): { key: string; value: string }[] {
+  const timeFormat = { key: 'TIME_FORMAT', value: format.format };
+  if (config.timePrefix) return [timeFormat];
+  const { timePrefix, lookahead } = locateTimestamp(format.example.text, format.example.span);
+  return [
+    ...(timePrefix !== null ? [{ key: 'TIME_PREFIX', value: timePrefix }] : []),
+    timeFormat,
+    { key: 'MAX_TIMESTAMP_LOOKAHEAD', value: String(lookahead) },
+  ];
+}
+
+/**
+ * Why an event's `_time` did not come from its text, and where it came from
+ * instead, or null when it did come from its text.
+ */
+export function fallbackReason(step: TraceStep | undefined): string | null {
+  const source = step?.timeSource;
+  if (source === undefined || !FALLBACK_TIME_SOURCES.includes(source)) return null;
+  if (source !== 'previous-event' && source !== 'current-time') return FALLBACK_LABEL[source] ?? source;
+  const why = step?.timeFallback === 'out-of-bounds' ? 'Timestamp outside the sanity bounds' : 'No timestamp found';
+  return `${why} — _time from ${source === 'previous-event' ? 'the previous event' : 'the time of indexing'}`;
+}
+
+/**
+ * The overlay of an event automatic recognition read: the span the engine
+ * recorded, in the window the prober drew from TIME_PREFIX when one is set.
+ */
+export function recognisedSegments(
+  raw: string,
+  probe: TimestampProbe | null,
+  config: TimeConfig,
+  /** The read, and the `_time` it gave in epoch ms. */
+  read: { format: string; span: { start: number; end: number }; timeMs: number | null },
+): OverlaySegment[] | null {
+  const prefix = probe?.prefix ?? null;
+  const match: TimestampMatch = {
+    prefixStart: prefix?.start ?? 0,
+    prefixEnd: prefix?.end ?? 0,
+    lookaheadEnd: prefix?.lookaheadEnd ?? Math.min(config.maxLookahead, raw.length),
+    tsStart: read.span.start,
+    tsEnd: read.span.end,
+    parsedTimeMs: read.timeMs,
+    matchedText: raw.substring(read.span.start, read.span.end),
+  };
+  return overlaySegments(raw, { match, prefix }, config, read.format);
+}
+
+/** The overlay kinds that `segments` draw, for a legend of only what is on screen. */
+export function shownKinds(segments: readonly (readonly OverlaySegment[] | null)[]): Set<OverlaySegment['kind']> {
+  return new Set(segments.flatMap((s) => (s ?? []).map((segment) => segment.kind)));
 }
 
 /** A run of an event's text and how the overlay draws it. */
@@ -98,6 +212,8 @@ export function overlaySegments(
   raw: string,
   probe: TimestampProbe | null,
   config: TimeConfig,
+  /** The format automatic recognition read the timestamp with, when no TIME_FORMAT is set. */
+  recognisedFormat?: string,
 ): OverlaySegment[] | null {
   const result = probe?.match ?? null;
   const segments: OverlaySegment[] = [];
@@ -144,7 +260,7 @@ export function overlaySegments(
     key: 'ts',
     kind: 'timestamp',
     text: raw.substring(cursor, result.tsEnd),
-    title: `TIME_FORMAT: ${config.timeFormat}\nParsed: ${parsed}`,
+    title: `${recognisedFormat !== undefined ? `Recognized format: ${recognisedFormat}` : `TIME_FORMAT: ${config.timeFormat}`}\nParsed: ${parsed}`,
   });
   cursor = result.tsEnd;
 
