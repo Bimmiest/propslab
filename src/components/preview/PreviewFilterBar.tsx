@@ -50,7 +50,13 @@ export function PreviewFilterBar({
           className="w-full pl-7 pr-2 py-1 text-xs rounded border border-[var(--color-border-control)] bg-[var(--color-bg-primary)] text-[var(--color-text-primary)] outline-none focus:border-[var(--color-accent)]"
         />
       </div>
-      <MultiSelect label="Fields" options={allFields} selected={selectedFields} onChange={onFieldsChange} searchable />
+      <MultiSelect
+        label="Filter by field"
+        options={allFields}
+        selected={selectedFields}
+        onChange={onFieldsChange}
+        searchable
+      />
       {statusOptions.length > 0 && (
         <MultiSelect label="Status" options={statusOptions} selected={selectedStatus} onChange={onStatusChange} />
       )}
