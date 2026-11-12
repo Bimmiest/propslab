@@ -3,12 +3,16 @@ import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import {
   closestArgument,
+  explainInputSchema,
   explainInputShape,
   handleExplainPrecedence,
   handleLookupDirective,
   handleSimulate,
   handleValidate,
+  lookupInputSchema,
   MAX_TOTAL_CONF_CHARS,
+  simulateInputSchema,
+  validateInputSchema,
   validateInputShape,
   workerFailure,
 } from '../tools';
@@ -288,6 +292,8 @@ describe('explain_precedence', () => {
       ),
     );
     expect(out.parseErrors).toEqual([]);
+    // No sourcetype, so no stanza resolution.
+    expect(out).not.toHaveProperty('resolution');
     const stanza = out.stanzas.find((s: { name: string }) => s.name === 'access_log');
     expect(stanza.layers.map((l: { layer: string }) => l.layer)).toEqual(['default', 'local']);
     const winner = stanza.directives.find(
@@ -364,7 +370,14 @@ describe('explain_precedence', () => {
       argument: 'sourcetype',
       file: 'transforms.conf',
     });
-    expect(payload(result).guidance).toMatch(/file="props\.conf"/);
+    expect(payload(result).message).toBe(
+      'sourcetype selects the props.conf stanzas that match an event. No event matches a transforms.conf ' +
+        'stanza, so the call would ignore it.',
+    );
+    expect(payload(result).guidance).toBe(
+      'Omit sourcetype to explain transforms.conf. To see what applies to a sourcetype, call again with ' +
+        'file="props.conf", the props.conf that references these transforms, and the sourcetype.',
+    );
   });
 });
 
@@ -809,7 +822,71 @@ describe('closestArgument (#884)', () => {
 
   it('names nothing when no argument is close', () => {
     expect(closestArgument('banana', simulateArgsKnown)).toBeNull();
-    // Too short to match by containment: `r` is in raw, sourcetype and more.
-    expect(closestArgument('xr', ['raw_sample'])).toBeNull();
+    // Too short to match by containment, though `raw_sample` contains it.
+    expect(closestArgument('ra', ['raw_sample'])).toBeNull();
+  });
+
+  it('matches by containment from three characters', () => {
+    expect(closestArgument('max', ['max_events'])).toBe('max_events');
+  });
+
+  it('counts exactly two edits as close, and three as not', () => {
+    // Two insertions, and not contained in it.
+    expect(closestArgument('sorcetyp', ['sourcetype'])).toBe('sourcetype');
+    expect(closestArgument('sorcetp', ['sourcetype'])).toBeNull();
+  });
+
+  it('keeps the first of two equally close arguments', () => {
+    expect(closestArgument('ab_x', ['ab_y', 'ab_z'])).toBe('ab_y');
+  });
+
+  it('measures edits as insertions, deletions and substitutions', () => {
+    expect(closestArgument('timeout_mss', ['timeout_ms', 'zzzzzzzzzzz'])).toBe('timeout_ms');
+    expect(closestArgument('hst', ['host'])).toBe('host');
+    expect(closestArgument('hosx', ['host'])).toBe('host');
+    expect(closestArgument('xyzw', ['host'])).toBeNull();
+  });
+});
+
+describe('strict tool input (#884)', () => {
+  const issues = (schema: z.ZodType, input: unknown) => {
+    const result = schema.safeParse(input);
+    if (result.success) throw new Error('expected the schema to refuse the input');
+    return result.error.issues.map((i) => i.message);
+  };
+
+  it('refuses one unknown argument, names the closest and lists the rest', () => {
+    expect(issues(simulateInputSchema, { raw: 'x', sourcetype: 'st', props: '[st]' })).toEqual([
+      'unknown argument `props` (did you mean `props_conf`?). This tool takes: raw, sourcetype, index, host, ' +
+        'source, props_conf, transforms_conf, per_event_pipeline, capture_offsets, include_snapshots, ' +
+        'max_events, timeout_ms.',
+    ]);
+  });
+
+  it('names every unknown argument, with no suggestion where none is close', () => {
+    expect(issues(validateInputSchema, { transforms: '', foo: 1 })).toEqual([
+      'unknown arguments `transforms` (did you mean `transforms_conf`?), `foo`. ' +
+        'This tool takes: props_conf, transforms_conf, timeout_ms.',
+    ]);
+    expect(issues(lookupInputSchema, { directive: 'X' })).toEqual([
+      'unknown argument `directive`. This tool takes: key, file.',
+    ]);
+    expect(issues(explainInputSchema, { conf: '', sourcetyp: 'st' })[0]).toMatch(
+      /^unknown argument `sourcetyp` \(did you mean `sourcetype`\?\)\./,
+    );
+  });
+
+  it("leaves zod's message on arguments that are not an object", () => {
+    expect(issues(simulateInputSchema, 'raw text')).toEqual([expect.stringMatching(/expected object/)]);
+  });
+
+  it("leaves zod's own message on every other problem", () => {
+    const [message] = issues(simulateInputSchema, { raw: 1, sourcetype: 'st' });
+    expect(message).toMatch(/expected string/);
+    expect(message).not.toMatch(/unknown argument/);
+  });
+
+  it('still fills the defaults of a call with only known arguments', () => {
+    expect(validateInputSchema.parse({})).toEqual({ props_conf: '', transforms_conf: '', timeout_ms: 5_000 });
   });
 });

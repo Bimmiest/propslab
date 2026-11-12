@@ -177,3 +177,26 @@ describe('parseConf — class-directive prefixes are case-sensitive (#60)', () =
     expect(conf.errors.some((e) => e.message.includes('EXTRACT-f'))).toBe(true);
   });
 });
+
+describe('parseConf — leading UTF-8 BOM (#873)', () => {
+  it.each(['props.conf', 'transforms.conf'] as const)('keeps the first stanza of %s', (file) => {
+    const parsed = parseConf('﻿[other]\nSEDCMD-x = s/a/b/g\n', file);
+    expect(parsed.errors).toEqual([]);
+    expect(parsed.stanzas.map((s) => s.name)).toEqual(['other']);
+    expect(parsed.stanzas[0]!.directives[0]).toMatchObject({ key: 'SEDCMD-x', value: 's/a/b/g' });
+  });
+
+  it('strips the BOM of each layer, and only a leading one', () => {
+    const parsed = parseConf(
+      [
+        { layer: 'a', text: '﻿[one]\nA = 1\n' },
+        { layer: 'b', text: '﻿[two]\nB = 2\n' },
+      ],
+      'props.conf',
+    );
+    expect(parsed.errors).toEqual([]);
+    expect(parsed.stanzas.map((s) => s.name)).toEqual(['one', 'two']);
+    const mid = parseConf('[s]\n﻿A = 1\n', 'props.conf');
+    expect(mid.errors.length).toBeGreaterThan(0);
+  });
+});
