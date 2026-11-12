@@ -4,6 +4,17 @@ import { useCallback, useSyncExternalStore } from 'react';
 export const MOBILE_QUERY = '(max-width: 767px)';
 
 /**
+ * The phone and the two columns on a tablet or a small laptop: too narrow for
+ * a side list to be open by default beside the content it lists (#893).
+ */
+export const NARROW_QUERY = '(max-width: 1099px)';
+
+/** Whether `query` matches now, read once, for a default that does not follow later changes. */
+export function matchesNow(query: string): boolean {
+  return typeof window !== 'undefined' && window.matchMedia(query).matches;
+}
+
+/**
  * Subscribe to a CSS media query and re-render when its match state changes.
  * Returns false during server-side rendering (no `window`).
  */

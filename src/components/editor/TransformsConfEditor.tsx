@@ -29,8 +29,8 @@ export function TransformsConfEditor() {
             title="Expand transforms.conf"
           >
             <Icon name="chevron-down" className="w-3.5 h-3.5 text-[var(--color-text-muted)] -rotate-90" />
-            <Icon name="refresh" className="w-3.5 h-3.5 text-[var(--color-accent)]" />
-            <span className="text-xs font-semibold tracking-wide text-[var(--color-text-secondary)]">
+            <Icon name="refresh" className="w-3.5 h-3.5 shrink-0 text-[var(--color-accent)]" />
+            <span className="text-xs font-semibold tracking-wide truncate text-[var(--color-text-secondary)]">
               transforms.conf
             </span>
           </button>
@@ -42,20 +42,24 @@ export function TransformsConfEditor() {
 
   return (
     <div className="h-full flex flex-col bg-[var(--color-bg-primary)]">
-      <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--color-border-subtle)] bg-[var(--color-bg-secondary)]">
+      {/* A container, so Clear and Copy turn to icons in a narrow pane (#893). */}
+      <div className="@container flex items-center justify-between gap-2 px-3 py-2 border-b border-[var(--color-border-subtle)] bg-[var(--color-bg-secondary)]">
         <button
           type="button"
           onClick={() => toggleCollapse('transforms.conf')}
-          className="flex items-center gap-2 min-h-[24px] hover:opacity-80 transition-opacity"
+          className="flex items-center gap-2 min-w-0 hover:opacity-80 transition-opacity min-h-[24px]"
           title="Collapse transforms.conf"
         >
-          <Icon name="chevron-down" className="w-3.5 h-3.5 text-[var(--color-text-muted)] transition-transform" />
-          <Icon name="refresh" className="w-3.5 h-3.5 text-[var(--color-accent)]" />
-          <span className="text-xs font-semibold tracking-wide text-[var(--color-text-secondary)]">
+          <Icon
+            name="chevron-down"
+            className="w-3.5 h-3.5 shrink-0 text-[var(--color-text-muted)] transition-transform"
+          />
+          <Icon name="refresh" className="w-3.5 h-3.5 shrink-0 text-[var(--color-accent)]" />
+          <span className="text-xs font-semibold tracking-wide truncate text-[var(--color-text-secondary)]">
             transforms.conf
           </span>
         </button>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 shrink-0">
           <ClearButton onClear={() => setTransformsConf('')} label="Clear" />
           <CopyButton getText={getText} />
         </div>

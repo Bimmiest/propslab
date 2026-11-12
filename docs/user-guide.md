@@ -22,7 +22,9 @@ The rail selects one of two top-level views:
 
 The two views stay mounted. The app shows one of them with `hidden`, and does not render them conditionally. Thus, when you go to the dictionary and back, Monaco keeps its undo history, cursor and folding state. The output filters also stay as they were. An `ErrorBoundary` wraps each major panel.
 
-Below 768px, the labelled tab strip of `MobileShell` replaces the rail. The rail shows its labels only in hover tooltips, and a touch screen cannot open a hover tooltip.
+Below 768px, the labelled tab strip of `MobileShell` replaces the rail. The rail shows its labels only in hover tooltips, and a touch screen cannot open a hover tooltip. On a phone, the **More** button (⋯) in the header holds settings, the pipeline reference and the theme, and **Clear All** shows only its icon. The field list of the Extractions tab opens as a drawer over the events. Below 1100px, the field list is closed at first: select **Field list** to open it.
+
+The header and the panes follow the width of their container, not of the window. In a narrow pane, **Clear**, **Copy** and **Scaffold** show only their icons, and their names stay in the tooltip and for a screen reader. A row of tabs or a table that is wider than its pane fades out at the edge where it is cut. Scroll it sideways to see the rest.
 
 **Keyboard:** `Ctrl/Cmd+K` opens the command palette. The palette has three groups: Actions, Navigate and Look up (for a directive). The **Load example…** action opens a second level that lists the examples, and Backspace in an empty query goes back. When you type the name of an example, it also shows in the first level. The header info button (ⓘ) opens a slide-out reference to the 11 pipeline stages.
 

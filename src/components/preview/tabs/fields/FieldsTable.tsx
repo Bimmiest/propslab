@@ -1,6 +1,7 @@
 import { useMemo, useRef, type ReactNode } from 'react';
 import { useWindowedRows } from '../../../../hooks/useWindowedRows';
 import { useRovingRows } from '../../../../hooks/useRovingRows';
+import { useScrollFade } from '../../../../hooks/useScrollFade';
 import { COLUMNS } from './data';
 import { controlledRowIds, renderedRowIds, type FieldRow } from './fieldRows';
 import { FieldTableRow } from './FieldTableRow';
@@ -33,6 +34,8 @@ export function FieldsTable({
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const { segments, onFocus } = useWindowedRows(scrollRef, rows.length, { estimate: 29 });
+  // Columns past the pane's edge are a fade, not a clean cut that reads as the whole table (#893).
+  useScrollFade(scrollRef);
   // A toggle names only the child rows that exist: with the table windowed,
   // most of them may not be rendered.
   const rendered = useMemo(() => renderedRowIds(segments, rows, rowIds), [segments, rows, rowIds]);
@@ -46,7 +49,7 @@ export function FieldsTable({
   } = useRovingRows<HTMLTableSectionElement>(names, segments, scrollRef);
 
   return (
-    <div ref={scrollRef} className="flex-1 overflow-auto" onFocus={onFocus}>
+    <div ref={scrollRef} className="scroll-fade flex-1 overflow-auto" onFocus={onFocus}>
       <table
         className="w-full text-xs border-collapse"
         style={{ minWidth: Object.values(columnWidths).reduce((a, b) => a + b, 0) }}
