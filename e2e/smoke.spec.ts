@@ -9,6 +9,7 @@ import {
   workerReplies,
   dwellUntilVisible,
   pointIn,
+  pasteInto,
 } from './fixtures';
 
 const APACHE = /Apache Access Log/i;
@@ -416,6 +417,54 @@ test.describe('engine output reaches the tabs', () => {
   });
 });
 
+test.describe('event pager (#880, #881)', () => {
+  // The Apache example's five lines six times over: line 3, the only one with
+  // a query string, gives `uri_query` to events 3, 8, 13, 18, 23 and 28.
+  const APACHE_LINES = [
+    '198.51.100.10 - frank [25/Oct/2026:13:55:36 -0700] "GET /apache_pb.gif HTTP/1.0" 200 2326',
+    '198.51.100.20 - - [25/Oct/2026:13:55:37 -0700] "POST /login HTTP/1.1" 403 512',
+    '203.0.113.30 - admin [25/Oct/2026:13:55:38 -0700] "GET /admin/dashboard?view=week HTTP/1.0" 200 1024',
+    '203.0.113.40 - - [25/Oct/2026:13:55:39 -0700] "GET /nonexistent HTTP/1.1" 404 209',
+    '192.0.2.50 - jdoe [25/Oct/2026:13:55:40 -0700] "DELETE /api/v1/record/42 HTTP/1.1" 204 0',
+  ];
+
+  test('pages through the events with a pinned field, from the keyboard too', async ({ page }) => {
+    await openApp(page);
+    await loadExample(page, APACHE);
+    await pasteInto(page, 0, Array.from({ length: 6 }, () => APACHE_LINES.join('\n')).join('\n'));
+    await expect(page.getByText('30 events', { exact: true })).toBeVisible({ timeout: 30_000 });
+
+    await page.getByRole('tab', { name: /^Extractions$/ }).click();
+    await page.getByRole('combobox', { name: 'Per page:' }).selectOption('5');
+    const footer = page.getByText(/^Showing events/);
+    await expect(footer).toHaveText('Showing events 1-5 of 30');
+
+    await page
+      .getByTitle(/^uri_query /)
+      .first()
+      .click();
+    await expect(footer).toHaveText('Showing events 1-5 of 6 with uri_query');
+    await page.getByRole('button', { name: 'Next page' }).click();
+    await expect(footer).toHaveText('Showing events 6-6 of 6 with uri_query');
+    await expect(page.getByText(/^Event #28\b/)).toBeVisible();
+    await expect(page.getByRole('status').filter({ hasText: 'Page 2 of 2' })).toBeAttached();
+
+    // Unpinned: every event again, and the page box goes where it is told.
+    await page
+      .getByTitle(/^uri_query /)
+      .first()
+      .click();
+    await expect(footer).toHaveText('Showing events 1-5 of 30');
+    const pageBox = page.getByRole('textbox', { name: 'Page' });
+    await pageBox.fill('4');
+    await pageBox.press('Enter');
+    await expect(footer).toHaveText('Showing events 16-20 of 30');
+    await expect(pageBox).toBeFocused();
+    await page.getByRole('button', { name: 'Last page' }).click();
+    await expect(footer).toHaveText('Showing events 26-30 of 30');
+  });
+});
+
 test.describe('accessibility affordances', () => {
   test('the command palette opens, traps focus, and closes on Escape', async ({ page, complaints }) => {
     await openApp(page);
@@ -490,6 +539,36 @@ test.describe('accessibility affordances', () => {
     await expect(extract).toBeHidden();
 
     expect(complaints.all, 'browser errors during keyboard selection').toEqual([]);
+  });
+
+  test('a highlighted value pins and opens its menu from the keyboard (#882)', async ({ page, browserName }) => {
+    // See 'a raw-event selection can be made and acted on from the keyboard'.
+    test.skip(browserName === 'firefox', "Playwright's Firefox fires no contextmenu event from the keyboard");
+    await openApp(page);
+    await loadExample(page, APACHE);
+    await page.getByRole('tab', { name: /^Extractions$/ }).click();
+
+    // One tab stop per card: its first value.
+    const card = page.locator('pre').first();
+    const values = card.locator('[data-field]');
+    expect(await card.locator('[data-field][tabindex="0"]').count()).toBe(1);
+    await values.first().focus();
+    await page.keyboard.press('ArrowRight');
+    const second = values.nth(1);
+    await expect(second).toBeFocused();
+    const field = await second.getAttribute('data-field');
+
+    await page.keyboard.press('Shift+F10');
+    const menu = page.getByRole('menu');
+    await expect(menu.getByText(field ?? '', { exact: true })).toBeVisible();
+    await expect(menu.getByRole('menuitem', { name: 'Copy value' })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(menu).toBeHidden();
+    await expect(second).toBeFocused();
+
+    await page.keyboard.press('Enter');
+    await expect(page.getByText(/events match 1 pinned field/)).toBeVisible();
+    await expect(page.locator('pre [aria-pressed="true"]').first()).toHaveAttribute('data-field', field ?? '');
   });
 
   test('controls that opted out of the outline still show keyboard focus', async ({ page }) => {
