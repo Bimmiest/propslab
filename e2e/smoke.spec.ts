@@ -762,6 +762,17 @@ test.describe('dictionary', () => {
       if (dialog.type() === 'beforeunload') prompts++;
       void dialog.dismiss();
     });
+    // Temporary diagnostics for the WebKit job.
+    const seen: string[] = [];
+    page.on('request', (r) => {
+      if (/DictionaryView|\/$|index-/.test(r.url())) seen.push(`req ${r.url().slice(-40)}`);
+    });
+    page.on('requestfailed', (r) => seen.push(`failed ${r.url().slice(-40)} ${r.failure()?.errorText ?? ''}`));
+    page.on('response', (r) => {
+      if (/DictionaryView/.test(r.url())) seen.push(`res ${r.status()} ${r.url().slice(-40)}`);
+    });
+    page.on('console', (m) => seen.push(`console ${m.type()} ${m.text().slice(0, 120)}`));
+    page.on('framenavigated', (f) => seen.push(`nav ${f.url()}`));
     const props = page.locator('.monaco-editor').nth(1);
     await props.click();
     await page.keyboard.type('[web]');
@@ -770,7 +781,13 @@ test.describe('dictionary', () => {
     await page.getByRole('tab', { name: 'Dictionary' }).click();
     await reloaded;
 
-    await expect(page.getByRole('listbox', { name: 'Splunk directives' })).toBeVisible({ timeout: 30_000 });
+    const shown = await expect(page.getByRole('listbox', { name: 'Splunk directives' }))
+      .toBeVisible({ timeout: 15_000 })
+      .then(
+        () => true,
+        () => false,
+      );
+    expect(shown, `DIAG12 ${seen.join(' | ')}`).toBe(true);
     // The edits were saved for the reload, so there was nothing to ask about.
     expect(prompts).toBe(0);
     await page.getByRole('tab', { name: 'Simulator' }).click();
