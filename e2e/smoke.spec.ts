@@ -9,6 +9,7 @@ import {
   workerReplies,
   dwellUntilVisible,
   pointIn,
+  pasteInto,
 } from './fixtures';
 
 const APACHE = /Apache Access Log/i;
@@ -413,6 +414,54 @@ test.describe('engine output reaches the tabs', () => {
     await expect(evalStep.getByText('~action', { exact: true })).toBeVisible();
     await expect(evalStep.getByText('+action', { exact: true })).toHaveCount(0);
     await expect(evalStep.getByText('+bytes_total', { exact: true })).toBeVisible();
+  });
+});
+
+test.describe('event pager (#880, #881)', () => {
+  // The Apache example's five lines six times over: line 3, the only one with
+  // a query string, gives `uri_query` to events 3, 8, 13, 18, 23 and 28.
+  const APACHE_LINES = [
+    '198.51.100.10 - frank [25/Oct/2026:13:55:36 -0700] "GET /apache_pb.gif HTTP/1.0" 200 2326',
+    '198.51.100.20 - - [25/Oct/2026:13:55:37 -0700] "POST /login HTTP/1.1" 403 512',
+    '203.0.113.30 - admin [25/Oct/2026:13:55:38 -0700] "GET /admin/dashboard?view=week HTTP/1.0" 200 1024',
+    '203.0.113.40 - - [25/Oct/2026:13:55:39 -0700] "GET /nonexistent HTTP/1.1" 404 209',
+    '192.0.2.50 - jdoe [25/Oct/2026:13:55:40 -0700] "DELETE /api/v1/record/42 HTTP/1.1" 204 0',
+  ];
+
+  test('pages through the events with a pinned field, from the keyboard too', async ({ page }) => {
+    await openApp(page);
+    await loadExample(page, APACHE);
+    await pasteInto(page, 0, Array.from({ length: 6 }, () => APACHE_LINES.join('\n')).join('\n'));
+    await expect(page.getByText('30 events', { exact: true })).toBeVisible({ timeout: 30_000 });
+
+    await page.getByRole('tab', { name: /^Extractions$/ }).click();
+    await page.getByRole('combobox', { name: 'Per page:' }).selectOption('5');
+    const footer = page.getByText(/^Showing events/);
+    await expect(footer).toHaveText('Showing events 1-5 of 30');
+
+    await page
+      .getByTitle(/^uri_query /)
+      .first()
+      .click();
+    await expect(footer).toHaveText('Showing events 1-5 of 6 with uri_query');
+    await page.getByRole('button', { name: 'Next page' }).click();
+    await expect(footer).toHaveText('Showing events 6-6 of 6 with uri_query');
+    await expect(page.getByText(/^Event #28\b/)).toBeVisible();
+    await expect(page.getByRole('status').filter({ hasText: 'Page 2 of 2' })).toBeAttached();
+
+    // Unpinned: every event again, and the page box goes where it is told.
+    await page
+      .getByTitle(/^uri_query /)
+      .first()
+      .click();
+    await expect(footer).toHaveText('Showing events 1-5 of 30');
+    const pageBox = page.getByRole('textbox', { name: 'Page' });
+    await pageBox.fill('4');
+    await pageBox.press('Enter');
+    await expect(footer).toHaveText('Showing events 16-20 of 30');
+    await expect(pageBox).toBeFocused();
+    await page.getByRole('button', { name: 'Last page' }).click();
+    await expect(footer).toHaveText('Showing events 26-30 of 30');
   });
 });
 

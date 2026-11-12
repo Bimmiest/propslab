@@ -169,15 +169,28 @@ export async function dwellUntilVisible(page: Page, at: () => Promise<Point>, sh
 /**
  * Replace an editor's text through Monaco's own paste path: a `paste` event on
  * the editor's input carrying the text, as the browser delivers a real Ctrl+V.
+ *
+ * The text goes in twice, because the two browsers read different members of
+ * the event's init. Chromium takes `clipboardData`. Firefox ignores it and
+ * builds the event's DataTransfer from its own `dataType` and `data` members,
+ * so with `clipboardData` alone the paste reached Monaco empty and changed
+ * nothing. Both failures throw here, not as a wait for text that never comes:
+ * an event that does not carry the text, and a paste that Monaco does not
+ * cancel, which it does when it takes one.
  */
 export async function pasteInto(page: Page, editor: number, text: string): Promise<void> {
   await page.locator('.monaco-editor').nth(editor).click();
   await page.keyboard.press('Control+a');
-  await page.evaluate((data) => {
+  const problem = await page.evaluate((data) => {
     const input = document.activeElement;
-    if (!input) throw new Error('editor has no focused input');
+    if (!input) return 'has no focused input';
     const clipboardData = new DataTransfer();
     clipboardData.setData('text/plain', data);
-    input.dispatchEvent(new ClipboardEvent('paste', { clipboardData, bubbles: true, cancelable: true }));
+    // `dataType` and `data` are Firefox's, and not in the DOM typings.
+    const init = { clipboardData, dataType: 'text/plain', data, bubbles: true, cancelable: true } as ClipboardEventInit;
+    const event = new ClipboardEvent('paste', init);
+    if (event.clipboardData?.getData('text/plain') !== data) return 'got a paste event without the text';
+    return input.dispatchEvent(event) ? 'did not take the paste' : null;
   }, text);
+  if (problem !== null) throw new Error(`editor ${editor} ${problem}`);
 }
