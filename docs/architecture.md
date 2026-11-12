@@ -18,6 +18,7 @@ src/
 │   │                          #   hover, linting AND the dictionary
 │   ├── registry/              # The directive entries, props and transforms
 │   ├── stanzaRegistry.ts      # The four stanza header kinds + precedence
+│   ├── misspelledDirective.ts # The directive a key is one edit from
 │   ├── pipelineStages.ts      # The 11 stages, and key → stage lookup
 │   ├── parser/
 │   │   ├── confParser.ts      # INI parser + default/local layer merge → ParsedConf
@@ -37,6 +38,7 @@ src/
 │   ├── splunkConfFolding.ts
 │   ├── splunkConfDiagnostics.ts
 │   ├── splunkConfCodeActions.ts
+│   ├── editorProblems.ts      # One problem list per editor: lint + run
 │   ├── timeFormatPreview.ts   # TIME_FORMAT hover preview
 │   ├── timePrefixMatcher.ts   #   and its off-thread TIME_PREFIX match
 │   ├── markdown.ts            # Escape user text in hover Markdown

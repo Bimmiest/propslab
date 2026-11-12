@@ -157,6 +157,60 @@ test.describe('monaco', () => {
   });
 });
 
+test.describe('editor problems (#899)', () => {
+  // The repro of #899: five defects at the end of an example's props.conf.
+  const BAD = [
+    'EXTRACT-bad = (?<x>[a-',
+    'TIME_FROMAT = %Y',
+    'LOOKUP-x = foo a OUTPUT b',
+    'SEDCMD-y = s/a/b/2',
+    'not a directive',
+  ].join('\n');
+
+  test('the panel, the markers and the status bar count the same five problems', async ({ page }) => {
+    // Tall enough, with transforms.conf collapsed, that props.conf shows
+    // every line: Monaco renders markers on the lines in view only.
+    await page.setViewportSize({ width: 1280, height: 1600 });
+    await openApp(page);
+    await loadExample(page, /Linux SSH Auth/i);
+    await page.getByTitle('Collapse transforms.conf').click();
+
+    // Pasted at the end, through Monaco's own paste path: typed, the
+    // suggest widget and the auto-closing pairs would change the text.
+    await page.locator('.monaco-editor').nth(1).click();
+    await page.keyboard.press('Control+End');
+    await page.evaluate((data) => {
+      const input = document.activeElement;
+      if (!input) throw new Error('editor has no focused input');
+      const clipboardData = new DataTransfer();
+      clipboardData.setData('text/plain', data);
+      input.dispatchEvent(new ClipboardEvent('paste', { clipboardData, bubbles: true, cancelable: true }));
+    }, `\n${BAD}\n`);
+
+    const panel = page.getByRole('region', { name: 'props.conf problems' });
+    await expect(panel.getByRole('button')).toHaveCount(5, { timeout: 20_000 });
+    await expect(panel.getByRole('button').nth(1)).toContainText('Did you mean "TIME_FORMAT"?');
+    await expect(page.getByRole('button', { name: /^2 errors\s*3 warnings/ })).toBeVisible();
+
+    const footer = page.getByRole('contentinfo');
+    await expect(footer.getByText('2 errors')).toBeVisible();
+    await expect(footer.getByText('3 warnings')).toBeVisible();
+
+    const props = page.locator('.monaco-editor').nth(1);
+    await expect(props.locator('.squiggly-error')).toHaveCount(2);
+    await expect(props.locator('.squiggly-warning')).toHaveCount(3);
+
+    // The panel keeps to a third of the pane, and the editor keeps the rest.
+    const { panelHeight, paneHeight } = await panel.evaluate((list) => {
+      const box = list.parentElement;
+      const pane = box?.parentElement;
+      if (!box || !pane) throw new Error('the panel is not in a pane');
+      return { panelHeight: box.getBoundingClientRect().height, paneHeight: pane.getBoundingClientRect().height };
+    });
+    expect(panelHeight).toBeLessThanOrEqual(paneHeight / 3 + 1);
+  });
+});
+
 /**
  * Each editor contribution MonacoEditor.tsx imports by hand. Dropping
  * one type-checks, builds and mounts fine, and silently removes its feature;

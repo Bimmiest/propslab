@@ -160,7 +160,7 @@ The editor has a custom language, `splunk-conf`:
 - Autocomplete: directive keys at the start of a line, enum/boolean/strftime values after `=`, and stanza types inside `[`.
 - Hover tooltips in rich Markdown: description, default, example, category, phase, value type and valid values.
 - Folding for stanzas and for consecutive comments.
-- Lint markers through `setModelMarkers`: unknown directives, invalid regex, type mismatches, duplicate stanzas, a stanza header without its `]`, and best-practice warnings.
+- Lint markers through `setModelMarkers`: unknown directives, invalid regex, type mismatches, duplicate stanzas, a stanza header without its `]`, and best-practice warnings. A key that is one edit from a directive, such as `TIME_FROMAT`, gets a warning that names the directive, and a quick fix. The editor also marks the diagnostics of the last run. The panel under the editor lists the same problems as the markers, and the status bar counts them. When the linter and the run report the same line, the panel shows the problem one time.
 - Light and dark themes (`splunk-light`, `splunk-dark`) that use the same charcoal, sand and gold colours as the app.
 - A context menu. Right-click in an editor, or press `Shift+F10` or the Menu key. The menu has Cut, Copy, Paste, Select all, Find and the command palette, with their shortcuts. In props.conf and transforms.conf, it also opens the directive on the cursor line in the dictionary, comments the lines in or out (also `Ctrl/Cmd+/`), and sends a regex value to the Regex tab. In props.conf, it opens the Effective config tab when the stanza at the cursor matches the metadata. In the raw log, it opens the Scaffold. A right-click outside the selection moves the cursor to the pointer first.
 

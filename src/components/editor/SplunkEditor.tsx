@@ -4,8 +4,10 @@ import type { editor } from 'monaco-editor';
 import { useAppStore } from '../../store/useAppStore';
 import { MonacoEditor } from './MonacoEditor';
 import { registerEditor, unregisterEditor } from './editorRegistry';
-import { computeDiagnostics } from '../../monaco/splunkConfDiagnostics';
+import type { DiagnosticMarker } from '../../monaco/splunkConfDiagnostics';
+import { fileProblems, lintConf } from '../../monaco/editorProblems';
 import { toMarkerData } from '../../monaco/markerData';
+import { LINT_DELAY_MS } from './useFileProblems';
 import { ensureSplunkMonaco, PROPS_LANGUAGE_ID, TRANSFORMS_LANGUAGE_ID } from './splunkMonacoSetup';
 import { TOGGLE_COMMENT_ACTION, toggleComment } from './toggleComment';
 
@@ -69,15 +71,31 @@ export function SplunkEditor({ value, onChange, fileType = 'props.conf', languag
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const theme = useAppStore((s) => s.theme);
   const diagnosticTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The run's diagnostics join the linter's markers, so that the editor marks
+  // the list its panel shows (fileProblems, #899).
+  const runDiagnostics = useAppStore((s) => s.validationDiagnostics);
+  const runRef = useRef(runDiagnostics);
+  // The last lint of this editor's text; null until the first pass.
+  const lintRef = useRef<readonly DiagnosticMarker[] | null>(null);
 
-  const runDiagnostics = useCallback(() => {
-    if (!editorRef.current) return;
-    const model = editorRef.current.getModel();
-    if (!model) return;
-
-    const markers = computeDiagnostics(model, fileType);
+  const applyMarkers = useCallback(() => {
+    const model = editorRef.current?.getModel();
+    if (!model || lintRef.current === null) return;
+    const { markers } = fileProblems(fileType, lintRef.current, runRef.current);
     monaco.editor.setModelMarkers(model, 'splunk-linter', toMarkerData(markers));
   }, [fileType]);
+
+  const lint = useCallback(() => {
+    const model = editorRef.current?.getModel();
+    if (!model) return;
+    lintRef.current = lintConf(model.getValue(), fileType);
+    applyMarkers();
+  }, [fileType, applyMarkers]);
+
+  useEffect(() => {
+    runRef.current = runDiagnostics;
+    applyMarkers();
+  }, [runDiagnostics, applyMarkers]);
 
   const handleMount = (editorInstance: editor.IStandaloneCodeEditor) => {
     editorRef.current = editorInstance;
@@ -115,7 +133,7 @@ export function SplunkEditor({ value, onChange, fileType = 'props.conf', languag
 
     const schedule = () => {
       if (diagnosticTimerRef.current) clearTimeout(diagnosticTimerRef.current);
-      diagnosticTimerRef.current = setTimeout(runDiagnostics, 500);
+      diagnosticTimerRef.current = setTimeout(lint, LINT_DELAY_MS);
     };
     schedule(); // initial pass over whatever the editor mounted with
     const subscription = instance.onDidChangeModelContent(schedule);
@@ -129,8 +147,10 @@ export function SplunkEditor({ value, onChange, fileType = 'props.conf', languag
       // Removed so consumers can't act on a disposed instance (e.g. after a
       // collapse or mobile-layout switch).
       unregisterEditor(fileType, instance);
+      // A lint of the old file type must not be marked against the new one.
+      lintRef.current = null;
     };
-  }, [fileType, runDiagnostics]);
+  }, [fileType, lint]);
 
   return (
     <MonacoEditor
