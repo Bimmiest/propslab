@@ -184,7 +184,18 @@ test.describe('editor problems (#899)', () => {
       if (!input) throw new Error('editor has no focused input');
       const clipboardData = new DataTransfer();
       clipboardData.setData('text/plain', data);
-      input.dispatchEvent(new ClipboardEvent('paste', { clipboardData, bubbles: true, cancelable: true }));
+      // `dataType` and `data` are Firefox's, and not in the DOM typings:
+      // Firefox's ClipboardEventInit has no `clipboardData` member.
+      const init = {
+        clipboardData,
+        dataType: 'text/plain',
+        data,
+        bubbles: true,
+        cancelable: true,
+      } as ClipboardEventInit;
+      const event = new ClipboardEvent('paste', init);
+      if (event.clipboardData?.getData('text/plain') !== data) throw new Error('got a paste event without the text');
+      input.dispatchEvent(event);
     }, `\n${BAD}\n`);
 
     const panel = page.getByRole('region', { name: 'props.conf problems' });
