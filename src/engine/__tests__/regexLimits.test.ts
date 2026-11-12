@@ -107,3 +107,113 @@ describe("transforms.conf REGEX under its own stanza's limits", () => {
     expect(e.fields['v']).toBeUndefined();
   });
 });
+
+describe('#874 — a scan for every match that stops at a limit after the first match', () => {
+  // `x` matches at once; at the run of a's, `(?:a+)+b` tries about 2^n ways
+  // before it fails, which passes both Splunk's default MATCH_LIMIT and PCRE2's
+  // own. So the scan finds the first two x's, stops, and never reaches the last.
+  const STOPS = 'x|(?:a+)+b';
+  const FIELD = 'x(?<v>\\d)|(?:a+)+b';
+  const subject = (as: number) => `x1 x2 ${'a'.repeat(as)} x3`;
+  const LONG = subject(30);
+  const SHORT = subject(12);
+  const run = (raw: string, props: string, transforms = '') => runPipeline(raw, META, props, transforms, AT_FIXED_NOW);
+  const warningsAbout = (diagnostics: { message: string }[], text: string) =>
+    diagnostics.filter((d) => d.message.includes(text)).map((d) => d.message);
+
+  it('SEDCMD: replaces the matches before the limit, and warns that the rest is not masked', () => {
+    const props = `[st]\nSEDCMD-mask = s/${STOPS}/X/g\n`;
+    const { result, diagnostics } = run(LONG, props);
+    expect(result.events[0]!._raw).toBe(`X1 X2 ${'a'.repeat(30)} x3`);
+    const [warning] = warningsAbout(diagnostics, 'regex limit');
+    expect(warning).toMatch(/^SEDCMD-mask: the scan for each match stopped at a regex limit \(.*limit.*\)/);
+    expect(warning).toContain('the substitution is incomplete');
+    expect(diagnostics.find((d) => d.message === warning)).toMatchObject({
+      file: 'props.conf',
+      line: 2,
+      directiveKey: 'SEDCMD-mask',
+    });
+
+    const whole = run(SHORT, props);
+    expect(whole.result.events[0]!._raw).toBe(`X1 X2 ${'a'.repeat(12)} X3`);
+    expect(warningsAbout(whole.diagnostics, 'regex limit')).toEqual([]);
+  });
+
+  it('SEDCMD: a limit before any match stays a no-op, not a partial rewrite', () => {
+    const { result, diagnostics } = run(`${'a'.repeat(30)} x`, `[st]\nSEDCMD-mask = s/${STOPS}/X/g\n`);
+    expect(result.events[0]!._raw).toBe(`${'a'.repeat(30)} x`);
+    expect(result.events[0]!.noOps?.[0]?.reason.kind).toBe('regex-limit');
+    expect(warningsAbout(diagnostics, 'substitution is incomplete')).toEqual([]);
+  });
+
+  it('REPORT with FORMAT: keeps the values before the limit, and warns at the REGEX', () => {
+    const transforms = `[t]\nREGEX = ${FIELD}\nFORMAT = v::$1\nMV_ADD = true\n`;
+    const { result, diagnostics } = run(LONG, '[st]\nREPORT-v = t\n', transforms);
+    expect(result.events[0]!.fields['v']).toEqual(['1', '2']);
+    const [warning] = warningsAbout(diagnostics, 'regex limit');
+    expect(warning).toMatch(/^Transform "t" stopped at a regex limit \(.*\).*incomplete/);
+    expect(diagnostics.find((d) => d.message === warning)).toMatchObject({ file: 'transforms.conf', line: 2 });
+
+    const whole = run(SHORT, '[st]\nREPORT-v = t\n', transforms);
+    expect(whole.result.events[0]!.fields['v']).toEqual(['1', '2', '3']);
+    expect(warningsAbout(whole.diagnostics, 'regex limit')).toEqual([]);
+  });
+
+  it('REPORT with named groups: keeps the values before the limit, and warns', () => {
+    const transforms = `[t]\nREGEX = ${FIELD}\nMV_ADD = true\n`;
+    const { result, diagnostics } = run(LONG, '[st]\nREPORT-v = t\n', transforms);
+    expect(result.events[0]!.fields['v']).toEqual(['1', '2']);
+    expect(warningsAbout(diagnostics, 'Transform "t" stopped at a regex limit')).toHaveLength(1);
+  });
+
+  it('TRANSFORMS with REPEAT_MATCH into DEST_KEY: writes the values before the limit, and warns', () => {
+    const transforms = `[t]\nREGEX = ${FIELD}\nFORMAT = v::$1\nREPEAT_MATCH = true\nDEST_KEY = _meta\nWRITE_META = true\n`;
+    const { result, diagnostics } = run(LONG, '[st]\nTRANSFORMS-v = t\n', transforms);
+    expect(result.events[0]!._meta['v']).toEqual(['1', '2']);
+    expect(warningsAbout(diagnostics, 'Transform "t" stopped at a regex limit')).toHaveLength(1);
+
+    const whole = run(SHORT, '[st]\nTRANSFORMS-v = t\n', transforms);
+    expect(whole.result.events[0]!._meta['v']).toEqual(['1', '2', '3']);
+    expect(warningsAbout(whole.diagnostics, 'regex limit')).toEqual([]);
+  });
+
+  it('EVAL replace(): returns the partial rewrite, and warns naming the EVAL', () => {
+    const props = `[st]\nEVAL-masked = replace(_raw, "${STOPS}", "X")\n`;
+    const { result, diagnostics } = run(LONG, props);
+    expect(result.events[0]!.fields['masked']).toBe(`X1 X2 ${'a'.repeat(30)} x3`);
+    const [warning] = warningsAbout(diagnostics, 'regex limit');
+    expect(warning).toMatch(/^EVAL-masked: replace\(\) pattern "x\|\(\?:a\+\)\+b" stopped at a regex limit \(.*\)/);
+    expect(warning).toContain('only the matches before the limit were replaced');
+    expect(diagnostics.find((d) => d.message === warning)).toMatchObject({ line: 2, directiveKey: 'EVAL-masked' });
+
+    const whole = run(SHORT, props);
+    expect(whole.result.events[0]!.fields['masked']).toBe(`X1 X2 ${'a'.repeat(12)} X3`);
+    expect(warningsAbout(whole.diagnostics, 'regex limit')).toEqual([]);
+  });
+
+  it('warns once per directive in a run, not once per event', () => {
+    const props =
+      `[st]\nSHOULD_LINEMERGE = false\nSEDCMD-mask = s/${STOPS}/X/g\n` +
+      `EVAL-masked = replace(_raw, "${STOPS}", "X")\nREPORT-v = t\n`;
+    // SEDCMD runs first and turns the x's into X's.
+    const transforms = `[t]\nREGEX = (?i)${FIELD}\nMV_ADD = true\n`;
+    const { result, diagnostics } = run(`${LONG}\n${LONG}`, props, transforms);
+    expect(result.events).toHaveLength(2);
+    expect(warningsAbout(diagnostics, 'regex limit').map((m) => m.split(':')[0])).toEqual([
+      'SEDCMD-mask',
+      expect.stringMatching(/^Transform "t" stopped/),
+      'EVAL-masked',
+    ]);
+  });
+
+  it('INGEST_EVAL and STOP_PROCESSING_IF replace(): warn naming the directive', () => {
+    const transforms =
+      `[mask]\nINGEST_EVAL = _raw=replace(_raw, "${STOPS}", "X")\n` +
+      `[stop]\nSTOP_PROCESSING_IF = replace(_raw, "${STOPS}", "") == ""\n`;
+    const { result, diagnostics } = run(LONG, '[st]\nTRANSFORMS-a = mask, stop\n', transforms);
+    expect(result.events[0]!._raw).toBe(`X1 X2 ${'a'.repeat(30)} x3`);
+    const warnings = warningsAbout(diagnostics, 'stopped at a regex limit');
+    expect(warnings.some((m) => m.startsWith('INGEST_EVAL _raw: replace() pattern'))).toBe(true);
+    expect(warnings.some((m) => m.startsWith('STOP_PROCESSING_IF: replace() pattern'))).toBe(true);
+  });
+});

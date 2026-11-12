@@ -628,10 +628,12 @@ export async function handleExplainPrecedence(
   // direct callers of the handler, which skip the schema.
   const tooLarge = confTooLarge(args.conf);
   if (tooLarge) return tooLarge;
+  // Only props.conf gets here with a sourcetype: transforms.conf with one was
+  // refused above.
   const metadata: EventMetadata | undefined =
-    args.file === 'props.conf' && args.sourcetype
-      ? { index: args.index, host: args.host, source: args.source, sourcetype: args.sourcetype }
-      : undefined;
+    args.sourcetype === undefined
+      ? undefined
+      : { index: args.index, host: args.host, source: args.source, sourcetype: args.sourcetype };
   try {
     const response = await runInWorker<ExplainResponse>(
       { op: 'explain', file: args.file, conf: args.conf, ...(metadata ? { metadata } : {}) },
