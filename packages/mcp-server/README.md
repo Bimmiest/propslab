@@ -79,6 +79,18 @@ one flat string or an ordered list of layers, lowest precedence first — an
 agent pointed at a real app directory hands over `default/` + `local/` and
 gets btool-style provenance back.
 
+## Prompt and resource
+
+Beside the tools, the server offers the workflow and the reference data
+directly (#813), for clients that support prompts and resources:
+
+| Kind | Name | Gives |
+|---|---|---|
+| Prompt | `draft_simulate_fix` | The workflow in one message: draft a props.conf (and transforms.conf), check each directive's support level, `validate`, `simulate` on the sample, fix the conf from each event's `processingTrace`, and report. The report must list each directive in the conf that the simulation does not honour — support level `documented` or `ignored`, or named by a diagnostic — with the reason. Optional arguments `sample`, `sourcetype` and `goal`; without a sample, it tells the agent to ask for one rather than invent it. |
+| Resource | `propslab://directives` | The whole directive registry as JSON, `{ supportLevels, "props.conf": [...], "transforms.conf": [...] }`: each entry as `lookup_directive` returns it, with its `support` level, `supportNote` and `supportIssue`. Under 100 KB, so a client loads it in one read instead of one tool call per directive. |
+
+`lookup_directive` stays: a client without resources still needs it.
+
 ## Setup
 
 The server bundles the engine from the app's `src/`. The engine's one

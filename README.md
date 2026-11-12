@@ -63,7 +63,7 @@ Open [propslab.vero-labs.net](https://propslab.vero-labs.net), or run the app lo
 
 ### MCP server
 
-[`packages/mcp-server`](packages/mcp-server) is an MCP server over the same engine. It has four tools: `simulate`, `validate`, `explain_precedence` and `lookup_directive`. With these tools, an LLM agent can run a config against real sample data, and it does not have to guess. The server obeys the rules for untrusted regexes that [docs/engine.md](docs/engine.md) gives. Each engine run occurs in a worker thread that the server can stop, within a wall-clock budget.
+[`packages/mcp-server`](packages/mcp-server) is an MCP server over the same engine. It has four tools: `simulate`, `validate`, `explain_precedence` and `lookup_directive`. It also has a prompt for the draft, simulate and fix workflow, and a resource that holds the directive registry with the support level of each directive. With these tools, an LLM agent can run a config against real sample data, and it does not have to guess. The server obeys the rules for untrusted regexes that [docs/engine.md](docs/engine.md) gives. Each engine run occurs in a worker thread that the server can stop, within a wall-clock budget.
 
 To build the server and add it to Claude Code, run these commands from the root of a clone:
 
