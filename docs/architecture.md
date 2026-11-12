@@ -74,7 +74,7 @@ packages/
 └── mcp-server/                # MCP server over the engine
     └── src/responseBudget.ts  #   Caps each tool response in bytes on the wire
 
-e2e/                           # Playwright tests (production build, Chromium)
+e2e/                           # Playwright tests (production build; the smoke spec also in Firefox and WebKit)
 ├── fixtures.ts                # Console/CSP error collection + readiness helpers
 ├── smoke.spec.ts
 ├── a11y.spec.ts               # axe-core over every main view, both themes

@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
-import { test, expect, openApp, loadExample, pasteInto } from './fixtures';
+import { test, expect, openApp, loadExample, pasteInto, failPipelineWorker } from './fixtures';
 
 const APACHE = /Apache Access Log/i;
 
@@ -302,6 +302,58 @@ for (const theme of ['dark', 'light'] as const) {
       await openApp(page);
       await page.getByRole('tab', { name: /^Architecture$/ }).click();
       await expectNoViolations(page, 'Architecture (inactive)');
+    });
+  });
+}
+
+/**
+ * The states a failure puts the page in (#891): an error boundary in each of
+ * its two forms, a run that failed, and a dialog open over that failure. Each
+ * one draws in the error colours, which no state above uses on this scale.
+ */
+for (const theme of ['dark', 'light'] as const) {
+  test.describe(`accessibility of failure states (${theme})`, () => {
+    test.beforeEach(async ({ page }) => {
+      await page.addInitScript((t) => {
+        try {
+          localStorage.setItem('propslab:theme', t);
+        } catch {
+          /* ignore */
+        }
+      }, theme);
+    });
+
+    // Offline, a lazy chunk that cannot load goes to its error boundary.
+    // Online, the page reloads onto a new build instead (staleChunkReload.ts).
+    test('error boundary, a panel: the dictionary', async ({ page, context }) => {
+      await openApp(page);
+      await context.setOffline(true);
+      await page.getByRole('tab', { name: 'Dictionary' }).click();
+      await expect(page.getByRole('alert').filter({ hasText: 'Dictionary Error' })).toBeVisible();
+      await expectNoViolations(page, 'error boundary (panel)');
+    });
+
+    test('error boundary, a line in the chrome: the scaffold', async ({ page, context }) => {
+      await openApp(page);
+      await loadExample(page, APACHE);
+      await context.setOffline(true);
+      await page.getByRole('button', { name: 'Scaffold' }).click();
+      await expect(page.getByRole('alert').filter({ hasText: 'Scaffold Error' })).toBeVisible();
+      await expectNoViolations(page, 'error boundary (inline)');
+    });
+
+    test('a failed run, and a dialog over it', async ({ page }) => {
+      // Two crashes on the run made on mount: the run stops and says why.
+      await failPipelineWorker(page, 'crash', 2);
+      await openApp(page);
+      await expect(page.getByRole('alert').filter({ hasText: 'Processing failed' })).toBeVisible({
+        timeout: 20_000,
+      });
+      await expectNoViolations(page, 'failed run');
+
+      await page.getByRole('contentinfo').getByRole('button', { name: /^v/ }).click();
+      await expect(page.getByRole('dialog', { name: 'About Propslab' })).toBeVisible();
+      await expectNoViolations(page, 'dialog over a failed run');
     });
   });
 }

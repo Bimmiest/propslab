@@ -7,6 +7,9 @@ import {
   loadExample,
   recordWorkerReplies,
   workerReplies,
+  appendLines,
+  failPipelineWorker,
+  PIPELINE_WORKER,
   dwellUntilVisible,
   pointIn,
   pasteInto,
@@ -65,7 +68,11 @@ test.describe('boot', () => {
  * new string reaching a script or HTML sink, shows up here as a violation.
  */
 test.describe('trusted types', () => {
-  test('the editor, hovers, the palette and the dictionary run with no violation', async ({ page, complaints }) => {
+  test('the editor, hovers, the palette and the dictionary run with no violation', async ({
+    page,
+    complaints,
+    keys,
+  }) => {
     await page.addInitScript(() => {
       const seen: string[] = [];
       Object.defineProperty(window, '__e2eViolations', { value: seen });
@@ -84,21 +91,27 @@ test.describe('trusted types', () => {
     // Typing, the suggest widget and the lint squiggles.
     const props = page.locator('.monaco-editor').nth(1);
     await props.click();
-    await page.keyboard.press('Control+End');
+    await page.keyboard.press(keys.textEnd);
     await page.keyboard.type('\n[tt]\nSHOULD_LINEMERGE = notabool\nTIME_PRE');
     await expect(page.locator('.suggest-widget')).toBeVisible();
     await page.keyboard.press('Escape');
     // The diagnostics the typed lines raise open a list that shrinks the
     // editor, which keeps its scroll position. Once the list is open, moving
     // the cursor reveals the typed lines, where the squiggles are, again.
+    // Pressed again until they show: the list can finish opening after the
+    // first press has revealed the lines, and push them out of view again.
     await expect(page.getByText(/takes a boolean, and "notabool" is not one/)).toBeVisible();
-    await page.keyboard.press('Control+End');
-    await expect(page.locator('.squiggly-warning, .squiggly-error, .squiggly-info').first()).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(async () => {
+      await page.keyboard.press(keys.textEnd);
+      await expect(page.locator('.squiggly-warning, .squiggly-error, .squiggly-info').first()).toBeVisible({
+        timeout: 3_000,
+      });
+    }).toPass({ timeout: 15_000 });
 
-    // A directive hover: markdown rendered through Monaco's sanitizer.
-    const token = props.getByText('SHOULD_LINEMERGE', { exact: true }).last();
+    // A directive hover: markdown rendered through Monaco's sanitizer. The
+    // token is looked for in the text lines only: the hover names the key
+    // too, and the last match would be the hover itself, not the token.
+    const token = props.locator('.view-lines').getByText('SHOULD_LINEMERGE', { exact: true }).last();
     await dwellUntilVisible(page, pointIn(token), page.getByText('Open in dictionary'));
 
     await page.keyboard.press('Control+k');
@@ -189,12 +202,12 @@ test.describe('editor context menu (#745)', () => {
     await expect(page.getByRole('tabpanel', { name: 'Dictionary' })).toBeVisible();
   });
 
-  test('Ctrl+/ comments out the line in props.conf, as the menu does (#762)', async ({ page }) => {
+  test('Ctrl+/ comments out the line in props.conf, as the menu does (#762)', async ({ page, keys }) => {
     await openApp(page);
     await loadExample(page, APACHE);
     const line = page.locator('.monaco-editor').nth(1).locator('.view-line').nth(1);
     await line.click();
-    await page.keyboard.press('ControlOrMeta+/');
+    await page.keyboard.press(`${keys.mod}+/`);
     await expect(line).toHaveText(/^#\sTIME_PREFIX/);
   });
 
@@ -227,14 +240,14 @@ test.describe('monaco contributions', () => {
     await expect(suggest.getByText('TIME_PREFIX').first()).toBeVisible();
   });
 
-  test('a quick fix renames a mis-cased key', async ({ page }) => {
+  test('a quick fix renames a mis-cased key', async ({ page, keys }) => {
     await typeIntoProps(page, '[web]\ntime_prefix = x');
     await expect(page.locator('.squiggly-warning, .squiggly-error, .squiggly-info').first()).toBeVisible({
       timeout: 15_000,
     });
 
     await page.keyboard.press('Home');
-    await page.keyboard.press('Control+.');
+    await page.keyboard.press(`${keys.mod}+.`);
     await expect(page.getByText('Change "time_prefix" to "TIME_PREFIX"')).toBeVisible();
     await page.keyboard.press('Enter');
     await expect(page.locator('.monaco-editor').nth(1).locator('.view-lines')).toContainText('TIME_PREFIX = x');
@@ -248,9 +261,9 @@ test.describe('monaco contributions', () => {
     await expect(props.locator('.view-lines')).not.toContainText('TRUNCATE = 1');
   });
 
-  test('find opens its widget', async ({ page }) => {
+  test('find opens its widget', async ({ page, keys }) => {
     await typeIntoProps(page, '[web]\nTRUNCATE = 1');
-    await page.keyboard.press('Control+f');
+    await page.keyboard.press(`${keys.mod}+f`);
     await expect(page.locator('.monaco-editor').nth(1).locator('.find-widget.visible')).toBeVisible();
   });
 });
@@ -258,7 +271,7 @@ test.describe('monaco contributions', () => {
 test.describe('editor state across remounts', () => {
   // Collapsing a panel remounts the editors; each file's model is kept, so
   // what was typed before the collapse can still be undone after it (#453).
-  test('undo still works after props.conf is collapsed and expanded', async ({ page, complaints }) => {
+  test('undo still works after props.conf is collapsed and expanded', async ({ page, complaints, keys }) => {
     await openApp(page);
     const props = () => page.locator('.monaco-editor').nth(1);
     await props().click();
@@ -273,7 +286,7 @@ test.describe('editor state across remounts', () => {
 
     await props().locator('.view-lines').click();
     await expect(async () => {
-      await page.keyboard.press('Control+z');
+      await page.keyboard.press(`${keys.mod}+z`);
       await expect(props().locator('.view-lines')).not.toContainText('TRUNCATE', { timeout: 500 });
     }).toPass({ timeout: 10_000 });
     expect(complaints.all).toEqual([]);
@@ -288,8 +301,11 @@ test.describe('editor state across remounts', () => {
     });
     // Chromium shows the prompt only after a user gesture on the page.
     await page.locator('.monaco-editor').nth(1).click();
-    await page.close({ runBeforeUnload: true });
-    await expect.poll(() => page.isClosed()).toBe(true);
+    // A reload, not a close: Playwright's WebKit does not close a page that
+    // has run its beforeunload handlers, though none of them asked to stay.
+    // A prompt here would be dismissed, and the reload would never finish.
+    await page.reload();
+    await expect(page.locator('#main-content')).toBeVisible();
     expect(prompts).toBe(0);
   });
 
@@ -323,7 +339,7 @@ test.describe('pipeline worker', () => {
     expect(Number(/(\d+) fields?/.exec(text)?.[1] ?? 0)).toBeGreaterThan(0);
   });
 
-  test('recomputes when props.conf changes', async ({ page }) => {
+  test('recomputes when props.conf changes', async ({ page, keys }) => {
     await openApp(page);
     await loadExample(page, APACHE);
 
@@ -337,11 +353,132 @@ test.describe('pipeline worker', () => {
 
     // Add an EVAL that must produce a new field, then wait for it to appear.
     await page.locator('.monaco-editor').nth(1).click();
-    await page.keyboard.press('Control+End');
+    await page.keyboard.press(keys.textEnd);
     await page.keyboard.type('\nEVAL-e2e_marker = "present"\n');
 
     await expect(page.getByText('e2e_marker', { exact: true })).toBeVisible({ timeout: 20_000 });
     expect(await page.locator('tbody tr').count()).toBeGreaterThan(before);
+  });
+
+  // The watchdog and the crash policy (ADR 0014) against a real Worker (#891).
+  // The unit tests drive them with a fake one. Each stand-in fails the run
+  // that the app makes on mount, with the raw log empty.
+  const failure = (page: Page) => page.getByRole('alert').filter({ hasText: 'Processing failed' });
+
+  test('the watchdog stops a run that hangs its worker, and the next run uses a new worker', async ({ page }) => {
+    const fetches = await failPipelineWorker(page, 'hang');
+    await recordWorkerReplies(page);
+    await openApp(page);
+
+    await expect(failure(page)).toContainText('Pipeline timed out after 5 s', { timeout: 20_000 });
+    await expect(page.getByRole('contentinfo')).toContainText('1 error');
+    // The watchdog built the replacement at once, not at the next request.
+    await expect.poll(fetches).toBe(2);
+
+    await loadExample(page, APACHE);
+    await expect(failure(page)).toHaveCount(0);
+    expect(await workerReplies(page, PIPELINE_WORKER)).toBeGreaterThan(0);
+    await expect(page.getByTestId('pipeline-main-thread')).toHaveCount(0);
+  });
+
+  test('a run that crashes its worker once is run again on a new worker', async ({ page }) => {
+    const fetches = await failPipelineWorker(page, 'crash');
+    await recordWorkerReplies(page);
+    await openApp(page);
+
+    // The replay answers the run, so the user sees no failure.
+    await expect.poll(() => workerReplies(page, PIPELINE_WORKER), { timeout: 20_000 }).toBeGreaterThan(0);
+    await expect.poll(fetches).toBe(2);
+    await expect(failure(page)).toHaveCount(0);
+    await loadExample(page, APACHE);
+  });
+
+  test('a run that crashes two workers is stopped, and the next run uses a third', async ({ page }) => {
+    const fetches = await failPipelineWorker(page, 'crash', 2);
+    await recordWorkerReplies(page);
+    await openApp(page);
+
+    await expect(failure(page)).toContainText('Worker crashed repeatedly while processing this input', {
+      timeout: 20_000,
+    });
+    await expect.poll(fetches).toBe(3);
+
+    // The input that crashed is not run again on the main thread, and the
+    // next one runs on the third worker.
+    await expect(page.getByTestId('pipeline-main-thread')).toHaveCount(0);
+    await loadExample(page, APACHE);
+    await expect(failure(page)).toHaveCount(0);
+    expect(await workerReplies(page, PIPELINE_WORKER)).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * The two pipeline settings (#891). Manual apply holds each edit until Run or
+ * Ctrl+Enter. Per-event mode re-matches the stanzas of an event whose
+ * sourcetype a transform rewrote, and it turns manual apply on.
+ */
+test.describe('pipeline settings', () => {
+  const toggleSetting = async (page: Page, name: string) => {
+    await page.getByRole('button', { name: 'Open settings' }).click();
+    await page.getByRole('switch', { name }).click();
+    await page.getByRole('button', { name: 'Close settings' }).click();
+    await expect(page.getByRole('button', { name: 'Close settings' })).toBeHidden();
+  };
+  // In the Fields table only: the editors show the same names.
+  const fieldRow = (page: Page, name: string) => page.locator('tbody').getByText(name, { exact: true });
+  const outOfDate = (page: Page) => page.getByRole('contentinfo').getByText('● Out of date');
+
+  test('manual apply runs an edit only on Run or Ctrl+Enter', async ({ page, keys }) => {
+    await openApp(page);
+    await toggleSetting(page, 'Manual apply');
+    // Loading an example is a decision to look at it, so it runs (#492).
+    await loadExample(page, APACHE);
+    await page.getByRole('tab', { name: /^Fields$/ }).click();
+    await expect(page.locator('tbody tr').first()).toBeVisible();
+
+    await appendLines(page, 1, ['EVAL-e2e_run = "button"']);
+    await expect(outOfDate(page)).toBeVisible();
+    await expect(fieldRow(page, 'e2e_run')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Run pipeline' }).click();
+    await expect(fieldRow(page, 'e2e_run')).toBeVisible({ timeout: 20_000 });
+    await expect(outOfDate(page)).toHaveCount(0);
+
+    // Ctrl+Enter with the focus in the editor runs too, and adds no line.
+    await appendLines(page, 1, ['EVAL-e2e_key = "shortcut"']);
+    await expect(outOfDate(page)).toBeVisible();
+    await expect(fieldRow(page, 'e2e_key')).toHaveCount(0);
+    await page.keyboard.press(`${keys.mod}+Enter`);
+    await expect(fieldRow(page, 'e2e_key')).toBeVisible({ timeout: 20_000 });
+    await expect(outOfDate(page)).toHaveCount(0);
+  });
+
+  test('per-event mode applies the search-time stanza of a rewritten sourcetype', async ({ page }) => {
+    await openApp(page);
+    await loadExample(page, APACHE);
+    // The POST event becomes sourcetype e2e_web, whose stanza adds a field.
+    await appendLines(page, 2, [
+      '[e2e_retype]',
+      'REGEX = POST',
+      'DEST_KEY = MetaData:Sourcetype',
+      'FORMAT = sourcetype::e2e_web',
+    ]);
+    await appendLines(page, 1, ['TRANSFORMS-e2e = e2e_retype', '[e2e_web]', 'EVAL-e2e_rematched = "yes"']);
+
+    // In batch mode the rewrite is reported, and the stanza does not apply.
+    const batchWarning = page.getByText(/One or more events had their sourcetype\/host\/source rewritten/).first();
+    await expect(batchWarning).toBeVisible({ timeout: 20_000 });
+    await page.getByRole('tab', { name: /^Fields$/ }).click();
+    await expect(page.locator('tbody tr').first()).toBeVisible();
+    await expect(fieldRow(page, 'e2e_rematched')).toHaveCount(0);
+
+    await toggleSetting(page, 'Re-match stanzas after metadata rewrites');
+    await expect(page.getByRole('contentinfo').getByRole('button', { name: 'Per-event pipeline' })).toBeVisible();
+    // Per-event mode turned manual apply on, so the change waits for Run.
+    await expect(outOfDate(page)).toBeVisible();
+    await page.getByRole('button', { name: 'Run pipeline' }).click();
+
+    await expect(fieldRow(page, 'e2e_rematched')).toBeVisible({ timeout: 20_000 });
+    await expect(batchWarning).toHaveCount(0);
   });
 });
 
@@ -700,12 +837,20 @@ test.describe('dictionary', () => {
 
   test('a tab left open across a redeploy reloads onto the new build and keeps its edits (#706)', async ({ page }) => {
     await openApp(page);
-    // The redeploy deleted the chunk this tab knows: its first fetch 404s, as the old hash would.
-    let deleted = true;
+    // The redeploy deleted the chunk this tab knows: its fetch 404s, as the
+    // old hash would. The new build names the chunk by a new URL, as a real
+    // one does: WebKit does not fetch a URL again in the reloaded page after
+    // a reload cancelled its 404, and fails the import with no request.
+    let redeployed = false;
     await page.route(/\/assets\/DictionaryView-[^/]+\.js$/, (route) => {
-      if (!deleted) return route.continue();
-      deleted = false;
+      redeployed = true;
       return route.fulfill({ status: 404 });
+    });
+    await page.route(/\/assets\/index-[^/]+\.js$/, async (route) => {
+      if (!redeployed) return route.continue();
+      const response = await route.fetch();
+      const body = (await response.text()).replace(/DictionaryView-[\w-]+\.js/g, '$&?build=new');
+      return route.fulfill({ response, body });
     });
     let prompts = 0;
     page.on('dialog', (dialog) => {
@@ -911,7 +1056,7 @@ test.describe('regex engine', () => {
   // compilation ever turns into the multi-second, fully optimised kind.
   const LOAD_BUDGET_MS = 2_000;
 
-  test('loads fast, from the one built asset, and every worker runs on it', async ({ page, complaints }) => {
+  test('loads fast, from the one built asset, and every worker runs on it', async ({ page, complaints, keys }) => {
     const wasmFetches: string[] = [];
     page.on('request', (request) => {
       if (/\.wasm$/.test(new URL(request.url()).pathname)) wasmFetches.push(request.url());
@@ -931,7 +1076,7 @@ test.describe('regex engine', () => {
     await expect.poll(() => workerReplies(page, /\/timestampMatchWorker[^/]*\.js$/)).toBeGreaterThan(0);
 
     await page.locator('.monaco-editor').nth(1).click();
-    await page.keyboard.press('Control+End');
+    await page.keyboard.press(keys.textEnd);
     await page.keyboard.type('\nEXTRACT-e2e = HTTP/\\K(?<e2e_ver>[\\d.]++)\n');
     await page.getByRole('tab', { name: /^Fields$/ }).click();
     await expect(page.getByText('e2e_ver', { exact: true })).toBeVisible({ timeout: 20_000 });

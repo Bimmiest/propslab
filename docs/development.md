@@ -71,6 +71,6 @@ Pay the debt in a change that touches its code, or plan it as other work. The pu
 ## If the installation or a test fails
 
 - **The Node version is too old:** Read `.nvmrc`. To change to that version, run `nvm use` or `fnm use`.
-- **The Playwright browser is not installed:** Run `npx playwright install chromium`. The first e2e run needs it.
+- **The Playwright browser is not installed:** Run `npx playwright install chromium`. The first e2e run needs it. The `firefox` and `webkit` projects need their own browsers.
 - **`node_modules` is not current:** Run `rm -rf node_modules && npm install`.
 - **An old `dist/` causes E2E failures:** Run `rm -rf dist/ && npm run test:e2e`.
