@@ -66,7 +66,7 @@ The examples are dated October 2026. Until 2032 they are inside the default `MAX
 |---|---|
 | Raw | The events after line breaking and event breaking, with line numbers and timestamp regions. A truncated event has a `Truncated` badge. A copy that `CLONE_SOURCETYPE` makes has a `Cloned from <sourcetype>` badge. You can expand and collapse a long event. |
 | Timestamp | For each event: the prefix that matched, the format pattern, and the parsed `_time`. |
-| Extractions | The field extractions, inline in `_raw`. Each extraction has a class: auto (KV_MODE / INDEXED_EXTRACTIONS), manual (EXTRACT / REPORT / TRANSFORMS / SEDCMD) or calc (EVAL). The filter pills are `Auto / Manual / Calculated / All`. A sidebar that you can collapse has search, hover-focus and pin-to-filter. |
+| Extractions | The field extractions, inline in `_raw`. Each extraction has a class: auto (KV_MODE / INDEXED_EXTRACTIONS), manual (EXTRACT / REPORT / TRANSFORMS / SEDCMD) or calc (EVAL). The filter pills are `Auto / Manual / Calculated / All`. The **Field list** button opens and closes a sidebar with the heading **Field list**. The sidebar has search, hover-focus and pin-to-filter. |
 | Diff | A character-level unified diff of the original raw data and the processed `_raw`. |
 | Regex | An interactive regex tester for the event text. It shows only the matches. When you enter no pattern, it shows an empty-state prompt. `Add to props.conf` upserts the `EXTRACT-` line that you built into the sourcetype stanza of the event. If the event has no sourcetype, the button writes a placeholder stanza *and* points the metadata to it. The event cannot match a stanza without this change, and such a stanza is a scaffold that does nothing. The panel says this before you click. |
 
@@ -76,7 +76,9 @@ The examples are dated October 2026. Until 2032 they are inside the default `MAX
 
 **Fields tab.** This tab lists each extracted field, with its phase (index-time or search-time) and the processors that made it. It also lists the default fields `host`, `source`, `sourcetype` and `index` that have a value in the metadata, with the label **default**. These come from the metadata of each event after the pipeline. An extracted field with the same name replaces the metadata value in that event. After a `rename`, the `sourcetype` row shows the new name, as a search in Splunk does. The filter pill is `All / Index-time / Search-time`.
 
-**Field menu.** Right-click a field in the Fields tab, in the Extractions sidebar or in the event text to open its menu. From the keyboard, move to a row with the arrow keys and press `Shift+F10` or the Menu key. The menu is the same in each place. It has these items:
+**Names of the field controls.** The **Fields** tab is a top-level tab. **Filter by field** is the menu beside the event search in the Preview tabs. **Field list** is the button in the Extractions tab that opens and closes the sidebar, and it is the heading of that sidebar.
+
+**Field menu.** Right-click a field in the Fields tab, in the Field list of the Extractions tab or in the event text to open its menu. From the keyboard, move to a row with the arrow keys and press `Shift+F10` or the Menu key. The menu is the same in each place. It has these items:
 
 - copy the field name, the value or the sample values
 - pin the field, in the Extractions view

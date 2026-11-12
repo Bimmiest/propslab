@@ -25,11 +25,11 @@ export function FieldSidebar({ fieldCount, activeFields, onCollapse, renderItems
     <div className="h-full flex flex-col bg-[var(--color-bg-secondary)]">
       {/* Header */}
       <div className="flex-shrink-0 flex items-center justify-between px-2 py-1.5 border-b border-[var(--color-border)]">
-        <span className="text-xs font-medium text-[var(--color-text-muted)] uppercase tracking-wider">Fields</span>
+        <span className="text-xs font-medium text-[var(--color-text-muted)] uppercase tracking-wider">Field list</span>
         <button
           className="flex items-center justify-center w-5 h-5 rounded hover:bg-[var(--color-bg-tertiary)] cursor-pointer bg-transparent border-none p-0 transition-colors"
           onClick={onCollapse}
-          title="Collapse field panel"
+          title="Collapse field list"
         >
           <Icon name="chevron-right" className="w-3.5 h-3.5" style={{ color: 'var(--color-text-muted)' }} />
         </button>
