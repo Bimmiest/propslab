@@ -1,7 +1,7 @@
 import type { ConfDirective, SplunkEvent, ValidationDiagnostic } from '../types';
 import type { RunContext } from '../runContext';
 import { transformsMessageKey } from './ingestEval';
-import { regexFailureMessage } from '../processors/evalProcessor';
+import { regexFailureMessage, regexLimitMessage } from '../processors/evalProcessor';
 import { evalNode } from '../processors/eval/evaluator';
 import { type Node, parseExpression } from '../processors/eval/parser';
 import { atDirective } from '../parser/provenance';
@@ -76,6 +76,8 @@ export function evaluateStopCondition(
       now,
       onStubWarning: (fn) => report('warning', `${fn}() is not fully simulated — results may differ from real Splunk`),
       onRegexError: (fn, pattern) => report('warning', `STOP_PROCESSING_IF: ${regexFailureMessage(fn, pattern)}`),
+      onRegexLimit: (fn, pattern, error) =>
+        report('warning', `STOP_PROCESSING_IF: ${regexLimitMessage(fn, pattern, error)}`),
     });
     return { stop: stopConditionHolds(value), expression };
   } catch (err) {
