@@ -67,6 +67,9 @@ export function applyKvMode(events: SplunkEvent[], directives: ConfDirective[], 
 
     if (added.length === 0 && missedPastCap.length === 0) return event;
 
+    // XML appends a value to a field that the event had before, and records
+    // it in `added`: that field is modified, not added (#900).
+    const modified = added.filter((f) => hasField(event.fields, f));
     return {
       ...event,
       fields: newFields,
@@ -76,7 +79,8 @@ export function applyKvMode(events: SplunkEvent[], directives: ConfDirective[], 
           processor: `KV_MODE(${mode})`,
           phase: 'search-time' as const,
           description: `Extracted ${added.length} fields via KV_MODE=${mode}${depthWarning ? ' (depth limit reached — deeply nested fields omitted)' : ''}${capNote(missedPastCap)}`,
-          fieldsAdded: added,
+          fieldsAdded: modified.length > 0 ? added.filter((f) => !hasField(event.fields, f)) : added,
+          ...(modified.length > 0 ? { fieldsModified: modified } : {}),
         },
       ],
     };

@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
-import { test, expect, openApp, loadExample, pasteInto } from './fixtures';
+import { test, expect, openApp, loadExample, pasteInto, failPipelineWorker } from './fixtures';
 
 const APACHE = /Apache Access Log/i;
 
@@ -83,6 +83,24 @@ for (const theme of ['dark', 'light'] as const) {
         await expectNoViolations(page, tab);
       });
     }
+
+    // The Apache example has five events, too few for the pager to show. Not
+    // with a field pinned: that dims the other text on purpose, which axe reads
+    // as low contrast.
+    test('event pager (#881)', async ({ page }) => {
+      await openApp(page);
+      await loadExample(page, APACHE);
+      const lines = Array.from(
+        { length: 12 },
+        (_, i) => `203.0.113.${i} - admin [25/Oct/2026:13:55:38 -0700] "GET /a?x=${i} HTTP/1.0" 200 1`,
+      );
+      await pasteInto(page, 0, lines.join('\n'));
+      await expect(page.getByText('12 events', { exact: true })).toBeVisible({ timeout: 30_000 });
+      await page.getByRole('tab', { name: /^Extractions$/ }).click();
+      await page.getByRole('button', { name: 'Next page' }).click();
+      await expect(page.getByText('Showing events 11-12 of 12', { exact: true })).toBeVisible();
+      await expectNoViolations(page, 'event pager');
+    });
 
     test('dictionary', async ({ page }) => {
       await openApp(page);
@@ -275,7 +293,8 @@ for (const theme of ['dark', 'light'] as const) {
     test('CIM Models: models with no matching field', async ({ page }) => {
       await openDroppedAndRouted(page);
       await page.getByRole('tab', { name: /^CIM Models$/ }).click();
-      await expect(page.getByRole('button', { name: 'Show matching only' })).toBeVisible();
+      // The header gives the threshold (#896); which models reach it depends on the example.
+      await expect(page.getByText(/A match has 50% or more of its required fields/)).toBeVisible();
       await expectNoViolations(page, 'CIM Models (non-matching)');
     });
 
@@ -283,6 +302,58 @@ for (const theme of ['dark', 'light'] as const) {
       await openApp(page);
       await page.getByRole('tab', { name: /^Architecture$/ }).click();
       await expectNoViolations(page, 'Architecture (inactive)');
+    });
+  });
+}
+
+/**
+ * The states a failure puts the page in (#891): an error boundary in each of
+ * its two forms, a run that failed, and a dialog open over that failure. Each
+ * one draws in the error colours, which no state above uses on this scale.
+ */
+for (const theme of ['dark', 'light'] as const) {
+  test.describe(`accessibility of failure states (${theme})`, () => {
+    test.beforeEach(async ({ page }) => {
+      await page.addInitScript((t) => {
+        try {
+          localStorage.setItem('propslab:theme', t);
+        } catch {
+          /* ignore */
+        }
+      }, theme);
+    });
+
+    // Offline, a lazy chunk that cannot load goes to its error boundary.
+    // Online, the page reloads onto a new build instead (staleChunkReload.ts).
+    test('error boundary, a panel: the dictionary', async ({ page, context }) => {
+      await openApp(page);
+      await context.setOffline(true);
+      await page.getByRole('tab', { name: 'Dictionary' }).click();
+      await expect(page.getByRole('alert').filter({ hasText: 'Dictionary Error' })).toBeVisible();
+      await expectNoViolations(page, 'error boundary (panel)');
+    });
+
+    test('error boundary, a line in the chrome: the scaffold', async ({ page, context }) => {
+      await openApp(page);
+      await loadExample(page, APACHE);
+      await context.setOffline(true);
+      await page.getByRole('button', { name: 'Scaffold' }).click();
+      await expect(page.getByRole('alert').filter({ hasText: 'Scaffold Error' })).toBeVisible();
+      await expectNoViolations(page, 'error boundary (inline)');
+    });
+
+    test('a failed run, and a dialog over it', async ({ page }) => {
+      // Two crashes on the run made on mount: the run stops and says why.
+      await failPipelineWorker(page, 'crash', 2);
+      await openApp(page);
+      await expect(page.getByRole('alert').filter({ hasText: 'Processing failed' })).toBeVisible({
+        timeout: 20_000,
+      });
+      await expectNoViolations(page, 'failed run');
+
+      await page.getByRole('contentinfo').getByRole('button', { name: /^v/ }).click();
+      await expect(page.getByRole('dialog', { name: 'About Propslab' })).toBeVisible();
+      await expectNoViolations(page, 'dialog over a failed run');
     });
   });
 }
