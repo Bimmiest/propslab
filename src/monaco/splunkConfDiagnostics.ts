@@ -16,6 +16,7 @@ import {
   regexProblem,
 } from '../engine/utils/directiveValues';
 import { DIRECTIVE_RE, STANZA_RE, miscasedCanonical, MISCASED_MESSAGE } from '../engine/parser/confParser';
+import { misspelledCanonical, MISSPELLED_MESSAGE } from '../engine/misspelledDirective';
 import { unsupportedSpecifiers } from '../utils/strftime';
 
 /**
@@ -51,7 +52,13 @@ export interface DiagnosticMarker {
  */
 export const MISCASED_MARKER_CODE = 'splunk.miscased-attribute';
 
+/** Tags the marker of a key one edit from a real attribute, which the same quick fix renames. */
+export const MISSPELLED_MARKER_CODE = 'splunk.misspelled-attribute';
+
 type ConfFileType = 'props.conf' | 'transforms.conf';
+
+/** What the linter reads of a model: its lines. A text split into lines serves as well (editorProblems.ts). */
+export type LineSource = Pick<editor.ITextModel, 'getLineCount' | 'getLineContent'>;
 type DirectiveInfo = NonNullable<ReturnType<typeof getDirectiveInfo>>;
 
 /** A marker on one line, from `startColumn` to (exclusive) `endColumn`. */
@@ -177,6 +184,21 @@ function unknownDirectiveMarker(
   // the same way it does for a documented-but-`ignored` key — so say
   // nothing more here rather than contradicting it.
   if (isUndocumentedAttribute(key)) return null;
+
+  // One edit from a real attribute: the engine reports the same sentence, and
+  // a warning, like a mis-cased key, because the line is dead on an indexer.
+  const intended = misspelledCanonical(key, fileType);
+  if (intended !== undefined) {
+    return {
+      ...lineMarker(i, {
+        severity: 4,
+        message: MISSPELLED_MESSAGE(key, intended, fileType),
+        startColumn: 1,
+        endColumn: eqIdx + 1,
+      }),
+      code: MISSPELLED_MARKER_CODE,
+    };
+  }
   return lineMarker(i, {
     severity: 2,
     message: `Unknown directive "${key}" — possible typo?`,
@@ -284,7 +306,7 @@ function checkKnownDirective(info: DirectiveInfo, d: DirectiveLine, markers: Dia
   }
 }
 
-export function computeDiagnostics(model: editor.ITextModel, fileType: ConfFileType): DiagnosticMarker[] {
+export function computeDiagnostics(model: LineSource, fileType: ConfFileType): DiagnosticMarker[] {
   const markers: DiagnosticMarker[] = [];
   const lineCount = model.getLineCount();
   const seenStanzas = new Set<string>();
@@ -388,12 +410,7 @@ export function computeDiagnostics(model: editor.ITextModel, fileType: ConfFileT
  * continues: each earlier one lost its final backslash to the continuation it
  * made, so the parity of the value's trailing backslashes is the last part's.
  */
-function joinContinuedValue(
-  model: editor.ITextModel,
-  startLine: number,
-  firstFragment: string,
-  lineCount: number,
-): string {
+function joinContinuedValue(model: LineSource, startLine: number, firstFragment: string, lineCount: number): string {
   const parts = [firstFragment];
   for (let line = startLine + 1; line <= lineCount; line++) {
     const last = parts.length - 1;

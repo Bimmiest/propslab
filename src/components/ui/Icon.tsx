@@ -5,6 +5,8 @@ export type IconName =
   | 'chevron-up'
   | 'chevron-left'
   | 'chevron-right'
+  | 'chevrons-left'
+  | 'chevrons-right'
   | 'settings'
   | 'refresh'
   | 'document'
@@ -34,6 +36,18 @@ const PATHS: Record<IconName, React.ReactNode> = {
   'chevron-up': <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />,
   'chevron-left': <polyline points="15 18 9 12 15 6" />,
   'chevron-right': <polyline points="9 18 15 12 9 6" />,
+  'chevrons-left': (
+    <>
+      <polyline points="11 17 6 12 11 7" />
+      <polyline points="18 17 13 12 18 7" />
+    </>
+  ),
+  'chevrons-right': (
+    <>
+      <polyline points="13 17 18 12 13 7" />
+      <polyline points="6 17 11 12 6 7" />
+    </>
+  ),
   settings: (
     <>
       <path

@@ -38,6 +38,23 @@ describe('EventContextMenu — fallback stanza (#72)', () => {
     fireEvent.click(screen.getByText(/Create EXTRACT/i));
   }
 
+  it('opens on Shift+F10 from the focused event text, with no contextmenu event from the browser (#933)', () => {
+    render(
+      <EventContextMenu event={event()} selectionText="alice" selectionStart={16}>
+        <span role="textbox" tabIndex={0} aria-label="Event text">
+          event body
+        </span>
+      </EventContextMenu>,
+    );
+    const text = screen.getByRole('textbox', { name: 'Event text' });
+    text.focus();
+    fireEvent.keyDown(text, { key: 'F10', shiftKey: true });
+    expect(screen.getByRole('menuitem', { name: /Create EXTRACT/ })).toBeInTheDocument();
+    // Chromium sends its own event for the key as well; it opens no second menu.
+    fireEvent.contextMenu(text);
+    expect(screen.getAllByRole('menu')).toHaveLength(1);
+  });
+
   it('points metadata at the stanza it wrote, so the directive can match', () => {
     openExtractDialog();
     fireEvent.click(screen.getByRole('button', { name: /Add EXTRACT/i }));

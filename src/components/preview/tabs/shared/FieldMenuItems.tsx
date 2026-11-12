@@ -2,6 +2,7 @@ import { copyQuietly } from '../../../../utils/clipboard';
 import { useAppStore } from '../../../../store/useAppStore';
 import { revealInEditor } from '../../../editor/revealInEditor';
 import { ContextMenuItem, ContextMenuLabel, ContextMenuSeparator } from '../../../ui/ContextMenu';
+import { Identifier } from '../../../ui/Identifier';
 import { currentFieldDirectiveLine } from './fieldDirective';
 
 /**
@@ -36,7 +37,9 @@ export function FieldMenuItems({
 
   return (
     <>
-      <ContextMenuLabel>{field}</ContextMenuLabel>
+      <ContextMenuLabel>
+        <Identifier>{field}</Identifier>
+      </ContextMenuLabel>
       <ContextMenuItem onSelect={() => copyQuietly(field)}>Copy field name</ContextMenuItem>
       {value !== undefined && (
         <>

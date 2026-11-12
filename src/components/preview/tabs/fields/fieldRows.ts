@@ -1,4 +1,4 @@
-import type { TraceStep, ViewEvent } from '../../../../utils/viewResult';
+import { fieldsWritten, type TraceStep, type ViewEvent } from '../../../../utils/viewResult';
 import { fieldCollator, type FieldStats } from '../../../../utils/fieldStats';
 import type { WindowSegment } from '../../../../hooks/useWindowedRows';
 import type { PhaseFilter, SortDir, SortKey } from './data';
@@ -48,10 +48,11 @@ interface Credit {
 function creditsOf(trace: readonly TraceStep[]): Credit[] {
   const credits: Credit[] = [];
   for (const step of trace) {
-    for (const name of step.fieldsAdded ?? []) credits.push({ name, step, masked: false });
+    for (const name of fieldsWritten(step)) credits.push({ name, step, masked: false });
     // The field extracts fine but an index-time rewrite destroyed its
     // value. Without this the row looks like a working extraction, and a
     // blank-looking value reads as "the extraction is wrong".
+    if (step.phase === 'search-time') continue;
     for (const name of step.fieldsModified ?? []) credits.push({ name, step, masked: true });
   }
   return credits;
@@ -338,4 +339,45 @@ export function controlledRowIds(
 ): string | undefined {
   if (collapsed) return undefined;
   return childIds?.filter((id) => rendered.has(id)).join(' ') || undefined;
+}
+
+/**
+ * How many fields are of each kind, for the count above the Fields table.
+ * Each field counts once, so the kinds add up to `total`: a default field
+ * (host, source, sourcetype, index) when metadata is its only source, else
+ * an index-time field when any index-time step made it, else a search-time
+ * field, else a field that no step is credited with (`noPhase`).
+ */
+export interface FieldKinds {
+  total: number;
+  default: number;
+  indexTime: number;
+  searchTime: number;
+  noPhase: number;
+}
+
+export function countFieldKinds(aggregated: readonly AggregatedField[]): FieldKinds {
+  const kinds: FieldKinds = { total: aggregated.length, default: 0, indexTime: 0, searchTime: 0, noPhase: 0 };
+  for (const f of aggregated) {
+    if (f.sources.size === 1 && f.sources.has(METADATA_SOURCE)) kinds.default++;
+    else if (f.phases.has('index-time')) kinds.indexTime++;
+    else if (f.phases.has('search-time')) kinds.searchTime++;
+    else kinds.noPhase++;
+  }
+  return kinds;
+}
+
+/** "33 fields (4 default, 7 index-time, 22 search-time)", or "5 of 33 fields (...)" when a filter leaves `shown` rows. */
+export function fieldCountLabel(shown: number, kinds: FieldKinds): string {
+  const noun = `field${kinds.total === 1 ? '' : 's'}`;
+  const head = shown === kinds.total ? `${kinds.total} ${noun}` : `${shown} of ${kinds.total} ${noun}`;
+  const parts = [
+    [kinds.default, 'default'],
+    [kinds.indexTime, 'index-time'],
+    [kinds.searchTime, 'search-time'],
+    [kinds.noPhase, 'no phase'],
+  ]
+    .filter(([n]) => n !== 0)
+    .map(([n, name]) => `${n} ${name}`);
+  return parts.length === 0 ? head : `${head} (${parts.join(', ')})`;
 }

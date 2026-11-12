@@ -1,10 +1,10 @@
-import { useMemo } from 'react';
+import { memo, useMemo, useState } from 'react';
+import type { KeyboardEvent } from 'react';
 import { findFieldValuePositions } from '../../../../utils/fieldHighlight';
-import { useFieldFocusState } from './useFieldFocus';
-import { ContextMenu, ContextMenuTrigger, ContextMenuContent } from '../../../ui/ContextMenu';
-import { FieldMenuItems } from './FieldMenuItems';
+import { useFieldFocusState, useFieldSpanState } from './useFieldFocus';
 import { tint } from '../../../../utils/tint';
 import { atomicSegments, type Highlight } from './atomicSegments';
+import { FIELD_SELECTOR, rovingIndex } from './fieldSpans';
 
 interface HighlightedRawProps {
   raw: string;
@@ -23,6 +23,8 @@ interface HighlightedRawProps {
    * When present for a field, these offsets are used directly and context matching is skipped.
    */
   fieldOffsets?: Record<string, Array<[number, number]>>;
+  /** The element that tells a screen reader the keys of the highlighted values. */
+  hintId?: string;
 }
 
 /** Every span of `raw` a field's value occupies, coloured by field. */
@@ -77,53 +79,67 @@ function PlainSegment({ text }: { text: string }) {
   return <span style={{ opacity: focused ? 0.3 : 1, transition: 'opacity 0.15s' }}>{text}</span>;
 }
 
-/** One highlighted field value, with its copy/pin context menu. */
-function HighlightedSpan({
+/**
+ * One highlighted field value. Its menu is the card's (EventContextMenu), which
+ * reads the field and the value off `data-field` and `data-value`: one menu per
+ * card, not one per value. Hover and focus focus the field; a press pins it.
+ */
+const HighlightedSpan = memo(function HighlightedSpan({
   hl,
+  start,
   text,
   valueStr,
   title,
+  tabbable,
+  hintId,
   onFieldHover,
   onFieldClick,
 }: {
   hl: Highlight;
+  start: number;
   text: string;
   valueStr: string;
   title: string;
+  /** The card's one tab stop among its values. */
+  tabbable: boolean;
+  hintId?: string;
   onFieldHover: (field: string | null) => void;
   onFieldClick: (field: string) => void;
 }) {
   // Subscribed here rather than passed down, so a hover re-renders only the
   // spans whose look it changes, not every card on the page.
-  const focusState = useFieldFocusState(hl.field);
-  const focused = focusState !== 'none';
-  const active = focusState !== 'dim';
+  const state = useFieldSpanState(hl.field);
+  const focused = state !== 'none';
+  const active = state !== 'dim';
   return (
-    <ContextMenu>
-      <ContextMenuTrigger>
-        <span
-          style={{
-            color: hl.color,
-            backgroundColor: active && focused ? tint(hl.color, 13) : 'transparent',
-            opacity: focused && !active ? 0.2 : 1,
-            transition: 'opacity 0.15s, background-color 0.15s, color 0.15s',
-            cursor: 'pointer',
-          }}
-          title={title}
-          className="rounded-sm px-0.5"
-          onMouseEnter={() => onFieldHover(hl.field)}
-          onMouseLeave={() => onFieldHover(null)}
-          onClick={() => onFieldClick(hl.field)}
-        >
-          {text}
-        </span>
-      </ContextMenuTrigger>
-      <ContextMenuContent>
-        <FieldMenuItems field={hl.field} value={valueStr} onTogglePin={onFieldClick} />
-      </ContextMenuContent>
-    </ContextMenu>
+    <span
+      role="button"
+      tabIndex={tabbable ? 0 : -1}
+      aria-pressed={state === 'pinned'}
+      aria-label={title}
+      aria-describedby={hintId}
+      data-field={hl.field}
+      data-value={valueStr}
+      data-start={start}
+      style={{
+        color: hl.color,
+        backgroundColor: active && focused ? tint(hl.color, 13) : 'transparent',
+        opacity: focused && !active ? 0.2 : 1,
+        transition: 'opacity 0.15s, background-color 0.15s, color 0.15s',
+        cursor: 'pointer',
+      }}
+      title={title}
+      className="rounded-sm px-0.5"
+      onMouseEnter={() => onFieldHover(hl.field)}
+      onMouseLeave={() => onFieldHover(null)}
+      onFocus={() => onFieldHover(hl.field)}
+      onBlur={() => onFieldHover(null)}
+      onClick={() => onFieldClick(hl.field)}
+    >
+      {text}
+    </span>
   );
-}
+});
 
 export function HighlightedRaw({
   raw,
@@ -134,6 +150,7 @@ export function HighlightedRaw({
   onFieldClick,
   fieldSourceKeys,
   fieldOffsets,
+  hintId,
 }: HighlightedRawProps) {
   // Segmentation depends only on the raw text and the field/value/offset maps, so
   // it survives anything that re-renders the card without changing them.
@@ -142,9 +159,35 @@ export function HighlightedRaw({
     [raw, fieldColorMap, fieldValues, fieldOffsets, fieldSourceKeys],
   );
 
-  if (atomic.length === 0) {
+  // A roving tab stop: Tab stops on one value per card, and the arrow keys
+  // move between the values. Held by the value's offset in `raw`; the first
+  // value when that value is gone or none was chosen.
+  const [chosenStop, setTabStop] = useState<number | null>(null);
+  const starts = atomic.flatMap(({ start, hl }) => (hl ? [start] : []));
+  const tabStop = chosenStop !== null && starts.includes(chosenStop) ? chosenStop : starts[0];
+
+  if (starts.length === 0) {
     return <PlainSegment text={raw} />;
   }
+
+  const onKeyDown = (e: KeyboardEvent<HTMLSpanElement>) => {
+    const span = e.target;
+    if (!(span instanceof HTMLElement)) return;
+    const { field } = span.dataset;
+    if (field === undefined) return;
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      onFieldClick(field);
+      return;
+    }
+    const spans = Array.from(e.currentTarget.querySelectorAll<HTMLElement>(FIELD_SELECTOR));
+    const next = rovingIndex(e.key, spans.indexOf(span), spans.length);
+    const target = next === null ? undefined : spans[next];
+    if (!target) return;
+    e.preventDefault();
+    setTabStop(Number(target.getAttribute('data-start')));
+    target.focus();
+  };
 
   const segments: React.ReactNode[] = atomic.map(({ start, end, hl }) => {
     const text = raw.substring(start, end);
@@ -157,14 +200,17 @@ export function HighlightedRaw({
       <HighlightedSpan
         key={`${start}-${hl.field}`}
         hl={hl}
+        start={start}
         text={text}
         valueStr={valueStr}
         title={titleFor(hl.field, text)}
+        tabbable={start === tabStop}
+        hintId={hintId}
         onFieldHover={onFieldHover}
         onFieldClick={onFieldClick}
       />
     );
   });
 
-  return <>{segments}</>;
+  return <span onKeyDown={onKeyDown}>{segments}</span>;
 }

@@ -20,6 +20,9 @@ export interface SessionInputs {
   metadata: EventMetadata;
 }
 
+/** The configuration a pipeline run reads: the inputs other than the events. */
+export type PipelineInputs = Omit<SessionInputs, 'rawData'>;
+
 /** What the Preview tab's filter bar narrows the events to. */
 export interface PreviewFilters {
   search: string;
@@ -40,6 +43,13 @@ export const EMPTY_INPUTS: SessionInputs = {
   propsConf: '',
   transformsConf: '',
   metadata: { index: 'main', host: '', source: '', sourcetype: '' },
+};
+
+/** What the tabs that describe a run show before any run has answered. */
+const NO_RUN_INPUTS: PipelineInputs = {
+  propsConf: EMPTY_INPUTS.propsConf,
+  transformsConf: EMPTY_INPUTS.transformsConf,
+  metadata: EMPTY_INPUTS.metadata,
 };
 
 interface AppState {
@@ -71,7 +81,19 @@ interface AppState {
   loadInputs: (inputs: SessionInputs) => void;
 
   processingResult: ViewResult | null;
-  setProcessingResult: (result: ViewResult | null) => void;
+  /**
+   * The configuration of the run whose result is on screen (#879). The
+   * Timestamp, Effective config and Architecture tabs describe that run, not
+   * the editors, which can hold config that has not run yet: in manual-apply
+   * mode, or while a slow run is still in the worker. Null until a run answers.
+   */
+  runInputs: PipelineInputs | null;
+  /**
+   * Show the answer of a run. `inputs` is what that run read, set in the same
+   * update as the result so that the two always agree. A test that only needs
+   * a result omits it, and the recorded inputs stay as they are.
+   */
+  setProcessingResult: (result: ViewResult | null, inputs?: PipelineInputs) => void;
 
   validationDiagnostics: ValidationDiagnostic[];
   setValidationDiagnostics: (diags: ValidationDiagnostic[]) => void;
@@ -319,7 +341,9 @@ export const useAppStore = create<AppState>((set) => ({
     })),
 
   processingResult: null,
-  setProcessingResult: (result) => set({ processingResult: result }),
+  runInputs: null,
+  setProcessingResult: (result, inputs) =>
+    set(inputs ? { processingResult: result, runInputs: inputs } : { processingResult: result }),
 
   validationDiagnostics: [],
   setValidationDiagnostics: (diags) => set({ validationDiagnostics: diags }),
@@ -416,4 +440,9 @@ export function selectSessionDirty(s: AppState): boolean {
     s.metadata.source !== base.metadata.source ||
     s.metadata.sourcetype !== base.metadata.sourcetype
   );
+}
+
+/** The configuration of the run on screen, or empty config before any run has answered. */
+export function selectRunInputs(s: AppState): PipelineInputs {
+  return s.runInputs ?? NO_RUN_INPUTS;
 }
