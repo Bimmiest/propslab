@@ -1,4 +1,4 @@
-import type { SplunkEvent, ConfDirective } from '../types';
+import type { SplunkEvent, ConfDirective, TimeFallback } from '../types';
 import { validateRegex } from '../../utils/splunkRegex';
 import { parseTimestampDetailed, parseTzAlias, type CalendarDate, type ParsedTimestamp } from '../../utils/strftime';
 import { atDirective } from '../parser/provenance';
@@ -386,9 +386,10 @@ class TimestampBatch {
    * The tail of the fallback chain: the previous event's `_time`, and failing
    * that the time of indexing. Splunk always places an event on the timeline —
    * leaving `_time` null is not one of the outcomes — so `reason` explains which
-   * rule got us here and the trace records it as a fallback either way.
+   * rule got us here and the trace records it as a fallback either way;
+   * `fallback` says the same as data.
    */
-  inherit(event: SplunkEvent, reason: string): SplunkEvent {
+  inherit(event: SplunkEvent, reason: string, fallback: TimeFallback = 'not-found'): SplunkEvent {
     const { now, lastResolved } = this;
     const step =
       lastResolved !== null
@@ -415,6 +416,7 @@ class TimestampBatch {
           phase: 'index-time' as const,
           description: step.description,
           timeSource: step.timeSource,
+          timeFallback: fallback,
           ...noTimestampAdded(this.extraMode),
         },
       ],
@@ -498,7 +500,7 @@ class TimestampBatch {
         ...(anchor?.key !== undefined ? { directiveKey: anchor.key } : {}),
       });
     }
-    return this.inherit(event, `Timestamp ${date.toISOString()} rejected: ${rejection}`);
+    return this.inherit(event, `Timestamp ${date.toISOString()} rejected: ${rejection}`, 'out-of-bounds');
   }
 
   /** Accept a parsed timestamp, or reject it and fall back. */
@@ -528,6 +530,7 @@ class TimestampBatch {
       // What was read, for the Timestamp tab to probe once SEDCMD or an
       // index-time transform has rewritten `_raw`.
       timestampText: event._raw,
+      timestampSpan: position,
       processingTrace: [
         ...event.processingTrace,
         {
@@ -535,6 +538,7 @@ class TimestampBatch {
           phase: 'index-time' as const,
           description: note !== undefined ? `${label} (${note})` : label,
           timeSource: source,
+          timeFormat: format,
           ...(extraNames.length > 0 ? { fieldsAdded: extraNames } : {}),
         },
       ],

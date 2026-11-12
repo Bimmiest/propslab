@@ -243,6 +243,10 @@ describe('MCP server end to end', () => {
     const out = payload(result);
     expect(out.eventCount).toBe(1);
     expect(out.events[0]._time).toBe('2026-08-02T10:15:00.000Z');
+    // The step that read it names the format, which the output schema declares.
+    expect(
+      out.events[0].processingTrace.find((s: { processor: string }) => s.processor === 'timestampExtractor'),
+    ).toMatchObject({ timeSource: 'TIME_FORMAT', timeFormat: '%d/%b/%Y:%H:%M:%S %z' });
     expect(out.events[0].fields.status).toBe('200');
     // The defaulted metadata reached the engine...
     expect(out.events[0].metadata).toMatchObject({

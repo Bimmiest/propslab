@@ -1,38 +1,43 @@
 import { memo } from 'react';
-import type { TimeConfig, TimestampProbe } from '../../../../engine/timestampMatch';
-import type { TimeSource } from '../../../../engine/types';
 import { tint } from '../../../../utils/tint';
 import { EventCardHeader, EventNumber } from '../shared/EventCardHeader';
-import { FALLBACK_LABEL, FORMAT_COLOR, LOOKAHEAD_COLOR, PREFIX_COLOR } from './data';
-import { overlaySegments, type OverlaySegment } from './timestampLogic';
+import { FORMAT_COLOR, LOOKAHEAD_COLOR, PREFIX_COLOR } from './data';
+import type { OverlaySegment } from './timestampLogic';
+
+/** What the card's header says of the event's `_time`. */
+export type TimeBadge =
+  | { kind: 'pending' }
+  /** Read from the event text; `format` when it is not the one the tab names. */
+  | { kind: 'read'; time: Date; format?: string }
+  /** Not read from the event text: `label` says why, and `time` is where it came from instead. */
+  | { kind: 'fallback'; label: string; time: Date | null }
+  | { kind: 'none'; label: string };
 
 // Memoised: the tab re-renders with its parent, and a page holds up to 50 cards (#565).
 export const TimestampEventCard = memo(function TimestampEventCard({
   raw,
   rewritten,
   globalIdx,
-  config,
-  probe,
-  pending,
-  resolvedTime,
-  timeSource,
+  segments,
+  badge,
 }: {
   raw: string;
   /** Whether `_raw` was rewritten after timestamping, so `raw` is not the final text. */
   rewritten: boolean;
   globalIdx: number;
-  config: TimeConfig;
-  probe: TimestampProbe | null;
-  pending: boolean;
-  resolvedTime: Date | null;
-  timeSource: TimeSource | undefined;
+  /** How the overlay draws `raw`, or null to draw it plain. */
+  segments: OverlaySegment[] | null;
+  badge: TimeBadge;
 }) {
-  const result = probe?.match ?? null;
-  const parsedTime = result?.parsedTimeMs != null ? new Date(result.parsedTimeMs) : null;
-  const fallbackLabel = timeSource ? FALLBACK_LABEL[timeSource] : undefined;
-
+  // A fallback is set apart by its edge as well as its badge: its _time looks
+  // like a read one in the output.
+  const fallback = badge.kind === 'fallback';
   return (
-    <div className="border border-[var(--color-border)] rounded bg-[var(--color-bg-secondary)]">
+    <div
+      className="border border-[var(--color-border)] rounded bg-[var(--color-bg-secondary)]"
+      style={fallback ? { borderLeft: '3px solid var(--color-warning)' } : undefined}
+      data-time-badge={badge.kind}
+    >
       <EventCardHeader split>
         <EventNumber globalIdx={globalIdx}>
           {rewritten && (
@@ -45,43 +50,67 @@ export const TimestampEventCard = memo(function TimestampEventCard({
           )}
         </EventNumber>
         <div className="flex items-center gap-2">
-          {pending ? (
-            <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-bg-secondary)] text-[var(--color-text-muted)] font-medium">
-              Matching…
-            </span>
-          ) : fallbackLabel ? (
-            // The event still has a _time — it just did not come from this
-            // event's text, so it is warned about rather than shown as a match.
-            <>
-              <span
-                className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-warning)]/10 text-[var(--color-warning)] font-medium"
-                title="This _time was not read from the event text"
-              >
-                {fallbackLabel}
-              </span>
-              {resolvedTime && (
-                <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-bg-secondary)] text-[var(--color-text-muted)] font-medium font-mono">
-                  {resolvedTime.toISOString()}
-                </span>
-              )}
-            </>
-          ) : parsedTime ? (
-            <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-success)]/10 text-[var(--color-success)] font-medium font-mono">
-              {parsedTime.toISOString()}
-            </span>
-          ) : (
-            <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-error)]/10 text-[var(--color-error)] font-medium">
-              {config.timeFormat ? 'No match' : 'No format'}
-            </span>
-          )}
+          <Badge badge={badge} />
         </div>
       </EventCardHeader>
       <pre className="p-3 text-xs font-mono whitespace-pre-wrap break-all">
-        <TimestampOverlay raw={raw} probe={probe} config={config} />
+        {segments ? (
+          segments.map((segment) => <OverlaySpan key={segment.key} segment={segment} />)
+        ) : (
+          <span className={fallback ? 'text-[var(--color-text-muted)]' : 'text-[var(--color-text-secondary)]'}>
+            {raw}
+          </span>
+        )}
       </pre>
     </div>
   );
 });
+
+function Badge({ badge }: { badge: TimeBadge }) {
+  switch (badge.kind) {
+    case 'pending':
+      return (
+        <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-bg-secondary)] text-[var(--color-text-muted)] font-medium">
+          Matching…
+        </span>
+      );
+    case 'fallback':
+      return (
+        <>
+          <span
+            className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-warning)]/10 text-[var(--color-warning)] font-medium"
+            title="This _time was not read from the event text"
+          >
+            {badge.label}
+          </span>
+          {badge.time && (
+            <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-bg-secondary)] text-[var(--color-text-muted)] font-medium font-mono">
+              {badge.time.toISOString()}
+            </span>
+          )}
+        </>
+      );
+    case 'read':
+      return (
+        <>
+          {badge.format !== undefined && (
+            <code className="text-xs px-1 py-0.5 rounded bg-[var(--color-bg-tertiary)] text-[var(--color-text-muted)] font-mono">
+              {badge.format}
+            </code>
+          )}
+          <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-success)]/10 text-[var(--color-success)] font-medium font-mono">
+            {badge.time.toISOString()}
+          </span>
+        </>
+      );
+    case 'none':
+      return (
+        <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-error)]/10 text-[var(--color-error)] font-medium">
+          {badge.label}
+        </span>
+      );
+  }
+}
 
 function OverlaySpan({ segment: { kind, text, title } }: { segment: OverlaySegment }) {
   switch (kind) {
@@ -114,16 +143,4 @@ function OverlaySpan({ segment: { kind, text, title } }: { segment: OverlaySegme
     case 'boundary':
       return <span style={{ color: LOOKAHEAD_COLOR, fontWeight: 'bold' }}>{text}</span>;
   }
-}
-
-function TimestampOverlay({ raw, probe, config }: { raw: string; probe: TimestampProbe | null; config: TimeConfig }) {
-  const segments = overlaySegments(raw, probe, config);
-  if (!segments) return <span className="text-[var(--color-text-secondary)]">{raw}</span>;
-  return (
-    <>
-      {segments.map((segment) => (
-        <OverlaySpan key={segment.key} segment={segment} />
-      ))}
-    </>
-  );
 }

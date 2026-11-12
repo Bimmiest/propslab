@@ -1,6 +1,7 @@
 import type { TimeConfig } from '../../../../engine/timestampMatch';
 import { tint } from '../../../../utils/tint';
 import { FORMAT_COLOR, LOOKAHEAD_COLOR, PREFIX_COLOR } from './data';
+import type { OverlaySegment } from './timestampLogic';
 
 /** Config summary: the timestamp settings in force, and what the format's directives mean. */
 export function ConfigSummary({
@@ -38,30 +39,44 @@ export function ConfigSummary({
   );
 }
 
-export function TimestampLegend() {
+/**
+ * The legend of the overlay kinds on screen, and only those: a key for a mark
+ * that no event shows sends the reader to look for it. `auto` names the
+ * timestamp mark for automatic recognition, when no TIME_FORMAT is set.
+ */
+export function TimestampLegend({ kinds, auto }: { kinds: ReadonlySet<OverlaySegment['kind']>; auto: boolean }) {
+  if (!kinds.has('prefix') && !kinds.has('timestamp') && !kinds.has('boundary')) return null;
   return (
     <div className="flex-shrink-0 px-3 py-1.5 border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
       <div className="flex items-center gap-4 text-xs">
-        <span className="flex items-center gap-1.5">
-          <span
-            className="w-3 h-2 rounded-sm"
-            style={{ backgroundColor: tint(PREFIX_COLOR, 25), borderBottom: `2px solid ${PREFIX_COLOR}` }}
-          />
-          <span className="text-[var(--color-text-muted)]">TIME_PREFIX match</span>
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span
-            className="w-3 h-2 rounded-sm"
-            style={{ backgroundColor: tint(FORMAT_COLOR, 25), borderBottom: `2px solid ${FORMAT_COLOR}` }}
-          />
-          <span className="text-[var(--color-text-muted)]">TIME_FORMAT match</span>
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="text-xs font-bold leading-none" style={{ color: LOOKAHEAD_COLOR }}>
-            ]
+        {kinds.has('prefix') && (
+          <span className="flex items-center gap-1.5">
+            <span
+              className="w-3 h-2 rounded-sm"
+              style={{ backgroundColor: tint(PREFIX_COLOR, 25), borderBottom: `2px solid ${PREFIX_COLOR}` }}
+            />
+            <span className="text-[var(--color-text-muted)]">TIME_PREFIX match</span>
           </span>
-          <span className="text-[var(--color-text-muted)]">Lookahead boundary</span>
-        </span>
+        )}
+        {kinds.has('timestamp') && (
+          <span className="flex items-center gap-1.5">
+            <span
+              className="w-3 h-2 rounded-sm"
+              style={{ backgroundColor: tint(FORMAT_COLOR, 25), borderBottom: `2px solid ${FORMAT_COLOR}` }}
+            />
+            <span className="text-[var(--color-text-muted)]">
+              {auto ? 'Recognized timestamp' : 'TIME_FORMAT match'}
+            </span>
+          </span>
+        )}
+        {kinds.has('boundary') && (
+          <span className="flex items-center gap-1.5">
+            <span className="text-xs font-bold leading-none" style={{ color: LOOKAHEAD_COLOR }}>
+              ]
+            </span>
+            <span className="text-[var(--color-text-muted)]">Lookahead boundary</span>
+          </span>
+        )}
       </div>
     </div>
   );

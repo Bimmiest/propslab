@@ -73,16 +73,12 @@ function PipelineSection() {
           <Toggle id="toggle-per-event" checked={settings.perEventPipeline} onChange={togglePerEventPipeline} />
         </div>
         <p className="text-xs leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>
-          Simulates{' '}
-          <code className="font-mono text-xs px-1 rounded" style={{ backgroundColor: 'var(--color-bg-tertiary)' }}>
-            DEST_KEY = MetaData:*
-          </code>{' '}
-          correctly. After any index-time transform rewrites the sourcetype, host, or source, stanzas are re-matched and
-          search-time processors (EXTRACT, REPORT, FIELDALIAS, EVAL) apply directives from the new sourcetype.
+          Run stanza matching again after a transform rewrites the sourcetype, host or source. Off by default, because
+          it runs the pipeline per event.
         </p>
         {settings.perEventPipeline && (
           <p className="text-xs font-medium" style={{ color: 'var(--color-warning)' }}>
-            Pipeline runs per-event — may be slower on large inputs. Manual apply is enabled automatically.
+            The pipeline runs for each event, so large inputs can be slower. Manual apply is on.
           </p>
         )}
       </div>
@@ -111,8 +107,8 @@ function PipelineSection() {
           Disables live updates while you type. Use the <strong>Run pipeline</strong> button in the status bar to
           process changes.{' '}
           {settings.perEventPipeline
-            ? 'Required while per-event mode is on, so it cannot be turned off here.'
-            : 'Recommended when per-event mode is on.'}
+            ? 'Required while stanza matching runs again after a rewrite, so it cannot be turned off here.'
+            : 'Recommended when stanza matching runs again after a rewrite.'}
         </p>
       </div>
     </section>
