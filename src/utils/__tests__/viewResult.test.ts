@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { runPipeline } from '../../engine/pipeline';
 import { AT_FIXED_NOW } from '../../engine/__tests__/runCtx';
 import type { ProcessingResult, ProcessingStep, SplunkEvent } from '../../engine/types';
-import { summarizeSteps, toViewResult } from '../viewResult';
+import { fieldsWritten, summarizeSteps, toViewResult } from '../viewResult';
 import { makeEvent } from '../../test/makeEvent';
 
 const meta = { index: 'main', host: 'h', source: 's', sourcetype: 'st' };
@@ -204,5 +204,23 @@ describe('summarizeSteps', () => {
 
   it('is empty for no events', () => {
     expect(summarizeSteps([])).toEqual([]);
+  });
+});
+
+// #900: a search-time step that wrote over a field gave it its value; an
+// index-time rewrite of _raw that devalued a field did not.
+describe('fieldsWritten', () => {
+  it('adds the fields a search-time step wrote over to the ones it added', () => {
+    expect(fieldsWritten({ phase: 'search-time', fieldsAdded: ['a'], fieldsModified: ['b'] })).toEqual(['a', 'b']);
+    expect(fieldsWritten({ phase: 'search-time', fieldsModified: ['b'] })).toEqual(['b']);
+  });
+
+  it('leaves out the fields an index-time step modified', () => {
+    expect(fieldsWritten({ phase: 'index-time', fieldsAdded: ['a'], fieldsModified: ['b'] })).toEqual(['a']);
+  });
+
+  it('is empty for a step that wrote no field', () => {
+    expect(fieldsWritten({ phase: 'search-time' })).toEqual([]);
+    expect(fieldsWritten({ phase: 'search-time', fieldsModified: [] })).toEqual([]);
   });
 });
