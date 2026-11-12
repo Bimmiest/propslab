@@ -87,8 +87,11 @@ updates:
       # `marked` is a devDependency only so the hover tests can render Markdown
       # the way the editor will. Monaco bundles its own copy and pins it exactly
       # (monaco-editor@0.57.0 ships 14.0.0), so the useful version is whichever
-      # Monaco ships, not the newest. Move it in the same change that moves
-      # monaco-editor, to the version that release pins.
+      # Monaco ships, not the newest. `src/__tests__/dependencyPins.test.ts`
+      # fails while the two differ and says which version to set, so the pin
+      # follows Monaco without a reminder. The entry stays: without it
+      # Dependabot opens a pull request for each newer `marked`, and each one
+      # fails that test (#776).
       - dependency-name: "marked"
       # A tilde pin that Dependabot would propose past anyway (#222 proposed
       # 5.9 to 7.0, and was closed). TypeScript does not follow semver, and
@@ -96,7 +99,7 @@ updates:
       # accepted cannot install, let alone pass. TypeScript moves when
       # typescript-eslint does, the two bumped together by hand. From
       # repo-template (#602). On 6.0 since #795, so this holds 7.x, which
-      # typescript-eslint does not accept yet.
+      # typescript-eslint does not accept yet. Tracked in #930.
       - dependency-name: "typescript"
         update-types: ["version-update:semver-major"]
 

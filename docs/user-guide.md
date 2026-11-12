@@ -95,6 +95,12 @@ The strftime completions show the same rendered time. Thus you can choose betwee
 
 **Pipeline tab.** Right-click a step, or move to it with Tab and press `Shift+F10` or the Menu key, to open its menu. **Jump to config** moves the props.conf cursor to the directive that the step ran. For a `TRANSFORMS-` or `REPORT-` step, the menu also moves to the transforms.conf stanza. The menu also opens the directive in the dictionary and copies the description of the step.
 
+Each step shows the fields that it changed, with a mark and a colour for each type of change. Put the pointer on a mark to see the reason.
+
+- `+name` is a new field.
+- `~name` is a field that the event had before the step, and that the step changed. At index time, a rewrite of `_raw` changed the value that an extraction finds. At search time, the step wrote a new value: for example, `EVAL-action` changes the `action` field that a `REPORT` extracted.
+- `−name` is a field that the step removed.
+
 **"Did not fire".** This list appears in the Pipeline and Extractions tabs when a directive ran against the loaded events and changed nothing. Without the list, the preview shows this failure as a usual event that did not change. The list has two groups:
 
 - **Did not fire** shows each directive that had no effect on all of the events, with a warning. Each row gives the directive, the number of events and the reason.
@@ -147,6 +153,8 @@ When you click a line reference, the props.conf editor moves to that line. `Show
 - Updates
 - Vulnerabilities
 - Web
+
+The tab lists the models in order of fit. The matching models come first. In each group, a model with more of its required fields in the data comes before one with fewer, then the share of the required fields decides, then the share of all the fields. A model *matches* when the data has 50% or more of its required fields, and at least one field of the model. A model with no required fields matches when the data has 50% or more of all its fields. The header of the tab gives the count of matching models and this rule. **Show matching only** hides the other models.
 
 These items all come from the model JSON in the CIM add-on of Splunk (`Splunk_SA_CIM` **8.5.0**):
 

@@ -18,6 +18,7 @@ import {
   ContextMenuSeparator,
   ContextMenuLabel,
 } from '../../../ui/ContextMenu';
+import { Identifier } from '../../../ui/Identifier';
 
 function currentSelection(): string {
   return (typeof window !== 'undefined' ? (window.getSelection()?.toString() ?? '') : '').trim();
@@ -78,7 +79,9 @@ function EventItems({
         <>
           <ContextMenuItem onSelect={() => copyQuietly(selection)}>Copy selection</ContextMenuItem>
           <ContextMenuSeparator />
-          <ContextMenuLabel>Scaffold from selection → [{stanza}]</ContextMenuLabel>
+          <ContextMenuLabel>
+            Scaffold from selection → <Identifier>[{stanza}]</Identifier>
+          </ContextMenuLabel>
           <ContextMenuItem onSelect={onExtract}>Create EXTRACT…</ContextMenuItem>
           <ContextMenuItem onSelect={onTimePrefix}>Set as TIME_PREFIX…</ContextMenuItem>
         </>

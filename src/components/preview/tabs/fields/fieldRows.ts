@@ -1,4 +1,4 @@
-import type { TraceStep, ViewEvent } from '../../../../utils/viewResult';
+import { fieldsWritten, type TraceStep, type ViewEvent } from '../../../../utils/viewResult';
 import { fieldCollator, type FieldStats } from '../../../../utils/fieldStats';
 import type { WindowSegment } from '../../../../hooks/useWindowedRows';
 import type { PhaseFilter, SortDir, SortKey } from './data';
@@ -48,10 +48,11 @@ interface Credit {
 function creditsOf(trace: readonly TraceStep[]): Credit[] {
   const credits: Credit[] = [];
   for (const step of trace) {
-    for (const name of step.fieldsAdded ?? []) credits.push({ name, step, masked: false });
+    for (const name of fieldsWritten(step)) credits.push({ name, step, masked: false });
     // The field extracts fine but an index-time rewrite destroyed its
     // value. Without this the row looks like a working extraction, and a
     // blank-looking value reads as "the extraction is wrong".
+    if (step.phase === 'search-time') continue;
     for (const name of step.fieldsModified ?? []) credits.push({ name, step, masked: true });
   }
   return credits;

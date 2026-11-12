@@ -79,6 +79,28 @@ describe('processorsOf', () => {
     expect(processorsOf('b', view.events)).toEqual(['EXTRACT-b']);
     expect(processorsOf('missing', view.events)).toEqual([]);
   });
+
+  // #900: EVAL wrote over the field, so it made the value too; a rewrite of
+  // _raw that devalued a field did not.
+  it('includes a search-time step that wrote over the field, and no index-time rewrite', () => {
+    const view = toViewResult({
+      events: [
+        makeEvent('', {
+          fields: { action: 'allowed' },
+          processingTrace: [
+            { processor: 'SEDCMD-mask', phase: 'index-time', description: '', fieldsModified: ['action'] },
+            { processor: 'REPORT-pan', phase: 'search-time', description: '', fieldsAdded: ['action'] },
+            { processor: 'EVAL', phase: 'search-time', description: '', fieldsAdded: [], fieldsModified: ['action'] },
+          ],
+        }),
+      ],
+      originalRaw: '',
+      eventCount: 1,
+      processingSteps: [],
+      inputMetadata: META,
+    });
+    expect(processorsOf('action', view.events)).toEqual(['REPORT-pan', 'EVAL']);
+  });
 });
 
 describe('fieldAliasDirective', () => {

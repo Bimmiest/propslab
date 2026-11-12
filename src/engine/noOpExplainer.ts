@@ -38,6 +38,11 @@ export type NoOpReason =
    * pattern reached — the character the pattern stopped agreeing with.
    */
   | { kind: 'no-match'; partialEnd?: number; partialPattern?: string }
+  /**
+   * A SEDCMD pattern matched, but each replacement wrote the text it replaced,
+   * so `_raw` is unchanged.
+   */
+  | { kind: 'replacement-identical' }
   /** It matched, but every field it produces was already set by an earlier rule. */
   | { kind: 'fields-already-set'; fields: string[] }
   /**
@@ -86,6 +91,8 @@ export function describeNoOp(reason: NoOpReason): string {
       return reason.partialEnd !== undefined
         ? `the pattern did not match; it stopped agreeing at character ${reason.partialEnd}`
         : 'the pattern did not match anywhere in the source';
+    case 'replacement-identical':
+      return 'the pattern matched, but the replacement is the same as the matched text, so the event did not change';
     case 'fields-already-set':
       return `it matched, but ${reason.fields.join(', ')} ${reason.fields.length === 1 ? 'was' : 'were'} already set by an earlier rule`;
     case 'no-named-groups':
