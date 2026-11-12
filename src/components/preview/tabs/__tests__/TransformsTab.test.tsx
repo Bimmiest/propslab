@@ -212,6 +212,18 @@ describe("TransformsTab — a step's context menu (#760)", () => {
     expect(reveal).toHaveBeenCalledWith('transforms.conf', 2);
   });
 
+  it('opens on the Menu key from a focused step, with no contextmenu event from the browser (#933)', () => {
+    const { container } = render(<TransformsTab />);
+    const stepEl = within(container).getByRole('group', { name: 'Step 1: REPORT-kv:kv_pairs' });
+    expect(stepEl).toHaveAttribute('tabindex', '0');
+    stepEl.focus();
+    fireEvent.keyDown(stepEl, { key: 'ContextMenu' });
+    expect(within(document.body).getByRole('menuitem', { name: 'Jump to config' })).toBeInTheDocument();
+    // Chromium sends its own event for the key as well; it opens no second menu.
+    fireEvent.contextMenu(stepEl);
+    expect(within(document.body).getAllByRole('menu')).toHaveLength(1);
+  });
+
   it("looks the directive up, and copies the step's description", () => {
     const menu = openMenuOn('REPORT-kv:kv_pairs');
     fireEvent.click(within(menu).getByRole('menuitem', { name: "Copy the step's description" }));

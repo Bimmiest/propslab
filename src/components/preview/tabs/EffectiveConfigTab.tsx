@@ -23,6 +23,7 @@ import {
   ContextMenuLabel,
   ContextMenuTrigger,
 } from '../../ui/ContextMenu';
+import { Identifier } from '../../ui/Identifier';
 import { Icon } from '../../ui/Icon';
 import type { PipelineInputs } from './shared/usePipelineInputs';
 
@@ -49,7 +50,9 @@ function DirectiveMenuItems({ directive }: { directive: EffectiveDirective }) {
   const dictionaryKey = getDirectiveInfo(directive.key, 'props.conf')?.key;
   return (
     <>
-      <ContextMenuLabel>{directive.key}</ContextMenuLabel>
+      <ContextMenuLabel>
+        <Identifier>{directive.key}</Identifier>
+      </ContextMenuLabel>
       <ContextMenuItem onSelect={() => jumpTo(directive.line)}>Jump to config</ContextMenuItem>
       <ContextMenuItem onSelect={() => copyQuietly(`${directive.key} = ${directive.value}`)}>
         Copy {directive.key} = …
@@ -149,11 +152,8 @@ function DirectiveRowBody({ directive }: { directive: EffectiveDirective }) {
 
 interface EffectiveConfigTabProps {
   /**
-   * What the pipeline ran with, from `usePipelineInputs` in PreviewPanel, not
-   * the live editor state: in manual-apply mode the live state is config that
-   * has not been run. Taken as a prop rather than called here because the
-   * hook can only freeze inputs while mounted, and this tab unmounts whenever
-   * another output tab is selected — which is when props.conf gets edited.
+   * What the run on screen read, from `usePipelineInputs`, not the live editor
+   * state: in manual-apply mode the live state is config that has not been run.
    */
   inputs: PipelineInputs;
 }

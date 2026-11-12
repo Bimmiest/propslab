@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useMemo, type RefObject } from 'react';
-import { useAppStore } from '../store/useAppStore';
+import { useAppStore, type PipelineInputs } from '../store/useAppStore';
 import { useDebounce } from './useDebounce';
 import { PIPELINE_DEBOUNCE_MS, createManagedWorker, type ManagedWorker } from '../workers/workerLifecycle';
 import type { PipelineWorkerRequest, PipelineWorkerResponse } from '../engine/pipelineWorker';
@@ -56,6 +56,8 @@ interface LatestRequest {
    * running it inline (#421).
    */
   crashed: boolean;
+  /** The configuration it was made with, recorded beside its answer for the tabs that describe the run (#879). */
+  inputs: PipelineInputs;
 }
 
 /** The inputs a run was made with, to tell whether the editors have moved on since. */
@@ -90,6 +92,21 @@ interface PipelineRefs {
   latestRef: RefObject<LatestRequest | null>;
 }
 
+/** What a run reads besides the events. */
+function configOf({ propsConf, transformsConf, metadata }: PipelineInputs): PipelineInputs {
+  return { propsConf, transformsConf, metadata };
+}
+
+/**
+ * The configuration of request `id`, if it is still the latest. `sendRequest`
+ * records each request as the latest before it posts it, so only a superseded
+ * request has none.
+ */
+function inputsOf(latestRef: RefObject<LatestRequest | null>, id: number): PipelineInputs | undefined {
+  const latest = latestRef.current;
+  return latest?.request.id === id ? latest.inputs : undefined;
+}
+
 type AppState = ReturnType<typeof useAppStore.getState>;
 
 /** Where the worker callbacks deliver results, and how they run a request inline. */
@@ -107,7 +124,7 @@ interface WorkerPolicy extends PipelineRefs, PipelineSinks {
 
 function report(p: WorkerPolicy, message: string): void {
   p.setIsProcessing(false);
-  p.setProcessingResult(null);
+  p.setProcessingResult(null, inputsOf(p.latestRef, p.requestIdRef.current));
   p.setValidationDiagnostics([{ level: 'error', message, file: 'props.conf' }]);
 }
 
@@ -146,9 +163,10 @@ function onResponse(p: WorkerPolicy, { id, result, error, runMs }: PipelineWorke
   // budget.
   p.retryCountRef.current = 0;
   if (p.latestRef.current) p.latestRef.current.state = 'done';
+  const inputs = inputsOf(p.latestRef, id);
 
   if (error || !result) {
-    p.setProcessingResult(null);
+    p.setProcessingResult(null, inputs);
     p.setValidationDiagnostics([
       {
         level: 'error',
@@ -159,7 +177,7 @@ function onResponse(p: WorkerPolicy, { id, result, error, runMs }: PipelineWorke
     return;
   }
 
-  p.setProcessingResult(result.result);
+  p.setProcessingResult(result.result, inputs);
   p.setValidationDiagnostics(result.diagnostics);
 }
 
@@ -297,12 +315,12 @@ function runPipelineInline(
         request.options,
       );
       sinks.setLastProcessingMs(performance.now() - refs.requestStartRef.current);
-      sinks.setProcessingResult(toViewResult(output.result));
+      sinks.setProcessingResult(toViewResult(output.result), inputsOf(refs.latestRef, request.id));
       sinks.setValidationDiagnostics(output.diagnostics);
     })
     .catch((err: unknown) => {
       if (request.id !== refs.requestIdRef.current) return;
-      sinks.setProcessingResult(null);
+      sinks.setProcessingResult(null, inputsOf(refs.latestRef, request.id));
       sinks.setValidationDiagnostics([
         {
           level: 'error',
@@ -413,7 +431,7 @@ export function useProcessingPipeline() {
       // for the old one's run time.
       const managed = workerRef.current;
       managed?.forget();
-      latestRef.current = { request, state: 'running', crashed: false };
+      latestRef.current = { request, state: 'running', crashed: false, inputs: configOf(inputs) };
 
       // The retry budget spans requests: it is cleared when a request completes
       // cleanly or the pipeline gives up on one, never by a new request. See

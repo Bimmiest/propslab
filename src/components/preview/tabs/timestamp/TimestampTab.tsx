@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useTimestampMatch } from '../../../../hooks/useTimestampMatch';
-import { usePipelineInputs, type PipelineInputs } from '../shared/usePipelineInputs';
+import { usePipelineInputs } from '../shared/usePipelineInputs';
 import type { EnrichedEvent } from '../../enrichEvents';
 import { pageStart } from '../../../../utils/pagination';
 import { extractDirectives, parseTimeConfig, resolvedTimeSource, timestampTextOf } from './timestampLogic';
@@ -12,36 +12,15 @@ interface TimestampTabProps {
   items: EnrichedEvent[];
   currentPage: number;
   eventsPerPage: number;
-  /**
-   * The inputs of the last pipeline run, from PreviewPanel. This tab unmounts
-   * whenever another sub-tab is shown, which is when edits happen, so an
-   * instance of the hook here would start from unrun edits. The
-   * fallback serves a tab rendered on its own.
-   */
-  inputs?: Pick<PipelineInputs, 'propsConf' | 'metadata'>;
 }
 
 /**
- * The tab, reading the inputs it is given. Without them it subscribes to the
- * store's own, which re-renders it on every config keystroke and again after
- * the debounce: PreviewPanel passes them precisely so that it does not (#565).
+ * The tab, for the config of the run whose events it shows (#879): the editors
+ * can hold config that has not run, and this tab mounts afresh on each switch
+ * to it, which is when such edits are made.
  */
-export function TimestampTab(props: TimestampTabProps) {
-  return props.inputs ? <TimestampView {...props} inputs={props.inputs} /> : <TimestampWithOwnInputs {...props} />;
-}
-
-function TimestampWithOwnInputs(props: TimestampTabProps) {
-  const inputs = usePipelineInputs();
-  return <TimestampView {...props} inputs={inputs} />;
-}
-
-function TimestampView({
-  items,
-  currentPage,
-  eventsPerPage,
-  inputs,
-}: TimestampTabProps & { inputs: NonNullable<TimestampTabProps['inputs']> }) {
-  const { propsConf, metadata } = inputs;
+export function TimestampTab({ items, currentPage, eventsPerPage }: TimestampTabProps) {
+  const { propsConf, metadata } = usePipelineInputs();
 
   const config = useMemo(() => parseTimeConfig(propsConf, metadata), [propsConf, metadata]);
 

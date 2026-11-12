@@ -357,7 +357,7 @@ describe('tool handlers — random input never throws out of the handler', () =>
     );
   }, 60_000);
 
-  it('explain_precedence: a result for any conf, file and sourcetype', async () => {
+  it('explain_precedence: a result for any conf, file and sourcetype it applies to', async () => {
     await fc.assert(
       fc.asyncProperty(
         fc.constantFrom<File>('props.conf', 'transforms.conf'),
@@ -376,6 +376,13 @@ describe('tool handlers — random input never throws out of the handler', () =>
             },
             WORKER_PATH,
           );
+          // A sourcetype with transforms.conf is refused (#884); every other
+          // combination gets a result.
+          if (file === 'transforms.conf' && sourcetype !== undefined) {
+            expect(result.isError).toBe(true);
+            expect(JSON.parse(text(result))).toMatchObject({ error: 'argument_not_applicable' });
+            return;
+          }
           expect(result.isError).toBeUndefined();
           expect(JSON.parse(text(result))).toHaveProperty('stanzas');
           expectStructured(result, explainOutputShape);

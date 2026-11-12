@@ -1,55 +1,23 @@
 // ---------------------------------------------------------------------------
 // usePipelineInputs.ts
-// The props.conf, transforms.conf and metadata the pipeline last ran with, for
-// the views that describe a run rather than the editor: the Timestamp,
-// Effective config and Architecture tabs.
+// The props.conf, transforms.conf and metadata of the run on screen, for the
+// views that describe a run rather than the editor: the Timestamp, Effective
+// config and Architecture tabs.
 // ---------------------------------------------------------------------------
 
-import { useMemo, useState } from 'react';
-import { useAppStore } from '../../../../store/useAppStore';
-import { useDebounce } from '../../../../hooks/useDebounce';
-import { PIPELINE_DEBOUNCE_MS } from '../../../../workers/workerLifecycle';
-import type { EventMetadata } from '../../../../engine/types';
+import { selectRunInputs, useAppStore, type PipelineInputs } from '../../../../store/useAppStore';
 
-export interface PipelineInputs {
-  propsConf: string;
-  transformsConf: string;
-  metadata: EventMetadata;
-}
+export type { PipelineInputs };
 
 /**
- * The props.conf and metadata the events on screen were produced from, as near
- * as the caller can tell.
+ * The inputs of the run that produced the events on screen, as the pipeline
+ * recorded them beside its answer (#879). Not the editors: in manual-apply
+ * mode they can hold config that has not run, and during a run they are ahead
+ * of the events. The store holds them, so a component that mounts later (a
+ * tab switch, the phone's switch to Output) gets the same answer.
  *
- * The live editor state would run ahead of the events beside it: in
- * manual-apply mode it is config that has not been run, and in auto mode every
- * keystroke would re-probe before the pipeline had caught up. Here the inputs
- * follow the pipeline instead — debounced like its auto-run, or frozen at the
- * last "Run pipeline" click in manual-apply mode, which is the moment the
- * pipeline reads them too.
- *
- * The store does not record what a run used, so a component that mounts while
- * manual-apply changes are pending starts from the editor state. Call it from
- * a component that stays mounted across tab switches where that matters.
+ * Only a new answer changes them, so a keystroke does not re-render a caller.
  */
 export function usePipelineInputs(): PipelineInputs {
-  const propsConf = useAppStore((s) => s.propsConf);
-  const transformsConf = useAppStore((s) => s.transformsConf);
-  const metadata = useAppStore((s) => s.metadata);
-  const manualApply = useAppStore((s) => s.settings.manualApply);
-  const manualRunTick = useAppStore((s) => s.manualRunTick);
-
-  const live = useMemo(() => ({ propsConf, transformsConf, metadata }), [propsConf, transformsConf, metadata]);
-  const debounced = useDebounce(live, PIPELINE_DEBOUNCE_MS);
-
-  // Adjusted during render rather than in an effect, as React recommends for
-  // state derived from props, so the frame after a Run click already probes
-  // what was run. In auto mode it tracks the debounced inputs, so turning
-  // manual-apply on freezes it at the last auto run.
-  const [applied, setApplied] = useState({ tick: manualRunTick, inputs: live });
-  const target = !manualApply ? debounced : applied.tick !== manualRunTick ? live : applied.inputs;
-  if (applied.tick !== manualRunTick || applied.inputs !== target) {
-    setApplied({ tick: manualRunTick, inputs: target });
-  }
-  return target;
+  return useAppStore(selectRunInputs);
 }

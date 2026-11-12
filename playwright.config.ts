@@ -70,6 +70,14 @@ export default defineConfig({
       use: { ...devices['Desktop Firefox'] },
       testMatch: /smoke\.spec\.ts$/,
     },
+    // And in WebKit (#891): ADR 0022's Baseline includes Safari. Playwright's
+    // WebKit reports a macOS user agent on every host, so the page binds its
+    // keys as on a Mac; the specs read them from `keys` (fixtures.ts).
+    {
+      name: 'webkit',
+      use: { ...devices['Desktop Safari'] },
+      testMatch: /smoke\.spec\.ts$/,
+    },
     {
       name: 'perf',
       use: { ...devices['Desktop Chrome'] },

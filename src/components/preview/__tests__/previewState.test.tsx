@@ -153,4 +153,51 @@ describe('Extractions pins', () => {
     );
     expect(container.textContent).toContain('0/1 events match 1 pinned field');
   });
+
+  // #880: the pager pages through the events with the pinned field, and says so.
+  it('page the pager through the events with the field', () => {
+    // 30 events; every third has `user`, so 10 match.
+    useAppStore.setState({
+      processingResult: resultOf(
+        Array.from({ length: 30 }, (_, i): Record<string, string> =>
+          i % 3 === 0 ? { user: `u${i}` } : { n: String(i) },
+        ),
+      ),
+      eventsPerPage: 5,
+      previewSubTab: 'highlighted',
+    });
+    const { container } = render(<PreviewPanel />);
+    fireEvent.click(screen.getByRole('button', { name: 'Next page' }));
+    fireEvent.click(within(container).getAllByTitle(/^user \(manual\)/)[0]!);
+
+    expect(useAppStore.getState().currentPage).toBe(1);
+    expect(screen.getByText('Showing events 1-5 of 10 with user')).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Page' })).toHaveAccessibleDescription('of 2');
+    expect(screen.getByText(/Event #\s*13\b/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next page' }));
+    expect(screen.getByText('Showing events 6-10 of 10 with user')).toBeInTheDocument();
+    expect(screen.getByText(/Event #\s*28\b/)).toBeInTheDocument();
+    expect(screen.queryByText(/Event #\s*13\b/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Last page' })).toBeDisabled();
+
+    // Unpinned, the pager counts every event again.
+    fireEvent.click(within(container).getAllByTitle(/^user \(manual\)/)[0]!);
+    expect(screen.getByText('Showing events 1-5 of 30')).toBeInTheDocument();
+  });
+
+  it('do not change the pager of another sub-tab', () => {
+    useAppStore.setState({
+      processingResult: resultOf(
+        Array.from({ length: 30 }, (_, i): Record<string, string> => (i % 3 === 0 ? { user: `u${i}` } : {})),
+      ),
+      eventsPerPage: 5,
+      previewSubTab: 'highlighted',
+    });
+    const { container } = render(<PreviewPanel />);
+    fireEvent.click(within(container).getAllByTitle(/^user \(manual\)/)[0]!);
+    expect(screen.getByText('Showing events 1-5 of 10 with user')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: 'Raw' }));
+    expect(screen.getByText('Showing events 1-5 of 30')).toBeInTheDocument();
+  });
 });
