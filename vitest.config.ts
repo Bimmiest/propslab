@@ -131,7 +131,7 @@ export default defineConfig({
       thresholds: {
         statements: 94,
         branches: 89,
-        functions: 92,
+        functions: 94,
         lines: 95,
         // The engine is held to a much higher bar than the app as a whole. It
         // is where correctness lives — a simulator whose UI is under-tested is

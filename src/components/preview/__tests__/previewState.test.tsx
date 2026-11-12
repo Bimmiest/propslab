@@ -7,13 +7,14 @@
 // ---------------------------------------------------------------------------
 
 import { beforeEach, describe, expect, it } from 'vitest';
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { PreviewPanel } from '../PreviewPanel';
 import type { EnrichedEvent } from '../enrichEvents';
 import { HighlightedTab } from '../tabs/HighlightedTab';
 import { useAppStore } from '../../../store/useAppStore';
 import { toViewResult, type ViewResult } from '../../../utils/viewResult';
 import { makeEvent } from '../../../test/makeEvent';
+import { answerRun } from '../../../test/answerRun';
 import type { EventMetadata } from '../../../engine/types';
 
 const initial = useAppStore.getState();
@@ -199,5 +200,22 @@ describe('Extractions pins', () => {
     expect(screen.getByText('Showing events 1-5 of 10 with user')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('tab', { name: 'Raw' }));
     expect(screen.getByText('Showing events 1-5 of 30')).toBeInTheDocument();
+  });
+});
+
+describe('the Preview filter bar on Timestamp and Regex', () => {
+  it('stays, and the Timestamp tab reads the filtered events', async () => {
+    useAppStore.setState({
+      propsConf: '[st]\nTIME_FORMAT = %Y\n',
+      processingResult: resultOf([{ user: 'alice' }, { user: 'bob' }]),
+    });
+    answerRun();
+    render(<PreviewPanel />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Timestamp' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search events' }), { target: { value: 'alice' } });
+    expect(screen.getByText(/Event #1/)).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText(/Event #2/)).not.toBeInTheDocument());
+    fireEvent.click(screen.getByRole('tab', { name: 'Regex' }));
+    expect(screen.getByRole('textbox', { name: 'Search events' })).toHaveValue('alice');
   });
 });

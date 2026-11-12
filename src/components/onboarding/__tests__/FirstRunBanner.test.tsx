@@ -50,3 +50,20 @@ describe('FirstRunBanner', () => {
     expect(screen.queryByRole('region', { name: 'Getting started' })).not.toBeInTheDocument();
   });
 });
+
+describe('FirstRunBanner — one row, no dangling arrow', () => {
+  beforeEach(() => localStorage.clear());
+
+  it('numbers the three steps and draws no arrows between them', () => {
+    const { container } = render(<FirstRunBanner />);
+    for (const n of ['1', '2', '3']) expect(screen.getByText(n)).toBeInTheDocument();
+    expect(container.querySelector('svg path[d="M13 7l5 5m0 0l-5 5m5-5H6"]')).toBeNull();
+  });
+
+  it('shows the descriptions only where all three fit on one row', () => {
+    render(<FirstRunBanner />);
+    expect(screen.getByText('Drop log lines into the Raw Log panel on the left').className).toContain(
+      'min-[1500px]:inline',
+    );
+  });
+});

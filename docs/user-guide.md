@@ -26,7 +26,7 @@ Below 768px, the labelled tab strip of `MobileShell` replaces the rail. The rail
 
 The header and the panes follow the width of their container, not of the window. In a narrow pane, **Clear**, **Copy** and **Scaffold** show only their icons, and their names stay in the tooltip and for a screen reader. A row of tabs or a table that is wider than its pane fades out at the edge where it is cut. Scroll it sideways to see the rest.
 
-**Keyboard:** `Ctrl/Cmd+K` opens the command palette. The palette has four groups: Examples, Navigate, Look up (for a directive) and Actions. The header info button (ⓘ) opens a slide-out reference to the 11 pipeline stages.
+**Keyboard:** `Ctrl/Cmd+K` opens the command palette. The palette has three groups: Actions, Navigate and Look up (for a directive). The **Load example…** action opens a second level that lists the examples, and Backspace in an empty query goes back. When you type the name of an example, it also shows in the first level. The header info button (ⓘ) opens a slide-out reference to the 11 pipeline stages.
 
 **Context menus from the keyboard:** `Shift+F10` or the Menu key opens the context menu of the item that has the focus. The app handles these keys itself, so they also work in Safari. On a Mac keyboard, press `Shift+Fn+F10` if the top row does media functions.
 
@@ -43,7 +43,7 @@ The header and the panes follow the width of their container, not of the window.
 
 ## Examples
 
-The **Examples** button in the header opens the example library, which groups the examples by the kind of data source. The empty output has the same button, and the command palette lists the examples too. If you edited the inputs, the app asks before an example replaces them. Each example loads a raw log, its metadata, `props.conf` and `transforms.conf`, and shows a different part of the pipeline. The data is invented: the addresses are documentation or private ranges, and the domains are `example.com`. The configurations are written from the `.spec` files.
+The **Examples** button in the header opens the example library, which groups the examples by the kind of data source. The empty output has the same button, and the command palette lists the examples under **Load example…**. If you edited the inputs, the app asks before an example replaces them. Each example loads a raw log, its metadata, `props.conf` and `transforms.conf`, and shows a different part of the pipeline. The data is invented: the addresses are documentation or private ranges, and the domains are `example.com`. The configurations are written from the `.spec` files.
 
 | Example | Sourcetype | What it shows |
 |---|---|---|

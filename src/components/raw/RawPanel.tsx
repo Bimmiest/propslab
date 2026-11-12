@@ -89,7 +89,7 @@ export function RawPanel() {
             disabled={!hasText}
             title="Scaffold a starter props.conf from this sample"
             aria-label="Scaffold"
-            className="shrink-0 flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium cursor-pointer border-none text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-tertiary)] press disabled:opacity-40 disabled:cursor-not-allowed"
+            className="shrink-0 flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium cursor-pointer border-none text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-tertiary)] press disabled:opacity-40 disabled:cursor-not-allowed min-h-[24px]"
           >
             <Icon name="sparkles" className="w-3.5 h-3.5 shrink-0 text-[var(--color-accent)]" />
             <span className={PANE_LABEL}>Scaffold</span>
