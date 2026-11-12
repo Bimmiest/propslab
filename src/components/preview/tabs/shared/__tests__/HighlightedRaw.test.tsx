@@ -127,9 +127,13 @@ describe("the card's one context menu (#882)", () => {
   it('opens the field menu of the value it was opened on, with that value', () => {
     renderTab();
     const action = valuesOf(1)[1]!;
-    // Shift+F10 and the Menu key reach the focused value as a contextmenu event.
+    // Shift+F10 alone, with no contextmenu event from the browser, as in
+    // Safari (#933): the trigger sends one to the focused value.
     action.focus();
+    fireEvent.keyDown(action, { key: 'F10', shiftKey: true });
+    // Chromium sends its own event for the key as well; it opens no second menu.
     fireEvent.contextMenu(action);
+    expect(screen.getAllByRole('menu')).toHaveLength(1);
     const menu = screen.getByRole('menu');
     expect(within(menu).getByText('action')).toBeInTheDocument();
     fireEvent.click(within(menu).getByRole('menuitem', { name: 'Copy value' }));

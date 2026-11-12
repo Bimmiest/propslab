@@ -156,7 +156,7 @@ export default defineConfig({
         // src/workers; the hooks themselves are covered as before.
         'src/hooks/**': {
           statements: 93,
-          branches: 81,
+          branches: 83,
           functions: 95,
           lines: 95,
         },
