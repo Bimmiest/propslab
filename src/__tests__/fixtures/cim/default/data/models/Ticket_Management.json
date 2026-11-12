@@ -4,10 +4,7 @@
     {
       "objectName": "All_Ticket_Management",
       "parentName": "BaseEvent",
-      "fields": [
-        { "fieldName": "ticket_id", "comment": {} },
-        { "fieldName": "dest", "comment": {} }
-      ]
+      "fields": [{ "fieldName": "ticket_id", "comment": {} }, { "fieldName": "dest", "comment": {} }]
     }
   ]
 }

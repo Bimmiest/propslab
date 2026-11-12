@@ -10,7 +10,9 @@
         { "fieldName": "internal_flag", "hidden": true, "comment": { "recommended": true } },
         { "fieldName": "widget_priority", "comment": { "ta_relevant": false } }
       ],
-      "calculations": [{ "outputFields": [{ "fieldName": "action", "comment": { "recommended": true } }] }]
+      "calculations": [
+        { "outputFields": [{ "fieldName": "action", "comment": { "recommended": true } }] }
+      ]
     },
     {
       "objectName": "Big_Widgets",
@@ -20,10 +22,7 @@
     {
       "objectName": "Tiny_Widgets",
       "parentName": "Big_Widgets",
-      "fields": [
-        { "fieldName": "id", "comment": {} },
-        { "fieldName": "length_mm", "comment": {} }
-      ]
+      "fields": [{ "fieldName": "id", "comment": {} }, { "fieldName": "length_mm", "comment": {} }]
     },
     {
       "objectName": "Unlisted_Root",
