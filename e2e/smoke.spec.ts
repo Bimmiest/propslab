@@ -108,8 +108,10 @@ test.describe('trusted types', () => {
       });
     }).toPass({ timeout: 15_000 });
 
-    // A directive hover: markdown rendered through Monaco's sanitizer.
-    const token = props.getByText('SHOULD_LINEMERGE', { exact: true }).last();
+    // A directive hover: markdown rendered through Monaco's sanitizer. The
+    // token is looked for in the text lines only: the hover names the key
+    // too, and the last match would be the hover itself, not the token.
+    const token = props.locator('.view-lines').getByText('SHOULD_LINEMERGE', { exact: true }).last();
     await dwellUntilVisible(page, pointIn(token), page.getByText('Open in dictionary'));
 
     await page.keyboard.press('Control+k');

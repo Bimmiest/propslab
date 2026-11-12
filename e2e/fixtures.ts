@@ -261,7 +261,7 @@ export async function dwellUntilVisible(page: Page, at: () => Promise<Point>, sh
  */
 export async function pasteInto(page: Page, editor: number, text: string): Promise<void> {
   await page.locator('.monaco-editor').nth(editor).click();
-  await page.keyboard.press('Control+a');
+  await page.keyboard.press(`${(await shortcutKeys(page)).mod}+a`);
   const problem = await page.evaluate((data) => {
     const input = document.activeElement;
     if (!input) return 'has no focused input';
