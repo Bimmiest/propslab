@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import { buildExtractFromSelection, toCaptureGroupName } from '../../../../engine/scaffold/fromSelection';
 import { DirectiveDialog, DirectiveForm } from './DirectiveDialog';
+import { Identifier } from '../../../ui/Identifier';
 import { useLiveCapture, isSettledCapture, type Capture } from './useLiveCapture';
 
 /**
@@ -161,7 +162,7 @@ export function AddedLine({ stanza, line }: { stanza: string; line: string }) {
         className="text-xs font-semibold uppercase tracking-wider mb-1"
         style={{ color: 'var(--color-text-secondary)' }}
       >
-        Adds to <code className="font-mono">[{stanza}]</code>
+        Adds to <Identifier>[{stanza}]</Identifier>
       </div>
       <pre
         className="text-xs font-mono rounded border p-2 overflow-x-auto whitespace-pre-wrap break-all"

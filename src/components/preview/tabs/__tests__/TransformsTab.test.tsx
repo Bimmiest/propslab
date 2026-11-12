@@ -133,12 +133,38 @@ describe('TransformsTab', () => {
   it.each([
     ['SEDCMD-mask', 'index-time', /deleted the text "f" is extracted from/],
     ['FIELDALIAS', 'search-time', /source field has no value, so FIELDALIAS … AS removed "f"/],
+    ['EVAL', 'search-time', /EVAL-f returned null, so EVAL removed "f"/],
   ] as const)('explains a field %s removed', (processor, phase, hint) => {
     useAppStore.setState({
       processingResult: resultOf([eventWithTrace([{ processor, phase, description: 'd', fieldsRemoved: ['f'] }])]),
     });
     const { container } = render(<TransformsTab />);
     const chip = within(container).getByText('−f');
+    act(() => {
+      fireEvent.focus(chip);
+    });
+    expect(within(document.body).getAllByText(hint).length).toBeGreaterThan(0);
+  });
+
+  // #900: a field that existed before the step is drawn as modified, with its
+  // own glyph and colour, and the hint says why for each kind of step.
+  it.each([
+    ['SEDCMD-mask', 'index-time', /rewrote _raw and changed the value of "f"/],
+    ['EVAL', 'search-time', /"f" existed before EVAL, and EVAL-f replaced its value/],
+    ['FIELDALIAS', 'search-time', /"f" existed before FIELDALIAS, and FIELDALIAS … AS replaced its value/],
+    ['REPORT-x:x', 'search-time', /"f" existed before this step, and this step changed its value/],
+  ] as const)('draws and explains a field %s modified', (processor, phase, hint) => {
+    useAppStore.setState({
+      processingResult: resultOf([
+        eventWithTrace([{ processor, phase, description: 'd', fieldsAdded: ['g'], fieldsModified: ['f'] }]),
+      ]),
+    });
+    const { container } = render(<TransformsTab />);
+    const view = within(container);
+    const chip = view.getByText('~f');
+    expect(chip.className).toContain('text-[var(--color-warning)]');
+    expect(view.getByText('+g').className).toContain('text-[var(--color-success)]');
+    expect(view.queryByText('+f')).toBeNull();
     act(() => {
       fireEvent.focus(chip);
     });

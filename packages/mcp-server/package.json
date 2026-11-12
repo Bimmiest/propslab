@@ -27,7 +27,8 @@
     "pretest": "npm run build",
     "test": "vitest run",
     "pretest:coverage": "npm run build",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "perf": "node perf/budgets.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",

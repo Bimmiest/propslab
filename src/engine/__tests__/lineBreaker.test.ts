@@ -634,3 +634,23 @@ describe('breakLines — BREAK_ONLY_BEFORE_DATE honours the stanza timestamp set
     expect(breakLines(raw, [dir('TIME_PREFIX', 'at=')], META, runCtx(FIXED_NOW))).toHaveLength(2);
   });
 });
+
+describe('#872 — a TIME_FORMAT with a run of spaces, over a long run of whitespace', () => {
+  // Each space of the format was its own \s+, so twelve of them over 120
+  // spaces backtracked for hours, in the line breaker and in the extractor.
+  it('breaks before each dated line and reads its _time', () => {
+    const gap = ' '.repeat(12);
+    const undated = `2026${' '.repeat(120)}x no month here`;
+    const raw = `${undated}\n2026${gap}05 a\n2026${gap}06 b`;
+    const { result } = runPipeline(raw, META, `[myapp]\nTZ = UTC\nTIME_FORMAT = %Y${gap}%m\n`, '', {
+      perEventPipeline: false,
+      captureOffsets: false,
+      now: Date.parse('2026-07-01T00:00:00Z'),
+    });
+    expect(result.events.map((e) => e._raw)).toEqual([undated, `2026${gap}05 a`, `2026${gap}06 b`]);
+    expect(result.events.slice(1).map((e) => e._time?.toISOString())).toEqual([
+      '2026-05-01T00:00:00.000Z',
+      '2026-06-01T00:00:00.000Z',
+    ]);
+  });
+});
