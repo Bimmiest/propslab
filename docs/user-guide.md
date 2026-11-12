@@ -26,6 +26,8 @@ Below 768px, the labelled tab strip of `MobileShell` replaces the rail. The rail
 
 **Keyboard:** `Ctrl/Cmd+K` opens the command palette. The palette has four groups: Examples, Navigate, Look up (for a directive) and Actions. The header info button (ⓘ) opens a slide-out reference to the 11 pipeline stages.
 
+**Context menus from the keyboard:** `Shift+F10` or the Menu key opens the context menu of the item that has the focus. The app handles these keys itself, so they also work in Safari. On a Mac keyboard, press `Shift+Fn+F10` if the top row does media functions.
+
 **Status bar:** the status bar shows these items:
 
 - the worker status

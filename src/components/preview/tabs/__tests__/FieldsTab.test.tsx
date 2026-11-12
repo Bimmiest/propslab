@@ -98,8 +98,12 @@ describe('FieldsTab', () => {
     fireEvent.keyDown(rows()[0]!, { key: 'ArrowDown' });
     expect(document.activeElement).toBe(rows()[1]);
     expect(rows().map((r) => r.tabIndex)).toEqual([-1, 0, -1]);
-    fireEvent.contextMenu(rows()[1]!);
+    // Shift+F10 alone, with no contextmenu event from the browser, as in Safari (#933).
+    fireEvent.keyDown(rows()[1]!, { key: 'F10', shiftKey: true });
     expect(within(document.body).getByRole('menuitem', { name: 'Create FIELDALIAS…' })).toBeInTheDocument();
+    // Chromium sends its own event for the key as well; it opens no second menu.
+    fireEvent.contextMenu(rows()[1]!);
+    expect(within(document.body).getAllByRole('menu')).toHaveLength(1);
   });
 
   it('filters by name when searching', () => {
