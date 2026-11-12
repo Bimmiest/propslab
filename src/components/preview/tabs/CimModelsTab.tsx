@@ -11,6 +11,7 @@ import {
   ContextMenuLabel,
   ContextMenuTrigger,
 } from '../../ui/ContextMenu';
+import { CIM_MATCH_THRESHOLD_PERCENT, matchesModel, rankModels } from '../../../utils/cimMatching';
 import { Identifier } from '../../ui/Identifier';
 
 export function CimModelsTab() {
@@ -18,18 +19,14 @@ export function CimModelsTab() {
   const [showMatchingOnly, setShowMatchingOnly] = useState(false);
 
   const allCimResults = useMemo(
-    () => validateCimCompliance(new Set(result?.fieldStats.names), { includeAll: true }),
+    () => rankModels(validateCimCompliance(new Set(result?.fieldStats.names), { includeAll: true })),
     [result],
   );
 
-  const matchingCount = useMemo(
-    () => allCimResults.filter((r) => r.requiredPresent.length > 0 || r.recommendedPresent.length > 0).length,
-    [allCimResults],
-  );
+  const matchingCount = useMemo(() => allCimResults.filter(matchesModel).length, [allCimResults]);
 
-  const displayResults = showMatchingOnly
-    ? allCimResults.filter((r) => r.requiredPresent.length > 0 || r.recommendedPresent.length > 0)
-    : allCimResults;
+  // With no matching model the toggle is hidden, so a filter left on must not empty the list.
+  const displayResults = showMatchingOnly && matchingCount > 0 ? allCimResults.filter(matchesModel) : allCimResults;
 
   return (
     <div className="h-full overflow-auto p-3 space-y-3">
@@ -37,7 +34,8 @@ export function CimModelsTab() {
         <span className="text-xs text-[var(--color-text-muted)]">
           {matchingCount > 0
             ? `${matchingCount} matching model${matchingCount !== 1 ? 's' : ''} of ${allCimResults.length}`
-            : `${allCimResults.length} models (no fields matched yet)`}
+            : `${allCimResults.length} models, none matches yet`}
+          {`. A match has ${CIM_MATCH_THRESHOLD_PERCENT}% or more of its required fields. Best fit first.`}
         </span>
         {matchingCount > 0 && (
           // A toggle: the name stays put and aria-pressed carries the state,

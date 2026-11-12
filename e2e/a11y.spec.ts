@@ -275,7 +275,8 @@ for (const theme of ['dark', 'light'] as const) {
     test('CIM Models: models with no matching field', async ({ page }) => {
       await openDroppedAndRouted(page);
       await page.getByRole('tab', { name: /^CIM Models$/ }).click();
-      await expect(page.getByRole('button', { name: 'Show matching only' })).toBeVisible();
+      // The header gives the threshold (#896); which models reach it depends on the example.
+      await expect(page.getByText(/A match has 50% or more of its required fields/)).toBeVisible();
       await expectNoViolations(page, 'CIM Models (non-matching)');
     });
 
