@@ -84,14 +84,25 @@ describe('HighlightedTab', () => {
     expect(screen.getByRole('button', { name: /^Manual\s*\(2\)/ })).toBeInTheDocument();
   });
 
-  it('toggles sidebar on Fields button click', () => {
+  it('toggles sidebar on Field list button click', () => {
     render(<HighlightedTab items={items} allEvents={items} currentPage={1} eventsPerPage={10} />);
-    const fieldsBtn = screen.getByRole('button', { name: /^Fields/ });
+    const fieldsBtn = screen.getByRole('button', { name: 'Field list' });
     // Sidebar starts open — at least one field name should be visible in the sidebar tree.
     // Search input in sidebar has placeholder "Filter fields..." — look for it.
     expect(screen.getByPlaceholderText(/Filter fields/i)).toBeInTheDocument();
     fireEvent.click(fieldsBtn);
     expect(screen.queryByPlaceholderText(/Filter fields/i)).not.toBeInTheDocument();
+  });
+
+  it('names the list "Field list" in its button, its heading and its collapse button (#895)', () => {
+    render(<HighlightedTab items={items} allEvents={items} currentPage={1} eventsPerPage={10} />);
+    expect(screen.getByRole('button', { name: 'Field list' })).toHaveAttribute('title', 'Hide field list');
+    expect(screen.getByText('Field list', { selector: 'span' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Collapse field list' })).toBeInTheDocument();
+    // No control is still named just "Fields".
+    expect(screen.queryByRole('button', { name: /^Fields$/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Field list' }));
+    expect(screen.getByRole('button', { name: 'Field list' })).toHaveAttribute('title', 'Show field list');
   });
 
   it('renders "events match pinned" counter when a field is pinned via Fields sidebar', () => {

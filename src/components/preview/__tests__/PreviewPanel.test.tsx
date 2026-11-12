@@ -392,9 +392,18 @@ describe('PreviewPanel — the field filter follows the current fields (#432)', 
     );
   });
 
+  it('names the field filter "Filter by field", apart from the Fields tab (#895)', () => {
+    render(<PreviewPanel />);
+    expect(screen.getByRole('button', { name: /^Filter by field/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Fields/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Fields' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /^Filter by field/ }));
+    expect(screen.getByRole('group', { name: 'Filter by field options' })).toBeInTheDocument();
+  });
+
   it('drops a selected field that disappears', () => {
     const { container } = render(<PreviewPanel />);
-    fireEvent.click(screen.getByRole('button', { name: /Fields/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Filter by field/ }));
     fireEvent.click(screen.getByRole('checkbox', { name: 'user' }));
     expect(screen.getByText('1 / 1')).toBeInTheDocument();
 

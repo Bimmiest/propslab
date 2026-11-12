@@ -80,7 +80,7 @@ export function HighlightedFilterBar({
         <button
           type="button"
           onClick={toggleSidebar}
-          title={sidebarCollapsed ? 'Show fields sidebar' : 'Hide fields sidebar'}
+          title={sidebarCollapsed ? 'Show field list' : 'Hide field list'}
           className={[
             'flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded border transition-colors ml-auto',
             !sidebarCollapsed
@@ -98,7 +98,7 @@ export function HighlightedFilterBar({
             <rect x="3" y="3" width="18" height="18" rx="2" />
             <line x1="15" y1="3" x2="15" y2="21" />
           </svg>
-          Fields
+          Field list
         </button>
       </div>
     </div>
