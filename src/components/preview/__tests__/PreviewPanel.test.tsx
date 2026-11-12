@@ -3,9 +3,9 @@
 // show the first-run "No data yet" invitation.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, act, within } from '@testing-library/react';
+import { SAMPLE_CONFIGS, type EventMetadata } from 'propslab-engine';
 import { PreviewPanel } from '../PreviewPanel';
 import { useAppStore, selectSessionDirty } from '../../../store/useAppStore';
-import { SAMPLE_CONFIGS, type EventMetadata } from '../../../engine';
 import { toViewResult, type ViewResult } from '../../../utils/viewResult';
 import { answerRun } from '../../../test/answerRun';
 import { makeEvent } from '../../../test/makeEvent';

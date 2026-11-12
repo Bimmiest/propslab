@@ -70,7 +70,7 @@ export { expect };
  * apart from "the fallback answered" is the reply itself.
  *
  * A reply is a message carrying a numeric `id`; the unprompted
- * `{ type: 'ready' }` signal (engine/workerProtocol.ts) does not count, so a
+ * `{ type: 'ready' }` signal (workers/workerProtocol.ts) does not count, so a
  * worker that loads and then cannot answer is not mistaken for a working one.
  */
 export async function recordWorkerReplies(page: Page): Promise<void> {

@@ -5,11 +5,11 @@
 //
 // Each rule cites what the repository already says. The registry gives each
 // directive a phase, and its text and support notes name the forwarder and
-// input-layer directives (docs/fidelity.md lists the same layers). Where the
+// input-layer directives (propslab-engine's docs/fidelity.md lists the same layers). Where the
 // repository says nothing, the answer is "not known", not a guess.
 // ---------------------------------------------------------------------------
 
-import { parseConf, getDirectiveInfo } from '../../engine';
+import { parseConf, getDirectiveInfo } from 'propslab-engine';
 
 /**
  * A box of the Architecture tab. `heavy-forwarder` is the parsing tier: the
@@ -38,7 +38,7 @@ const FORWARDER_DIRECTIVES = new Set(['EVENT_BREAKER', 'EVENT_BREAKER_ENABLE', '
  * layer: they apply where the data is read in, which is the universal
  * forwarder's job in this diagram. CHARSET, NO_BINARY_CHECK and
  * LEARN_SOURCETYPE are also in the "forwarder and input layers" of
- * docs/fidelity.md. The sourcetype-model settings go with LEARN_SOURCETYPE,
+ * propslab-engine's docs/fidelity.md. The sourcetype-model settings go with LEARN_SOURCETYPE,
  * whose note says that sourcetype learning happens at input, and `sourcetype`
  * is assigned at input (stanzaMatcher.ts, resolveStanzasForEvent).
  */

@@ -8,6 +8,7 @@
 
 import { beforeEach, describe, expect, it } from 'vitest';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import type { EventMetadata } from 'propslab-engine';
 import { PreviewPanel } from '../PreviewPanel';
 import type { EnrichedEvent } from '../enrichEvents';
 import { HighlightedTab } from '../tabs/HighlightedTab';
@@ -15,7 +16,6 @@ import { useAppStore } from '../../../store/useAppStore';
 import { toViewResult, type ViewResult } from '../../../utils/viewResult';
 import { makeEvent } from '../../../test/makeEvent';
 import { answerRun } from '../../../test/answerRun';
-import type { EventMetadata } from '../../../engine';
 
 const initial = useAppStore.getState();
 const meta: EventMetadata = { index: 'main', host: 'h', source: 's', sourcetype: 'st' };

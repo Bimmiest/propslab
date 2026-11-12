@@ -4,36 +4,14 @@ type: explanation
 
 # Architecture notes
 
-This file describes the internals for contributors: the project structure, the store, the workers, the Monaco bundle, the accessibility patterns and the tech stack. [pipeline.md](pipeline.md) gives the order of the stages and stanza precedence. [user-guide.md](user-guide.md) gives the layout. The architecture decision records in [`docs/adr/`](adr/README.md) give the reasons for the design choices of the engine, and the issues that caused them.
+This file describes the internals for contributors: the project structure, the store, the workers, the Monaco bundle, the accessibility patterns and the tech stack. [The engine's pipeline.md](https://github.com/Bimmiest/propslab-engine/blob/main/docs/pipeline.md) gives the order of the stages and stanza precedence. [user-guide.md](user-guide.md) gives the layout. The architecture decision records in [`docs/adr/`](adr/README.md) give the reasons for the design choices of the engine, and the issues that caused them.
 
 ## Project structure
 
+The simulation is the [`propslab-engine`](https://github.com/Bimmiest/propslab-engine) package, which this repository installs by tag ([ADR 0023](adr/0023-the-engine-moves-to-a-repository-of-its-own.md)).
+
 ```
 src/
-├── engine/                    # Splunk simulation (pure logic, no React)
-│   ├── index.ts               # The public API: code outside the engine imports only this
-│   ├── types.ts               # SplunkEvent, ProcessingResult, ConfDirective
-│   ├── pipeline.ts            # runPipeline() — the pipeline's entry point
-│   ├── directiveRegistry.ts   # Directive lookup — drives completion,
-│   │                          #   hover, linting AND the dictionary
-│   ├── registry/              # The directive entries, props and transforms
-│   ├── stanzaRegistry.ts      # The four stanza header kinds + precedence
-│   ├── misspelledDirective.ts # The directive a key is one edit from
-│   ├── pipelineStages.ts      # The 11 stages, and key → stage lookup
-│   ├── parser/
-│   │   ├── confParser.ts      # INI parser + default/local layer merge → ParsedConf
-│   │   ├── provenance.ts      # Locate a diagnostic at a directive/stanza (+ its layer)
-│   │   └── stanzaMatcher.ts   # Precedence-based stanza matching
-│   ├── processors/            # One file per processing stage
-│   ├── transforms/            # regexTransform, destKeyRouter, ingestEval
-│   ├── cim/                   # cimModels.ts + cimModelsData.ts (CIM 8.5.0)
-│   ├── scaffold/              # Starter props.conf stanza from sample data
-│   └── utils/
-│       ├── splunkRegex.ts     # The PCRE2 adapter: every user pattern compiles here
-│       ├── strftime.ts        # TIME_FORMAT parsing and formatting
-│       ├── epochTime.ts       # _time range guard for INGEST_EVAL / DEST_KEY
-│       └── flattenJson.ts     # With prototype-pollution guard
-│
 ├── monaco/                    # Monaco language support
 │   ├── splunkConfCompletion.ts
 │   ├── splunkConfHover.ts
@@ -106,6 +84,8 @@ localStorage holds preferences only: UI state (split-pane sizes, seen-intro flag
 Monaco editor instances live in a module-level `Map` in `editorRegistry.ts`, not in the Zustand store.
 
 ## Workers
+
+The input has four parts: the raw log, the metadata, `props.conf` and `transforms.conf`. All of the input goes through one Zustand store. `useProcessingPipeline` debounces each change for 300 ms. Then it posts a request to a Web Worker, which runs the full simulation, and it writes the result back to the store. A 5 s watchdog stops a worker that hangs. When the worker starts again, the watchdog sends the last request that had no answer.
 
 Three workers run user regexes off the main thread: the pipeline (`pipelineWorker.ts`), the Regex tab and Create EXTRACT dialog (`regexMatchWorker.ts`), and the Timestamp tab and TIME_FORMAT hover (`timestampMatchWorker.ts`). All three share one lifecycle, `createManagedWorker` in `src/workers/workerLifecycle.ts`. It has no React import, so the hover can use it outside a component. Each caller passes in only its fallback policy, as callbacks.
 

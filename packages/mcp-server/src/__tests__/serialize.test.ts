@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ProcessingResult, SplunkEvent, ValidationDiagnostic } from '../../../../src/engine';
+import type { ProcessingResult, SplunkEvent, ValidationDiagnostic } from 'propslab-engine';
 import { serializeSimulation } from '../serialize';
 import { MAX_PAYLOAD_BYTES, MAX_RESPONSE_BYTES, responseBytes } from '../responseBudget';
 import { makeEvent } from '../../../../src/test/makeEvent';

@@ -4,7 +4,7 @@
 // what each card is badged with.
 // ---------------------------------------------------------------------------
 
-import { getField, hasField } from '../../../../engine';
+import { getField, hasField } from 'propslab-engine';
 import { pageStart } from '../../../../utils/pagination';
 import type { EnrichedEvent } from '../../enrichEvents';
 import type { FieldNode } from '../shared/fieldTreeUtils';

@@ -5,11 +5,11 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, act, within } from '@testing-library/react';
 import { Profiler } from 'react';
+import { extractTimestamps, type ConfDirective, type SplunkEvent } from 'propslab-engine';
 import { TimestampTab } from '../timestamp';
 import { useAppStore } from '../../../../store/useAppStore';
 import type { EnrichedEvent } from '../../enrichEvents';
 import { makeEvent } from '../../../../test/makeEvent';
-import { extractTimestamps, type ConfDirective, type SplunkEvent } from '../../../../engine';
 import { runCtx } from '../../../../test/runCtx';
 import { toViewResult } from '../../../../utils/viewResult';
 import { answerRun } from '../../../../test/answerRun';

@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
+import { matchInputs, type RegexMatchInfo } from 'propslab-engine';
 import { useDebounce } from './useDebounce';
 import { useWorkerRequest } from './useWorkerRequest';
-import { matchInputs, type RegexMatchInfo } from '../engine';
 import type { RegexMatchResponse } from '../workers/regexMatchWorker';
 
 const createWorker = () => new Worker(new URL('../workers/regexMatchWorker.ts', import.meta.url), { type: 'module' });

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
-import { buildExtractFromSelection, toCaptureGroupName } from '../../../../engine';
+import { buildExtractFromSelection, toCaptureGroupName } from 'propslab-engine';
 import { DirectiveDialog, DirectiveForm } from './DirectiveDialog';
 import { Identifier } from '../../../ui/Identifier';
 import { useLiveCapture, isSettledCapture, type Capture } from './useLiveCapture';

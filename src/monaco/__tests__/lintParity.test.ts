@@ -4,7 +4,7 @@
 // implementations of one rule set for a directive's VALUE: a boolean must be a
 // boolean spelling, a number an integer (and not negative where the spec says
 // non-negative), an enum one of its members. They read the value through the
-// same predicates (engine/utils/directiveValues), and this holds them to it:
+// same predicates (the engine's directiveValues), and this holds them to it:
 // for the same text, `lintConfigs` and `computeDiagnostics` must report the
 // same (line, severity, key) set for those rule families.
 //
@@ -16,8 +16,8 @@
 import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';
 import type { editor } from 'monaco-editor';
+import { lintConfigs, parseConf, type ValidationDiagnostic } from 'propslab-engine';
 import { computeDiagnostics } from '../splunkConfDiagnostics';
-import { lintConfigs, parseConf, type ValidationDiagnostic } from '../../engine';
 import { fakeModel } from '../../test/fakeModel';
 import { fcSeed } from '../../test/fcSeed';
 

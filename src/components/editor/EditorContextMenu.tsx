@@ -9,8 +9,8 @@
 
 import type { PointerEvent, ReactNode } from 'react';
 import type { editor } from 'monaco-editor';
+import { getDirectiveInfo, parseConf, resolveStanzasForEvent, parseExtractValue } from 'propslab-engine';
 import { useAppStore } from '../../store/useAppStore';
-import { getDirectiveInfo, parseConf, resolveStanzasForEvent, parseExtractValue } from '../../engine';
 import { toggleComment } from './toggleComment';
 import { copyQuietly, copyToClipboard } from '../../utils/clipboard';
 import { getModifierName } from '../../utils/platform';

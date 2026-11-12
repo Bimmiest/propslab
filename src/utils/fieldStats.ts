@@ -5,7 +5,7 @@
 // each view walking every event's fields again on the main thread.
 // ---------------------------------------------------------------------------
 
-import { type EventMetadata, METADATA_FIELD_NAMES } from '../engine';
+import { type EventMetadata, METADATA_FIELD_NAMES } from 'propslab-engine';
 
 /** The part of an event this module reads. */
 interface WithFields {

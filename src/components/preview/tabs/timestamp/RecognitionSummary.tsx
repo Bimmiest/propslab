@@ -1,4 +1,4 @@
-import type { TimeConfig } from '../../../../engine';
+import type { TimeConfig } from 'propslab-engine';
 import { useApplyDirective } from '../shared/useApplyDirective';
 import { recognisedDirectives, type RecognitionSummary } from './timestampLogic';
 

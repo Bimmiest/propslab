@@ -1,4 +1,4 @@
-import type { TimeSource } from '../../../../engine';
+import type { TimeSource } from 'propslab-engine';
 
 // Theme-aware highlight colours (no hard-coded hex — see design system in CLAUDE.md).
 export const PREFIX_COLOR = 'var(--color-info)';

@@ -11,12 +11,12 @@ import {
   type EventMetadata,
   type TimeSource,
   formatSpecifiers,
-} from '../../../../engine';
+} from 'propslab-engine';
 import type { TraceStep, ViewEvent } from '../../../../utils/viewResult';
 import { FALLBACK_LABEL, STRPTIME_REFERENCE } from './data';
 
 // TimeConfig / TimestampMatch / the probe itself now live in
-// `engine/timestampMatch`, so the worker and this tab share one definition.
+// the engine's `timestampMatch`, so the worker and this tab share one definition.
 
 // Resolve the time directives the ENGINE would actually apply for the current
 // metadata — using the same parse → stanza-match → merge path as the pipeline —

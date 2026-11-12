@@ -4,7 +4,7 @@
 // transform rewrote, with the transform that wrote it.
 // ---------------------------------------------------------------------------
 
-import type { EventMetadata } from '../../../../engine';
+import type { EventMetadata } from 'propslab-engine';
 import type { ViewEvent } from '../../../../utils/viewResult';
 import { Icon } from '../../../ui/Icon';
 import { DEST_KEY_LABELS, type MetadataChange } from './metadataChanges';

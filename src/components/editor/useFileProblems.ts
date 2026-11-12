@@ -1,9 +1,9 @@
 import { useMemo } from 'react';
+import type { DiagnosticLevel, DiagnosticTarget } from 'propslab-engine';
 import { useAppStore } from '../../store/useAppStore';
 import { useDebounce } from '../../hooks/useDebounce';
 import { countByLevel } from '../../utils/diagnosticCounts';
 import { fileProblems, lintConf, type FileProblems } from '../../monaco/editorProblems';
-import type { DiagnosticLevel, DiagnosticTarget } from '../../engine';
 
 /** The pause after an edit before the linter reads the text, in the editor and here alike. */
 export const LINT_DELAY_MS = 500;

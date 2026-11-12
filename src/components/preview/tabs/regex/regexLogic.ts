@@ -1,4 +1,4 @@
-import { safeRegex, type RegexMatchInfo } from '../../../../engine';
+import { safeRegex, type RegexMatchInfo } from 'propslab-engine';
 import type { Matched, RegexMatchState } from '../../../../hooks/useRegexMatch';
 import { fieldColorAt } from '../shared/fieldColors';
 

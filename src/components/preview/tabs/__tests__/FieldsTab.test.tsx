@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, fireEvent, within } from '@testing-library/react';
+import type { SplunkEvent, ProcessingStep } from 'propslab-engine';
 import { FieldsTab } from '../fields';
 import { useAppStore } from '../../../../store/useAppStore';
-import type { SplunkEvent, ProcessingStep } from '../../../../engine';
 import { toViewResult } from '../../../../utils/viewResult';
 import { makeEvent } from '../../../../test/makeEvent';
 

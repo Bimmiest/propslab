@@ -12,7 +12,7 @@
 // or above, and the linter's marker stands for both.
 // ---------------------------------------------------------------------------
 
-import type { DiagnosticLevel, DiagnosticTarget, ValidationDiagnostic } from '../engine';
+import type { DiagnosticLevel, DiagnosticTarget, ValidationDiagnostic } from 'propslab-engine';
 import { computeDiagnostics, type DiagnosticMarker, type LineSource } from './splunkConfDiagnostics';
 
 type ConfFile = 'props.conf' | 'transforms.conf';

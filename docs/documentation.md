@@ -33,9 +33,9 @@ type: how-to
 | `tutorial` | "Teach me, from the start." | A first contribution, step by step |
 | `how-to` | "How do I do this task?" | `development.md`, `recipes.md`, `releasing.md` |
 | `reference` | "What are the facts and the rules?" | `ci.md`, `testing.md`, `code-style.md`, `dependencies.md`, this file |
-| `explanation` | "Why is it like this?" | `pipeline.md`, `architecture.md` |
+| `explanation` | "Why is it like this?" | `architecture.md` |
 
-Each repository has the same six topic files: `development.md`, `ci.md`, `testing.md`, `code-style.md`, `dependencies.md` and `documentation.md`. This repository adds topic files for its own areas, for example `recipes.md`, `releasing.md`, `engine.md` and `fidelity.md`. A recipe, a trap or a troubleshooting step goes in the topic file of its area, not in `CONTRIBUTING.md`. If a topic file gets to its limit, split it by subtopic.
+Each repository has the same six topic files: `development.md`, `ci.md`, `testing.md`, `code-style.md`, `dependencies.md` and `documentation.md`. This repository adds topic files for its own areas, for example `recipes.md`, `releasing.md` and `fidelity.md`. A recipe, a trap or a troubleshooting step goes in the topic file of its area, not in `CONTRIBUTING.md`. If a topic file gets to its limit, split it by subtopic.
 
 ## The index
 
@@ -74,8 +74,6 @@ Each new or changed text follows these rules. [CONTRIBUTING.md](../CONTRIBUTING.
 6. **Documentation:** one line that links the index, `docs/README.md`, and a
    list of the other documents.
 7. **Contributing and feedback**, and **Licence**.
-
-Two facts in the README have a test. `src/engine/__tests__/directiveSupport.test.ts` reads the count for each support level from the table in the Overview. It also reads the count of the attributes that the registry does not know. Keep both in the README.
 
 ## Other rules
 

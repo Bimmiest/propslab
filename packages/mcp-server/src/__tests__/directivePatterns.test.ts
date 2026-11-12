@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { parseConf, type ConfDirective } from '../../../../src/engine';
+import { parseConf, type ConfDirective } from 'propslab-engine';
 import { directivePatterns } from '../directivePatterns';
 import { collectRegexSuspects } from '../suspects';
 import { lintRegexDirectives } from '../regexLint';

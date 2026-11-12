@@ -1,8 +1,8 @@
 import { useEffect, useRef } from 'react';
+import { PIPELINE_STAGES, PHASE_LABELS, type PipelineStage } from 'propslab-engine';
 import { Overlay } from '../ui/Overlay';
 import { useAppStore } from '../../store/useAppStore';
 import { Icon } from '../ui/Icon';
-import { PIPELINE_STAGES, PHASE_LABELS, type PipelineStage } from '../../engine';
 import { tint } from '../../utils/tint';
 
 export function HelpPanel() {

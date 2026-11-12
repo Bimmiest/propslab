@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
+import type { SplunkEvent } from 'propslab-engine';
 import { EventContextMenu } from '../EventContextMenu';
 import { useAppStore } from '../../../../../store/useAppStore';
-import type { SplunkEvent } from '../../../../../engine';
 import { makeEvent } from '../../../../../test/makeEvent';
 
 const reveal = vi.hoisted(() => vi.fn());

@@ -1,4 +1,4 @@
-import type { DiagnosticLevel, ValidationDiagnostic } from '../engine';
+import type { DiagnosticLevel, ValidationDiagnostic } from 'propslab-engine';
 
 /** How many of the diagnostics there are at each level. */
 export function countByLevel(diagnostics: readonly ValidationDiagnostic[]): Record<DiagnosticLevel, number> {

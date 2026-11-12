@@ -18,9 +18,7 @@ documents at the root are listed in the [README](../README.md#documentation).
 | [deployment.md](deployment.md) | The CI jobs, the deploy workflow, the production environment and how to do a rollback |
 | [development.md](development.md) | How to set up a checkout, the npm scripts, when to record tech debt, and what to do if the installation or a test fails |
 | [documentation.md](documentation.md) | The classes of documents and their line limits, the topic types, the STE rules and the sections of the README |
-| [engine.md](engine.md) | The engine as a library: `PipelineOptions`, layered conf input with override provenance, and the regex engine and its caveats |
-| [fidelity.md](fidelity.md) | What Propslab simulates, what it does not simulate, and where it diverges from Splunk |
-| [pipeline.md](pipeline.md) | How the simulation runs: the order of the stages, stanza precedence and the eval expression engine |
+| [fidelity.md](fidelity.md) | What the app adds to the boundary of the simulation: its settings, and where it runs a pattern |
 | [recipes.md](recipes.md) | Where each change goes, the steps for a simulated directive, and the recipes for the common changes |
 | [releasing.md](releasing.md) | How to make a release |
 | [testing.md](testing.md) | The rules for tests, the unit tests, the end-to-end suite and mutation testing |

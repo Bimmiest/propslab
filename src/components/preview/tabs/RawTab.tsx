@@ -1,7 +1,7 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import type { EventMetadata } from 'propslab-engine';
 import { useAppStore } from '../../../store/useAppStore';
 import type { EnrichedEvent } from '../enrichEvents';
-import type { EventMetadata } from '../../../engine';
 import { pageStart } from '../../../utils/pagination';
 import { EventContextMenu } from './shared/EventContextMenu';
 import { SelectableRaw, type RawSelection } from './shared/SelectableRaw';

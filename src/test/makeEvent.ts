@@ -8,7 +8,7 @@
 // a field passes it; everything else is the same neutral event everywhere.
 // ---------------------------------------------------------------------------
 
-import type { SplunkEvent } from '../engine';
+import type { SplunkEvent } from 'propslab-engine';
 
 /**
  * A SplunkEvent with the given raw text, and any other field overridden.

@@ -5,7 +5,7 @@
 // ---------------------------------------------------------------------------
 
 import type React from 'react';
-import { escapeRegex } from '../../../../engine';
+import { escapeRegex } from 'propslab-engine';
 
 export function SearchHighlightedRaw({ raw, search }: { raw: string; search: string }) {
   const trimmed = search.trim();

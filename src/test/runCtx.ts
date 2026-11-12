@@ -3,7 +3,7 @@
 // list; a test says which clock it runs under (#507), so a result that depends
 // on the date can be traced to the line that chose it rather than to a default
 // in this file.
-import { createRunContext, type PipelineOptions, type RunContext, type ValidationDiagnostic } from '../engine';
+import { createRunContext, type PipelineOptions, type RunContext, type ValidationDiagnostic } from 'propslab-engine';
 
 /**
  * The clock for a test that does not care what time it is: 2026-09-01T00:00:00Z.

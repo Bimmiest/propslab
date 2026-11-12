@@ -12,8 +12,8 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import fc from 'fast-check';
 import * as monaco from 'monaco-editor/editor';
+import { parseConf } from 'propslab-engine';
 import { ensureSplunkMonaco, PROPS_LANGUAGE_ID } from '../splunkMonacoSetup';
-import { parseConf } from '../../../engine';
 import { fcSeed } from '../../../test/fcSeed';
 
 // Monaco's theme service reads matchMedia when it is created; src/test/setup.ts stubs it.

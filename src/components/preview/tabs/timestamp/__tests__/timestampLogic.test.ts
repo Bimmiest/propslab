@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import {
+  extractTimestamps,
+  supportedSpecifiers,
+  probeTimestamp,
+  type TimeConfig,
+  type ConfDirective,
+  type SplunkEvent,
+} from 'propslab-engine';
+import {
   extractDirectives,
   fallbackReason,
   isSimulated,
@@ -14,14 +22,6 @@ import {
   timestampStepOf,
   timestampTextOf,
 } from '../timestampLogic';
-import {
-  extractTimestamps,
-  supportedSpecifiers,
-  probeTimestamp,
-  type TimeConfig,
-  type ConfDirective,
-  type SplunkEvent,
-} from '../../../../../engine';
 import { runCtx } from '../../../../../test/runCtx';
 import { STRPTIME_REFERENCE } from '../data';
 import { makeEvent } from '../../../../../test/makeEvent';

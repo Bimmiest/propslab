@@ -18,7 +18,7 @@
  * empty suspect list does not prove the conf innocent — the timeout error
  * says so.
  */
-import { parseConf, hasReDoSRisk, type ConfInput } from '../../../src/engine';
+import { parseConf, hasReDoSRisk, type ConfInput } from 'propslab-engine';
 import { directivePatterns } from './directivePatterns';
 import { elementBytes, fitting, MAX_PAYLOAD_BYTES } from './responseBudget';
 

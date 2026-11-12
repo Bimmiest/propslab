@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
+import type { EventMetadata } from 'propslab-engine';
 import { ArchitecturePanel } from '../ArchitecturePanel';
-import type { EventMetadata } from '../../../engine';
 
 const reveal = vi.hoisted(() => vi.fn());
 vi.mock('../../editor/revealInEditor', () => ({ revealInEditor: reveal }));

@@ -17,7 +17,7 @@ import {
   type EventMetadata,
   type PipelineOptions,
   type ValidationDiagnostic,
-} from '../engine';
+} from 'propslab-engine';
 import { serveWithRegexEngine } from './regexEngineLoader';
 import { toViewResult, type ViewResult } from '../utils/viewResult';
 import {

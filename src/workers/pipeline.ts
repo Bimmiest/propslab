@@ -3,4 +3,4 @@
 // demand: a dynamic import of the engine's entry point would put the whole
 // pipeline in the startup chunk, because that chunk imports the entry point
 // too.
-export { runPipeline } from '../engine';
+export { runPipeline } from 'propslab-engine';

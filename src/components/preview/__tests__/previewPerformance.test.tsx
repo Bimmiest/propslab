@@ -8,6 +8,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, render, renderHook, screen, within } from '@testing-library/react';
 import { Profiler } from 'react';
+import type { EventMetadata } from 'propslab-engine';
 import { PreviewPanel, PROCESSING_OVERLAY_DELAY_MS } from '../PreviewPanel';
 import type { EnrichedEvent } from '../enrichEvents';
 import { EffectiveConfigTab } from '../tabs/EffectiveConfigTab';
@@ -17,7 +18,6 @@ import { ArchitecturePanel } from '../../architecture/ArchitecturePanel';
 import { useAppStore } from '../../../store/useAppStore';
 import { toViewResult } from '../../../utils/viewResult';
 import { makeEvent } from '../../../test/makeEvent';
-import type { EventMetadata } from '../../../engine';
 
 const initial = useAppStore.getState();
 const meta: EventMetadata = { index: 'main', host: 'h', source: 's', sourcetype: 'st' };

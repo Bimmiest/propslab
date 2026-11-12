@@ -27,7 +27,7 @@ import {
   type ValidationDiagnostic,
   describeNoOp,
   indexedFields,
-} from '../../../src/engine';
+} from 'propslab-engine';
 import { elementBytes, fitting, MAX_PAYLOAD_BYTES, MAX_RESPONSE_BYTES, responseBytes } from './responseBudget';
 
 export interface SerializeOptions {

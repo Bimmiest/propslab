@@ -13,7 +13,7 @@ import {
   unquoteFieldName,
   getDirectiveInfo,
   type EventMetadata,
-} from '../../../../engine';
+} from 'propslab-engine';
 import { fieldsWritten, type ViewEvent } from '../../../../utils/viewResult';
 import { useAppStore } from '../../../../store/useAppStore';
 

@@ -12,7 +12,7 @@ import {
   getDirectivesForFile,
   type ConfInput,
   type EventMetadata,
-} from '../../../src/engine';
+} from 'propslab-engine';
 import type { ExplainResponse, SimulateResponse, ValidateResponse } from './protocol';
 import {
   runInWorker,

@@ -43,12 +43,15 @@ the `no-changelog` label.
 
 ## Areas with their own CLAUDE.md
 
-`src/engine/` and `packages/mcp-server/` each have a `CLAUDE.md` with the
-rules for that area. Claude Code loads one when it works in that directory.
+`packages/mcp-server/` has a `CLAUDE.md` with the rules for that area.
+Claude Code loads it when it works in that directory.
 
-- **propslab-sb and propslab-ent vendor the engine byte-exact,** with its
-  `CLAUDE.md`. Keep the Node pin, the gates and the template standard the
-  same in all three.
+- **The engine is the `propslab-engine` package**
+  ([ADR 0023](./docs/adr/0023-the-engine-moves-to-a-repository-of-its-own.md)). A change to the simulation goes to
+  that repository, then a release, then a pin bump here.
+- **propslab-sb and propslab-ent vendor `src/monaco` and parts of
+  `src/utils` and `src/workers` byte-exact.** Keep the Node pin, the gates
+  and the template standard the same in all three.
 
 ## Expensive to get wrong
 
@@ -62,8 +65,9 @@ rules for that area. Claude Code loads one when it works in that directory.
   `env:`.
 - **A rollback sets `DEPLOY_PAUSED` first,** then dispatches the deploy with
   `run_id` ([docs/deployment.md](./docs/deployment.md#rollback)).
-- **A `pcre2-wasm-utf16` pin bump copies the release's `pcre2.wasm.sha256`**
-  to the root in the same change.
+- **The `pcre2-wasm-utf16` pin follows the engine's.** Both `package.json`
+  files pin the commit that `propslab-engine` declares, and a test holds them
+  to it.
 
 ## Not in this file
 

@@ -9,8 +9,8 @@
 //
 // The package's checksum comes from the same commit as the binary, so it
 // catches corruption but not a pin moved to a different build. The binary is
-// also checked against the pcre2.wasm.sha256 at this repository's root, which
-// a pin bump has to change in the same diff (#567).
+// also checked against the pcre2.wasm.sha256 of propslab-engine, which owns the
+// pin (ADR 0023): a pin bump there changes it in the same diff (#567).
 //
 // The same check as `sha256sum --check --strict pcre2.wasm.sha256`, in Node so
 // it runs on every OS the MCP server's CI does, and from the package's own
@@ -26,7 +26,6 @@
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { basename, dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { orExit } from './lib/orExit.mjs';
 import { verifyChecksum } from './lib/wasmChecksum.mjs';
 
@@ -40,7 +39,13 @@ const wasmPath = orExit(
 const bytes = readFileSync(wasmPath);
 const checks = [
   [join(dirname(wasmPath), 'pcre2.wasm.sha256'), 'the package ships its checksum, and this one does not'],
-  [fileURLToPath(new URL('../pcre2.wasm.sha256', import.meta.url)), 'this repository records the hash it expects'],
+  [
+    orExit(
+      () => createRequire(join(from, 'noop.js')).resolve('propslab-engine/pcre2.wasm.sha256'),
+      `propslab-engine is not installed for ${from} — run \`npm ci\` first.`,
+    ),
+    'the engine records the hash it expects (ADR 0023)',
+  ],
 ];
 for (const [sumPath, missing] of checks) {
   const sums = orExit(() => readFileSync(sumPath, 'utf8'), `${sumPath} is missing: ${missing}.`);

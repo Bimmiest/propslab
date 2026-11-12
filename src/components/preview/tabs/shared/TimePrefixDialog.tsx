@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { timePrefixFromSelection } from '../../../../engine';
+import { timePrefixFromSelection } from 'propslab-engine';
 import { DirectiveDialog, DirectiveForm } from './DirectiveDialog';
 import { Identifier } from '../../../ui/Identifier';
 import { useLiveCapture, isSettledCapture, type Capture } from './useLiveCapture';

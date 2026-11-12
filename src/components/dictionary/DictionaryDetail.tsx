@@ -1,6 +1,6 @@
 import type React from 'react';
+import { getStagesForDirective, PHASE_LABELS } from 'propslab-engine';
 import { useAppStore } from '../../store/useAppStore';
-import { getStagesForDirective, PHASE_LABELS } from '../../engine';
 import { CopyButton } from '../editor/CopyButton';
 import { Icon } from '../ui/Icon';
 import { Chip, DirectiveBadges } from './DictionaryBadges';

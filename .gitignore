@@ -36,5 +36,3 @@ coverage/
 .stryker-tmp/
 /reports/
 
-# Local-only tests. Never committed.
-/src/engine/__tests__/private/

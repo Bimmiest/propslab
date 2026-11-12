@@ -11,7 +11,7 @@
 // ---------------------------------------------------------------------------
 
 import { useMemo, useState } from 'react';
-import { type DirectiveNoOp, groupNoOps, type GroupedNoOp, describeNoOp } from '../../../../engine';
+import { type DirectiveNoOp, groupNoOps, type GroupedNoOp, describeNoOp } from 'propslab-engine';
 import type { ViewEvent } from '../../../../utils/viewResult';
 import { revealInEditor } from '../../../editor/revealInEditor';
 import { Icon } from '../../../ui/Icon';

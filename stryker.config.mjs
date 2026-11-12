@@ -1,21 +1,18 @@
 // @ts-check
-// Mutation testing for the engine (#370): `npm run test:mutation`. Coverage
+// Mutation testing (#370): `npm run test:mutation`. Coverage
 // says a line ran; this says whether any test would notice the line being
 // wrong. See docs/testing.md for how to read a run and when CI runs it.
 /** @type {import('@stryker-mutator/api/core').PartialStrykerOptions} */
 export default {
   testRunner: 'vitest',
-  // Engine tests only; the file says why.
+  // The file says which tests, and why.
   vitest: { configFile: 'vitest.stryker.config.ts' },
 
-  // src/engine is where correctness lives, so it is what gets mutated. Left out:
-  // type-only modules (no code to mutate), and the generated or hand-written
-  // data tables — the directive registry, the CIM models and the support
-  // roster — whose mutants are edits to description prose that no behavioural
-  // test should be asserting. The worker entry points are in src/workers, and
-  // are not mutated: each is a `self.onmessage` wrapper.
+  // The modules with real logic outside the engine, whose own mutation run is
+  // in its repository (ADR 0023). Left out: the components, which the
+  // component tests cover, and the worker entry points, each a
+  // `self.onmessage` wrapper.
   mutate: [
-    'src/engine/**/*.ts',
     // The MCP server's pure functions (#455): the oversize-message limiter,
     // the request-id scan behind its error, and the response serializer.
     'packages/mcp-server/src/requestId.ts',
@@ -30,7 +27,6 @@ export default {
     // (#508): state machines with real logic, and tests that ran in the app's
     // suite but were never asked whether they would notice a wrong edit.
     'src/workers/workerLifecycle.ts',
-    // Was under src/engine until #566 moved the worker plumbing to src/workers.
     'src/workers/workerProtocol.ts',
     'src/store/**/*.ts',
     // The editor's language support (#816, #836). Its providers run against
@@ -38,13 +34,6 @@ export default {
     // model, and the TIME_FORMAT preview's worker runs against a fake worker.
     'src/monaco/*.ts',
     '!src/store/**/__tests__/**',
-    '!src/engine/**/__tests__/**',
-    '!src/engine/**/*.test.ts',
-    '!src/engine/types.ts',
-    '!src/engine/scaffold/types.ts',
-    '!src/engine/cim/cimModelsData.ts',
-    '!src/engine/registry/**',
-    '!src/engine/directiveSupport.ts',
   ],
 
   // Each mutant runs only the tests that reached it — the difference between
@@ -70,8 +59,10 @@ export default {
   clearText: { reportMutants: false, reportTests: false },
 
   // `break` is the floor: below it the run exits non-zero, which is what fails
-  // the mutation workflow. Measured, not chosen: 3 points under the 84.90% the
-  // whole engine scored on 2026-10-26, the slack the coverage ratchet uses. At
+  // the mutation workflow. Measured, not chosen: 3 points under the 91.15% that
+  // the modules above scored in the weekly run of 2026-11-09, when the engine
+  // and its 85.90% moved to its own repository (ADR 0023). 3 points is the
+  // slack the coverage ratchet uses. At
   // 1.6 points, one change that killed fewer mutants turned the weekly run red
   // with no PR to blame (#571). Raise it when tests raise the score; never lower
   // it to make a branch green.
@@ -84,5 +75,5 @@ export default {
   // A shard of the weekly run (MUTATION_SHARD=1) has no floor of its own:
   // scripts/check-mutation-score.mjs holds the shards' combined score to
   // `break` (#851). One shard alone can be below the floor while the run is not.
-  thresholds: { high: 85, low: 83, break: process.env.MUTATION_SHARD === '1' ? null : 81 },
+  thresholds: { high: 92, low: 90, break: process.env.MUTATION_SHARD === '1' ? null : 88 },
 };

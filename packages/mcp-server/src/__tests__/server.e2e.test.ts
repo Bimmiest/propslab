@@ -518,22 +518,28 @@ describe('built launcher', () => {
     expect(index.startsWith('#!/usr/bin/env node\n')).toBe(true);
   });
 
-  it('bundles the same pcre2-wasm-utf16 commit the app is tested against', () => {
-    // The package declares the regex engine itself and the build resolves the
-    // engine's import to that copy, while the app's suite runs the same engine
-    // source against the root's. Two different releases would mean the server
-    // ships a regex engine nothing tested.
+  it('bundles the engine and the pcre2-wasm-utf16 commit that the app is tested against', () => {
+    // The package declares the engine and the regex engine itself, and the
+    // build resolves both to its own copies, while the app's suite runs the
+    // root's. Two different releases would mean the server ships code that
+    // nothing tested. The engine owns the regex engine's pin (ADR 0023), so
+    // both copies follow the one that the engine declares.
     const read = (rel: string) =>
       JSON.parse(readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8')) as {
         dependencies?: Record<string, string>;
         packages?: Record<string, { resolved?: string }>;
       };
-    const spec = (rel: string) => read(rel).dependencies?.['pcre2-wasm-utf16'];
-    const pinned = (rel: string) => read(rel).packages?.['node_modules/pcre2-wasm-utf16']?.resolved;
-    expect(spec('../../package.json')).toBeDefined();
-    expect(spec('../../package.json')).toBe(spec('../../../../package.json'));
-    expect(pinned('../../package-lock.json')).toMatch(/#[0-9a-f]{40}$/);
-    expect(pinned('../../package-lock.json')).toBe(pinned('../../../../package-lock.json'));
+    for (const name of ['propslab-engine', 'pcre2-wasm-utf16']) {
+      const spec = (rel: string) => read(rel).dependencies?.[name];
+      const pinned = (rel: string) => read(rel).packages?.[`node_modules/${name}`]?.resolved;
+      expect(spec('../../package.json'), name).toBeDefined();
+      expect(spec('../../package.json'), name).toBe(spec('../../../../package.json'));
+      expect(pinned('../../package-lock.json'), name).toMatch(/#[0-9a-f]{40}$/);
+      expect(pinned('../../package-lock.json'), name).toBe(pinned('../../../../package-lock.json'));
+    }
+    expect(read('../../package.json').dependencies?.['pcre2-wasm-utf16']).toBe(
+      read('../../node_modules/propslab-engine/package.json').dependencies?.['pcre2-wasm-utf16'],
+    );
   });
 
   it('keeps the shebang off the worker bundle', () => {

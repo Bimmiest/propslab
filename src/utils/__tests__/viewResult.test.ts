@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { runPipeline, type ProcessingResult, type ProcessingStep, type SplunkEvent } from '../../engine';
+import { runPipeline, type ProcessingResult, type ProcessingStep, type SplunkEvent } from 'propslab-engine';
 import { AT_FIXED_NOW } from '../../test/runCtx';
 import { fieldsWritten, summarizeSteps, toViewResult } from '../viewResult';
 import { makeEvent } from '../../test/makeEvent';

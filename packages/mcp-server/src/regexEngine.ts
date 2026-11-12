@@ -11,7 +11,7 @@ import {
   isRegexEngineReady,
   regexEngineModule as compiledModule,
   type RegexEngineModule,
-} from '../../../src/engine';
+} from 'propslab-engine';
 
 /**
  * Where the module is: beside the bundle (the build copies it into dist/, so

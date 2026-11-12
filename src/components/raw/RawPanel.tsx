@@ -1,5 +1,6 @@
 import { useMemo, useEffect, useRef, useState } from 'react';
 import type { editor } from 'monaco-editor';
+import { detectLogFormat } from 'propslab-engine';
 import { useAppStore } from '../../store/useAppStore';
 import { MetadataButton } from '../metadata/MetadataButton';
 import { Icon } from '../ui/Icon';
@@ -10,7 +11,6 @@ import { EditorValidationList } from '../editor/EditorValidationList';
 import { CursorPosition } from '../editor/CursorPosition';
 import { EditorContextMenu } from '../editor/EditorContextMenu';
 import { countLines } from '../../utils/countLines';
-import { detectLogFormat } from '../../engine';
 
 // Module-level so the identity is stable: MonacoEditor treats a new `options`
 // object as a change and re-runs updateOptions.

@@ -156,14 +156,10 @@ export default defineConfig([
   {
     files: ['src/**/__tests__/**/*.{ts,tsx}', 'src/**/*.test.{ts,tsx}'],
     rules: {
-      // This engine extracts fields whose names collide with Object.prototype
-      // members on purpose — `toString`, `valueOf`, `hasOwnProperty` are the
-      // subject of prototypeFieldNames.test.ts. Reading `fields['toString']`
-      // resolves to the index signature, but the rule matches on the property
-      // name and reports every such assertion as an unbound method. The one
-      // remaining use is deliberate too (capturing RegExp.prototype.exec to
-      // restore it after a spy), and the rule guards against accidental `this`
-      // rebinding in shipped code, which is where it stays enabled.
+      // A test captures a prototype method to restore it after a spy
+      // (`SplunkRegex.prototype.exec` in timePrefixMatcher.test.ts), which the
+      // rule reports as an unbound method. The rule guards against accidental
+      // `this` rebinding in shipped code, which is where it stays enabled.
       '@typescript-eslint/unbound-method': 'off',
       // A test says which clock it runs under (runCtx.ts, #507): runPipeline
       // falls back to Date.now(), and a date that is fine today trips
@@ -174,14 +170,12 @@ export default defineConfig([
         'error',
         {
           selector: "CallExpression[callee.name='runPipeline'][arguments.length<5]:not(:has(> SpreadElement))",
-          message:
-            'Pass runPipeline its options with `now` (FIXED_NOW from runCtx.ts in src/test, or in src/engine/__tests__ for an engine test).',
+          message: 'Pass runPipeline its options with `now` (FIXED_NOW from src/test/runCtx.ts).',
         },
         {
           selector:
             "CallExpression[callee.name='runPipeline'] > ObjectExpression:nth-child(5):not(:has(> Property[key.name='now'])):not(:has(> SpreadElement))",
-          message:
-            'runPipeline options need `now` (FIXED_NOW from runCtx.ts in src/test, or in src/engine/__tests__ for an engine test).',
+          message: 'runPipeline options need `now` (FIXED_NOW from src/test/runCtx.ts).',
         },
       ],
     },
@@ -214,13 +208,13 @@ export default defineConfig([
     // inside that server (in its workers, whose output would land there too):
     // a stray console.log corrupts the protocol stream. Diagnostics go to
     // stderr, which is what console.error and console.warn write.
-    files: ['src/engine/**/*.ts', 'packages/mcp-server/src/**/*.ts'],
+    files: ['packages/mcp-server/src/**/*.ts'],
     rules: {
       'no-console': ['error', { allow: ['error', 'warn'] }],
     },
   },
   {
-    // The maintenance scripts, one of which runs weekly in roster.yml. No
+    // The maintenance scripts, some of which run on a schedule. No
     // type-aware rules: they are plain JS outside every tsconfig, which is what
     // projectService needs to see a file. ESM either way: the root
     // package.json is "type": "module".
@@ -344,95 +338,6 @@ export default defineConfig([
       // reads as a hook call outside a component.
       'react-hooks/rules-of-hooks': 'off',
     },
-  },
-  {
-    // The engine layer must remain UI-free: no React, no DOM globals, no
-    // UI-specific utilities. Enforce this boundary to keep the engine
-    // portable and testable in isolation.
-    //
-    // `patterns`, not `name`: a `name` entry is an exact module specifier, so
-    // '**/components/**' never matched `../components/x` and the rule caught
-    // nothing (#510). `group` entries are gitignore-style globs tested against
-    // the import string, which is what reaches a relative path however many
-    // levels it climbs. src/__tests__/eslintBoundary.test.ts holds the rule to
-    // the imports it must catch.
-    //
-    // Tests are exempt: one asserts parity with the editor's diagnostics, which
-    // is a check on the boundary rather than a crossing of it.
-    files: ['src/engine/**/*.{ts,tsx}'],
-    ignores: ['src/engine/**/__tests__/**', 'src/engine/**/*.test.{ts,tsx}'],
-    rules: {
-      'no-restricted-imports': [
-        'error',
-        {
-          patterns: [
-            {
-              group: [
-                '**/components',
-                '**/components/**',
-                '**/hooks',
-                '**/hooks/**',
-                '**/store',
-                '**/store/**',
-                '**/monaco',
-                '**/monaco/**',
-              ],
-              message:
-                'The engine must stay UI-free. Do not import UI components, hooks, the store or the editor integration.',
-            },
-            {
-              group: [
-                'react',
-                'react/*',
-                'react-dom',
-                'react-dom/*',
-                'zustand',
-                'zustand/*',
-                'monaco-editor',
-                'monaco-editor/*',
-              ],
-              message: 'The engine must stay UI-free. Do not import React, zustand or Monaco.',
-            },
-          ],
-        },
-      ],
-    },
-  },
-  {
-    // The other side of the boundary (ADR 0023): code outside src/engine,
-    // tests included, imports the engine from src/engine/index.ts only. That
-    // file is the API that the engine's own repository exports, so an import of
-    // a module inside the engine cannot survive the move.
-    //
-    // The test setup file is the exception. It starts the regex engine for
-    // every test file, so it imports splunkRegex itself: the entry point would
-    // load every engine module before a test's vi.mock, and the mock would miss.
-    files: ['src/**/*.{ts,tsx}', 'packages/mcp-server/src/**/*.ts'],
-    ignores: ['src/engine/**', 'src/test/setup.ts'],
-    rules: {
-      'no-restricted-imports': [
-        'error',
-        {
-          patterns: [
-            {
-              group: ['**/engine/*'],
-              message: 'Import the engine from its entry point (src/engine/index.ts), not from a module inside it.',
-            },
-          ],
-        },
-      ],
-    },
-  },
-  {
-    // A false positive: the rule reads the U+0300–U+036F combining-mark range
-    // in NAME_CHAR as a combined character, and it is a range endpoint (#774).
-    files: ['src/engine/utils/xmlReader.ts'],
-    rules: { 'no-misleading-character-class': 'off' },
-  },
-  {
-    // The test runs each documented engine snippet, which is code in a string.
-    files: ['src/__tests__/docsEngineExamples.test.ts'],
-    rules: { '@typescript-eslint/no-implied-eval': 'off' },
   },
   {
     // The fallbacks that the supported-browser rule keeps (ADR 0022). Each

@@ -8,8 +8,8 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
+import type { TimeConfig, TimestampProbe } from 'propslab-engine';
 import { useTimestampMatch } from '../useTimestampMatch';
-import type { TimeConfig, TimestampProbe } from '../../engine';
 import type { TimestampMatchRequest, TimestampMatchResponse } from '../../workers/timestampMatchWorker';
 import { requestsIn } from '../../test/workerInputs';
 

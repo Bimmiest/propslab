@@ -11,7 +11,7 @@
  *         RegexMatchResponse, or a WorkerSkippedResponse, per request
  */
 
-import { matchInputs, type RegexMatchInfo } from '../engine';
+import { matchInputs, type RegexMatchInfo } from 'propslab-engine';
 import { serveWithRegexEngine } from './regexEngineLoader';
 import {
   createRequestQueue,

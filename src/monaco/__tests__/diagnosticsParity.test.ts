@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import { parseConf } from 'propslab-engine';
 import { computeDiagnostics } from '../splunkConfDiagnostics';
-import { parseConf } from '../../engine';
 import { fakeModel } from '../../test/fakeModel';
 
 // The linter and confParser agree on what a directive line is: DIRECTIVE_RE

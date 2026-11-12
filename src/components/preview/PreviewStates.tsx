@@ -3,9 +3,9 @@
 // What the output shows in place of a tab: a run that failed, or no run yet.
 // ---------------------------------------------------------------------------
 
+import { SAMPLE_CONFIGS } from 'propslab-engine';
 import { useAppStore } from '../../store/useAppStore';
 import { Icon } from '../ui/Icon';
-import { SAMPLE_CONFIGS } from '../../engine';
 import { ExamplesMenu } from '../examples/ExamplesMenu';
 
 export function FailureState({ message }: { message: string }) {

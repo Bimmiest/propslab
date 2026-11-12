@@ -1,12 +1,14 @@
 name: Mutation
 
 # Coverage says a line ran; it does not say a test would notice if the line were
-# wrong. Stryker answers that second question by breaking src/engine/** one small
-# edit at a time and checking that some test fails. A full run takes over four
-# hours of work, so it lives here rather than in ci.yml, is divided across the
-# jobs of a matrix, and pull requests mutate only the engine files they change.
+# wrong. Stryker answers that second question by breaking the modules in the
+# `mutate` list of stryker.config.mjs one small edit at a time, and checking
+# that some test fails. The full run lives here rather than in ci.yml, is
+# divided across the jobs of a matrix, and pull requests mutate only the files
+# in scope that they change. The engine's own run is in its repository
+# (ADR 0023).
 on:
-  # The whole engine, from scratch, in shards whose combined score is held to
+  # The whole scope, from scratch, in shards whose combined score is held to
   # the floor in stryker.config.mjs (the `score` job). Later in the morning
   # than ci.yml's weekly run so the two do not share a queue. The full run
   # includes the static mutants (#857): see `ignoreStatic` in stryker.config.mjs.
@@ -20,7 +22,7 @@ on:
         description: Include the static mutants (MUTATION_STATIC=1), as the weekly run does
         type: boolean
         default: true
-  # Only the engine source files the PR changes are mutated, so the check costs
+  # Only the source files in scope that the PR changes are mutated, so the check costs
   # minutes whatever else is going on. Nothing is cached between runs: a PR's
   # cost never depends on how recently something else ran.
   pull_request:
@@ -123,13 +125,13 @@ jobs:
             config=$(git diff --name-only "origin/$BASE_REF...HEAD" -- stryker.config.mjs vitest.config.ts vitest.stryker.config.ts .github/workflows/mutation.yml \
               scripts/mutation-targets.mjs scripts/drop-format-only.mjs scripts/lib/mutationTargets.mjs scripts/lib/formatOnly.mjs)
             if [ -n "$config" ]; then
-              files=src/engine/utils/fieldRef.ts
+              files=src/monaco/markdown.ts
               echo "Mutation setup changed; smoke run on \`$files\`." >> "$GITHUB_STEP_SUMMARY"
             fi
           fi
           echo "files=$files" >> "$GITHUB_OUTPUT"
           if [ -z "$files" ]; then
-            echo "No mutable engine source changed; the weekly full run covers the rest." >> "$GITHUB_STEP_SUMMARY"
+            echo "No mutable source changed; the weekly full run covers the rest." >> "$GITHUB_STEP_SUMMARY"
           elif [ -z "${config:-}" ]; then
             echo "Mutating: \`$files\`" >> "$GITHUB_STEP_SUMMARY"
           fi

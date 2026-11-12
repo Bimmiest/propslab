@@ -46,7 +46,7 @@ All notable changes to Propslab are documented here, newest first. Entries say w
 - **A new colour palette for the light and dark themes** ([#688](https://github.com/Bimmiest/propslab/issues/688)). The two themes use the same four colours from Color Hunt: two charcoals, bronze and sand. The dark theme has charcoal surfaces, sand text and a gold accent. The light theme has near-white surfaces, charcoal text and a dark bronze accent. The editor follows the theme. All text has a contrast of 4.5:1 or more, and the borders of text boxes and dropdowns have 3:1 or more. Before, the borders of inputs had less than 3:1 ([#564](https://github.com/Bimmiest/propslab/issues/564)).
 - **SECURITY.md gives a timeline and a fallback contact** ([#576](https://github.com/Bimmiest/propslab/issues/576)). A valid report gets a fix within 90 days. If private reporting is not available, open an issue that asks for a contact. The MCP server is supported from `main` only.
 - **A run that takes more than 4 s stops, and an error names the stage where it stopped** ([#560](https://github.com/Bimmiest/propslab/issues/560)). The preview shows the result of the stages before that stage. Before, the watchdog stopped the worker and the preview showed no result. A `MATCH_LIMIT` or `DEPTH_LIMIT` of 0 now means 10,000,000 steps, not "no limit", in the app and in the MCP server.
-- **The dictionary and the editor hover say where Propslab guesses** ([#561](https://github.com/Bimmiest/propslab/issues/561)). `TIME_FORMAT`, `EXTRACT`, `SEDCMD` and `INGEST_EVAL` show a note for a behaviour that no Splunk recording confirms. [fidelity.md](docs/fidelity.md#guesses-that-no-recording-confirms) lists each guess.
+- **The dictionary and the editor hover say where Propslab guesses** ([#561](https://github.com/Bimmiest/propslab/issues/561)). `TIME_FORMAT`, `EXTRACT`, `SEDCMD` and `INGEST_EVAL` show a note for a behaviour that no Splunk recording confirms. [fidelity.md](https://github.com/Bimmiest/propslab-engine/blob/main/docs/fidelity.md#guesses-that-no-recording-confirms) lists each guess.
 - **CI and the deploy check `pcre2.wasm` against a hash that this repository records** ([#567](https://github.com/Bimmiest/propslab/issues/567)). Before, the only hash came from the same commit as the binary. Now a change to the `pcre2-wasm-utf16` pin also changes `pcre2.wasm.sha256` at the root, and the reviewer sees it.
 - **The MCP server's sandbox workers get no environment, and code generation from strings is refused** ([#568](https://github.com/Bimmiest/propslab/issues/568)). A worker running agent-supplied patterns no longer inherits the API keys an MCP client may start the server with, `eval` and `new Function` throw in the server and its workers, and `PROPSLAB_MCP_NO_REEXEC=1` always warns that it turns the permission model off.
 
@@ -508,7 +508,7 @@ Entries #280–#300, and follow-ups #303 and #304, came from one review of the w
 ### Fixed
 
 - **`TZ_ALIAS` is simulated, and the `ignored` roster is empty** ([#227](https://github.com/Bimmiest/propslab/issues/227)). An event's zone abbreviation can be remapped to an offset, abbreviation or IANA name, and `TZ = GMT-5` resolves to UTC-5 ([ADR 0006](docs/adr/0006-time-zone-resolution.md)).
-- **A scheduled check that every `ignored` roster entry names an open issue** ([.github/workflows/roster.yml](.github/workflows/roster.yml)). It runs weekly, outside the hermetic `npm test`, and fails on a closed issue or a PR link.
+- **A scheduled check that every `ignored` roster entry names an open issue** ([.github/workflows/roster.yml](https://github.com/Bimmiest/propslab-engine/blob/main/.github/workflows/roster.yml)). It runs weekly, outside the hermetic `npm test`, and fails on a closed issue or a PR link.
 - **The `dompurify` override is raised past GHSA-55q2-fjhq-7xh7** to `^3.4.13` (introduced in [#18](https://github.com/Bimmiest/propslab/issues/18)); `npm audit` now reports zero vulnerabilities.
 
 ### Changed
@@ -522,7 +522,7 @@ Entries #280–#300, and follow-ups #303 and #304, came from one review of the w
   - Node 26 is deferred until it is LTS; its `localStorage` global collides with jsdom in 14 tests.
 - **Vite 7 → 8 and `@vitejs/plugin-react` 5 → 6, together** ([#215](https://github.com/Bimmiest/propslab/pull/215), [#217](https://github.com/Bimmiest/propslab/pull/217)). The Monaco split moves to Rolldown's `codeSplitting.groups`, and the app chunk shrinks from 647 to 469 kB.
 - **`@types/diff` is removed** ([#216](https://github.com/Bimmiest/propslab/pull/216)); `diff` ships its own types.
-- **The docs are restructured by audience.** Engine-library material moves to [docs/engine.md](docs/engine.md), internals to [docs/architecture.md](docs/architecture.md), and recipes to CONTRIBUTING; the fidelity sections are merged.
+- **The docs are restructured by audience.** Engine-library material moves to [docs/engine.md](https://github.com/Bimmiest/propslab-engine/blob/main/docs/api.md), internals to [docs/architecture.md](docs/architecture.md), and recipes to CONTRIBUTING; the fidelity sections are merged.
 
 ---
 
@@ -566,7 +566,7 @@ The first released version, with its support boundary stated plainly.
 
 ### What is guaranteed
 
-- **32 directives are simulated** and asserted by tests; the classification is in [`src/engine/directiveSupport.ts`](src/engine/directiveSupport.ts).
+- **32 directives are simulated** and asserted by tests; the classification is in [`src/engine/directiveSupport.ts`](https://github.com/Bimmiest/propslab-engine/blob/main/src/directiveSupport.ts).
 - **The fidelity corpus carries no known mismatch.** All 73 cases assert against output captured from **Splunk 10.4.0** (build `f798d4d49089`).
 - **Everything outside the boundary says so where you are looking**: diagnostic, hover, autocomplete marker and dictionary callout.
 - **977 tests**, with coverage floored in CI (65% overall; 88% statements and 96% functions for `src/engine/**`).

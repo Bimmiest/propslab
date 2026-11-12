@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
+import { probeTimestamps, type TimeConfig, type TimestampProbe } from 'propslab-engine';
 import { useWorkerRequest } from './useWorkerRequest';
-import { probeTimestamps, type TimeConfig, type TimestampProbe } from '../engine';
 import type { TimestampMatchResponse } from '../workers/timestampMatchWorker';
 
 const createWorker = () =>

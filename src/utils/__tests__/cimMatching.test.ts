@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import { validateCimCompliance, type CimValidationResult, runPipeline, SAMPLE_CONFIGS } from 'propslab-engine';
 import { CIM_MATCH_THRESHOLD_PERCENT, matchesModel, rankModels } from '../cimMatching';
-import { validateCimCompliance, type CimValidationResult, runPipeline, SAMPLE_CONFIGS } from '../../engine';
 import { AT_FIXED_NOW } from '../../test/runCtx';
 
 const run = (fields: string[]) => validateCimCompliance(new Set(fields), { includeAll: true });

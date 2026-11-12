@@ -4,7 +4,7 @@ type: reference
 
 # Using the app
 
-This file describes the app for a user: the layout, the output tabs, the editor and the dictionary. [pipeline.md](pipeline.md) describes what the simulation does with the input.
+This file describes the app for a user: the layout, the output tabs, the editor and the dictionary. [the engine's pipeline.md](https://github.com/Bimmiest/propslab-engine/blob/main/docs/pipeline.md) describes what the simulation does with the input.
 
 ## Layout
 
@@ -176,7 +176,7 @@ These items all come from the model JSON in the CIM add-on of Splunk (`Splunk_SA
 - the split into required and recommended fields
 - the constraint tags.
 
-The header of `src/engine/cim/cimModelsData.ts` gives the exact rules for this derivation. There is one entry for each CIM *root dataset*. Endpoint has five root datasets and no model-wide `tag=endpoint`, so it appears five times. Three models declare no key fields in the CIM: Databases, JVM and Interprocess Messaging. Their required score shows `n/a`, not a 100% that means nothing.
+The header of [`src/cim/cimModelsData.ts`](https://github.com/Bimmiest/propslab-engine/blob/main/src/cim/cimModelsData.ts) in propslab-engine gives the exact rules for this derivation. There is one entry for each CIM *root dataset*. Endpoint has five root datasets and no model-wide `tag=endpoint`, so it appears five times. Three models declare no key fields in the CIM: Databases, JVM and Interprocess Messaging. Their required score shows `n/a`, not a 100% that means nothing.
 
 ## Monaco editor
 

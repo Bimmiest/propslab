@@ -1,4 +1,4 @@
-import type { ProcessingResult, ProcessingStep, SplunkEvent } from '../engine';
+import type { ProcessingResult, ProcessingStep, SplunkEvent } from 'propslab-engine';
 import { computeFieldStats, type FieldStats } from './fieldStats';
 
 /**

@@ -11,7 +11,7 @@
  *         TimestampMatchResponse, or a WorkerSkippedResponse, per request
  */
 
-import { probeTimestamps, type TimeConfig, type TimestampProbe } from '../engine';
+import { probeTimestamps, type TimeConfig, type TimestampProbe } from 'propslab-engine';
 import { serveWithRegexEngine } from './regexEngineLoader';
 import {
   createRequestQueue,
