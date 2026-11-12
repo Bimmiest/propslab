@@ -8,12 +8,23 @@
 // ---------------------------------------------------------------------------
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { useAppStore, selectSessionDirty, EMPTY_INPUTS, NO_PREVIEW_FILTERS } from '../useAppStore';
+import {
+  selectRunInputs,
+  selectSessionDirty,
+  EMPTY_INPUTS,
+  NO_PREVIEW_FILTERS,
+  type useAppStore,
+} from '../useAppStore';
 
 const THEME_KEY = 'propslab:theme';
 const SETTINGS_KEY = 'propslab:settings';
-const initial = useAppStore.getState();
-const state = () => useAppStore.getState();
+/**
+ * The store of the current test. Each test gets a store built afresh, as on a
+ * page load, rather than the one store reset to its first state: the actions
+ * are made when the store is built, so only a new build runs a changed one.
+ */
+let store: typeof useAppStore;
+const state = () => store.getState();
 
 /** A store as if the page had just loaded, with `storage` already in localStorage. */
 async function freshStore(storage: Record<string, string> = {}) {
@@ -23,9 +34,10 @@ async function freshStore(storage: Record<string, string> = {}) {
   return (await import('../useAppStore')).useAppStore.getState();
 }
 
-beforeEach(() => {
-  useAppStore.setState(initial, true);
+beforeEach(async () => {
   localStorage.clear();
+  vi.resetModules();
+  store = (await import('../useAppStore')).useAppStore;
 });
 
 describe('defaults', () => {
@@ -39,6 +51,7 @@ describe('defaults', () => {
       isProcessing: false,
       pipelineOnMainThread: false,
       processingResult: null,
+      runInputs: null,
       validationDiagnostics: [],
       theme: 'dark',
       activeOutputTab: 'preview',
@@ -73,9 +86,19 @@ describe('defaults', () => {
     });
   });
 
-  it('does not share its metadata object with the baseline', () => {
+  it('does not share its metadata object with the baseline', async () => {
+    // The baseline of the store under test, not of the module imported above.
+    const { EMPTY_INPUTS: baseline } = await import('../useAppStore');
     state().setMetadataField('host', 'web01');
-    expect(EMPTY_INPUTS.metadata.host).toBe('');
+    expect(baseline.metadata.host).toBe('');
+  });
+
+  it('writes nothing to storage for a change that is not a preference', () => {
+    state().setCurrentPage(3);
+    state().setPropsConf('[st]');
+    state().toggleHelp();
+    expect(localStorage.getItem(THEME_KEY)).toBeNull();
+    expect(localStorage.getItem(SETTINGS_KEY)).toBeNull();
   });
 });
 
@@ -112,6 +135,40 @@ describe('setters', () => {
     expect(state().processingResult).toBe(result);
     state().setProcessingResult(null);
     expect(state().processingResult).toBeNull();
+  });
+
+  it('setProcessingResult records the inputs of the run with its result, and keeps them when given none (#879)', () => {
+    const ran = {
+      propsConf: '[a]',
+      transformsConf: '[t]',
+      metadata: { index: 'i', host: 'h', source: 's', sourcetype: 'st' },
+    };
+    const result = { events: [] } as never;
+    state().setProcessingResult(result, ran);
+    expect(state().processingResult).toBe(result);
+    expect(state().runInputs).toBe(ran);
+    expect(selectRunInputs(state())).toBe(ran);
+
+    // A failed run answers with no result, but it did read its inputs.
+    const failed = { ...ran, propsConf: '[b]' };
+    state().setProcessingResult(null, failed);
+    expect(state().processingResult).toBeNull();
+    expect(state().runInputs).toBe(failed);
+
+    state().setProcessingResult(result);
+    expect(state().processingResult).toBe(result);
+    expect(state().runInputs).toBe(failed);
+  });
+
+  it('selectRunInputs is empty config before any run answers, whatever the editors hold (#879)', () => {
+    state().setPropsConf('[a]\nTRUNCATE = 1');
+    state().setTransformsConf('[t]');
+    state().setMetadataField('sourcetype', 'st');
+    expect(selectRunInputs(state())).toEqual({
+      propsConf: '',
+      transformsConf: '',
+      metadata: { index: 'main', host: '', source: '', sourcetype: '' },
+    });
   });
 
   it('setRawData keeps the page, and setEventsPerPage goes back to page one (#566)', () => {

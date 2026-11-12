@@ -20,7 +20,6 @@ import { PreviewFilterBar } from './PreviewFilterBar';
 import { EventPagination, MIN_PAGE_SIZE } from './EventPagination';
 import { usePagination } from '../../hooks/usePagination';
 import { useDebounce } from '../../hooks/useDebounce';
-import type { PipelineInputs } from './tabs/shared/usePipelineInputs';
 import { enrichEvents, type EnrichedEvent } from './enrichEvents';
 import type { FieldStats } from '../../utils/fieldStats';
 import { anyFilter, filterOptions, matchesFilters, pruneSelection } from './previewFilters';
@@ -36,9 +35,6 @@ const PREVIEW_SUB_TABS: { id: PreviewSubTabId; label: string }[] = [
   { id: 'regex', label: 'Regex' },
 ];
 
-/** What the preview's sub-tabs read of the pipeline inputs: the Timestamp tab's config. */
-export type PreviewInputs = Pick<PipelineInputs, 'propsConf' | 'metadata'>;
-
 /** What the sub-tabs read between them; each takes the part it needs. */
 interface SubTabData {
   items: EnrichedEvent[];
@@ -47,7 +43,6 @@ interface SubTabData {
   eventsPerPage: number;
   search: string;
   fieldStats: FieldStats | undefined;
-  inputs: PreviewInputs;
   onPinnedViewChange: (view: PinnedView | null) => void;
 }
 
@@ -70,9 +65,7 @@ function subTabContent(subTab: PreviewSubTabId, d: SubTabData): ReactNode {
     case 'diff':
       return <DiffTab items={d.items} currentPage={d.currentPage} eventsPerPage={d.eventsPerPage} />;
     case 'timestamp':
-      return (
-        <TimestampTab items={d.items} currentPage={d.currentPage} eventsPerPage={d.eventsPerPage} inputs={d.inputs} />
-      );
+      return <TimestampTab items={d.items} currentPage={d.currentPage} eventsPerPage={d.eventsPerPage} />;
     case 'regex':
       return (
         <RegexTab items={d.items} allEvents={d.allEvents} currentPage={d.currentPage} eventsPerPage={d.eventsPerPage} />
@@ -113,7 +106,7 @@ function useLiveSelections(
   return live;
 }
 
-export const PreviewSubTab = memo(function PreviewSubTab({ pipelineInputs }: { pipelineInputs: PreviewInputs }) {
+export const PreviewSubTab = memo(function PreviewSubTab() {
   const result = useAppStore((s) => s.processingResult);
   const events = useMemo(() => result?.events ?? [], [result]);
   const originalRaw = result?.originalRaw ?? '';
@@ -222,7 +215,6 @@ export const PreviewSubTab = memo(function PreviewSubTab({ pipelineInputs }: { p
           eventsPerPage,
           search: debouncedSearch,
           fieldStats,
-          inputs: pipelineInputs,
           onPinnedViewChange: setPinnedView,
         })}
       </div>
