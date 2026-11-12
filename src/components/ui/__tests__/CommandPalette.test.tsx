@@ -6,7 +6,7 @@ import { render, screen, fireEvent, act } from '@testing-library/react';
 import { CommandPalette } from '../CommandPalette';
 import { Overlay } from '../Overlay';
 import { useAppStore } from '../../../store/useAppStore';
-import { SAMPLE_CONFIGS } from '../../../engine/sampleData';
+import { SAMPLE_CONFIGS } from '../../../engine';
 
 const initial = useAppStore.getState();
 const sample = SAMPLE_CONFIGS[0]!;

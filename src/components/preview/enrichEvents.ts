@@ -5,7 +5,7 @@
 // or metadata or dropped it.
 // ---------------------------------------------------------------------------
 
-import type { EventMetadata } from '../../engine/types';
+import type { EventMetadata } from '../../engine';
 import type { ViewEvent } from '../../utils/viewResult';
 
 // trimEnd, not /\s+$/: the regex backtracks quadratically over a long inner

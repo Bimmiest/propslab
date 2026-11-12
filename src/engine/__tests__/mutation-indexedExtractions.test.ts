@@ -2,7 +2,7 @@
 // Each pins an INDEXED_EXTRACTIONS behaviour the suite executed without asserting.
 import { describe, it, expect } from 'vitest';
 import { applyIndexedExtractions } from '../processors/indexedExtractions';
-import { validateRegex } from '../../utils/splunkRegex';
+import { validateRegex } from '../utils/splunkRegex';
 import type { SplunkEvent, ConfDirective, ValidationDiagnostic } from '../types';
 import { runCtx, FIXED_NOW } from './runCtx';
 import { makeEvent } from '../../test/makeEvent';

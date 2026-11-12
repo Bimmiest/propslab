@@ -5,7 +5,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { ExamplesMenu } from '../ExamplesMenu';
-import { SAMPLE_CONFIGS } from '../../../engine/sampleData';
+import { SAMPLE_CONFIGS } from '../../../engine';
 import { selectSessionDirty, useAppStore } from '../../../store/useAppStore';
 
 const initial = useAppStore.getState();

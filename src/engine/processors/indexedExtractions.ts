@@ -1,7 +1,7 @@
 import type { ConfDirective, SplunkEvent } from '../types';
 import { flattenJson, flattenArray, parseJson } from '../utils/flattenJson';
 import { deleteField, getField, setField } from '../utils/fieldBag';
-import { safeRegex, validateRegex, type SplunkRegex } from '../../utils/splunkRegex';
+import { safeRegex, validateRegex, type SplunkRegex } from '../utils/splunkRegex';
 import { atDirective } from '../parser/provenance';
 import { EXTRA_TIME_FIELD_NAMES, extractTimestamps } from './timestampExtractor';
 import { extractXmlIndexed } from './xmlIndexedExtractions';

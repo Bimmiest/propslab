@@ -33,7 +33,7 @@ runPipeline(rawData, metadata, propsConfInput, transformsConfInput, options?)
 `parseConf`, and therefore `runPipeline`, accept either the text of one flat conf or an ordered list of layers, **lowest precedence first** — which is how a caller reading an app off disk (or out of a Git worktree) hands over `$APP/default/props.conf` and `$APP/local/props.conf`:
 
 ```ts
-import { runPipeline } from './src/engine/pipeline';
+import { runPipeline } from './src/engine';
 
 runPipeline(
   raw,
@@ -64,7 +64,7 @@ This is within-stanza only — a directive that wins its stanza can still lose t
 
 ## The regex engine
 
-Every pattern a user writes — `LINE_BREAKER`, `BREAK_ONLY_BEFORE`, `MUST_BREAK_AFTER`, `TIME_PREFIX`, `EXTRACT`, transforms `REGEX`, `SEDCMD`, `FIELD_HEADER_REGEX` and the other `INDEXED_EXTRACTIONS` patterns, eval's `match()`, `replace()`, `like()` and `mvfind()`, and the `[source::…]` and `[host::…]` stanza patterns, which Splunk reads as PCRE — runs on **PCRE2 compiled to WebAssembly**, through `src/utils/splunkRegex.ts`. Splunk's regexes are PCRE, so this is the engine Splunk runs rather than a translation of it into JavaScript, and the pipeline, the editor's diagnostics, the Regex and Timestamp tabs and the MCP server all compile through that one module, so they cannot disagree about what a pattern means. The engine's own internal patterns (strftime formats, date recognition) stay JavaScript regexes.
+Every pattern a user writes — `LINE_BREAKER`, `BREAK_ONLY_BEFORE`, `MUST_BREAK_AFTER`, `TIME_PREFIX`, `EXTRACT`, transforms `REGEX`, `SEDCMD`, `FIELD_HEADER_REGEX` and the other `INDEXED_EXTRACTIONS` patterns, eval's `match()`, `replace()`, `like()` and `mvfind()`, and the `[source::…]` and `[host::…]` stanza patterns, which Splunk reads as PCRE — runs on **PCRE2 compiled to WebAssembly**, through `src/engine/utils/splunkRegex.ts`. Splunk's regexes are PCRE, so this is the engine Splunk runs rather than a translation of it into JavaScript, and the pipeline, the editor's diagnostics, the Regex and Timestamp tabs and the MCP server all compile through that one module, so they cannot disagree about what a pattern means. The engine's own internal patterns (strftime formats, date recognition) stay JavaScript regexes.
 
 The WebAssembly module is [`pcre2-wasm-utf16`](https://github.com/Bimmiest/pcre2-wasm-utf16), a dependency pinned to a commit: PCRE2 10.48, the 16-bit library in UTF mode, built reproducibly from the pinned release by its `build/build.sh` with plain clang and `wasm-ld`. Its offsets are UTF-16 code units, so they are JS string indices with nothing to transcode. See its README for the API and build.
 
@@ -73,7 +73,7 @@ The WebAssembly module is [`pcre2-wasm-utf16`](https://github.com/Bimmiest/pcre2
 The engine API is synchronous, but a WebAssembly module has to be compiled before first use. Do it once, before the first pattern compiles:
 
 ```ts
-import { initRegexEngine, initRegexEngineSync } from './src/utils/splunkRegex';
+import { initRegexEngine, initRegexEngineSync } from './src/engine';
 
 // Node, or a worker: synchronous is fine.
 initRegexEngineSync(readFileSync(createRequire(import.meta.url).resolve('pcre2-wasm-utf16/pcre2.wasm')));
@@ -125,7 +125,7 @@ Treat the pattern language as the common PCRE1/PCRE2 subset, and verify anything
 
 PCRE2's limits bound each match, but not a run. Many events with several patterns each can take seconds, while each match stays in its limits. Set `limits.maxRunMs` to bound a run. After the budget, the stages stop at the next regex call, and an error diagnostic names the stage ([ADR 0019](adr/0019-a-run-stops-at-its-time-budget.md)). A `MATCH_LIMIT` or `DEPTH_LIMIT` of 0, or above 10,000,000, becomes 10,000,000, so one match takes about 0.2 s at most.
 
-**A consumer that runs patterns it did not write must still use a thread that it can stop.** A run can go past its budget by one match and by work that uses no regex. The browser app sets `maxRunMs` to 4 s. It runs the pipeline, the Regex and Timestamp tabs and the `TIME_FORMAT` hover in workers, each with a watchdog. The MCP server stops its sandbox worker at the `timeout_ms` of the call. The structural ReDoS heuristic does not refuse patterns, because Splunk does not refuse a valid pattern. The MCP server uses it only to rank the patterns in its timeout report (`src/utils/redosHeuristic.ts`).
+**A consumer that runs patterns it did not write must still use a thread that it can stop.** A run can go past its budget by one match and by work that uses no regex. The browser app sets `maxRunMs` to 4 s. It runs the pipeline, the Regex and Timestamp tabs and the `TIME_FORMAT` hover in workers, each with a watchdog. The MCP server stops its sandbox worker at the `timeout_ms` of the call. The structural ReDoS heuristic does not refuse patterns, because Splunk does not refuse a valid pattern. The MCP server uses it only to rank the patterns in its timeout report (`src/engine/utils/redosHeuristic.ts`).
 
 Measured on a 20,000-event synthetic key-value input (EXTRACT ×2, a `REPORT` with `MV_ADD`, `SEDCMD`, `TIME_PREFIX`) in Node, the pipeline took 2.3 s on PCRE2 against 1.7 s on V8's irregexp; on the two bundled examples scaled to the 1 MB input cap, 0–25% slower. A typical `EXTRACT` costs about 1.8 µs per event against irregexp's 1.4 µs. In the browser, the end-to-end suite's 20,000-event paste (`e2e/perf.spec.ts`) ran its pipeline in about 2.7 s against 2.5 s before, on the same machine.
 

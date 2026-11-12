@@ -94,8 +94,9 @@ Prettier sets the layout, ESLint finds mistakes, and TypeScript is strict. [docs
 [docs/recipes.md](docs/recipes.md) gives the directory for each kind of change, and the steps for the common changes. These rules apply to each change:
 
 - **`src/engine/**` has one runtime dependency, the PCRE2 WebAssembly module, and must not gain another.** Other code uses the engine directly as a library.
-- **A user-written pattern compiles through `safeRegex` in `src/utils/splunkRegex.ts`, never `new RegExp`.**
-- **An export from `src/engine`, `src/monaco` or a vendored file in `src/utils` is public.** Before you remove or rename an export, search propslab-sb and propslab-ent too.
+- **A user-written pattern compiles through `safeRegex` in `src/engine/utils/splunkRegex.ts`, never `new RegExp`.**
+- **Code outside `src/engine` imports the engine only from `src/engine/index.ts`, its public API ([ADR 0023](docs/adr/0023-the-engine-moves-to-a-repository-of-its-own.md)).** A lint rule enforces this.
+- **An export from `src/engine/index.ts`, `src/monaco` or a vendored file in `src/utils` or `src/workers` is public.** Before you remove or rename an export, search propslab-sb and propslab-ent too.
 - **Each directive in the registry has a classification in `directiveSupport.ts`.** A `simulated` directive has a unit test, and a "Doc-derived" citation of the `.spec` file. `directiveEvidence.test.ts` fails without the citation. [The steps for a simulated directive](docs/recipes.md#adding-or-changing-a-simulated-directive) give the detail.
 - **If real Splunk contradicts a doc-derived test, open an issue** with the input, the stanza and what Splunk produced. Do not put recorded Splunk output in this repository ([ADR 0016](docs/adr/0016-recorded-splunk-output-is-not-distributed.md)).
 

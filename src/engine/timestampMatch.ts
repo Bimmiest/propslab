@@ -1,5 +1,5 @@
-import { safeRegex, type SplunkRegex } from '../utils/splunkRegex';
-import { parseTimestampDetailed, parseTzAlias } from '../utils/strftime';
+import { safeRegex, type SplunkRegex } from './utils/splunkRegex';
+import { parseTimestampDetailed, parseTzAlias } from './utils/strftime';
 import { matchTimeFormat, timeFormatRegex } from './processors/timestampExtractor';
 
 /**

@@ -10,8 +10,9 @@ import {
   getClassBasedDirectiveBase,
   getDirectiveInfo,
   getDirectivesForFile,
-} from '../../../src/engine/directiveRegistry';
-import type { ConfInput, EventMetadata } from '../../../src/engine/types';
+  type ConfInput,
+  type EventMetadata,
+} from '../../../src/engine';
 import type { ExplainResponse, SimulateResponse, ValidateResponse } from './protocol';
 import {
   runInWorker,

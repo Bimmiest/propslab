@@ -5,12 +5,15 @@
 // and the directive and transforms.conf stanza a Pipeline step ran (#760).
 // ---------------------------------------------------------------------------
 
-import { parseConf } from '../../../../engine/parser/confParser';
-import { resolveStanzasForEvent } from '../../../../engine/parser/stanzaMatcher';
-import { resolveEffectiveConfig } from '../../../../engine/parser/effectiveConfig';
-import { fieldNameNeedsQuoting, unquoteFieldName } from '../../../../engine/utils/fieldRef';
-import { getDirectiveInfo } from '../../../../engine/directiveRegistry';
-import type { EventMetadata } from '../../../../engine/types';
+import {
+  parseConf,
+  resolveStanzasForEvent,
+  resolveEffectiveConfig,
+  fieldNameNeedsQuoting,
+  unquoteFieldName,
+  getDirectiveInfo,
+  type EventMetadata,
+} from '../../../../engine';
 import { fieldsWritten, type ViewEvent } from '../../../../utils/viewResult';
 import { useAppStore } from '../../../../store/useAppStore';
 

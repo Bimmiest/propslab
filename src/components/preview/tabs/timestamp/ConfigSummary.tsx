@@ -1,4 +1,4 @@
-import type { TimeConfig } from '../../../../engine/timestampMatch';
+import type { TimeConfig } from '../../../../engine';
 import { tint } from '../../../../utils/tint';
 import { FORMAT_COLOR, LOOKAHEAD_COLOR, PREFIX_COLOR } from './data';
 import type { OverlaySegment } from './timestampLogic';

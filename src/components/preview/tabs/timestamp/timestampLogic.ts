@@ -1,11 +1,18 @@
-import { parseConf } from '../../../../engine/parser/confParser';
-import { mergeDirectives, resolveStanzasForEvent } from '../../../../engine/parser/stanzaMatcher';
-import { resolveLookahead } from '../../../../engine/processors/timestampExtractor';
-import { locateTimestamp } from '../../../../engine/scaffold/analyzers/timestamp';
-import type { TimeConfig, TimestampMatch, TimestampProbe } from '../../../../engine/timestampMatch';
-import { FALLBACK_TIME_SOURCES, type EventMetadata, type TimeSource } from '../../../../engine/types';
+import {
+  parseConf,
+  mergeDirectives,
+  resolveStanzasForEvent,
+  resolveLookahead,
+  locateTimestamp,
+  type TimeConfig,
+  type TimestampMatch,
+  type TimestampProbe,
+  FALLBACK_TIME_SOURCES,
+  type EventMetadata,
+  type TimeSource,
+  formatSpecifiers,
+} from '../../../../engine';
 import type { TraceStep, ViewEvent } from '../../../../utils/viewResult';
-import { formatSpecifiers } from '../../../../utils/strftime';
 import { FALLBACK_LABEL, STRPTIME_REFERENCE } from './data';
 
 // TimeConfig / TimestampMatch / the probe itself now live in

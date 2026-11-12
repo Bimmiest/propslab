@@ -7,7 +7,7 @@
  */
 
 import type { ConfDirective, EventMetadata, SplunkEvent } from '../types';
-import { safeRegex, validateRegex, type SplunkRegex } from '../../utils/splunkRegex';
+import { safeRegex, validateRegex, type SplunkRegex } from '../utils/splunkRegex';
 import { atDirective } from '../parser/provenance';
 import { effectiveDirective, parseSplunkBool } from '../utils/directiveValues';
 import { createTimestampFinder, readTimestampLocation } from './timestampRecognizer';

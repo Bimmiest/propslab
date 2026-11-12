@@ -1,5 +1,5 @@
 import type { ScaffoldSuggestion } from './types';
-import { escapeRegex } from '../../utils/splunkRegex';
+import { escapeRegex } from '../utils/splunkRegex';
 import { endsWithContinuation } from '../utils/directiveValues';
 
 /**

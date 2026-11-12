@@ -1,4 +1,4 @@
-import type { CimValidationResult } from '../engine/cim/cimModels';
+import type { CimValidationResult } from '../engine';
 
 /**
  * A model matches the data when the data has at least this share of the

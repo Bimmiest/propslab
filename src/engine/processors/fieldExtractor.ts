@@ -1,5 +1,5 @@
 import type { SplunkEvent, ConfDirective, DirectiveNoOp } from '../types';
-import { extractionLimits, safeRegex, validateRegex, type SplunkRegex } from '../../utils/splunkRegex';
+import { extractionLimits, safeRegex, validateRegex, type SplunkRegex } from '../utils/splunkRegex';
 import { explainNoMatch, noOpDirectiveKey, type NoOpReason } from '../noOpExplainer';
 import { effectiveValue } from '../utils/directiveValues';
 import { isInternalField } from '../utils/internalFields';

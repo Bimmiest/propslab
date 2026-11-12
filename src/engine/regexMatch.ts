@@ -1,4 +1,4 @@
-import { extractionLimits, safeRegex, type SplunkRegex } from '../utils/splunkRegex';
+import { extractionLimits, safeRegex, type SplunkRegex } from './utils/splunkRegex';
 import { setField } from './utils/fieldBag';
 
 /**

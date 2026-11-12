@@ -27,7 +27,7 @@ import { attributeRawMutations } from './processors/rawMutationAttribution';
 import { lintConfigs, lintMatchedDirectives } from './configLint';
 import { createRunContext, withDiagnostics, type RunContext, type RunLimits } from './runContext';
 import type { RunStage } from './runStages';
-import { RegexDeadlineError, withRegexDeadline } from '../utils/splunkRegex';
+import { RegexDeadlineError, withRegexDeadline } from './utils/splunkRegex';
 
 type Stage = (batch: SplunkEvent[], ctx: RunContext) => SplunkEvent[];
 

@@ -10,7 +10,7 @@
 // ---------------------------------------------------------------------------
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import * as splunkRegex from '../../utils/splunkRegex';
+import * as splunkRegex from '../utils/splunkRegex';
 import { applyEvalExpressions } from '../processors/evalProcessor';
 import { evaluateExpression } from '../processors/eval/evaluator';
 import { runPipeline } from '../pipeline';
@@ -19,8 +19,8 @@ import { runCtx, FIXED_NOW } from './runCtx';
 import { makeEvent } from '../../test/makeEvent';
 
 // Replaced per test by `refuse` below; otherwise the real guard.
-vi.mock('../../utils/splunkRegex', async (importOriginal) => {
-  const real = await importOriginal<typeof import('../../utils/splunkRegex')>();
+vi.mock('../utils/splunkRegex', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../utils/splunkRegex')>();
   return { ...real, safeRegex: vi.fn(real.safeRegex) };
 });
 

@@ -1,6 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { parseConf } from '../../../../src/engine/parser/confParser';
-import type { ConfDirective } from '../../../../src/engine/types';
+import { parseConf, type ConfDirective } from '../../../../src/engine';
 import { directivePatterns } from '../directivePatterns';
 import { collectRegexSuspects } from '../suspects';
 import { lintRegexDirectives } from '../regexLint';

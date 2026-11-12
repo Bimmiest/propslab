@@ -24,8 +24,8 @@ import { renderHook, act, waitFor } from '@testing-library/react';
 import { useProcessingPipeline } from '../useProcessingPipeline';
 import { LOAD_WAIT_FACTOR, type ManagedWorkerConfig } from '../../workers/workerLifecycle';
 import { useAppStore } from '../../store/useAppStore';
-import type { PipelineWorkerRequest } from '../../engine/pipelineWorker';
-import { SAMPLE_CONFIGS } from '../../engine/sampleData';
+import type { PipelineWorkerRequest } from '../../workers/pipelineWorker';
+import { SAMPLE_CONFIGS } from '../../engine';
 
 // The real lifecycle, with each config kept so a test can hand the hook's
 // policy a callback the lifecycle's own timing no longer produces.
@@ -124,7 +124,7 @@ describe('useProcessingPipeline', () => {
   // rather than the hook. Loading it once up front keeps that cost out of
   // every assertion window.
   beforeAll(async () => {
-    await import('../../engine/pipeline');
+    await import('../../workers/pipeline');
   });
 
   beforeEach(() => {

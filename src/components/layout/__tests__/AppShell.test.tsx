@@ -23,7 +23,7 @@ import * as RadixTooltip from '@radix-ui/react-tooltip';
 import type { ComponentType } from 'react';
 import { useAppStore } from '../../../store/useAppStore';
 import { PIPELINE_DEBOUNCE_MS } from '../../../workers/workerLifecycle';
-import type { PipelineWorkerRequest } from '../../../engine/pipelineWorker';
+import type { PipelineWorkerRequest } from '../../../workers/pipelineWorker';
 
 const shell = vi.hoisted(() => ({ renders: 0 }));
 

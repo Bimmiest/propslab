@@ -18,16 +18,16 @@
  * `outputSchemas.ts` describes the same shape to clients, and is checked
  * against these types at compile time, so the two cannot drift apart.
  */
-import type {
-  DirectiveNoOp,
-  EventMetadata,
-  ProcessingResult,
-  ProcessingStep,
-  SplunkEvent,
-  ValidationDiagnostic,
-} from '../../../src/engine/types';
-import { describeNoOp } from '../../../src/engine/noOpExplainer';
-import { indexedFields } from '../../../src/engine/utils/metadataFields';
+import {
+  type DirectiveNoOp,
+  type EventMetadata,
+  type ProcessingResult,
+  type ProcessingStep,
+  type SplunkEvent,
+  type ValidationDiagnostic,
+  describeNoOp,
+  indexedFields,
+} from '../../../src/engine';
 import { elementBytes, fitting, MAX_PAYLOAD_BYTES, MAX_RESPONSE_BYTES, responseBytes } from './responseBudget';
 
 export interface SerializeOptions {

@@ -18,9 +18,7 @@
  * empty suspect list does not prove the conf innocent — the timeout error
  * says so.
  */
-import { parseConf } from '../../../src/engine/parser/confParser';
-import { hasReDoSRisk } from '../../../src/utils/redosHeuristic';
-import type { ConfInput } from '../../../src/engine/types';
+import { parseConf, hasReDoSRisk, type ConfInput } from '../../../src/engine';
 import { directivePatterns } from './directivePatterns';
 import { elementBytes, fitting, MAX_PAYLOAD_BYTES } from './responseBudget';
 

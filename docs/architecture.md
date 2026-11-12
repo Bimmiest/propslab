@@ -11,9 +11,9 @@ This file describes the internals for contributors: the project structure, the s
 ```
 src/
 ├── engine/                    # Splunk simulation (pure logic, no React)
+│   ├── index.ts               # The public API: code outside the engine imports only this
 │   ├── types.ts               # SplunkEvent, ProcessingResult, ConfDirective
-│   ├── pipeline.ts            # runPipeline() — sole entry point
-│   ├── pipelineWorker.ts      # Web Worker wrapper
+│   ├── pipeline.ts            # runPipeline() — the pipeline's entry point
 │   ├── directiveRegistry.ts   # Directive lookup — drives completion,
 │   │                          #   hover, linting AND the dictionary
 │   ├── registry/              # The directive entries, props and transforms
@@ -29,6 +29,8 @@ src/
 │   ├── cim/                   # cimModels.ts + cimModelsData.ts (CIM 8.5.0)
 │   ├── scaffold/              # Starter props.conf stanza from sample data
 │   └── utils/
+│       ├── splunkRegex.ts     # The PCRE2 adapter: every user pattern compiles here
+│       ├── strftime.ts        # TIME_FORMAT parsing and formatting
 │       ├── epochTime.ts       # _time range guard for INGEST_EVAL / DEST_KEY
 │       └── flattenJson.ts     # With prototype-pollution guard
 │
@@ -46,9 +48,9 @@ src/
 │
 ├── store/useAppStore.ts       # Zustand store (flat; subscribe per slice)
 ├── hooks/                     # useProcessingPipeline, useDebounce, useTheme, usePagination
-├── workers/                   # No React: workerLifecycle, workerProtocol, regexEngineLoader
-├── utils/                     # splunkRegex (the PCRE2 adapter), strftime, diffEngine,
-│                              #   fieldHighlight, countLines
+├── workers/                   # No React: the three worker entry points (pipelineWorker…), pipeline.ts,
+│                              #   workerLifecycle, workerProtocol, regexEngineLoader
+├── utils/                     # diffEngine, fieldHighlight, countLines, viewResult
 │
 └── components/
     ├── layout/                # AppShell, ActivityRail, SimulatorView,

@@ -13,8 +13,8 @@
 // matched this event sends them to rewrite a working pattern.
 // ---------------------------------------------------------------------------
 
-import { extractionLimits, safeProbeRegex, safeRegex, validateRegex, type RegexLimits } from '../utils/splunkRegex';
-import { classEnd } from '../utils/regexSyntax';
+import { extractionLimits, safeProbeRegex, safeRegex, validateRegex, type RegexLimits } from './utils/splunkRegex';
+import { classEnd } from './utils/regexSyntax';
 
 const PROBE_LIMITS = extractionLimits();
 

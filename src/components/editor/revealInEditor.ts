@@ -1,5 +1,5 @@
 import type { editor } from 'monaco-editor';
-import type { DiagnosticTarget } from '../../engine/types';
+import type { DiagnosticTarget } from '../../engine';
 import { useAppStore, type MobileView } from '../../store/useAppStore';
 import { getEditor, onEditorRegistered } from './editorRegistry';
 

@@ -17,9 +17,7 @@ import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';
 import type { editor } from 'monaco-editor';
 import { computeDiagnostics } from '../splunkConfDiagnostics';
-import { lintConfigs } from '../../engine/configLint';
-import { parseConf } from '../../engine/parser/confParser';
-import type { ValidationDiagnostic } from '../../engine/types';
+import { lintConfigs, parseConf, type ValidationDiagnostic } from '../../engine';
 import { fakeModel } from '../../test/fakeModel';
 import { fcSeed } from '../../test/fcSeed';
 

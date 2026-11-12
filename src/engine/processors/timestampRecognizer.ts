@@ -12,14 +12,14 @@
  */
 
 import type { ConfDirective } from '../types';
-import { safeRegex } from '../../utils/splunkRegex';
+import { safeRegex } from '../utils/splunkRegex';
 import {
   KNOWN_ZONE_ABBREVIATIONS,
   parseTimestampDetailed,
   strftimeToRegex,
   type ParsedTimestamp,
   type ParseTimestampOptions,
-} from '../../utils/strftime';
+} from '../utils/strftime';
 import { effectiveDirective } from '../utils/directiveValues';
 
 // ---------------------------------------------------------------------------

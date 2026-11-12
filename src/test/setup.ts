@@ -1,7 +1,10 @@
 // Runs for every vitest file. Engine tests use the `node` env and skip the
 // jsdom-specific setup; component tests opt into jsdom via a
 // `// @vitest-environment jsdom` pragma and pick up the DOM bits here.
-import { initRegexEngineSync } from '../utils/splunkRegex';
+// The module itself, not the engine's entry point: importing the entry point here
+// would load every engine module before a test's vi.mock registers, and the
+// mock would then miss the module it names.
+import { initRegexEngineSync } from '../engine/utils/splunkRegex';
 
 type GetBuiltinModule = (id: 'node:fs') => { readFileSync(path: string): Uint8Array };
 

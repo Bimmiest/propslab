@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { RUN_STAGES } from '../../../../src/engine/runStages';
+import { RUN_STAGES } from '../../../../src/engine';
 import { createProgressBuffer, MAX_REPORTED_EVENTS, progressWriter, readProgress, RUN_PHASES } from '../progress';
 
 describe('run progress (#488)', () => {

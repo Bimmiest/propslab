@@ -24,9 +24,8 @@ import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';
 import { computeDiagnostics } from '../splunkConfDiagnostics';
 import { fakeModel } from '../../test/fakeModel';
-import { parseConf } from '../../engine/parser/confParser';
+import { parseConf, isIntegerLiteral } from '../../engine';
 import { fcSeed } from '../../test/fcSeed';
-import { isIntegerLiteral } from '../../engine/utils/directiveValues';
 
 fc.configureGlobal({ seed: fcSeed(5724), numRuns: 300 });
 

@@ -4,7 +4,7 @@
 // the sibling format.ts, delims.ts and keyCleaning.ts.
 
 import type { SplunkEvent, ConfStanza, ConfDirective } from '../types';
-import { extractionLimits, safeRegex, validateRegex, type RegexMatch, type SplunkRegex } from '../../utils/splunkRegex';
+import { extractionLimits, safeRegex, validateRegex, type RegexMatch, type SplunkRegex } from '../utils/splunkRegex';
 import { explainNoMatch, type NoOpReason } from '../noOpExplainer';
 import { getField, hasField, setField, addFieldValue } from '../utils/fieldBag';
 import { stripLeadingUnderscoreForField } from '../utils/internalFields';

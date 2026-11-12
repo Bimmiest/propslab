@@ -15,7 +15,7 @@ import { useAppStore } from '../../../store/useAppStore';
 import { toViewResult, type ViewResult } from '../../../utils/viewResult';
 import { makeEvent } from '../../../test/makeEvent';
 import { answerRun } from '../../../test/answerRun';
-import type { EventMetadata } from '../../../engine/types';
+import type { EventMetadata } from '../../../engine';
 
 const initial = useAppStore.getState();
 const meta: EventMetadata = { index: 'main', host: 'h', source: 's', sourcetype: 'st' };

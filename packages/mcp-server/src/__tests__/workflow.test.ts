@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import { getDirectivesForFile } from '../../../../src/engine/directiveRegistry';
+import { getDirectivesForFile } from '../../../../src/engine';
 import { createServer, SERVER_INSTRUCTIONS } from '../server';
 import { jsonResponseBytes, MAX_PAYLOAD_BYTES } from '../responseBudget';
 import { DIRECTIVE_REGISTRY_URI, directiveRegistryJson, workflowPromptText } from '../workflow';

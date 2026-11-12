@@ -5,8 +5,8 @@
 // because they decide which argument nodes to evaluate at all.
 
 import type { SplunkEvent } from '../../types';
-import { escapeRegex, safeRegex, validateRegex, type RegexMatch, type SplunkRegex } from '../../../utils/splunkRegex';
-import { formatStrftime } from '../../../utils/strftime';
+import { escapeRegex, safeRegex, validateRegex, type RegexMatch, type SplunkRegex } from '../../utils/splunkRegex';
+import { formatStrftime } from '../../utils/strftime';
 import {
   type EvalValue,
   type StaticType,

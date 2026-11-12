@@ -12,9 +12,7 @@
 
 import type { editor, languages, IRange } from 'monaco-editor';
 import { MISCASED_MARKER_CODE, MISSPELLED_MARKER_CODE } from './splunkConfDiagnostics';
-import { miscasedCanonical } from '../engine/parser/confParser';
-import { misspelledCanonical } from '../engine/misspelledDirective';
-import { DIRECTIVE_RE } from '../engine/parser/confParser';
+import { miscasedCanonical, misspelledCanonical, DIRECTIVE_RE } from '../engine';
 
 /**
  * The range covering just the key on a directive line, so the edit replaces the

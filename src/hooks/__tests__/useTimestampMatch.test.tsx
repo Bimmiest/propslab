@@ -9,8 +9,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useTimestampMatch } from '../useTimestampMatch';
-import type { TimeConfig, TimestampProbe } from '../../engine/timestampMatch';
-import type { TimestampMatchRequest, TimestampMatchResponse } from '../../engine/timestampMatchWorker';
+import type { TimeConfig, TimestampProbe } from '../../engine';
+import type { TimestampMatchRequest, TimestampMatchResponse } from '../../workers/timestampMatchWorker';
 import { requestsIn } from '../../test/workerInputs';
 
 class FakeWorker {

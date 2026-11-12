@@ -8,10 +8,9 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 import { useApplyDirective } from '../useApplyDirective';
 import { useAppStore } from '../../../../../store/useAppStore';
-import { runPipeline } from '../../../../../engine/pipeline';
-import { AT_FIXED_NOW } from '../../../../../engine/__tests__/runCtx';
+import { runPipeline, type EventMetadata } from '../../../../../engine';
+import { AT_FIXED_NOW } from '../../../../../test/runCtx';
 import { toViewResult } from '../../../../../utils/viewResult';
-import type { EventMetadata } from '../../../../../engine/types';
 
 const initial = useAppStore.getState();
 

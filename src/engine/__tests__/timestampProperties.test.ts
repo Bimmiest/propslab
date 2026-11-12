@@ -26,7 +26,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import fc from 'fast-check';
-import { formatStrftime, parseTimestamp } from '../../utils/strftime';
+import { formatStrftime, parseTimestamp } from '../utils/strftime';
 import { recognizeTimestamp } from '../processors/timestampRecognizer';
 import { extractTimestamps } from '../processors/timestampExtractor';
 import type { SplunkEvent } from '../types';

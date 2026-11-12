@@ -9,7 +9,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { runPipeline } from '../pipeline';
-import { regexCompileCount } from '../../utils/splunkRegex';
+import { regexCompileCount } from '../utils/splunkRegex';
 import type { EventMetadata, DirectiveNoOp } from '../types';
 import { FIXED_NOW } from './runCtx';
 

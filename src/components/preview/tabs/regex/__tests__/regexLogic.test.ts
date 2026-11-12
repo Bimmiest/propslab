@@ -8,7 +8,7 @@ import {
   extractNamedGroups,
   highlightSegments,
 } from '../regexLogic';
-import { matchInputs, type RegexMatchInfo } from '../../../../../engine/regexMatch';
+import { matchInputs, type RegexMatchInfo } from '../../../../../engine';
 import { fieldColorAt } from '../../shared/fieldColors';
 
 /** The first match of `pattern` in `raw`, as the worker reports it. */

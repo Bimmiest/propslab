@@ -1,5 +1,4 @@
-import { safeRegex } from '../../../../utils/splunkRegex';
-import type { RegexMatchInfo } from '../../../../engine/regexMatch';
+import { safeRegex, type RegexMatchInfo } from '../../../../engine';
 import type { Matched, RegexMatchState } from '../../../../hooks/useRegexMatch';
 import { fieldColorAt } from '../shared/fieldColors';
 

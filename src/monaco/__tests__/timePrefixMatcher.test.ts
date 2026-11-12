@@ -12,9 +12,8 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { Position, languages, CancellationToken } from 'monaco-editor';
-import type { TimestampMatchRequest, TimestampMatchResponse } from '../../engine/timestampMatchWorker';
-import { probeTimestamps } from '../../engine/timestampMatch';
-import { SplunkRegex } from '../../utils/splunkRegex';
+import type { TimestampMatchRequest, TimestampMatchResponse } from '../../workers/timestampMatchWorker';
+import { probeTimestamps, SplunkRegex } from '../../engine';
 import { useAppStore } from '../../store/useAppStore';
 import { LOAD_WAIT_FACTOR } from '../../workers/workerLifecycle';
 import { createHoverProvider } from '../splunkConfHover';
@@ -171,7 +170,7 @@ describe('TIME_FORMAT hover — TIME_PREFIX in a worker (#334)', () => {
     // Vite adds a query to the URL in the test run, and Stryker's instrumented
     // copy keeps it bare.
     const pending = matchTimePrefix('ts=', SAMPLE);
-    expect(worker().url).toMatch(/\/src\/engine\/timestampMatchWorker\.ts(\?|$)/);
+    expect(worker().url).toMatch(/\/src\/workers\/timestampMatchWorker\.ts(\?|$)/);
     expect(worker().options).toEqual({ type: 'module' });
     worker().answer();
     await expect(pending).resolves.toEqual({ status: 'matched', end: 8 });

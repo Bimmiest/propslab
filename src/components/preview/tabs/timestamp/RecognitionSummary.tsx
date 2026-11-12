@@ -1,4 +1,4 @@
-import type { TimeConfig } from '../../../../engine/timestampMatch';
+import type { TimeConfig } from '../../../../engine';
 import { useApplyDirective } from '../shared/useApplyDirective';
 import { recognisedDirectives, type RecognitionSummary } from './timestampLogic';
 

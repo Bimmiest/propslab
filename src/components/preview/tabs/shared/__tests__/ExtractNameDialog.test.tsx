@@ -2,8 +2,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { ExtractNameDialog } from '../ExtractNameDialog';
-import { matchInputs } from '../../../../../engine/regexMatch';
-import type { RegexMatchRequest, RegexMatchResponse } from '../../../../../engine/regexMatchWorker';
+import { matchInputs } from '../../../../../engine';
+import type { RegexMatchRequest, RegexMatchResponse } from '../../../../../workers/regexMatchWorker';
 import { lastRequest, requestsIn } from '../../../../../test/workerInputs';
 
 function setup(pattern?: string) {

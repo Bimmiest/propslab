@@ -27,8 +27,8 @@ import { STALLING_RAW, stallingStanza } from './stallingConf';
 // Counts the confs parsed on this thread, the server's. The parser itself still
 // runs: collectRegexSuspects below calls it for real. See withParseCount.
 const parseCalls = vi.hoisted(() => ({ count: 0 }));
-vi.mock('../../../../src/engine/parser/confParser', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../../src/engine/parser/confParser')>();
+vi.mock('../../../../src/engine', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../../src/engine')>();
   return {
     ...actual,
     parseConf: (...args: Parameters<typeof actual.parseConf>) => {

@@ -4,7 +4,7 @@ import { applyTransforms } from './transformsProcessor';
 import { applyKvMode } from './kvMode';
 import { getField } from '../utils/fieldBag';
 import { replayContext, type RunContext } from '../runContext';
-import { RegexDeadlineError } from '../../utils/splunkRegex';
+import { RegexDeadlineError } from '../utils/splunkRegex';
 
 type FieldBag = Record<string, string | string[]>;
 

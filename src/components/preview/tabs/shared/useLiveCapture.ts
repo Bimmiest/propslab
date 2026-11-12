@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useRegexMatch } from '../../../../hooks/useRegexMatch';
-import { validateRegex } from '../../../../utils/splunkRegex';
+import { validateRegex } from '../../../../engine';
 
 export type Capture =
   | { state: 'empty' }

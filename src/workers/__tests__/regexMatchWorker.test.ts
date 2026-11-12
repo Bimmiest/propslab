@@ -11,7 +11,10 @@ import { stubWasmFetch } from '../../test/wasmFetch';
 // A plain variable rather than a `vi.fn`: vitest fails a test whose mock
 // throws, even when the code under test catches it.
 let matchImpl: (pattern: string) => unknown = () => [];
-vi.mock('../regexMatch', () => ({ matchInputs: (pattern: string): unknown => matchImpl(pattern) }));
+vi.mock('../../engine', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../engine')>()),
+  matchInputs: (pattern: string): unknown => matchImpl(pattern),
+}));
 
 describe('regexMatchWorker', () => {
   beforeEach(() => {

@@ -1,4 +1,4 @@
-import { escapeRegex } from './splunkRegex';
+import { escapeRegex } from '../engine';
 
 // Bound the compiled-pattern cache so it can't grow without limit across a long
 // session over a large sample (each distinct key/value pair compiles 4 regexes).

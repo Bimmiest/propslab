@@ -9,7 +9,7 @@ import { appendTraceStep, metadataChanges } from '../utils/traceStep';
 import { VALID_UNSIMULATED_DEST_KEYS, normaliseDestKey } from '../transforms/destKeys';
 import { atDirective, atStanza } from '../parser/provenance';
 import { effectiveDirective, parseSplunkBool } from '../utils/directiveValues';
-import { validateRegex } from '../../utils/splunkRegex';
+import { validateRegex } from '../utils/splunkRegex';
 import { epochOutOfRangeMessage } from '../utils/epochTime';
 import { indexedFields } from '../utils/metadataFields';
 import { hasField } from '../utils/fieldBag';

@@ -34,10 +34,15 @@ import { explainOutputShape, simulateOutputShape, validateOutputShape } from '..
 import { lintRegexDirectives } from '../regexLint';
 import { regexEngineModule } from '../regexEngine';
 import { resultText } from './resultText';
-import { parseConf } from '../../../../src/engine/parser/confParser';
-import { getDirectivesForFile } from '../../../../src/engine/directiveRegistry';
-import { validateRegex } from '../../../../src/utils/splunkRegex';
-import type { ConfInput, ProcessingResult, SplunkEvent, ValidationDiagnostic } from '../../../../src/engine/types';
+import {
+  parseConf,
+  getDirectivesForFile,
+  validateRegex,
+  type ConfInput,
+  type ProcessingResult,
+  type SplunkEvent,
+  type ValidationDiagnostic,
+} from '../../../../src/engine';
 import { fcSeed } from '../../../../src/test/fcSeed';
 import { makeEvent } from '../../../../src/test/makeEvent';
 

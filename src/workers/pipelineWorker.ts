@@ -11,16 +11,21 @@
  *         PipelineWorkerResponse, or a WorkerSkippedResponse, per request
  */
 
-import { runPipeline } from './pipeline';
-import type { ConfInput, EventMetadata, PipelineOptions, ValidationDiagnostic } from './types';
-import { serveWithRegexEngine } from '../workers/regexEngineLoader';
+import {
+  runPipeline,
+  type ConfInput,
+  type EventMetadata,
+  type PipelineOptions,
+  type ValidationDiagnostic,
+} from '../engine';
+import { serveWithRegexEngine } from './regexEngineLoader';
 import { toViewResult, type ViewResult } from '../utils/viewResult';
 import {
   createRequestQueue,
   type QueuedRequest,
   type WorkerInputsMessage,
   type WorkerSkippedResponse,
-} from '../workers/workerProtocol';
+} from './workerProtocol';
 
 export interface PipelineWorkerRequest extends QueuedRequest {
   rawData: string;

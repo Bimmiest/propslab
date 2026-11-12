@@ -10,11 +10,14 @@
 
 import { useMemo, useState } from 'react';
 import { useAppStore } from '../../../store/useAppStore';
-import { parseConf } from '../../../engine/parser/confParser';
-import { resolveStanzasForEvent } from '../../../engine/parser/stanzaMatcher';
-import { resolveEffectiveConfig, type EffectiveDirective } from '../../../engine/parser/effectiveConfig';
+import {
+  parseConf,
+  resolveStanzasForEvent,
+  resolveEffectiveConfig,
+  type EffectiveDirective,
+  getDirectiveInfo,
+} from '../../../engine';
 import { revealInEditor } from '../../editor/revealInEditor';
-import { getDirectiveInfo } from '../../../engine/directiveRegistry';
 import { copyQuietly } from '../../../utils/clipboard';
 import {
   ContextMenu,
