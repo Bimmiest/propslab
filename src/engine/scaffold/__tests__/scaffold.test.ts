@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { detectLineFormat } from '../analyzers/lineFormat';
-import { detectTimestamp } from '../analyzers/timestamp';
+import { detectTimestamp, locateTimestamp } from '../analyzers/timestamp';
 import { detectTruncate } from '../analyzers/truncate';
 import { normalizeSourcetype, detectSourcetypeHygiene } from '../analyzers/sourcetype';
 import { renderStanza, appendStanza } from '../serialize';
@@ -147,6 +147,110 @@ describe('detectTimestamp', () => {
 
   it('returns nothing when no timestamp is present', () => {
     expect(detectTimestamp(splitLines('no time here\nstill none'))).toEqual([]);
+  });
+
+  // TIME_PREFIX matches its first occurrence, and the format is read right
+  // after it: a `[` before the one that opens the timestamp would read "INFO]".
+  it('suggests no TIME_PREFIX when the prefix occurs earlier in the line', () => {
+    const raw = '[INFO] [2024-01-15 10:00:00] started';
+    const out = detectTimestamp(splitLines(raw));
+    expect(byKey(out, 'TIME_PREFIX')).toBeUndefined();
+    // No prefix: the lookahead counts from the event start, past the timestamp's end.
+    expect(byKey(out, 'MAX_TIMESTAMP_LOOKAHEAD')?.value).toBe('37');
+  });
+
+  it('gives each suggestion with a prefix its confidence, evidence and default', () => {
+    const raw = 'id=1 ts=2024-01-15T10:00:00 x\nid=2 ts=2024-01-15T10:00:01 y';
+    expect(detectTimestamp(splitLines(raw))).toEqual([
+      {
+        key: 'TIME_FORMAT',
+        value: '%Y-%m-%dT%H:%M:%S',
+        confidence: 'high',
+        evidence: 'Matched in 2/2 sample lines',
+        enabledByDefault: true,
+      },
+      {
+        key: 'TIME_PREFIX',
+        value: 'ts=',
+        confidence: 'medium',
+        evidence: 'Timestamp follows the literal "ts="',
+        enabledByDefault: true,
+      },
+      {
+        key: 'MAX_TIMESTAMP_LOOKAHEAD',
+        value: '20',
+        confidence: 'medium',
+        evidence: 'Timestamp is 19 characters; cap the search just past TIME_PREFIX for indexing performance',
+        enabledByDefault: true,
+      },
+    ]);
+  });
+
+  it('gives the lookahead with no prefix the confidence of the format', () => {
+    const raw = '2024-01-15 10:00:00 a\nno time here';
+    expect(detectTimestamp(splitLines(raw))[1]).toEqual({
+      key: 'MAX_TIMESTAMP_LOOKAHEAD',
+      value: '29',
+      confidence: 'medium',
+      evidence: 'Timestamp ends near character 19; cap the search there for indexing performance',
+      enabledByDefault: true,
+    });
+  });
+
+  // The confidence is the share of the sampled lines that the format read.
+  it.each([
+    [9, 1, 'high'],
+    [1, 1, 'medium'],
+    [1, 2, 'low'],
+  ])('rates %i reads in %i more lines as %s', (hits, misses, confidence) => {
+    const lines = [...Array<string>(hits).fill('2024-01-15 10:00:00 a'), ...Array<string>(misses).fill('none')];
+    expect(byKey(detectTimestamp(lines), 'TIME_FORMAT')?.confidence).toBe(confidence);
+  });
+
+  it('samples only lines with text, and only the first twenty of them', () => {
+    // Blank and whitespace-only lines are not sampled, so they do not lower the share.
+    expect(byKey(detectTimestamp(['', '  ', '2024-01-15 10:00:00 a', '\t']), 'TIME_FORMAT')?.confidence).toBe('high');
+    // A timestamp past the twentieth line with text is not sampled.
+    expect(detectTimestamp([...Array<string>(20).fill('none'), '2024-01-15 10:00:00 a'])).toEqual([]);
+  });
+
+  it('suggests the format most lines use, and the first one seen on a tie', () => {
+    const iso = '2024-01-15 10:00:00 a';
+    const apache = '15/Jan/2024:10:00:00 b';
+    const format = (lines: string[]) => byKey(detectTimestamp(lines), 'TIME_FORMAT')?.value;
+    expect(format([apache, iso, iso])).toBe('%Y-%m-%d %H:%M:%S');
+    expect(format([iso, iso, apache])).toBe('%Y-%m-%d %H:%M:%S');
+    expect(format([apache, iso])).toBe('%d/%b/%Y:%H:%M:%S');
+  });
+});
+
+describe('locateTimestamp (#898)', () => {
+  it('uses the literal before the timestamp, and caps the lookahead to just past it', () => {
+    expect(locateTimestamp('id=1 ts=2024-01-15T10:00:00 x', { start: 8, end: 27 })).toEqual({
+      prefix: 'ts=',
+      timePrefix: 'ts=',
+      lookahead: 20,
+    });
+  });
+
+  it('escapes the prefix as a regex', () => {
+    expect(locateTimestamp('h [15/Jan/2024:10:00:00 +0000]', { start: 3, end: 29 }).timePrefix).toBe('\\[');
+  });
+
+  it('measures the lookahead from the event start when there is no prefix', () => {
+    expect(locateTimestamp('2024-01-15 10:00:00 a', { start: 0, end: 19 })).toEqual({
+      prefix: '',
+      timePrefix: null,
+      lookahead: 29,
+    });
+  });
+
+  it('drops a prefix whose first occurrence is not the one before the timestamp', () => {
+    expect(locateTimestamp('[INFO] [2024-01-15 10:00:00]', { start: 8, end: 27 })).toEqual({
+      prefix: '',
+      timePrefix: null,
+      lookahead: 37,
+    });
   });
 });
 
