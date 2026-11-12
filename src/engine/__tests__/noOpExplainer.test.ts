@@ -194,6 +194,12 @@ describe('describeNoOp', () => {
     expect(describeNoOp({ kind: 'regex-invalid', error: 'missing )' })).toBe('the pattern did not compile: missing )');
   });
 
+  it('says a pattern matched when the replacement equals the matched text (#875)', () => {
+    expect(describeNoOp({ kind: 'replacement-identical' })).toBe(
+      'the pattern matched, but the replacement is the same as the matched text, so the event did not change',
+    );
+  });
+
   it('says plainly when an event was past the explanation limit', () => {
     expect(describeNoOp({ kind: 'not-explained' })).toBe('Not analysed: explanation limit reached for this directive');
   });
