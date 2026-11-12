@@ -46,7 +46,7 @@ describe('FieldsTab', () => {
     expect(within(container).getByText('idx_field')).toBeInTheDocument();
     expect(within(container).getByText('ext_field')).toBeInTheDocument();
     expect(within(container).getByText('evaled')).toBeInTheDocument();
-    expect(within(container).getByText('3 fields')).toBeInTheDocument();
+    expect(within(container).getByText('3 fields (1 index-time, 2 search-time)')).toBeInTheDocument();
   });
 
   it('filters to index-time only when Index-time pill is clicked', () => {
@@ -55,7 +55,8 @@ describe('FieldsTab', () => {
     expect(within(container).getByText('idx_field')).toBeInTheDocument();
     expect(within(container).queryByText('ext_field')).not.toBeInTheDocument();
     expect(within(container).queryByText('evaled')).not.toBeInTheDocument();
-    expect(within(container).getByText('1 fields')).toBeInTheDocument();
+    // The split is of all the fields: a filter says how many it leaves.
+    expect(within(container).getByText('1 of 3 fields (1 index-time, 2 search-time)')).toBeInTheDocument();
   });
 
   it('filters to search-time only when Search-time pill is clicked', () => {
@@ -64,7 +65,7 @@ describe('FieldsTab', () => {
     expect(within(container).queryByText('idx_field')).not.toBeInTheDocument();
     expect(within(container).getByText('ext_field')).toBeInTheDocument();
     expect(within(container).getByText('evaled')).toBeInTheDocument();
-    expect(within(container).getByText('2 fields')).toBeInTheDocument();
+    expect(within(container).getByText('2 of 3 fields (1 index-time, 2 search-time)')).toBeInTheDocument();
   });
 
   it('lists the metadata as default fields, index-time, and an extracted field of the same name wins (#741)', () => {
@@ -81,8 +82,8 @@ describe('FieldsTab', () => {
     useAppStore.setState({ processingResult: toViewResult({ ...raw, events, eventCount: 2 }) });
     const { container } = render(<FieldsTab />);
     fireEvent.click(within(container).getByRole('button', { name: 'Index-time' }));
-    // host, sourcetype and index; source is empty, so it has no row.
-    expect(within(container).getByText('3 fields')).toBeInTheDocument();
+    // host, sourcetype and index; source is empty, so it has no row. ext_field has no step in this fixture.
+    expect(within(container).getByText('3 of 4 fields (3 default, 1 no phase)')).toBeInTheDocument();
     expect(within(container).queryByText('source')).not.toBeInTheDocument();
     const host = within(container).getByText('host').closest('tr')!;
     expect(host).toHaveTextContent('default');
@@ -280,7 +281,7 @@ describe('FieldsTab — windowed for wide events (#454)', () => {
     const first = container.querySelector('tbody tr[aria-rowindex]');
     expect(first).toHaveAttribute('aria-rowindex', '2');
     expect(first).toHaveTextContent('f0000');
-    expect(within(container).getByText('2000 fields')).toBeInTheDocument();
+    expect(within(container).getByText(/^2000 fields/)).toBeInTheDocument();
   });
 
   it('still finds a row outside the window through the search box', () => {

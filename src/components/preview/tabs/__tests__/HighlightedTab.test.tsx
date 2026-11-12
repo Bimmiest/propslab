@@ -105,6 +105,12 @@ describe('HighlightedTab', () => {
     expect(screen.getByRole('button', { name: 'Field list' })).toHaveAttribute('title', 'Show field list');
   });
 
+  it('labels the count of the sidebar as extracted fields (#894)', () => {
+    render(<HighlightedTab items={items} allEvents={items} currentPage={1} eventsPerPage={10} />);
+    expect(screen.getByText(/^\d+ extracted$/)).toBeInTheDocument();
+    expect(screen.queryByText(/^\d+ fields$/)).not.toBeInTheDocument();
+  });
+
   it('renders "events match pinned" counter when a field is pinned via Fields sidebar', () => {
     const { container } = render(<HighlightedTab items={items} allEvents={items} currentPage={1} eventsPerPage={10} />);
     // Click the "username" field chip in the sidebar to pin it.
