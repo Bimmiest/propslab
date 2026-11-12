@@ -310,7 +310,7 @@ jobs:
 
       - name: Smoke tests in WebKit
         id: e2e
-        run: npm run test:e2e -- --project webkit -g redeploy --repeat-each 2
+        run: npm run test:e2e -- --project webkit
 
       - name: Upload Playwright report
         if: ${{ failure() && steps.e2e.outcome == 'failure' }}

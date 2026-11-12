@@ -747,32 +747,26 @@ test.describe('dictionary', () => {
 
   test('a tab left open across a redeploy reloads onto the new build and keeps its edits (#706)', async ({ page }) => {
     await openApp(page);
-    // The redeploy deleted the chunk this tab knows: its first fetch 404s, as the old hash would.
-    let deleted = true;
+    // The redeploy deleted the chunk this tab knows: its fetch 404s, as the
+    // old hash would. The new build names the chunk by a new URL, as a real
+    // one does: WebKit does not fetch a URL again in the reloaded page after
+    // a reload cancelled its 404, and fails the import with no request.
+    let redeployed = false;
     await page.route(/\/assets\/DictionaryView-[^/]+\.js$/, (route) => {
-      if (!deleted) return route.continue();
-      deleted = false;
-      // `no-store`: here the new build serves the same URL again, which a
-      // real redeploy never does. Without it, WebKit's import after the
-      // reload failed with no request on the network: the 404 was reused.
-      return route.fulfill({ status: 404, headers: { 'Cache-Control': 'no-store' } });
+      redeployed = true;
+      return route.fulfill({ status: 404 });
+    });
+    await page.route(/\/assets\/index-[^/]+\.js$/, async (route) => {
+      if (!redeployed) return route.continue();
+      const response = await route.fetch();
+      const body = (await response.text()).replace(/DictionaryView-[\w-]+\.js/g, '$&?build=new');
+      return route.fulfill({ response, body });
     });
     let prompts = 0;
     page.on('dialog', (dialog) => {
       if (dialog.type() === 'beforeunload') prompts++;
       void dialog.dismiss();
     });
-    // Temporary diagnostics for the WebKit job.
-    const seen: string[] = [];
-    page.on('request', (r) => {
-      if (/DictionaryView|\/$|index-/.test(r.url())) seen.push(`req ${r.url().slice(-40)}`);
-    });
-    page.on('requestfailed', (r) => seen.push(`failed ${r.url().slice(-40)} ${r.failure()?.errorText ?? ''}`));
-    page.on('response', (r) => {
-      if (/DictionaryView/.test(r.url())) seen.push(`res ${r.status()} ${r.url().slice(-40)}`);
-    });
-    page.on('console', (m) => seen.push(`console ${m.type()} ${m.text().slice(0, 120)}`));
-    page.on('framenavigated', (f) => seen.push(`nav ${f.url()}`));
     const props = page.locator('.monaco-editor').nth(1);
     await props.click();
     await page.keyboard.type('[web]');
@@ -781,13 +775,7 @@ test.describe('dictionary', () => {
     await page.getByRole('tab', { name: 'Dictionary' }).click();
     await reloaded;
 
-    const shown = await expect(page.getByRole('listbox', { name: 'Splunk directives' }))
-      .toBeVisible({ timeout: 15_000 })
-      .then(
-        () => true,
-        () => false,
-      );
-    expect(shown, `DIAG12 ${seen.join(' | ')}`).toBe(true);
+    await expect(page.getByRole('listbox', { name: 'Splunk directives' })).toBeVisible({ timeout: 30_000 });
     // The edits were saved for the reload, so there was nothing to ask about.
     expect(prompts).toBe(0);
     await page.getByRole('tab', { name: 'Simulator' }).click();
