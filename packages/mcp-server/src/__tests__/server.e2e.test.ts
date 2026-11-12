@@ -261,6 +261,52 @@ describe('MCP server end to end', () => {
     }
   }, 20_000);
 
+  it('advertises every input schema as closed (#884)', async () => {
+    const { tools } = await client.listTools();
+    for (const tool of tools) {
+      expect(tool.inputSchema, tool.name).toMatchObject({ type: 'object', additionalProperties: false });
+    }
+  });
+
+  // One misspelled argument per tool. Before #884 each one was dropped, and
+  // the call ran on the defaults: an empty conf, or the whole listing.
+  it.each([
+    {
+      name: 'simulate',
+      args: { raw: 'x\n', sourcetype: 'st', props: '[st]\nSEDCMD-x = s/a/b/g' },
+      unknown: 'props',
+      meant: 'props_conf',
+    },
+    { name: 'validate', args: { transforms: '[t]\nREGEX = x\n' }, unknown: 'transforms', meant: 'transforms_conf' },
+    {
+      name: 'explain_precedence',
+      args: { conf: '[st]\n', sourcetyp: 'st' },
+      unknown: 'sourcetyp',
+      meant: 'sourcetype',
+    },
+    { name: 'lookup_directive', args: { directive: 'LINE_BREAKER' }, unknown: 'directive', meant: null },
+  ])('refuses an unknown argument to $name, and names it', async ({ name, args, unknown, meant }) => {
+    const result = (await client.callTool({ name, arguments: args })) as TextResult;
+    expect(result.isError).toBe(true);
+    const text = resultText(result);
+    expect(text).toContain(`unknown argument \`${unknown}\``);
+    if (meant === null) expect(text).not.toContain('did you mean');
+    else expect(text).toContain(`(did you mean \`${meant}\`?)`);
+    // The accepted arguments, so the agent can correct the call in one step.
+    expect(text).toMatch(/This tool takes: .+\./);
+  });
+
+  it('names each unknown argument in one refusal', async () => {
+    const result = (await client.callTool({
+      name: 'validate',
+      arguments: { props: '[st]\n', foo: 1 },
+    })) as TextResult;
+    expect(result.isError).toBe(true);
+    expect(resultText(result)).toContain(
+      'unknown arguments `props` (did you mean `props_conf`?), `foo`. This tool takes: props_conf, transforms_conf, timeout_ms.',
+    );
+  });
+
   it('rejects input the schema does not allow before anything runs', async () => {
     const result = await client.callTool({
       name: 'simulate',

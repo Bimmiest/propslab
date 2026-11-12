@@ -3,8 +3,8 @@
 // The editors' right-click menu (#745), the app's shared ContextMenu rather
 // than Monaco's own, which this build does not load and which would look and
 // behave unlike every other menu here. Shift+F10 and the Menu key open it as
-// well: the browser sends the contextmenu event to Monaco's focused textarea,
-// and it bubbles to the trigger.
+// well: the shared trigger sends the contextmenu event to Monaco's focused
+// textarea, which sits at the cursor, so the menu opens there.
 // ---------------------------------------------------------------------------
 
 import type { PointerEvent, ReactNode } from 'react';

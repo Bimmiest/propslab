@@ -1,9 +1,9 @@
-import { useMemo } from 'react';
 import { useAppStore } from '../../store/useAppStore';
 import { Icon } from '../ui/Icon';
 import { Tooltip } from '../ui/Tooltip';
+import { FieldCountTip } from './FieldCountTip';
 import { RUN_BUDGET_MS } from '../../hooks/useProcessingPipeline';
-import { countByLevel } from '../../utils/diagnosticCounts';
+import { useProblemCounts } from '../editor/useFileProblems';
 import { BUILD_LABEL, SHORT_COMMIT } from '../about/buildInfo';
 
 const MAIN_THREAD_HINT =
@@ -115,7 +115,6 @@ function PipelineStatus() {
 /** Right: events / fields / diagnostics */
 function ResultSummary() {
   const result = useAppStore((s) => s.processingResult);
-  const diagnostics = useAppStore((s) => s.validationDiagnostics);
   const toggleAbout = useAppStore((s) => s.toggleAbout);
 
   // Counted once per run, with the result (`fieldStats`): this bar is always
@@ -124,7 +123,8 @@ function ResultSummary() {
   // The default fields count as Splunk counts them, once even when also extracted.
   const fieldCount = stats ? stats.names.length + stats.metadataNames.filter((n) => !stats.counts.has(n)).length : 0;
 
-  const { error: errorCount, warning: warningCount } = useMemo(() => countByLevel(diagnostics), [diagnostics]);
+  // The problems the editors' panels list, so the counts agree with them (#899).
+  const { error: errorCount, warning: warningCount } = useProblemCounts();
 
   return (
     <div className="flex items-center gap-3">
@@ -133,9 +133,12 @@ function ResultSummary() {
           <span>
             {result.eventCount} event{result.eventCount !== 1 ? 's' : ''}
           </span>
-          <span>
-            {fieldCount} field{fieldCount !== 1 ? 's' : ''}
-          </span>
+          {/* Focusable, so the tooltip with the definition is not for a mouse alone. */}
+          <Tooltip content={<FieldCountTip fieldCount={fieldCount} />} side="top">
+            <span tabIndex={0} className="cursor-help">
+              {fieldCount} field{fieldCount !== 1 ? 's' : ''}
+            </span>
+          </Tooltip>
         </>
       )}
       {errorCount > 0 && (

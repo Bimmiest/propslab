@@ -1,8 +1,10 @@
+import { useId, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { ViewEvent } from '../../../../utils/viewResult';
 import { HighlightedRaw } from './HighlightedRaw';
 import { EventContextMenu } from './EventContextMenu';
 import { EventCardHeader, EventNumber } from './EventCardHeader';
+import { fieldTargetOf, type FieldTarget } from './fieldSpans';
 
 interface FieldEventCardProps {
   event: ViewEvent;
@@ -35,9 +37,16 @@ export function FieldEventCard({
   fieldOffsets,
   children,
 }: FieldEventCardProps) {
+  // The value a right-click or Shift+F10 landed on, read before the card's one
+  // menu opens: its field menu then replaces the event menu.
+  const [menuField, setMenuField] = useState<FieldTarget | null>(null);
+  const hintId = useId();
   return (
-    <EventContextMenu event={event}>
-      <div className="border border-[var(--color-border)] rounded bg-[var(--color-bg-secondary)]">
+    <EventContextMenu event={event} field={menuField} onTogglePin={onFieldClick}>
+      <div
+        className="border border-[var(--color-border)] rounded bg-[var(--color-bg-secondary)]"
+        onContextMenuCapture={(e) => setMenuField(fieldTargetOf(e.target, e.currentTarget))}
+      >
         <EventCardHeader>
           <EventNumber globalIdx={globalIdx} />
           {badges}
@@ -52,8 +61,14 @@ export function FieldEventCard({
             onFieldClick={onFieldClick}
             fieldSourceKeys={fieldSourceKeys}
             fieldOffsets={fieldOffsets}
+            hintId={hintId}
           />
         </pre>
+        {/* Outside the <pre>, so a copy of the event text does not take it. */}
+        <span id={hintId} className="sr-only">
+          Left and Right arrow keys move between the fields of the event. Enter pins the field. Shift+F10 or the Menu
+          key opens its menu.
+        </span>
         {children}
       </div>
     </EventContextMenu>

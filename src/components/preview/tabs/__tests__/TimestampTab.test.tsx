@@ -13,6 +13,7 @@ import { extractTimestamps } from '../../../../engine/processors/timestampExtrac
 import { runCtx } from '../../../../engine/__tests__/runCtx';
 import type { ConfDirective, SplunkEvent } from '../../../../engine/types';
 import { toViewResult } from '../../../../utils/viewResult';
+import { answerRun } from '../../../../test/answerRun';
 
 const dir = (key: string, value: string): ConfDirective => ({ key, value, line: 1, directiveType: key });
 
@@ -42,10 +43,11 @@ describe('TimestampTab', () => {
       },
       true,
     );
+    answerRun();
   });
   afterEach(() => vi.useRealTimers());
 
-  it('in manual-apply mode, keeps the applied config until the pipeline is run (#316)', () => {
+  it('in manual-apply mode, keeps the config of the run until another run answers (#316, #879)', () => {
     useAppStore.setState({ settings: { perEventPipeline: false, manualApply: true } });
     render(<TimestampTab items={items} currentPage={1} eventsPerPage={10} />);
     expect(shownFormat()).toBe('%Y-%m-%d');
@@ -56,17 +58,25 @@ describe('TimestampTab', () => {
     });
     expect(shownFormat()).toBe('%Y-%m-%d');
 
-    act(() => useAppStore.getState().triggerManualRun());
+    act(() => answerRun());
     expect(shownFormat()).toBe('%Y');
   });
 
-  it('in auto mode, follows the editor after the pipeline debounce, not per keystroke (#316)', () => {
+  it('mounted after edits that did not run, shows the config of the run (#879)', () => {
+    useAppStore.setState({ settings: { perEventPipeline: false, manualApply: true } });
+    act(() => useAppStore.getState().setPropsConf(conf('%Y')));
+    render(<TimestampTab items={items} currentPage={1} eventsPerPage={10} />);
+    expect(shownFormat()).toBe('%Y-%m-%d');
+  });
+
+  it('in auto mode, keeps the config of the events on screen until the run answers (#316, #879)', () => {
     render(<TimestampTab items={items} currentPage={1} eventsPerPage={10} />);
     act(() => useAppStore.getState().setPropsConf(conf('%Y')));
-    expect(shownFormat()).toBe('%Y-%m-%d');
     act(() => {
-      vi.advanceTimersByTime(300);
+      vi.advanceTimersByTime(5000);
     });
+    expect(shownFormat()).toBe('%Y-%m-%d');
+    act(() => answerRun());
     expect(shownFormat()).toBe('%Y');
   });
 
@@ -85,12 +95,14 @@ describe('TimestampTab', () => {
         'TIME_FORMAT = %Y-%m-%d',
       ].join('\n'),
     });
+    answerRun();
     render(<TimestampTab items={items} currentPage={1} eventsPerPage={10} />);
     expect(shownFormat()).toBe('%Y-%m-%d');
   });
 
   it('reads an empty TIME_PREFIX as not set (#328)', () => {
     useAppStore.setState({ propsConf: '[st]\nTIME_PREFIX =\nTIME_FORMAT = %Y-%m-%d\n' });
+    answerRun();
     render(<TimestampTab items={items} currentPage={1} eventsPerPage={10} />);
     expect(screen.getByText(/^TIME_PREFIX=/)).toHaveTextContent('not set');
   });
@@ -101,6 +113,7 @@ describe('TimestampTab', () => {
     useAppStore.setState({
       propsConf: '[st]\nTIME_PREFIX = host=\\S+\\s\nTIME_FORMAT = %Y-%m-%d %H:%M:%S\nSEDCMD-mask = s/host=\\S+ //\n',
     });
+    answerRun();
     const time = new Date('2026-01-15T10:00:00.000Z');
     const rewritten: EnrichedEvent = {
       ...item,
@@ -132,20 +145,27 @@ describe('TimestampTab', () => {
 });
 
 describe('TimestampTab inputs (#565)', () => {
-  it('does not re-render on a config keystroke when it is given the run inputs', () => {
+  it('does not re-render on a config keystroke, only when a run answers', () => {
+    useAppStore.setState(
+      {
+        ...initial,
+        propsConf: '[st]\nTIME_FORMAT = %Y-%m-%d',
+        metadata: { index: 'main', host: 'h', source: 's', sourcetype: 'st' },
+      },
+      true,
+    );
+    answerRun();
     let renders = 0;
-    const inputs = {
-      propsConf: '[st]\nTIME_FORMAT = %Y-%m-%d',
-      metadata: { index: 'main', host: 'h', source: 's', sourcetype: 'st' },
-    };
     render(
       <Profiler id="ts" onRender={() => renders++}>
-        <TimestampTab items={items} currentPage={1} eventsPerPage={10} inputs={inputs} />
+        <TimestampTab items={items} currentPage={1} eventsPerPage={10} />
       </Profiler>,
     );
     const before = renders;
     act(() => useAppStore.getState().setPropsConf('[st]\nTIME_FORMAT = %d/%m/%Y'));
     expect(renders).toBe(before);
+    act(() => answerRun());
+    expect(renders).toBeGreaterThan(before);
   });
 });
 
@@ -184,6 +204,7 @@ describe('TimestampTab with no TIME_FORMAT (#898)', () => {
       },
       true,
     );
+    answerRun();
   });
   afterEach(() => vi.useRealTimers());
 
@@ -262,6 +283,7 @@ describe('TimestampTab with no TIME_FORMAT (#898)', () => {
         inputMetadata: { index: 'main', host: 'h', source: 's', sourcetype: 'st' },
       }),
     });
+    answerRun();
     render(<TimestampTab items={events.slice(0, 1).map(enrich)} currentPage={1} eventsPerPage={1} />);
     await settle();
     expect(screen.getByRole('region', { name: 'Automatic timestamp recognition' })).toHaveTextContent(
@@ -281,6 +303,7 @@ describe('TimestampTab with no TIME_FORMAT (#898)', () => {
 
   it('keeps a TIME_PREFIX that is set, and writes TIME_FORMAT alone', async () => {
     useAppStore.setState({ propsConf: '[st]\nTIME_PREFIX = ts=\n' });
+    answerRun();
     const events = run(['id ts=2026-10-25 14:23:01 x'], [dir('TIME_PREFIX', 'ts=')]);
     render(<TimestampTab items={events} currentPage={1} eventsPerPage={10} />);
     await settle();
@@ -302,6 +325,7 @@ describe('TimestampTab with no TIME_FORMAT (#898)', () => {
 
   it('shows no recognition panel when TIME_FORMAT is set, and names the match TIME_FORMAT in the legend', async () => {
     useAppStore.setState({ propsConf: '[st]\nTIME_FORMAT = %Y-%m-%d\n' });
+    answerRun();
     render(<TimestampTab items={items} currentPage={1} eventsPerPage={10} />);
     await settle();
     expect(screen.queryByRole('region', { name: 'Automatic timestamp recognition' })).not.toBeInTheDocument();

@@ -125,3 +125,27 @@ describe('a mis-cased marker that the line no longer matches', () => {
     expect(staleActions('[st]\ntime_format = %s', '[st]\ntime_format = %s', 'another-code')).toEqual([]);
   });
 });
+
+describe('misspelled attribute quick fix (#899)', () => {
+  it('offers the attribute a key is one edit from', () => {
+    const actions = actionsFor('[st]\nTIME_FROMAT = %Y');
+    expect(actions.map((a) => a.title)).toEqual(['Change "TIME_FROMAT" to "TIME_FORMAT"']);
+    expect(edit(actions[0]!).text).toBe('TIME_FORMAT');
+  });
+
+  it('keeps the class name of a class key', () => {
+    expect(edit(actionsFor('[st]\nEXTRCT-ip = (?<ip>\\S+)')[0]!).text).toBe('EXTRACT-ip');
+  });
+
+  it('offers nothing once the line no longer holds a typo', () => {
+    const model = fakeModel('[st]\nTIME_FORMAT = %Y');
+    const markers = toMarkerData(computeDiagnostics(fakeModel('[st]\nTIME_FROMAT = %Y'), 'props.conf'));
+    const result = createCodeActionProvider('props.conf').provideCodeActions(
+      model,
+      { startLineNumber: 1, startColumn: 1, endLineNumber: 1, endColumn: 1 } as Range,
+      { markers, trigger: monacoLanguages.CodeActionTriggerType.Invoke },
+      { isCancellationRequested: false, onCancellationRequested: () => ({ dispose: () => undefined }) },
+    );
+    expect((result as languages.CodeActionList).actions).toEqual([]);
+  });
+});

@@ -15,6 +15,7 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from '../../ui/ContextMenu';
+import { Identifier } from '../../ui/Identifier';
 import { currentStepDirectiveLine, stepDictionaryKey, stepTransformsLine } from './shared/fieldDirective';
 
 /** Per-event detail rows rendered at first, and added per "show more". */
@@ -197,7 +198,9 @@ function StepMenuItems({ step }: { step: StepSummary }) {
   const description = [`${step.processor}: ${step.summaryText}`, ...step.descriptions.slice(1)].join('\n');
   return (
     <>
-      <ContextMenuLabel>{step.processor}</ContextMenuLabel>
+      <ContextMenuLabel>
+        <Identifier>{step.processor}</Identifier>
+      </ContextMenuLabel>
       <ContextMenuItem
         disabled={propsLine === null}
         onSelect={() => propsLine !== null && revealInEditor('props.conf', propsLine)}

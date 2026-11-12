@@ -18,6 +18,7 @@ src/
 │   │                          #   hover, linting AND the dictionary
 │   ├── registry/              # The directive entries, props and transforms
 │   ├── stanzaRegistry.ts      # The four stanza header kinds + precedence
+│   ├── misspelledDirective.ts # The directive a key is one edit from
 │   ├── pipelineStages.ts      # The 11 stages, and key → stage lookup
 │   ├── parser/
 │   │   ├── confParser.ts      # INI parser + default/local layer merge → ParsedConf
@@ -37,6 +38,7 @@ src/
 │   ├── splunkConfFolding.ts
 │   ├── splunkConfDiagnostics.ts
 │   ├── splunkConfCodeActions.ts
+│   ├── editorProblems.ts      # One problem list per editor: lint + run
 │   ├── timeFormatPreview.ts   # TIME_FORMAT hover preview
 │   ├── timePrefixMatcher.ts   #   and its off-thread TIME_PREFIX match
 │   ├── markdown.ts            # Escape user text in hover Markdown
@@ -74,7 +76,7 @@ packages/
 └── mcp-server/                # MCP server over the engine
     └── src/responseBudget.ts  #   Caps each tool response in bytes on the wire
 
-e2e/                           # Playwright tests (production build, Chromium)
+e2e/                           # Playwright tests (production build; the smoke spec also in Firefox and WebKit)
 ├── fixtures.ts                # Console/CSP error collection + readiness helpers
 ├── smoke.spec.ts
 ├── a11y.spec.ts               # axe-core over every main view, both themes
@@ -85,11 +87,11 @@ e2e/                           # Playwright tests (production build, Chromium)
 
 ## State management
 
-Single Zustand store (`src/store/useAppStore.ts`). The store is flat — components subscribe to individual slices rather than reading the whole store. A subscription re-renders its component on every change, so the ones that change per keystroke sit in leaves: the pipeline hook runs in `PipelineController`, which renders nothing, and PreviewPanel reads the run's inputs through a small provider rather than itself.
+Single Zustand store (`src/store/useAppStore.ts`). The store is flat — components subscribe to individual slices rather than reading the whole store. A subscription re-renders its component on every change, so the ones that change per keystroke sit in leaves: the pipeline hook runs in `PipelineController`, which renders nothing. The output tabs read the inputs of the run on screen (`runInputs`), which the store sets together with the result, so they do not change on a keystroke.
 
 ```
 rawData / metadata / propsConf / transformsConf     User inputs (ephemeral)
-processingResult / validationDiagnostics            Pipeline output
+processingResult / runInputs / validationDiagnostics  Pipeline output, and the config it ran with
 isProcessing / lastProcessingMs                     StatusBar telemetry
 theme / activeOutputTab / collapsedPanels / ...     UI state
 activeView / dictionarySelection                    Rail view + dictionary deep link
@@ -146,7 +148,8 @@ The whole editor loads lazily: `LazyEditors.tsx` is the only thing the shell imp
 - Inputs have an accessible name: an associated `<label>` via `htmlFor`/`id` (ids from `useId`), or `aria-label` where there is no visible label.
 - A global `:focus-visible` outline in `index.css` is the floor for every focusable element; components that draw their own `focus-visible:ring-*` take precedence over it. Do not add `outline-none` without a replacement ring.
 - Colour tokens in `index.css` are chosen for 4.5:1 as text on every surface they meet, including their own 10% tint (status chips) — which is why the dark accent is light enough to need dark text on an accent fill (`--color-text-on-accent`). Do not reach for `text-white` on an accent or error fill, or for opacity to de-emphasise text; use `--color-text-muted`. Field highlight colours come in a light and a dark set for the same reason. Input borders use `--color-border-control`, which meets 3:1 against the surface (WCAG 1.4.11); `--color-border` is for dividers between surfaces, which need no contrast. `src/__tests__/themeContrast.test.ts` reads the tokens from `index.css` and the Monaco themes and checks every pair, and `e2e/a11y.spec.ts` checks the rendered app in both themes.
-- Clickable spans and divs that cannot be `<button>`s go through `components/ui/pressable.ts`, which adds the tab stop, `role="button"` and Enter/Space. The highlighted spans inside raw event text are the deliberate exception: one tab stop per value would bury the page, and the field sidebar offers the same pin action.
+- Clickable spans and divs that cannot be `<button>`s go through `components/ui/pressable.ts`, which adds the tab stop, `role="button"` and Enter/Space. The highlighted values inside an Extractions card are the exception, because one tab stop per value would bury the page: they are `role="button"` with a roving tab stop, one per card (`HighlightedRaw`). Left/Right/Home/End move between the values, Enter or Space pins, and Shift+F10 or the Menu key opens the field menu of that value.
+- An event card has one context menu (`EventContextMenu`), not one Radix root per highlighted value. A capture handler on the card reads the value under the `contextmenu` event (`data-field`, `data-value`, `aria-pressed`; `fieldSpans.ts`), and the menu shows that field's items, or the event's items for the rest of the card. A value keeps one store subscription, for its look and its `aria-pressed`, so that a hover re-renders only the values whose look changes.
 - Raw-text selection (`SelectableRaw`) has a keyboard path: arrows select tokens, Shift extends, Shift+F10 or the Menu key opens the row's context menu.
 - `eslint-plugin-jsx-a11y` is not wired into lint: its peer range ends at eslint 9. Tracked in #302.
 - Panel-level `ErrorBoundary` with "Try Again" recovery; the header and each overlay have their own, and lazy chunks load through `retryableLazy` so "Try Again" refetches a chunk that failed. When a redeploy deleted the chunk, `staleChunkReload.ts` reloads onto the current build and keeps the inputs and the active view in `sessionStorage` over the reload. It does not reload when it cannot save them, when the browser is offline, or when a chunk fails again within 10 s after such a reload. A root boundary catches the rest and offers "Copy config" (inputs are not persisted) and "Reload".

@@ -53,6 +53,23 @@ export function selectRows(
   return out;
 }
 
+/**
+ * One page of the pin matches. The page is clamped to the matches' last page:
+ * the page in the store can still count the unpinned events for one render.
+ */
+export function pageOfRows(rows: EventRow[], currentPage: number, eventsPerPage: number): EventRow[] {
+  const lastPage = Math.max(1, Math.ceil(rows.length / eventsPerPage));
+  const start = pageStart(Math.min(currentPage, lastPage), eventsPerPage);
+  return rows.slice(start, start + eventsPerPage);
+}
+
+/** What the pinned events have in common, for the pager's summary. */
+export function pinScope(pinnedFields: ReadonlySet<string>): string {
+  const [only, ...rest] = pinnedFields;
+  if (only !== undefined && rest.length === 0) return `with ${only}`;
+  return `with any of ${pinnedFields.size} pinned fields`;
+}
+
 /** Every node of the field tree that has children, depth first. */
 export function groupNames(tree: FieldNode[]): string[] {
   const groups: string[] = [];
