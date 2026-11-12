@@ -22,6 +22,7 @@ All notable changes to Propslab are documented here, newest first. Entries say w
 
 ### Changed
 
+- **The Effective config tab groups the directives by stanza, and the Diff tab says why nothing changed** ([#902](https://github.com/Bimmiest/propslab/issues/902)). Each stanza has one heading, with its kind, and each row keeps its line number as a link to props.conf. A long value, such as `FIELDALIAS-cim`, wraps under its key and is not cut. When the run changed no `_raw`, the Diff tab says that no `SEDCMD`, and no `TRANSFORMS` with `DEST_KEY = _raw`, rewrote it.
 - **Propslab and the MCP server need Node 26** ([#717](https://github.com/Bimmiest/propslab/issues/717)). Node 26 is the Active LTS line since 2026-10-28, and Node 24 gets only maintenance fixes now. `npm install` on an older Node stops with an `engines` error. Under Node 26, the permission model of the MCP server also blocks network connections.
 - **"Did not fire" warns only about a directive that changed none of the events** ([#772](https://github.com/Bimmiest/propslab/issues/772)). A directive that changed some of the events is in a separate group, **Fired on some events**, which is collapsed and has no warnings. This is usual when a sourcetype has more than one log structure. The Extractions tab now counts all of the events on all pages, not only the current page. A `FIELDALIAS` line with more than one alias has one row for each alias, and a count never goes above the number of events: before, a line with four aliases could show "no effect on 161 of 61 events". The reason for an `EVAL` that evaluated to null no longer says that a field is usually absent.
 - **The Preview's Status and Changes filters show only when they can separate the events** ([#752](https://github.com/Bimmiest/propslab/issues/752)). Status shows when the run dropped an event, and Changes shows when the run changed the `_raw` or the metadata of an event. Each lists only the states that the events have. Before, both showed on every run, and most of their choices selected all of the events or none.
@@ -373,7 +374,7 @@ Entries #341 and #343–#349 are the rest of the fourth review's findings. Engin
     - `like()`, `match()` and `cidrmatch()`.
   - **How NULL is treated.** False in `if()`, `case()` and STOP_PROCESSING_IF, three-valued in NOT/AND/OR/XOR, and an EVAL that yields NULL writes no field.
 - **A `]` straight after `[` or `[^` in a regex is a literal, as in PCRE** ([#341](https://github.com/Bimmiest/propslab/issues/341)), found by the #340 property tests.
-- _*XML_IE_* wildcard lists are matched as globs in linear time_* ([#344](https://github.com/Bimmiest/propslab/issues/344)) instead of backtracking regexes.
+- _\*XML_IE_* wildcard lists are matched as globs in linear time_* ([#344](https://github.com/Bimmiest/propslab/issues/344)) instead of backtracking regexes.
 - **INGEST_EVAL rewrites now show in the trace** ([#346](https://github.com/Bimmiest/propslab/issues/346); [ADR 0010](docs/adr/0010-engine-decisions-are-structured-data-on-the-event.md)).
   - A `_raw=` rewrite records before, after and the fields it destroyed, like `DEST_KEY = _raw`.
   - Metadata assignments show old → new.

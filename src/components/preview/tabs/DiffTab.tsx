@@ -14,8 +14,16 @@ interface DiffTabProps {
 }
 
 export function DiffTab({ items, currentPage, eventsPerPage }: DiffTabProps) {
+  const anyChanged = items.some((item) => item.hasChanges);
   return (
     <div className="p-3 space-y-2">
+      {!anyChanged && items.length > 0 && (
+        <p className="text-xs text-[var(--color-text-muted)]" role="status">
+          No index-time directive rewrote <code className="font-mono">_raw</code> (
+          <code className="font-mono">SEDCMD</code>, or <code className="font-mono">TRANSFORMS</code> with{' '}
+          <code className="font-mono">DEST_KEY = _raw</code>).
+        </p>
+      )}
       {items.map((item, idx) => {
         const globalIdx = pageStart(currentPage, eventsPerPage) + idx + 1;
 

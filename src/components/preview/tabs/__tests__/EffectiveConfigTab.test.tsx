@@ -3,12 +3,15 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, fireEvent, within, act } from '@testing-library/react';
 import { EffectiveConfigTab } from '../EffectiveConfigTab';
 import { usePipelineInputs } from '../shared/usePipelineInputs';
+import { revealInEditor } from '../../../editor/revealInEditor';
 import { useAppStore } from '../../../../store/useAppStore';
 
 /** The tab as PreviewPanel mounts it: fed the inputs of the last pipeline run. */
 function Tab() {
   return <EffectiveConfigTab inputs={usePipelineInputs()} />;
 }
+
+vi.mock('../../../editor/revealInEditor', () => ({ revealInEditor: vi.fn() }));
 
 const metadata = {
   index: 'main',
@@ -42,9 +45,34 @@ describe('EffectiveConfigTab (#86)', () => {
     expect(within(container).queryByText('= 500')).not.toBeInTheDocument();
   });
 
-  it('names the winning stanza and its line', () => {
+  it('groups the directives under one heading per stanza, with the line on the row', () => {
     const { container } = render(<Tab />);
-    expect(within(container).getByText('[source::/var/log/app.log]:6')).toBeInTheDocument();
+    const source = within(container).getByRole('region', { name: '[source::/var/log/app.log]' });
+    expect(within(source).getByText('source stanza')).toBeInTheDocument();
+    expect(within(source).getByText('= 999')).toBeInTheDocument();
+    expect(within(source).getByRole('button', { name: 'Jump to line 6 of props.conf' })).toHaveTextContent(':6');
+
+    const sourcetype = within(container).getByRole('region', { name: '[my_app]' });
+    expect(within(sourcetype).getByText('sourcetype stanza')).toBeInTheDocument();
+    expect(within(sourcetype).getByText('SHOULD_LINEMERGE')).toBeInTheDocument();
+    // The stanza is named once, not on each row.
+    expect(within(sourcetype).getAllByText('[my_app]')).toHaveLength(1);
+  });
+
+  it('does not cut a long value, and wraps it under the key', () => {
+    const long = 'x'.repeat(300);
+    setConf(`[my_app]\nFIELDALIAS-cim = ${long} AS y\n`);
+    const { container } = render(<Tab />);
+    const value = within(container).getByText(`= ${long} AS y`);
+    expect(value.className).not.toContain('truncate');
+    expect(value.parentElement?.className).toContain('-indent-4');
+    expect(container.textContent).not.toContain('…');
+  });
+
+  it('jumps to the stanza from its heading', () => {
+    const { container } = render(<Tab />);
+    fireEvent.click(within(container).getByRole('button', { name: '[source::/var/log/app.log]' }));
+    expect(revealInEditor).toHaveBeenCalledWith('props.conf', 5);
   });
 
   it('counts the contested directives', () => {
