@@ -52,9 +52,8 @@ describe('getStagesForDirective', () => {
   });
 });
 
-// ArchitecturePanel derives its routing directives from the stage that holds
-// TRANSFORMS, so a directive added to that stage changes what counts as routing
-// there. The stages added for #511 each get their own stage instead.
+// The stages added for #511 each get their own stage, so the stage that holds
+// TRANSFORMS keeps only the directives that route.
 describe('stages for directives the pipeline runs but the reference once omitted (#511)', () => {
   it.each([
     ['ANNOTATE_PUNCT', 'Punctuation Annotation', 'index-time'],
