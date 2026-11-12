@@ -73,6 +73,8 @@ The suite is for the things that vitest cannot reach, because of its structure. 
 
   `perf-vitals.spec.ts` loads the production build cold. It holds LCP, total blocking time and transferred bytes to budgets that come from measurements. Budgets for the size of each chunk are not sufficient alone: one time, they let the entry preload all of Monaco. These tests run in the `perf` Playwright project, which has no retries. They write their numbers to the job summary, with the budget next to each number.
 
+  The MCP server has the same kind of budgets in `packages/mcp-server/perf/budgets.mjs`: cold start, `simulate` on a large sample with many regexes, and peak memory. The `mcp-perf` job runs them with no retry ([ci.md](ci.md)).
+
 If you extend the suite, remember this. The app runs the pipeline one time on mount, with an empty raw log. `runPipeline` returns a real result for empty input (`eventCount: 0`). Thus the status bar shows "Worker idle · 0 events" *before* any data loads. Wait for an event count that is not zero, as `loadExample` does. Do not wait for the idle state.
 
 `@playwright/test` is pinned to `~1.64.1`. The pin matches a specific Chromium revision, so that local development is consistent. You can bump it at any time. CI installs the browser that agrees with each version, so the pin has no effect on CI runs.

@@ -6,7 +6,7 @@ type: reference
 
 Each CI job, what makes it fail, and how to run it locally. [CONTRIBUTING.md](../CONTRIBUTING.md) has the rules.
 
-[`ci.yml`](../.github/workflows/ci.yml) runs its jobs side by side on every PR, on pushes to main, weekly and on demand (`dependency-review` on PRs only). The job `ci` passes only when every other job of `ci.yml` passed, and `main` requires it, so a PR cannot merge while one of them fails. The automatic deploy runs only after a push to main's CI run passes, and then ships the newest commit on main whose whole CI run passed. Thus it gates on the same jobs. The `audit` job is in [`audit.yml`](../.github/workflows/audit.yml): `main` requires it, but the deploy does not wait for it, so a new advisory stops merges and not deploys. A manual deploy is not CI-gated: dispatching the deploy workflow on `main` redeploys that same newest green commit, or, with its `sha` input set, rolls back to any commit main has contained, whether or not its CI passed. With `run_id` set instead, it deploys again the bundle that an earlier run deployed, without a rebuild (kept 30 days). A rollback only sticks if the repository variable `DEPLOY_PAUSED` is set to `true` *before* you dispatch it — otherwise the next automatic deploy undoes it, or cancels it while it is still queued — and it stays in place until you delete the variable once the fix is on main. [deployment.md](deployment.md) describes the deploy workflow in full.
+[`ci.yml`](../.github/workflows/ci.yml) runs its jobs side by side on every PR, on pushes to main, weekly and on demand (`dependency-review` on PRs only). The job `ci` passes only when every other job of `ci.yml` passed (`mcp-perf` is the exception), and `main` requires it, so a PR cannot merge while one of them fails. The automatic deploy runs only after a push to main's CI run passes, and then ships the newest commit on main whose whole CI run passed. Thus it gates on the same jobs. The `audit` job is in [`audit.yml`](../.github/workflows/audit.yml): `main` requires it, but the deploy does not wait for it, so a new advisory stops merges and not deploys. A manual deploy is not CI-gated: dispatching the deploy workflow on `main` redeploys that same newest green commit, or, with its `sha` input set, rolls back to any commit main has contained, whether or not its CI passed. With `run_id` set instead, it deploys again the bundle that an earlier run deployed, without a rebuild (kept 30 days). A rollback only sticks if the repository variable `DEPLOY_PAUSED` is set to `true` *before* you dispatch it — otherwise the next automatic deploy undoes it, or cancels it while it is still queued — and it stays in place until you delete the variable once the fix is on main. [deployment.md](deployment.md) describes the deploy workflow in full.
 
 **`static checks`**, **`unit tests`** and **`e2e`** — the app, in three jobs:
 
@@ -35,6 +35,16 @@ npm run test:coverage # typecheck + esbuild bundle first, then vitest with the p
 ```
 
 On the Linux leg it also runs the coverage ratchet against `vitest.config.mts` and the licence check against the package's own lockfile and `packages/mcp-server/.licence-allowlist.json`.
+
+**`mcp-perf`** — the MCP server's performance budgets (#815), in a job of their own with no retry:
+
+```bash
+cd packages/mcp-server
+npm run build
+npm run perf # node perf/budgets.mjs, against dist/
+```
+
+`perf/budgets.mjs` starts the built server over stdio. It holds three figures to budgets: the cold start (process start to the first answer of a tool, worst of five), `simulate` on a 257 KB sample with 60 EXTRACTs (worst of three), and the peak memory of the server process while it does that (`VmHWM`, so the worker's heap is in it; Linux only). Each budget is several times the slowest local measurement, and the file says the measurement beside each budget. The job writes each figure, its budget and the headroom to the job summary. When a budget fails, read the summary of earlier runs to see if the figure drifted or jumped. Do not raise a budget to make a run green: find the change that made the figure grow. The job is not a required check, and `ci` does not wait for it. A timing on a shared runner has noise, and a required check that fails by chance teaches people to run it again. Look at its result on each PR that changes `packages/mcp-server` or `src/engine`. Timing assertions do not go in the unit suite ([testing.md](testing.md)).
 
 **`audit`** — shared-workflows' audit-check over both lockfiles, the app's and `packages/mcp-server`'s: `npm audit --omit=dev`, failing on a high or critical advisory. An advisory that nothing reachable is exposed to can be listed in that lockfile's `.audit-exceptions.json`, with the reason and an expiry; an expired entry, or one the report no longer needs, fails the job. Dev-only advisories are reported but never fatal. It installs nothing, so locally run `node ../shared-workflows/.github/actions/audit-check/audit-check.mjs` in each directory (or `npm audit --omit=dev --audit-level=high`, which is the same gate without the exceptions).
 
