@@ -36,37 +36,37 @@ Below 768px, the labelled tab strip of `MobileShell` replaces the rail. The rail
 - a "Per-event pipeline" chip, when that setting is on
 - the version. Select it to open the About dialog. The dialog shows the build and the date of its commit, and has links to the source code, the changelog and the issue tracker. Use its **Copy** button to put the version and the build in a bug report.
 
+
 ## Examples
 
 The **Examples** button in the header opens the example library, which groups the examples by the kind of data source. The empty output has the same button, and the command palette lists the examples under **Load example…**. If you edited the inputs, the app asks before an example replaces them. Each example loads a raw log, its metadata, `props.conf` and `transforms.conf`, and shows a different part of the pipeline. The data is invented: the addresses are documentation or private ranges, and the domains are `example.com`. The configurations are written from the `.spec` files.
 
-| Example                | Sourcetype                | What it shows                                                                                      |
-| ---------------------- | ------------------------- | -------------------------------------------------------------------------------------------------- |
-| Apache Access Log      | `access_combined`         | `EXTRACT`, a `REPORT` transform on an extracted field, `EVAL`, and aliases for the CIM Web model   |
-| Palo Alto Firewall     | `pan:traffic`             | One `REPORT` regex over a CSV-like line, `FIELDALIAS` and `EVAL` for the CIM Network Traffic model |
-| Linux SSH Auth         | `linux_secure`            | A syslog timestamp with no year, and `EXTRACT` and `EVAL` for the CIM Authentication model         |
-| Windows Security (XML) | `XmlWinEventLog:Security` | `KV_MODE = xml`: each named `Data` element is a field, and `Data_Name` is multivalue               |
-| AWS CloudTrail (JSON)  | `aws:cloudtrail`          | `INDEXED_EXTRACTIONS = json`, with the timestamp from `TIMESTAMP_FIELDS`                           |
-| Cisco ASA              | `cisco:asa`               | `REPORT` transforms that read the ASA message ID, for the CIM Network Traffic model                |
-| Java App (Multi-line)  | `java:app`                | A `LINE_BREAKER` with a lookahead, so that a stack trace stays with its event                      |
-| CSV Export             | `vpn:sessions:csv`        | `INDEXED_EXTRACTIONS = csv` for a file with no header row, with the columns named by `FIELD_NAMES` |
-| FortiGate Traffic      | `fgt_traffic`             | `KV_MODE = auto` for `key=value` pairs, with aliases for the CIM Network Traffic model             |
+| Example | Sourcetype | What it shows |
+|---|---|---|
+| Apache Access Log | `access_combined` | `EXTRACT`, a `REPORT` transform on an extracted field, `EVAL`, and aliases for the CIM Web model |
+| Palo Alto Firewall | `pan:traffic` | One `REPORT` regex over a CSV-like line, `FIELDALIAS` and `EVAL` for the CIM Network Traffic model |
+| Linux SSH Auth | `linux_secure` | A syslog timestamp with no year, and `EXTRACT` and `EVAL` for the CIM Authentication model |
+| Windows Security (XML) | `XmlWinEventLog:Security` | `KV_MODE = xml`: each named `Data` element is a field, and `Data_Name` is multivalue |
+| AWS CloudTrail (JSON) | `aws:cloudtrail` | `INDEXED_EXTRACTIONS = json`, with the timestamp from `TIMESTAMP_FIELDS` |
+| Cisco ASA | `cisco:asa` | `REPORT` transforms that read the ASA message ID, for the CIM Network Traffic model |
+| Java App (Multi-line) | `java:app` | A `LINE_BREAKER` with a lookahead, so that a stack trace stays with its event |
+| CSV Export | `vpn:sessions:csv` | `INDEXED_EXTRACTIONS = csv` for a file with no header row, with the columns named by `FIELD_NAMES` |
+| FortiGate Traffic | `fgt_traffic` | `KV_MODE = auto` for `key=value` pairs, with aliases for the CIM Network Traffic model |
 
 The examples are dated October 2026. Until 2032 they are inside the default `MAX_DAYS_AGO` of 2000 days, so they load with no warning.
-
 ## Output tabs
 
 **Top-level tabs:** Preview, CIM Models, Fields, Pipeline, Effective config, Architecture.
 
 **Preview sub-tabs**, in this order: Raw → Timestamp → Extractions → Diff → Regex. The search and the filters are above the Raw, Extractions and Diff tabs only. The Timestamp and Regex tabs test every event, so they do not show the filter bar.
 
-| Sub-tab     | Shows                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Raw         | The events after line breaking and event breaking, with line numbers and timestamp regions. A truncated event has a `Truncated` badge. A copy that `CLONE_SOURCETYPE` makes has a `Cloned from <sourcetype>` badge. You can expand and collapse a long event.                                                                                                                                                                                                                                       |
-| Timestamp   | For each event: the prefix that matched, the format pattern, and the parsed `_time`.                                                                                                                                                                                                                                                                                                                                                                                                                |
-| Extractions | The field extractions, inline in `_raw`. Each extraction has a class: auto (KV_MODE / INDEXED_EXTRACTIONS), manual (EXTRACT / REPORT / TRANSFORMS / SEDCMD) or calc (EVAL). The filter pills are `Auto / Manual / Calculated / All`. A sidebar that you can collapse has search, hover-focus and pin-to-filter.                                                                                                                                                                                     |
-| Diff        | A character-level unified diff of the original raw data and the processed `_raw`.                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| Regex       | An interactive regex tester for the event text. It shows only the matches. When you enter no pattern, it shows an empty-state prompt. `Add to props.conf` upserts the `EXTRACT-` line that you built into the sourcetype stanza of the event. If the event has no sourcetype, the button writes a placeholder stanza _and_ points the metadata to it. The event cannot match a stanza without this change, and such a stanza is a scaffold that does nothing. The panel says this before you click. |
+| Sub-tab | Shows |
+|---|---|
+| Raw | The events after line breaking and event breaking, with line numbers and timestamp regions. A truncated event has a `Truncated` badge. A copy that `CLONE_SOURCETYPE` makes has a `Cloned from <sourcetype>` badge. You can expand and collapse a long event. |
+| Timestamp | For each event: the prefix that matched, the format pattern, and the parsed `_time`. |
+| Extractions | The field extractions, inline in `_raw`. Each extraction has a class: auto (KV_MODE / INDEXED_EXTRACTIONS), manual (EXTRACT / REPORT / TRANSFORMS / SEDCMD) or calc (EVAL). The filter pills are `Auto / Manual / Calculated / All`. A sidebar that you can collapse has search, hover-focus and pin-to-filter. |
+| Diff | A character-level unified diff of the original raw data and the processed `_raw`. |
+| Regex | An interactive regex tester for the event text. It shows only the matches. When you enter no pattern, it shows an empty-state prompt. `Add to props.conf` upserts the `EXTRACT-` line that you built into the sourcetype stanza of the event. If the event has no sourcetype, the button writes a placeholder stanza *and* points the metadata to it. The event cannot match a stanza without this change, and such a stanza is a scaffold that does nothing. The panel says this before you click. |
 
 **Field highlights.** A highlight uses the authoritative byte offsets that the extraction recorded, when they exist. These offsets exist for positional EXTRACT captures against `_raw`. For EVAL-computed, aliased, JSON-flattened and KV-mode fields, the highlight uses a context-aware match instead: `"key":"value"`, `key="value"`, `key: value` or `key=value`. A value of one character gets a highlight only when the context-aware match succeeds. Without this rule, a plain substring search for `"0"` highlights the whole event.
 
@@ -150,7 +150,7 @@ These items all come from the model JSON in the CIM add-on of Splunk (`Splunk_SA
 - the split into required and recommended fields
 - the constraint tags.
 
-The header of `src/engine/cim/cimModelsData.ts` gives the exact rules for this derivation. There is one entry for each CIM _root dataset_. Endpoint has five root datasets and no model-wide `tag=endpoint`, so it appears five times. Three models declare no key fields in the CIM: Databases, JVM and Interprocess Messaging. Their required score shows `n/a`, not a 100% that means nothing.
+The header of `src/engine/cim/cimModelsData.ts` gives the exact rules for this derivation. There is one entry for each CIM *root dataset*. Endpoint has five root datasets and no model-wide `tag=endpoint`, so it appears five times. Three models declare no key fields in the CIM: Databases, JVM and Interprocess Messaging. Their required score shows `n/a`, not a 100% that means nothing.
 
 ## Monaco editor
 
