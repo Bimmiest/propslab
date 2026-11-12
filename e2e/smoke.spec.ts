@@ -541,6 +541,36 @@ test.describe('accessibility affordances', () => {
     expect(complaints.all, 'browser errors during keyboard selection').toEqual([]);
   });
 
+  test('a highlighted value pins and opens its menu from the keyboard (#882)', async ({ page, browserName }) => {
+    // See 'a raw-event selection can be made and acted on from the keyboard'.
+    test.skip(browserName === 'firefox', "Playwright's Firefox fires no contextmenu event from the keyboard");
+    await openApp(page);
+    await loadExample(page, APACHE);
+    await page.getByRole('tab', { name: /^Extractions$/ }).click();
+
+    // One tab stop per card: its first value.
+    const card = page.locator('pre').first();
+    const values = card.locator('[data-field]');
+    expect(await card.locator('[data-field][tabindex="0"]').count()).toBe(1);
+    await values.first().focus();
+    await page.keyboard.press('ArrowRight');
+    const second = values.nth(1);
+    await expect(second).toBeFocused();
+    const field = await second.getAttribute('data-field');
+
+    await page.keyboard.press('Shift+F10');
+    const menu = page.getByRole('menu');
+    await expect(menu.getByText(field ?? '', { exact: true })).toBeVisible();
+    await expect(menu.getByRole('menuitem', { name: 'Copy value' })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(menu).toBeHidden();
+    await expect(second).toBeFocused();
+
+    await page.keyboard.press('Enter');
+    await expect(page.getByText(/events match 1 pinned field/)).toBeVisible();
+    await expect(page.locator('pre [aria-pressed="true"]').first()).toHaveAttribute('data-field', field ?? '');
+  });
+
   test('controls that opted out of the outline still show keyboard focus', async ({ page }) => {
     // Every focusable control shows a focus indicator, including those that
     // set `outline-none` without a ring, such as the settings panel's close button.
