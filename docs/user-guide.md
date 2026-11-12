@@ -26,12 +26,14 @@ Below 768px, the labelled tab strip of `MobileShell` replaces the rail. The rail
 
 **Keyboard:** `Ctrl/Cmd+K` opens the command palette. The palette has four groups: Examples, Navigate, Look up (for a directive) and Actions. The header info button (ⓘ) opens a slide-out reference to the 11 pipeline stages.
 
+**Context menus from the keyboard:** `Shift+F10` or the Menu key opens the context menu of the item that has the focus. The app handles these keys itself, so they also work in Safari. On a Mac keyboard, press `Shift+Fn+F10` if the top row does media functions.
+
 **Status bar:** the status bar shows these items:
 
 - the worker status
 - the time that the pipeline took
 - the event count
-- the count of distinct fields
+- the count of fields. It counts the field names in the events after the pipeline: the extracted fields, the aliases, and the default fields `host`, `source`, `sourcetype` and `index`. Hover over it, or move the focus to it, to see how the Fields tab divides them
 - the error and warning counts
 - a "Per-event pipeline" chip, when that setting is on
 - the version. Select it to open the About dialog. The dialog shows the build and the date of its commit, and has links to the source code, the changelog and the issue tracker. Use its **Copy** button to put the version and the build in a bug report.
@@ -64,20 +66,26 @@ The examples are dated October 2026. Until 2032 they are inside the default `MAX
 |---|---|
 | Raw | The events after line breaking and event breaking, with line numbers and timestamp regions. A truncated event has a `Truncated` badge. A copy that `CLONE_SOURCETYPE` makes has a `Cloned from <sourcetype>` badge. You can expand and collapse a long event. |
 | Timestamp | For each event: the prefix that matched, the format pattern, and the parsed `_time`. |
-| Extractions | The field extractions, inline in `_raw`. Each extraction has a class: auto (KV_MODE / INDEXED_EXTRACTIONS), manual (EXTRACT / REPORT / TRANSFORMS / SEDCMD) or calc (EVAL). The filter pills are `Auto / Manual / Calculated / All`. A sidebar that you can collapse has search, hover-focus and pin-to-filter. |
+| Extractions | The field extractions, inline in `_raw`. Each extraction has a class: auto (KV_MODE / INDEXED_EXTRACTIONS), manual (EXTRACT / REPORT / TRANSFORMS / SEDCMD) or calc (EVAL). The filter pills are `Auto / Manual / Calculated / All`. The **Field list** button opens and closes a sidebar with the heading **Field list**. The sidebar counts the fields that were extracted, as **N extracted**. It has search, hover-focus and pin-to-filter. |
 | Diff | A character-level unified diff of the original raw data and the processed `_raw`. |
 | Regex | An interactive regex tester for the event text. It shows only the matches. When you enter no pattern, it shows an empty-state prompt. `Add to props.conf` upserts the `EXTRACT-` line that you built into the sourcetype stanza of the event. If the event has no sourcetype, the button writes a placeholder stanza *and* points the metadata to it. The event cannot match a stanza without this change, and such a stanza is a scaffold that does nothing. The panel says this before you click. |
 
+**Pages of events.** The Preview sub-tabs show the events in pages of 5, 10, 25 or 50. The pager below the events has buttons for the first, the previous, the next and the last page. To go to a page, type its number in the **Page** box and press Enter. A screen reader announces the page that you go to. When you pin a field in the Extractions view, the pager shows only the events that have the field, and the summary names the field: for example, "Showing events 1-50 of 340 with src_ip". When you pin or unpin a field, the pager goes to the first page.
+
 **Field highlights.** A highlight uses the authoritative byte offsets that the extraction recorded, when they exist. These offsets exist for positional EXTRACT captures against `_raw`. For EVAL-computed, aliased, JSON-flattened and KV-mode fields, the highlight uses a context-aware match instead: `"key":"value"`, `key="value"`, `key: value` or `key=value`. A value of one character gets a highlight only when the context-aware match succeeds. Without this rule, a plain substring search for `"0"` highlights the whole event.
 
-**Fields tab.** This tab lists each extracted field, with its phase (index-time or search-time) and the processors that made it. It also lists the default fields `host`, `source`, `sourcetype` and `index` that have a value in the metadata, with the label **default**. These come from the metadata of each event after the pipeline. An extracted field with the same name replaces the metadata value in that event. After a `rename`, the `sourcetype` row shows the new name, as a search in Splunk does. The filter pill is `All / Index-time / Search-time`.
+**Fields tab.** This tab lists each extracted field, with its phase (index-time or search-time) and the processors that made it. It also lists the default fields `host`, `source`, `sourcetype` and `index` that have a value in the metadata, with the label **default**. These come from the metadata of each event after the pipeline. An extracted field with the same name replaces the metadata value in that event. After a `rename`, the `sourcetype` row shows the new name, as a search in Splunk does. The count above the table gives the split: for example, **33 fields (4 default, 7 index-time, 22 search-time)**. A field that an index-time step and a search-time step made counts as index-time, and a kind with no field is not shown. An alias is not a row, because the **Aliases** column lists it, so the count in the status bar can be larger. When a search or a filter leaves fewer rows, the count says **5 of 33 fields**. The filter pill is `All / Index-time / Search-time`.
 
-**Field menu.** Right-click a field in the Fields tab, in the Extractions sidebar or in the event text to open its menu. From the keyboard, move to a row with the arrow keys and press `Shift+F10` or the Menu key. The menu is the same in each place. It has these items:
+**Names of the field controls.** The **Fields** tab is a top-level tab. **Filter by field** is the menu beside the event search in the Preview tabs. **Field list** is the button in the Extractions tab that opens and closes the sidebar, and it is the heading of that sidebar.
+
+**Field menu.** Right-click a field in the Fields tab, in the Field list of the Extractions tab or in the event text to open its menu. From the keyboard, move to a row with the arrow keys and press `Shift+F10` or the Menu key. The menu is the same in each place. It has these items:
 
 - copy the field name, the value or the sample values
 - pin the field, in the Extractions view
 - **Create FIELDALIAS…**, which adds `FIELDALIAS-<alias> = <field> AS <alias>` to the stanza of the sourcetype
 - **Jump to config**, which moves the props.conf cursor to the directive that made the field. This item is not available when no line in props.conf made the field, for example a default field or `KV_MODE = auto`.
+
+**Field values from the keyboard.** In the Extractions view, press Tab to move to the first highlighted value of an event. The Left and Right arrow keys move to the other values of the event, and Home and End move to the first and the last value. Enter or Space pins the field. `Shift+F10` or the Menu key opens the field menu for that value. Press Tab again to go to the next event.
 
 **Event menu.** Right-click an event in the Raw or Extractions view to open its menu. It copies the event, its fields as JSON, or its metadata as `index=… host=… source=… sourcetype=…`. For each props.conf stanza that applies to the event, a **Jump to [stanza]** item moves the props.conf cursor to the stanza header. With text selected, the menu also copies the selection and makes an `EXTRACT` or a `TIME_PREFIX` from it.
 
@@ -90,6 +98,12 @@ The examples are dated October 2026. Until 2032 they are inside the default `MAX
 The strftime completions show the same rendered time. Thus you can choose between five opaque token strings when you see what each one makes. An unsimulated specifier also gets an informational marker in the editor. The config can be correct for a real indexer, but this preview does not resolve `_time` from it.
 
 **Pipeline tab.** Right-click a step, or move to it with Tab and press `Shift+F10` or the Menu key, to open its menu. **Jump to config** moves the props.conf cursor to the directive that the step ran. For a `TRANSFORMS-` or `REPORT-` step, the menu also moves to the transforms.conf stanza. The menu also opens the directive in the dictionary and copies the description of the step.
+
+Each step shows the fields that it changed, with a mark and a colour for each type of change. Put the pointer on a mark to see the reason.
+
+- `+name` is a new field.
+- `~name` is a field that the event had before the step, and that the step changed. At index time, a rewrite of `_raw` changed the value that an extraction finds. At search time, the step wrote a new value: for example, `EVAL-action` changes the `action` field that a `REPORT` extracted.
+- `−name` is a field that the step removed.
 
 **"Did not fire".** This list appears in the Pipeline and Extractions tabs when a directive ran against the loaded events and changed nothing. Without the list, the preview shows this failure as a usual event that did not change. The list has two groups:
 
@@ -142,6 +156,8 @@ When you click a line number or a stanza heading, the props.conf editor moves to
 - Updates
 - Vulnerabilities
 - Web
+
+The tab lists the models in order of fit. The matching models come first. In each group, a model with more of its required fields in the data comes before one with fewer, then the share of the required fields decides, then the share of all the fields. A model *matches* when the data has 50% or more of its required fields, and at least one field of the model. A model with no required fields matches when the data has 50% or more of all its fields. The header of the tab gives the count of matching models and this rule. **Show matching only** hides the other models.
 
 These items all come from the model JSON in the CIM add-on of Splunk (`Splunk_SA_CIM` **8.5.0**):
 

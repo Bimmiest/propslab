@@ -48,7 +48,7 @@ npm run test:e2e     # Playwright smoke tests (builds, then serves dist/)
 npm run test:e2e:ui  # …in Playwright's interactive runner
 npm run test:mutation # Stryker mutation testing
 npm run test:mutation:canary # 40-second check that Stryker still kills mutants (the vitest shim)
-npm run check:overrides # Verify the @radix-ui overrides match what the Radix packages pin, and that each scoped override is still needed
+npm run check:overrides # Verify that no override pins a @radix-ui package to a version that a Radix package does not ask for, and that each scoped override is still needed
 npm run screenshot:readme # Build, then take the README screenshot (docs/assets/demo.png) again with the same setup
 ```
 
@@ -71,6 +71,6 @@ Pay the debt in a change that touches its code, or plan it as other work. The pu
 ## If the installation or a test fails
 
 - **The Node version is too old:** Read `.nvmrc`. To change to that version, run `nvm use` or `fnm use`.
-- **The Playwright browser is not installed:** Run `npx playwright install chromium`. The first e2e run needs it.
+- **The Playwright browser is not installed:** Run `npx playwright install chromium`. The first e2e run needs it. The `firefox` and `webkit` projects need their own browsers.
 - **`node_modules` is not current:** Run `rm -rf node_modules && npm install`.
 - **An old `dist/` causes E2E failures:** Run `rm -rf dist/ && npm run test:e2e`.

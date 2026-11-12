@@ -193,9 +193,10 @@ function useTokenDrag(
  * The same selection is reachable from the keyboard. The text is a
  * focusable read-only textbox: Left/Right (or Home/End) select a token, Shift
  * extends to the next one, Escape clears, Ctrl/Cmd+C copies it, and the Menu key
- * or Shift+F10 — which the browser delivers as a `contextmenu` event on the
- * focused element — opens the row's existing menu, its "Scaffold from
- * selection" items (Create EXTRACT…, Set as TIME_PREFIX…) included. Native
+ * or Shift+F10 — which the shared ContextMenuTrigger turns into a
+ * `contextmenu` event on the focused element — opens the row's existing menu,
+ * its "Scaffold from selection" items (Create EXTRACT…, Set as TIME_PREFIX…)
+ * included. Native
  * selection stays off: it would bring back the menu clearing it and ranges
  * that end mid-token, and copy is provided for the controlled selection
  * instead.

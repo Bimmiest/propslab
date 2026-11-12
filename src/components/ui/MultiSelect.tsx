@@ -210,7 +210,7 @@ function OptionFilter({
         <input
           ref={searchRef}
           type="text"
-          aria-label={`Filter ${label} options`}
+          aria-label={`Search ${label} options`}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Filter…"

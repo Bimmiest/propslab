@@ -45,6 +45,9 @@ const PAGE_SINGLETONS = {
   // The one jump to a line that is waiting for its editor: a newer click
   // cancels it, whichever component asked.
   'src/components/editor/revealInEditor.ts': ['cancelPending'],
+  // The one guard against the browser's own contextmenu event for the menu
+  // key: the page has one keyboard, and a newer press replaces the guard.
+  'src/components/ui/ContextMenu.tsx': ['releaseGuard'],
   // The count of error-boundary resets that each lazy component reads. The
   // file says why it is not a context: one lazy component sits under several
   // boundaries.
@@ -239,6 +242,7 @@ export default defineConfig([
       'vitest.config.ts',
       'playwright.config.ts',
       'packages/mcp-server/vitest.config.mts',
+      'packages/mcp-server/perf/*.mjs',
     ],
     extends: [js.configs.recommended],
     languageOptions: {

@@ -80,6 +80,23 @@ describe('#84 — no-op explanations reach the caller', () => {
     expect(noOps[0]?.phase).toBe('index-time');
   });
 
+  it('says a SEDCMD matched when its replacement equals the matched text (#875)', () => {
+    const noOps = noOpsFor('password=****\n', '[my_app]\nSEDCMD-mask = s/password=\\S+/password=****/\n');
+    expect(noOps).toHaveLength(1);
+    expect(noOps[0]?.reason).toEqual({ kind: 'replacement-identical' });
+  });
+
+  it('keeps no-match for a SEDCMD whose pattern does not match, beside one that does (#875)', () => {
+    const noOps = noOpsFor(
+      'password=****\n',
+      '[my_app]\nSEDCMD-a = s/password=\\S+/password=****/\nSEDCMD-b = s/token=\\S+/x/\n',
+    );
+    expect(noOps.map((n) => [n.directive, n.reason.kind])).toEqual([
+      ['SEDCMD-a', 'replacement-identical'],
+      ['SEDCMD-b', 'no-match'],
+    ]);
+  });
+
   it('says nothing about a SEDCMD that did rewrite the event', () => {
     const noOps = noOpsFor(RAW, '[my_app]\nSEDCMD-mask = s/alice/REDACTED/g\n');
     expect(noOps).toEqual([]);

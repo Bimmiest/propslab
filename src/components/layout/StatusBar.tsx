@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useAppStore } from '../../store/useAppStore';
 import { Icon } from '../ui/Icon';
 import { Tooltip } from '../ui/Tooltip';
+import { FieldCountTip } from './FieldCountTip';
 import { RUN_BUDGET_MS } from '../../hooks/useProcessingPipeline';
 import { countByLevel } from '../../utils/diagnosticCounts';
 import { BUILD_LABEL, SHORT_COMMIT } from '../about/buildInfo';
@@ -133,9 +134,12 @@ function ResultSummary() {
           <span>
             {result.eventCount} event{result.eventCount !== 1 ? 's' : ''}
           </span>
-          <span>
-            {fieldCount} field{fieldCount !== 1 ? 's' : ''}
-          </span>
+          {/* Focusable, so the tooltip with the definition is not for a mouse alone. */}
+          <Tooltip content={<FieldCountTip fieldCount={fieldCount} />} side="top">
+            <span tabIndex={0} className="cursor-help">
+              {fieldCount} field{fieldCount !== 1 ? 's' : ''}
+            </span>
+          </Tooltip>
         </>
       )}
       {errorCount > 0 && (

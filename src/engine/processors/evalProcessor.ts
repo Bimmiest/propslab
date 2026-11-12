@@ -1,6 +1,6 @@
 import type { SplunkEvent, ConfDirective, DirectiveNoOp } from '../types';
 import { fieldQuotingWarning } from '../utils/fieldRef';
-import { deleteField, setField } from '../utils/fieldBag';
+import { deleteField, hasField, setField } from '../utils/fieldBag';
 import { atDirective } from '../parser/provenance';
 import { BOOLEAN_ASSIGNMENT_ERROR, type EvalValue } from './eval/values';
 import { type Node, parseExpression } from './eval/parser';
@@ -176,21 +176,34 @@ function evaluateAll(event: SplunkEvent, compiled: CompiledEval[], reporter: Eva
   return results;
 }
 
-/** Write an event's EVAL results onto it, tracing the computed fields. */
+/**
+ * Write an event's EVAL results onto it, and trace what they changed. A field
+ * that the event had before is modified, not added (#900). A null result
+ * removes a field that the event had, and is a no-op otherwise: a no-op is not
+ * in the trace (ADR 0010, #876).
+ */
 function applyResults(event: SplunkEvent, results: EvalResults, byField: Map<string, ConfDirective>): SplunkEvent {
   const noOps: DirectiveNoOp[] = [];
   const newFields = { ...event.fields };
   const added: string[] = [];
+  const modified: string[] = [];
+  const removed: string[] = [];
   // The expression behind each computed field, so the UI never has to
   // re-parse props.conf to recover it. These are the directives that survived
   // stanza matching for this event, which a text scan cannot know.
   const evalExpressions: Record<string, string> = {};
 
   for (const [field, { value, expression }] of results) {
+    const existed = hasField(event.fields, field);
     if (value === null) {
-      // A null result deletes the field, so an EVAL that was meant to create
-      // one leaves no trace of having run at all. Null propagation makes
-      // this the single most common way an EVAL silently does nothing.
+      if (existed) {
+        deleteField(newFields, field);
+        removed.push(field);
+        evalExpressions[field] = expression;
+        continue;
+      }
+      // Null propagation makes this the most common way that an EVAL does
+      // nothing, and nothing in the preview would say so.
       noOps.push({
         directive: `EVAL-${field}`,
         file: 'props.conf',
@@ -198,27 +211,34 @@ function applyResults(event: SplunkEvent, results: EvalResults, byField: Map<str
         phase: 'search-time',
         reason: { kind: 'eval-null', expression },
       });
-      deleteField(newFields, field);
-    } else if (Array.isArray(value)) {
-      setField(newFields, field, value);
-    } else {
-      setField(newFields, field, String(value));
+      continue;
     }
-    added.push(field);
+    setField(newFields, field, Array.isArray(value) ? value : String(value));
+    (existed ? modified : added).push(field);
     evalExpressions[field] = expression;
   }
 
+  const withNoOps = noOps.length > 0 ? { noOps: [...(event.noOps ?? []), ...noOps] } : {};
+  if (added.length + modified.length + removed.length === 0) return { ...event, ...withNoOps };
+
+  const description = [
+    ...(added.length > 0 ? [`Computed fields: ${added.join(', ')}`] : []),
+    ...(modified.length > 0 ? [`Changed fields: ${modified.join(', ')}`] : []),
+    ...(removed.length > 0 ? [`Removed fields (null): ${removed.join(', ')}`] : []),
+  ];
   return {
     ...event,
+    ...withNoOps,
     fields: newFields,
-    ...(noOps.length > 0 ? { noOps: [...(event.noOps ?? []), ...noOps] } : {}),
     processingTrace: [
       ...event.processingTrace,
       {
         processor: 'EVAL',
         phase: 'search-time' as const,
-        description: `Computed fields: ${added.join(', ')}`,
+        description: description.join('; '),
         fieldsAdded: added,
+        ...(modified.length > 0 ? { fieldsModified: modified } : {}),
+        ...(removed.length > 0 ? { fieldsRemoved: removed } : {}),
         evalExpressions,
       },
     ],
