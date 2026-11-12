@@ -100,7 +100,12 @@ test.describe('trusted types', () => {
     // the cursor reveals the typed lines, where the squiggles are, again.
     // Pressed again until they show: the list can finish opening after the
     // first press has revealed the lines, and push them out of view again.
-    await expect(page.getByText(/takes a boolean, and "notabool" is not one/)).toBeVisible();
+    // The list is open when it shows the linter's message. The run's message
+    // for the line ("takes a boolean") shows only until the linter marks the
+    // line, and then the list drops it (#899).
+    await expect(
+      page.getByText('Expected boolean value (true/false) for "SHOULD_LINEMERGE", got "notabool"'),
+    ).toBeVisible();
     await expect(async () => {
       await page.keyboard.press(keys.textEnd);
       await expect(page.locator('.squiggly-warning, .squiggly-error, .squiggly-info').first()).toBeVisible({
@@ -181,36 +186,14 @@ test.describe('editor problems (#899)', () => {
     'not a directive',
   ].join('\n');
 
-  test('the panel, the markers and the status bar count the same five problems', async ({ page }) => {
-    // Tall enough, with transforms.conf collapsed, that props.conf shows
-    // every line: Monaco renders markers on the lines in view only.
+  test('the panel, the markers and the status bar count the same five problems', async ({ page, keys }) => {
+    // Tall enough, with transforms.conf collapsed, that props.conf shows the
+    // five lines: Monaco renders markers on the lines in view only.
     await page.setViewportSize({ width: 1280, height: 1600 });
     await openApp(page);
     await loadExample(page, /Linux SSH Auth/i);
     await page.getByTitle('Collapse transforms.conf').click();
-
-    // Pasted at the end, through Monaco's own paste path: typed, the
-    // suggest widget and the auto-closing pairs would change the text.
-    await page.locator('.monaco-editor').nth(1).click();
-    await page.keyboard.press('Control+End');
-    await page.evaluate((data) => {
-      const input = document.activeElement;
-      if (!input) throw new Error('editor has no focused input');
-      const clipboardData = new DataTransfer();
-      clipboardData.setData('text/plain', data);
-      // `dataType` and `data` are Firefox's, and not in the DOM typings:
-      // Firefox's ClipboardEventInit has no `clipboardData` member.
-      const init = {
-        clipboardData,
-        dataType: 'text/plain',
-        data,
-        bubbles: true,
-        cancelable: true,
-      } as ClipboardEventInit;
-      const event = new ClipboardEvent('paste', init);
-      if (event.clipboardData?.getData('text/plain') !== data) throw new Error('got a paste event without the text');
-      input.dispatchEvent(event);
-    }, `\n${BAD}\n`);
+    await pasteInto(page, 1, `\n${BAD}\n`, 'end');
 
     const panel = page.getByRole('region', { name: 'props.conf problems' });
     await expect(panel.getByRole('button')).toHaveCount(5, { timeout: 20_000 });
@@ -221,8 +204,15 @@ test.describe('editor problems (#899)', () => {
     await expect(footer.getByText('2 errors')).toBeVisible();
     await expect(footer.getByText('3 warnings')).toBeVisible();
 
+    // The panel shrinks the editor, which keeps its scroll position, so the
+    // last lines can go out of view: in WebKit, whose Mac font defaults make
+    // the lines taller, the malformed line did. Moving the cursor to the end
+    // reveals them again; pressed until the editor has its last size.
     const props = page.locator('.monaco-editor').nth(1);
-    await expect(props.locator('.squiggly-error')).toHaveCount(2);
+    await expect(async () => {
+      await page.keyboard.press(keys.textEnd);
+      await expect(props.locator('.squiggly-error')).toHaveCount(2, { timeout: 3_000 });
+    }).toPass({ timeout: 15_000 });
     await expect(props.locator('.squiggly-warning')).toHaveCount(3);
 
     // The panel keeps to a third of the pane, and the editor keeps the rest.

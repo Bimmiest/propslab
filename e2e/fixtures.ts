@@ -250,6 +250,8 @@ export async function dwellUntilVisible(page: Page, at: () => Promise<Point>, sh
 /**
  * Replace an editor's text through Monaco's own paste path: a `paste` event on
  * the editor's input carrying the text, as the browser delivers a real Ctrl+V.
+ * With `at` 'end', the text goes after the editor's text instead. Typed, the
+ * suggest widget and the auto-closing pairs would change it.
  *
  * The text goes in twice, because the two browsers read different members of
  * the event's init. Chromium takes `clipboardData`. Firefox ignores it and
@@ -259,9 +261,15 @@ export async function dwellUntilVisible(page: Page, at: () => Promise<Point>, sh
  * an event that does not carry the text, and a paste that Monaco does not
  * cancel, which it does when it takes one.
  */
-export async function pasteInto(page: Page, editor: number, text: string): Promise<void> {
+export async function pasteInto(
+  page: Page,
+  editor: number,
+  text: string,
+  at: 'replace' | 'end' = 'replace',
+): Promise<void> {
   await page.locator('.monaco-editor').nth(editor).click();
-  await page.keyboard.press(`${(await shortcutKeys(page)).mod}+a`);
+  const keys = await shortcutKeys(page);
+  await page.keyboard.press(at === 'end' ? keys.textEnd : `${keys.mod}+a`);
   const problem = await page.evaluate((data) => {
     const input = document.activeElement;
     if (!input) return 'has no focused input';
