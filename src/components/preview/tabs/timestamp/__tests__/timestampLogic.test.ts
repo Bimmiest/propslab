@@ -1,19 +1,29 @@
 import { describe, it, expect } from 'vitest';
 import {
   extractDirectives,
+  fallbackReason,
   isSimulated,
   overlaySegments,
   parseTimeConfig,
+  recognisedDirectives,
+  recognisedRead,
+  recognisedSegments,
   resolvedTimeSource,
+  shownKinds,
+  summariseRecognition,
+  timestampStepOf,
   timestampTextOf,
 } from '../timestampLogic';
+import { extractTimestamps } from '../../../../../engine/processors/timestampExtractor';
+import { runCtx } from '../../../../../engine/__tests__/runCtx';
 import { STRPTIME_REFERENCE } from '../data';
 import { supportedSpecifiers } from '../../../../../utils/strftime';
 import { probeTimestamp, type TimeConfig } from '../../../../../engine/timestampMatch';
-import type { SplunkEvent } from '../../../../../engine/types';
+import type { ConfDirective, SplunkEvent } from '../../../../../engine/types';
 import { makeEvent } from '../../../../../test/makeEvent';
 
 const metadata = { index: 'main', host: 'h', source: 's', sourcetype: 'st' };
+const dir = (key: string, value: string): ConfDirective => ({ key, value, line: 1, directiveType: key });
 
 function eventWith(over: Partial<SplunkEvent> = {}): SplunkEvent {
   return makeEvent('raw', { metadata, ...over });
@@ -161,5 +171,132 @@ describe('overlaySegments', () => {
   it('is null when neither matched, so the text is drawn plain', () => {
     expect(segmentsOf('no prefix here')).toBeNull();
     expect(overlaySegments('x', null, config)).toBeNull();
+  });
+});
+
+// With no TIME_FORMAT, the tab reads what automatic recognition did from the
+// run's trace (#898). Built by the extractor itself, so the tab and the
+// engine are held to one contract.
+describe('automatic recognition (#898)', () => {
+  const now = new Date('2026-11-01T00:00:00.000Z');
+  const run = (...raws: string[]) =>
+    extractTimestamps(
+      raws.map((raw) => makeEvent(raw)),
+      [],
+      runCtx(now),
+    );
+  const noFormat: TimeConfig = { timePrefix: null, timeFormat: null, maxLookahead: 128, tz: null };
+
+  it('reads the format and the span of an event it recognised, and nothing of one it did not', () => {
+    const [read, fallback] = run('a 2026/10/25 14:23:01 b', 'no time');
+    expect(recognisedRead(read!)).toEqual({ format: '%Y/%m/%d %H:%M:%S', span: { start: 2, end: 21 } });
+    expect(recognisedRead(fallback!)).toBeNull();
+  });
+
+  it('counts recognised and fallback events, and puts the most common format first', () => {
+    const summary = summariseRecognition(
+      run('25/Oct/2026:14:23:01 x', '2026-10-25 14:23:02 y', 'none', '2026-10-25 14:23:03 ok'),
+    );
+    expect(summary.recognised).toBe(3);
+    expect(summary.fallback).toBe(1);
+    expect(summary.formats.map((f) => [f.format, f.count])).toEqual([
+      ['%Y-%m-%d %H:%M:%S', 2],
+      ['%d/%b/%Y:%H:%M:%S', 1],
+    ]);
+    // The first event read with a format is the one its directives come from.
+    expect(summary.formats[0]?.example).toEqual({ text: '2026-10-25 14:23:02 y', span: { start: 0, end: 19 } });
+  });
+
+  it('keeps first-seen order between formats with the same count', () => {
+    const summary = summariseRecognition(run('25/Oct/2026:14:23:01 x', '2026-10-25 14:23:02 y'));
+    expect(summary.formats.map((f) => f.format)).toEqual(['%d/%b/%Y:%H:%M:%S', '%Y-%m-%d %H:%M:%S']);
+  });
+
+  it('counts an event with no timestamp step as neither', () => {
+    expect(summariseRecognition([makeEvent('x')])).toEqual({ formats: [], recognised: 0, fallback: 0 });
+  });
+
+  it('writes the directives the scaffold would, located from the example event', () => {
+    const [format] = summariseRecognition(run('1,2026/10/25 14:23:01,007')).formats;
+    expect(recognisedDirectives(format!, noFormat)).toEqual([
+      { key: 'TIME_PREFIX', value: ',' },
+      { key: 'TIME_FORMAT', value: '%Y/%m/%d %H:%M:%S' },
+      { key: 'MAX_TIMESTAMP_LOOKAHEAD', value: '20' },
+    ]);
+  });
+
+  it('leaves TIME_PREFIX out when no stable prefix precedes the timestamp', () => {
+    const [format] = summariseRecognition(run('2026-10-25 14:23:01 x')).formats;
+    expect(recognisedDirectives(format!, noFormat)).toEqual([
+      { key: 'TIME_FORMAT', value: '%Y-%m-%d %H:%M:%S' },
+      { key: 'MAX_TIMESTAMP_LOOKAHEAD', value: '29' },
+    ]);
+  });
+
+  it('writes TIME_FORMAT alone when TIME_PREFIX is already set', () => {
+    const [format] = summariseRecognition(run('ts=2026-10-25 14:23:01 x')).formats;
+    expect(recognisedDirectives(format!, { ...noFormat, timePrefix: 'ts=' })).toEqual([
+      { key: 'TIME_FORMAT', value: '%Y-%m-%d %H:%M:%S' },
+    ]);
+  });
+
+  it('says why an event fell back and where its _time came from', () => {
+    const [, previous] = run('2026-10-25 14:23:01 x', 'no time');
+    expect(fallbackReason(timestampStepOf(previous!))).toBe('No timestamp found — _time from the previous event');
+    const [clock] = run('no time');
+    expect(fallbackReason(timestampStepOf(clock!))).toBe('No timestamp found — _time from the time of indexing');
+    const [old] = extractTimestamps([makeEvent('2020-01-01 00:00:00 x')], [dir('MAX_DAYS_AGO', '7')], runCtx(now));
+    expect(fallbackReason(timestampStepOf(old!))).toBe(
+      'Timestamp outside the sanity bounds — _time from the time of indexing',
+    );
+  });
+
+  it('names DATETIME_CONFIG as the reason, and nothing for an event that was read', () => {
+    const [current] = extractTimestamps([makeEvent('x')], [dir('DATETIME_CONFIG', 'CURRENT')], runCtx(now));
+    expect(fallbackReason(timestampStepOf(current!))).toBe('DATETIME_CONFIG = CURRENT');
+    const [read] = run('2026-10-25 14:23:01 x');
+    expect(fallbackReason(timestampStepOf(read!))).toBeNull();
+    expect(fallbackReason(undefined)).toBeNull();
+  });
+
+  it('draws the recorded span as the timestamp, titled with the recognised format', () => {
+    const raw = 'a 2026/10/25 14:23:01 b';
+    const segments = recognisedSegments(
+      raw,
+      null,
+      { ...noFormat, maxLookahead: 25 },
+      { format: '%Y/%m/%d %H:%M:%S', span: { start: 2, end: 21 }, timeMs: Date.UTC(2026, 9, 25, 14, 23, 1) },
+    )!;
+    expect(segments.map((s) => `${s.kind}:${s.text}`)).toEqual([
+      'gap:a ',
+      'timestamp:2026/10/25 14:23:01',
+      'window: b',
+      'boundary:]',
+    ]);
+    expect(segments[1]?.title).toBe('Recognized format: %Y/%m/%d %H:%M:%S\nParsed: 2026-10-25T14:23:01.000Z');
+  });
+
+  it('draws the TIME_PREFIX match the prober found before a recognised timestamp', () => {
+    const raw = 'id ts=2026-10-25 14:23:01 tail';
+    const config = { ...noFormat, timePrefix: 'ts=', maxLookahead: 20 };
+    const segments = recognisedSegments(raw, probeTimestamp(raw, config), config, {
+      format: '%Y-%m-%d %H:%M:%S',
+      span: { start: 6, end: 25 },
+      timeMs: null,
+    })!;
+    expect(segments.map((s) => `${s.kind}:${s.text}`)).toEqual([
+      'outside:id ',
+      'prefix:ts=',
+      'timestamp:2026-10-25 14:23:01',
+      'window: ',
+      'boundary:]',
+      'outside:tail',
+    ]);
+    expect(segments[2]?.title).toContain('Parsed: failed');
+  });
+
+  it('lists the overlay kinds that are on screen', () => {
+    const kinds = shownKinds([[{ key: 'ts', kind: 'timestamp', text: 'x' }], null]);
+    expect([...kinds]).toEqual(['timestamp']);
   });
 });

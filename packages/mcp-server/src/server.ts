@@ -27,8 +27,21 @@ export interface CreateServerOptions {
   workerPath?: string;
 }
 
+/**
+ * Sent in the `initialize` result, for clients that give it to the model: the
+ * order of work that the tool descriptions imply one tool at a time (#885).
+ */
+export const SERVER_INSTRUCTIONS = [
+  "propslab simulates Splunk's props.conf and transforms.conf against sample data, so you can check what a config does instead of predicting it. Work in this order:",
+  '1. lookup_directive: for each directive you are not sure of, read its registry entry, including its support level. A directive the simulator ignores or only documents is not simulated, so a run says nothing about it.',
+  '2. validate: lint the conf you drafted, with no sample needed: parse errors, unknown or mis-cased keys, values of the wrong type, missing transforms, regexes that do not compile. Fix these first.',
+  '3. simulate: run the conf on real sample events. Read each event, its processingTrace and the diagnostics, fix the conf, and run it again.',
+  'For a conf in layers (default/ then local/), explain_precedence shows which layer wins each attribute.',
+  'An error result carries JSON with an `error` code, which each tool description lists. busy and start_timeout mean retry later, not change the input. Send a progressToken to get progress notifications while a call waits for a slot or runs.',
+].join('\n');
+
 export function createServer(options: CreateServerOptions = {}): McpServer {
-  const server = new McpServer({ name: 'propslab', version });
+  const server = new McpServer({ name: 'propslab', version }, { instructions: SERVER_INSTRUCTIONS });
   registerTools(server, options);
   return server;
 }

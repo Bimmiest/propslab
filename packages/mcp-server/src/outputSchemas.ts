@@ -62,6 +62,8 @@ const traceStep = z.looseObject({
       'datetime-config-none',
     ])
     .optional(),
+  timeFormat: z.string().optional(),
+  timeFallback: z.enum(['not-found', 'out-of-bounds']).optional(),
   inputSnapshot: z.string().optional(),
   outputSnapshot: z.string().optional(),
   fieldsAdded: z.array(z.string()).optional(),

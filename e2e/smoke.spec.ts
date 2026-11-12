@@ -1116,6 +1116,42 @@ test.describe('match workers', () => {
 });
 
 /**
+ * The Palo Alto example sets no TIME_FORMAT, so the Timestamp tab shows what
+ * automatic recognition did, from the trace of the run (#898). Each event
+ * starts `1,2026/10/25 14:23:0x,`.
+ */
+test.describe('Timestamp tab with no TIME_FORMAT', () => {
+  test('shows the recognised format and writes it as TIME_FORMAT', async ({ page, complaints }) => {
+    await openApp(page);
+    await loadExample(page, /Palo Alto Firewall/i);
+    await page.getByRole('tab', { name: /^Timestamp$/ }).click();
+
+    const panel = page.getByRole('region', { name: 'Automatic timestamp recognition' });
+    await expect(panel).toContainText('Auto-recognized timestamp format %Y/%m/%d %H:%M:%S (2 events)');
+    await expect(panel).toContainText('2 events recognized · 0 events with a _time not read from the event text');
+    const match = page.getByTitle(/^Recognized format: %Y\/%m\/%d %H:%M:%S\nParsed: /).first();
+    await expect(match).toHaveText('2026/10/25 14:23:01');
+    await expect(page.getByText('Recognized timestamp', { exact: true })).toBeVisible();
+    await expect(page.getByText('TIME_PREFIX match', { exact: true })).toHaveCount(0);
+
+    await panel.getByRole('button', { name: 'Write this as TIME_FORMAT' }).click();
+
+    // The run that follows reads the written TIME_FORMAT, and the tab draws
+    // its match the way it draws any configured one.
+    await expect(page.getByText(/^TIME_FORMAT=/).locator('code')).toHaveText('%Y/%m/%d %H:%M:%S', {
+      timeout: 15_000,
+    });
+    await expect(page.getByText(/^TIME_PREFIX=/).locator('code')).toHaveText(',');
+    await expect(panel).toHaveCount(0);
+    await expect(page.getByTitle(/^TIME_FORMAT: %Y\/%m\/%d %H:%M:%S\nParsed: /).first()).toHaveText(
+      '2026/10/25 14:23:01',
+    );
+
+    expect(complaints.all, 'browser errors in the Timestamp tab').toEqual([]);
+  });
+});
+
+/**
  * Every user pattern runs on PCRE2 compiled to WebAssembly. The page
  * and each worker load it from the one hashed asset URL the build fixed —
  * never from a message — and compiling it takes milliseconds.

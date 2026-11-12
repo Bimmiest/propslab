@@ -53,6 +53,27 @@ with `file: "transforms.conf"` and a `sourcetype` is refused as
 matches a transforms.conf stanza, so the call could not give the resolution
 it asked for.
 
+The server sends `instructions` in its `initialize` result (#885), for
+clients that give them to the model: the order of work is `lookup_directive`
+for each directive the agent is not sure of, then `validate` on the draft,
+then `simulate` on real sample events, and again after each fix. Each tool's
+description lists the `error` codes its result can carry, and says which
+ones mean "retry later" (`busy`, `start_timeout`) rather than "change the
+input"; a test holds the descriptions to the codes the handlers return.
+
+A client that sends a `progressToken` with a call gets
+`notifications/progress` while the call waits for a sandbox slot, while its
+worker starts, and while it runs (#885): at once when the call queues, when
+its worker starts and when that worker is ready, and once a second between,
+until the call returns. `progress` counts the notifications; there is no
+`total`. `message` says where the call is, for example `Waiting for a
+sandbox slot: 4 runs in progress, 2 calls queued, this one included. The
+timeout_ms budget has not started.` or `Running EXTRACT over 120 events.`
+The running state is read from the same shared word that a timeout reads
+(below). A client that resets its request timeout on progress, such as the
+SDK's with `resetTimeoutOnProgress`, then waits for a call that is queued
+instead of failing it with no reason.
+
 `simulate`, `validate` and `explain_precedence` accept conf input as either
 one flat string or an ordered list of layers, lowest precedence first — an
 agent pointed at a real app directory hands over `default/` + `local/` and

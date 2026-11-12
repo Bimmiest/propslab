@@ -34,6 +34,13 @@ export const FALLBACK_TIME_SOURCES: readonly TimeSource[] = [
   'datetime-config-none',
 ];
 
+/**
+ * Why the event text gave no `_time`: no timestamp was found in it, or none
+ * would parse (`not-found`); or one was read but fell outside the sanity
+ * bounds (`out-of-bounds`).
+ */
+export type TimeFallback = 'not-found' | 'out-of-bounds';
+
 export interface ProcessingStep {
   processor: string;
   phase: 'index-time' | 'search-time';
@@ -44,6 +51,14 @@ export interface ProcessingStep {
    * `fieldAliases` below.
    */
   timeSource?: TimeSource;
+  /**
+   * The format `timestampExtractor` read `_time` with: TIME_FORMAT, or the
+   * format automatic recognition found. Absent when `_time` did not come from
+   * the event text.
+   */
+  timeFormat?: string;
+  /** Set by `timestampExtractor` when `_time` fell back to the previous event or the clock: why. */
+  timeFallback?: TimeFallback;
   inputSnapshot?: string;
   outputSnapshot?: string;
   fieldsAdded?: string[];
@@ -188,6 +203,14 @@ export interface SplunkEvent {
    * replaced it, so it costs nothing until then.
    */
   timestampText?: string;
+  /**
+   * Where in `timestampText` (or `_raw`, when that is absent) the timestamp
+   * that set `_time` is, end exclusive. Absent when `_time` did not come from
+   * the event text. On the event, not on its trace step: each event has its
+   * own span, and the preview shares one trace between events whose steps
+   * are the same.
+   */
+  timestampSpan?: { start: number; end: number };
 }
 
 /** One directive that did nothing to one event, and why. */
