@@ -71,18 +71,18 @@ export default defineConfig({
       // under node"; main.test.tsx and the worker tests do instantiate them, so
       // they are measured like the rest.
       thresholds: {
-        // Measured again when the engine, the best-covered code here, moved to
-        // its own repository (ADR 0023).
-        statements: 93,
-        branches: 86,
-        functions: 91,
-        lines: 94,
+        // Measured again with the tests of the About dialog's engine rows
+        // (#940).
+        statements: 94,
+        branches: 87,
+        functions: 92,
+        lines: 96,
         // Each source directory has a floor of its own: the global figure
         // would hide a fall in any one of them. The engine's floors are in its
         // own repository (ADR 0023).
         'src/components/**': {
           statements: 92,
-          branches: 83,
+          branches: 86,
           functions: 89,
           lines: 93,
         },
