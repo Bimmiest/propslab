@@ -30,7 +30,7 @@ describe('StatusBar', () => {
 
   it('names the build beside the version, for a bug report (#648)', () => {
     renderStatusBar();
-    const version = screen.getByTitle('Propslab test, build 0000000');
+    const version = screen.getByTitle('Propslab test, build 0000000; engine 0.0.0-test, build 1111111');
     expect(version).toHaveTextContent('vtest, build 0000000');
   });
 

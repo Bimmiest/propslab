@@ -16,3 +16,9 @@ declare const __APP_COMMIT__: string;
 declare const __APP_COMMIT_DATE__: string;
 /** The repository's web address, from `repository.url` in `package.json`. */
 declare const __APP_REPOSITORY__: string;
+/** The installed `propslab-engine` version, from its `package.json`. */
+declare const __ENGINE_VERSION__: string;
+/** The full hash of the engine commit that `package.json` pins. */
+declare const __ENGINE_COMMIT__: string;
+/** The web address of the engine's repository, from the same pin. */
+declare const __ENGINE_REPOSITORY__: string;

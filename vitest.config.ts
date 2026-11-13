@@ -14,6 +14,9 @@ export default defineConfig({
     __APP_COMMIT__: JSON.stringify('0000000000000000000000000000000000000000'),
     __APP_COMMIT_DATE__: JSON.stringify('2026-01-02T03:04:05+00:00'),
     __APP_REPOSITORY__: JSON.stringify('https://github.com/Bimmiest/propslab'),
+    __ENGINE_VERSION__: JSON.stringify('0.0.0-test'),
+    __ENGINE_COMMIT__: JSON.stringify('1111111111111111111111111111111111111111'),
+    __ENGINE_REPOSITORY__: JSON.stringify('https://github.com/Bimmiest/propslab-engine'),
     // Read by src/test/setup.ts to instantiate the regex engine.
     __PCRE2_WASM_PATH__: JSON.stringify(createRequire(import.meta.url).resolve('pcre2-wasm-utf16/pcre2.wasm')),
   },
@@ -68,18 +71,18 @@ export default defineConfig({
       // under node"; main.test.tsx and the worker tests do instantiate them, so
       // they are measured like the rest.
       thresholds: {
-        // Measured again when the engine, the best-covered code here, moved to
-        // its own repository (ADR 0023).
-        statements: 93,
-        branches: 86,
-        functions: 91,
-        lines: 94,
+        // Measured again with the tests of the About dialog's engine rows
+        // (#940).
+        statements: 94,
+        branches: 87,
+        functions: 92,
+        lines: 96,
         // Each source directory has a floor of its own: the global figure
         // would hide a fall in any one of them. The engine's floors are in its
         // own repository (ADR 0023).
         'src/components/**': {
           statements: 92,
-          branches: 83,
+          branches: 86,
           functions: 89,
           lines: 93,
         },
