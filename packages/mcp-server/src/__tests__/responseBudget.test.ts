@@ -44,6 +44,7 @@ describe('boundValidate', () => {
     for (const unit of UNITS) {
       const diagnostics: ValidationDiagnostic[] = Array.from({ length: 20_000 }, (_, i) => ({
         level: 'error',
+        code: 'malformed-line',
         message: `${i} ${unit.repeat(200)}`,
         file: 'props.conf',
         line: i,
@@ -61,7 +62,9 @@ describe('boundValidate', () => {
   });
 
   it('adds nothing when nothing was cut', () => {
-    const diagnostics: ValidationDiagnostic[] = [{ level: 'warning', message: 'm', file: 'raw' }];
+    const diagnostics: ValidationDiagnostic[] = [
+      { code: 'malformed-line', level: 'warning', message: 'm', file: 'raw' },
+    ];
     expect(boundValidate(diagnostics)).toEqual({ diagnostics });
   });
 });
@@ -102,6 +105,7 @@ describe('boundExplain', () => {
       const full: ExplainResponse = {
         parseErrors: Array.from({ length: 50_000 }, (_, i) => ({
           level: 'error' as const,
+          code: 'malformed-line' as const,
           message: `${i} ${unit.repeat(50)}`,
           file: 'props.conf' as const,
         })),

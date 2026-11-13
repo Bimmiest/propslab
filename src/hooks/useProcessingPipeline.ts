@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useMemo, type RefObject } from 'react';
-import type { EventMetadata } from 'propslab-engine';
+import type { DiagnosticCode, EventMetadata } from 'propslab-engine';
 import { useAppStore, type PipelineInputs } from '../store/useAppStore';
 import { useDebounce } from './useDebounce';
 import { PIPELINE_DEBOUNCE_MS, createManagedWorker, type ManagedWorker } from '../workers/workerLifecycle';
@@ -122,20 +122,20 @@ interface WorkerPolicy extends PipelineRefs, PipelineSinks {
   managed: ManagedWorker<PipelineWorkerRequest>;
 }
 
-function report(p: WorkerPolicy, message: string): void {
+function report(p: WorkerPolicy, message: string, code: DiagnosticCode = 'processor-failed'): void {
   p.setIsProcessing(false);
   p.setProcessingResult(null, inputsOf(p.latestRef, p.requestIdRef.current));
-  p.setValidationDiagnostics([{ level: 'error', message, file: 'props.conf' }]);
+  p.setValidationDiagnostics([{ level: 'error', code, message, file: 'props.conf' }]);
 }
 
 /**
  * Stop on the latest request for good: it hung or crashed a worker, so it
  * is neither replayed again nor ever run inline.
  */
-function giveUp(p: WorkerPolicy, message: string): void {
+function giveUp(p: WorkerPolicy, message: string, code?: DiagnosticCode): void {
   p.retryCountRef.current = 0;
   if (p.latestRef.current) p.latestRef.current.state = 'poisoned';
-  report(p, message);
+  report(p, message, code);
 }
 
 const NO_REPLACEMENT_AFTER_CRASH =
@@ -170,6 +170,7 @@ function onResponse(p: WorkerPolicy, { id, result, error, runMs }: PipelineWorke
     p.setValidationDiagnostics([
       {
         level: 'error',
+        code: 'processor-failed',
         message: `Pipeline error: ${error ?? 'Unknown error'}`,
         file: 'props.conf',
       },
@@ -195,6 +196,7 @@ function onTimeout(p: WorkerPolicy, request: PipelineWorkerRequest, loaded: bool
   giveUp(
     p,
     `Pipeline timed out after ${WORKER_TIMEOUT_MS / 1000} s — a regex may be backtracking heavily on every event. Try simplifying your EXTRACT or TRANSFORMS pattern, or lowering its MATCH_LIMIT.`,
+    'time-budget-reached',
   );
 }
 
@@ -324,6 +326,7 @@ function runPipelineInline(
       sinks.setValidationDiagnostics([
         {
           level: 'error',
+          code: 'processor-failed',
           message: `Pipeline error: ${err instanceof Error ? err.message : String(err)}`,
           file: 'props.conf',
         },

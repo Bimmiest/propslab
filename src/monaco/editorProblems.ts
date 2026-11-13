@@ -40,9 +40,15 @@ export function lintConf(text: string, file: ConfFile): readonly DiagnosticMarke
 const LEVEL: Record<DiagnosticMarker['severity'], DiagnosticLevel> = { 8: 'error', 4: 'warning', 2: 'info', 1: 'info' };
 const SEVERITY: Record<DiagnosticLevel, DiagnosticMarker['severity']> = { error: 8, warning: 4, info: 2 };
 
+/**
+ * A row of the panel. A run diagnostic has the engine's code; the linter's
+ * markers do not, so here the code is optional.
+ */
+export type Problem = Omit<ValidationDiagnostic, 'code'> & Partial<Pick<ValidationDiagnostic, 'code'>>;
+
 export interface FileProblems {
   /** The rows of the panel: the problems without a line first, then by line. */
-  problems: ValidationDiagnostic[];
+  problems: Problem[];
   /** The same problems, less those without a line, as the editor's markers. */
   markers: DiagnosticMarker[];
 }
@@ -62,7 +68,7 @@ export function fileProblems(
   const kept = run.filter(
     (d) => d.file === file && (d.line === undefined || (lintedAt.get(d.line) ?? 0) < SEVERITY[d.level]),
   );
-  const fromLint = lint.map((m): ValidationDiagnostic => ({
+  const fromLint = lint.map((m): Problem => ({
     level: LEVEL[m.severity],
     message: m.message,
     file,

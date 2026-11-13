@@ -125,6 +125,7 @@ describe('serializeSimulation', () => {
   it('caps diagnostics too, keeping the total count', () => {
     const diagnostics: ValidationDiagnostic[] = Array.from({ length: 50_000 }, (_, i) => ({
       level: 'warning',
+      code: 'malformed-line',
       message: `diagnostic ${i} ${'y'.repeat(100)}`,
       file: 'props.conf',
       line: i,
@@ -219,6 +220,7 @@ describe('serializeSimulation', () => {
   it('says how many diagnostics were cut', () => {
     const diagnostics: ValidationDiagnostic[] = Array.from({ length: 50_000 }, (_, i) => ({
       level: 'warning',
+      code: 'malformed-line',
       message: `diagnostic ${i} ${'y'.repeat(100)}`,
       file: 'props.conf',
     }));

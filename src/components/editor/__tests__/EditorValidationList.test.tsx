@@ -13,7 +13,9 @@ describe('EditorValidationList', () => {
 
   it('reports the disclosure state of its summary button', () => {
     useAppStore.setState({
-      validationDiagnostics: [{ level: 'error', message: 'Unknown directive', file: 'props.conf' }],
+      validationDiagnostics: [
+        { code: 'malformed-line', level: 'error', message: 'Unknown directive', file: 'props.conf' },
+      ],
     });
     render(<EditorValidationList file="props.conf" />);
     const toggle = screen.getByRole('button', { name: /1 error/ });
@@ -27,8 +29,8 @@ describe('EditorValidationList', () => {
       propsConf: '[st]\nTIME_FROMAT = %Y\ngarbage\nLOOKUP-x = foo a OUTPUT b\n',
       validationDiagnostics: [
         // Found by the linter too, on the same line: listed once.
-        { level: 'error', message: 'Malformed line: "garbage"', file: 'props.conf', line: 3 },
-        { level: 'warning', message: 'LOOKUP-x is not simulated', file: 'props.conf', line: 4 },
+        { code: 'malformed-line', level: 'error', message: 'Malformed line: "garbage"', file: 'props.conf', line: 3 },
+        { code: 'malformed-line', level: 'warning', message: 'LOOKUP-x is not simulated', file: 'props.conf', line: 4 },
       ],
     });
     render(<EditorValidationList file="props.conf" />);

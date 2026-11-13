@@ -22,7 +22,13 @@ function diag(
   level: ValidationDiagnostic['level'],
   file: ValidationDiagnostic['file'] = 'props.conf',
 ): ValidationDiagnostic {
-  return { level, message: `run ${line ?? '-'}`, file, ...(line === undefined ? {} : { line }) };
+  return {
+    code: 'malformed-line',
+    level,
+    message: `run ${line ?? '-'}`,
+    file,
+    ...(line === undefined ? {} : { line }),
+  };
 }
 
 describe('textLines', () => {

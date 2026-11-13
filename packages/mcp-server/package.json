@@ -33,7 +33,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",
     "pcre2-wasm-utf16": "github:Bimmiest/pcre2-wasm-utf16#8651a3023bf1f0a683f67203adce2c73a33f03e6",
-    "propslab-engine": "github:Bimmiest/propslab-engine#fd1a51bffba8649d7d8426bb8c0c9e0e39765881",
+    "propslab-engine": "github:Bimmiest/propslab-engine#8df4b843cbb7a46918dfc42eef230626ba80c495",
     "zod": "^4.6.6"
   },
   "devDependencies": {

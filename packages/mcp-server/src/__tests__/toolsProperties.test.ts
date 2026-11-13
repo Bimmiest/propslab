@@ -278,6 +278,7 @@ describe('serializeSimulation — the response stays under MAX_PAYLOAD_BYTES', (
           const message = raw(messageLength);
           const diagnostics: ValidationDiagnostic[] = Array.from({ length: diagnosticCount }, () => ({
             level: 'warning',
+            code: 'malformed-line',
             message,
             file: 'props.conf',
           }));

@@ -40,6 +40,7 @@ export function lintRegexDirectives(propsConf: ParsedConf, transformsConf: Parse
           if (why === null) continue;
           diagnostics.push({
             level: 'error',
+            code: 'regex-invalid',
             message:
               fn === undefined
                 ? `${dir.key} = ${pattern} — ${why.replace(/\.$/, '')}. ` +

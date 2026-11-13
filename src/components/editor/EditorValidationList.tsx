@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import type { ValidationDiagnostic, DiagnosticTarget } from 'propslab-engine';
+import type { DiagnosticTarget } from 'propslab-engine';
+import type { Problem } from '../../monaco/editorProblems';
 import { Icon } from '../ui/Icon';
 import { countByLevel } from '../../utils/diagnosticCounts';
 import { revealInEditor } from './revealInEditor';
@@ -82,7 +83,7 @@ export function EditorValidationList({ file }: EditorValidationListProps) {
   );
 }
 
-function DiagnosticRow({ diagnostic, onNavigate }: { diagnostic: ValidationDiagnostic; onNavigate?: () => void }) {
+function DiagnosticRow({ diagnostic, onNavigate }: { diagnostic: Problem; onNavigate?: () => void }) {
   const content = (
     <>
       <div className="flex-shrink-0">

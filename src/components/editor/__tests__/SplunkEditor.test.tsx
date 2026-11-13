@@ -208,9 +208,15 @@ describe('the lint pass', () => {
     act(() =>
       useAppStore.setState({
         validationDiagnostics: [
-          { level: 'error', message: 'Malformed line: "garbage"', file: 'props.conf', line: 3 },
-          { level: 'warning', message: 'LOOKUP-x is not simulated', file: 'props.conf', line: 4 },
-          { level: 'warning', message: 'in the other file', file: 'transforms.conf', line: 2 },
+          { code: 'malformed-line', level: 'error', message: 'Malformed line: "garbage"', file: 'props.conf', line: 3 },
+          {
+            code: 'malformed-line',
+            level: 'warning',
+            message: 'LOOKUP-x is not simulated',
+            file: 'props.conf',
+            line: 4,
+          },
+          { code: 'malformed-line', level: 'warning', message: 'in the other file', file: 'transforms.conf', line: 2 },
         ],
       }),
     );
