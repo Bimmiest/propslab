@@ -14,6 +14,9 @@ export default defineConfig({
     __APP_COMMIT__: JSON.stringify('0000000000000000000000000000000000000000'),
     __APP_COMMIT_DATE__: JSON.stringify('2026-01-02T03:04:05+00:00'),
     __APP_REPOSITORY__: JSON.stringify('https://github.com/Bimmiest/propslab'),
+    __ENGINE_VERSION__: JSON.stringify('0.0.0-test'),
+    __ENGINE_COMMIT__: JSON.stringify('1111111111111111111111111111111111111111'),
+    __ENGINE_REPOSITORY__: JSON.stringify('https://github.com/Bimmiest/propslab-engine'),
     // Read by src/test/setup.ts to instantiate the regex engine.
     __PCRE2_WASM_PATH__: JSON.stringify(createRequire(import.meta.url).resolve('pcre2-wasm-utf16/pcre2.wasm')),
   },

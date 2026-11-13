@@ -38,7 +38,7 @@ The header and the panes follow the width of their container, not of the window.
 - the count of fields. It counts the field names in the events after the pipeline: the extracted fields, the aliases, and the default fields `host`, `source`, `sourcetype` and `index`. Hover over it, or move the focus to it, to see how the Fields tab divides them
 - the error and warning counts
 - a "Per-event pipeline" chip, when that setting is on
-- the version. Select it to open the About dialog. The dialog shows the build and the date of its commit, and has links to the source code, the changelog and the issue tracker. Use its **Copy** button to put the version and the build in a bug report.
+- the version. Select it to open the About dialog. The dialog shows the build and the date of its commit. It also shows the version of the engine, `propslab-engine`, and the engine commit that Propslab installs. The dialog has links to the source code and the changelog of Propslab and of the engine, and to the issue tracker. If a simulation result is not the same as the result of Splunk, use **Report a wrong simulation result**. This link opens a fidelity question in the engine repository. Use the **Copy** button to put the version and the build of Propslab and of the engine in a bug report.
 
 
 ## Examples

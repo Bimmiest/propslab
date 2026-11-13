@@ -1,20 +1,38 @@
 // ---------------------------------------------------------------------------
 // AboutDialog.tsx
-// The build this page runs and where the project lives (#739), opened from
-// the version in the status bar or from the command palette. A bug report
-// needs the build, and a tooltip can neither be found easily nor copied.
+// The build this page runs, the engine in it, and where each lives (#739,
+// #940), opened from the version in the status bar or from the command
+// palette. A bug report needs the build, and a tooltip can neither be found
+// easily nor copied.
 // ---------------------------------------------------------------------------
 
 import { useAppStore } from '../../store/useAppStore';
 import { CopyButton } from '../editor/CopyButton';
 import { DialogButton, DialogFooter, DialogFrame, DialogHeader } from '../ui/DialogFrame';
 import { Icon } from '../ui/Icon';
-import { BUILD_LABEL, COMMIT_DATE, COMMIT_URL, REPOSITORY_URL } from './buildInfo';
+import {
+  APP_BUILD,
+  BUILD_LABEL,
+  COMMIT_DATE,
+  COMMIT_URL,
+  ENGINE_BUILD,
+  ENGINE_COMMIT_URL,
+  ENGINE_REPOSITORY_URL,
+  REPOSITORY_URL,
+} from './buildInfo';
 
 const LINKS = [
   { label: 'Source code', href: REPOSITORY_URL },
   { label: 'Changelog', href: `${REPOSITORY_URL}/blob/main/CHANGELOG.md` },
+  { label: 'Engine source code', href: ENGINE_REPOSITORY_URL },
+  { label: 'Engine changelog', href: `${ENGINE_REPOSITORY_URL}/blob/main/CHANGELOG.md` },
   { label: 'Report an issue', href: `${REPOSITORY_URL}/issues/new/choose` },
+  // The engine owns the simulation, so a result that differs from Splunk is
+  // a fidelity question there (CONTRIBUTING.md, "Where a change goes").
+  {
+    label: 'Report a wrong simulation result',
+    href: `${ENGINE_REPOSITORY_URL}/issues/new?template=fidelity-question.yml`,
+  },
   { label: 'Security policy', href: `${REPOSITORY_URL}/blob/main/SECURITY.md` },
   { label: 'Licence (MIT)', href: `${REPOSITORY_URL}/blob/main/LICENSE` },
 ];
@@ -82,11 +100,24 @@ export function AboutDialog() {
               'unknown'
             )}
           </dd>
+          <dt className="text-[var(--color-text-muted)]">Engine</dt>
+          <dd className="font-mono">{__ENGINE_VERSION__}</dd>
+          <dt className="text-[var(--color-text-muted)]">Engine commit</dt>
+          <dd className="font-mono text-xs self-center break-all">
+            <a href={ENGINE_COMMIT_URL} target="_blank" rel="noreferrer" className={LINK_CLASS}>
+              {__ENGINE_COMMIT__}
+            </a>
+          </dd>
         </dl>
 
         <div className="flex items-center gap-2 rounded-md px-2.5 py-1.5 bg-[var(--color-bg-secondary)]">
           <span className="text-xs shrink-0 text-[var(--color-text-muted)]">For a bug report</span>
-          <code className="flex-1 min-w-0 truncate font-mono text-xs">{BUILD_LABEL}</code>
+          {/* The label is too long for one line of the dialog, so it breaks
+              only between the app and the engine. */}
+          <code className="flex-1 min-w-0 font-mono text-xs">
+            <span className="whitespace-nowrap">{APP_BUILD};</span>{' '}
+            <span className="whitespace-nowrap">{ENGINE_BUILD}</span>
+          </code>
           <CopyButton getText={getBuildLabel} />
         </div>
 

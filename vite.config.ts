@@ -1,10 +1,12 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { createRequire } from 'node:module';
 import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import pkg from './package.json' with { type: 'json' };
 import swa from './public/staticwebapp.config.json' with { type: 'json' };
+import { parseEnginePin } from './scripts/lib/enginePin.mjs';
 
 /** The output of a git command about the commit being built, or `unknown` outside a git checkout. */
 function gitOutput(args: string[]): string {
@@ -14,6 +16,12 @@ function gitOutput(args: string[]): string {
     return 'unknown';
   }
 }
+
+// The engine's version comes from the installed package, which is what the
+// bundle contains. Its commit comes from the pin, because npm does not record
+// the commit in the installed package.
+const engine = parseEnginePin(pkg.dependencies['propslab-engine']);
+const enginePkg = createRequire(import.meta.url)('propslab-engine/package.json') as { version: string };
 
 /**
  * Dev server only: put a hash of each inline module script into the meta CSP's
@@ -52,6 +60,11 @@ export default defineConfig({
     __APP_COMMIT__: JSON.stringify(gitOutput(['rev-parse', 'HEAD'])),
     __APP_COMMIT_DATE__: JSON.stringify(gitOutput(['log', '-1', '--format=%cI', 'HEAD'])),
     __APP_REPOSITORY__: JSON.stringify(pkg.repository.url.replace(/^git\+/, '').replace(/\.git$/, '')),
+    // A wrong simulation result is a question for the engine, so a bug report
+    // names its build too (#940).
+    __ENGINE_VERSION__: JSON.stringify(enginePkg.version),
+    __ENGINE_COMMIT__: JSON.stringify(engine.commit),
+    __ENGINE_REPOSITORY__: JSON.stringify(engine.repository),
   },
   // Serve the deployed headers from `vite preview` too, so the e2e suite runs
   // the workers under the same CSP they get in production (a worker ignores the
