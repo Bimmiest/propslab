@@ -18,5 +18,5 @@ An export from `src/monaco` or a vendored file in `src/utils` or `src/workers` i
 
 ## Add a preview sub-tab
 1. Create the component in `src/components/preview/tabs/`.
-2. Add the ID to `PreviewSubTabId` in the engine's `src/types.ts`. That is a change to `propslab-engine`, and a release.
+2. Add the ID to `PreviewSubTabId` in `src/store/useAppStore.ts`.
 3. Add the entry to `PREVIEW_SUB_TABS` and render it in `PreviewSubTab.tsx`.

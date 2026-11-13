@@ -1,5 +1,5 @@
 import { create, type StoreApi } from 'zustand';
-import type { EventMetadata, OutputTabId, PreviewSubTabId, ValidationDiagnostic } from 'propslab-engine';
+import type { EventMetadata, ValidationDiagnostic } from 'propslab-engine';
 import type { ViewResult } from '../utils/viewResult';
 import { safeStorage } from '../utils/safeStorage';
 
@@ -22,6 +22,12 @@ export interface SessionInputs {
 
 /** The configuration a pipeline run reads: the inputs other than the events. */
 export type PipelineInputs = Omit<SessionInputs, 'rawData'>;
+
+/** The output tabs. A tab of this UI only, so it is declared here and not in the engine. */
+export type OutputTabId = 'preview' | 'cim' | 'fields' | 'transforms' | 'effective' | 'architecture';
+
+/** The sub-tabs of the Preview tab. */
+export type PreviewSubTabId = 'raw' | 'highlighted' | 'diff' | 'timestamp' | 'regex';
 
 /** What the Preview tab's filter bar narrows the events to. */
 export interface PreviewFilters {
