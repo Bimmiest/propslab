@@ -17,6 +17,7 @@
  * validation would then reject on every call — fails the build instead.
  */
 import { z } from 'zod';
+import { DIAGNOSTIC_CODES } from 'propslab-engine';
 import type { ExplainResponse, ValidateResponse } from './protocol';
 import type { SerializedEvent, SerializedSimulation } from './serialize';
 
@@ -37,6 +38,9 @@ const metadata = z.object({
 
 const diagnostic = z.looseObject({
   level: z.enum(['error', 'warning', 'info']),
+  code: z
+    .enum(DIAGNOSTIC_CODES)
+    .describe('What the diagnostic is about, for acting on it without reading the message.'),
   message: z.string(),
   file: z.enum(['props.conf', 'transforms.conf', 'raw']),
   layer: z.string().optional(),

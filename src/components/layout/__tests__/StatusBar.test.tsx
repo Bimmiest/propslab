@@ -150,9 +150,9 @@ describe('StatusBar', () => {
 
   it('shows error / warning counts when diagnostics are present', () => {
     const diags: ValidationDiagnostic[] = [
-      { level: 'error', message: 'e1', file: 'props.conf' },
-      { level: 'error', message: 'e2', file: 'props.conf' },
-      { level: 'warning', message: 'w1', file: 'props.conf' },
+      { code: 'malformed-line', level: 'error', message: 'e1', file: 'props.conf' },
+      { code: 'malformed-line', level: 'error', message: 'e2', file: 'props.conf' },
+      { code: 'malformed-line', level: 'warning', message: 'w1', file: 'props.conf' },
     ];
     useAppStore.setState({
       processingResult: toViewResult({
@@ -176,9 +176,9 @@ describe('StatusBar', () => {
       propsConf: '[st]\ngarbage\nLOOKUP-x = foo a OUTPUT b\n',
       transformsConf: '[t]\nREGEX = (\n',
       validationDiagnostics: [
-        { level: 'error', message: 'Malformed line: "garbage"', file: 'props.conf', line: 2 },
-        { level: 'warning', message: 'LOOKUP-x is not simulated', file: 'props.conf', line: 3 },
-        { level: 'warning', message: 'no events', file: 'raw' },
+        { code: 'malformed-line', level: 'error', message: 'Malformed line: "garbage"', file: 'props.conf', line: 2 },
+        { code: 'malformed-line', level: 'warning', message: 'LOOKUP-x is not simulated', file: 'props.conf', line: 3 },
+        { code: 'malformed-line', level: 'warning', message: 'no events', file: 'raw' },
       ],
     });
     renderStatusBar();

@@ -2,7 +2,12 @@ import { describe, it, expect } from 'vitest';
 import type { DiagnosticLevel, ValidationDiagnostic } from 'propslab-engine';
 import { countByLevel } from '../diagnosticCounts';
 
-const diag = (level: DiagnosticLevel): ValidationDiagnostic => ({ level, message: level, file: 'props.conf' });
+const diag = (level: DiagnosticLevel): ValidationDiagnostic => ({
+  code: 'malformed-line',
+  level,
+  message: level,
+  file: 'props.conf',
+});
 
 describe('countByLevel', () => {
   it('counts each level, and zero for a level that is absent', () => {

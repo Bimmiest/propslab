@@ -55,7 +55,9 @@ describe('PreviewPanel', () => {
   it('shows the failure, not the empty state, when a run produced no result', () => {
     useAppStore.setState({
       processingResult: null,
-      validationDiagnostics: [{ level: 'error', message: 'Pipeline timed out after 5 s', file: 'props.conf' }],
+      validationDiagnostics: [
+        { code: 'malformed-line', level: 'error', message: 'Pipeline timed out after 5 s', file: 'props.conf' },
+      ],
     });
     render(<PreviewPanel />);
     expect(screen.getByRole('alert')).toHaveTextContent('Pipeline timed out after 5 s');
@@ -98,7 +100,9 @@ describe('PreviewPanel', () => {
   it('ignores warnings when there is no result', () => {
     useAppStore.setState({
       processingResult: null,
-      validationDiagnostics: [{ level: 'warning', message: 'unused stanza', file: 'props.conf' }],
+      validationDiagnostics: [
+        { code: 'malformed-line', level: 'warning', message: 'unused stanza', file: 'props.conf' },
+      ],
     });
     render(<PreviewPanel />);
     expect(screen.getByText('No data yet')).toBeInTheDocument();
