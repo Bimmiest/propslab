@@ -1,8 +1,8 @@
 import { useEffect, useCallback, useState } from 'react';
 import type React from 'react';
 import { Command } from 'cmdk';
-import { SAMPLE_CONFIGS, getAllDirectives, type OutputTabId } from 'propslab-engine';
-import { useAppStore, EMPTY_INPUTS, type SessionInputs } from '../../store/useAppStore';
+import { SAMPLE_CONFIGS, getAllDirectives } from 'propslab-engine';
+import { useAppStore, EMPTY_INPUTS, type OutputTabId, type SessionInputs } from '../../store/useAppStore';
 import { Icon } from './Icon';
 import { Overlay } from './Overlay';
 import { useReplaceInputs } from './useReplaceInputs';

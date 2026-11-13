@@ -1,6 +1,5 @@
 import { memo, Suspense, useId, useMemo } from 'react';
-import type { OutputTabId } from 'propslab-engine';
-import { useAppStore } from '../../store/useAppStore';
+import { useAppStore, type OutputTabId } from '../../store/useAppStore';
 import { Tabs } from '../ui/Tabs';
 import { tabId, tabPanelId } from '../ui/tabIds';
 import { Icon } from '../ui/Icon';

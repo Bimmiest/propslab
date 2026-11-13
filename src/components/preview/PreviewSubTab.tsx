@@ -6,8 +6,7 @@
 
 import { memo, useEffect, useId, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import type { PreviewSubTabId } from 'propslab-engine';
-import { useAppStore, type PreviewFilters } from '../../store/useAppStore';
+import { useAppStore, type PreviewFilters, type PreviewSubTabId } from '../../store/useAppStore';
 import { Tabs } from '../ui/Tabs';
 import { tabId, tabPanelId } from '../ui/tabIds';
 import { RawTab } from './tabs/RawTab';
