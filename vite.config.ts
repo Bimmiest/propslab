@@ -1,12 +1,14 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import pkg from './package.json' with { type: 'json' };
 import swa from './public/staticwebapp.config.json' with { type: 'json' };
 import { parseEnginePin } from './scripts/lib/enginePin.mjs';
+import { noticeFiles, noticesPlugin } from './scripts/lib/notices.mjs';
 
 /** The output of a git command about the commit being built, or `unknown` outside a git checkout. */
 function gitOutput(args: string[]): string {
@@ -48,7 +50,13 @@ function devInlineScriptHashes(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [react(), tailwindcss(), devInlineScriptHashes()],
+  plugins: [
+    react(),
+    tailwindcss(),
+    devInlineScriptHashes(),
+    // The About dialog links these (#892).
+    noticesPlugin(noticeFiles(fileURLToPath(new URL('.', import.meta.url)))),
+  ],
   // Surfaced in the status bar so a bug report can name the build it came from.
   // Read from package.json rather than duplicated, so `npm version` is the only
   // place a release number is written.

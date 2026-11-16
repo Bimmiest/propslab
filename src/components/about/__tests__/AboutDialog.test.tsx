@@ -66,7 +66,7 @@ describe('AboutDialog', () => {
     await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Copied!' })).toBeInTheDocument());
   });
 
-  it('links the sources, the changelogs, the issue forms, the security policy and the licence', () => {
+  it('links the sources, the changelogs, the issue forms, the security policy, the licence and the notices', () => {
     const dialog = renderOpen();
     const hrefs = within(dialog)
       .getAllByRole('link')
@@ -82,6 +82,7 @@ describe('AboutDialog', () => {
       `${ENGINE_REPO}/issues/new?template=fidelity-question.yml`,
       `${REPO}/blob/main/SECURITY.md`,
       `${REPO}/blob/main/LICENSE`,
+      '/NOTICE.txt',
     ]);
     for (const link of within(dialog).getAllByRole('link')) {
       expect(link).toHaveAttribute('target', '_blank');

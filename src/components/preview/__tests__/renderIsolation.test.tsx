@@ -17,12 +17,12 @@ import { useAppStore } from '../../../store/useAppStore';
 import { toViewResult } from '../../../utils/viewResult';
 import { makeEvent } from '../../../test/makeEvent';
 
-const renders = vi.hoisted(() => ({ cim: 0, card: 0 }));
+const renders = vi.hoisted(() => ({ schemas: 0, card: 0 }));
 
-vi.mock('../tabs/CimModelsTab', () => ({
-  CimModelsTab: () => {
-    renders.cim++;
-    return <p>cim tab</p>;
+vi.mock('../tabs/SchemasTab', () => ({
+  SchemasTab: () => {
+    renders.schemas++;
+    return <p>schemas tab</p>;
   },
 }));
 
@@ -49,7 +49,7 @@ function eventWithFields(raw: string, fields: Record<string, string>): SplunkEve
 
 beforeEach(() => {
   useAppStore.setState(initial, true);
-  renders.cim = 0;
+  renders.schemas = 0;
   renders.card = 0;
 });
 afterEach(() => {
@@ -65,11 +65,11 @@ describe('PreviewPanel render isolation', () => {
       processingSteps: [],
       inputMetadata: initial.metadata,
     });
-    useAppStore.setState({ activeOutputTab: 'cim', processingResult: result });
+    useAppStore.setState({ activeOutputTab: 'schemas', processingResult: result });
     render(<PreviewPanel />);
     // The tab is its own chunk (#566), so it mounts once that has loaded.
-    expect(await screen.findByText('cim tab')).toBeInTheDocument();
-    const before = renders.cim;
+    expect(await screen.findByText('schemas tab')).toBeInTheDocument();
+    const before = renders.schemas;
 
     const { setPropsConf, setTransformsConf, setRawData, setIsProcessing } = useAppStore.getState();
     act(() => {
@@ -80,7 +80,7 @@ describe('PreviewPanel render isolation', () => {
     act(() => setIsProcessing(true));
     act(() => setIsProcessing(false));
 
-    expect(renders.cim).toBe(before);
+    expect(renders.schemas).toBe(before);
   });
 });
 

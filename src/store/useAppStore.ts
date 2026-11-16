@@ -24,7 +24,10 @@ export interface SessionInputs {
 export type PipelineInputs = Omit<SessionInputs, 'rawData'>;
 
 /** The output tabs. A tab of this UI only, so it is declared here and not in the engine. */
-export type OutputTabId = 'preview' | 'cim' | 'fields' | 'transforms' | 'effective' | 'architecture';
+export type OutputTabId = 'preview' | 'schemas' | 'fields' | 'transforms' | 'effective' | 'architecture';
+
+/** The schema that the Schemas tab checks the fields against. */
+export type SchemaView = 'cim' | 'ocsf';
 
 /** The sub-tabs of the Preview tab. */
 export type PreviewSubTabId = 'raw' | 'highlighted' | 'diff' | 'timestamp' | 'regex';
@@ -109,6 +112,10 @@ interface AppState {
 
   activeOutputTab: OutputTabId;
   setActiveOutputTab: (tab: OutputTabId) => void;
+
+  /** In the store, because a tab mounts again each time that it is selected (#892). */
+  schemaView: SchemaView;
+  setSchemaView: (view: SchemaView) => void;
 
   activeView: ActiveView;
   setActiveView: (view: ActiveView) => void;
@@ -199,7 +206,8 @@ interface AppState {
 
   /**
    * What the "Create FIELDALIAS" dialog is open for: a field to give an alias
-   * (a field's menu), or an alias to find a source for (a missing CIM field).
+   * (a field's menu), or an alias to find a source for (a missing CIM field or
+   * OCSF attribute).
    */
   fieldAlias: FieldAliasRequest | null;
   setFieldAlias: (request: FieldAliasRequest | null) => void;
@@ -359,6 +367,9 @@ export const useAppStore = create<AppState>((set) => ({
 
   activeOutputTab: 'preview',
   setActiveOutputTab: (tab) => set({ activeOutputTab: tab }),
+
+  schemaView: 'cim',
+  setSchemaView: (view) => set({ schemaView: view }),
 
   // Deliberately NOT persisted: the simulator is the product, and restoring a
   // reload straight into the dictionary would bury it.

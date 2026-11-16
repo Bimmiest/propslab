@@ -60,7 +60,7 @@ The **Examples** button in the header opens the example library, which groups th
 The examples are dated October 2026. Until 2032 they are inside the default `MAX_DAYS_AGO` of 2000 days, so they load with no warning.
 ## Output tabs
 
-**Top-level tabs:** Preview, CIM Models, Fields, Pipeline, Effective config, Architecture.
+**Top-level tabs:** Preview, Schemas, Fields, Pipeline, Effective config, Architecture.
 
 **Preview sub-tabs**, in this order: Raw → Timestamp → Extractions → Diff → Regex.
 
@@ -133,7 +133,7 @@ The list covers `EXTRACT`, `TRANSFORMS`/`REPORT`, `SEDCMD`, `FIELDALIAS` and `EV
 
 When you click a line number or a stanza heading, the props.conf editor moves to that line. A long value wraps and is not cut. `Show contested only` shows only the keys that two or more matched stanzas define. Precedence surprises occur in these keys. The tab resolves the configuration, not the output. Thus it gives an answer before Propslab processes any data.
 
-**Context menus in the Effective config, CIM Models and Diff tabs.** Right-click a directive in the Effective config tab to move to it in props.conf, copy it, or open it in the dictionary. Right-click a missing field in the CIM Models tab to copy it, copy all the missing fields, or **Create FIELDALIAS…**. In that dialog, the missing field is the alias, and you type the field that the events already have. Right-click a changed event in the Diff tab to copy the line, or the event before or after the pipeline. When no event changed, the Diff tab says that no `SEDCMD`, and no `TRANSFORMS` with `DEST_KEY = _raw`, rewrote `_raw`.
+**Context menus in the Effective config, Schemas and Diff tabs.** Right-click a directive in the Effective config tab to move to it in props.conf, copy it, or open it in the dictionary. Right-click a missing field or attribute in the Schemas tab to copy it, copy all the missing fields of its group, or **Create FIELDALIAS…**. In that dialog, the missing field is the alias, and you type the field that the events already have. A missing OCSF `class_uid` or `category_uid` also has **Add EVAL-class_uid = …**, with the value of the class. A missing OCSF object has only the copy items: open it, and make an alias for one of its attributes. Right-click a changed event in the Diff tab to copy the line, or the event before or after the pipeline. When no event changed, the Diff tab says that no `SEDCMD`, and no `TRANSFORMS` with `DEST_KEY = _raw`, rewrote `_raw`.
 
 **Architecture tab.** This tab shows where each props.conf directive runs in a Splunk deployment. It has a box for each tier: universal forwarder, heavy forwarder, indexer and search head. Each box lists the directives that run on that tier, by stanza. A box that the config uses has a border in the accent colour and the text **Used**. The other boxes are grey and have the text **Not used by this config**. Select a directive to move the props.conf cursor to its line. The tab uses these rules:
 
@@ -142,7 +142,9 @@ When you click a line number or a stanza heading, the props.conf editor moves to
 - `EVENT_BREAKER`, `EVENT_BREAKER_ENABLE`, `force_local_processing` and the directives of the input layer, for example `CHARSET`, run on the universal forwarder. The tier of XML extraction comes from `XML_INDEXED_EXTRACTIONS_PIPELINE`.
 - When Propslab cannot find the tier of a directive, the directive goes under **Tier not known**, with the reason. Examples are the other `INDEXED_EXTRACTIONS` formats and a key that is not in the directive registry.
 
-**CIM Models tab.** This tab validates the extracted fields against 27 CIM datasets:
+**Schemas tab.** This tab checks the extracted fields against a schema. Select **CIM** or **OCSF** at the top of the tab. CIM is the default.
+
+**Schemas › CIM.** This view validates the extracted fields against 27 CIM datasets:
 
 - Alerts
 - Authentication
@@ -168,7 +170,7 @@ When you click a line number or a stanza heading, the props.conf editor moves to
 - Vulnerabilities
 - Web
 
-The tab lists the models in order of fit. The matching models come first. In each group, a model with more of its required fields in the data comes before one with fewer, then the share of the required fields decides, then the share of all the fields. A model *matches* when the data has 50% or more of its required fields, and at least one field of the model. A model with no required fields matches when the data has 50% or more of all its fields. The header of the tab gives the count of matching models and this rule. **Show matching only** hides the other models.
+The view lists the models in order of fit. The matching models come first. In each group, a model with more of its required fields in the data comes before one with fewer, then the share of the required fields decides, then the share of all the fields. A model *matches* when the data has 50% or more of its required fields, and at least one field of the model. A model with no required fields matches when the data has 50% or more of all its fields. The header of the view gives the count of matching models and this rule. **Show matching only** hides the other models.
 
 These items all come from the model JSON in the CIM add-on of Splunk (`Splunk_SA_CIM` **8.5.0**):
 
@@ -177,6 +179,14 @@ These items all come from the model JSON in the CIM add-on of Splunk (`Splunk_SA
 - the constraint tags.
 
 The header of [`src/cim/cimModelsData.ts`](https://github.com/Bimmiest/propslab-engine/blob/main/src/cim/cimModelsData.ts) in propslab-engine gives the exact rules for this derivation. There is one entry for each CIM *root dataset*. Endpoint has five root datasets and no model-wide `tag=endpoint`, so it appears five times. Three models declare no key fields in the CIM: Databases, JVM and Interprocess Messaging. Their required score shows `n/a`, not a 100% that means nothing.
+
+**Schemas › OCSF.** This view checks the extracted fields against the 57 event classes of OCSF **1.9.0** that are not deprecated. Each card shows the caption, the category and the `class_uid` of a class, the share of its required attributes that the data has, and the share of its required and recommended attributes. Open a card to see the attributes by requirement. The optional attributes are closed at first. An object attribute, for example `src_endpoint`, opens to the attributes of its object, one level down. A card also shows each constraint of the class, for example "At least one of `dst_endpoint`, `service`", and if the data satisfies it.
+
+- **An attribute is present** when a field name is its path, or starts with its path and a `.`. Propslab first removes each `{}`, the array marker of the JSON extraction. Thus the field `src_endpoint.ip` makes `src_endpoint` and its attribute `ip` present. The field `src_endpoint_ip` does not. The comparison is case-sensitive.
+- **The order.** A class whose `class_uid` is a value of the `class_uid` field in the events comes first, with the badge **class_uid in the data**. The matching classes come next. In each group, the count of key attributes in the data decides, then their share, then the share of all the required and recommended attributes. The *key attributes* of a class are its required attributes that it does not take from the base event of OCSF. Each class has the seven required attributes of the base event, so they cannot tell one class from another. A class with no key required attributes uses its recommended attributes. A class *matches* when the data has 50% or more of its key attributes.
+- **The limits.** The view checks that an attribute is present, not its type or its value. An `activity_id` of `99` is present. It does not include profiles or extensions, so the attributes that the `cloud` or `host` profile adds are not in a class. It goes one level into an object, and no further.
+
+The filter at the top finds a class by its caption, its name, its category or its `class_uid`. **Show matching only** hides the other classes. The header of [`src/ocsf/ocsfClassesData.ts`](https://github.com/Bimmiest/propslab-engine/blob/main/src/ocsf/ocsfClassesData.ts) in propslab-engine gives the rules that make the data from the schema.
 
 ## Monaco editor
 

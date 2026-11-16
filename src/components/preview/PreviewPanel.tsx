@@ -11,10 +11,11 @@ import { usePipelineInputs } from './tabs/shared/usePipelineInputs';
 
 // The output tabs other than Preview, out of the entry chunk (#566): each is
 // mounted only when selected, so the cost is one chunk fetch on first open,
-// and CIM Models brings its data table with it. Retryable, since that fetch
+// and Schemas brings the CIM data table with it (and the OCSF one when the
+// user selects OCSF). Retryable, since that fetch
 // can fail on a flaky network; the OutputBoundary around this panel offers the
 // retry. A tab left open across a redeploy reloads instead (staleChunkReload.ts).
-const CimModelsTab = retryableLazy(() => import('./tabs/CimModelsTab').then((m) => ({ default: m.CimModelsTab })));
+const SchemasTab = retryableLazy(() => import('./tabs/SchemasTab').then((m) => ({ default: m.SchemasTab })));
 const EffectiveConfigTab = retryableLazy(() =>
   import('./tabs/EffectiveConfigTab').then((m) => ({ default: m.EffectiveConfigTab })),
 );
@@ -49,7 +50,7 @@ export const PreviewPanel = memo(function PreviewPanel() {
   const tabs = useMemo(
     () => [
       { id: 'preview', label: 'Preview' },
-      { id: 'cim', label: 'CIM Models' },
+      { id: 'schemas', label: 'Schemas' },
       { id: 'fields', label: 'Fields' },
       { id: 'transforms', label: 'Pipeline' },
       { id: 'effective', label: 'Effective config' },
@@ -134,8 +135,8 @@ const TabContent = memo(function TabContent({
   switch (tab) {
     case 'preview':
       return <PreviewSubTab />;
-    case 'cim':
-      return <CimModelsTab />;
+    case 'schemas':
+      return <SchemasTab />;
     case 'fields':
       return <FieldsTab />;
     case 'transforms':
