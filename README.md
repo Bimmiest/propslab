@@ -30,7 +30,7 @@ Propslab is a browser-based simulator of the Splunk pipeline that applies `props
 
 ## Overview
 
-You give Propslab a raw log, its metadata, a `props.conf` and a `transforms.conf`. Propslab divides the log into events, and runs the 11 stages of the pipeline in the order that Splunk uses. It resolves stanza precedence as Splunk does. The output tabs show the events, the timestamps, the extracted fields, a diff of `_raw`, the CIM coverage and the effective configuration. All of the simulation runs in the browser.
+You give Propslab a raw log, its metadata, a `props.conf` and a `transforms.conf`. Propslab divides the log into events, and runs the 11 stages of the pipeline in the order that Splunk uses. It resolves stanza precedence as Splunk does. The output tabs show the events, the timestamps, the extracted fields, a diff of `_raw`, the CIM and OCSF coverage and the effective configuration. All of the simulation runs in the browser.
 
 **Maturity.** Propslab is at version 1.3.0 ([CHANGELOG](CHANGELOG.md)). Each commit on `main` that passes CI goes to production. The simulation is the [`propslab-engine`](https://github.com/Bimmiest/propslab-engine) package. Its README gives the support level of each directive that the registry knows: simulated, documented or ignored.
 

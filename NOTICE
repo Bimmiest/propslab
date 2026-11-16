@@ -11,13 +11,15 @@ Trademarks
 
 Splunk, Splunk Enterprise, and Splunkbase are trademarks or registered
 trademarks of Splunk Inc. in the United States and other countries. Cisco is a
-trademark of Cisco Systems, Inc.
+trademark of Cisco Systems, Inc. OCSF and Open Cybersecurity Schema Framework
+are names of the OCSF project, a Series of LF Projects, LLC.
 
-Propslab is an independent project and is not affiliated with, endorsed by, or
-sponsored by Splunk Inc. or Cisco Systems, Inc. These marks appear in this
-repository only to identify the software whose behaviour is being simulated and
-the configuration file formats being parsed, which is descriptive use. No claim
-of ownership or association is made or implied.
+Propslab is an independent project and is not affiliated with, endorsed by,
+or sponsored by Splunk Inc., Cisco Systems, Inc., or the OCSF project. These
+marks appear in this repository only to identify the software whose behaviour
+is being simulated, the configuration file formats being parsed, and the
+schema that fields are checked against, which is descriptive use. No claim of
+ownership or association is made or implied.
 
 --------------------------------------------------------------------------
 Splunk Common Information Model (CIM) add-on
@@ -43,6 +45,39 @@ a dataset constraint requires — is factual naming needed to check whether an
 extraction is CIM-compliant. It is used here for interoperability, and it is
 not offered under this project's MIT licence. Rights in the CIM add-on and its
 data models remain with Splunk Inc.
+
+--------------------------------------------------------------------------
+Open Cybersecurity Schema Framework (OCSF)
+--------------------------------------------------------------------------
+
+The propslab-engine package, which the app bundles, carries in
+src/ocsf/ocsfClassesData.ts a derivative work of the OCSF schema, release
+1.9.0:
+
+    https://github.com/ocsf/ocsf-schema
+
+It holds the names of the event classes, categories, objects and attributes
+of the schema, and their requirements, in a different form. The descriptions
+are left out. propslab-engine's scripts/generate-ocsf-classes.js made the file
+from the schema. The app loads it when the OCSF view of the Schemas tab opens.
+
+The NOTICE of the schema reads:
+
+    Open Cybersecurity Schema Framework
+
+    Copyright © OCSF a Series of LF Projects, LLC
+    For web site terms of use, trademark policy and other project policies
+    please see https://lfprojects.org.
+
+    This project includes the ICD Schema developed by Symantec, a division of
+    Broadcom.
+
+    Licensed under the Apache 2 license.
+    Refer to the Apache 2 license in the file LICENSE.
+
+The schema is licensed under the Apache License, Version 2.0. Its LICENSE is
+LICENSE-OCSF in the propslab-engine package, and the site serves it as
+LICENSE-OCSF.txt beside this file.
 
 --------------------------------------------------------------------------
 Configuration directive documentation
@@ -75,6 +110,7 @@ The module is:
 
 PCRE2's licence is reproduced in full in that package's LICENCE-PCRE2.md, and
 its NOTICE describes what the package contains; both are installed with it
-(node_modules/pcre2-wasm-utf16/). The PCRE2 source is not vendored in either
+(node_modules/pcre2-wasm-utf16/). The site serves the licence as
+LICENCE-PCRE2.txt beside this file. The PCRE2 source is not vendored in either
 repository; the package's build script downloads the pinned release and
 verifies its checksum.

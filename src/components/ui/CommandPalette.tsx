@@ -16,7 +16,7 @@ const DIRECTIVE_KEYS = [...new Set(getAllDirectives().map((d) => d.key))];
 
 const OUTPUT_TABS: { id: OutputTabId; label: string }[] = [
   { id: 'preview', label: 'Preview' },
-  { id: 'cim', label: 'CIM Models' },
+  { id: 'schemas', label: 'Schemas' },
   { id: 'fields', label: 'Fields' },
   { id: 'transforms', label: 'Pipeline' },
   { id: 'effective', label: 'Effective config' },

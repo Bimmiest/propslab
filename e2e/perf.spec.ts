@@ -103,7 +103,7 @@ test('a 20k-event paste stays within the pipeline and tab-switch budgets', async
 
   const timings: Record<string, number> = {};
   const previewSubTabs = ['Timestamp', 'Extractions', 'Diff', 'Regex', 'Raw'];
-  const outputTabs = ['CIM Models', 'Fields', 'Pipeline', 'Effective config', 'Architecture', 'Preview'];
+  const outputTabs = ['Schemas', 'Fields', 'Pipeline', 'Effective config', 'Architecture', 'Preview'];
 
   await page.getByRole('tab', { name: /^Preview$/ }).click();
   const exact = (name: string) => page.getByRole('tab', { name: new RegExp(`^${name}$`) });

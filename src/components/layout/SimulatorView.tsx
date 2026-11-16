@@ -102,7 +102,7 @@ export const SimulatorView = memo(function SimulatorView() {
 
       <ResizeHandle direction="horizontal" />
 
-      {/* Right side: Output (Preview + CIM + Fields + Transforms + Validation + Architecture) */}
+      {/* Right side: Output (Preview + Schemas + Fields + Transforms + Validation + Architecture) */}
       <Panel defaultSize="62" minSize="30" id="output-panel">
         <OutputBoundary>
           <PreviewPanel />

@@ -35,6 +35,9 @@ const LINKS = [
   },
   { label: 'Security policy', href: `${REPOSITORY_URL}/blob/main/SECURITY.md` },
   { label: 'Licence (MIT)', href: `${REPOSITORY_URL}/blob/main/LICENSE` },
+  // Served with the site, because the bundle carries the data and the code
+  // that the notices are for, and the repository can be at another commit (#892).
+  { label: 'Third-party notices', href: `${import.meta.env.BASE_URL}NOTICE.txt` },
 ];
 
 // Module-level, so CopyButton's memoised handler keeps one identity.

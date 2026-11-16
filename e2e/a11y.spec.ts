@@ -75,7 +75,7 @@ for (const theme of ['dark', 'light'] as const) {
         await expectNoViolations(page, `Preview › ${sub}`);
       });
     }
-    for (const tab of ['CIM Models', 'Fields', 'Pipeline', 'Effective config', 'Architecture']) {
+    for (const tab of ['Schemas', 'Fields', 'Pipeline', 'Effective config', 'Architecture']) {
       test(`output tab ${tab}`, async ({ page }) => {
         await openApp(page);
         await loadExample(page, APACHE);
@@ -228,7 +228,8 @@ for (const theme of ['dark', 'light'] as const) {
 /**
  * States the example-driven scans above never reach (#493): a dropped and a
  * routed event, a nested JSON parent, a diff with added and removed lines, and
- * CIM models that match nothing. Each one was a contrast failure that no scan
+ * CIM models and OCSF classes that match nothing (#892). Each one was a
+ * contrast failure that no scan
  * saw because nothing put the page in that state.
  */
 for (const theme of ['dark', 'light'] as const) {
@@ -307,12 +308,25 @@ for (const theme of ['dark', 'light'] as const) {
       await expectNoViolations(page, 'Diff (added, removed)');
     });
 
-    test('CIM Models: models with no matching field', async ({ page }) => {
+    test('Schemas › CIM: models with no matching field', async ({ page }) => {
       await openDroppedAndRouted(page);
-      await page.getByRole('tab', { name: /^CIM Models$/ }).click();
+      await page.getByRole('tab', { name: /^Schemas$/ }).click();
       // The header gives the threshold (#896); which models reach it depends on the example.
       await expect(page.getByText(/A match has 50% or more of its required fields/)).toBeVisible();
-      await expectNoViolations(page, 'CIM Models (non-matching)');
+      await expectNoViolations(page, 'Schemas › CIM (non-matching)');
+    });
+
+    // `user` and `src` match a few classes, and most match nothing. A class
+    // open to its attributes and an object open to its own show the chip states.
+    test('Schemas › OCSF: classes with no matching attribute, and an open class', async ({ page }) => {
+      await openDroppedAndRouted(page);
+      await page.getByRole('tab', { name: /^Schemas$/ }).click();
+      await page.getByRole('button', { name: 'OCSF', exact: true }).click();
+      await expect(page.getByText(/OCSF 1\.9\.0: this view checks that an attribute is present/)).toBeVisible();
+      await page.getByRole('button', { name: /^Authentication/ }).click();
+      await page.getByRole('button', { name: /^src_endpoint \(/ }).click();
+      await page.getByRole('button', { name: /^Optional attributes \(/ }).click();
+      await expectNoViolations(page, 'Schemas › OCSF (non-matching, open)');
     });
 
     test('Architecture: nothing configured, every box inactive', async ({ page }) => {

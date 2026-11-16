@@ -71,8 +71,8 @@ export default defineConfig({
       // under node"; main.test.tsx and the worker tests do instantiate them, so
       // they are measured like the rest.
       thresholds: {
-        // Measured again with the tests of the About dialog's engine rows
-        // (#940).
+        // Measured again with the tests of the OCSF view of the Schemas tab
+        // (#892).
         statements: 94,
         branches: 87,
         functions: 92,
@@ -83,7 +83,7 @@ export default defineConfig({
         'src/components/**': {
           statements: 92,
           branches: 86,
-          functions: 89,
+          functions: 91,
           lines: 93,
         },
         // Lower since #566 moved workerLifecycle.ts, a well-covered module, to

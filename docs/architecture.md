@@ -43,7 +43,8 @@ src/
     │   ├── PreviewPanel.tsx   # Output container
     │   ├── PreviewFilterBar.tsx
     │   └── tabs/              # Raw, Timestamp, Highlighted, Diff, Regex,
-    │       └── shared/        #   CimModels, Fields, Transforms, EffectiveConfig
+    │       └── shared/        #   Schemas (CimModels, OcsfClasses), Fields, Transforms,
+    │                          #   EffectiveConfig
     ├── settings/              # SettingsPanel (gear in header)
     ├── onboarding/            # FirstRunBanner
     ├── help/                  # HelpPanel (pipeline reference slide-out)

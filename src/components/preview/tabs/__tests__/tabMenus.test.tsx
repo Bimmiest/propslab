@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 // ---------------------------------------------------------------------------
 // tabMenus.test.tsx
-// The context menus of the Effective config, CIM Models and Diff tabs (#761),
+// The context menus of the Effective config, Schemas (CIM #761, OCSF #892)
+// and Diff tabs,
 // and the FIELDALIAS dialog's second mode: a fixed alias, its source typed.
 // ---------------------------------------------------------------------------
 
@@ -9,6 +10,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import { EffectiveConfigTab } from '../EffectiveConfigTab';
 import { CimModelsTab } from '../CimModelsTab';
+import { OcsfClassesTab } from '../OcsfClassesTab';
 import { DiffTab } from '../DiffTab';
 import { FieldAliasDialog } from '../shared/FieldAliasDialog';
 import { usePipelineInputs } from '../shared/usePipelineInputs';
@@ -109,6 +111,77 @@ describe('CIM Models — a missing field', () => {
     for (const card of screen.getAllByRole('button', { expanded: false })) fireEvent.click(card);
     choose(menuOn(screen.getAllByText('action')[0]!), 'Copy the missing fields');
     expect(copied.mock.calls[0]?.[0]).toMatch(/(^|, )action(, |$)/);
+  });
+});
+
+describe('OCSF — a missing attribute', () => {
+  beforeEach(() => {
+    const events = [makeEvent('', { fields: { user: 'alice', src: '10.0.0.1' } })];
+    useAppStore.setState({
+      processingResult: {
+        events,
+        eventCount: 1,
+        fieldStats: computeFieldStats(events),
+        inputMetadata: { index: 'main', host: '', source: '', sourcetype: 'auth' },
+      } as unknown as ViewResult,
+    });
+  });
+
+  /** Opens the Authentication card, and its source endpoint. */
+  function openAuthentication() {
+    const card = screen
+      .getAllByRole('button')
+      .find((b) => b.hasAttribute('aria-expanded') && b.textContent.startsWith('Authentication'))!;
+    fireEvent.click(card);
+    fireEvent.click(screen.getByRole('button', { name: /^src_endpoint \(/ }));
+  }
+
+  it('makes the full path the alias of a FIELDALIAS, one level into an object', () => {
+    render(
+      <>
+        <OcsfClassesTab />
+        <FieldAliasDialog />
+      </>,
+    );
+    openAuthentication();
+    const chip = screen.getByTitle('src_endpoint.ip');
+    choose(menuOn(chip), 'Copy field name');
+    expect(copied).toHaveBeenCalledWith('src_endpoint.ip');
+    choose(menuOn(chip), 'Create FIELDALIAS…');
+    expect(useAppStore.getState().fieldAlias).toEqual({ alias: 'src_endpoint.ip' });
+
+    const dialog = screen.getByRole('dialog', { name: 'Create FIELDALIAS' });
+    fireEvent.change(within(dialog).getByRole('combobox'), { target: { value: 'src' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Add FIELDALIAS' }));
+    expect(useAppStore.getState().propsConf).toContain("FIELDALIAS-src_endpoint_ip = src AS 'src_endpoint.ip'");
+  });
+
+  it('offers no FIELDALIAS for an object, which its attributes make', () => {
+    render(<OcsfClassesTab />);
+    openAuthentication();
+    const menu = menuOn(screen.getByRole('button', { name: /^dst_endpoint \(/ }));
+    expect(within(menu).queryByRole('menuitem', { name: 'Create FIELDALIAS…' })).not.toBeInTheDocument();
+    choose(menu, 'Copy field name');
+    expect(copied).toHaveBeenCalledWith('dst_endpoint');
+  });
+
+  it('adds the class_uid and the category_uid of the class as an EVAL', () => {
+    render(<OcsfClassesTab />);
+    openAuthentication();
+    choose(menuOn(screen.getByTitle('class_uid')), 'Add EVAL-class_uid = 3002');
+    choose(menuOn(screen.getByTitle('category_uid')), 'Add EVAL-category_uid = 3');
+    const { propsConf } = useAppStore.getState();
+    expect(propsConf).toContain('[auth]');
+    expect(propsConf).toContain('EVAL-class_uid = 3002');
+    expect(propsConf).toContain('EVAL-category_uid = 3');
+  });
+
+  it('copies the missing attributes of the group', () => {
+    render(<OcsfClassesTab />);
+    openAuthentication();
+    choose(menuOn(screen.getByTitle('class_uid')), 'Copy the missing fields');
+    expect(copied.mock.calls[0]?.[0]).toMatch(/(^|, )class_uid(, |$)/);
+    expect(copied.mock.calls[0]?.[0]).not.toMatch(/(^|, )user(, |$)/);
   });
 });
 
