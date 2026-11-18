@@ -152,7 +152,7 @@ updates:
   # it rots into a permanently stale action; these updates are that something.
   # Dependabot rewrites the SHA and the trailing `# vN` comment together. The
   # Bimmiest/shared-workflows pins are bumped here too, from that repository's
-  # tags, and every one of them moves in the same pull request.
+  # tags, and every one of them moves in one pull request of their own.
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
@@ -160,11 +160,22 @@ updates:
       day: monday
     # A compromised action tag is the same hazard as a compromised package,
     # and the SHA pin only protects us if we do not raise it on day one.
+    # shared-workflows is the estate's own: its CI releases it from reviewed
+    # pull requests, and nobody else finds a fault in it during a hold, so the
+    # hold only delays it (repo-template docs/standard.md, Updates).
     cooldown:
       default-days: 7
+      exclude:
+        - "Bimmiest/shared-workflows*"
+    # shared-workflows lands alone: its major can need a change here first,
+    # and that must not hold back the other action bumps. The first group
+    # that matches takes a dependency.
     groups:
+      shared-workflows:
+        patterns: ["Bimmiest/shared-workflows*"]
       github-actions:
         patterns: ["*"]
+        exclude-patterns: ["Bimmiest/shared-workflows*"]
     ignore:
       # The one action the SHA-raising above cannot be trusted with. Upstream
       # publishes `v1` as both a tag and a branch: the tag is frozen at
