@@ -48,7 +48,7 @@
     "propslab-engine": "github:Bimmiest/propslab-engine#7d6f2510a020f10007626787d3c4b714f3d50698",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
-    "react-resizable-panels": "^4.21.0",
+    "react-resizable-panels": "^4.24.0",
     "zustand": "^5.1.0"
   },
   "devDependencies": {
