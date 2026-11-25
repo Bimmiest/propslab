@@ -10,7 +10,8 @@
     "BlueOak-1.0.0",
     "Python-2.0",
     "CC0-1.0",
-    "Unlicense"
+    "Unlicense",
+    "MPL-2.0"
   ],
   "packages": {
     "pcre2-wasm-utf16": {
